@@ -241,11 +241,12 @@ final class Collection_Rules {
 	 *
 	 * @internal
 	 *
-	 * @param string $collection Collection slug.
+	 * @param string $collection    Collection slug.
+	 * @param bool   $apply_filters False returns the declaration as shipped, before `woocommerce_pos_search_fields`.
 	 *
 	 * @return array{sorts?: array<string, array>, filters?: array<string, array>, search?: array<string, mixed>, visibility?: array<string, mixed>}
 	 */
-	public static function rules( string $collection ): array {
+	public static function rules( string $collection, bool $apply_filters = true ): array {
 		$rules = array(
 			'orders' => array(
 				'search' => array(
@@ -470,7 +471,7 @@ final class Collection_Rules {
 			),
 		);
 
-		if ( isset( $rules[ $collection ]['search'] ) ) {
+		if ( $apply_filters && isset( $rules[ $collection ]['search'] ) ) {
 			/**
 			 * Widen the server-side search for a collection.
 			 *
@@ -493,6 +494,36 @@ final class Collection_Rules {
 		}
 
 		return $rules[ $collection ] ?? array();
+	}
+
+	/**
+	 * The meta keys a store ADDED to search through `woocommerce_pos_search_fields`, per collection,
+	 * in the form the POS client can search them: the keys the REST `meta_data` exposes.
+	 *
+	 * Published on the site payload so the till folds the same custom fields into its local
+	 * search that the server matches (monorepo#2411). Only additions are listed — the declared
+	 * fields are fixed in both codebases — and only keys without a leading underscore, which
+	 * WooCommerce treats as protected and withholds from `meta_data`. A protected key is still
+	 * searched on the server; it simply cannot be searched locally.
+	 *
+	 * @return array<string, string[]> Collection slug => added meta keys (customers, orders).
+	 */
+	public static function client_search_meta_keys(): array {
+		$added = array();
+		foreach ( array( 'customers' => array( 'meta' ), 'orders' => array( 'posts', 'meta' ) ) as $collection => $path ) {
+			$declared = self::rules( $collection, false )['search'] ?? array();
+			$filtered = self::rules( $collection )['search'] ?? array();
+			foreach ( $path as $segment ) {
+				$declared = $declared[ $segment ] ?? array();
+				$filtered = $filtered[ $segment ] ?? array();
+			}
+			$keys = array_filter(
+				array_diff( (array) $filtered, (array) $declared ),
+				static fn( $key ) => \is_string( $key ) && '' !== $key && '_' !== $key[0]
+			);
+			$added[ $collection ] = array_values( array_unique( $keys ) );
+		}
+		return $added;
 	}
 
 	/**

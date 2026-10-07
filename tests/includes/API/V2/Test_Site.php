@@ -50,6 +50,35 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Extensions can add fields to the discovery payload.
 	 */
+	/** The payload lists only the meta keys a store ADDED to search, and only ones REST exposes. */
+	public function test_search_meta_keys_lists_filter_additions_the_client_can_read(): void {
+		wp_set_current_user( 0 );
+		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
+		$this->assertSame( array( 'customers' => array(), 'orders' => array() ), $response->get_data()['search_meta_keys'] );
+
+		$filter = static function ( $search, $collection ) {
+			if ( 'customers' === $collection ) {
+				$search['meta'][] = 'loyalty_number';
+				$search['meta'][] = '_hidden_internal';
+				$search['meta'][] = 'first_name'; // already declared: not an addition
+			}
+			if ( 'orders' === $collection ) {
+				$search['posts']['meta'][] = 'delivery_slot';
+			}
+			return $search;
+		};
+		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		try {
+			$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
+			$this->assertSame(
+				array( 'customers' => array( 'loyalty_number' ), 'orders' => array( 'delivery_slot' ) ),
+				$response->get_data()['search_meta_keys']
+			);
+		} finally {
+			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+		}
+	}
+
 	public function test_site_info_filter_can_add_a_field(): void {
 		$filter = static function ( array $data ): array {
 			$data['extension_field'] = 'extension-value';
