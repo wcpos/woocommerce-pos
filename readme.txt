@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.22
+Stable tag: 1.10.23
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,16 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.23 - 2026/10/07 =
+
+- **Paying with a hosted gateway such as Dintero, Mollie, PayPal or Klarna no longer jumps the till to the receipt before the payment.** The order is left open and settles from the gateway's callback, as before 1.10.20; merchants on 1.10.20–1.10.22 with such a gateway should update.
+- **"Checkout failed" no longer appears for a sale the store did accept** on a slow connection. The till now waits up to 45 seconds for the store's answer.
+- **Sales waiting behind an expired login are now announced.** A banner in the header shows how many sales are waiting, with a Log in button.
+- **A delete at the till is only dropped from the queue once the store confirms it.**
+- **Opening an order's refunds while offline, or after the app was in the background, shows an offline card instead of "Couldn't load refunds"**.
+- **A corrupt entry in the diagnostic log no longer crashes the Logs screen on iPhone, iPad and Android.**
+- Developers: a failed POS session revoke now returns its intended HTTP status (400, 404 or 500) instead of 200. Details on GitHub.
 
 = 1.10.22 - 2026/10/06 =
 
