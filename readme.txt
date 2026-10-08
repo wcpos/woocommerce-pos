@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.24
+Stable tag: 1.10.25
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,11 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.25 - 2026/10/08 =
+
+- **Saving or checking out a sale no longer fails with "Allowed memory size exhausted" on a store with a few thousand orders.** Since 1.9.0 every order save loaded the 200 most recent orders to guess which field holds VAT numbers; it now asks the database one small question instead.
+- **A damaged row in the till's own bookkeeping no longer blocks the local database.** The till discards the row on the spot instead of refusing the read on every launch; sales, products and customers are never discarded this way.
 
 = 1.10.24 - 2026/10/08 =
 
