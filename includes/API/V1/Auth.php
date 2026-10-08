@@ -348,7 +348,7 @@ class Auth extends WP_REST_Controller {
 		$user_id = $request->get_param( 'user_id' );
 
 		if ( empty( $jti ) || empty( $user_id ) ) {
-			return rest_ensure_response(
+			return new WP_REST_Response(
 				array(
 					'success' => false,
 					'message' => /* translators: REST API schema field label or error message. */ __( 'Missing required parameters.', 'woocommerce-pos' ),
@@ -371,7 +371,7 @@ class Auth extends WP_REST_Controller {
 			);
 		}
 
-		return rest_ensure_response(
+		return new WP_REST_Response(
 			array(
 				'success' => false,
 				'message' => __( 'Failed to revoke session.', 'woocommerce-pos' ),
@@ -392,7 +392,7 @@ class Auth extends WP_REST_Controller {
 		$except_current = $request->get_param( 'except_current' );
 
 		if ( empty( $user_id ) ) {
-			return rest_ensure_response(
+			return new WP_REST_Response(
 				array(
 					'success' => false,
 					'message' => /* translators: REST API schema field label or error message. */ __( 'Missing user_id parameter.', 'woocommerce-pos' ),
@@ -408,7 +408,7 @@ class Auth extends WP_REST_Controller {
 			$current_jti = $this->get_current_jti_from_request( $request );
 
 			if ( empty( $current_jti ) ) {
-				return rest_ensure_response(
+				return new WP_REST_Response(
 					array(
 						'success' => false,
 						'message' => __( 'Could not determine current session.', 'woocommerce-pos' ),
@@ -431,7 +431,7 @@ class Auth extends WP_REST_Controller {
 			);
 		}
 
-		return rest_ensure_response(
+		return new WP_REST_Response(
 			array(
 				'success' => false,
 				'message' => __( 'Failed to revoke sessions.', 'woocommerce-pos' ),

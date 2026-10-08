@@ -178,4 +178,95 @@ class Test_Payment_Gateways_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'supports_provider_refunds', $bacs['capabilities'] );
 		$this->assertArrayHasKey( 'supports_automatic_refunds', $bacs['capabilities'] );
 	}
+
+	/**
+	 * The catalog uses admin display values when the public title is null.
+	 */
+	public function test_payment_gateways_null_title_falls_back_to_method_title(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_catalog_untitled',
+				'method_title'       => 'Catalog Method',
+				'method_description' => 'Catalog description',
+				'enabled'            => 'yes',
+				'supports'           => array( 'products' ),
+			),
+			function () {
+				$request  = $this->wp_rest_get_request( '/wcpos/v2/payment-gateways' );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+
+				$match = wp_list_filter( $response->get_data(), array( 'id' => 'wcpos_catalog_untitled' ) );
+				$this->assertNotEmpty( $match );
+				$found = array_shift( $match );
+
+				$this->assertSame( 'Catalog Method', $found['title'] );
+				$this->assertSame( 'Catalog description', $found['description'] );
+			}
+		);
+	}
+
+	/**
+	 * The catalog uses the gateway id when both titles are empty.
+	 */
+	public function test_payment_gateways_empty_titles_fall_back_to_id(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'           => 'wcpos_catalog_nameless',
+				'title'        => '',
+				'method_title' => '',
+			),
+			function () {
+				$request  = $this->wp_rest_get_request( '/wcpos/v2/payment-gateways' );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+
+				$match = wp_list_filter( $response->get_data(), array( 'id' => 'wcpos_catalog_nameless' ) );
+				$this->assertNotEmpty( $match );
+				$found = array_shift( $match );
+
+				$this->assertSame( 'wcpos_catalog_nameless', $found['title'] );
+			}
+		);
+	}
+
+	/**
+	 * Register a stub gateway with the given public properties for the duration
+	 * of the callback, then restore the gateway registry.
+	 *
+	 * @param array    $props    Property name => value, assigned on the stub (e.g. 'id', 'title', 'method_title').
+	 * @param callable $callback Runs while the stub is registered.
+	 */
+	private function with_stub_gateway( array $props, callable $callback ): void {
+		$gateway = new class( $props ) extends WC_Payment_Gateway {
+			/**
+			 * Assign the given properties without building form fields.
+			 *
+			 * @param array $props Property name => value.
+			 */
+			public function __construct( array $props ) {
+				foreach ( $props as $name => $value ) {
+					$this->$name = $value;
+				}
+			}
+		};
+
+		$add_gateway = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+
+		add_filter( 'woocommerce_payment_gateways', $add_gateway );
+
+		$registry                   = WC_Payment_Gateways::instance();
+		$registry->payment_gateways = array();
+		$registry->init();
+
+		try {
+			$callback();
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			$registry->payment_gateways = array();
+			$registry->init();
+		}
+	}
 }

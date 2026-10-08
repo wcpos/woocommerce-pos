@@ -400,6 +400,52 @@ class Test_Access_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * User management capabilities alone do not permit service writes.
+	 */
+	public function test_write_requires_manage_woocommerce_pos(): void {
+		// Arrange.
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_user_by( 'id', $user_id );
+		$user->add_cap( 'edit_users' );
+		$user->add_cap( 'promote_users' );
+		wp_set_current_user( 0 );
+		wp_set_current_user( $user_id );
+		try {
+			// Act.
+			$result = $this->section->write(
+				array( 'cashier' => array( 'capabilities' => array( 'wc' => array( 'delete_products' => true ) ) ) )
+			);
+
+			// Assert.
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 403, $result->get_error_data()['status'] );
+			$this->assertFalse( get_role( 'cashier' )->has_cap( 'delete_products' ) );
+		} finally {
+			get_role( 'cashier' )->remove_cap( 'delete_products' );
+		}
+	}
+
+	/**
+	 * Administrators retain permission to manage access settings.
+	 */
+	public function test_write_keeps_administrator_manage_woocommerce_pos(): void {
+		// Arrange.
+		$administrator = get_role( 'administrator' );
+		try {
+			// Act.
+			$result = $this->section->write(
+				array( 'administrator' => array( 'capabilities' => array( 'wcpos' => array( 'manage_woocommerce_pos' => false ) ) ) )
+			);
+
+			// Assert.
+			$this->assertIsArray( $result );
+			$this->assertTrue( $administrator->has_cap( 'manage_woocommerce_pos' ) );
+		} finally {
+			$administrator->add_cap( 'manage_woocommerce_pos' );
+		}
+	}
+
+	/**
 	 * Without edit_users + promote_users, write() refuses with a 403 WP_Error
 	 * and mutates nothing.
 	 */

@@ -251,10 +251,17 @@ class Test_Auth_API extends WP_UnitTestCase {
 
 		$this->assertTrue( $data['success'] );
 		$this->assertEquals( 'Session revoked successfully.', $data['message'] );
+		$this->assertSame( 200, $response->get_status() );
 
 		// Verify session is gone
 		$sessions = $this->auth_service->get_user_sessions( $this->regular_user->ID );
 		$this->assertCount( 0, $sessions );
+
+		$response = $this->api->delete_session( $request );
+		$data = $response->get_data();
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( false, $data['success'] );
+		$this->assertSame( 'Failed to revoke session.', $data['message'] );
 	}
 
 	/**
@@ -269,6 +276,7 @@ class Test_Auth_API extends WP_UnitTestCase {
 
 		$this->assertFalse( $data['success'] );
 		$this->assertEquals( 'Missing required parameters.', $data['message'] );
+		$this->assertSame( 400, $response->get_status() );
 	}
 
 	/**
@@ -293,10 +301,22 @@ class Test_Auth_API extends WP_UnitTestCase {
 
 		$this->assertTrue( $data['success'] );
 		$this->assertEquals( 'Sessions revoked successfully.', $data['message'] );
+		$this->assertSame( 200, $response->get_status() );
 
 		// Verify all sessions are gone
 		$sessions = $this->auth_service->get_user_sessions( $this->regular_user->ID );
 		$this->assertCount( 0, $sessions );
+
+		$response = $this->api->delete_all_sessions( $request );
+		$data = $response->get_data();
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( false, $data['success'] );
+		$this->assertSame( 'Failed to revoke sessions.', $data['message'] );
+
+		$response = $this->api->delete_all_sessions( $this->create_request() );
+		$data = $response->get_data();
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'Missing user_id parameter.', $data['message'] );
 	}
 
 	/**
@@ -315,6 +335,19 @@ class Test_Auth_API extends WP_UnitTestCase {
 		$this->assertNotWPError( $access_token );
 
 		// Verify sessions exist
+		$sessions = $this->auth_service->get_user_sessions( $this->regular_user->ID );
+		$this->assertCount( 3, $sessions );
+
+		$request_without_header = $this->create_request(
+			array(
+				'user_id' => $this->regular_user->ID,
+				'except_current' => true,
+			)
+		);
+		$response = $this->api->delete_all_sessions( $request_without_header );
+		$data = $response->get_data();
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'Could not determine current session.', $data['message'] );
 		$sessions = $this->auth_service->get_user_sessions( $this->regular_user->ID );
 		$this->assertCount( 3, $sessions );
 

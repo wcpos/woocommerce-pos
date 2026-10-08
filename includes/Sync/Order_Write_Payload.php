@@ -635,6 +635,21 @@ final class Order_Write_Payload {
 			return $payload;
 		}
 
+		// `{ id, code: null }` is the POS's deletion marker for a synced coupon line —
+		// the `<key>: null` shape wc/v3's item_is_null() honours for every other line
+		// collection, and the one remove_omitted_order_items() mints for them. wc/v3
+		// keys coupon_lines by code instead, so the marker must be dropped here: the
+		// remaining codes then differ from the stored set and the remove-and-reapply
+		// below removes the coupon, or match it (a retried push) and nothing is sent.
+		$payload['coupon_lines'] = array_values(
+			array_filter(
+				$payload['coupon_lines'],
+				static function ( $line ) {
+					return ! self::is_coupon_deletion_marker( $line );
+				}
+			)
+		);
+
 		$requested_codes = array();
 		$all_lines_valid = true;
 		foreach ( $payload['coupon_lines'] as $line ) {
@@ -675,5 +690,28 @@ final class Order_Write_Payload {
 		$payload['coupon_lines'] = array_values( $payload['coupon_lines'] );
 
 		return $payload;
+	}
+
+	/**
+	 * Whether a posted coupon line is a deletion marker: a synced line (a canonical
+	 * positive integer id, as an int or a digit string) whose `code` key is present
+	 * and null. Anything else — no `code` key, an empty code, a missing, zero,
+	 * negative, fractional or exponent id — is malformed and still reaches wc/v3,
+	 * whose own validation answers ("Coupon code is required" / "Coupon item ID is
+	 * readonly").
+	 *
+	 * @param mixed $line A posted coupon line.
+	 *
+	 * @return bool
+	 */
+	public static function is_coupon_deletion_marker( $line ): bool {
+		if ( ! is_array( $line ) || ! array_key_exists( 'code', $line ) || null !== $line['code'] ) {
+			return false;
+		}
+		$id = $line['id'] ?? null;
+		if ( is_int( $id ) ) {
+			return $id > 0;
+		}
+		return is_string( $id ) && ctype_digit( $id ) && (int) $id > 0;
 	}
 }

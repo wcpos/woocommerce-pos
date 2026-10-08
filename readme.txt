@@ -130,6 +130,42 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.10.25 - 2026/10/08 =
+
+- **Saving or checking out a sale no longer fails with "Allowed memory size exhausted" on a store with a few thousand orders.** Since 1.9.0 every order save loaded the 200 most recent orders to guess which field holds VAT numbers; it now asks the database one small question instead.
+- **A damaged row in the till's own bookkeeping no longer blocks the local database.** The till discards the row on the spot instead of refusing the read on every launch; sales, products and customers are never discarded this way.
+
+= 1.10.24 - 2026/10/08 =
+
+- **Removing a coupon from a cart that had already been saved no longer makes Checkout fail.** Until now the next Checkout or Save was refused with "Coupon code is required" and the sale could not be completed until the coupon was put back or the cart rebuilt. This has been the case since coupons arrived in 1.9.0.
+
+= 1.10.23 - 2026/10/07 =
+
+- **Paying with a hosted gateway such as Dintero, Mollie, PayPal or Klarna no longer jumps the till to the receipt before the payment.** The order is left open and settles from the gateway's callback, as before 1.10.20; merchants on 1.10.20–1.10.22 with such a gateway should update.
+- **"Checkout failed" no longer appears for a sale the store did accept** on a slow connection. The till now waits up to 45 seconds for the store's answer.
+- **Sales waiting behind an expired login are now announced.** A banner in the header shows how many sales are waiting, with a Log in button.
+- **A delete at the till is only dropped from the queue once the store confirms it.**
+- **Opening an order's refunds while offline, or after the app was in the background, shows an offline card instead of "Couldn't load refunds"**.
+- **A corrupt entry in the diagnostic log no longer crashes the Logs screen on iPhone, iPad and Android.**
+- Developers: a failed POS session revoke now returns its intended HTTP status (400, 404 or 500) instead of 200. Details on GitHub.
+
+= 1.10.22 - 2026/10/06 =
+
+- **Cashiers can no longer change a customer's role.** Only the Customer role can be assigned from a cashier account; staff roles are reserved for store managers and administrators.
+
+= 1.10.21 - 2026/10/06 =
+
+- **Till totals now match your store to the cent** on stores that round tax at subtotal level.
+- **Adding a Bluetooth printer no longer crashes the app** on iPad and iPhone.
+- **Cashiers can only edit customer accounts**, never staff accounts.
+- **Changing a user's password signs them out of the POS on every device.**
+- **Cashiers can edit and delete their own sales again** when their role lacks "edit others' orders".
+- **Payment gateways with no customer-facing title now show a name** in POS settings and at the till.
+- **Fixes for stores using High-Performance Order Storage:** cash tendered and change, tax-ID suggestions and fiscal submission status now read correctly.
+- **Connecting the app to a store with no REST link on its front page works again.**
+- **A staging copy of your store no longer overwrites the live store in the app's site list.** A store moved to a new domain appears as a new site and needs connecting once more.
+- Developers: a faster product-ID listing on `wcpos/v2`, advertised as a capability on `GET /wcpos/v2/status`. Details on GitHub.
+
 = 1.10.20 - 2026/09/23 =
 
 - **Checkout no longer reports "Checkout failed" for a sale that reached the store.** If the till was busy sending another change, or an earlier attempt had failed, the checkout screen could give up waiting even though the order had been saved. It now hears back as soon as the order is saved, and pressing Checkout again after a failure tries straight away.

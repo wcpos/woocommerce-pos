@@ -817,23 +817,15 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$cashier->add_cap( 'access_woocommerce_pos' );
 		$cashier->add_cap( 'edit_shop_orders' );
 		$cashier->remove_cap( 'edit_others_shop_orders' );
-		$own_order_id = self::factory()->post->create(
-			array(
-				'post_author' => $cashier_id,
-				'post_type'   => 'shop_order_placehold',
-			)
-		);
-		$other_order_id = self::factory()->post->create(
-			array(
-				'post_author' => $other_id,
-				'post_type'   => 'shop_order_placehold',
-			)
-		);
+		$own_order_id   = $this->orderAssignedTo( $cashier_id );
+		$other_order_id = $this->orderAssignedTo( $other_id );
+		$web_order_id   = $this->orderAssignedTo( 0 );
 		wp_set_current_user( $cashier_id );
 		$controller = new Write_Controller( new Fake_Mutation_Store() );
 
 		$this->assertTrue( $controller->wcpos_check_permissions( false, 'edit', $own_order_id, 'shop_order' ) );
 		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $other_order_id, 'shop_order' ) );
+		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $web_order_id, 'shop_order' ) );
 	}
 
 	public function test_order_delete_permission_respects_order_ownership(): void {
@@ -843,23 +835,25 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$cashier->add_cap( 'access_woocommerce_pos' );
 		$cashier->add_cap( 'delete_shop_orders' );
 		$cashier->remove_cap( 'delete_others_shop_orders' );
-		$own_order_id = self::factory()->post->create(
-			array(
-				'post_author' => $cashier_id,
-				'post_type'   => 'shop_order_placehold',
-			)
-		);
-		$other_order_id = self::factory()->post->create(
-			array(
-				'post_author' => $other_id,
-				'post_type'   => 'shop_order_placehold',
-			)
-		);
+		$own_order_id   = $this->orderAssignedTo( $cashier_id );
+		$other_order_id = $this->orderAssignedTo( $other_id );
+		$web_order_id   = $this->orderAssignedTo( 0 );
 		wp_set_current_user( $cashier_id );
 		$controller = new Write_Controller( new Fake_Mutation_Store() );
 
 		$this->assertTrue( $controller->wcpos_check_permissions( false, 'delete', $own_order_id, 'shop_order' ) );
 		$this->assertFalse( $controller->wcpos_check_permissions( false, 'delete', $other_order_id, 'shop_order' ) );
+		$this->assertFalse( $controller->wcpos_check_permissions( false, 'delete', $web_order_id, 'shop_order' ) );
+	}
+
+	/** An order assigned to $cashier_id via `_pos_user`, or a web order (no cashier) for 0. */
+	private function orderAssignedTo( int $cashier_id ): int {
+		$order = wc_create_order();
+		if ( $cashier_id > 0 ) {
+			$order->update_meta_data( '_pos_user', (string) $cashier_id );
+			$order->save_meta_data();
+		}
+		return $order->get_id();
 	}
 
 	/**

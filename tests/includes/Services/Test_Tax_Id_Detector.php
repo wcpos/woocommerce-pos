@@ -143,6 +143,83 @@ class Test_Tax_Id_Detector extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Inference reads meta rows, never order objects.
+	 *
+	 * Hydrating the 200 most recent orders with their full meta on every POS
+	 * order write exhausted a 128 MB request on a legacy-storage store with
+	 * 5,500 orders (the checkout 500 reported on 2026-10-08).
+	 */
+	public function test_infer_from_recent_orders_does_not_hydrate_order_objects(): void {
+		// Arrange.
+		foreach ( array( 'DE123456789', '', 'DE987654321' ) as $vat ) {
+			$order = wc_create_order();
+			if ( '' !== $vat ) {
+				$order->update_meta_data( '_billing_eu_vat_number', $vat );
+			}
+			$order->save();
+		}
+		$hydrated = 0;
+		$count    = static function ( $classname ) use ( &$hydrated ) {
+			++$hydrated;
+			return $classname;
+		};
+		add_filter( 'woocommerce_order_class', $count );
+
+		// Act.
+		try {
+			$inferred = Tax_Id_Detector::infer_from_recent_orders();
+		} finally {
+			remove_filter( 'woocommerce_order_class', $count );
+		}
+
+		// Assert.
+		$this->assertSame( 0, $hydrated, 'inference must not instantiate order objects' );
+		$this->assertSame( '_billing_eu_vat_number', $inferred[ Tax_Id_Types::TYPE_EU_VAT ] ?? null );
+	}
+
+	/**
+	 * A key a plugin initialises to an empty array (stored serialized as
+	 * `a:0:{}`) is not populated, however many orders carry it. The object path
+	 * decoded the value and skipped `array()`; the count must agree.
+	 */
+	public function test_infer_from_recent_orders_ignores_serialized_empty_values(): void {
+		// Arrange: two orders with an empty-array placeholder, one with a real value on another key.
+		foreach ( array( 1, 2 ) as $_ ) {
+			$order = wc_create_order();
+			$order->update_meta_data( '_billing_vat_number', array() );
+			$order->save();
+		}
+		$order = wc_create_order();
+		$order->update_meta_data( '_billing_eu_vat_number', 'DE123456789' );
+		$order->save();
+
+		// Act.
+		$inferred = Tax_Id_Detector::infer_from_recent_orders();
+
+		// Assert.
+		$this->assertSame( '_billing_eu_vat_number', $inferred[ Tax_Id_Types::TYPE_EU_VAT ] ?? null );
+	}
+
+	/**
+	 * Only the newest `$limit` orders are inspected.
+	 */
+	public function test_infer_from_recent_orders_honours_the_limit(): void {
+		// Arrange: an older order carries the key, the newest does not.
+		$older = wc_create_order();
+		$older->set_date_created( time() - DAY_IN_SECONDS );
+		$older->update_meta_data( '_billing_eu_vat_number', 'DE123456789' );
+		$older->save();
+		$newest = wc_create_order();
+		$newest->save();
+
+		// Act.
+		$inferred = Tax_Id_Detector::infer_from_recent_orders( 1 );
+
+		// Assert.
+		$this->assertArrayNotHasKey( Tax_Id_Types::TYPE_EU_VAT, $inferred );
+	}
+
+	/**
 	 * `summary()` integrates settings and inference; with no plugins active and
 	 * no orders, falls back to defaults.
 	 */

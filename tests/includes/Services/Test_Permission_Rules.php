@@ -58,7 +58,13 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 		} elseif ( 'orders' === $collection ) {
 			$order = wc_create_order();
 			$id = $order->get_id();
-			wp_update_post( array( 'ID' => $id, 'post_author' => 'self' === $target_role ? $actor : $this->user ) );
+			// Ownership is the order's `_pos_user`. The placeholder post's author is never the
+			// actor, so a rule that still read `post_author` denies the `self` rows, and
+			// WooCommerce's own author-based check (HposOrderCapabilityHelper, WC 11+)
+			// answers the same on every WooCommerce version.
+			$order->update_meta_data( '_pos_user', (string) ( 'self' === $target_role ? $actor : $this->user ) );
+			$order->save_meta_data();
+			wp_update_post( array( 'ID' => $id, 'post_author' => $this->user ) );
 		}
 		wp_set_current_user( $actor );
 		$params = 'customers' === $collection ? array( 'first_name' => 'Permission rule' ) : array( 'customer_note' => 'Permission rule' );
@@ -138,22 +144,25 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Missing post ownership must retain each lane's pre-refactor edit decision.
+	 * Ownership is read from the order, so an HPOS order with no post row at all is
+	 * still judged by `_pos_user` on both lanes.
 	 *
 	 * @dataProvider missing_order_post_rows
 	 */
-	public function test_order_edit_missing_post_preserves_lane_verdict( $lane, $expected ): void {
+	public function test_order_edit_missing_post_judges_pos_user_ownership( $lane, $owner, $expected ): void {
 		// Arrange: HPOS order exists, but its placeholder post does not.
 		global $wpdb;
 		$this->setup_cot();
 		$this->cot_setup = true;
 		$this->disable_cot_sync();
+		$actor = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		$order = wc_create_order();
 		$id    = $order->get_id();
+		$order->update_meta_data( '_pos_user', (string) ( $owner ? $actor : $this->user ) );
+		$order->save_meta_data();
 		$wpdb->delete( $wpdb->posts, array( 'ID' => $id ), array( '%d' ) );
 		clean_post_cache( $id );
-		$actor = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$user  = get_user_by( 'id', $actor );
+		$user = get_user_by( 'id', $actor );
 		$user->add_cap( 'access_woocommerce_pos' );
 		$user->add_cap( 'edit_shop_orders' );
 		wp_set_current_user( $actor );
@@ -179,8 +188,116 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 
 	public function missing_order_post_rows(): array {
 		return array(
-			'v1 retains flat edit grant' => array( 'v1', 200 ),
-			'v2 retains missing-post denial' => array( 'v2', 403 ),
+			'v1 owner edits'      => array( 'v1', true, 200 ),
+			'v1 non-owner denied' => array( 'v1', false, 403 ),
+			'v2 owner edits'      => array( 'v2', true, 200 ),
+			'v2 non-owner denied' => array( 'v2', false, 403 ),
+		);
+	}
+
+	/**
+	 * On posts storage WooCommerce writes `post_author = 1` for every order, so a rule
+	 * keyed on the post author treated a cashier's own sale as someone else's.
+	 *
+	 * @dataProvider posts_storage_ownership_rows
+	 */
+	public function test_order_edit_posts_storage_cashier_owns_own_sale( $lane, $context ): void {
+		// Arrange: posts storage, a cashier holding the flat cap but not the `others` one.
+		$this->assertFalse( \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() );
+		$actor = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user  = get_user_by( 'id', $actor );
+		foreach ( array( 'access_woocommerce_pos', 'read_private_shop_orders', "{$context}_shop_orders" ) as $cap ) {
+			$user->add_cap( $cap );
+		}
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos_user', (string) $actor );
+		$order->save_meta_data();
+		$this->assertSame( 1, (int) get_post( $order->get_id() )->post_author );
+		wp_set_current_user( $actor );
+
+		// Act.
+		$verdict = Permission_Rules::verdict( 'orders', $context, $order->get_id(), $actor, $lane );
+
+		// Assert.
+		$this->assertTrue( $verdict, is_wp_error( $verdict ) ? $verdict->get_error_code() : '' );
+	}
+
+	/**
+	 * A WooCommerce grant does not bypass ownership: the cashier who created an order
+	 * (so is its post author wherever a post row carries one) loses it on reassignment.
+	 *
+	 * With compatibility sync the `shop_order` post carries the author; without it,
+	 * WooCommerce 11's HposOrderCapabilityHelper reads the placeholder's author.
+	 *
+	 * @dataProvider reassigned_order_rows
+	 */
+	public function test_order_write_reassigned_order_denies_creator_on_both_lanes( $storage, $lane, $context ): void {
+		// Arrange.
+		if ( 'posts' !== $storage ) {
+			$this->setup_cot();
+			$this->cot_setup = true;
+			if ( 'hpos-sync' === $storage ) {
+				$this->enable_cot_sync();
+			} else {
+				$this->disable_cot_sync();
+			}
+		}
+		$this->install_sync_read_lane();
+		$creator  = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$assignee = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user     = get_user_by( 'id', $creator );
+		foreach ( array( 'access_woocommerce_pos', 'read_private_shop_orders', "{$context}_shop_orders" ) as $cap ) {
+			$user->add_cap( $cap );
+		}
+		wp_set_current_user( $creator );
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos_user', (string) $assignee );
+		$order->save();
+		$id = $order->get_id();
+		if ( 'posts' !== $storage ) {
+			$this->assertSame( 'hpos-sync' === $storage ? 'shop_order' : 'shop_order_placehold', get_post_type( $id ) );
+			$this->assertSame( $creator, (int) get_post( $id )->post_author );
+		}
+
+		// Act: judge, then dispatch the same operation on the lane — the current lane
+		// is the route literal below; the legacy lane is the v1 PATCH/DELETE.
+		$verdict = Permission_Rules::verdict( 'orders', $context, $id, $creator, $lane );
+		if ( 'v1' === $lane ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $id );
+			$request->set_method( 'delete' === $context ? 'DELETE' : 'PATCH' );
+			if ( 'delete' !== $context ) {
+				$request->set_body_params( array( 'customer_note' => 'Reassigned' ) );
+			}
+			$response = $this->server->dispatch( $request );
+		} else {
+			$response = $this->push( 'orders', $context, $id, array( 'customer_note' => 'Reassigned' ), '/wcpos/v2/push/orders' );
+		}
+
+		// Assert.
+		$this->assertWPError( $verdict );
+		$this->assertSame( 403, $verdict->get_error_data()['status'] );
+		$this->assertSame( 403, $response->get_status(), wp_json_encode( $response->get_data() ) );
+	}
+
+	public function reassigned_order_rows(): array {
+		return array(
+			'posts v1 edit'      => array( 'posts', 'v1', 'edit' ),
+			'posts v2 edit'      => array( 'posts', 'v2', 'edit' ),
+			'posts v2 delete'    => array( 'posts', 'v2', 'delete' ),
+			'hpos-sync v1 edit'   => array( 'hpos-sync', 'v1', 'edit' ),
+			'hpos-sync v2 edit'   => array( 'hpos-sync', 'v2', 'edit' ),
+			'hpos-sync v2 delete' => array( 'hpos-sync', 'v2', 'delete' ),
+			'hpos v1 edit'        => array( 'hpos', 'v1', 'edit' ),
+			'hpos v2 edit'        => array( 'hpos', 'v2', 'edit' ),
+			'hpos v2 delete'      => array( 'hpos', 'v2', 'delete' ),
+		);
+	}
+
+	public function posts_storage_ownership_rows(): array {
+		return array(
+			'v1 edit'   => array( 'v1', 'edit' ),
+			'v2 edit'   => array( 'v2', 'edit' ),
+			'v2 delete' => array( 'v2', 'delete' ),
 		);
 	}
 

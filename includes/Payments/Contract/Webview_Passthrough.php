@@ -26,7 +26,7 @@ class Webview_Passthrough {
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 10, 1 );
 		add_action( 'woocommerce_before_pay_action', array( __CLASS__, 'on_before_pay_action' ), 10, 1 );
 		// Priority 1: the window must close before Orders::apply_unpaid_gateway_order_status()
-		// runs on this same filter at 10 and lands the merchant's configured status.
+		// runs on this same filter at PHP_INT_MAX and lands the merchant's configured status.
 		add_filter( 'woocommerce_payment_successful_result', array( __CLASS__, 'on_payment_successful_result' ), 1, 2 );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 10, 3 );
 	}
