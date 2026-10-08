@@ -150,14 +150,14 @@ class Gateway_Submission {
 				// Without session initialisation the cart adds no shutdown cookie or saved-cart
 				// hooks; without the persistent cart, a gateway's empty_cart() cannot delete the
 				// cashier's own saved storefront cart.
-				add_filter( 'woocommerce_cart_session_initialize', '__return_false' );
+				add_filter( 'woocommerce_cart_session_initialize', array( self::class, 'deny' ) );
 				try {
 					WC()->cart = new \WC_Cart();
 				} finally {
-					remove_filter( 'woocommerce_cart_session_initialize', '__return_false' );
+					remove_filter( 'woocommerce_cart_session_initialize', array( self::class, 'deny' ) );
 				}
 			}
-			add_filter( 'woocommerce_persistent_cart_enabled', '__return_false' );
+			add_filter( 'woocommerce_persistent_cart_enabled', array( self::class, 'deny' ) );
 			wc_clear_notices();
 			$valid   = $gateway->validate_fields();
 			$notices = self::take_error_notices();
@@ -193,7 +193,7 @@ class Gateway_Submission {
 			$threw  = $throwable;
 		} finally {
 			self::$submitting_order_id = 0;
-			remove_filter( 'woocommerce_persistent_cart_enabled', '__return_false' );
+			remove_filter( 'woocommerce_persistent_cart_enabled', array( self::class, 'deny' ) );
 			remove_action( 'woocommerce_payment_complete', $complete );
 			remove_action( 'woocommerce_order_status_changed', $status_changed, 10 );
 			foreach ( $ids as $id ) {
@@ -333,6 +333,14 @@ class Gateway_Submission {
 	 */
 	public static function clear_stamp( WC_Order $order ): void {
 		$order->delete_meta_data( self::STAMP_META_KEY );
+	}
+
+	/**
+	 * A filter callback only this class owns: removing it can never strip a site's own
+	 * `__return_false` on the same hook.
+	 */
+	public static function deny(): bool {
+		return false;
 	}
 
 	/** Clear obsolete stamps on terminal Woo transitions. */
