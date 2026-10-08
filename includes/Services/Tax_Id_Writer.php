@@ -163,6 +163,30 @@ class Tax_Id_Writer {
 	}
 
 	/**
+	 * The per-type write map for a normalized list, or nothing for an empty one.
+	 *
+	 * An empty list resolves no keys, so it needs no map. Asking the detector
+	 * for one ran its recent-order scan on every POS order push (the app always
+	 * sends `tax_ids`, usually empty), and that scan was the straw that
+	 * exhausted a 128 MB request on a 5,500-order store.
+	 *
+	 * @param array<int,array<string,mixed>> $normalized Normalized TaxId[] input.
+	 * @param null|array<string,string>      $write_map  Caller-supplied map, if any.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function resolve_write_map( array $normalized, $write_map ): array {
+		if ( \is_array( $write_map ) ) {
+			return $write_map;
+		}
+		if ( array() === $normalized ) {
+			return array();
+		}
+
+		return ( new Tax_Id_Detector() )->summary()['write_map'];
+	}
+
+	/**
 	 * Persist the given TaxId[] list onto a WooCommerce order.
 	 *
 	 * @param WC_Abstract_Order         $order     Order.
@@ -173,7 +197,7 @@ class Tax_Id_Writer {
 	 */
 	public function write_for_order( WC_Abstract_Order $order, array $tax_ids, $write_map = null ): array {
 		$normalized = self::normalize_input( $tax_ids );
-		$map        = \is_array( $write_map ) ? $write_map : ( new Tax_Id_Detector() )->summary()['write_map'];
+		$map        = self::resolve_write_map( $normalized, $write_map );
 		$canonical  = self::canonicalize_for_storage( $normalized );
 
 		$plan = self::build_updates( $normalized, $map );
@@ -234,7 +258,7 @@ class Tax_Id_Writer {
 		}
 
 		$normalized = self::normalize_input( $tax_ids );
-		$map        = \is_array( $write_map ) ? $write_map : ( new Tax_Id_Detector() )->summary()['write_map'];
+		$map        = self::resolve_write_map( $normalized, $write_map );
 		$canonical  = self::canonicalize_for_storage( $normalized );
 
 		$plan = self::build_updates( $normalized, $map );

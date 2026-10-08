@@ -23,6 +23,13 @@ namespace WCPOS\WooCommercePOS\Services;
  */
 class Tax_Id_Detector {
 	/**
+	 * Per-request detection summary, built once per request by {@see summary()}.
+	 *
+	 * @var null|array{plugins:array<int,string>,write_map:array<string,string>}
+	 */
+	private static $summary_cache = null;
+
+	/**
 	 * Recognised plugin definitions. Each entry maps a "plugin id" used in the
 	 * detection result to:
 	 *
@@ -220,40 +227,32 @@ class Tax_Id_Detector {
 			'_billing_cuit'           => Tax_Id_Types::TYPE_AR_CUIT,
 		);
 
-		// Best-effort SQL: tolerate environments where wc_get_orders() / HPOS aren't
-		// available. We use the wc_get_orders() API for cross-store compatibility.
 		if ( ! \function_exists( 'wc_get_orders' ) ) {
 			return array();
 		}
 
-		$orders = \wc_get_orders(
+		/**
+		 * Ids only, then one grouped count over the meta table. Hydrating the
+		 * orders loaded every meta row of the newest 200 into memory on each POS
+		 * order write and exhausted a 128 MB request on a legacy-storage store.
+		 *
+		 * @var array<int, int|string>|mixed $ids The stub over-narrows every wc_get_orders() result to WC_Order[].
+		 */
+		$ids = \wc_get_orders(
 			array(
 				'limit'   => $limit,
 				'orderby' => 'date',
 				'order'   => 'DESC',
 				'status'  => 'any',
+				'return'  => 'ids',
 			)
 		);
-		if ( ! \is_array( $orders ) || empty( $orders ) ) {
+		$ids = array_values( array_filter( array_map( 'intval', \is_array( $ids ) ? $ids : array() ) ) );
+		if ( array() === $ids ) {
 			return array();
 		}
 
-		// Tally populated rows per candidate.
-		$counts = array_fill_keys( array_keys( $candidates ), 0 );
-		foreach ( $orders as $order ) {
-			// Read meta through the order object: with HPOS on (and sync off) it lives
-			// in wc_orders_meta, where get_post_meta() finds nothing.
-			if ( ! \is_object( $order ) || ! \method_exists( $order, 'get_meta' ) ) {
-				continue;
-			}
-			foreach ( $candidates as $meta_key => $_type ) {
-				$value = $order->get_meta( $meta_key );
-				if ( '' === $value || array() === $value || null === $value ) {
-					continue;
-				}
-				++$counts[ $meta_key ];
-			}
-		}
+		$counts = self::count_populated_keys( $ids, array_keys( $candidates ) );
 
 		// Pick the top-counted key per type.
 		$best = array();
@@ -275,14 +274,66 @@ class Tax_Id_Detector {
 	}
 
 	/**
+	 * How many of the given orders carry a non-empty value for each meta key.
+	 *
+	 * Reads the order meta table of the active datastore directly: under HPOS
+	 * the rows live in `wc_orders_meta`, otherwise in `wp_postmeta`, the same
+	 * split {@see Pos_Uuid::get_order_ids_by_uuid()} makes.
+	 *
+	 * @param int[]    $ids  Order ids to inspect.
+	 * @param string[] $keys Candidate meta keys.
+	 *
+	 * @return array<string,int> Populated-order count per key, zero when absent.
+	 */
+	private static function count_populated_keys( array $ids, array $keys ): array {
+		global $wpdb;
+
+		$counts = array_fill_keys( $keys, 0 );
+		if ( array() === $ids || array() === $keys ) {
+			return $counts;
+		}
+
+		$order_util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
+		$hpos       = class_exists( $order_util )
+			&& method_exists( $order_util, 'custom_orders_table_usage_is_enabled' )
+			&& call_user_func( array( $order_util, 'custom_orders_table_usage_is_enabled' ) );
+		$table      = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$id_column  = $hpos ? 'order_id' : 'post_id';
+
+		$id_placeholders  = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
+		$key_placeholders = implode( ',', array_fill( 0, \count( $keys ), '%s' ) );
+
+		// "Populated" means what the order getter used to decode as non-empty: a
+		// plugin that initialises a key with an empty array, an empty string or
+		// null stores `a:0:{}`, `s:0:"";` or `N;`, and those must not count.
+		$empty_values = array( '', 'a:0:{}', 's:0:"";', 'N;' );
+		$empty_placeholders = implode( ',', array_fill( 0, \count( $empty_values ), '%s' ) );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table and column names are fixed above; every value goes through a placeholder.
+		$sql = "SELECT meta_key, COUNT(DISTINCT {$id_column}) AS populated FROM {$table}"
+			. " WHERE {$id_column} IN ({$id_placeholders}) AND meta_key IN ({$key_placeholders})"
+			. " AND meta_value NOT IN ({$empty_placeholders})"
+			. ' GROUP BY meta_key';
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $ids, $keys, $empty_values ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared here with the placeholders built above.
+
+		foreach ( (array) $rows as $row ) {
+			if ( isset( $counts[ $row['meta_key'] ] ) ) {
+				$counts[ $row['meta_key'] ] = (int) $row['populated'];
+			}
+		}
+
+		return $counts;
+	}
+
+	/**
 	 * Build the full detection summary for a request. Cached per-request.
 	 *
 	 * @return array{plugins:array<int,string>,write_map:array<string,string>}
 	 */
 	public function summary(): array {
-		static $cache = null;
-		if ( null !== $cache ) {
-			return $cache;
+		if ( null !== self::$summary_cache ) {
+			return self::$summary_cache;
 		}
 
 		$active    = self::active_plugin_ids();
@@ -290,11 +341,22 @@ class Tax_Id_Detector {
 		$overrides = Tax_Id_Settings::get_overrides();
 		$defaults  = Tax_Id_Settings::default_write_map();
 
-		$cache = array(
+		self::$summary_cache = array(
 			'plugins'   => $active,
 			'write_map' => self::compose_write_map( $defaults, $inferred, $active, $overrides ),
 		);
 
-		return $cache;
+		return self::$summary_cache;
+	}
+
+	/**
+	 * Discard the per-request summary cache. Tests only: the PHPUnit process
+	 * never ends between cases, so a warm cache would hide whether a write
+	 * path asks the detector at all.
+	 *
+	 * @internal
+	 */
+	public static function reset_request_state(): void {
+		self::$summary_cache = null;
 	}
 }
