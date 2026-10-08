@@ -55,9 +55,6 @@ class Gateway_Submission {
 		if ( ! wcpos_is_pos_order( $order ) ) {
 			return new WP_Error( 'wcpos_invalid_transition', __( 'Only POS orders take a gateway submission.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
-		if ( empty( $descriptor['pos_enabled'] ) ) {
-			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is not enabled for the POS.', 'woocommerce-pos' ), array( 'status' => 403 ) );
-		}
 		$attempt_id = strtolower( $attempt_id );
 		$ledger     = Ledger::instance();
 		$rows       = $ledger->read( $order );
@@ -81,6 +78,11 @@ class Gateway_Submission {
 		if ( 'cancelled' === ( $history[ $attempt_id ] ?? null ) ) {
 			// The till undid this send; a late retry of it must not send again.
 			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		// Only a NEW attempt needs the method enabled: a replay above answers what already
+		// happened, even after the merchant has switched the method off.
+		if ( empty( $descriptor['pos_enabled'] ) ) {
+			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is not enabled for the POS.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
 		if ( 0 === Money::minor( $ledger->balance( $order, $rows ) ) ) {
 			return new WP_Error( 'wcpos_order_already_paid', __( 'Order is already paid.', 'woocommerce-pos' ), array( 'status' => 409 ) );

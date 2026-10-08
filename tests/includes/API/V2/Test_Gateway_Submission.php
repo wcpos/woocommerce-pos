@@ -539,6 +539,21 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 0, Sent_Test_Gateway::$calls );
 	}
 
+	/** A lost response is replayed even after the merchant switched the method off; only a new attempt is refused. */
+	public function test_replay_survives_the_method_being_disabled(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['outcome'] );
+		$this->enable_for_pos( false );
+		// Act / Assert.
+		$replay = $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+		$this->assertSame( 200, $replay->get_status() );
+		$this->assertSame( 'sent', $replay->get_data()['outcome'] );
+		$this->assertSame( 403, $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
 	/** Paid orders refuse a new attempt. */
 	public function test_submit_paid_order_returns_already_paid(): void {
 		// Arrange.
