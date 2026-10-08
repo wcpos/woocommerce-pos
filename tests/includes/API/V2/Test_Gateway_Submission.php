@@ -27,6 +27,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		Sent_Test_Gateway::$failure     = '';
 		Sent_Test_Gateway::$land_status = 'pending';
 		Sent_Test_Gateway::$redirect    = '';
+		Sent_Test_Gateway::$empty_cart  = false;
 		Paid_Test_Gateway::$calls       = 0;
 		Paid_Test_Gateway::$status_only = false;
 		Paid_Test_Gateway::$throw_after = false;
@@ -228,7 +229,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_sent_test', $stamp['method_id'] );
 		$this->assertSame( 'buyer@example.com', $stamp['destination'] );
 		$this->assertSame( $attempt, $stamp['attempt_id'] );
-		$this->assertSame( array( $attempt ), $stamp['attempts'] );
+		$this->assertSame( array( $attempt => 'sent' ), Gateway_Submission::read_attempts( $stored ) );
 		$this->assertSame( get_current_user_id(), $stamp['cashier_id'] );
 		$this->assertNotEmpty( $stamp['sent_at_gmt'] );
 		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
@@ -250,10 +251,57 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'sent', $response->get_data()['outcome'] );
 		$this->assertSame( 'sent', $replay->get_data()['outcome'] );
 		$this->assertSame( 2, Sent_Test_Gateway::$calls );
-		$stamp = Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) );
+		$stored = wc_get_order( $order->get_id() );
+		$stamp  = Gateway_Submission::read_stamp( $stored );
 		$this->assertSame( $again, $stamp['attempt_id'] );
 		$this->assertSame( 'fixed@example.com', $stamp['destination'] );
-		$this->assertSame( array( $first, $again ), $stamp['attempts'] );
+		$this->assertSame(
+			array(
+				$first => 'sent',
+				$again => 'sent',
+			),
+			Gateway_Submission::read_attempts( $stored )
+		);
+	}
+
+	/** A gateway that empties the cart, as WooCommerce's own BACS, cheque and COD do, works on a REST request. */
+	public function test_submit_gateway_that_empties_the_cart_without_a_cart(): void {
+		// Arrange.
+		Sent_Test_Gateway::$empty_cart = true;
+		$order                         = $this->create_pos_order();
+		$cart                          = WC()->cart;
+		$customer                      = WC()->customer;
+		WC()->cart                     = null;
+		WC()->customer                 = null;
+		// Act.
+		try {
+			$response = $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+		} finally {
+			WC()->cart     = $cart;
+			WC()->customer = $customer;
+		}
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'sent', $response->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
+	/** A refused attempt leaves the order's payment method as it was. */
+	public function test_submit_failure_restores_the_previous_payment_method(): void {
+		// Arrange.
+		Sent_Test_Gateway::$failure = 'failure';
+		$order                      = $this->create_pos_order();
+		$order->set_payment_method( 'pos_cash' );
+		$order->set_payment_method_title( 'Cash' );
+		$order->save();
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+		// Assert.
+		$this->assertSame( 502, $response->get_status() );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos_cash', $stored->get_payment_method() );
+		$this->assertSame( 'Cash', $stored->get_payment_method_title() );
+		$this->assertSame( 'wcpos_sent_test', Sent_Test_Gateway::$posted_method );
 	}
 
 	/** A paid gateway yields exactly one client-minted row, keyed by the attempt. */
@@ -367,6 +415,19 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 400, $this->cancel( $order, null )->get_status() );
 		$this->assertSame( $again, Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) )['attempt_id'] );
 		$this->assertSame( 200, $this->cancel( $order, $again )->get_status() );
+		// A late retry of the cancelled send never sends again, and the earlier send is still remembered.
+		$retry = $this->submit( $order, $again, array( 'invoice_email' => 'fixed@example.com' ) );
+		$this->assertSame( 409, $retry->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $retry->get_data()['code'] );
+		$this->assertSame( 'sent', $this->submit( $order, $first, array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['outcome'] );
+		$this->assertSame( 2, Sent_Test_Gateway::$calls );
+		$this->assertSame(
+			array(
+				$first => 'sent',
+				$again => 'cancelled',
+			),
+			Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) )
+		);
 	}
 
 	/** Projection preserves a sent order until money arrives. */
@@ -655,6 +716,12 @@ class Sent_Test_Gateway extends \WC_Payment_Gateway {
 	 * @var string
 	 */
 	public static $redirect = '';
+	/**
+	 * Whether process_payment() empties the cart, as WooCommerce's own offline gateways do.
+	 *
+	 * @var bool
+	 */
+	public static $empty_cart = false;
 
 	/** Register fixture identity. */
 	public function __construct() {
@@ -699,6 +766,9 @@ class Sent_Test_Gateway extends \WC_Payment_Gateway {
 		}
 		$order = wc_get_order( $order_id );
 		$order->update_status( self::$land_status, 'Invoice sent by gateway' );
+		if ( self::$empty_cart ) {
+			WC()->cart->empty_cart();
+		}
 		return array(
 			'result'   => 'success',
 			'redirect' => '' !== self::$redirect ? self::$redirect : $order->get_checkout_order_received_url(),

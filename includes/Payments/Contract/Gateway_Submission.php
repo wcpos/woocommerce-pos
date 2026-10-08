@@ -16,8 +16,10 @@ use WP_Error;
 /** Reads what a Woo gateway did, within the route's existing order lock. */
 class Gateway_Submission {
 	public const STAMP_META_KEY = '_wcpos_awaiting_customer';
-	/** Past attempt ids a stamp remembers, so a delayed retry of an earlier send never sends again. */
-	public const STAMP_ATTEMPTS_CAP = 20;
+	/** Every sent or cancelled attempt for the order's life, so a delayed retry never sends again. */
+	public const ATTEMPTS_META_KEY = '_wcpos_gateway_attempts';
+	/** Attempt ids the history keeps; older ones fall off (a till does not retry a week-old send). */
+	public const ATTEMPTS_CAP = 50;
 	/**
 	 * Order whose gateway outcome is currently being observed.
 	 *
@@ -68,13 +70,18 @@ class Gateway_Submission {
 				'order' => $ledger->summary( $order ),
 			);
 		}
-		$stamp = self::read_stamp( $order );
-		if ( $stamp && in_array( $attempt_id, self::stamp_attempts( $stamp ), true ) ) {
+		$stamp   = self::read_stamp( $order );
+		$history = self::read_attempts( $order );
+		if ( 'sent' === ( $history[ $attempt_id ] ?? null ) ) {
 			return array(
 				'outcome' => 'sent',
 				'payment' => null,
 				'order' => $ledger->summary( $order ),
 			);
+		}
+		if ( 'cancelled' === ( $history[ $attempt_id ] ?? null ) ) {
+			// The till undid this send; a late retry of it must not send again.
+			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		if ( 0 === Money::minor( $ledger->balance( $order, $rows ) ) ) {
 			return new WP_Error( 'wcpos_order_already_paid', __( 'Order is already paid.', 'woocommerce-pos' ), array( 'status' => 409 ) );
@@ -124,14 +131,22 @@ class Gateway_Submission {
 				$complete( $id );
 			}
 		};
-		$threw = null;
+		$threw           = null;
+		$previous_method = null;
 		try {
-			// A REST request has no WooCommerce session, and wc_add_notice() / wc_clear_notices()
-			// (which validate_fields() and most process_payment() implementations use) call
-			// methods on it. Give the gateway a request-scoped one, never init()ed: notices
-			// live in memory for this call, with no cookie and no session row written.
+			// A REST request has no WooCommerce session, cart or customer; wc_add_notice() /
+			// wc_clear_notices() (validate_fields(), most process_payment() implementations)
+			// call methods on the session, and WooCommerce's own BACS, cheque and COD call
+			// WC()->cart->empty_cart(). Give the gateway request-scoped ones, the session never
+			// init()ed: everything lives in memory for this call, no cookie, no session row.
 			if ( ! WC()->session instanceof \WC_Session ) {
 				WC()->session = new \WC_Session_Handler();
+			}
+			if ( ! WC()->customer instanceof \WC_Customer ) {
+				WC()->customer = new \WC_Customer( get_current_user_id(), true );
+			}
+			if ( ! WC()->cart instanceof \WC_Cart ) {
+				WC()->cart = new \WC_Cart();
 			}
 			wc_clear_notices();
 			$valid   = $gateway->validate_fields();
@@ -153,7 +168,9 @@ class Gateway_Submission {
 				return self::invalid_fields( $errors );
 			}
 			// WooCommerce's own pay form assigns the chosen gateway before process_payment();
-			// the invoice email, the pay link and wp-admin read it from the order.
+			// the invoice email, the pay link and wp-admin read it from the order. Remembered so
+			// a refused attempt can put the previous method back (§2.1: nothing written).
+			$previous_method = array( $order->get_payment_method(), $order->get_payment_method_title() );
 			$order->set_payment_method( $gateway->id );
 			$order->set_payment_method_title( (string) $descriptor['title'] );
 			$order->save();
@@ -175,6 +192,7 @@ class Gateway_Submission {
 		$notices   = self::take_error_notices();
 		$malformed = ! is_array( $result ) || 'success' !== ( $result['result'] ?? null );
 		if ( $malformed && ! $paid ) {
+			self::restore_method( $order, $previous_method );
 			$detail = implode( ' ', wp_list_pluck( $notices, 'notice' ) );
 			if ( $threw ) {
 				// A gateway that throws instead of adding a notice still owes the operator a reason.
@@ -194,6 +212,7 @@ class Gateway_Submission {
 		if ( null !== $elsewhere ) {
 			// A hosted checkout: the gateway wants the browser to go somewhere the till cannot
 			// follow. Nothing was sent and nothing was taken, so say so rather than stamp "sent".
+			self::restore_method( $order, $previous_method );
 			Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d: %s answered a redirect to %s; refused.', $attempt_id, $order->get_id(), $descriptor['id'], $elsewhere ) );
 			return new WP_Error(
 				'wcpos_provider_error',
@@ -232,18 +251,17 @@ class Gateway_Submission {
 			);
 		} else {
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
-			$attempts    = array_merge( $stamp ? self::stamp_attempts( $stamp ) : array(), array( $attempt_id ) );
 			$order->update_meta_data(
 				self::STAMP_META_KEY,
 				array(
 					'method_id' => $descriptor['id'],
 					'destination' => $destination,
 					'attempt_id' => $attempt_id,
-					'attempts' => array_slice( array_values( array_unique( $attempts ) ), - self::STAMP_ATTEMPTS_CAP ),
 					'sent_at_gmt' => gmdate( 'c' ),
 					'cashier_id' => get_current_user_id(),
 				)
 			);
+			self::remember_attempt( $order, $history, $attempt_id, 'sent' );
 			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the destination the cashier entered. */
 			$order->add_order_note( sprintf( __( 'Sent via POS: %1$s (%2$s)', 'woocommerce-pos' ), $verb['label'], (string) $destination ) );
 			$order->save();
@@ -280,6 +298,8 @@ class Gateway_Submission {
 			return new WP_Error( 'wcpos_payment_conflict', __( 'A newer invoice has been sent for this order.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		self::clear_stamp( $order );
+		// The history outlives the stamp: a late retry of this send must never send again.
+		self::remember_attempt( $order, self::read_attempts( $order ), strtolower( $attempt_id ), 'cancelled' );
 		/* translators: 1: the payment method title, 2: the cashier's reason. */
 		$order->update_status( 'pos-open', trim( sprintf( __( 'Cancelled via POS: %1$s. %2$s', 'woocommerce-pos' ), $descriptor['title'], $reason ) ) );
 		return array( 'order' => Ledger::instance()->summary( $order ) );
@@ -335,8 +355,55 @@ class Gateway_Submission {
 		if ( ! is_string( $host ) || '' === $host ) {
 			return null; // A relative path stays on this site.
 		}
-		$home = wp_parse_url( home_url(), PHP_URL_HOST );
-		return strcasecmp( $host, (string) $home ) === 0 ? null : $host;
+		// Both of the site's hosts count as "here": a gateway may build its return URL from
+		// either, and they differ on sites that serve WordPress from a subdomain.
+		foreach ( array( home_url(), site_url() ) as $here ) {
+			if ( 0 === strcasecmp( $host, (string) wp_parse_url( $here, PHP_URL_HOST ) ) ) {
+				return null;
+			}
+		}
+		return $host;
+	}
+
+	/**
+	 * Put the order's previous payment method back after an attempt that wrote nothing else.
+	 *
+	 * @param WC_Order   $order    Order object (the route's instance; re-read before use).
+	 * @param array|null $previous `[ method id, title ]` as they were before this attempt; null when never changed.
+	 */
+	private static function restore_method( WC_Order $order, ?array $previous ): void {
+		$fresh = null === $previous ? null : wc_get_order( $order->get_id() );
+		if ( ! $fresh instanceof WC_Order ) {
+			return;
+		}
+		$fresh->set_payment_method( (string) $previous[0] );
+		$fresh->set_payment_method_title( (string) $previous[1] );
+		$fresh->save();
+	}
+
+	/**
+	 * The order's attempt history: attempt id → `sent` | `cancelled`. Never cleared with the stamp.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @return array<string, string>
+	 */
+	public static function read_attempts( WC_Order $order ): array {
+		$history = $order->get_meta( self::ATTEMPTS_META_KEY );
+		return is_array( $history ) ? array_filter( $history, 'is_string' ) : array();
+	}
+
+	/**
+	 * Record an attempt's fate; the caller owns saving.
+	 *
+	 * @param WC_Order $order      Order object.
+	 * @param array    $history    The history as read.
+	 * @param string   $attempt_id Attempt id (lowercase).
+	 * @param string   $fate       `sent` or `cancelled`.
+	 */
+	private static function remember_attempt( WC_Order $order, array $history, string $attempt_id, string $fate ): void {
+		unset( $history[ $attempt_id ] );
+		$history[ $attempt_id ] = $fate;
+		$order->update_meta_data( self::ATTEMPTS_META_KEY, array_slice( $history, - self::ATTEMPTS_CAP, null, true ) );
 	}
 
 	/**
@@ -351,19 +418,6 @@ class Gateway_Submission {
 		$notices = wc_get_notices( 'error' );
 		wc_clear_notices();
 		return is_array( $notices ) ? $notices : array();
-	}
-
-	/**
-	 * Every attempt id a stamp knows, the current one included.
-	 *
-	 * @param array $stamp Stamp meta.
-	 */
-	private static function stamp_attempts( array $stamp ): array {
-		$attempts = is_array( $stamp['attempts'] ?? null ) ? $stamp['attempts'] : array();
-		if ( isset( $stamp['attempt_id'] ) ) {
-			$attempts[] = $stamp['attempt_id'];
-		}
-		return array_values( array_unique( array_filter( $attempts, 'is_string' ) ) );
 	}
 
 	/**

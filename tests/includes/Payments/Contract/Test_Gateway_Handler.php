@@ -96,7 +96,7 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 	/** Refunds run through the gateway's own process_refund() when it supports them, else succeed by hand. */
 	public function test_gateway_refund_follows_the_gateway(): void {
 		// Arrange.
-		$filter = static fn( array $gateways ): array => array_merge( $gateways, array( Refunding_Test_Gateway::class ) );
+		$filter = static fn( array $gateways ): array => array_merge( $gateways, array( Refunding_Test_Gateway::class, No_Refund_Test_Gateway::class ) );
 		add_filter( 'woocommerce_payment_gateways', $filter );
 		\WC_Payment_Gateways::instance()->init();
 		$handler = Capture_Mode_Registry::instance()->get( 'gateway' );
@@ -113,16 +113,25 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'succeeded', $refunded['refunds'][0]['status'] );
 			$this->assertSame( '5.00', $refunded['refunds'][0]['amount'] );
 			$this->assertSame( 77, $refunded['refunds'][0]['id'] );
-			// Act / Assert: the provider refuses.
+			$this->assertNull( $refunded['refunds'][0]['provider_ref'] );
+			// Act / Assert: any truthy answer is a success, as wc_refund_payment() reads it.
+			Refunding_Test_Gateway::$result = 1;
+			$this->assertSame( 'succeeded', $handler->refund( $row, 80, '5.00' )['refunds'][0]['status'] );
+			// Act / Assert: the provider refuses, with and without a message.
 			Refunding_Test_Gateway::$result = new \WP_Error( 'declined', 'No funds' );
 			$error                          = $handler->refund( $row, 78, '5.00' );
 			$this->assertInstanceOf( \WP_Error::class, $error );
 			$this->assertSame( 'wcpos_provider_error', $error->get_error_code() );
 			$this->assertSame( 'No funds', $error->get_error_message() );
-			// Act / Assert: a gateway without refunds is handed back by hand.
-			$manual = $handler->refund( array_merge( $row, array( 'method_id' => 'wcpos_sent_nowhere' ) ), 79, '5.00' );
+			Refunding_Test_Gateway::$result = false;
+			$this->assertSame( 'wcpos_provider_error', $handler->refund( $row, 81, '5.00' )->get_error_code() );
+			// Act / Assert: a registered gateway without refunds is handed back by hand.
+			$manual = $handler->refund( array_merge( $row, array( 'method_id' => 'wcpos_norefund_test' ) ), 79, '5.00' );
 			$this->assertSame( 'succeeded', $manual['refunds'][0]['status'] );
 			$this->assertNull( $manual['refunds'][0]['provider_ref'] );
+			// Act / Assert: a gateway that is no longer installed cannot give anything back.
+			$missing = $handler->refund( array_merge( $row, array( 'method_id' => 'wcpos_gone' ) ), 82, '5.00' );
+			$this->assertSame( 'wcpos_payment_method_not_found', $missing->get_error_code() );
 		} finally {
 			remove_filter( 'woocommerce_payment_gateways', $filter );
 			\WC_Payment_Gateways::instance()->init();
@@ -160,12 +169,22 @@ class Replacement_Gateway_Handler extends Abstract_Capture_Mode_Handler {
 /** Plain Woo gateway fixture. */
 class Gateway_Handler_Test_Gateway extends \WC_Payment_Gateway {}
 
+/** A registered gateway with no refund support. */
+class No_Refund_Test_Gateway extends \WC_Payment_Gateway {
+	/** Register fixture identity. */
+	public function __construct() {
+		$this->id       = 'wcpos_norefund_test';
+		$this->title    = 'No refunds';
+		$this->supports = array( 'products' );
+	}
+}
+
 /** A gateway that supports refunds and records what it was asked. */
 class Refunding_Test_Gateway extends \WC_Payment_Gateway {
 	/**
 	 * What process_refund() answers.
 	 *
-	 * @var true|\WP_Error
+	 * @var mixed
 	 */
 	public static $result = true;
 	/**

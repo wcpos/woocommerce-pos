@@ -54,25 +54,28 @@ class Gateway_Handler extends Abstract_Capture_Mode_Handler {
 	 */
 	public function refund( array $row, int $refund_id, string $amount ) {
 		$gateway = Descriptor_Builder::instance()->gateway( (string) ( $row['method_id'] ?? '' ) );
-		$ref     = null;
-		if ( $gateway && $gateway->supports( 'refunds' ) ) {
+		if ( ! $gateway ) {
+			// The plugin that took the money is gone; nobody can give it back from here.
+			return new \WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		}
+		if ( $gateway->supports( 'refunds' ) ) {
 			$refund = $refund_id > 0 ? wc_get_order( $refund_id ) : null;
 			$reason = $refund instanceof \WC_Order_Refund ? $refund->get_reason() : '';
 			$result = $gateway->process_refund( (int) ( $row['order_id'] ?? 0 ), (float) $amount, $reason );
 			if ( is_wp_error( $result ) ) {
 				return new \WP_Error( 'wcpos_provider_error', $result->get_error_message(), array( 'status' => 502 ) );
 			}
-			if ( true !== $result ) {
+			// wc_refund_payment() treats any truthy result as success; so does this.
+			if ( ! $result ) {
 				return new \WP_Error( 'wcpos_provider_error', __( 'The payment provider did not refund this payment.', 'woocommerce-pos' ), array( 'status' => 502 ) );
 			}
-			$ref = wc_get_order( (int) ( $row['order_id'] ?? 0 ) );
-			$ref = $ref ? ( '' !== $ref->get_transaction_id() ? $ref->get_transaction_id() : null ) : null;
 		}
+		// process_refund() answers a boolean, never a refund reference, so none is recorded.
 		$row['refunds'][] = array(
 			'id'           => $refund_id,
 			'amount'       => $amount,
 			'status'       => 'succeeded',
-			'provider_ref' => $ref,
+			'provider_ref' => null,
 		);
 		return $row;
 	}
