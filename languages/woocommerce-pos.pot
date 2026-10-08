@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-29T01:31:49+00:00\n"
+"POT-Creation-Date: 2026-10-08T21:25:26+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -35,24 +35,24 @@ msgid "http://wcpos.com"
 msgstr ""
 
 #. translators: 1: Minimum PHP version, 2: Update URL.
-#: includes/Activator.php:349
+#: includes/Activator.php:356
 #, php-format
 msgid "<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
 msgstr ""
 
 #. translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
-#: includes/Activator.php:373
+#: includes/Activator.php:380
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:395
+#: includes/Activator.php:402
 msgid "<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:396
+#: includes/Activator.php:403
 msgid "Enable permalinks"
 msgstr ""
 
@@ -60,7 +60,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the POS cashier/operator who served the customer.
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Activator.php:638
+#: includes/Activator.php:645
 #: includes/Services/Receipt_Data_Schema.php:445
 #: includes/Services/Receipt_I18n_Labels.php:90
 #: includes/Services/Reports_Registry.php:187
@@ -70,7 +70,7 @@ msgid "Cashier"
 msgstr ""
 
 #. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-#: includes/Activator.php:833
+#: includes/Activator.php:840
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -375,12 +375,12 @@ msgid "58mm (Narrow)"
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API.php:433
+#: includes/API.php:437
 #: includes/API/V1/Cashier.php:124
 msgid "Authentication required."
 msgstr ""
 
-#: includes/API.php:440
+#: includes/API.php:444
 msgid "You do not have permission to access the POS."
 msgstr ""
 
@@ -501,41 +501,41 @@ msgstr ""
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Checkout_Controller.php:279
 #: includes/API/V1/Receipts_Controller.php:284
-#: includes/API/V2/Payments_Controller.php:251
+#: includes/API/V2/Payments_Controller.php:318
 #: includes/Payments/Contract/Settlement.php:89
 msgid "Order not found."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Customers_Controller.php:103
+#: includes/API/V1/Customers_Controller.php:104
 msgid "Customer tax IDs."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Customers_Controller.php:112
+#: includes/API/V1/Customers_Controller.php:113
 msgid "Tax ID type."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Customers_Controller.php:116
+#: includes/API/V1/Customers_Controller.php:117
 msgid "Tax ID value."
 msgstr ""
 
-#: includes/API/V1/Customers_Controller.php:120
+#: includes/API/V1/Customers_Controller.php:121
 msgid "ISO 3166-1 alpha-2 country code."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Customers_Controller.php:124
+#: includes/API/V1/Customers_Controller.php:125
 msgid "Optional human-readable label."
 msgstr ""
 
-#: includes/API/V1/Customers_Controller.php:194
+#: includes/API/V1/Customers_Controller.php:195
 msgid "Filter customers by roles."
 msgstr ""
 
 #. translators: Use default WordPress translation.
-#: includes/API/V1/Customers_Controller.php:328
+#: includes/API/V1/Customers_Controller.php:329
 #: includes/API/V1/Orders_Controller.php:599
 msgid "Invalid email address."
 msgstr ""
@@ -1068,15 +1068,31 @@ msgstr ""
 msgid "Collection \"%1$s\" is not served by this route. Supported: %2$s."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:75
+#: includes/API/V2/Payments_Controller.php:80
 msgid "Sorry, you cannot manage order payments."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:94
+#: includes/API/V2/Payments_Controller.php:99
 msgid "Payment must be an object."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:201
+#: includes/API/V2/Payments_Controller.php:151
+#: includes/API/V2/Payment_Methods_Controller.php:110
+#: includes/Payments/Contract/Gateway_Handler.php:59
+#: includes/Payments/Contract/Gateway_Submission.php:97
+#: includes/Payments/Contract/Ledger.php:724
+msgid "Payment method not found."
+msgstr ""
+
+#: includes/API/V2/Payments_Controller.php:157
+msgid "Values must be an object and attempt ID a UUID."
+msgstr ""
+
+#: includes/API/V2/Payments_Controller.php:162
+msgid "Attempt ID must name the sent attempt to cancel."
+msgstr ""
+
+#: includes/API/V2/Payments_Controller.php:268
 msgid "Invalid payment operation parameters."
 msgstr ""
 
@@ -1088,18 +1104,18 @@ msgstr ""
 msgid "Sorry, you cannot bootstrap payment methods."
 msgstr ""
 
-#: includes/API/V2/Payment_Methods_Controller.php:110
-#: includes/Payments/Contract/Ledger.php:679
-msgid "Payment method not found."
-msgstr ""
-
 #: includes/API/V2/Payment_Methods_Controller.php:114
-#: includes/Payments/Contract/Ledger.php:1197
+#: includes/Payments/Contract/Gateway_Submission.php:50
+#: includes/Payments/Contract/Ledger.php:1314
 msgid "Payment capture mode is unsupported."
 msgstr ""
 
 #: includes/API/V2/Payment_Methods_Controller.php:120
 msgid "Payment context must be an object."
+msgstr ""
+
+#: includes/API/V2/Proxy/Products_Proxy_Behavior.php:194
+msgid "Could not fetch products."
 msgstr ""
 
 #: includes/API/V2/Records_Controller.php:66
@@ -1218,7 +1234,7 @@ msgstr ""
 #. translators: Checkout error shown when card nonce validation fails.
 #. translators: Checkout error shown when cash nonce validation fails.
 #: includes/Gateways/Card.php:89
-#: includes/Gateways/Cash.php:139
+#: includes/Gateways/Cash.php:141
 msgid "Nonce verification failed"
 msgstr ""
 
@@ -1236,9 +1252,9 @@ msgstr ""
 #. translators: Cash checkout field label for the amount of money received from the customer.
 #. translators: Cash numpad label for the amount of money received from the customer.
 #. translators: Order note label for the cash amount received from the customer at checkout.
-#: includes/Gateways/Cash.php:89
-#: includes/Gateways/Cash.php:92
-#: includes/Gateways/Cash.php:203
+#: includes/Gateways/Cash.php:91
+#: includes/Gateways/Cash.php:94
+#: includes/Gateways/Cash.php:205
 msgid "Amount Tendered"
 msgstr ""
 
@@ -1246,7 +1262,7 @@ msgstr ""
 #. translators: Template-editor field label for total cash returned to the customer after payments; not "change" meaning modify.
 #. translators: Template-editor field label for cash returned to the customer after payment; not "change" meaning modify.
 #. translators: Receipt/payment label for cash returned to the customer when the received amount is greater than the total; not "change" meaning modify.
-#: includes/Gateways/Cash.php:97
+#: includes/Gateways/Cash.php:99
 #: includes/Services/Receipt_Data_Schema.php:931
 #: includes/Services/Receipt_Data_Schema.php:1046
 #: includes/Services/Receipt_Data_Schema.php:1723
@@ -1257,22 +1273,22 @@ msgid "Change"
 msgstr ""
 
 #. translators: Money returned to the customer after a cash payment.
-#: includes/Gateways/Cash.php:205
+#: includes/Gateways/Cash.php:207
 msgctxt "Money returned from cash sale"
 msgid "Change"
 msgstr ""
 
 #. translators: Checkout validation error for the cash amount received from the customer.
-#: includes/Gateways/Cash.php:276
+#: includes/Gateways/Cash.php:278
 msgid "Tendered amount must be zero or greater."
 msgstr ""
 
-#: includes/Gateways/Cash.php:296
+#: includes/Gateways/Cash.php:298
 msgid "Partial cash payments are not supported by the POS API checkout flow."
 msgstr ""
 
 #. translators: Fee line-item name added when a cash payment is partial.
-#: includes/Gateways/Cash.php:304
+#: includes/Gateways/Cash.php:306
 msgid "Partial Payment"
 msgstr ""
 
@@ -1281,27 +1297,27 @@ msgid "WCPOS cannot run alongside the wePOS plugin due to compatibility issues. 
 msgstr ""
 
 #. translators: POS order status label.
-#: includes/Orders.php:89
-#: includes/Orders.php:931
+#: includes/Orders.php:94
+#: includes/Orders.php:1123
 msgctxt "Order status"
 msgid "POS - Open"
 msgstr ""
 
 #. translators: POS order status label.
-#: includes/Orders.php:90
-#: includes/Orders.php:949
+#: includes/Orders.php:95
+#: includes/Orders.php:1141
 msgctxt "Order status"
 msgid "POS - Partial Payment"
 msgstr ""
 
 #. translators: %s: payment gateway title.
-#: includes/Orders.php:379
+#: includes/Orders.php:401
 #, php-format
 msgid "Order status set by %s; no payment was taken at the till."
 msgstr ""
 
 #. translators: %s is the number of orders with POS - Open status.
-#: includes/Orders.php:937
+#: includes/Orders.php:1129
 #, php-format
 msgid "POS - Open <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
@@ -1309,7 +1325,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s is the number of orders with POS - Partial Payment status.
-#: includes/Orders.php:955
+#: includes/Orders.php:1147
 #, php-format
 msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
@@ -1318,6 +1334,98 @@ msgstr[1] ""
 
 #: includes/Payments/Contract/Abstract_Capture_Mode_Handler.php:91
 msgid "This payment capture mode does not support that operation."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Handler.php:70
+msgid "The payment provider did not refund this payment."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Handler.php:94
+#: includes/Payments/Contract/Webview_Handler.php:55
+msgid "This payment cannot be voided."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:53
+msgid "Attempt ID must be a UUID."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:56
+msgid "Only POS orders take a gateway submission."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:80
+msgid "This attempt was cancelled at the till."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:85
+msgid "Payment method is not enabled for the POS."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:88
+msgid "Order is already paid."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:92
+msgid "Order already has a live payment."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:166
+msgid "The payment method rejected the details entered."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:215
+#: includes/Payments/Contract/Gateway_Submission.php:230
+msgid "The payment provider failed."
+msgstr ""
+
+#. translators: %s: the host the gateway wanted to redirect the browser to.
+#: includes/Payments/Contract/Gateway_Submission.php:234
+#, php-format
+msgid "This payment method wants to open %s in a browser, which the POS cannot follow."
+msgstr ""
+
+#. translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the destination the cashier entered.
+#: includes/Payments/Contract/Gateway_Submission.php:277
+#, php-format
+msgid "Sent via POS: %1$s (%2$s)"
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:302
+msgid "This invoice cannot be cancelled."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:305
+msgid "The invoice was sent by a different payment method."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:309
+msgid "A newer invoice has been sent for this order."
+msgstr ""
+
+#. translators: 1: the payment method title, 2: the cashier's reason.
+#: includes/Payments/Contract/Gateway_Submission.php:315
+#, php-format
+msgid "Cancelled via POS: %1$s. %2$s"
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:461
+msgid "This field must be true or false."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:466
+msgid "This field must be text."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:470
+msgid "This field is required."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:474
+msgid "Choose one of the listed options."
+msgstr ""
+
+#: includes/Payments/Contract/Gateway_Submission.php:488
+msgid "Check the payment fields."
 msgstr ""
 
 #: includes/Payments/Contract/Ledger.php:220
@@ -1333,79 +1441,84 @@ msgstr ""
 msgid "Tendered amount is invalid for this payment method."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:334
+#: includes/Payments/Contract/Ledger.php:339
 msgid "Payment method is disabled."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:372
-#: includes/Payments/Contract/Ledger.php:744
+#: includes/Payments/Contract/Ledger.php:390
+#: includes/Payments/Contract/Ledger.php:784
 msgid "The order is already paid."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:372
-#: includes/Payments/Contract/Ledger.php:744
+#: includes/Payments/Contract/Ledger.php:390
+#: includes/Payments/Contract/Ledger.php:785
 msgid "Payment amount exceeds the order balance."
 msgstr ""
 
+#: includes/Payments/Contract/Ledger.php:402
+#: includes/Payments/Contract/Ledger.php:787
+msgid "Another payment is already in progress on this order."
+msgstr ""
+
 #. translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency.
-#: includes/Payments/Contract/Ledger.php:519
+#: includes/Payments/Contract/Ledger.php:564
 #, php-format
 msgid "WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:524
+#: includes/Payments/Contract/Ledger.php:569
 msgid "Tip"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:590
+#: includes/Payments/Contract/Ledger.php:635
 msgid "Refund must belong to this order."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:593
-#: includes/Payments/Contract/Ledger.php:608
-#: includes/Payments/Contract/Ledger.php:635
+#: includes/Payments/Contract/Ledger.php:638
+#: includes/Payments/Contract/Ledger.php:653
+#: includes/Payments/Contract/Ledger.php:680
 msgid "Refund amount cannot be allocated to this payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:654
+#: includes/Payments/Contract/Ledger.php:699
 #: includes/Payments/Contract/Settlement.php:51
 msgid "Payment id must be a UUID."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:657
-#: includes/Payments/Contract/Ledger.php:661
+#: includes/Payments/Contract/Ledger.php:702
+#: includes/Payments/Contract/Ledger.php:706
 msgid "Payment amount must be positive."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:666
+#: includes/Payments/Contract/Ledger.php:711
 msgid "Payment currency must match the order."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:718
+#: includes/Payments/Contract/Ledger.php:763
 msgid "Payment id conflicts with an existing payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:744
+#: includes/Payments/Contract/Ledger.php:786
 msgid "Provider-confirmed amount or currency does not match the payment."
 msgstr ""
 
 #. translators: %s: payment row uuid.
-#: includes/Payments/Contract/Ledger.php:820
+#: includes/Payments/Contract/Ledger.php:891
 #, php-format
 msgid "WCPOS payment %s voided."
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: void reason given by the cashier.
-#: includes/Payments/Contract/Ledger.php:822
+#: includes/Payments/Contract/Ledger.php:893
 #, php-format
 msgid "WCPOS payment %1$s voided: %2$s"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1192
+#: includes/Payments/Contract/Ledger.php:1309
 msgid "Payment not found."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1202
+#: includes/Payments/Contract/Ledger.php:1319
 msgid "Payment transition is invalid."
 msgstr ""
 
@@ -1418,17 +1531,13 @@ msgid "Every ten minutes"
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: leg amount with currency.
-#: includes/Payments/Contract/Payments_Sweeper.php:89
+#: includes/Payments/Contract/Payments_Sweeper.php:128
 #, php-format
 msgid "WCPOS payment %1$s: the authorization for %2$s expired after the order was marked paid and was never captured — needs attention."
 msgstr ""
 
 #: includes/Payments/Contract/Settlement.php:161
 msgid "Could not save the pending payment confirmation."
-msgstr ""
-
-#: includes/Payments/Contract/Webview_Handler.php:55
-msgid "This payment cannot be voided."
 msgstr ""
 
 #. translators: API conflict error; idempotency key is a request identifier header/token, not a keyboard key.
@@ -1444,8 +1553,8 @@ msgstr ""
 msgid "An identical request is already being processed."
 msgstr ""
 
-#: includes/Services/Auth.php:315
-#: includes/Services/Auth.php:394
+#: includes/Services/Auth.php:362
+#: includes/Services/Auth.php:441
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
@@ -1601,7 +1710,11 @@ msgstr ""
 msgid "Cash payment received — amount tendered: %1$s, change given: %2$s."
 msgstr ""
 
-#: includes/Services/Permission_Rules.php:356
+#: includes/Services/Permission_Rules.php:535
+msgid "Sorry, you are not allowed to give users that role."
+msgstr ""
+
+#: includes/Services/Permission_Rules.php:549
 msgid "Only an administrator can edit or delete a staff account from the POS."
 msgstr ""
 
