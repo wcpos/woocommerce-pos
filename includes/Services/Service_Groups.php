@@ -179,6 +179,7 @@ final class Service_Groups {
 		Webview_Passthrough::register_hooks();
 		Stock_Validator::instance();
 		Order_Write_Intent::register();
+		Role_Meta_Guard::register();
 	}
 
 	/**

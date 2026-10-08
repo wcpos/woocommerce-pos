@@ -135,6 +135,14 @@ class Permission_Rules {
 			if ( 'v1' === $lane && 'orders' === $collection && is_wp_error( $permission ) && self::wc_filter( false, $context, $object_id, 'shop_order', 'orders', 'v1' ) ) {
 				return true;
 			}
+			// The implicit v1 scope passes WooCommerce's grant through; ownership still rules.
+			if ( 'v1' === $lane && 'orders' === $collection && true === $permission && ! self::wc_filter( true, $context, $object_id, 'shop_order', 'orders', 'v1' ) ) {
+				return new \WP_Error(
+					"woocommerce_rest_cannot_{$context}",
+					__( 'Sorry, you are not allowed to edit this resource.', 'woocommerce' ),
+					array( 'status' => rest_authorization_required_code() )
+				);
+			}
 			return $permission;
 		} finally {
 			if ( $restore ) {
@@ -217,26 +225,32 @@ class Permission_Rules {
 				}
 			}
 		}
-		if ( ! $permission && 'shop_order' === $post_type && in_array( $collection, array( 'writes', 'orders' ), true ) ) {
+		if ( 'shop_order' === $post_type && in_array( $collection, array( 'writes', 'orders' ), true ) ) {
+			$ownership = self::ownership_applies( $lane, $context );
+			$order     = $ownership ? wc_get_order( $object_id ) : false;
+			if ( $permission ) {
+				// WooCommerce granted on its own signal — under HPOS with compatibility
+				// sync the post author is whoever created the order — but the cashier the
+				// order is assigned to is the owner, so a reassigned order still needs the
+				// `others` capability from its creator.
+				if ( $order instanceof \WC_Abstract_Order && ! self::owns_order( $order ) && ! current_user_can( "{$context}_others_shop_orders" ) ) {
+					$permission = false;
+				}
+				return $permission;
+			}
 			// V1 checked existence before its fallback (23defd774); v2 did not.
 			if ( 'v1' === $lane && ( ! wc_get_order( $object_id ) || ! current_user_can( "{$context}_shop_orders" ) ) ) {
 				return $permission;
 			}
-			// Without a post row, only v1 historically granted the flat edit cap.
+			// Edit is always ownership-aware (ORDER_RULES), so it has no flat fallback.
 			$caps = array(
 				'read'   => 'read_private_shop_orders',
 				'create' => 'publish_shop_orders',
-				'edit'   => 'v1' === $lane ? 'edit_shop_orders' : null,
 				'delete' => 'delete_shop_orders',
 			);
 			$cap  = $caps[ $context ] ?? null;
-			foreach ( self::ORDER_RULES as $rule ) {
-				if ( $lane === $rule['lane'] && $context === $rule['context'] && $rule['ownership'] ) {
-					$post = get_post( $object_id );
-					if ( $post ) {
-						$cap = get_current_user_id() === (int) $post->post_author ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
-					}
-				}
+			if ( $order instanceof \WC_Abstract_Order ) {
+				$cap = self::owns_order( $order ) ? "{$context}_shop_orders" : "{$context}_others_shop_orders";
 			}
 			if ( $cap && current_user_can( $cap ) ) {
 				$permission = true;
@@ -247,6 +261,45 @@ class Permission_Rules {
 			$permission = current_user_can( 'access_woocommerce_pos' );
 		}
 		return $permission;
+	}
+
+	/**
+	 * Whether ORDER_RULES makes this lane's context ownership-aware.
+	 *
+	 * @param string $lane    Permission lane.
+	 * @param string $context Permission context.
+	 * @return bool
+	 */
+	private static function ownership_applies( string $lane, string $context ): bool {
+		foreach ( self::ORDER_RULES as $rule ) {
+			if ( $lane === $rule['lane'] && $context === $rule['context'] ) {
+				return (bool) $rule['ownership'];
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether the current user is the cashier an order is assigned to.
+	 *
+	 * `_pos_user` is the only ownership signal an order carries on both storage
+	 * modes: the write lanes stamp it server-side on creation and move it on a
+	 * cashier reassignment. `post_author` is not that signal — the posts store
+	 * writes `1` for every order, and the HPOS placeholder row inherits whoever
+	 * was logged in when it was inserted (the customer, or nobody, for a web
+	 * order). An order without `_pos_user` (a web order) belongs to no cashier,
+	 * so it needs the `*_others_shop_orders` capability.
+	 *
+	 * @param \WC_Abstract_Order $order Order being judged.
+	 * @return bool
+	 */
+	private static function owns_order( \WC_Abstract_Order $order ): bool {
+		$cashier = $order->get_meta( '_pos_user' );
+		$actor   = get_current_user_id();
+
+		// The lanes stamp the canonical decimal string, so an exact match is the strict test.
+		return $actor > 0 && is_scalar( $cashier ) && (string) $cashier === (string) $actor;
 	}
 
 	/**
@@ -386,6 +439,103 @@ class Permission_Rules {
 		}
 
 		return $caps;
+	}
+
+	/**
+	 * The only role a till user may assign.
+	 *
+	 * Customer creation from the till always produces this role; changing a
+	 * role is not a POS feature, so nothing legitimate needs more.
+	 */
+	private const TILL_ASSIGNABLE_ROLES = array( 'customer' );
+
+	/**
+	 * The roles a POS actor may hand out, or null when the actor is not fenced.
+	 *
+	 * Administrators (and so multisite super admins) are not fenced. A shop
+	 * manager — any actor with `manage_woocommerce` — follows WooCommerce's own
+	 * list for shop managers, `woocommerce_shop_manager_editable_roles`
+	 * (customer by default), which WooCommerce enforces only while it is active
+	 * and only for the literal `shop_manager` role name; applying it here keeps
+	 * that fence up when WooCommerce is deactivated (the roles and their
+	 * capabilities persist) and for a cashier who also holds shop manager.
+	 * Everyone else with till access gets TILL_ASSIGNABLE_ROLES.
+	 *
+	 * @param int $actor Acting user ID.
+	 *
+	 * @return array|null Role names, or null for an unfenced actor.
+	 */
+	private static function assignable_roles( int $actor ): ?array {
+		if ( $actor < 1 || ! user_can( $actor, 'access_woocommerce_pos' ) || user_can( $actor, 'manage_options' ) ) {
+			return null;
+		}
+		$allowed = self::TILL_ASSIGNABLE_ROLES;
+		if ( user_can( $actor, 'manage_woocommerce' ) ) {
+			$allowed = (array) apply_filters( 'woocommerce_shop_manager_editable_roles', self::TILL_ASSIGNABLE_ROLES ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's own fence list, applied as WooCommerce applies it.
+		}
+
+		return array_values( array_filter( array_map( 'strval', $allowed ) ) );
+	}
+
+	/**
+	 * Fence the roles a till user may assign (`editable_roles` filter).
+	 *
+	 * The Cashier role holds `edit_users` and, on WooCommerce below 9.9,
+	 * `promote_users` (customer creation needed it). WordPress's role-update
+	 * checks — `WP_REST_Users_Controller::check_role_update()`, `edit_user()`
+	 * and the users.php bulk actions — accept those two capabilities and then
+	 * ask `get_editable_roles()` which roles the actor may hand out; nothing
+	 * ranked them, so a cashier could set an ordinary customer's role to
+	 * Administrator. can_modify() does not catch that: it judges the target's
+	 * current capabilities, which a plain customer has none of until after the
+	 * update. It only ever removes roles; it never adds one.
+	 *
+	 * @param array $roles Editable roles keyed by role name.
+	 *
+	 * @return array
+	 */
+	public static function filter_editable_roles( $roles ): array {
+		$roles   = (array) $roles;
+		$allowed = self::assignable_roles( get_current_user_id() );
+		if ( null === $allowed ) {
+			return $roles;
+		}
+
+		return array_intersect_key( $roles, array_fill_keys( $allowed, true ) );
+	}
+
+	/**
+	 * Refuse a multisite "add existing user" invite outside the fence (`invite_user` action).
+	 *
+	 * WordPress's wp-admin/user-new.php stores the requested role in the `new_user_<key>`
+	 * option and only reads `get_editable_roles()` for the email's label, so an
+	 * invite to an existing network account can carry any role; accepting it
+	 * calls `add_user_to_blog()` with that role unchecked. Same fence as
+	 * filter_editable_roles(): a fenced actor's invite may name only an
+	 * assignable role, or the invite is deleted before its email goes out.
+	 *
+	 * @param int        $user_id     Invited user ID.
+	 * @param array|null $role        Role label array, null when the role was not editable.
+	 * @param string     $newuser_key Invitation key.
+	 *
+	 * @return void
+	 */
+	public static function refuse_unfenced_invite( $user_id, $role, $newuser_key ): void {
+		$allowed = self::assignable_roles( get_current_user_id() );
+		if ( null === $allowed ) {
+			return;
+		}
+		$invite    = get_option( 'new_user_' . $newuser_key );
+		$requested = \is_array( $invite ) && isset( $invite['role'] ) ? (string) $invite['role'] : '';
+		if ( \in_array( $requested, $allowed, true ) ) {
+			return;
+		}
+		delete_option( 'new_user_' . $newuser_key );
+		wp_die(
+			esc_html__( 'Sorry, you are not allowed to give users that role.', 'woocommerce-pos' ),
+			'',
+			array( 'response' => 403 )
+		);
 	}
 
 	/**

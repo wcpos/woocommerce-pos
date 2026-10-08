@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services\Settings;
 
+use WC_Payment_Gateway;
+use WC_Payment_Gateways;
 use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WP_UnitTestCase;
 
@@ -147,5 +149,188 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 		$this->assertSame( '12', $gateway['default_reader'] );
 		$this->assertSame( array( 'a', 'b' ), $gateway['allowed_readers'] );
 		$this->assertTrue( $gateway['lock_to_default'] );
+	}
+
+	/**
+	 * A gateway without a public title uses its admin display values.
+	 */
+	public function test_read_gateway_with_null_title_falls_back_to_method_title(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_untitled_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_untitled_gateway']['title'] );
+				$this->assertSame( 'Method description', $settings['gateways']['wcpos_untitled_gateway']['description'] );
+			}
+		);
+	}
+
+	/**
+	 * A gateway without public or admin titles uses its id.
+	 */
+	public function test_read_gateway_with_empty_titles_falls_back_to_id(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'           => 'wcpos_nameless_gateway',
+				'title'        => '',
+				'method_title' => '',
+			),
+			function () {
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'wcpos_nameless_gateway', $settings['gateways']['wcpos_nameless_gateway']['title'] );
+			}
+		);
+	}
+
+	/**
+	 * A saved null title falls back without replacing the enabled setting.
+	 */
+	public function test_read_saved_null_title_falls_back_to_method_title(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_null_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array(
+						'gateways' => array(
+							'wcpos_saved_null_gateway' => array(
+								'title'   => null,
+								'enabled' => true,
+							),
+						),
+					)
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_saved_null_gateway']['title'] );
+				$this->assertTrue( $settings['gateways']['wcpos_saved_null_gateway']['enabled'] );
+			}
+		);
+	}
+
+	/**
+	 * A saved non-empty POS title takes precedence over the fallback.
+	 */
+	public function test_read_saved_pos_title_wins_over_fallback(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_title_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array( 'gateways' => array( 'wcpos_saved_title_gateway' => array( 'title' => 'Front Counter' ) ) )
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Front Counter', $settings['gateways']['wcpos_saved_title_gateway']['title'] );
+			}
+		);
+	}
+
+	/**
+	 * A saved null description falls back to the method description.
+	 */
+	public function test_read_saved_null_description_falls_back_to_method_description(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_null_desc_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array( 'gateways' => array( 'wcpos_saved_null_desc_gateway' => array( 'description' => null ) ) )
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( 'Method description', $settings['gateways']['wcpos_saved_null_desc_gateway']['description'] );
+			}
+		);
+	}
+
+	/**
+	 * A saved empty description is kept as a deliberate blank.
+	 */
+	public function test_read_saved_empty_description_is_kept(): void {
+		$this->with_stub_gateway(
+			array(
+				'id'                 => 'wcpos_saved_empty_desc_gateway',
+				'method_title'       => 'Untitled Method',
+				'method_description' => 'Method description',
+			),
+			function () {
+				update_option(
+					'woocommerce_pos_settings_payment_gateways',
+					array( 'gateways' => array( 'wcpos_saved_empty_desc_gateway' => array( 'description' => '' ) ) )
+				);
+
+				$section  = new Payment_Gateways_Section();
+				$settings = $section->read();
+
+				$this->assertSame( '', $settings['gateways']['wcpos_saved_empty_desc_gateway']['description'] );
+			}
+		);
+	}
+
+	/**
+	 * Register a stub gateway with the given public properties for the duration
+	 * of the callback, then restore the gateway registry.
+	 *
+	 * @param array    $props    Property name => value, assigned on the stub (e.g. 'id', 'title', 'method_title').
+	 * @param callable $callback Runs while the stub is registered.
+	 */
+	private function with_stub_gateway( array $props, callable $callback ): void {
+		$gateway = new class( $props ) extends WC_Payment_Gateway {
+			/**
+			 * Assign the given properties without building form fields.
+			 *
+			 * @param array $props Property name => value.
+			 */
+			public function __construct( array $props ) {
+				foreach ( $props as $name => $value ) {
+					$this->$name = $value;
+				}
+			}
+		};
+
+		$add_gateway = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+
+		add_filter( 'woocommerce_payment_gateways', $add_gateway );
+
+		$registry                   = WC_Payment_Gateways::instance();
+		$registry->payment_gateways = array();
+		$registry->init();
+
+		try {
+			$callback();
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			$registry->payment_gateways = array();
+			$registry->init();
+		}
 	}
 }

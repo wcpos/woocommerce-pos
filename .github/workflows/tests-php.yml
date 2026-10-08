@@ -9,6 +9,8 @@ on:
       - "**.php"
       - "composer.json"
       - "composer.lock"
+      - "php-scoper/composer.json"
+      - "php-scoper/composer.lock"
       - "package.json"
       - "pnpm-workspace.yaml"
       - "patches/**"
@@ -63,6 +65,10 @@ jobs:
               - '**.php'
               - 'composer.json'
               - 'composer.lock'
+              # php-scoper's manifest and lock decide what CI scopes into
+              # vendor_prefixed/, the runtime code the plugin ships.
+              - 'php-scoper/composer.json'
+              - 'php-scoper/composer.lock'
               # The node manifest decides which @wordpress/env builds the test
               # containers, and patches/ can rewrite it in place — both change what
               # the PHP suite runs on. pnpm-lock.yaml is gitignored (CI resolves
@@ -175,6 +181,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate merge gate
+        run: bash .github/scripts/test-merge-gate.sh
 
       - name: Setup PHP with tools
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2

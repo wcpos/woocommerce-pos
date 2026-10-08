@@ -15,10 +15,10 @@ use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
-use Exception;
 
 /**
  * Shared helpers for all WCPOS REST API controllers.
@@ -462,29 +462,13 @@ trait WCPOS_REST_API {
 	/**
 	 * Get server load average.
 	 *
+	 * Same source as the v2 lane's `X-Server-Load`. The former Windows branch
+	 * tested `stristr( PHP_OS, 'win' )`, which also matches `Darwin`, so every
+	 * macOS host shelled out to `wmic` on each bulk-ID request.
+	 *
 	 * @return array The load average.
 	 */
 	public function get_server_load() {
-		try {
-			if ( stristr( PHP_OS, 'win' ) ) {
-					// Use WMIC to get load percentage from Windows.
-					$load = @shell_exec( 'wmic cpu get loadpercentage /all' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				if ( $load ) {
-						$load = explode( "\n", $load );
-					if ( isset( $load[1] ) ) {
-						$load = intval( $load[1] );
-						return array( $load, $load, $load ); // Mimic the array structure of sys_getloadavg().
-					}
-				}
-			} elseif ( function_exists( 'sys_getloadavg' ) ) {
-				return sys_getloadavg();
-			}
-		} catch ( Exception $e ) {
-			// Log the error for debugging purposes.
-			Logger::log( 'Error getting server load: ' . $e->getMessage() );
-		}
-
-		// Fallback if no method is available or an error occurs.
-		return array( 0, 0, 0 );
+		return Response_Telemetry::server_load();
 	}
 }

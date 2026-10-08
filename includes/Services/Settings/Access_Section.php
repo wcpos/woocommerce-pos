@@ -233,7 +233,7 @@ class Access_Section implements Settings_Section_Interface {
 	 * this mirrors the single-role update semantics of the original REST
 	 * controller.
 	 *
-	 * The administrator/read capability is never removed as a sanity guard.
+	 * The administrator read and manage_woocommerce_pos capabilities are never removed.
 	 *
 	 * @param array $settings Incoming payload keyed by role slug.
 	 *
@@ -243,7 +243,7 @@ class Access_Section implements Settings_Section_Interface {
 		// Defense-in-depth: capability mutation is a privileged service-layer
 		// operation; do not rely solely on the REST route's permission
 		// callback (matches the Settings::delete_settings() precedent).
-		if ( ! current_user_can( 'edit_users' ) || ! current_user_can( 'promote_users' ) ) {
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) || ! current_user_can( 'edit_users' ) || ! current_user_can( 'promote_users' ) ) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',
 				__( 'You do not have permission to update access settings.', 'woocommerce-pos' ),
@@ -292,6 +292,10 @@ class Access_Section implements Settings_Section_Interface {
 				foreach ( $flattened_caps as $cap => $grant ) {
 					// Sanity check: administrator role must always keep the `read` capability.
 					if ( 'administrator' === $slug && 'read' === $cap ) {
+						continue;
+					}
+					// Administrators must retain access to capability management.
+					if ( 'administrator' === $slug && 'manage_woocommerce_pos' === $cap && ! $grant ) {
 						continue;
 					}
 					if ( $grant ) {

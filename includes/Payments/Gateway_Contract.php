@@ -19,6 +19,40 @@ use WP_REST_Request;
  */
 class Gateway_Contract {
 	/**
+	 * Human-readable gateway name for POS and settings display.
+	 *
+	 * Falls back from the public title to the admin method title to the id,
+	 * because some gateways never assign a public title.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway object.
+	 */
+	public function get_display_title( WC_Payment_Gateway $gateway ): string {
+		foreach ( array( $gateway->get_title(), $gateway->method_title ) as $title ) {
+			if ( is_string( $title ) && '' !== trim( $title ) ) {
+				return $title;
+			}
+		}
+
+		return (string) $gateway->id;
+	}
+
+	/**
+	 * Gateway description for POS and settings display, falling back to the
+	 * admin method description.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway object.
+	 */
+	public function get_display_description( WC_Payment_Gateway $gateway ): string {
+		foreach ( array( $gateway->get_description(), $gateway->method_description ) as $description ) {
+			if ( is_string( $description ) && '' !== trim( $description ) ) {
+				return $description;
+			}
+		}
+
+		return '';
+	}
+
+	/**
 	 * Infer POS type for a gateway.
 	 *
 	 * @param WC_Payment_Gateway $gateway Gateway object.

@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -216,6 +217,35 @@ class Test_Tax_Id_Writer extends WC_REST_Unit_Test_Case {
 		$this->assertSame( Tax_Id_Types::TYPE_EU_VAT, $result[0]['type'] );
 		$this->assertSame( 'DE123456789', $result[0]['value'] );
 		$this->assertSame( 'DE', $result[0]['country'] );
+	}
+
+	/**
+	 * An empty list needs no write map, so the detector's recent-order scan
+	 * must not run. Every POS order push carries `tax_ids`, usually empty, and
+	 * the scan was the straw that broke a 128 MB request on a 5,500-order store.
+	 */
+	public function test_write_for_order_with_empty_list_does_not_query_recent_orders(): void {
+		// Arrange. An earlier test in the process may have warmed the detector.
+		Tax_Id_Detector::reset_request_state();
+		$order   = OrderHelper::create_order();
+		$queries = 0;
+		$count   = static function ( $args ) use ( &$queries ) {
+			++$queries;
+			return $args;
+		};
+		add_filter( 'woocommerce_order_query_args', $count );
+
+		// Act.
+		try {
+			$plan = ( new Tax_Id_Writer() )->write_for_order( $order, array() );
+		} finally {
+			remove_filter( 'woocommerce_order_query_args', $count );
+		}
+
+		// Assert.
+		$this->assertSame( 0, $queries, 'an empty tax_ids list must not scan recent orders' );
+		$this->assertSame( array(), $plan['updates'] );
+		$this->assertSame( array(), $plan['owned'] );
 	}
 
 	/**

@@ -299,6 +299,281 @@ class Test_Cashier_Core_User_Routes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertFalse( $promote_self, 'promote self' );
 	}
 
+	/**
+	 * Core REST: a Cashier with promote_users (WooCommerce below 9.9) must not make a
+	 * customer an administrator. can_modify() clears a plain customer, so the role
+	 * fence is what stands between the till and site-admin control. While WooCommerce
+	 * is active its wc_modify_editable_roles() also strips administrator for non-admins,
+	 * so this case is double-fenced; the shop_manager case below is ours alone.
+	 */
+	public function test_wp_v2_users_cannot_promote_customer_to_administrator(): void {
+		// Arrange.
+		get_user_by( 'id', $this->cashier )->add_cap( 'promote_users' );
+		wp_set_current_user( 0 ); // Re-reading the current user picks up the new capability.
+		wp_set_current_user( $this->cashier );
+		$this->assertTrue( current_user_can( 'promote_user', $this->customer ), 'the capability the finding relies on' );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/users/' . $this->customer );
+		$request->set_body_params( array( 'roles' => array( 'administrator' ) ) );
+
+		// Act.
+		$response = rest_get_server()->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_user_invalid_role', $response->get_data()['code'] );
+		$this->assertSame( array( 'customer' ), get_userdata( $this->customer )->roles );
+		$this->assertFalse( user_can( $this->customer, 'manage_options' ) );
+	}
+
+	/** The same through a POS bearer token, to shop manager, and on a fresh customer the Cashier created. */
+	public function test_wp_v2_users_bearer_token_cashier_cannot_promote_own_customer_to_shop_manager(): void {
+		// Arrange.
+		get_user_by( 'id', $this->cashier )->add_cap( 'promote_users' );
+		wp_set_current_user( 0 );
+		$tokens = Auth::instance()->generate_token_pair( get_user_by( 'id', $this->cashier ) );
+		$this->assertIsArray( $tokens );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $tokens['access_token']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		wp_get_current_user();
+		$this->assertSame( $this->cashier, get_current_user_id(), 'The bearer token must authenticate the Cashier.' );
+		$target  = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/users/' . $target );
+		$request->set_body_params( array( 'roles' => array( 'shop_manager' ) ) );
+
+		// Act.
+		$response = rest_get_server()->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_user_invalid_role', $response->get_data()['code'], wp_json_encode( $response->get_data() ) );
+		$this->assertSame( array( 'customer' ), get_userdata( $target )->roles );
+	}
+
+	/** A Cashier's get_editable_roles() is customer only; setting customer explicitly still works. */
+	public function test_editable_roles_for_cashier_is_customer_only(): void {
+		// Arrange.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		get_user_by( 'id', $this->cashier )->add_cap( 'promote_users' );
+		wp_set_current_user( 0 ); // Re-reading the current user picks up the new capability.
+		wp_set_current_user( $this->cashier );
+		$subscriber = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$request    = new WP_REST_Request( 'POST', '/wp/v2/users/' . $subscriber );
+		$request->set_body_params( array( 'roles' => array( 'customer' ) ) );
+
+		// Act.
+		$editable = array_keys( get_editable_roles() );
+		$response = rest_get_server()->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( array( 'customer' ), $editable );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'customer' ), get_userdata( $subscriber )->roles );
+	}
+
+	/** Administrators, shop managers, a cashier+shop manager and roles without till access keep their editable roles. */
+	public function test_editable_roles_actors_outside_the_rule_are_unchanged(): void {
+		// Arrange.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		add_role(
+			'user_manager_no_pos',
+			'User manager without POS',
+			array(
+				'read'          => true,
+				'edit_users'    => true,
+				'promote_users' => true,
+			)
+		);
+		$cashier_manager = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		get_user_by( 'id', $cashier_manager )->add_role( 'shop_manager' );
+		$actors = array(
+			'administrator'        => $this->admin,
+			'shop_manager'         => $this->shop_manager,
+			'user_manager_no_pos'  => $this->factory->user->create( array( 'role' => 'user_manager_no_pos' ) ),
+			'cashier+shop_manager' => $cashier_manager,
+		);
+		$filter = array( Permission_Rules::class, 'filter_editable_roles' );
+
+		foreach ( $actors as $name => $actor ) {
+			wp_set_current_user( $actor );
+
+			// Act.
+			$with = array_keys( get_editable_roles() );
+			remove_filter( 'editable_roles', $filter, PHP_INT_MAX );
+			try {
+				$without = array_keys( get_editable_roles() );
+			} finally {
+				add_filter( 'editable_roles', $filter, PHP_INT_MAX );
+			}
+
+			// Assert (WooCommerce's own shop-manager fence is what shapes these; ours adds nothing).
+			$this->assertSame( $without, $with, $name );
+		}
+	}
+
+	/** The role fence, like the staff rule, is registered by the Activator alone. */
+	public function test_editable_roles_filter_is_registered_by_the_activator_without_init(): void {
+		// Arrange.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		$filter = array( Permission_Rules::class, 'filter_editable_roles' );
+		remove_filter( 'editable_roles', $filter, PHP_INT_MAX );
+		try {
+			$this->assertFalse( has_filter( 'editable_roles', $filter ), 'the fence is off' );
+			// WooCommerce already strips administrator for anyone without manage_options; editor is ours to strip.
+			$this->assertArrayHasKey( 'editor', get_editable_roles(), 'nothing else supplies the fence' );
+
+			// Act.
+			new \WCPOS\WooCommercePOS\Activator();
+			$registered = has_filter( 'editable_roles', $filter );
+			$editable   = array_keys( get_editable_roles() );
+
+			// Assert.
+			$this->assertSame( PHP_INT_MAX, $registered );
+			$this->assertSame( array( 'customer' ), $editable, 'the fence holds' );
+		} finally {
+			add_filter( 'editable_roles', $filter, PHP_INT_MAX );
+		}
+	}
+
+	/** A role-editor plugin adding roles back at a later priority does not widen the fence. */
+	public function test_editable_roles_fence_runs_after_other_filters(): void {
+		// Arrange.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		wp_set_current_user( $this->cashier );
+		$widen = static function ( $roles ) {
+			$roles['editor'] = array(
+				'name' => 'Editor',
+				'capabilities' => array(),
+			);
+			return $roles;
+		};
+		add_filter( 'editable_roles', $widen, 99 );
+		try {
+			// Act.
+			$editable = array_keys( get_editable_roles() );
+		} finally {
+			remove_filter( 'editable_roles', $widen, 99 );
+		}
+
+		// Assert.
+		$this->assertSame( array( 'customer' ), $editable );
+	}
+
+	/**
+	 * Multisite "add existing user" stores the requested role unchecked and fires invite_user
+	 * after; a till user's invite naming a staff role is deleted and refused.
+	 */
+	public function test_invite_user_outside_the_fence_is_deleted_and_refused(): void {
+		// Arrange.
+		get_user_by( 'id', $this->cashier )->add_cap( 'promote_users' );
+		wp_set_current_user( 0 );
+		wp_set_current_user( $this->cashier );
+		add_option(
+			'new_user_fencetest',
+			array(
+				'user_id' => $this->customer,
+				'email' => 'c@example.test',
+				'role' => 'administrator',
+			)
+		);
+		$died = false;
+
+		// Act.
+		try {
+			do_action( 'invite_user', $this->customer, null, 'fencetest' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, fired as wp-admin fires it.
+		} catch ( \WPDieException $e ) {
+			$died = true;
+		}
+
+		// Assert.
+		$this->assertTrue( $died, 'wp_die 403' );
+		$this->assertFalse( get_option( 'new_user_fencetest' ), 'the invite is gone' );
+	}
+
+	/** A till user's invite to the customer role, and any invite by an administrator, go through. */
+	public function test_invite_user_inside_the_fence_or_by_an_admin_is_kept(): void {
+		// Arrange.
+		add_option(
+			'new_user_fenceok',
+			array(
+				'user_id' => $this->customer,
+				'email' => 'c@example.test',
+				'role' => 'customer',
+			)
+		);
+		add_option(
+			'new_user_adminok',
+			array(
+				'user_id' => $this->customer,
+				'email' => 'c@example.test',
+				'role' => 'administrator',
+			)
+		);
+
+		// Act.
+		wp_set_current_user( $this->cashier );
+		do_action( 'invite_user', $this->customer, array( 'name' => 'Customer' ), 'fenceok' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, fired as wp-admin fires it.
+		wp_set_current_user( $this->admin );
+		do_action( 'invite_user', $this->customer, array( 'name' => 'Administrator' ), 'adminok' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, fired as wp-admin fires it.
+
+		// Assert.
+		$this->assertSame( 'customer', get_option( 'new_user_fenceok' )['role'] );
+		$this->assertSame( 'administrator', get_option( 'new_user_adminok' )['role'] );
+	}
+
+	/**
+	 * With WooCommerce deactivated its wc_modify_editable_roles() is gone, but the roles and
+	 * their capabilities persist: a cashier who also holds shop manager must still be held to
+	 * WooCommerce's shop-manager list (customer) rather than every role.
+	 */
+	public function test_editable_roles_cashier_plus_shop_manager_is_fenced_without_woocommerce(): void {
+		// Arrange.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		$cashier_manager = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		get_user_by( 'id', $cashier_manager )->add_role( 'shop_manager' );
+		get_user_by( 'id', $cashier_manager )->add_cap( 'promote_users' );
+		wp_set_current_user( $cashier_manager );
+		$this->assertTrue( current_user_can( 'manage_woocommerce' ) );
+		$wc_fence = has_filter( 'editable_roles', 'wc_modify_editable_roles' );
+		$this->assertNotFalse( $wc_fence, 'WooCommerce is active in the test site' );
+		remove_filter( 'editable_roles', 'wc_modify_editable_roles', $wc_fence );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/users/' . $this->customer );
+		$request->set_body_params( array( 'roles' => array( 'administrator' ) ) );
+		try {
+			// Act.
+			$editable = array_keys( get_editable_roles() );
+			$response = rest_get_server()->dispatch( $request );
+		} finally {
+			add_filter( 'editable_roles', 'wc_modify_editable_roles', $wc_fence );
+		}
+
+		// Assert.
+		$this->assertSame( array( 'customer' ), $editable );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( array( 'customer' ), get_userdata( $this->customer )->roles );
+	}
+
+	/** A merchant who widened WooCommerce's shop-manager list sees the same list from us. */
+	public function test_editable_roles_shop_manager_follows_woocommerce_list(): void {
+		// Arrange.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		wp_set_current_user( $this->shop_manager );
+		$widen = static function () {
+			return array( 'customer', 'subscriber' );
+		};
+		add_filter( 'woocommerce_shop_manager_editable_roles', $widen );
+		try {
+			// Act.
+			$editable = array_keys( get_editable_roles() );
+		} finally {
+			remove_filter( 'woocommerce_shop_manager_editable_roles', $widen );
+		}
+
+		// Assert.
+		sort( $editable );
+		$this->assertSame( array( 'customer', 'subscriber' ), $editable );
+	}
+
 	/** Constructing the Activator alone registers the staff rule, once, with no Init or requirement check. */
 	public function test_user_meta_caps_filter_is_registered_by_the_activator_without_init(): void {
 		// Arrange.
