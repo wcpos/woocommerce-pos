@@ -303,12 +303,19 @@ class Tax_Id_Detector {
 		$id_placeholders  = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
 		$key_placeholders = implode( ',', array_fill( 0, \count( $keys ), '%s' ) );
 
+		// "Populated" means what the order getter used to decode as non-empty: a
+		// plugin that initialises a key with an empty array, an empty string or
+		// null stores `a:0:{}`, `s:0:"";` or `N;`, and those must not count.
+		$empty_values = array( '', 'a:0:{}', 's:0:"";', 'N;' );
+		$empty_placeholders = implode( ',', array_fill( 0, \count( $empty_values ), '%s' ) );
+
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table and column names are fixed above; every value goes through a placeholder.
 		$sql = "SELECT meta_key, COUNT(DISTINCT {$id_column}) AS populated FROM {$table}"
-			. " WHERE {$id_column} IN ({$id_placeholders}) AND meta_key IN ({$key_placeholders}) AND meta_value <> ''"
+			. " WHERE {$id_column} IN ({$id_placeholders}) AND meta_key IN ({$key_placeholders})"
+			. " AND meta_value NOT IN ({$empty_placeholders})"
 			. ' GROUP BY meta_key';
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $ids, $keys ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared here with the placeholders built above.
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $ids, $keys, $empty_values ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared here with the placeholders built above.
 
 		foreach ( (array) $rows as $row ) {
 			if ( isset( $counts[ $row['meta_key'] ] ) ) {

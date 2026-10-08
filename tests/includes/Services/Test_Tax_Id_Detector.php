@@ -178,6 +178,29 @@ class Test_Tax_Id_Detector extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A key a plugin initialises to an empty array (stored serialized as
+	 * `a:0:{}`) is not populated, however many orders carry it. The object path
+	 * decoded the value and skipped `array()`; the count must agree.
+	 */
+	public function test_infer_from_recent_orders_ignores_serialized_empty_values(): void {
+		// Arrange: two orders with an empty-array placeholder, one with a real value on another key.
+		foreach ( array( 1, 2 ) as $_ ) {
+			$order = wc_create_order();
+			$order->update_meta_data( '_billing_vat_number', array() );
+			$order->save();
+		}
+		$order = wc_create_order();
+		$order->update_meta_data( '_billing_eu_vat_number', 'DE123456789' );
+		$order->save();
+
+		// Act.
+		$inferred = Tax_Id_Detector::infer_from_recent_orders();
+
+		// Assert.
+		$this->assertSame( '_billing_eu_vat_number', $inferred[ Tax_Id_Types::TYPE_EU_VAT ] ?? null );
+	}
+
+	/**
 	 * Only the newest `$limit` orders are inspected.
 	 */
 	public function test_infer_from_recent_orders_honours_the_limit(): void {
