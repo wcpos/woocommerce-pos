@@ -32,7 +32,7 @@
     "@types/lodash": "^4.17.24",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
-    "@wordpress/env": "^11.5.0",
+    "@wordpress/env": "^11.16.0",
     "babel-loader": "^10.1.1",
     "css-loader": "^7.1.4",
     "css-minimizer-webpack-plugin": "^8.0.0",
