@@ -158,7 +158,10 @@ class Payments_Controller extends WC_REST_Controller {
 			}
 			$result = Gateway_Submission::submit( $order, $descriptor, $params['attempt_id'], $params['values'] );
 		} else {
-			$result = Gateway_Submission::cancel( $order, $descriptor, sanitize_text_field( $params['reason'] ?? '' ) );
+			if ( ! is_string( $params['attempt_id'] ?? null ) ) {
+				return new WP_Error( 'rest_invalid_param', __( 'Attempt ID must name the sent attempt to cancel.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+			}
+			$result = Gateway_Submission::cancel( $order, $descriptor, $params['attempt_id'], sanitize_text_field( $params['reason'] ?? '' ) );
 		}
 		if ( is_wp_error( $result ) ) {
 			return $result;

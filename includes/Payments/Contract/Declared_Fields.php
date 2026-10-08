@@ -88,6 +88,9 @@ class Declared_Fields {
 			$item['default'] = 'checkbox' === $type ? (bool) ( $component['default'] ?? false ) : $text( $component['default'] ?? null );
 			if ( 'select' === $type ) {
 				$item['options'] = $options;
+				if ( ! in_array( $item['default'], wp_list_pluck( $options, 'value' ), true ) ) {
+					$item['default'] = '';
+				}
 			} else {
 				$item['prefill'] = in_array( $component['prefill'] ?? null, self::PREFILLS, true ) ? $component['prefill'] : null;
 			}

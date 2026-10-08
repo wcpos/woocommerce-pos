@@ -71,6 +71,64 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** The scoped key wins for its gateway; every other gateway-mode method keeps Free's handler. */
+	public function test_gateway_scoped_registration_serves_one_gateway(): void {
+		// Arrange.
+		$registry = Capture_Mode_Registry::instance();
+		$filter   = static fn( $mode, $gateway ) => 'pos_cash' === $gateway->id ? 'gateway:pos_cash' : ( 'pos_card' === $gateway->id ? 'gateway' : $mode );
+		add_filter( 'wcpos_payment_method_capture_mode', $filter, 10, 2 );
+		try {
+			$registry->register( 'gateway:pos_cash', Replacement_Gateway_Handler::class );
+			// Act.
+			$cash = Descriptor_Builder::instance()->get( 'pos_cash' );
+			$card = Descriptor_Builder::instance()->get( 'pos_card' );
+			// Assert.
+			$this->assertSame( 'gateway', $cash['capture']['mode'] );
+			$this->assertFalse( $cash['capture']['webview_available'] );
+			$this->assertSame( 'gateway', $card['capture']['mode'] );
+			$this->assertTrue( $card['capture']['webview_available'] );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_mode', $filter, 10 );
+			$registry->register( 'gateway:pos_cash', Gateway_Handler::class );
+		}
+	}
+
+	/** Refunds run through the gateway's own process_refund() when it supports them, else succeed by hand. */
+	public function test_gateway_refund_follows_the_gateway(): void {
+		// Arrange.
+		$filter = static fn( array $gateways ): array => array_merge( $gateways, array( Refunding_Test_Gateway::class ) );
+		add_filter( 'woocommerce_payment_gateways', $filter );
+		\WC_Payment_Gateways::instance()->init();
+		$handler = Capture_Mode_Registry::instance()->get( 'gateway' );
+		$row     = array(
+			'order_id'  => 4321,
+			'method_id' => 'wcpos_refunding_test',
+			'refunds'   => array(),
+		);
+		try {
+			// Act / Assert: provider refund succeeds.
+			Refunding_Test_Gateway::$result = true;
+			$refunded                       = $handler->refund( $row, 77, '5.00' );
+			$this->assertSame( array( 4321, 5.0, '' ), Refunding_Test_Gateway::$args );
+			$this->assertSame( 'succeeded', $refunded['refunds'][0]['status'] );
+			$this->assertSame( '5.00', $refunded['refunds'][0]['amount'] );
+			$this->assertSame( 77, $refunded['refunds'][0]['id'] );
+			// Act / Assert: the provider refuses.
+			Refunding_Test_Gateway::$result = new \WP_Error( 'declined', 'No funds' );
+			$error                          = $handler->refund( $row, 78, '5.00' );
+			$this->assertInstanceOf( \WP_Error::class, $error );
+			$this->assertSame( 'wcpos_provider_error', $error->get_error_code() );
+			$this->assertSame( 'No funds', $error->get_error_message() );
+			// Act / Assert: a gateway without refunds is handed back by hand.
+			$manual = $handler->refund( array_merge( $row, array( 'method_id' => 'wcpos_sent_nowhere' ) ), 79, '5.00' );
+			$this->assertSame( 'succeeded', $manual['refunds'][0]['status'] );
+			$this->assertNull( $manual['refunds'][0]['provider_ref'] );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $filter );
+			\WC_Payment_Gateways::instance()->init();
+		}
+	}
+
 	/** Addendum: specialization uses registration, not a describe filter. */
 	public function test_gateway_second_registration_replaces_handler(): void {
 		// Arrange.
@@ -101,3 +159,39 @@ class Replacement_Gateway_Handler extends Abstract_Capture_Mode_Handler {
 
 /** Plain Woo gateway fixture. */
 class Gateway_Handler_Test_Gateway extends \WC_Payment_Gateway {}
+
+/** A gateway that supports refunds and records what it was asked. */
+class Refunding_Test_Gateway extends \WC_Payment_Gateway {
+	/**
+	 * What process_refund() answers.
+	 *
+	 * @var true|\WP_Error
+	 */
+	public static $result = true;
+	/**
+	 * The arguments process_refund() received.
+	 *
+	 * @var array
+	 */
+	public static $args = array();
+
+	/** Register fixture identity. */
+	public function __construct() {
+		$this->id       = 'wcpos_refunding_test';
+		$this->title    = 'Refunding';
+		$this->supports = array( 'products', 'refunds' );
+	}
+
+	/**
+	 * Record the refund request.
+	 *
+	 * @param int    $order_id Order ID.
+	 * @param float  $amount   Amount.
+	 * @param string $reason   Reason.
+	 * @return bool|\WP_Error
+	 */
+	public function process_refund( $order_id, $amount = null, $reason = '' ) {
+		self::$args = array( $order_id, $amount, $reason );
+		return self::$result;
+	}
+}
