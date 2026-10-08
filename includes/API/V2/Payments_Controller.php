@@ -12,6 +12,8 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
+use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WP_Error;
 use WP_REST_Request;
@@ -36,7 +38,10 @@ class Payments_Controller extends WC_REST_Controller {
 	/** Register the order payment route family. */
 	public function register_routes(): void {
 		$payment_path = '/' . $this->rest_base . '/(?P<id>[\d]+)/payments';
+		$method_path = '/' . $this->rest_base . '/(?P<id>[\d]+)/payment-methods/(?P<method>[\w-]+)';
 		$routes       = array(
+			$method_path . '/submit' => array( WP_REST_Server::CREATABLE, 'submit_item' ),
+			$method_path . '/cancel' => array( WP_REST_Server::CREATABLE, 'cancel_item' ),
 			$payment_path => array( WP_REST_Server::CREATABLE, 'create_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/status' => array( WP_REST_Server::READABLE, 'get_status' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/intent' => array( WP_REST_Server::CREATABLE, 'intent_item' ),
@@ -107,6 +112,64 @@ class Payments_Controller extends WC_REST_Controller {
 			return $refusal;
 		}
 		return $this->payment_response( $row, $order );
+	}
+
+	/**
+	 * Submit a gateway's declared fields.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function submit_item( $request ) {
+		return $this->gateway_item( $request, 'submit' );
+	}
+
+	/**
+	 * Cancel an awaiting-customer outcome.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function cancel_item( $request ) {
+		return $this->gateway_item( $request, 'cancel' );
+	}
+
+	/**
+	 * Dispatch a gateway operation inside the route lock.
+	 *
+	 * @param WP_REST_Request $request   Request object.
+	 * @param string          $operation Submit or cancel.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	private function gateway_item( WP_REST_Request $request, string $operation ) {
+		$order = $this->get_order( (int) $request['id'] );
+		if ( is_wp_error( $order ) ) {
+			return $order;
+		}
+		$descriptor = Descriptor_Builder::instance()->get( (string) $request['method'] );
+		if ( ! $descriptor ) {
+			return new WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		}
+		$params = $request->get_json_params();
+		$params = is_array( $params ) ? $params : $request->get_body_params();
+		if ( 'submit' === $operation ) {
+			if ( ! is_array( $params['values'] ?? null ) || ! is_string( $params['attempt_id'] ?? null ) ) {
+				return new WP_Error( 'rest_invalid_param', __( 'Values must be an object and attempt ID a UUID.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+			}
+			$result = Gateway_Submission::submit( $order, $descriptor, $params['attempt_id'], $params['values'] );
+		} else {
+			if ( ! is_string( $params['attempt_id'] ?? null ) ) {
+				return new WP_Error( 'rest_invalid_param', __( 'Attempt ID must name the sent attempt to cancel.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+			}
+			$result = Gateway_Submission::cancel( $order, $descriptor, $params['attempt_id'], sanitize_text_field( $params['reason'] ?? '' ) );
+		}
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( isset( $result['payment'] ) ) {
+			$result['payment'] = Ledger::to_wire( $result['payment'] );
+		}
+		return rest_ensure_response( $result );
 	}
 
 	/**

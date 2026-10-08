@@ -1024,8 +1024,12 @@ class Ledger {
 				$selected = $row;
 			}
 		}
+		// A sent gateway order (awaiting the customer off-till) is POS-owned whatever status
+		// the gateway left it in, so it re-enters the projection the moment money lands.
+		$stamped = null !== Gateway_Submission::read_stamp( $order );
 		// No counting rows: leave payment_method/title untouched (the cart, or every leg voided).
 		if ( $selected ) {
+			Gateway_Submission::clear_stamp( $order );
 			$titles = array();
 			foreach ( $counting as $row ) {
 				$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
@@ -1042,7 +1046,7 @@ class Ledger {
 
 		// Only the ledger-managed states are projected; a completed/processing/on-hold/refunded
 		// order is never pulled back by a later ledger write (a refused row, a void of a leg).
-		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) ) {
+		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && ! $stamped ) {
 			return;
 		}
 		$paid  = Money::minor( $this->paid( $rows ) );
@@ -1067,6 +1071,9 @@ class Ledger {
 				return 'pending' === ( $row['status'] ?? '' );
 			}
 		);
+		if ( ! $selected && $stamped ) {
+			return;
+		}
 		$order->set_status( $pending ? 'pending' : ( $paid > 0 ? 'pos-partial' : 'pos-open' ) );
 	}
 

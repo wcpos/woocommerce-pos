@@ -21,7 +21,7 @@ class Test_Payment_Methods_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 1, $data['schema'] );
-		$this->assertSame( '1.1', $data['contract'] );
+		$this->assertSame( '1.2', $data['contract'] );
 		$this->assertSame( 'manual', $cash['capture']['mode'] );
 		$this->assertSame( true, $cash['capabilities']['change'] );
 		$this->assertSame( array(), (array) $cash['provider_data'] );

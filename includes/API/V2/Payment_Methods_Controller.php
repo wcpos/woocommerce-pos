@@ -138,6 +138,7 @@ class Payment_Methods_Controller extends WC_REST_Controller {
 				'capabilities'  => array( 'type' => 'object' ),
 				'defaults'      => array( 'type' => 'object' ),
 				'provider_data' => array( 'type' => 'object' ),
+				'fields' => array( 'type' => 'object' ),
 			),
 		);
 

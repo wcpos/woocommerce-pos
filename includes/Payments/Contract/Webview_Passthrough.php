@@ -93,7 +93,7 @@ class Webview_Passthrough {
 			}
 		}
 
-		self::maybe_mint( $order );
+		self::mint( $order );
 	}
 
 	/**
@@ -123,32 +123,33 @@ class Webview_Passthrough {
 			return;
 		}
 
-		self::maybe_mint( $order );
+		self::mint( $order );
 	}
 
 	/**
 	 * Append a captured webview row when payment is not already represented.
 	 *
-	 * @param WC_Order $order Order object.
+	 * @param WC_Order $order     Order object.
+	 * @param array    $overrides Submission-specific row values.
 	 */
-	private static function maybe_mint( WC_Order $order ): void {
+	public static function mint( WC_Order $order, array $overrides = array() ): ?array {
 		if ( ! wcpos_is_pos_order( $order ) ) {
-			return;
+			return null;
 		}
 		$ledger = Ledger::instance();
 		$rows   = $ledger->read( $order );
 		foreach ( $rows as $row ) {
 			if ( in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
-				return;
+				return null;
 			}
 		}
-		if ( Ledger::is_deriving() ) {
-			return;
+		if ( Ledger::is_deriving() || Gateway_Submission::is_submitting( $order->get_id() ) ) {
+			return null;
 		}
 
-		$method_id = $order->get_payment_method();
+		$method_id = $overrides['method_id'] ?? $order->get_payment_method();
 		if ( (float) $order->get_total() <= 0 || '' === $method_id ) {
-			return;
+			return null;
 		}
 		$descriptor = Descriptor_Builder::instance()->get( $method_id );
 		$tendered   = null;
@@ -165,29 +166,34 @@ class Webview_Passthrough {
 		// fallback for an order that never went through the POS writer.
 		$cashier_id = (int) $order->get_meta( '_pos_user' );
 		$now        = gmdate( 'c' );
-		$rows[] = array(
-			'id'               => wp_generate_uuid4(),
-			'source'           => 'webview',
-			'method_id'        => $method_id,
-			'kind'             => $descriptor ? $descriptor['kind'] : 'other',
-			'provider'         => $descriptor ? $descriptor['capture']['provider'] : null,
-			'capture_mode'     => 'webview',
-			'transport'        => null,
-			'recorded_offline' => false,
-			'amount'           => $order->get_total(),
-			'currency'         => $order->get_currency(),
-			'tendered'         => $tendered,
-			'change'           => $change,
-			'tip'              => null,
-			'status'           => 'captured',
-			'provider_refs'    => array( 'transaction_id' => '' !== $transaction_id ? $transaction_id : null ),
-			'receipt'          => array(),
-			'cashier_id'       => $cashier_id > 0 ? $cashier_id : get_current_user_id(),
-			'store_id'         => '' === (string) $order->get_meta( '_pos_store' ) ? null : (int) $order->get_meta( '_pos_store' ),
-			'created_at_gmt'   => $now,
-			'captured_at_gmt'  => $now,
-			'updated_at_gmt'   => $now,
+		$row = array_merge(
+			array(
+				'id'               => wp_generate_uuid4(),
+				'source'           => 'webview',
+				'method_id'        => $method_id,
+				'kind'             => $descriptor ? $descriptor['kind'] : 'other',
+				'provider'         => $descriptor ? $descriptor['capture']['provider'] : null,
+				'capture_mode'     => 'webview',
+				'transport'        => null,
+				'recorded_offline' => false,
+				'amount'           => $order->get_total(),
+				'currency'         => $order->get_currency(),
+				'tendered'         => $tendered,
+				'change'           => $change,
+				'tip'              => null,
+				'status'           => 'captured',
+				'provider_refs'    => array( 'transaction_id' => '' !== $transaction_id ? $transaction_id : null ),
+				'receipt'          => array(),
+				'cashier_id'       => $cashier_id > 0 ? $cashier_id : get_current_user_id(),
+				'store_id'         => '' === (string) $order->get_meta( '_pos_store' ) ? null : (int) $order->get_meta( '_pos_store' ),
+				'created_at_gmt'   => $now,
+				'captured_at_gmt'  => $now,
+				'updated_at_gmt'   => $now,
+			),
+			$overrides
 		);
+		$rows[] = $row;
 		$ledger->save( $order, $rows );
+		return $ledger->find( $order, $row['id'] );
 	}
 }
