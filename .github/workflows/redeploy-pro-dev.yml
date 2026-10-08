@@ -74,9 +74,13 @@ jobs:
           # none has appeared yet rather than point at the wrong deployment.
           for _ in 1 2 3 4 5 6; do
             sleep 5
+            # `gh --jq` takes one expression and forwards no jq options, so bind $since
+            # through jq itself. A failing lookup fails the step: the dispatch above has
+            # already happened, and a silent miss would report a run that exists as missing.
             # shellcheck disable=SC2016 # $since inside the quotes is jq's variable, bound by --arg.
             run=$(gh run list --repo wcpos/woocommerce-pos-pro --workflow deploy-dev.yml --branch next --event workflow_dispatch --limit 5 \
-              --json url,status,createdAt --jq --arg since "$since" '[.[] | select(.createdAt >= $since)] | sort_by(.createdAt) | first // empty | "\(.url) \(.status)"' || true)
+              --json url,status,createdAt \
+              | jq -r --arg since "$since" '[.[] | select(.createdAt >= $since)] | sort_by(.createdAt) | first // empty | "\(.url) \(.status)"')
             if [ -n "$run" ]; then
               echo "Pro run: $run"
               exit 0
