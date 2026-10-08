@@ -45,6 +45,7 @@ class Capture_Mode_Registry {
 	private function __construct() {
 		$this->register( 'manual', Manual_Handler::class );
 		$this->register( 'webview', Webview_Handler::class );
+		$this->register( 'gateway', Gateway_Handler::class );
 	}
 
 	/** Get the shared registry. */

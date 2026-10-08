@@ -1026,6 +1026,7 @@ class Ledger {
 		}
 		// No counting rows: leave payment_method/title untouched (the cart, or every leg voided).
 		if ( $selected ) {
+			Gateway_Submission::clear_stamp( $order );
 			$titles = array();
 			foreach ( $counting as $row ) {
 				$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
@@ -1067,6 +1068,9 @@ class Ledger {
 				return 'pending' === ( $row['status'] ?? '' );
 			}
 		);
+		if ( ! $selected && Gateway_Submission::read_stamp( $order ) ) {
+			return;
+		}
 		$order->set_status( $pending ? 'pending' : ( $paid > 0 ? 'pos-partial' : 'pos-open' ) );
 	}
 

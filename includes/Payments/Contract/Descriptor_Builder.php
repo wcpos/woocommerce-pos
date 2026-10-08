@@ -57,7 +57,7 @@ class Descriptor_Builder {
 
 		return array(
 			'schema' => 1,
-			'contract' => '1.1',
+			'contract' => '1.2',
 			'methods' => $methods,
 		);
 	}
@@ -182,7 +182,7 @@ class Descriptor_Builder {
 			}
 		}
 
-		return array(
+		$descriptor = array(
 			'schema'        => 1,
 			'id'            => $gateway->id,
 			'title'         => $title,
@@ -213,5 +213,10 @@ class Descriptor_Builder {
 			),
 			'provider_data' => empty( $provider_data ) ? new \stdClass() : $provider_data,
 		);
+		$fields = Declared_Fields::for_gateway( $gateway );
+		if ( null !== $fields ) {
+			$descriptor['fields'] = $fields;
+		}
+		return $descriptor;
 	}
 }
