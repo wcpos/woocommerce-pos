@@ -70,7 +70,6 @@ class Gateway_Submission {
 				'order' => $ledger->summary( $order ),
 			);
 		}
-		$stamp   = self::read_stamp( $order );
 		$history = self::read_attempts( $order );
 		if ( 'sent' === ( $history[ $attempt_id ] ?? null ) ) {
 			return array(
@@ -146,8 +145,17 @@ class Gateway_Submission {
 				WC()->customer = new \WC_Customer( get_current_user_id(), true );
 			}
 			if ( ! WC()->cart instanceof \WC_Cart ) {
-				WC()->cart = new \WC_Cart();
+				// Without session initialisation the cart adds no shutdown cookie or saved-cart
+				// hooks; without the persistent cart, a gateway's empty_cart() cannot delete the
+				// cashier's own saved storefront cart.
+				add_filter( 'woocommerce_cart_session_initialize', '__return_false' );
+				try {
+					WC()->cart = new \WC_Cart();
+				} finally {
+					remove_filter( 'woocommerce_cart_session_initialize', '__return_false' );
+				}
 			}
+			add_filter( 'woocommerce_persistent_cart_enabled', '__return_false' );
 			wc_clear_notices();
 			$valid   = $gateway->validate_fields();
 			$notices = self::take_error_notices();
@@ -183,6 +191,7 @@ class Gateway_Submission {
 			$threw  = $throwable;
 		} finally {
 			self::$submitting_order_id = 0;
+			remove_filter( 'woocommerce_persistent_cart_enabled', '__return_false' );
 			remove_action( 'woocommerce_payment_complete', $complete );
 			remove_action( 'woocommerce_order_status_changed', $status_changed, 10 );
 			foreach ( $ids as $id ) {

@@ -100,8 +100,11 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'woocommerce_payment_gateways', $filter );
 		\WC_Payment_Gateways::instance()->init();
 		$handler = Capture_Mode_Registry::instance()->get( 'gateway' );
-		$row     = array(
-			'order_id'  => 4321,
+		$order   = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
+		$order->set_transaction_id( 'ch_original_charge' );
+		$order->save();
+		$row = array(
+			'order_id'  => $order->get_id(),
 			'method_id' => 'wcpos_refunding_test',
 			'refunds'   => array(),
 		);
@@ -109,7 +112,7 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 			// Act / Assert: provider refund succeeds.
 			Refunding_Test_Gateway::$result = true;
 			$refunded                       = $handler->refund( $row, 77, '5.00' );
-			$this->assertSame( array( 4321, 5.0, '' ), Refunding_Test_Gateway::$args );
+			$this->assertSame( array( $order->get_id(), 5.0, '' ), Refunding_Test_Gateway::$args );
 			$this->assertSame( 'succeeded', $refunded['refunds'][0]['status'] );
 			$this->assertSame( '5.00', $refunded['refunds'][0]['amount'] );
 			$this->assertSame( 77, $refunded['refunds'][0]['id'] );

@@ -181,18 +181,34 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		Sent_Test_Gateway::$redirect = 'https://pay.example-provider.test/session/abc';
 		$order                       = $this->create_pos_order();
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
 		// Act.
 		$response = $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
 		// Assert.
 		$this->assertSame( 502, $response->get_status() );
 		$this->assertSame( 'wcpos_provider_error', $response->get_data()['code'] );
 		$this->assertStringContainsString( 'pay.example-provider.test', $response->get_data()['data']['detail'] );
-		$this->assertNull( Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) ) );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( 'pos_cash', $stored->get_payment_method() );
 		// Arrange / Act: a page on this site.
 		Sent_Test_Gateway::$redirect = home_url( '/thank-you/' );
 		$response                    = $this->submit( $this->create_pos_order(), wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'sent', $response->get_data()['outcome'] );
+		// Arrange / Act: WordPress served from its own host, the gateway built its URL from it.
+		$site_url                    = static fn() => 'https://wp.example-store.test';
+		Sent_Test_Gateway::$redirect = 'https://wp.example-store.test/checkout/order-received/1/';
+		add_filter( 'site_url', $site_url );
+		try {
+			$response = $this->submit( $this->create_pos_order(), wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+		} finally {
+			remove_filter( 'site_url', $site_url );
+		}
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		$this->assertSame( 'sent', $response->get_data()['outcome'] );
 	}
 
