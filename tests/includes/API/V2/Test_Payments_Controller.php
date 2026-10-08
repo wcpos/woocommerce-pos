@@ -31,6 +31,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Capture log attempts without writing to disk. */
 	public function setUp(): void {
 		parent::setUp();
+		Route_Handler::$prompt = null;
 		Logger::reset_dedup_state();
 		$this->logged_messages = array();
 		$this->log_filter = function ( $should_log, $message ) {
@@ -316,6 +317,33 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	public function test_status_prompt_is_response_only(): void {
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		$prompt = array( 'id' => 'p1', 'lines' => array( 'Sign?' ), 'buttons' => array( array( 'id' => 'B1', 'label' => 'YES' ) ) );
+		Route_Handler::$prompt = $prompt;
+		$order = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '20.00', array( 'capture_mode' => 'route_test', 'status' => 'pending' ) );
+		Ledger::instance()->save( $order, array( $payment ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( $this->payment_path( $order, $payment['id'] ) . '/status' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'prompt', $data );
+		$this->assertSame( $prompt, $data['prompt'] );
+		$this->assertArrayNotHasKey( 'prompt', $data['payment'] );
+		$this->assertArrayNotHasKey( 'prompt', Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] ) );
+	}
+
+	public function test_status_without_prompt_returns_null(): void {
+		$order = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '20.00' );
+		$this->record( $order, $payment );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( $this->payment_path( $order, $payment['id'] ) . '/status' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'prompt', $data );
+		$this->assertNull( $data['prompt'] );
+	}
+
 	/** Intent and capture return the current payment summary. */
 	public function test_intent_and_capture_return_handoff_and_locked_fresh_order_summary(): void {
 		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
@@ -350,6 +378,31 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'captured', $response->get_data()['payment']['status'] );
 		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
 		$this->assertArrayNotHasKey( 'handoff', $response->get_data() );
+	}
+
+	/** A second full-balance intent while a leg is live is refused with the live leg's id. */
+	public function test_intent_in_flight_returns_409_with_the_live_payment_id(): void {
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		add_filter(
+			'wcpos_payment_method_capture_mode',
+			static function () {
+				return 'route_test';
+			}
+		);
+		$order = $this->create_pos_order();
+		$first = $this->payment( 'pos_cash', '92.95' );
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $first['id'] ) . '/intent' );
+		$request->set_body_params( array( 'payment' => $first, 'context' => array() ) );
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+		$second = $this->payment( 'pos_cash', '92.95' );
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $second['id'] ) . '/intent' );
+		$request->set_body_params( array( 'payment' => $second, 'context' => array() ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 409, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'wcpos_payment_in_flight', $data['code'] );
+		$this->assertSame( $first['id'], $data['data']['payment_id'] );
+		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 	}
 
 	/** Refund responses contain only the payment row. */
@@ -477,6 +530,25 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 // phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- Route fixtures stay with their tests.
 /** A local handler keeps route tests independent of a provider. */
 class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler {
+	/**
+	 * Response-only provider prompt.
+	 *
+	 * @var array|null
+	 */
+	public static $prompt = null;
+
+	/**
+	 * Return a transient prompt when the provider asks the cashier a question.
+	 *
+	 * @param array $row Payment row.
+	 */
+	public function status( array $row ) {
+		if ( null !== self::$prompt ) {
+			$row['prompt'] = self::$prompt;
+		}
+		return $row;
+	}
+
 	/**
 	 * Describe the test capture mode.
 	 *

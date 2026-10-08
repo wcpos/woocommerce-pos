@@ -66,8 +66,47 @@ final class Payments_Sweeper {
 						if ( ! $handler ) {
 							continue;
 						}
-						$result = $handler->status( $row );
+						// Re-dispatch only a row the provider has never answered: any provider ref other than the
+						// reader (server `action`, device `payment_intent`) means a live provider object to poll.
+						$dispatch = Ledger::is_unanswered( $row );
+						// Manual records are never pending; legacy webview legs are not provider intents.
+						if ( $dispatch && in_array( $row['capture_mode'], array( 'manual', 'webview' ), true ) ) {
+							continue;
+						}
+						// An order cancelled or completed since the create was lost takes no new charge. The
+						// provider MAY have accepted that create, so the row is not voided blind: the handler's
+						// void recovers any live action through the idempotent create and cancels it (Pro), or
+						// voids locally when nothing exists at the provider.
+						if ( $dispatch && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) ) {
+							$closed = $handler->void( $row, 'order_closed' );
+							if ( is_wp_error( $closed ) ) {
+								Logger::log( sprintf( 'WCPOS payment sweep %s: void on closed order failed: %s', $row['id'], $closed->get_error_message() ) );
+							} else {
+								$ledger->apply_result( $order, $row['id'], $closed, false );
+							}
+							continue;
+						}
+						$result = $dispatch
+							? $handler->intent(
+								$row,
+								array(
+									'source' => 'sweep',
+									'reader' => $row['provider_refs']['reader'] ?? null,
+								)
+							)
+							: $handler->status( $row );
 						if ( is_wp_error( $result ) ) {
+							if ( $dispatch && true !== ( $result->get_error_data()['indeterminate'] ?? false ) ) {
+								$ledger->apply_result(
+									$order,
+									$row['id'],
+									array(
+										'status' => 'failed',
+										'failure_reason' => $result->get_error_code(),
+									),
+									false
+								);
+							}
 							Logger::log( sprintf( 'WCPOS payment sweep %s: %s', $row['id'], $result->get_error_message() ) );
 							continue;
 						}
