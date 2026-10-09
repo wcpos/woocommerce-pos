@@ -51,6 +51,13 @@ class Orders {
 	private static $temp_id_counter = 0;
 
 	/**
+	 * Armed date_paid suppressions, keyed by order id — see arm_paid_date_suppression().
+	 *
+	 * @var array<int, callable>
+	 */
+	private $paid_date_suppressions = array();
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -183,7 +190,100 @@ class Orders {
 			return $status;
 		}
 
-		return $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
+		$configured = $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
+
+		/*
+		 * The gateway writes this status itself with update_status(), and no money
+		 * has been taken at the till. payment_complete_order_status() reports the
+		 * configured status as this order's paid status, so set_status() would
+		 * stamp date_paid the moment the order lands on it — booking a pending
+		 * "pay by invoice" or on-hold bank-transfer order as revenue. Suppress the
+		 * stamp for that write when the configured status is one WooCommerce
+		 * does not itself call paid; a paid status keeps WooCommerce's own
+		 * behaviour (core stamps date_paid for COD landing on processing).
+		 *
+		 * This filter runs before the gateway's update_status(), so the
+		 * suppression is armed here and released once the order object is saved
+		 * — see release_paid_date_suppression_after_save().
+		 */
+		if ( $order instanceof WC_Order && ! \in_array( $configured, wc_get_is_paid_statuses(), true ) ) {
+			$this->arm_paid_date_suppression( $order->get_id() );
+		}
+
+		return $configured;
+	}
+
+	/**
+	 * Suppress the date_paid stamp for one order until its next save.
+	 *
+	 * Scoped to the order id: a status-transition handler can call
+	 * payment_complete() on a *different* order while this filter is live
+	 * (subscriptions, bundles and gift-card plugins all do), and an
+	 * unconditional '' would reach that order too — set_status() rejects an
+	 * unknown status and falls back to 'pending', leaving an order that was
+	 * just paid sitting unpaid.
+	 *
+	 * Released on `woocommerce_after_order_object_save` for that order, which
+	 * fires whether or not the status actually changed, and on `shutdown` as a
+	 * backstop so a write that never happens cannot leave it armed.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function arm_paid_date_suppression( int $order_id ): void {
+		if ( isset( $this->paid_date_suppressions[ $order_id ] ) ) {
+			return;
+		}
+
+		$suppress = static function ( $payment_status, $filtered_order_id ) use ( $order_id ) {
+			return (int) $filtered_order_id === $order_id ? '' : $payment_status;
+		};
+
+		$this->paid_date_suppressions[ $order_id ] = $suppress;
+
+		add_filter( 'woocommerce_payment_complete_order_status', $suppress, PHP_INT_MAX, 2 );
+		add_action( 'woocommerce_after_order_object_save', array( $this, 'release_paid_date_suppression_after_save' ), 10, 1 );
+		add_action( 'shutdown', array( $this, 'release_all_paid_date_suppressions' ) );
+	}
+
+	/**
+	 * Release the date_paid suppression once the order it was armed for is saved.
+	 *
+	 * @param WC_Abstract_Order $order The saved order.
+	 */
+	public function release_paid_date_suppression_after_save( $order ): void {
+		if ( ! $order instanceof WC_Abstract_Order ) {
+			return;
+		}
+
+		$this->release_paid_date_suppression( $order->get_id() );
+	}
+
+	/**
+	 * Release every armed date_paid suppression.
+	 */
+	public function release_all_paid_date_suppressions(): void {
+		foreach ( array_keys( $this->paid_date_suppressions ) as $order_id ) {
+			$this->release_paid_date_suppression( (int) $order_id );
+		}
+	}
+
+	/**
+	 * Remove one order's date_paid suppression from the filter.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function release_paid_date_suppression( int $order_id ): void {
+		if ( ! isset( $this->paid_date_suppressions[ $order_id ] ) ) {
+			return;
+		}
+
+		remove_filter( 'woocommerce_payment_complete_order_status', $this->paid_date_suppressions[ $order_id ], PHP_INT_MAX );
+		unset( $this->paid_date_suppressions[ $order_id ] );
+
+		if ( empty( $this->paid_date_suppressions ) ) {
+			remove_action( 'woocommerce_after_order_object_save', array( $this, 'release_paid_date_suppression_after_save' ), 10 );
+			remove_action( 'shutdown', array( $this, 'release_all_paid_date_suppressions' ) );
+		}
 	}
 
 	/**

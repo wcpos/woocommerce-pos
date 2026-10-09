@@ -1722,6 +1722,123 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Data provider: offline gateways landing on a status WooCommerce does not call paid.
+	 *
+	 * @return array[]
+	 */
+	public function offline_gateway_unpaid_configured_status_provider(): array {
+		return array(
+			'bacs → pending (pay by invoice)' => array( 'bacs', 'on-hold', 'wc-pending', 'pending' ),
+			'bacs → on-hold'                  => array( 'bacs', 'on-hold', 'wc-on-hold', 'on-hold' ),
+			'cheque → on-hold'                => array( 'cheque', 'on-hold', 'wc-on-hold', 'on-hold' ),
+		);
+	}
+
+	/**
+	 * An offline gateway takes no money at the till. When its configured status is
+	 * one WooCommerce does not call paid, applying it must not stamp date_paid.
+	 *
+	 * WCPOS's payment_complete_order_status() reports the configured status as the
+	 * order's paid status, so WC_Order::set_status() — called by the gateway's own
+	 * update_status() — would otherwise stamp date_paid on a pending or on-hold
+	 * order and book it as revenue.
+	 *
+	 * @dataProvider offline_gateway_unpaid_configured_status_provider
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::offline_process_payment_order_status
+	 *
+	 * @param string $gateway_id     Gateway id.
+	 * @param string $default_status The status the gateway would apply on its own.
+	 * @param string $configured     The stored POS status, with prefix.
+	 * @param string $expected       The status the order lands on.
+	 */
+	public function test_offline_gateway_landing_on_unpaid_configured_status_does_not_stamp_date_paid( string $gateway_id, string $default_status, string $configured, string $expected ): void {
+		// Arrange.
+		$this->set_gateway_settings( $gateway_id, $configured );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( $gateway_id );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act: what WC_Gateway_BACS::process_payment() does with the filtered status.
+		$status = apply_filters( 'woocommerce_' . $gateway_id . '_process_payment_order_status', $default_status, $order );
+		$order->update_status( $status, 'Awaiting payment' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( $expected, $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid(), 'No money was taken, so date_paid must stay unset.' );
+	}
+
+	/**
+	 * A configured status WooCommerce itself calls paid keeps WooCommerce's own
+	 * behaviour: core stamps date_paid for COD landing on processing, and so do we.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::offline_process_payment_order_status
+	 */
+	public function test_offline_gateway_landing_on_paid_configured_status_still_stamps_date_paid(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'cod', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'cod' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		$status = apply_filters( 'woocommerce_cod_process_payment_order_status', 'processing', $order );
+		$order->update_status( $status, 'Payment to be made upon delivery.' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'completed', $fresh->get_status() );
+		$this->assertNotNull( $fresh->get_date_paid(), 'A paid status keeps WooCommerce\'s own date_paid stamp.' );
+	}
+
+	/**
+	 * The suppression lasts for the gateway's status write only; it must not sit on
+	 * the filter afterwards, where it would reach a later payment on the same order.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::offline_process_payment_order_status
+	 */
+	public function test_offline_gateway_date_paid_suppression_is_released_after_the_status_write(): void {
+		global $wp_filter;
+
+		// Arrange.
+		$this->set_gateway_settings( 'bacs', 'wc-pending' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$callbacks_before = isset( $wp_filter['woocommerce_payment_complete_order_status'] )
+			? \count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() )
+			: 0;
+
+		// Act.
+		$status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+		$this->assertGreaterThan(
+			$callbacks_before,
+			\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+			'The suppression is armed between the filter and the status write.'
+		);
+		$order->update_status( $status, 'Awaiting payment' );
+
+		// Assert.
+		$this->assertSame(
+			$callbacks_before,
+			\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+			'The suppression must come off once the order is saved.'
+		);
+		$this->assertNull( wc_get_order( $order->get_id() )->get_date_paid() );
+	}
+
+	/**
 	 * A partial tender still owes money, so it must be left alone.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
