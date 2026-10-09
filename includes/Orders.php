@@ -22,6 +22,7 @@ use WC_Discounts;
 use WC_Product;
 use WC_Product_Simple;
 use WC_Tax;
+use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 
 /**
  * Orders Class
@@ -517,61 +518,16 @@ class Orders {
 	/**
 	 * Read the explicitly stored per-gateway order status.
 	 *
-	 * Reads the raw options rather than the settings service, because the service
-	 * rebuilds its view from the installed gateways and synthesizes a default
-	 * status for gateways the merchant has never configured. Only a status the
-	 * merchant actually chose, on a gateway they enabled for POS, counts as intent.
-	 *
-	 * Two places hold such a choice, matching Payment_Gateways_Section::read():
-	 * the per-gateway entry, and — on sites upgraded from before per-gateway
-	 * statuses — the legacy global `checkout.order_status`, which that section
-	 * still applies in memory to any gateway with no explicit status of its own
-	 * until the merchant next saves.
+	 * The received page and the POS gateway catalog read the same value, so the
+	 * reader lives on Gateway_Contract — see get_stored_order_status() there for
+	 * why the raw option, and not the settings view, is the source of intent.
 	 *
 	 * @param string $gateway_id The payment gateway ID.
 	 *
 	 * @return string The stored status (may include the wc- prefix), or '' when absent.
 	 */
 	private function get_stored_gateway_order_status( string $gateway_id ): string {
-		if ( '' === $gateway_id ) {
-			return '';
-		}
-
-		$stored = get_option( 'woocommerce_pos_settings_payment_gateways', array() );
-
-		if ( ! \is_array( $stored ) || ! isset( $stored['gateways'][ $gateway_id ] ) || ! \is_array( $stored['gateways'][ $gateway_id ] ) ) {
-			return '';
-		}
-
-		$gateway = $stored['gateways'][ $gateway_id ];
-
-		if ( ! isset( $gateway['enabled'] ) || ! wc_string_to_bool( $gateway['enabled'] ) ) {
-			return '';
-		}
-
-		if ( isset( $gateway['order_status'] ) && \is_string( $gateway['order_status'] ) && '' !== $gateway['order_status'] ) {
-			return $gateway['order_status'];
-		}
-
-		return $this->get_legacy_checkout_order_status();
-	}
-
-	/**
-	 * Read the legacy global checkout order status.
-	 *
-	 * Pre-dates per-gateway statuses. Payment_Gateways_Section::read() still seeds
-	 * it in memory for gateways with no explicit status, and leaves the key in
-	 * place until the merchant saves, so an upgraded site can have an enabled
-	 * gateway whose only configured status lives here.
-	 *
-	 * @return string The stored legacy status, or '' when absent.
-	 */
-	private function get_legacy_checkout_order_status(): string {
-		$checkout = get_option( 'woocommerce_pos_settings_checkout', array() );
-
-		return \is_array( $checkout ) && isset( $checkout['order_status'] ) && \is_string( $checkout['order_status'] )
-			? $checkout['order_status']
-			: '';
+		return ( new Gateway_Contract() )->get_stored_order_status( $gateway_id );
 	}
 
 	/**

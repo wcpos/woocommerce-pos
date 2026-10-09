@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_REST_Request;
 
 /**
@@ -94,10 +95,18 @@ class Received {
 			}
 
 			$order_json = $this->get_order_json( $order->get_id() );
-			// Emit only after WooCommerce recognizes the order as paid. A negative
-			// needs_payment() check is insufficient because zero-total failed orders do not
-			// need payment. Keep the POS exclusions so parked carts never report success.
-			$order_complete = $order->is_paid() && ! \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true );
+			// Emit once the sale is settled: WooCommerce recognizes the order as paid, or
+			// the order has reached the status the merchant explicitly configured for its
+			// gateway. The second branch is what closes a "pay by invoice" sale that lands
+			// on Pending payment, or a bank transfer on On hold — statuses is_paid() never
+			// admits. An async gateway configured for Completed that redirects while the
+			// order is still pending matches neither branch, so it keeps waiting. A
+			// negative needs_payment() check would be insufficient because zero-total failed
+			// orders do not need payment. Keep the POS exclusions so parked carts never
+			// report success.
+			$settled_status = ( new Gateway_Contract() )->get_settled_order_status( $order->get_payment_method() );
+			$order_settled  = $order->is_paid() || ( '' !== $settled_status && $order->has_status( $settled_status ) );
+			$order_complete = $order_settled && ! \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true );
 
 			if ( false === $order_json ) {
 				$order_complete = false;
