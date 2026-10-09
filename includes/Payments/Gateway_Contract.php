@@ -19,6 +19,13 @@ use WP_REST_Request;
  */
 class Gateway_Contract {
 	/**
+	 * Statuses that are never a settled outcome — see get_settled_order_status().
+	 *
+	 * @var string[]
+	 */
+	private const NEVER_SETTLED_STATUSES = array( 'pos-open', 'pos-partial', 'failed', 'cancelled' );
+
+	/**
 	 * Human-readable gateway name for POS and settings display.
 	 *
 	 * Falls back from the public title to the admin method title to the id,
@@ -116,6 +123,13 @@ class Gateway_Contract {
 	 * statuses carry at runtime, without the `wc-` prefix, and validated
 	 * against the registered statuses.
 	 *
+	 * Four statuses can never be a settled outcome, whatever is stored: the
+	 * parked POS statuses are open carts, and `failed`/`cancelled` are a
+	 * payment that did not happen. The settings picker offers every registered
+	 * status, so a stored `failed` is reachable through the UI; honouring it
+	 * would let a failed payment emit the payment-received message and close
+	 * the till on a sale that must stay open for a retry.
+	 *
 	 * @param string $gateway_id Gateway id.
 	 *
 	 * @return string The settled status without the `wc-` prefix, or '' when none is configured.
@@ -129,7 +143,7 @@ class Gateway_Contract {
 
 		$status = 0 === strpos( $stored, 'wc-' ) ? substr( $stored, 3 ) : $stored;
 
-		if ( '' === $status ) {
+		if ( '' === $status || \in_array( $status, self::NEVER_SETTLED_STATUSES, true ) ) {
 			return '';
 		}
 

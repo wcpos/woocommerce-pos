@@ -90,6 +90,40 @@ class Test_Gateway_Settled_Order_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Statuses that can never be a settled outcome, whatever the merchant stored.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function never_settled_statuses(): array {
+		return array(
+			'failed'      => array( 'wc-failed' ),
+			'cancelled'   => array( 'wc-cancelled' ),
+			'pos-open'    => array( 'wc-pos-open' ),
+			'pos-partial' => array( 'wc-pos-partial' ),
+		);
+	}
+
+	/**
+	 * A stored failed/cancelled/parked status is not a settled outcome: the picker
+	 * offers every registered status, and a failed payment must stay open for a retry.
+	 *
+	 * @dataProvider never_settled_statuses
+	 *
+	 * @param string $stored The stored status, with prefix.
+	 */
+	public function test_settled_order_status_is_empty_for_never_settled_status( string $stored ): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', $stored );
+
+		// Act.
+		$status = ( new Gateway_Contract() )->get_settled_order_status( 'bacs' );
+
+		// Assert.
+		$this->assertSame( '', $status );
+	}
+
+	/**
 	 * The legacy global checkout status still applies to an enabled gateway with no
 	 * status of its own, matching Orders and Payment_Gateways_Section::read().
 	 */

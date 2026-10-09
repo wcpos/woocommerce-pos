@@ -150,6 +150,23 @@ class Test_Received_Settled_Status extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A failed payment must stay open for a retry even if the merchant stored
+	 * Failed as the gateway's status — the picker offers every registered status.
+	 */
+	public function test_failed_order_with_failed_stored_as_gateway_status_does_not_render_received_script(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-failed' );
+		$order = $this->create_pos_order( 'bacs', 'failed' );
+
+		// Act.
+		$output = $this->render_received( $order );
+
+		// Assert.
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
 	 * The parked POS statuses never count as settled, whatever is stored.
 	 *
 	 * @dataProvider parked_pos_statuses
