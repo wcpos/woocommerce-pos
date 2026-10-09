@@ -19,6 +19,13 @@ use WP_REST_Request;
  */
 class Gateway_Contract {
 	/**
+	 * Statuses that are never a settled outcome — see get_settled_order_status().
+	 *
+	 * @var string[]
+	 */
+	private const NEVER_SETTLED_STATUSES = array( 'pos-open', 'pos-partial', 'failed', 'cancelled', 'refunded', 'checkout-draft' );
+
+	/**
 	 * Human-readable gateway name for POS and settings display.
 	 *
 	 * Falls back from the public title to the admin method title to the id,
@@ -97,6 +104,107 @@ class Gateway_Contract {
 		$pos_setting = $settings['gateways'][ $gateway->id ] ?? array();
 
 		return isset( $pos_setting['enabled'] ) ? (bool) $pos_setting['enabled'] : wc_string_to_bool( $gateway->enabled );
+	}
+
+	/**
+	 * The order status a gateway settles a POS sale to, as the merchant configured it.
+	 *
+	 * This is the merchant's intent, not WooCommerce's notion of "paid": a gateway
+	 * configured to land on Pending payment (a "pay by invoice" flow, where the
+	 * customer still pays through the web pay link) or On hold (a bank transfer
+	 * awaiting confirmation) has finished its part of the sale once the order
+	 * reaches that status, even though is_paid() says otherwise. The received
+	 * page and the POS catalog both read this so the till can close the sale,
+	 * while an async gateway configured to land on Completed that redirects
+	 * early still waits — a pending order has not reached *its* status.
+	 *
+	 * Only a status the merchant stored for a gateway enabled for POS counts —
+	 * per gateway, or the legacy global checkout status that
+	 * Payment_Gateways_Section still applies to a gateway without its own (see
+	 * get_stored_order_status()). The value is normalised to the form order
+	 * statuses carry at runtime, without the `wc-` prefix, and validated
+	 * against the registered statuses.
+	 *
+	 * Some statuses can never be a settled outcome, whatever is stored: the
+	 * parked POS statuses are open carts; `failed`/`cancelled` are a payment
+	 * that did not happen; `refunded` is money given back; `checkout-draft` is
+	 * no order yet. The settings picker offers every registered status, so a
+	 * stored `failed` is reachable through the UI; honouring it would let a
+	 * failed payment emit the payment-received message and close the till on
+	 * a sale that must stay open for a retry.
+	 *
+	 * @param string $gateway_id Gateway id.
+	 *
+	 * @return string The settled status without the `wc-` prefix, or '' when none is configured.
+	 */
+	public function get_settled_order_status( string $gateway_id ): string {
+		$stored = $this->get_stored_order_status( $gateway_id );
+
+		if ( '' === $stored ) {
+			return '';
+		}
+
+		$status = 0 === strpos( $stored, 'wc-' ) ? substr( $stored, 3 ) : $stored;
+
+		if ( '' === $status || \in_array( $status, self::NEVER_SETTLED_STATUSES, true ) ) {
+			return '';
+		}
+
+		foreach ( array_keys( wc_get_order_statuses() ) as $registered ) {
+			$registered = 0 === strpos( $registered, 'wc-' ) ? substr( $registered, 3 ) : $registered;
+
+			if ( $registered === $status ) {
+				return $status;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Read the explicitly stored per-gateway order status.
+	 *
+	 * Reads the raw options rather than the settings service, because the service
+	 * rebuilds its view from the installed gateways and synthesizes a default
+	 * status for gateways the merchant has never configured. Only a status the
+	 * merchant actually chose, on a gateway they enabled for POS, counts as intent.
+	 *
+	 * Two places hold such a choice, matching Payment_Gateways_Section::read():
+	 * the per-gateway entry, and — on sites upgraded from before per-gateway
+	 * statuses — the legacy global `checkout.order_status`, which that section
+	 * still applies in memory to any gateway with no explicit status of its own
+	 * until the merchant next saves.
+	 *
+	 * @param string $gateway_id The payment gateway ID.
+	 *
+	 * @return string The stored status (may include the wc- prefix), or '' when absent.
+	 */
+	public function get_stored_order_status( string $gateway_id ): string {
+		if ( '' === $gateway_id ) {
+			return '';
+		}
+
+		$stored = get_option( 'woocommerce_pos_settings_payment_gateways', array() );
+
+		if ( ! \is_array( $stored ) || ! isset( $stored['gateways'][ $gateway_id ] ) || ! \is_array( $stored['gateways'][ $gateway_id ] ) ) {
+			return '';
+		}
+
+		$gateway = $stored['gateways'][ $gateway_id ];
+
+		if ( ! isset( $gateway['enabled'] ) || ! wc_string_to_bool( $gateway['enabled'] ) ) {
+			return '';
+		}
+
+		if ( isset( $gateway['order_status'] ) && \is_string( $gateway['order_status'] ) && '' !== $gateway['order_status'] ) {
+			return $gateway['order_status'];
+		}
+
+		$checkout = get_option( 'woocommerce_pos_settings_checkout', array() );
+
+		return \is_array( $checkout ) && isset( $checkout['order_status'] ) && \is_string( $checkout['order_status'] )
+			? $checkout['order_status']
+			: '';
 	}
 
 	/**
