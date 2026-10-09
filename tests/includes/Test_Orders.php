@@ -1722,6 +1722,213 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Data provider: offline gateways landing on a status WooCommerce does not call paid.
+	 *
+	 * @return array[]
+	 */
+	public function offline_gateway_unpaid_configured_status_provider(): array {
+		return array(
+			'bacs → pending (pay by invoice)' => array( 'bacs', 'on-hold', 'wc-pending', 'pending' ),
+			'bacs → on-hold'                  => array( 'bacs', 'on-hold', 'wc-on-hold', 'on-hold' ),
+			'cheque → on-hold'                => array( 'cheque', 'on-hold', 'wc-on-hold', 'on-hold' ),
+		);
+	}
+
+	/**
+	 * An offline gateway takes no money at the till. When its configured status is
+	 * one WooCommerce does not call paid, applying it must not stamp date_paid.
+	 *
+	 * WCPOS's payment_complete_order_status() reports the configured status as the
+	 * order's paid status, so WC_Order::set_status() — called by the gateway's own
+	 * update_status() — would otherwise stamp date_paid on a pending or on-hold
+	 * order and book it as revenue.
+	 *
+	 * @dataProvider offline_gateway_unpaid_configured_status_provider
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::offline_process_payment_order_status
+	 *
+	 * @param string $gateway_id     Gateway id.
+	 * @param string $default_status The status the gateway would apply on its own.
+	 * @param string $configured     The stored POS status, with prefix.
+	 * @param string $expected       The status the order lands on.
+	 */
+	public function test_offline_gateway_landing_on_unpaid_configured_status_does_not_stamp_date_paid( string $gateway_id, string $default_status, string $configured, string $expected ): void {
+		// Arrange.
+		$this->set_gateway_settings( $gateway_id, $configured );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( $gateway_id );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act: what WC_Gateway_BACS::process_payment() does with the filtered status.
+		$status = apply_filters( 'woocommerce_' . $gateway_id . '_process_payment_order_status', $default_status, $order );
+		$order->update_status( $status, 'Awaiting payment' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( $expected, $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid(), 'No money was taken, so date_paid must stay unset.' );
+	}
+
+	/**
+	 * A configured status WooCommerce itself calls paid keeps WooCommerce's own
+	 * behaviour: core stamps date_paid for COD landing on processing, and so do we.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::offline_process_payment_order_status
+	 */
+	public function test_offline_gateway_landing_on_paid_configured_status_still_stamps_date_paid(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'cod', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'cod' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		$status = apply_filters( 'woocommerce_cod_process_payment_order_status', 'processing', $order );
+		$order->update_status( $status, 'Payment to be made upon delivery.' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'completed', $fresh->get_status() );
+		$this->assertNotNull( $fresh->get_date_paid(), 'A paid status keeps WooCommerce\'s own date_paid stamp.' );
+	}
+
+	/**
+	 * The suppression lasts for the gateway's status write only; it must not sit on
+	 * the filter afterwards, where it would reach a later payment on the same order.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::offline_process_payment_order_status
+	 */
+	public function test_offline_gateway_date_paid_suppression_is_released_after_the_status_write(): void {
+		global $wp_filter;
+
+		// Arrange.
+		$this->set_gateway_settings( 'bacs', 'wc-pending' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$callbacks_before = isset( $wp_filter['woocommerce_payment_complete_order_status'] )
+			? \count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() )
+			: 0;
+
+		// Act.
+		$status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+		$this->assertGreaterThan(
+			$callbacks_before,
+			\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+			'The suppression is armed between the filter and the status write.'
+		);
+		$order->update_status( $status, 'Awaiting payment' );
+
+		// Assert.
+		$this->assertSame(
+			$callbacks_before,
+			\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+			'The suppression must come off once the order is saved.'
+		);
+		$this->assertNull( wc_get_order( $order->get_id() )->get_date_paid() );
+	}
+
+	/**
+	 * A save with no status transition still releases the suppression: the
+	 * after-save hook fires for every save, not only for a status change.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::release_paid_date_suppression_after_save
+	 */
+	public function test_offline_gateway_date_paid_suppression_is_released_by_a_save_without_transition(): void {
+		global $wp_filter;
+
+		// Arrange: the order already sits on the configured status.
+		$this->set_gateway_settings( 'bacs', 'wc-pending' );
+		$order = $this->create_pos_order( 'pending' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Earlier cases in this class run the offline filter without ever saving, so
+		// the plugin's Orders instance can carry their armed entries into this test
+		// (the WP test case restores $wp_filter between tests, not object state) —
+		// with their shutdown hook already wiped. Arm once to re-register that hook,
+		// then release everything the way a request end would, so the hook count
+		// below is about THIS order only.
+		apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+		$this->assertGreaterThan( 0, $this->run_wcpos_shutdown_releases() );
+
+		$callbacks_before  = \count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() );
+		$after_save_before = isset( $wp_filter['woocommerce_after_order_object_save'] )
+			? \count( $wp_filter['woocommerce_after_order_object_save']->callbacks[10] ?? array() )
+			: 0;
+
+		// Act: the gateway's update_status() to the same status is a save with no transition.
+		$status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+		$order->update_status( $status, 'Awaiting payment' );
+
+		// Assert.
+		$this->assertSame( 'pending', $status );
+		$this->assertSame(
+			$callbacks_before,
+			\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+			'A save without a transition must still release the suppression.'
+		);
+		$this->assertSame(
+			$after_save_before,
+			\count( $wp_filter['woocommerce_after_order_object_save']->callbacks[10] ?? array() ),
+			'The after-save release hook must come off with the last suppression.'
+		);
+	}
+
+	/**
+	 * A write that never happens must not leave the suppression armed: shutdown
+	 * releases it, and a later payment on the same order is not affected.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::release_all_paid_date_suppressions
+	 */
+	public function test_offline_gateway_date_paid_suppression_is_released_on_shutdown_without_a_save(): void {
+		global $wp_filter;
+
+		// Arrange.
+		$this->set_gateway_settings( 'bacs', 'wc-pending' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$callbacks_before = \count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() );
+
+		// Act: the filter runs, but the gateway never writes the status. Firing the
+		// whole `shutdown` action would flush WordPress's output buffers under
+		// PHPUnit, so run only the release callback WCPOS registered on it.
+		apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+		$this->assertGreaterThan( $callbacks_before, \count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ) );
+		$this->assertGreaterThan( 0, $this->run_wcpos_shutdown_releases(), 'Arming registers a shutdown release.' );
+
+		// Assert: released, and a later paid status on the same order is not suppressed.
+		$this->assertSame(
+			$callbacks_before,
+			\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+			'Shutdown must release a suppression whose write never came.'
+		);
+		$this->assertSame(
+			'pending',
+			apply_filters( 'woocommerce_payment_complete_order_status', 'completed', $order->get_id(), $order ),
+			'After release the configured status is reported again, not the suppressed empty string.'
+		);
+	}
+
+	/**
 	 * A partial tender still owes money, so it must be left alone.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
@@ -2621,6 +2828,31 @@ class Test_Orders extends WC_Unit_Test_Case {
 			'result'   => 'success',
 			'redirect' => $order->get_checkout_order_received_url(),
 		);
+	}
+
+	/**
+	 * Run every date_paid release WCPOS registered on `shutdown`, without firing
+	 * the whole action (which flushes WordPress's output buffers under PHPUnit).
+	 *
+	 * @return int How many release callbacks ran — one per Orders instance that armed.
+	 */
+	private function run_wcpos_shutdown_releases(): int {
+		global $wp_filter;
+
+		$releases = array_filter(
+			isset( $wp_filter['shutdown'] ) ? ( $wp_filter['shutdown']->callbacks[10] ?? array() ) : array(),
+			static function ( array $hook ): bool {
+				return \is_array( $hook['function'] )
+					&& $hook['function'][0] instanceof Orders
+					&& 'release_all_paid_date_suppressions' === $hook['function'][1];
+			}
+		);
+
+		foreach ( $releases as $hook ) {
+			\call_user_func( $hook['function'] );
+		}
+
+		return \count( $releases );
 	}
 
 	/**
