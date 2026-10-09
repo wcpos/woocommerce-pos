@@ -23,7 +23,7 @@ class Gateway_Contract {
 	 *
 	 * @var string[]
 	 */
-	private const NEVER_SETTLED_STATUSES = array( 'pos-open', 'pos-partial', 'failed', 'cancelled' );
+	private const NEVER_SETTLED_STATUSES = array( 'pos-open', 'pos-partial', 'failed', 'cancelled', 'refunded', 'checkout-draft' );
 
 	/**
 	 * Human-readable gateway name for POS and settings display.
@@ -118,17 +118,20 @@ class Gateway_Contract {
 	 * while an async gateway configured to land on Completed that redirects
 	 * early still waits — a pending order has not reached *its* status.
 	 *
-	 * Only an explicitly stored status on a gateway enabled for POS counts (see
+	 * Only a status the merchant stored for a gateway enabled for POS counts —
+	 * per gateway, or the legacy global checkout status that
+	 * Payment_Gateways_Section still applies to a gateway without its own (see
 	 * get_stored_order_status()). The value is normalised to the form order
 	 * statuses carry at runtime, without the `wc-` prefix, and validated
 	 * against the registered statuses.
 	 *
-	 * Four statuses can never be a settled outcome, whatever is stored: the
-	 * parked POS statuses are open carts, and `failed`/`cancelled` are a
-	 * payment that did not happen. The settings picker offers every registered
-	 * status, so a stored `failed` is reachable through the UI; honouring it
-	 * would let a failed payment emit the payment-received message and close
-	 * the till on a sale that must stay open for a retry.
+	 * Some statuses can never be a settled outcome, whatever is stored: the
+	 * parked POS statuses are open carts; `failed`/`cancelled` are a payment
+	 * that did not happen; `refunded` is money given back; `checkout-draft` is
+	 * no order yet. The settings picker offers every registered status, so a
+	 * stored `failed` is reachable through the UI; honouring it would let a
+	 * failed payment emit the payment-received message and close the till on
+	 * a sale that must stay open for a retry.
 	 *
 	 * @param string $gateway_id Gateway id.
 	 *

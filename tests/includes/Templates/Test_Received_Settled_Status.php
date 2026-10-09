@@ -167,6 +167,45 @@ class Test_Received_Settled_Status extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A refund is money given back, never a settled sale, even if stored.
+	 */
+	public function test_refunded_order_with_refunded_stored_as_gateway_status_does_not_render_received_script(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-refunded' );
+		$order = $this->create_pos_order( 'bacs', 'refunded' );
+
+		// Act.
+		$output = $this->render_received( $order );
+
+		// Assert.
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
+	 * The configured status closes POS sales only. A web-checkout order reached
+	 * through this URL with its key keeps WooCommerce's own thank-you page.
+	 */
+	public function test_non_pos_order_at_stored_gateway_status_does_not_render_received_script(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-pending' );
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'bacs',
+				'status'         => 'pending',
+				'total'          => '50',
+			)
+		);
+
+		// Act.
+		$output = $this->render_received( $order );
+
+		// Assert.
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
 	 * The parked POS statuses never count as settled, whatever is stored.
 	 *
 	 * @dataProvider parked_pos_statuses

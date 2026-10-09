@@ -96,11 +96,30 @@ class Test_Gateway_Settled_Order_Status extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function never_settled_statuses(): array {
 		return array(
-			'failed'      => array( 'wc-failed' ),
-			'cancelled'   => array( 'wc-cancelled' ),
-			'pos-open'    => array( 'wc-pos-open' ),
-			'pos-partial' => array( 'wc-pos-partial' ),
+			'failed'         => array( 'wc-failed' ),
+			'cancelled'      => array( 'wc-cancelled' ),
+			'refunded'       => array( 'wc-refunded' ),
+			'checkout-draft' => array( 'wc-checkout-draft' ),
+			'pos-open'       => array( 'wc-pos-open' ),
+			'pos-partial'    => array( 'wc-pos-partial' ),
 		);
+	}
+
+	/**
+	 * The catalog reports null, not the stored value, for a never-settled status.
+	 */
+	public function test_payment_gateways_catalog_reports_null_for_stored_failed_status(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-failed' );
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/payment-gateways' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$gateways = $this->index_by_id( $response->get_data() );
+		$this->assertNull( $gateways['bacs']['settled_order_status'] );
 	}
 
 	/**
