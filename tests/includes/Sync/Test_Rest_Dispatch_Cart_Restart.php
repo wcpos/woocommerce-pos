@@ -306,6 +306,31 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
 	}
 
+	/** The same rule on the create path of this lane: nothing is created from an impossible date. */
+	public function test_create_with_a_calendar_invalid_date_created_gmt_is_a_400_and_creates_nothing(): void {
+		$product = ProductHelper::create_simple_product();
+		$before  = count( wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) );
+
+		$response = $this->push_envelope(
+			'create',
+			array(
+				'status'           => 'pos-open',
+				'date_created_gmt' => '2026-02-31T12:00:00Z',
+				'line_items'       => array(
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'meta_data'        => $this->uuid_meta(),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_date_created_gmt', $response->get_data()['code'] );
+		$this->assertSame( $before, count( wc_get_orders( array( 'limit' => -1, 'return' => 'ids' ) ) ) );
+	}
+
 	public function test_update_with_a_far_future_date_created_gmt_is_a_400_and_writes_nothing(): void {
 		$product  = ProductHelper::create_simple_product();
 		$order_id = $this->make_order( 'pos-open' );
