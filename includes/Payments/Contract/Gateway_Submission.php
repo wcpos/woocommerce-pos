@@ -197,12 +197,14 @@ class Gateway_Submission {
 			// the invoice email, the pay link and wp-admin read it from the order. Remembered so
 			// a refused attempt can put the previous method back (§2.1: nothing written).
 			$previous_method = array( $order->get_payment_method(), $order->get_payment_method_title() );
+			if ( '' !== $settled_status && ! in_array( $settled_status, wc_get_is_paid_statuses(), true ) ) {
+				// Armed before the method is saved: on an order already sitting at the stored
+				// status (a re-submission) that save alone would stamp date_paid.
+				add_filter( 'woocommerce_payment_complete_order_status', $suppress_date_paid, PHP_INT_MAX, 3 );
+			}
 			$order->set_payment_method( $gateway->id );
 			$order->set_payment_method_title( (string) $descriptor['title'] );
 			$order->save();
-			if ( '' !== $settled_status && ! in_array( $settled_status, wc_get_is_paid_statuses(), true ) ) {
-				add_filter( 'woocommerce_payment_complete_order_status', $suppress_date_paid, PHP_INT_MAX, 3 );
-			}
 			add_action( 'woocommerce_payment_complete', $complete );
 			add_action( 'woocommerce_order_status_changed', $status_changed, 10, 3 );
 			self::$submitting_order_id = $order->get_id();

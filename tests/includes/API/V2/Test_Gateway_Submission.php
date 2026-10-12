@@ -739,9 +739,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 	public function test_submit_payment_complete_on_order_already_at_stored_status_keeps_it(): void {
 		// Arrange.
 		$this->enable_for_pos( true, array( 'wcpos_paid_test' => 'wc-on-hold' ) );
-		$order = $this->create_pos_order();
-		$order->set_status( 'on-hold' );
-		$order->save();
+		$order = $this->park_unpaid( $this->create_pos_order(), 'on-hold' );
 		// Act.
 		$response = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
 		// Assert.
@@ -753,6 +751,23 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'on-hold', $stored->get_status() );
 		$this->assertNotNull( $stored->get_date_paid( 'edit' ) );
 		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
+	}
+
+	/** A re-submission of an order already at its stored status settles without the method save stamping date_paid. */
+	public function test_submit_settled_on_order_already_at_stored_status_leaves_date_paid_unset(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-on-hold' ) );
+		Sent_Test_Gateway::$land_status = 'on-hold';
+		$order                          = $this->park_unpaid( $this->create_pos_order(), 'on-hold' );
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'settled', $response->get_data()['outcome'] );
+		$this->assertSame( '92.95', $response->get_data()['order']['balance'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
 	}
 
 	/** Send again after the merchant stores the status: the settled attempt clears the earlier send's stamp. */
@@ -830,6 +845,30 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		return $options;
+	}
+
+	/**
+	 * Park an order on an unpaid status with date_paid still empty.
+	 *
+	 * Outside a submit nothing on `next` suppresses WooCommerce's maybe_set_date_paid() on save,
+	 * and the settings view answers bacs (the helper's method) with On hold, so a plain
+	 * set_status( 'on-hold' ) + save() would stamp date_paid on an unpaid order.
+	 *
+	 * @param \WC_Order $order  Order.
+	 * @param string    $status Status without the `wc-` prefix.
+	 */
+	private function park_unpaid( \WC_Order $order, string $status ): \WC_Order {
+		add_filter( 'woocommerce_payment_complete_order_status', '__return_empty_string', PHP_INT_MAX );
+		try {
+			$order->set_status( $status );
+			$order->save();
+		} finally {
+			remove_filter( 'woocommerce_payment_complete_order_status', '__return_empty_string', PHP_INT_MAX );
+		}
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $status, $order->get_status() );
+		$this->assertNull( $order->get_date_paid( 'edit' ) );
+		return $order;
 	}
 
 	/** Create an open POS order. */
