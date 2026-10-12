@@ -937,9 +937,21 @@ class Ledger {
 		if ( $to !== $from && ! in_array( $to, $allowed[ $from ] ?? array(), true ) ) {
 			return $this->invalid_transition();
 		}
-		foreach ( array( 'status', 'failure_reason', 'provider_refs', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
+		foreach ( array( 'status', 'failure_reason', 'receipt', 'captured_at_gmt', 'transport', 'expires_at', 'refunds', 'events', 'void_requested_at' ) as $field ) {
 			if ( array_key_exists( $field, $new ) ) {
 				$row[ $field ] = $new[ $field ];
+			}
+		}
+		// Provider references merge: keys the confirmation carries are written, keys it does
+		// not carry are kept (a webhook's intent id must never erase the till's reader, action
+		// or Pro's own intent), and a null is ignored so no provider has to filter its
+		// observation before sending it.
+		if ( is_array( $new['provider_refs'] ?? null ) ) {
+			$row['provider_refs'] = is_array( $row['provider_refs'] ?? null ) ? $row['provider_refs'] : array();
+			foreach ( $new['provider_refs'] as $key => $value ) {
+				if ( null !== $value ) {
+					$row['provider_refs'][ $key ] = $value;
+				}
 			}
 		}
 		// The approval time is write-once: a later capture, void or status answer that

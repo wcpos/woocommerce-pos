@@ -72,6 +72,9 @@ class Settlement {
 						'patch' => array_replace( $previous, $patch ),
 						'parked_at' => time(),
 					);
+					if ( is_array( $previous['provider_refs'] ?? null ) && is_array( $patch['provider_refs'] ?? null ) ) {
+						$pending[ $payment_id ]['patch']['provider_refs'] = $transition['provider_refs'];
+					}
 					uasort( $pending, static fn( $a, $b ) => $a['parked_at'] <=> $b['parked_at'] );
 					return $this->write_pending( array_slice( $pending, -self::PARK_MAX, null, true ) );
 				}
