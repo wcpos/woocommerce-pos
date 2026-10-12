@@ -14,6 +14,39 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Payment method descriptor tests. */
 class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
+	/** Cash exposes the configured increment without losing decimal precision. */
+	public function test_descriptor_cash_with_rounding_returns_nearest_increment(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array( 'gateways' => array( 'pos_cash' => array( 'rounding_increment' => '0.05' ) ) )
+		);
+		$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+		$this->assertSame(
+			array(
+				'increment' => '0.05',
+				'mode'      => 'nearest',
+			),
+			$descriptor['defaults']['rounding']
+		);
+	}
+
+	/** Unset, empty, and unsupported values do not enable rounding. */
+	public function test_descriptor_cash_without_valid_rounding_returns_null(): void {
+		foreach ( array( array(), array( 'rounding_increment' => '' ), array( 'rounding_increment' => '0.2' ) ) as $settings ) {
+			update_option( 'woocommerce_pos_settings_payment_gateways', array( 'gateways' => array( 'pos_cash' => $settings ) ) );
+			$this->assertNull( Descriptor_Builder::instance()->get( 'pos_cash' )['defaults']['rounding'] );
+		}
+	}
+
+	/** Card descriptors ignore even a supported rounding value. */
+	public function test_descriptor_card_with_rounding_returns_null(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array( 'gateways' => array( 'pos_card' => array( 'rounding_increment' => '0.05' ) ) )
+		);
+		$this->assertNull( Descriptor_Builder::instance()->get( 'pos_card' )['defaults']['rounding'] );
+	}
+
 	/** Cash uses the Free manual-mode defaults. */
 	public function test_descriptor_cash_gateway_has_manual_capture_and_cash_defaults(): void {
 		// Arrange / Act.

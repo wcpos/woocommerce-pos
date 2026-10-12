@@ -38,6 +38,8 @@ import { t } from '../../translations';
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 
 export interface GatewayProps {
+	kind: string;
+	rounding_increment: string;
 	capture_mode: string;
 	default_reader: string;
 	allowed_readers: string[];

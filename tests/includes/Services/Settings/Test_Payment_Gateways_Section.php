@@ -20,6 +20,81 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Payment_Gateways_Section extends WP_UnitTestCase {
+	/** Rounding is opt-in for every installed gateway. */
+	public function test_rounding_defaults_to_empty_string(): void {
+		$section = new Payment_Gateways_Section();
+		$this->assertSame( '', $section->defaults()['gateways']['pos_cash']['rounding_increment'] );
+		foreach ( $section->read()['gateways'] as $gateway ) {
+			$this->assertSame( '', $gateway['rounding_increment'] );
+		}
+	}
+
+	/** The endpoint accepts only the closed list of decimal strings. */
+	public function test_rounding_validation_accepts_supported_strings_only(): void {
+		$args     = ( new Payment_Gateways_Section() )->endpoint_args();
+		$validate = $args['gateways']['validate_callback'];
+		foreach ( array( '', '0.05', '0.10', '0.25', '0.50', '1', '5', '10' ) as $increment ) {
+			$this->assertTrue( $validate( array( 'pos_cash' => array( 'rounding_increment' => $increment ) ), null, 'gateways' ) );
+		}
+		foreach ( array( '0.2', '0.1', 0.05, 1, null, false, array() ) as $increment ) {
+			$request = new \WP_REST_Request( 'PATCH' );
+			$request->set_attributes( array( 'args' => $args ) );
+			$request->set_param( 'gateways', array( 'pos_cash' => array( 'rounding_increment' => $increment ) ) );
+			$error = $request->has_valid_params();
+			$this->assertWPError( $error );
+			$this->assertSame( 400, $error->get_error_data()['status'] );
+		}
+	}
+
+	/** Direct writes store strings and omit computed kind metadata. */
+	public function test_rounding_sanitize_normalizes_strings_and_defaults(): void {
+		$section = new Payment_Gateways_Section();
+		$section->write(
+			array(
+				'gateways' => array(
+					'pos_cash' => array(
+						'rounding_increment' => 5,
+						'kind'               => 'card',
+					),
+					'pos_card' => array(),
+				),
+			)
+		);
+		$gateways = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways'];
+		$this->assertSame( '5', $gateways['pos_cash']['rounding_increment'] );
+		$this->assertSame( '', $gateways['pos_card']['rounding_increment'] );
+		$this->assertArrayNotHasKey( 'kind', $gateways['pos_cash'] );
+	}
+
+	/** Read exposes saved precision and resolves kind instead of trusting storage. */
+	public function test_rounding_read_exposes_saved_increment_and_resolved_kind(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'gateways' => array(
+					'pos_cash' => array(
+						'rounding_increment' => '0.10',
+						'kind'               => 'card',
+					),
+				),
+			)
+		);
+		$section  = new Payment_Gateways_Section();
+		$gateways = $section->read()['gateways'];
+		$this->assertSame( 'cash', $gateways['pos_cash']['kind'] );
+		$this->assertSame( 'card', $gateways['pos_card']['kind'] );
+		$this->assertSame( '0.10', $gateways['pos_cash']['rounding_increment'] );
+		$filter = static function () {
+			return 'other';
+		};
+		add_filter( 'wcpos_payment_method_kind', $filter );
+		try {
+			$this->assertSame( 'other', $section->read()['gateways']['pos_cash']['kind'] );
+		} finally {
+			remove_filter( 'wcpos_payment_method_kind', $filter );
+		}
+	}
+
 	/**
 	 * Clean options between tests.
 	 */

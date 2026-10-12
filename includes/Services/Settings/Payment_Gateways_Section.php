@@ -21,6 +21,9 @@ use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
  * time.
  */
 class Payment_Gateways_Section extends Abstract_Section {
+	/** Supported decimal strings; an empty string disables cash rounding. */
+	const ROUNDING_INCREMENTS = array( '', '0.05', '0.10', '0.25', '0.50', '1', '5', '10' );
+
 	/**
 	 * Section id.
 	 */
@@ -36,9 +39,10 @@ class Payment_Gateways_Section extends Abstract_Section {
 			'default_gateway' => 'pos_cash',
 			'gateways'        => array(
 				'pos_cash' => array(
-					'order'        => 0,
-					'enabled'      => true,
-					'order_status' => 'wc-completed',
+					'order'              => 0,
+					'enabled'            => true,
+					'order_status'       => 'wc-completed',
+					'rounding_increment' => '',
 				),
 				'pos_card' => array(
 					'order'        => 1,
@@ -71,6 +75,9 @@ class Payment_Gateways_Section extends Abstract_Section {
 					}
 					foreach ( $param as $gateway ) {
 						if ( ! \is_array( $gateway ) ) {
+							return false;
+						}
+						if ( \array_key_exists( 'rounding_increment', $gateway ) && ! \in_array( $gateway['rounding_increment'], self::ROUNDING_INCREMENTS, true ) ) {
 							return false;
 						}
 						if ( ( \array_key_exists( 'default_reader', $gateway ) && ! \is_string( $gateway['default_reader'] ) )
@@ -107,7 +114,7 @@ class Payment_Gateways_Section extends Abstract_Section {
 	}
 
 	/**
-	 * Normalize terminal settings before storage.
+	 * Normalize gateway settings before storage.
 	 *
 	 * @param array $settings Settings to save.
 	 * @return array
@@ -115,7 +122,8 @@ class Payment_Gateways_Section extends Abstract_Section {
 	protected function sanitize( array $settings ): array {
 		foreach ( $settings['gateways'] ?? array() as $id => $gateway ) {
 			// Computed on every read; a PATCH echoes the view back, so keep it out of the option.
-			unset( $settings['gateways'][ $id ]['capture_mode'] );
+			unset( $settings['gateways'][ $id ]['capture_mode'], $settings['gateways'][ $id ]['kind'] );
+			$settings['gateways'][ $id ]['rounding_increment'] = (string) ( $gateway['rounding_increment'] ?? '' );
 			if ( \array_key_exists( 'default_reader', $gateway ) ) {
 				$settings['gateways'][ $id ]['default_reader'] = (string) $gateway['default_reader'];
 			}
@@ -187,13 +195,17 @@ class Payment_Gateways_Section extends Abstract_Section {
 					'order_status' => $default_status,
 				),
 				array(
-					'default_reader'  => '',
-					'allowed_readers' => array(),
-					'lock_to_default' => false,
+					'default_reader'     => '',
+					'allowed_readers'    => array(),
+					'lock_to_default'    => false,
+					'rounding_increment' => '',
 				),
 				$gateways_settings['gateways'][ $id ] ?? array(),
 				// The bare mode: a handler may scope the resolved value as `<mode>:<provider>`.
-				array( 'capture_mode' => explode( ':', Descriptor_Builder::resolve_mode( $gateway ), 2 )[0] )
+				array(
+					'capture_mode' => explode( ':', Descriptor_Builder::resolve_mode( $gateway ), 2 )[0],
+					'kind'         => Descriptor_Builder::resolve_kind( $gateway ),
+				)
 			);
 
 			if ( ! is_string( $response['gateways'][ $id ]['title'] ) || '' === trim( $response['gateways'][ $id ]['title'] ) ) {
