@@ -242,8 +242,23 @@ class Orders {
 			return;
 		}
 
-		$suppress = static function ( $payment_status, $filtered_order_id ) use ( $order_id ) {
-			return (int) $filtered_order_id === $order_id ? '' : $payment_status;
+		/*
+		 * Only the write that lands the order on the configured status is
+		 * suppressed. WC_Order::set_status() has already moved the status prop
+		 * when maybe_set_date_paid() asks this filter, so the order reads as the
+		 * configured status there; payment_complete() asks it while the order
+		 * still sits on its previous status, and is passed through untouched.
+		 */
+		$suppress = static function ( $payment_status, $filtered_order_id, $filtered_order = null ) use ( $order_id, $configured ) {
+			if ( (int) $filtered_order_id !== $order_id ) {
+				return $payment_status;
+			}
+
+			if ( $filtered_order instanceof WC_Abstract_Order && $filtered_order->get_status() !== $configured ) {
+				return $payment_status;
+			}
+
+			return '';
 		};
 
 		$this->paid_date_suppressions[ $order_id ] = array(
@@ -252,7 +267,7 @@ class Orders {
 			'to'     => $configured,
 		);
 
-		add_filter( 'woocommerce_payment_complete_order_status', $suppress, PHP_INT_MAX, 2 );
+		add_filter( 'woocommerce_payment_complete_order_status', $suppress, PHP_INT_MAX, 3 );
 		add_action( 'woocommerce_after_order_object_save', array( $this, 'release_paid_date_suppression_after_save' ), 10, 1 );
 		add_action( 'shutdown', array( $this, 'release_all_paid_date_suppressions' ) );
 	}
@@ -261,13 +276,14 @@ class Orders {
 	 * Release the date_paid suppression once the order it was armed for has had
 	 * its status written.
 	 *
-	 * A save that leaves the order on the status it had when the suppression was
-	 * armed is not that write — a later callback on the same process-payment
-	 * filter persisting gateway metadata, for instance — and releasing on it
-	 * would let the gateway's own update_status() stamp date_paid after all.
+	 * A save that does not land the order on the configured status is not that
+	 * write — a later callback on the same process-payment filter persisting
+	 * gateway metadata, or an interim status, for instance — and releasing on
+	 * it would let the gateway's own update_status() stamp date_paid after all.
 	 * Such a save keeps the suppression; the shutdown backstop still clears it
-	 * if the write never comes. An order already sitting on the configured
-	 * status has nothing to transition, so any save releases it.
+	 * if the write never comes, and the filter itself only suppresses while the
+	 * order reads as the configured status. An order already sitting on the
+	 * configured status has nothing to transition, so any save releases it.
 	 *
 	 * @param WC_Abstract_Order $order The saved order.
 	 */
@@ -281,7 +297,7 @@ class Orders {
 			return;
 		}
 
-		if ( $entry['from'] !== $entry['to'] && $order->get_status() === $entry['from'] ) {
+		if ( $entry['from'] !== $entry['to'] && $order->get_status() !== $entry['to'] ) {
 			return;
 		}
 

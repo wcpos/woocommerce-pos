@@ -27,14 +27,13 @@ class Test_Received_Settled_Status_HPOS extends Test_Received_Settled_Status {
 
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
-		$this->toggle_cot_feature_and_usage( true );
+		$this->disable_cot_sync();
 	}
 
 	/**
 	 * Restore posts storage.
 	 */
 	public function tearDown(): void {
-		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 

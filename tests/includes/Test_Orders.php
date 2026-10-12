@@ -1948,6 +1948,61 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A save that moves the order to an interim status before the gateway's
+	 * write must not release the suppression either: only the configured
+	 * status is the write it was armed for.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::release_paid_date_suppression_after_save
+	 */
+	public function test_offline_gateway_date_paid_suppression_survives_an_interim_status_before_the_status_write(): void {
+		global $wp_filter;
+
+		// Arrange.
+		$this->set_gateway_settings( 'bacs', 'wc-pending' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+		$this->assertGreaterThan( 0, $this->run_wcpos_shutdown_releases() );
+		$callbacks_before = \count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() );
+
+		$interim = static function ( $status, $filtered_order ) {
+			$filtered_order->update_status( 'on-hold', 'Interim' );
+
+			return $status;
+		};
+		add_filter( 'woocommerce_bacs_process_payment_order_status', $interim, 20, 2 );
+
+		try {
+			// Act.
+			$status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+			$this->assertSame( 'on-hold', wc_get_order( $order->get_id() )->get_status(), 'The interim status was saved.' );
+			$this->assertGreaterThan(
+				$callbacks_before,
+				\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+				'An interim status is not the configured-status write; the suppression stays armed.'
+			);
+			$order->update_status( $status, 'Awaiting payment' );
+		} finally {
+			remove_filter( 'woocommerce_bacs_process_payment_order_status', $interim, 20 );
+		}
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pending', $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid(), 'Neither the interim status nor the configured status may stamp date_paid.' );
+		$this->assertSame(
+			$callbacks_before,
+			\count( $wp_filter['woocommerce_payment_complete_order_status']->callbacks[ PHP_INT_MAX ] ?? array() ),
+			'The suppression comes off with the configured-status write.'
+		);
+	}
+
+	/**
 	 * A write that never happens must not leave the suppression armed: shutdown
 	 * releases it, and a later payment on the same order is not affected.
 	 *
