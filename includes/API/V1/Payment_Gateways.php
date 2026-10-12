@@ -132,6 +132,14 @@ class Payment_Gateways extends WC_REST_Controller {
 			'provider_data' => $this->gateway_contract->get_provider_data( $item, $request ),
 		);
 
+		// The status the merchant configured this gateway to settle a POS sale to,
+		// so the app can recognise a configured outcome WooCommerce does not call
+		// paid (Pending payment for a "pay by invoice" flow, On hold for a bank
+		// transfer). Null when the merchant has not stored one: the app must not
+		// treat an unpaid status as settled on a guess.
+		$settled_status                = $this->gateway_contract->get_settled_order_status( $item->id );
+		$data['settled_order_status'] = '' === $settled_status ? null : $settled_status;
+
 		$context = ! empty( $request['context'] ) ? $request['context'] : 'view';
 		$data    = $this->add_additional_fields_to_object( $data, $request );
 		$data    = $this->filter_response_by_context( $data, $context );
@@ -213,6 +221,12 @@ class Payment_Gateways extends WC_REST_Controller {
 				'provider_data' => array(
 					'description' => __( 'Provider-specific public metadata.', 'woocommerce-pos' ),
 					'type'        => 'object',
+					'context'     => array( 'view' ),
+					'readonly'    => true,
+				),
+				'settled_order_status' => array(
+					'description' => __( 'Order status (without the wc- prefix) the merchant configured this gateway to settle a POS sale to, or null when none is stored.', 'woocommerce-pos' ),
+					'type'        => array( 'string', 'null' ),
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
