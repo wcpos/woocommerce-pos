@@ -11,12 +11,13 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_Error;
 
 /** Reads what a Woo gateway did, within the route's existing order lock. */
 class Gateway_Submission {
 	public const STAMP_META_KEY = '_wcpos_awaiting_customer';
-	/** Every sent or cancelled attempt for the order's life, so a delayed retry never sends again. */
+	/** Every sent, settled or cancelled attempt for the order's life, so a delayed retry never sends again. */
 	public const ATTEMPTS_META_KEY = '_wcpos_gateway_attempts';
 	/** Attempt ids the history keeps; older ones fall off (a till does not retry a week-old send). */
 	public const ATTEMPTS_CAP = 50;
@@ -68,9 +69,9 @@ class Gateway_Submission {
 			);
 		}
 		$history = self::read_attempts( $order );
-		if ( 'sent' === ( $history[ $attempt_id ] ?? null ) ) {
+		if ( in_array( $history[ $attempt_id ] ?? null, array( 'sent', 'settled' ), true ) ) {
 			return array(
-				'outcome' => 'sent',
+				'outcome' => $history[ $attempt_id ],
 				'payment' => null,
 				'order' => $ledger->summary( $order ),
 			);
@@ -245,6 +246,13 @@ class Gateway_Submission {
 			'kind' => 'take',
 			'label' => $descriptor['title'],
 		);
+		// No money observed, but the gateway landed the order on the status the merchant stored
+		// as THIS gateway's POS Order Status (§3.1 `settled`): the sale is finished at the till
+		// (BACS stored as Pending is "pay by invoice"). Read after the gateway ran, from the
+		// fresh order, for the gateway the submission was for; the reader itself refuses the
+		// never-settled statuses (failed, cancelled, refunded, checkout-draft, the parked POS ones).
+		$settled_status = $paid ? '' : ( new Gateway_Contract() )->get_settled_order_status( $descriptor['id'] );
+		$settled        = '' !== $settled_status && $order->has_status( $settled_status );
 		if ( $paid ) {
 			self::clear_stamp( $order );
 			$row = Webview_Passthrough::mint(
@@ -260,6 +268,13 @@ class Gateway_Submission {
 					'cashier_id' => get_current_user_id(),
 				)
 			);
+		} elseif ( $settled ) {
+			// Not awaiting the customer: no stamp, and a stale one from an earlier send goes.
+			self::clear_stamp( $order );
+			self::remember_attempt( $order, $history, $attempt_id, 'settled' );
+			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the order status the merchant stored for this gateway. */
+			$order->add_order_note( sprintf( __( 'Settled via POS: %1$s on %2$s', 'woocommerce-pos' ), $verb['label'], wc_get_order_status_name( $settled_status ) ) );
+			$order->save();
 		} else {
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
 			$order->update_meta_data(
@@ -277,7 +292,7 @@ class Gateway_Submission {
 			$order->add_order_note( sprintf( __( 'Sent via POS: %1$s (%2$s)', 'woocommerce-pos' ), $verb['label'], (string) $destination ) );
 			$order->save();
 		}
-		$outcome = $paid ? 'recorded' : 'sent';
+		$outcome = $paid ? 'recorded' : ( $settled ? 'settled' : 'sent' );
 		Logger::log( sprintf( 'WCPOS gateway attempt %s on order #%d: %s via %s by cashier #%d (verb %s)', $attempt_id, $order->get_id(), $outcome, $descriptor['id'], get_current_user_id(), $verb['kind'] ) );
 		return array(
 			'outcome' => $outcome,
@@ -401,7 +416,7 @@ class Gateway_Submission {
 	}
 
 	/**
-	 * The order's attempt history: attempt id → `sent` | `cancelled`. Never cleared with the stamp.
+	 * The order's attempt history: attempt id → `sent` | `settled` | `cancelled`. Never cleared with the stamp.
 	 *
 	 * @param WC_Order $order Order object.
 	 * @return array<string, string>
@@ -417,7 +432,7 @@ class Gateway_Submission {
 	 * @param WC_Order $order      Order object.
 	 * @param array    $history    The history as read.
 	 * @param string   $attempt_id Attempt id (lowercase).
-	 * @param string   $fate       `sent` or `cancelled`.
+	 * @param string   $fate       `sent`, `settled` or `cancelled`.
 	 */
 	private static function remember_attempt( WC_Order $order, array $history, string $attempt_id, string $fate ): void {
 		unset( $history[ $attempt_id ] );

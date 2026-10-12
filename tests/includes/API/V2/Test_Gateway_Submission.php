@@ -617,22 +617,150 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 401, $this->cancel( $order, wp_generate_uuid4() )->get_status() );
 	}
 
+	/** The merchant's stored POS Order Status, reached by the gateway, settles the sale at the till. */
+	public function test_submit_stored_status_reached_is_settled_and_replays(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		// Act.
+		$response = $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'settled', $response->get_data()['outcome'] );
+		$this->assertNull( $response->get_data()['payment'] );
+		$this->assertSame( 'pending', $response->get_data()['order']['status'] );
+		$this->assertSame( 'wcpos_sent_test', $response->get_data()['order']['payment_method'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pending', $stored->get_status() );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( array( $attempt => 'settled' ), Gateway_Submission::read_attempts( $stored ) );
+		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
+		$notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$this->assertContains( 'Settled via POS: Send invoice on Pending payment', $notes );
+		// A replay answers settled again without calling the gateway; nothing awaits cancelling.
+		$this->assertSame( $response->get_data(), $this->submit( $order, $attempt, array() )->get_data() );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$this->assertSame( 409, $this->cancel( $order, $attempt )->get_status() );
+	}
+
+	/** A stored status the gateway did not reach is the ordinary send-and-leave. */
+	public function test_submit_stored_status_not_reached_is_sent(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-completed' ) );
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		// Act.
+		$response = $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+		// Assert.
+		$this->assertSame( 'sent', $response->get_data()['outcome'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pending', $stored->get_status() );
+		$this->assertSame( $attempt, Gateway_Submission::read_stamp( $stored )['attempt_id'] );
+		$this->assertSame( array( $attempt => 'sent' ), Gateway_Submission::read_attempts( $stored ) );
+	}
+
+	/** A stored status the reader never honours (failed) cannot settle, even when the gateway lands on it. */
+	public function test_submit_stored_never_settled_status_is_not_settled(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-failed' ) );
+		Sent_Test_Gateway::$land_status = 'failed';
+		$order                          = $this->create_pos_order();
+		$attempt                        = wp_generate_uuid4();
+		// Act.
+		$response = $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'sent', $response->get_data()['outcome'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'failed', $stored->get_status() );
+		$this->assertSame( $attempt, Gateway_Submission::read_stamp( $stored )['attempt_id'] );
+		$this->assertSame( array( $attempt => 'sent' ), Gateway_Submission::read_attempts( $stored ) );
+	}
+
+	/** A purchase-order style gateway stored as On hold settles when it lands there. */
+	public function test_submit_stored_on_hold_reached_is_settled(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-on-hold' ) );
+		Sent_Test_Gateway::$land_status = 'on-hold';
+		$order                          = $this->create_pos_order();
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+		// Assert.
+		$this->assertSame( 'settled', $response->get_data()['outcome'] );
+		$this->assertSame( 'on-hold', $response->get_data()['order']['status'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $stored->get_status() );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( array( 'settled' ), array_values( Gateway_Submission::read_attempts( $stored ) ) );
+	}
+
+	/** Money observed wins over a stored status the gateway also reached. */
+	public function test_submit_money_observed_wins_over_stored_status(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_paid_test' => 'wc-processing' ) );
+		Paid_Test_Gateway::$status_only = true;
+		$order                          = $this->create_pos_order();
+		$attempt                        = wp_generate_uuid4();
+		// Act.
+		$response = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
+		// Assert.
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$this->assertSame( $attempt, $response->get_data()['payment']['id'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'processing', $stored->get_status() );
+		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
+		$this->assertSame( array(), Gateway_Submission::read_attempts( $stored ) );
+	}
+
+	/** Send again after the merchant stores the status: the settled attempt clears the earlier send's stamp. */
+	public function test_submit_settled_clears_a_stale_stamp_from_an_earlier_send(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$first = wp_generate_uuid4();
+		$again = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $first, array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['outcome'] );
+		$this->assertSame( $first, Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) )['attempt_id'] );
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
+		// Act.
+		$response = $this->submit( $order, $again, array( 'invoice_email' => 'fixed@example.com' ) );
+		// Assert.
+		$this->assertSame( 'settled', $response->get_data()['outcome'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame(
+			array(
+				$first => 'sent',
+				$again => 'settled',
+			),
+			Gateway_Submission::read_attempts( $stored )
+		);
+		$this->assertSame( 2, Sent_Test_Gateway::$calls );
+		// The earlier send still replays as what it was.
+		$this->assertSame( 'sent', $this->submit( $order, $first, array() )->get_data()['outcome'] );
+		$this->assertSame( 2, Sent_Test_Gateway::$calls );
+	}
+
 	/**
 	 * Enable (or disable) the fixtures for the POS through the settings option the builder reads.
 	 *
-	 * @param bool $enabled Whether the fixtures are POS-enabled.
+	 * @param bool                  $enabled        Whether the fixtures are POS-enabled.
+	 * @param array<string, string> $order_statuses Stored POS Order Status per fixture id, with the `wc-` prefix.
 	 */
-	private function enable_for_pos( bool $enabled ): void {
+	private function enable_for_pos( bool $enabled, array $order_statuses = array() ): void {
 		self::$fixtures_enabled = $enabled;
+		$gateways               = array( 'pos_cash' => array( 'enabled' => true ) );
+		foreach ( array( 'wcpos_sent_test', 'wcpos_paid_test' ) as $id ) {
+			$gateways[ $id ] = array( 'enabled' => $enabled );
+			if ( isset( $order_statuses[ $id ] ) ) {
+				$gateways[ $id ]['order_status'] = $order_statuses[ $id ];
+			}
+		}
 		update_option(
 			'woocommerce_pos_settings_payment_gateways',
 			array(
 				'default_gateway' => 'pos_cash',
-				'gateways'        => array(
-					'pos_cash'        => array( 'enabled' => true ),
-					'wcpos_sent_test' => array( 'enabled' => $enabled ),
-					'wcpos_paid_test' => array( 'enabled' => $enabled ),
-				),
+				'gateways'        => $gateways,
 			)
 		);
 		// Free's settings filter (API\V1\Settings::payment_gateways_settings) switches every
