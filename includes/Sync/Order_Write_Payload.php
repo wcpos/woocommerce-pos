@@ -184,6 +184,13 @@ final class Order_Write_Payload {
 		if ( false === $timestamp ) {
 			return $this->invalid_created_gmt();
 		}
+		// PHP's parser normalises an impossible calendar date (2026-02-31 → March 3)
+		// instead of refusing it; only a round trip through the timestamp proves the
+		// client's date was the one that gets stored.
+		$normalized = strtoupper( (string) preg_replace( '/(?:\.\d+)?Z?$/i', '', $value ) );
+		if ( gmdate( 'Y-m-d\TH:i:s', $timestamp ) !== $normalized ) {
+			return $this->invalid_created_gmt();
+		}
 		return $timestamp > time() + DAY_IN_SECONDS
 			? new WP_Error( 'woocommerce_pos_rest_future_date_created_gmt', __( 'date_created_gmt cannot be more than 24 hours in the future.', 'woocommerce-pos' ), array( 'status' => 400 ) )
 			: $timestamp;

@@ -9,6 +9,8 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
@@ -96,6 +98,12 @@ class Order_Writer extends Null_Writer {
 
 	/** Prepare an order update and its update-only hook/reassignment policy. */
 	public function prepare_update( array $meta, int $id, array $payload, callable $validate_tax_ids ) {
+		// Validated up front, exactly as on create: a bad value is a 400 before the
+		// pre-read, and the late context only decides whether the order may take it.
+		$created_gmt = $this->order_payload->validate_client_created_gmt( $payload );
+		if ( is_wp_error( $created_gmt ) ) {
+			return $created_gmt;
+		}
 		$error = $validate_tax_ids( $payload );
 		if ( is_wp_error( $error ) ) {
 			return $error;
@@ -105,8 +113,8 @@ class Order_Writer extends Null_Writer {
 			'route' => $meta['route'] . '/' . $id,
 			'payload' => $payload,
 			'context' => array(),
-			'context_factory' => function () use ( $id, $payload ) {
-				return $this->prepare_order_update_after_read( $id, $payload );
+			'context_factory' => function () use ( $id, $payload, $created_gmt ) {
+				return $this->prepare_order_update_after_read( $id, $payload, $created_gmt );
 			},
 		);
 	}
@@ -140,12 +148,61 @@ class Order_Writer extends Null_Writer {
 		$payload = $prepared['payload'];
 		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
 		$declared['set_paid'] = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
-		return Order_Write_Intent::open(
-			$declared,
-			function () use ( $prepared, $forward ) {
-				return $this->forward_with_reserved_stock( $prepared, $forward );
+		// A cart restart and the payment routes contend for the same order: hold the
+		// payment lock from wc/v3's fresh load through its save, so no payment row can
+		// land between the pre-insert re-check and the write. Held by someone else
+		// means a payment operation is running on this order — then it is not a
+		// restartable cart, and the push goes ahead without the restart (never a 409:
+		// the till's other edits are still good). The Mutation_Store record lock is
+		// already held on this connection; Order_Lock falls back to its option lease
+		// on servers that cannot nest named locks, so that lock is never dropped.
+		$locked = isset( $declared['restart_gmt'] ) && Order_Lock::instance()->acquire( (int) $declared['id'] );
+		if ( isset( $declared['restart_gmt'] ) && ! $locked ) {
+			unset( $declared['restart_gmt'] );
+		}
+		$prepared['context'] = $declared;
+		try {
+			return Order_Write_Intent::open(
+				$declared,
+				function () use ( $prepared, $forward ) {
+					return $this->forward_with_reserved_stock( $prepared, $forward );
+				}
+			);
+		} finally {
+			if ( $locked ) {
+				Order_Lock::instance()->release( (int) $declared['id'] );
 			}
-		);
+		}
+	}
+
+	/**
+	 * The creation date a cart restart may write, or null when the order may not take it.
+	 *
+	 * A cart the cashier emptied restarts when its next line goes in
+	 * (wcpos/monorepo#2183): the till restamps date_created_gmt and sends it on the
+	 * next push. wc/v3 drops the field on PUT (readonly), so the update's intent
+	 * carries it — only while the order is still an unpaid open cart with no payment
+	 * rows, and only forward: a second till still holding the old date sends an
+	 * older value, which is ignored, so a stale push cannot undo a restart.
+	 * `needs_payment()` is the wrong gate here: an emptied cart totals 0, and at
+	 * pre-insert wc/v3 has not recalculated the new lines yet.
+	 *
+	 * Decided twice on purpose: at the pre-read, and again at pre-insert on the order
+	 * wc/v3 is about to write (under the payment lock), so a payment that completed
+	 * in between wins — the same shape as the provenance re-decision.
+	 *
+	 * @param \WC_Order $order       The order as currently loaded.
+	 * @param int|null  $created_gmt Validated client date_created_gmt (UTC timestamp), or null when absent.
+	 */
+	public static function cart_restart_gmt( \WC_Order $order, ?int $created_gmt ): ?int {
+		if ( null === $created_gmt || 'pos-open' !== $order->get_status() || $order->get_date_paid( 'edit' ) ) {
+			return null;
+		}
+		if ( array() !== Ledger::instance()->read( $order ) ) {
+			return null;
+		}
+		$stored = $order->get_date_created( 'edit' );
+		return ! $stored || $created_gmt > $stored->getTimestamp() ? $created_gmt : null;
 	}
 
 	/**
@@ -277,6 +334,20 @@ class Order_Writer extends Null_Writer {
 			// intent named the subject at priority 1.
 			$intent = Order_Write_Intent::current();
 			if ( $order instanceof \WC_Order && null !== $intent && $intent->is_subject( $order ) ) {
+				if ( isset( $context['restart_gmt'] ) ) {
+					// Re-decided on the order about to be written: a payment row or
+					// paid date that landed since the pre-read refuses the restart.
+					$restart_gmt = self::cart_restart_gmt( $order, (int) $context['restart_gmt'] );
+					if ( null !== $restart_gmt ) {
+						$order->set_date_created( $restart_gmt );
+					}
+				}
+				// Provenance only when there is provenance to write: a restart alone
+				// must not restamp the receipt time, or Provenance_Health would read
+				// a clock skew off an unchanged sale time.
+				if ( array() === ( $context['fill_provenance'] ?? array() ) ) {
+					return $order;
+				}
 				if ( $order->needs_payment() ) {
 					foreach ( $context['fill_provenance'] as $key => $value ) {
 						$order->update_meta_data( $key, $value );
@@ -306,7 +377,7 @@ class Order_Writer extends Null_Writer {
 				$qd->persist( $order );
 			}
 		};
-		$use_filter = array() !== ( $context['fill_provenance'] ?? array() );
+		$use_filter = array() !== ( $context['fill_provenance'] ?? array() ) || isset( $context['restart_gmt'] );
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
 		}
@@ -354,8 +425,14 @@ class Order_Writer extends Null_Writer {
 		return $response;
 	}
 
-	/** Capture and authorize the cashier/store reassignment lifecycle. */
-	private function prepare_order_update_after_read( int $id, array $payload ): array {
+	/**
+	 * Capture and authorize the cashier/store reassignment lifecycle.
+	 *
+	 * @param int      $id          Order ID.
+	 * @param array    $payload     Client order document.
+	 * @param int|null $created_gmt Validated client date_created_gmt (UTC timestamp), or null when absent.
+	 */
+	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null ): array {
 		$reassignment = array();
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
 			$key = Meta_Entry::key( $entry );
@@ -376,9 +453,13 @@ class Order_Writer extends Null_Writer {
 		$fill_meta          = array();
 		$fill_provenance    = array();
 		$provenance_refused = array();
-		$pre_store = null;
-		$order     = wc_get_order( $id );
+		$pre_store   = null;
+		$restart_gmt = null;
+		$order       = wc_get_order( $id );
 		if ( $order ) {
+			// Cart restart (wcpos/monorepo#2183): a first decision on the pre-read;
+			// the binding one is re-taken at pre-insert, see cart_restart_gmt().
+			$restart_gmt = self::cart_restart_gmt( $order, $created_gmt );
 			/*
 			 * `set_paid` is write-only in wc/v3, so a client re-sends it on every
 			 * later edit of an order it created offline. WooCommerce only takes
@@ -426,19 +507,23 @@ class Order_Writer extends Null_Writer {
 				$fill_meta['_pos_store'] = (string) $reassignment['_pos_store'];
 			}
 		}
+		$context = array(
+			'operation' => 'update',
+			'id' => $id,
+			'clear_email' => $clear_email,
+			'reassignment' => $reassignment,
+			'store_authorized' => $authorized,
+			'pre_store' => $pre_store,
+			'fill_meta' => $fill_meta,
+			'fill_provenance' => $fill_provenance,
+			'provenance_refused' => $provenance_refused,
+		);
+		if ( null !== $restart_gmt ) {
+			$context['restart_gmt'] = $restart_gmt;
+		}
 		return array(
 			'payload' => $this->order_payload->for_update( $id, $forward ),
-			'context' => array(
-				'operation' => 'update',
-				'id' => $id,
-				'clear_email' => $clear_email,
-				'reassignment' => $reassignment,
-				'store_authorized' => $authorized,
-				'pre_store' => $pre_store,
-				'fill_meta' => $fill_meta,
-				'fill_provenance' => $fill_provenance,
-				'provenance_refused' => $provenance_refused,
-			),
+			'context' => $context,
 		);
 	}
 
