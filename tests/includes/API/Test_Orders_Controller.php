@@ -786,6 +786,32 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'woocommerce_pos_rest_invalid_date_created_gmt', $data['code'] );
 	}
 
+	/** PHP would silently read 2026-02-31 as March 3; the documented invalid-date 400 fires instead. */
+	public function test_create_guest_order_rejects_calendar_invalid_client_date_created_gmt(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'payment_method'   => 'pos_cash',
+					'date_created_gmt' => '2026-02-31T12:00:00Z',
+					'line_items'       => array(
+						array(
+							'product_id' => 1,
+							'quantity'   => 1,
+						),
+					),
+				)
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'woocommerce_pos_rest_invalid_date_created_gmt', $data['code'] );
+	}
+
 	public function test_create_guest_order_rejects_non_utc_client_date_created_gmt(): void {
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 		$request->set_header( 'Content-Type', 'application/json' );

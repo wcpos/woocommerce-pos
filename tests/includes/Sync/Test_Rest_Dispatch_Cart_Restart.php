@@ -291,6 +291,21 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'processing', wc_get_order( $order_id )->get_status() );
 	}
 
+	/** PHP would silently read 2026-02-31 as March 3; the documented invalid-date 400 fires instead. */
+	public function test_update_with_a_calendar_invalid_date_created_gmt_is_a_400_and_writes_nothing(): void {
+		$product  = ProductHelper::create_simple_product();
+		$order_id = $this->make_order( 'pos-open' );
+		$payload  = $this->restart_payload( $product->get_id() );
+
+		$payload['date_created_gmt'] = '2026-02-31T12:00:00Z';
+		$response                    = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_invalid_date_created_gmt', $response->get_data()['code'] );
+		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
+		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
+	}
+
 	public function test_update_with_a_far_future_date_created_gmt_is_a_400_and_writes_nothing(): void {
 		$product  = ProductHelper::create_simple_product();
 		$order_id = $this->make_order( 'pos-open' );
