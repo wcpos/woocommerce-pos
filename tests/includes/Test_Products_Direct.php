@@ -14,6 +14,7 @@ use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Products;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Query;
+use WP_REST_Request;
 
 /**
  * Test_Products_Direct class.
@@ -58,6 +59,8 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		} else {
 			delete_option( 'woocommerce_pos_settings_general' );
 		}
+
+		delete_option( 'woocommerce_pos_settings_visibility' );
 
 		// Restore original no stock amount
 		if ( false !== $this->original_no_stock_amount ) {
@@ -173,6 +176,112 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		// Verify the query was not adversely modified
 		$this->assertEquals( 'product', $query->get( 'post_type' ) );
 		$this->assertInstanceOf( WP_Query::class, $query );
+	}
+
+	/**
+	 * A storefront product query excludes the POS Only ids.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
+	 */
+	public function test_hide_pos_only_products_storefront_query_excludes_pos_only_ids(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$product = ProductHelper::create_simple_product();
+		$this->set_pos_only_product_ids( array( $product->get_id() ) );
+		$products = new Products();
+		$query    = new WP_Query();
+		$query->set( 'post_type', 'product' );
+
+		// Act.
+		$products->hide_pos_only_products( $query );
+
+		// Assert.
+		$this->assertSame( array( $product->get_id() ), $query->get( 'post__not_in' ) );
+	}
+
+	/**
+	 * REST routes and whether the POS Only exclusion applies while they are dispatched.
+	 *
+	 * The WooCommerce admin namespaces are the merchant operating the shop; the Store API
+	 * and the WooCommerce REST API are shopper-facing and stay filtered. A namespace only
+	 * counts when it leads the route.
+	 *
+	 * @return array<string, array{string, bool}>
+	 */
+	public function rest_route_provider(): array {
+		return array(
+			'wc-analytics report'      => array( '/wc-analytics/reports/products', false ),
+			'wc-analytics index'       => array( '/wc-analytics', false ),
+			'wc-admin, mixed case'     => array( '/WC-Admin/options', false ),
+			'Store API'                => array( '/wc/store/v1/products', true ),
+			'WooCommerce REST API'     => array( '/wc/v3/products', true ),
+			'namespace not leading'    => array( '/wc/store/v1/wc-analytics/products', true ),
+			'namespace as a prefix'    => array( '/wc-analytics-lookalike/products', true ),
+		);
+	}
+
+	/**
+	 * WooCommerce Analytics resolves a category filter with wc_get_products() during a
+	 * wc-analytics request. The merchant is reporting on the catalogue, not shopping it,
+	 * so the POS Only exclusion must not apply there or the category reads "No data".
+	 *
+	 * @dataProvider rest_route_provider
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
+	 * @covers \WCPOS\WooCommercePOS\Products::record_rest_route
+	 *
+	 * @param string $route         The REST route being dispatched.
+	 * @param bool   $expect_hidden Whether the POS Only product is excluded from the query.
+	 */
+	public function test_hide_pos_only_products_by_rest_route( string $route, bool $expect_hidden ): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$product = ProductHelper::create_simple_product();
+		$this->set_pos_only_product_ids( array( $product->get_id() ) );
+		$products = new Products();
+		$products->record_rest_route( null, rest_get_server(), new WP_REST_Request( 'GET', $route ) );
+		$query = new WP_Query();
+		$query->set( 'post_type', 'product' );
+
+		// Act.
+		$products->hide_pos_only_products( $query );
+
+		// Assert.
+		$expected = $expect_hidden ? array( $product->get_id() ) : '';
+		$this->assertSame( $expected, $query->get( 'post__not_in' ) );
+	}
+
+	/**
+	 * A site can switch the exclusion off for a context of its own through the filter.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
+	 */
+	public function test_hide_pos_only_products_filter_false_keeps_pos_only_products(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$product = ProductHelper::create_simple_product();
+		$this->set_pos_only_product_ids( array( $product->get_id() ) );
+		$products = new Products();
+		$query    = new WP_Query();
+		$query->set( 'post_type', 'product' );
+		$seen = array();
+		add_filter(
+			'woocommerce_pos_hide_pos_only_products',
+			function ( $hide, $filtered_query ) use ( &$seen ) {
+				$seen = array( $hide, $filtered_query );
+				return false;
+			},
+			10,
+			2
+		);
+
+		// Act.
+		$products->hide_pos_only_products( $query );
+
+		// Assert.
+		$this->assertEmpty( $query->get( 'post__not_in' ) );
+		$this->assertTrue( $seen[0], 'The filter receives the default decision.' );
+		$this->assertSame( $query, $seen[1], 'The filter receives the query being decided.' );
 	}
 
 	/**
@@ -493,6 +602,31 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 
 		// Currently returns unchanged args
 		$this->assertEquals( $args, $result );
+	}
+
+	/**
+	 * Store a POS Only product id list the way the settings screen does.
+	 *
+	 * @param int[] $ids Product ids.
+	 */
+	private function set_pos_only_product_ids( array $ids ): void {
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products'   => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => $ids ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array() ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+			)
+		);
 	}
 
 	/**
