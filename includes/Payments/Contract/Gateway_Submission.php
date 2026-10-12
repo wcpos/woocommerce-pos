@@ -141,8 +141,9 @@ class Gateway_Submission {
 		// A gateway's update_status() onto the stored status runs maybe_set_date_paid(), which
 		// asks this filter. Orders::payment_complete_order_status() (priority 10) already answers
 		// '' in that case since #2176; this closure repeats the answer at PHP_INT_MAX so a
-		// third-party filter between the two cannot hand back a paid status and have WooCommerce
-		// stamp date_paid on a sale nobody paid (Ledger::balance() would then read 0). Answer ''
+		// third-party filter between the two cannot hand back the order's current (stored) status,
+		// which is what makes maybe_set_date_paid() stamp date_paid on a sale nobody paid
+		// (Ledger::balance() would then read 0). Answer ''
 		// only while the order already reads the stored status AND has no date_paid yet:
 		// maybe_set_date_paid() asks only while date_paid is empty, whereas
 		// payment_complete() stamps date_paid on the line before it asks (and may ask while the
