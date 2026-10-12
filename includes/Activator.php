@@ -491,8 +491,13 @@ class Activator {
 						( new Integrity_Digest() )->register_hooks();
 					}
 				} catch ( \RuntimeException $error ) {
-					// The schema latch keeps its old value, so the next request retries.
-					// Re-throwing would fatal every request until the database is fixed.
+					// Re-throwing would fatal every request until the database is fixed. The schema
+					// latch keeps its old value on its own; the plugin-version latch was bumped above,
+					// so put it back too, or a failed fiscal-store install after the versioned files
+					// would never be re-detected and the fiscal schema would stay stale for good.
+					if ( $locked_plugin_needs_upgrade ) {
+						update_option( 'woocommerce_pos_db_version', $locked_old );
+					}
 					Logger::error( 'WCPOS database upgrade failed: ' . $error->getMessage() );
 				} finally {
 					$release_lock();

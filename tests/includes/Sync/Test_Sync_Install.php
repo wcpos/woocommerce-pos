@@ -383,6 +383,12 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 			return false !== strpos( $query, 'business_day IS NULL' ) ? 'SELECT id, opened_at_gmt FROM wcpos_no_such_table WHERE 1 = 0' : $query;
 		};
 		add_filter( 'query', $break_business_day_read );
+		$logged      = array();
+		$capture_log = static function ( bool $enabled, string $message ) use ( &$logged ): bool {
+			$logged[] = $message;
+			return $enabled;
+		};
+		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
 		$suppress = $wpdb->suppress_errors();
 
 		try {
@@ -395,9 +401,49 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 			do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
 		} finally {
 			remove_filter( 'query', $break_business_day_read );
+			remove_filter( 'woocommerce_pos_logging', $capture_log, 10 );
 			$wpdb->suppress_errors( $suppress );
 		}
 
+		$this->assertSame( '6', get_option( Api::SCHEMA_OPTION, null ) );
+		$this->assertFalse( get_option( 'woocommerce_pos_db_upgrade_lock.lock', false ) );
+		$this->assertCount( 1, array_filter( $logged, static fn( string $m ): bool => false !== strpos( $m, 'WCPOS database upgrade failed: Business day upgrade read failed.' ) ) );
+	}
+
+	/**
+	 * A failed upgrade puts the plugin-version latch back, so the next request re-detects it.
+	 */
+	public function test_version_check_failed_upgrade_restores_the_plugin_version_latch(): void {
+		global $wpdb;
+
+		update_option( 'woocommerce_pos_db_version', '1.10.0' );
+		update_option( Api::SCHEMA_OPTION, '6', false );
+		delete_option( 'woocommerce_pos_db_upgrade_lock.lock' );
+		remove_all_actions( 'woocommerce_init' );
+
+		$break_business_day_read = static function ( string $query ): string {
+			return false !== strpos( $query, 'business_day IS NULL' ) ? 'SELECT id, opened_at_gmt FROM wcpos_no_such_table WHERE 1 = 0' : $query;
+		};
+		add_filter( 'query', $break_business_day_read );
+		$suppress = $wpdb->suppress_errors();
+
+		try {
+			$activator     = new Activator();
+			$reflection    = new \ReflectionClass( $activator );
+			$version_check = $reflection->getMethod( 'version_check' );
+			$version_check->setAccessible( true );
+			$version_check->invoke( $activator );
+
+			// bump_versions() has already advanced the latch at this point; the failure must undo it.
+			$this->assertSame( \WCPOS\WooCommercePOS\VERSION, get_option( 'woocommerce_pos_db_version' ) );
+
+			do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+		} finally {
+			remove_filter( 'query', $break_business_day_read );
+			$wpdb->suppress_errors( $suppress );
+		}
+
+		$this->assertSame( '1.10.0', get_option( 'woocommerce_pos_db_version' ) );
 		$this->assertSame( '6', get_option( Api::SCHEMA_OPTION, null ) );
 		$this->assertFalse( get_option( 'woocommerce_pos_db_upgrade_lock.lock', false ) );
 	}
