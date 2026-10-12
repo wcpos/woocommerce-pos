@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
@@ -44,8 +45,6 @@ final class Changes_Controller extends WP_REST_Controller {
 	 */
 	private const CATALOG_POST_OBJECT_TYPES = array( 'product', 'variation' );
 
-	private const PRODUCT_POST_TYPES_SQL     = "('product','product_variation')";
-	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
 	private const TAX_RATES_NOTE             = 'tax rates table has no timestamps; rows carry ids only.';
 
 	private Sync_Journal $journal;
@@ -369,8 +368,8 @@ final class Changes_Controller extends WP_REST_Controller {
 		$rows   = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT ID FROM {$wpdb->posts}"
-				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. ' WHERE post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
+				. ' AND post_status NOT IN ' . Digest_Index::EXCLUDED_POST_STATUSES_SQL
 				. self::hidden_ids_sql( $hidden )
 				. ' AND ID > %d ORDER BY ID ASC LIMIT %d',
 				array_merge( $hidden, array( $since_id, $limit ) )
@@ -468,8 +467,8 @@ final class Changes_Controller extends WP_REST_Controller {
 			$rows   = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT ID, post_modified_gmt FROM {$wpdb->posts}"
-					. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-					. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+					. ' WHERE post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
+					. ' AND post_status NOT IN ' . Digest_Index::EXCLUDED_POST_STATUSES_SQL
 					. self::hidden_ids_sql( $hidden )
 					. ' AND ID >= %d AND ID < %d ORDER BY ID ASC',
 					array_merge( $hidden, array( $range_start, $range_end ) )
@@ -508,8 +507,8 @@ final class Changes_Controller extends WP_REST_Controller {
 			$sql    = 'SELECT FLOOR(ID/%d) AS bucket, COUNT(*) AS record_count,'
 				. " MD5(GROUP_CONCAT(CONCAT(ID,'|',post_modified_gmt) ORDER BY ID SEPARATOR ',')) AS checksum"
 				. " FROM {$wpdb->posts}"
-				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. ' WHERE post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
+				. ' AND post_status NOT IN ' . Digest_Index::EXCLUDED_POST_STATUSES_SQL
 				. self::hidden_ids_sql( $hidden )
 				. ' GROUP BY bucket ORDER BY bucket';
 			$sql_args = array_merge( $sql_args, $hidden );

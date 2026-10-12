@@ -98,8 +98,10 @@ final class Digest_Index {
 	 */
 	public const OBJECT_TYPES_SQL = "('product','variation')";
 
-	private const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
-	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
+	/** The wp_posts types that make up the product id-space, as an SQL list. */
+	public const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
+	/** Statuses outside the live product (and order) set, as an SQL list. The published-only scope is published_product_predicate_sql(). */
+	public const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
 
 	/**
 	 * Request-level memo for {@see digested_meta_keys}, KEYED BY BLOG ID. The hook write path

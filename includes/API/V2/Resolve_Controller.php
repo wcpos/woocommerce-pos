@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
@@ -36,7 +37,6 @@ use WP_REST_Server;
 class Resolve_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
 
-	private const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
 	private const BARCODE_META_KEYS_SQL  = "('_sku','_global_unique_id','_barcode')";
 
 
@@ -147,7 +147,7 @@ class Resolve_Controller extends WP_REST_Controller {
 				"SELECT p.ID, p.post_type FROM {$wpdb->posts} p"
 				. ' INNER JOIN ' . $wpdb->postmeta . ' pm ON pm.post_id = p.ID'
 				. ' WHERE pm.meta_key = %s AND pm.meta_value = %s'
-				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
+				. ' AND p.post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
 				. " AND p.post_status = 'publish'"
 				. ' GROUP BY p.ID ORDER BY p.ID ASC',
 				$meta_key,
@@ -173,7 +173,7 @@ class Resolve_Controller extends WP_REST_Controller {
 				. ' WHERE pm.meta_key IN ' . self::BARCODE_META_KEYS_SQL
 				. ' AND pm.meta_key <> %s'
 				. ' AND pm.meta_value = %s'
-				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
+				. ' AND p.post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
 				. " AND p.post_status = 'publish'"
 				. ' GROUP BY p.ID ORDER BY p.ID ASC',
 				$active_field,
