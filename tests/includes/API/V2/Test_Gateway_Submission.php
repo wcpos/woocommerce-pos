@@ -735,6 +735,26 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
 	}
 
+	/** An order already on its stored status keeps it when real money lands: the suppression never answers payment_complete(). */
+	public function test_submit_payment_complete_on_order_already_at_stored_status_keeps_it(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_paid_test' => 'wc-on-hold' ) );
+		$order = $this->create_pos_order();
+		$order->set_status( 'on-hold' );
+		$order->save();
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$this->assertSame( 'on-hold', $response->get_data()['order']['status'] );
+		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $stored->get_status() );
+		$this->assertNotNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
+	}
+
 	/** Send again after the merchant stores the status: the settled attempt clears the earlier send's stamp. */
 	public function test_submit_settled_clears_a_stale_stamp_from_an_earlier_send(): void {
 		// Arrange.

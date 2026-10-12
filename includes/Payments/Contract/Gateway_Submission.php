@@ -142,11 +142,13 @@ class Gateway_Submission {
 		// gateway's update_status() onto the stored status runs maybe_set_date_paid(), which
 		// asks this filter; Orders::payment_complete_order_status() answers the stored status,
 		// so WooCommerce would stamp date_paid on a sale nobody paid and Ledger::balance() would
-		// read 0. Answer '' only while the order already reads the stored status:
-		// payment_complete() asks before its own set_status(), while the order still reads its
-		// previous status, so observed money passes through and is stamped as paid.
+		// read 0. Answer '' only while the order already reads the stored status AND has no
+		// date_paid yet: maybe_set_date_paid() asks only while date_paid is empty, whereas
+		// payment_complete() stamps date_paid on the line before it asks (and may ask while the
+		// order already sits on the stored status, e.g. a second submission of an on-hold order),
+		// so observed money always passes through and keeps the merchant's status.
 		$suppress_date_paid = static function ( $status, $id, $filtered ) use ( $order, $settled_status ) {
-			return (int) $id === $order->get_id() && $filtered instanceof \WC_Abstract_Order && $filtered->has_status( $settled_status ) ? '' : $status;
+			return (int) $id === $order->get_id() && $filtered instanceof \WC_Abstract_Order && $filtered->has_status( $settled_status ) && ! $filtered->get_date_paid( 'edit' ) ? '' : $status;
 		};
 		try {
 			// A REST request has no WooCommerce session, cart or customer; wc_add_notice() /
