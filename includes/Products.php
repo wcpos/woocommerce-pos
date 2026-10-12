@@ -21,6 +21,26 @@ use WP_Query;
  */
 class Products {
 	/**
+	 * REST namespaces that are the merchant operating the shop, not a shopper browsing it.
+	 *
+	 * WooCommerce Analytics (`wc-analytics`) and the WooCommerce admin app (`wc-admin`)
+	 * read the catalogue to manage and report on it, exactly as wp-admin does, and never
+	 * show a product to a shopper. The Store API (`wc/store`) is NOT listed: it renders
+	 * the storefront. The core WooCommerce API (`wc/v3`) is not listed either; WC_API
+	 * owns that decision.
+	 *
+	 * @var string[]
+	 */
+	const OPERATOR_REST_NAMESPACES = array( 'wc-analytics', 'wc-admin' );
+
+	/**
+	 * Lower-cased route of the REST request being dispatched, or '' outside REST.
+	 *
+	 * @var string
+	 */
+	private $rest_route = '';
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -30,6 +50,7 @@ class Products {
 		$pos_only_products = Settings::instance()->pos_only_products_enabled();
 
 		if ( $pos_only_products ) {
+			add_filter( 'rest_pre_dispatch', array( $this, 'record_rest_route' ), 10, 3 );
 			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ) );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
 			add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_prevent_pos_only_add_to_cart' ) );
@@ -72,15 +93,34 @@ class Products {
 	}
 
 	/**
-	 * Hide POS only products and variations from front-end queries.
+	 * Remember which REST route is being dispatched.
+	 *
+	 * `pre_get_posts` cannot see the request, and the `rest_route` query var is
+	 * not set when a request is dispatched directly (batch sub-requests, tests), so
+	 * the route is captured here, the same way WC_API does.
+	 *
+	 * @param mixed            $result  The dispatch result.
+	 * @param \WP_REST_Server  $server  The server instance.
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return mixed The unchanged result.
+	 */
+	public function record_rest_route( $result, $server, $request ) {
+		// WordPress matches routes case-insensitively, so compare lower-cased.
+		$this->rest_route = strtolower( $request->get_route() );
+
+		return $result;
+	}
+
+	/**
+	 * Hide POS only products and variations from storefront queries.
 	 *
 	 * @param \WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return void
 	 */
 	public function hide_pos_only_products( \WP_Query $query ): void {
-		// Only run for front-end queries, not admin or POS requests.
-		if ( is_admin() || woocommerce_pos_request() ) {
+		if ( ! $this->should_hide_pos_only_products( $query ) ) {
 			return;
 		}
 
@@ -119,6 +159,65 @@ class Products {
 			}
 			$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
 		}
+	}
+
+	/**
+	 * Whether the POS Only exclusion applies to the request running this query.
+	 *
+	 * Hiding POS Only products is a storefront rule: a shopper must not see or buy
+	 * them. It does not apply where the merchant is operating the shop rather than
+	 * shopping in it (wp-admin, WP-CLI, the WooCommerce admin REST namespaces), nor
+	 * on POS requests, which are what POS Only products exist for. Applying it to
+	 * WooCommerce Analytics, which resolves a category filter with wc_get_products()
+	 * during a wc-analytics request, made a category of POS Only products report
+	 * "No data" while the same products' sales showed when searched by name.
+	 *
+	 * @param \WP_Query $query The query being decided.
+	 *
+	 * @return bool
+	 */
+	public function should_hide_pos_only_products( \WP_Query $query ): bool {
+		$hide = ! ( is_admin() || woocommerce_pos_request() || $this->is_cli_request() || $this->is_operator_rest_request() );
+
+		/**
+		 * Filters whether POS Only products are excluded from a product query.
+		 *
+		 * The default is true on the storefront (catalogue, search, the Store API,
+		 * feeds and sitemaps) and false in wp-admin, WP-CLI, the WooCommerce admin
+		 * REST namespaces and the POS itself. Return false to let a context of
+		 * your own see POS Only products.
+		 *
+		 * @param bool      $hide  Whether to exclude POS Only products from this query.
+		 * @param \WP_Query $query The query being decided.
+		 */
+		return (bool) apply_filters( 'woocommerce_pos_hide_pos_only_products', $hide, $query );
+	}
+
+	/**
+	 * Whether the current REST request belongs to an operator namespace.
+	 *
+	 * @return bool
+	 */
+	private function is_operator_rest_request(): bool {
+		if ( '' === $this->rest_route ) {
+			return false;
+		}
+		foreach ( self::OPERATOR_REST_NAMESPACES as $namespace ) {
+			if ( '/' . $namespace === $this->rest_route || 0 === strpos( $this->rest_route, '/' . $namespace . '/' ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether the request is a WP-CLI command.
+	 *
+	 * @return bool
+	 */
+	private function is_cli_request(): bool {
+		return \defined( 'WP_CLI' ) && WP_CLI;
 	}
 
 	/**

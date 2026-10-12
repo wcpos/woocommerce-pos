@@ -37,7 +37,11 @@ class WC_API {
 	public function __construct() {
 		$pos_only_products = Settings::instance()->pos_only_products_enabled();
 
-		if ( $pos_only_products ) {
+		// `wp wc product list` dispatches these same routes. A WP-CLI command is the
+		// merchant operating the shop, like wp-admin, so it lists every product.
+		$is_cli = \defined( 'WP_CLI' ) && WP_CLI;
+
+		if ( $pos_only_products && ! $is_cli ) {
 			add_filter( 'rest_pre_dispatch', array( $this, 'set_woocommerce_rest_api_request_flags' ), 10, 3 );
 			add_filter( 'posts_where', array( $this, 'exclude_pos_only_products_from_api_response' ), 10, 2 );
 		}
@@ -55,6 +59,12 @@ class WC_API {
 		// still dispatches to the products controller — flag detection must not
 		// be skippable by upper-casing the route.
 		$route = strtolower( $request->get_route() );
+
+		// The flags describe THIS dispatch. A `/batch/v1` request dispatches its
+		// sub-requests one after another through this same filter, so a products
+		// sub-request must not leave the flags set for the one that follows it.
+		$this->is_woocommerce_rest_api_products_request   = false;
+		$this->is_woocommerce_rest_api_variations_request = false;
 
 		if ( 0 === strpos( $route, '/wc/v3/products' ) || 0 === strpos( $route, '/wc/v2/products' ) || 0 === strpos( $route, '/wc/v1/products' ) ) {
 			$this->is_woocommerce_rest_api_products_request = true;
