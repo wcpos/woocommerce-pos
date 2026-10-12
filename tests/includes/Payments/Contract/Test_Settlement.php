@@ -40,6 +40,37 @@ class Test_Settlement extends \WP_UnitTestCase {
 		$this->assertSame( array( 'brand' => 'visa' ), Ledger::instance()->find( $order, $row['id'] )['receipt'] );
 	}
 
+	public function test_settlement_patch_refs_merge_into_the_rows_refs(): void {
+		list( $order, $row ) = $this->pending( array( 'reader' => 'sn-1', 'action' => 'act_1' ) );
+		$this->assertTrue( wcpos_settle_payment( $row['id'], array(
+			'status' => 'captured', 'amount' => '20.00', 'currency' => $row['currency'],
+			'provider_refs' => array( 'transaction_id' => 'txn_1', 'charge' => null ),
+		) ) );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( array( 'reader' => 'sn-1', 'action' => 'act_1', 'transaction_id' => 'txn_1' ), Ledger::instance()->find( $order, $row['id'] )['provider_refs'] );
+		$this->assertSame( 'txn_1', $order->get_transaction_id() );
+	}
+
+	public function test_settlement_patch_ref_wins_over_the_rows_value_for_the_same_key(): void {
+		list( $order, $row ) = $this->pending( array( 'transaction_id' => 'old' ) );
+		$this->assertTrue( wcpos_settle_payment( $row['id'], array(
+			'status' => 'captured', 'amount' => '20.00', 'currency' => $row['currency'],
+			'provider_refs' => array( 'transaction_id' => 'new' ),
+		) ) );
+		$this->assertSame( 'new', Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] )['provider_refs']['transaction_id'] );
+	}
+
+	public function test_settlement_parked_patches_merge_refs(): void {
+		$id = wp_generate_uuid4();
+		$this->assertTrue( wcpos_settle_payment( $id, array( 'status' => 'captured', 'provider_refs' => array( 'a' => '1' ) ) ) );
+		$this->assertTrue( wcpos_settle_payment( $id, array( 'provider_refs' => array( 'b' => '2' ) ) ) );
+		$order = $this->order();
+		$row = Ledger::instance()->record( $order, array( 'id' => $id, 'method_id' => 'pos_card', 'amount' => '20.00' ) );
+		$this->assertSame( 'captured', $row['status'] );
+		$this->assertSame( '1', $row['provider_refs']['a'] );
+		$this->assertSame( '2', $row['provider_refs']['b'] );
+	}
+
 	/** The provider's approval time, not the server's receipt time, is what the row keeps. */
 	public function test_settlement_keeps_the_provider_approval_time(): void {
 		list( $order, $row ) = $this->pending();
@@ -257,9 +288,10 @@ class Test_Settlement extends \WP_UnitTestCase {
 		return $order;
 	}
 
-	private function pending(): array {
+	private function pending( array $refs = array() ): array {
 		$order = $this->order();
 		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_card', 'capture_mode' => 'settlement_test', 'amount' => '20.00', 'status' => 'pending' );
+		$row['provider_refs'] = $refs;
 		Ledger::instance()->save( $order, array( $row ) );
 		return array( $order, Ledger::instance()->find( $order, $row['id'] ) );
 	}
