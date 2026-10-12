@@ -843,10 +843,8 @@ class Auth {
 			return true;
 		}
 		foreach ( array_keys( get_blogs_of_user( $user_id ) ) as $blog_id ) {
-			switch_to_blog( (int) $blog_id );
-			$administers = user_can( $user_id, 'manage_options' );
-			restore_current_blog();
-			if ( $administers ) {
+			// A WP_User built for a site id carries that site's capabilities; no blog switch needed.
+			if ( ( new \WP_User( $user_id, '', (int) $blog_id ) )->has_cap( 'manage_options' ) ) {
 				return true;
 			}
 		}
