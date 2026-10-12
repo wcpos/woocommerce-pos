@@ -38,6 +38,6 @@ $version = extract_plugin_version( __DIR__ . '/woocommerce-pos.php' ) ?: '1.8.7'
 \define( 'WCPOS\WooCommercePOS\PLUGIN_FILE', 'woocommerce-pos/woocommerce-pos.php' );
 \define( 'WCPOS\WooCommercePOS\PLUGIN_PATH', '/path/to/woocommerce-pos/' );
 \define( 'WCPOS\WooCommercePOS\PLUGIN_URL', 'https://example.com/wp-content/plugins/woocommerce-pos/' );
-\define( 'WCPOS\WooCommercePOS\WC_MIN_VERSION', '5.3' );
+\define( 'WCPOS\WooCommercePOS\WC_MIN_VERSION', '9.0' );
 \define( 'WCPOS\WooCommercePOS\PHP_MIN_VERSION', '7.4' );
 \define( 'WCPOS\WooCommercePOS\MIN_PRO_VERSION', $version );

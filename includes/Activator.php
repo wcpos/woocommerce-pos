@@ -490,6 +490,10 @@ class Activator {
 						( new Sync_Journal() )->register_hooks();
 						( new Integrity_Digest() )->register_hooks();
 					}
+				} catch ( \RuntimeException $error ) {
+					// The schema latch keeps its old value, so the next request retries.
+					// Re-throwing would fatal every request until the database is fixed.
+					Logger::error( 'WCPOS database upgrade failed: ' . $error->getMessage() );
 				} finally {
 					$release_lock();
 					remove_action( 'shutdown', $release_lock );

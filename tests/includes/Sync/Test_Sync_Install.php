@@ -369,6 +369,40 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A failed business-day upgrade preserves the latch and releases the lock without throwing.
+	 */
+	public function test_version_check_business_day_upgrade_failure_is_logged_not_thrown(): void {
+		global $wpdb;
+
+		update_option( 'woocommerce_pos_db_version', \WCPOS\WooCommercePOS\VERSION );
+		update_option( Api::SCHEMA_OPTION, '6', false );
+		delete_option( 'woocommerce_pos_db_upgrade_lock.lock' );
+		remove_all_actions( 'woocommerce_init' );
+
+		$break_business_day_read = static function ( string $query ): string {
+			return false !== strpos( $query, 'business_day IS NULL' ) ? 'SELECT id, opened_at_gmt FROM wcpos_no_such_table WHERE 1 = 0' : $query;
+		};
+		add_filter( 'query', $break_business_day_read );
+		$suppress = $wpdb->suppress_errors();
+
+		try {
+			$activator     = new Activator();
+			$reflection    = new \ReflectionClass( $activator );
+			$version_check = $reflection->getMethod( 'version_check' );
+			$version_check->setAccessible( true );
+			$version_check->invoke( $activator );
+
+			do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+		} finally {
+			remove_filter( 'query', $break_business_day_read );
+			$wpdb->suppress_errors( $suppress );
+		}
+
+		$this->assertSame( '6', get_option( Api::SCHEMA_OPTION, null ) );
+		$this->assertFalse( get_option( 'woocommerce_pos_db_upgrade_lock.lock', false ) );
+	}
+
+	/**
 	 * A same-request write after schema migration reaches both sync observers.
 	 */
 	public function test_version_check_registers_observers_after_sync_schema_upgrade(): void {
