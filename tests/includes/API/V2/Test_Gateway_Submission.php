@@ -631,8 +631,12 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( $response->get_data()['payment'] );
 		$this->assertSame( 'pending', $response->get_data()['order']['status'] );
 		$this->assertSame( 'wcpos_sent_test', $response->get_data()['order']['payment_method'] );
+		// Nobody paid: the balance is still due and WooCommerce did not stamp date_paid on the way
+		// onto the stored status (Orders::payment_complete_order_status() answers it).
+		$this->assertSame( '92.95', $response->get_data()['order']['balance'] );
 		$stored = wc_get_order( $order->get_id() );
 		$this->assertSame( 'pending', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
 		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
 		$this->assertSame( array( $attempt => 'settled' ), Gateway_Submission::read_attempts( $stored ) );
 		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
@@ -689,8 +693,10 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 'settled', $response->get_data()['outcome'] );
 		$this->assertSame( 'on-hold', $response->get_data()['order']['status'] );
+		$this->assertSame( '92.95', $response->get_data()['order']['balance'] );
 		$stored = wc_get_order( $order->get_id() );
 		$this->assertSame( 'on-hold', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
 		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
 		$this->assertSame( array( 'settled' ), array_values( Gateway_Submission::read_attempts( $stored ) ) );
 	}
@@ -711,6 +717,22 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'processing', $stored->get_status() );
 		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
 		$this->assertSame( array(), Gateway_Submission::read_attempts( $stored ) );
+	}
+
+	/** The date_paid suppression lets observed money through: payment_complete() still stamps the order paid. */
+	public function test_submit_payment_complete_with_stored_unpaid_status_still_stamps_date_paid(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_paid_test' => 'wc-pending' ) );
+		$order = $this->create_pos_order();
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertNotNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
 	}
 
 	/** Send again after the merchant stores the status: the settled attempt clears the earlier send's stamp. */

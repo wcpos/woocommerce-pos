@@ -135,6 +135,19 @@ class Gateway_Submission {
 		};
 		$threw           = null;
 		$previous_method = null;
+		// The status the merchant stored as THIS gateway's POS Order Status (§3.1 `settled`),
+		// read once before the gateway runs and compared with the fresh order after it.
+		$settled_status = ( new Gateway_Contract() )->get_settled_order_status( $descriptor['id'] );
+		// Twin of Orders::arm_paid_date_suppression(), which only the offline gateways get. A
+		// gateway's update_status() onto the stored status runs maybe_set_date_paid(), which
+		// asks this filter; Orders::payment_complete_order_status() answers the stored status,
+		// so WooCommerce would stamp date_paid on a sale nobody paid and Ledger::balance() would
+		// read 0. Answer '' only while the order already reads the stored status:
+		// payment_complete() asks before its own set_status(), while the order still reads its
+		// previous status, so observed money passes through and is stamped as paid.
+		$suppress_date_paid = static function ( $status, $id, $filtered ) use ( $order, $settled_status ) {
+			return (int) $id === $order->get_id() && $filtered instanceof \WC_Abstract_Order && $filtered->has_status( $settled_status ) ? '' : $status;
+		};
 		try {
 			// A REST request has no WooCommerce session, cart or customer; wc_add_notice() /
 			// wc_clear_notices() (validate_fields(), most process_payment() implementations)
@@ -185,6 +198,9 @@ class Gateway_Submission {
 			$order->set_payment_method( $gateway->id );
 			$order->set_payment_method_title( (string) $descriptor['title'] );
 			$order->save();
+			if ( '' !== $settled_status && ! in_array( $settled_status, wc_get_is_paid_statuses(), true ) ) {
+				add_filter( 'woocommerce_payment_complete_order_status', $suppress_date_paid, PHP_INT_MAX, 3 );
+			}
 			add_action( 'woocommerce_payment_complete', $complete );
 			add_action( 'woocommerce_order_status_changed', $status_changed, 10, 3 );
 			self::$submitting_order_id = $order->get_id();
@@ -195,6 +211,7 @@ class Gateway_Submission {
 		} finally {
 			self::$submitting_order_id = 0;
 			remove_filter( 'woocommerce_persistent_cart_enabled', array( self::class, 'deny' ) );
+			remove_filter( 'woocommerce_payment_complete_order_status', $suppress_date_paid, PHP_INT_MAX );
 			remove_action( 'woocommerce_payment_complete', $complete );
 			remove_action( 'woocommerce_order_status_changed', $status_changed, 10 );
 			foreach ( $ids as $id ) {
@@ -246,13 +263,11 @@ class Gateway_Submission {
 			'kind' => 'take',
 			'label' => $descriptor['title'],
 		);
-		// No money observed, but the gateway landed the order on the status the merchant stored
-		// as THIS gateway's POS Order Status (§3.1 `settled`): the sale is finished at the till
-		// (BACS stored as Pending is "pay by invoice"). Read after the gateway ran, from the
-		// fresh order, for the gateway the submission was for; the reader itself refuses the
-		// never-settled statuses (failed, cancelled, refunded, checkout-draft, the parked POS ones).
-		$settled_status = $paid ? '' : ( new Gateway_Contract() )->get_settled_order_status( $descriptor['id'] );
-		$settled        = '' !== $settled_status && $order->has_status( $settled_status );
+		// No money observed, but the gateway landed the fresh order on the merchant's stored status
+		// (§3.1 `settled`): the sale is finished at the till (BACS stored as Pending is "pay by
+		// invoice"). The reader itself refuses the never-settled statuses (failed, cancelled,
+		// refunded, checkout-draft, the parked POS ones).
+		$settled = ! $paid && '' !== $settled_status && $order->has_status( $settled_status );
 		if ( $paid ) {
 			self::clear_stamp( $order );
 			$row = Webview_Passthrough::mint(
