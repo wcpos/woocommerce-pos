@@ -122,7 +122,13 @@ class Receipt {
 			/**
 			 * Check for custom template first.
 			 */
-			$custom_template = $this->get_custom_template( ! empty( $receipt_data['fiscal']['is_closure_document'] ) ? 'closure' : 'receipt' );
+			$document_type   = ! empty( $receipt_data['fiscal']['is_closure_document'] ) ? 'closure' : 'receipt';
+			$custom_template = $this->get_custom_template( $document_type );
+			if ( null === $custom_template && 'closure' === $document_type ) {
+				// The fallback below is the legacy SALE receipt: for a closure it would print an empty sale
+				// and, on a print intent, count the closure as printed. Refuse as the PDF branch does.
+				wp_die( esc_html__( 'No closure template is enabled.', 'woocommerce-pos' ), '', array( 'response' => 404 ) );
+			}
 			$receipt_data    = $receipt_data ?? $this->get_receipt_data( $order, $is_preview ? 'preview' : 'live' );
 
 			// Start output buffering and register shutdown handler for fatal errors.
