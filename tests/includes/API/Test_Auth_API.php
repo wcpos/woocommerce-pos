@@ -426,6 +426,68 @@ class Test_Auth_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Shop managers cannot access an administrator's sessions.
+	 */
+	public function test_check_session_permissions_shop_manager_targeting_administrator_returns_false(): void {
+		// Arrange.
+		wp_set_current_user( $this->shop_manager_user->ID );
+		$request = $this->create_request(
+			array(
+				'user_id' => $this->admin_user->ID,
+			)
+		);
+
+		// Act.
+		$allowed = $this->api->check_session_permissions( $request );
+
+		// Assert.
+		$this->assertFalse( $allowed );
+	}
+
+	/**
+	 * Shop manager listings omit administrators but retain other users and self.
+	 */
+	public function test_get_all_users_sessions_shop_manager_omits_administrator_rows(): void {
+		// Arrange.
+		$this->auth_service->generate_refresh_token( $this->admin_user );
+		$this->auth_service->generate_refresh_token( $this->regular_user );
+		$this->auth_service->generate_refresh_token( $this->shop_manager_user );
+		wp_set_current_user( $this->shop_manager_user->ID );
+
+		// Act.
+		$response = $this->api->get_all_users_sessions( $this->create_request() );
+		$data     = $response->get_data();
+		$ids      = array_column( $data['users'], 'user_id' );
+
+		// Assert.
+		$this->assertNotContains( $this->admin_user->ID, $ids );
+		$this->assertContains( $this->regular_user->ID, $ids );
+		$this->assertContains( $this->shop_manager_user->ID, $ids );
+		$this->assertSame( count( $data['users'] ), $data['total'] );
+	}
+
+	/**
+	 * The permission check refuses revocation and leaves the administrator's session intact.
+	 */
+	public function test_delete_all_sessions_shop_manager_cannot_revoke_administrator_sessions_via_permission_check(): void {
+		// Arrange.
+		$this->auth_service->generate_refresh_token( $this->admin_user );
+		wp_set_current_user( $this->shop_manager_user->ID );
+		$request = $this->create_request(
+			array(
+				'user_id' => $this->admin_user->ID,
+			)
+		);
+
+		// Act.
+		$allowed = $this->api->check_session_permissions( $request );
+
+		// Assert.
+		$this->assertFalse( $allowed );
+		$this->assertCount( 1, $this->auth_service->get_user_sessions( $this->admin_user->ID ) );
+	}
+
+	/**
 	 * Test permission check for own sessions.
 	 */
 	public function test_check_session_permissions_for_own_sessions(): void {

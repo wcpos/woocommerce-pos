@@ -815,9 +815,10 @@ class Auth {
 			return true;
 		}
 
-		// Shop managers can manage anyone's sessions.
+		// Shop managers manage everyone's sessions except an administrator's:
+		// the staff rule (#1918) — WooCommerce likewise refuses a manager acting on an administrator.
 		if ( current_user_can( 'manage_woocommerce' ) ) {
-			return true;
+			return ! user_can( $target_user_id, 'manage_options' );
 		}
 
 		return false;
