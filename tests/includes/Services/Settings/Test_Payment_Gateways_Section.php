@@ -84,6 +84,8 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 		$this->assertSame( 'cash', $gateways['pos_cash']['kind'] );
 		$this->assertSame( 'card', $gateways['pos_card']['kind'] );
 		$this->assertSame( '0.10', $gateways['pos_cash']['rounding_increment'] );
+		update_option( 'woocommerce_pos_settings_payment_gateways', array( 'gateways' => array( 'pos_cash' => array( 'rounding_increment' => '0.2' ) ) ) );
+		$this->assertSame( '', $section->read()['gateways']['pos_cash']['rounding_increment'], 'an unlisted stored value reads as no rounding' );
 		$filter = static function () {
 			return 'other';
 		};

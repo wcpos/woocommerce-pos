@@ -211,6 +211,10 @@ class Payment_Gateways_Section extends Abstract_Section {
 				)
 			);
 
+			// A stored value the list no longer carries reads as no rounding, so the modal never sends it back.
+			if ( ! \in_array( $response['gateways'][ $id ]['rounding_increment'], self::ROUNDING_INCREMENTS, true ) ) {
+				$response['gateways'][ $id ]['rounding_increment'] = '';
+			}
 			if ( ! is_string( $response['gateways'][ $id ]['title'] ) || '' === trim( $response['gateways'][ $id ]['title'] ) ) {
 				$response['gateways'][ $id ]['title'] = $contract->get_display_title( $gateway );
 			}
