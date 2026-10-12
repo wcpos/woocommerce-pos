@@ -388,6 +388,9 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 			$logged[] = $message;
 			return $enabled;
 		};
+		// The Logger suppresses a consecutive duplicate before the filter runs; the latch test
+		// logs this same line, so start from clean dedup state whatever the test order.
+		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
 		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
 		$suppress = $wpdb->suppress_errors();
 
@@ -402,6 +405,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		} finally {
 			remove_filter( 'query', $break_business_day_read );
 			remove_filter( 'woocommerce_pos_logging', $capture_log, 10 );
+			\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
 			$wpdb->suppress_errors( $suppress );
 		}
 
