@@ -123,8 +123,8 @@ class Payment_Gateways_Section extends Abstract_Section {
 		foreach ( $settings['gateways'] ?? array() as $id => $gateway ) {
 			// Computed on every read; a PATCH echoes the view back, so keep it out of the option.
 			unset( $settings['gateways'][ $id ]['capture_mode'], $settings['gateways'][ $id ]['kind'] );
-			// A writer that skipped the endpoint (save_settings, the pre-save filter) cannot store a value
-			// the list and the till would refuse; it becomes no rounding.
+			// A writer that skipped the endpoint (save_settings) cannot store a value the list and the
+			// till would refuse; it becomes no rounding. The pre-save filter runs after this.
 			$increment = (string) ( $gateway['rounding_increment'] ?? '' );
 			$settings['gateways'][ $id ]['rounding_increment'] = \in_array( $increment, self::ROUNDING_INCREMENTS, true ) ? $increment : '';
 			if ( \array_key_exists( 'default_reader', $gateway ) ) {
