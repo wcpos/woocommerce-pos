@@ -753,7 +753,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
 	}
 
-	/** A re-submission of an order already at its stored status settles without the method save stamping date_paid. */
+	/** An order already at its stored status settles with the balance still due and no date_paid. */
 	public function test_submit_settled_on_order_already_at_stored_status_leaves_date_paid_unset(): void {
 		// Arrange.
 		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-on-hold' ) );
@@ -850,9 +850,10 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Park an order on an unpaid status with date_paid still empty.
 	 *
-	 * Outside a submit nothing on `next` suppresses WooCommerce's maybe_set_date_paid() on save,
-	 * and the settings view answers bacs (the helper's method) with On hold, so a plain
-	 * set_status( 'on-hold' ) + save() would stamp date_paid on an unpaid order.
+	 * WooCommerce runs maybe_set_date_paid() from set_status() on a real status change; outside
+	 * a submit nothing on `next` suppresses it, and the settings view answers bacs (the helper's
+	 * method) with On hold, so a plain set_status( 'on-hold' ) would stamp date_paid on an
+	 * unpaid order.
 	 *
 	 * @param \WC_Order $order  Order.
 	 * @param string    $status Status without the `wc-` prefix.
