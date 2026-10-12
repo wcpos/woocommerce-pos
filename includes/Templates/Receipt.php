@@ -576,19 +576,7 @@ class Receipt {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$preview_id = sanitize_text_field( wp_unslash( $_GET['wcpos_preview_template'] ) );
 
-			if ( is_numeric( $preview_id ) ) {
-				// Database template.
-				return TemplatesManager::get_template( (int) $preview_id );
-			}
-
-			// Virtual template (theme/plugin-pro/plugin-core).
-			$template = TemplatesManager::get_virtual_template( $preview_id, $type );
-			if ( $template ) {
-				return $template;
-			}
-
-			// Gallery template (e.g. "standard-receipt").
-			return TemplatesManager::get_gallery_template_by_key( $preview_id );
+			return TemplatesManager::find_template_or_gallery( $preview_id, $type );
 		}
 
 		// Check for template selection parameter (used by POS app to switch templates).
@@ -597,15 +585,9 @@ class Receipt {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$template_id = sanitize_text_field( wp_unslash( $_GET['template'] ) );
 
-			if ( is_numeric( $template_id ) ) {
-				$post_id  = (int) $template_id;
-				$template = 'publish' === get_post_status( $post_id ) ? TemplatesManager::get_template( $post_id ) : null;
-			} else {
-				$template = TemplatesManager::get_virtual_template( $template_id, $type );
-				if ( ! $template ) {
-					$template = TemplatesManager::get_gallery_template_by_key( $template_id );
-				}
-			}
+			$template = is_numeric( $template_id ) && 'publish' !== get_post_status( (int) $template_id )
+				? null
+				: TemplatesManager::find_template_or_gallery( $template_id, $type );
 
 			// Only allow published receipt templates.
 			if ( $template && ( $template['type'] ?? '' ) === $type ) {

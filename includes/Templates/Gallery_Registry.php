@@ -2,7 +2,7 @@
 /**
  * Gallery Template Registry.
  *
- * Translatable catalogue of bundled receipt/report templates. Returned per
+ * Translatable catalogue of bundled receipt, display, report and closure templates. Returned per
  * request so locale changes produce the right translation. Content lives
  * in sibling files (templates/gallery/<key>.html|xml|php) located by
  * Templates::get_gallery_templates().

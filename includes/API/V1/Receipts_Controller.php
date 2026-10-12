@@ -295,7 +295,7 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$template = $is_closure && ! is_numeric( $template_id ) ? Templates::get_virtual_template( $template_id, 'closure' ) : Print_Job_Service::load_template( $template_id );
+		$template = Print_Job_Service::load_template( $template_id, $is_closure ? 'closure' : 'receipt' );
 		if ( $is_closure && $template && 'closure' !== ( $template['type'] ?? '' ) ) {
 			return new WP_Error( 'wcpos_template_type_mismatch', __( 'A closure template is required.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}

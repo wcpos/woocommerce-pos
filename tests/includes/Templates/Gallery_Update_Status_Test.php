@@ -17,6 +17,30 @@ use WP_UnitTestCase;
 class Gallery_Update_Status_Test extends WP_UnitTestCase {
 
 	/**
+	 * Recording an install stamps all provenance against the saved content.
+	 */
+	public function test_record_install_writes_key_version_hash_and_locale(): void {
+		// Arrange.
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_status'  => 'publish',
+				'post_content' => 'Installed content',
+			)
+		);
+
+		// Act.
+		Gallery_Update_Status::record_install( $id, 'standard-receipt', 3, 'fr_FR' );
+
+		// Assert.
+		$this->assertSame( 'standard-receipt', get_post_meta( $id, Gallery_Update_Status::META_GALLERY_KEY, true ) );
+		$this->assertSame( '3', get_post_meta( $id, Gallery_Update_Status::META_GALLERY_VERSION, true ) );
+		$this->assertSame( hash( 'sha256', 'Installed content' ), get_post_meta( $id, Gallery_Update_Status::META_SOURCE_HASH, true ) );
+		$this->assertSame( 'fr_FR', get_post_meta( $id, Gallery_Update_Status::META_SOURCE_LOCALE, true ) );
+		$this->assertTrue( Gallery_Update_Status::is_unedited( $id ) );
+	}
+
+	/**
 	 * The gallery key used across these tests.
 	 *
 	 * @var string

@@ -233,19 +233,18 @@ class Print_Job_Service {
 	}
 
 	/**
-	 * Load a receipt template by id (numeric stored template or virtual slug).
+	 * Load a template by id (numeric stored template or virtual slug).
 	 *
 	 * Single source of truth for template resolution shared by render_payload(),
 	 * the auto-print trigger, and the manual print-jobs endpoint.
 	 *
 	 * @param string $template_id Template id (numeric) or virtual slug.
+	 * @param string $type        Template type a virtual slug is resolved in.
 	 *
 	 * @return array|null Template array, or null when not found.
 	 */
-	public static function load_template( string $template_id ): ?array {
-		return is_numeric( $template_id )
-			? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
-			: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
+	public static function load_template( string $template_id, string $type = 'receipt' ): ?array {
+		return \WCPOS\WooCommercePOS\Templates::find_template( $template_id, $type );
 	}
 
 	/**

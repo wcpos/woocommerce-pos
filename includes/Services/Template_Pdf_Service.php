@@ -38,8 +38,8 @@ class Template_Pdf_Service {
 	public function render( array $template, WC_Abstract_Order $order, ?array $receipt_data = null ): string {
 		$engine = isset( $template['engine'] ) ? (string) $template['engine'] : '';
 
-		// Prepared sale data is also passed by the PDF route; only refund documents
-		// must not fall back to a native integration that would render the sale.
+		// Prepared sale data is also passed by the PDF route; only frozen documents (refund, closure,
+		// X-report) must not fall back to a native integration that would render the sale.
 		if ( in_array( $receipt_data['fiscal']['document_type'] ?? '', array( 'refund', 'closure', 'xreport' ), true ) && $this->is_native( $template ) ) {
 			throw new \RuntimeException( 'WP Overnight templates cannot render frozen receipt documents.' );
 		}

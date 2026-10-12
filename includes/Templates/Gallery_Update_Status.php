@@ -17,7 +17,7 @@
  *   what keeps this from becoming a notice every merchant learns to ignore.
  *
  * Deliberately does no file I/O: `status_for()` runs on the template list, which the settings
- * screens re-read often, and reading 37 bundled files to answer it would be the same mistake as
+ * screens re-read often, and reading every bundled file to answer it would be the same mistake as
  * calling `load_template()` on a poll path. Only `sync_untouched()` touches the filesystem, and
  * only for templates already known to be both outdated and unedited.
  *
@@ -126,6 +126,25 @@ final class Gallery_Update_Status {
 		if ( null !== $locale && '' !== $locale ) {
 			update_post_meta( $template_id, self::META_SOURCE_LOCALE, $locale );
 		}
+	}
+
+	/**
+	 * Stamp a freshly installed gallery copy with its provenance.
+	 *
+	 * Where it came from, which bundled version, and what its content was as installed: the
+	 * facts `status_for()` compares later. Call it after the content is finally saved.
+	 *
+	 * @param int    $template_id The template post ID.
+	 * @param string $gallery_key The gallery key it was installed from.
+	 * @param int    $version     The registry version it was installed from.
+	 * @param string $locale      The locale its phrases were translated into.
+	 *
+	 * @return void
+	 */
+	public static function record_install( int $template_id, string $gallery_key, int $version, string $locale ): void {
+		update_post_meta( $template_id, self::META_GALLERY_KEY, $gallery_key );
+		update_post_meta( $template_id, self::META_GALLERY_VERSION, $version );
+		self::record_source_hash( $template_id, $locale );
 	}
 
 	/**

@@ -552,7 +552,7 @@ class Templates {
 	 * Get a virtual PHP or HTML template by ID.
 	 *
 	 * @param string $template_id Virtual template ID (theme, plugin-pro, plugin-core).
-	 * @param string $type        Template type (receipt, report, display).
+	 * @param string $type        Template type (receipt, report, display, closure).
 	 *
 	 * @return null|array Template data or null if not found.
 	 */
@@ -610,6 +610,45 @@ class Templates {
 			'menu_order'        => 0,
 			'date_modified_gmt' => gmdate( 'Y-m-d H:i:s', filemtime( $file_path ) ),
 		);
+	}
+
+	/**
+	 * Find a template by the reference a caller names it with.
+	 *
+	 * A numeric reference names a stored template, whatever its type; any other string names a
+	 * virtual (filesystem) template of `$type`. Type and status policy stay with the caller.
+	 *
+	 * @param int|string $reference Template post ID or virtual template ID.
+	 * @param string     $type      Template type a virtual reference is resolved in.
+	 *
+	 * @return null|array Template data, or null when nothing matches.
+	 */
+	public static function find_template( $reference, string $type = 'receipt' ): ?array {
+		if ( is_numeric( $reference ) ) {
+			return self::get_template( (int) $reference );
+		}
+
+		return self::get_virtual_template( (string) $reference, $type );
+	}
+
+	/**
+	 * Find a template by reference, falling back to a bundled gallery entry by its key.
+	 *
+	 * For the preview and render paths, which may name a gallery template that was never
+	 * installed. A numeric reference never falls back.
+	 *
+	 * @param int|string $reference Template post ID, virtual template ID or gallery key.
+	 * @param string     $type      Template type a virtual reference is resolved in.
+	 *
+	 * @return null|array Template data, or null when nothing matches.
+	 */
+	public static function find_template_or_gallery( $reference, string $type = 'receipt' ): ?array {
+		$template = self::find_template( $reference, $type );
+		if ( null !== $template || is_numeric( $reference ) ) {
+			return $template;
+		}
+
+		return self::get_gallery_template_by_key( (string) $reference );
 	}
 
 	/**
@@ -725,7 +764,7 @@ class Templates {
 	 * Detect all available filesystem templates for a type.
 	 * Returns templates in priority order: Theme > Pro > Core.
 	 *
-	 * @param string $type Template type (receipt, report, display).
+	 * @param string $type Template type (receipt, report, display, closure).
 	 *
 	 * @return array Array of available virtual templates.
 	 */
@@ -754,7 +793,7 @@ class Templates {
 	/**
 	 * Get the default (highest priority) filesystem template for a type.
 	 *
-	 * @param string $type Template type (receipt, report, display).
+	 * @param string $type Template type (receipt, report, display, closure).
 	 *
 	 * @return null|array Default template data or null if none found.
 	 */
@@ -766,7 +805,7 @@ class Templates {
 	/**
 	 * Get the ID of the active template for a type.
 	 *
-	 * @param string $type Template type (receipt, report, display).
+	 * @param string $type Template type (receipt, report, display, closure).
 	 *
 	 * @return null|int|string Active template ID (int for database, string for virtual), or null.
 	 */
@@ -798,7 +837,7 @@ class Templates {
 	 * Get active template for a specific type.
 	 * Returns the full template data.
 	 *
-	 * @param string $type Template type (receipt, report, display).
+	 * @param string $type Template type (receipt, report, display, closure).
 	 *
 	 * @return null|array Active template data or null if not found.
 	 */
@@ -809,35 +848,21 @@ class Templates {
 			return null;
 		}
 
-		// Check if it's a database template (numeric ID).
-		if ( is_numeric( $active_id ) ) {
-			return self::get_template( (int) $active_id );
-		}
-
-		// It's a virtual template.
-		return self::get_virtual_template( $active_id, $type );
+		return self::find_template( $active_id, $type );
 	}
 
 	/**
 	 * Set the active template by ID.
 	 *
 	 * @param int|string $template_id Template ID (int for database, string for virtual).
-	 * @param string     $type        Template type (receipt, report, display).
+	 * @param string     $type        Template type (receipt, report, display, closure).
 	 *
 	 * @return bool True on success, false on failure.
 	 */
 	public static function set_active_template_id( $template_id, string $type = 'receipt' ): bool {
 		// Validate the template exists.
-		if ( is_numeric( $template_id ) ) {
-			$template = self::get_template( (int) $template_id );
-			if ( ! $template ) {
-				return false;
-			}
-		} else {
-			$template = self::get_virtual_template( $template_id, $type );
-			if ( ! $template ) {
-				return false;
-			}
+		if ( null === self::find_template( $template_id, $type ) ) {
+			return false;
 		}
 
 		return update_option( 'wcpos_active_template_' . $type, $template_id );
@@ -862,7 +887,7 @@ class Templates {
 	/**
 	 * Get the stored display order for templates of a given type.
 	 *
-	 * @param string $type Template type (receipt, report, display).
+	 * @param string $type Template type (receipt, report, display, closure).
 	 *
 	 * @return array Ordered array of template IDs (int for database, string for virtual).
 	 */
@@ -880,7 +905,7 @@ class Templates {
 	 * Save the display order for templates of a given type.
 	 *
 	 * @param array  $order Array of template IDs in display order.
-	 * @param string $type  Template type (receipt, report, display).
+	 * @param string $type  Template type (receipt, report, display, closure).
 	 *
 	 * @return bool True on success.
 	 */
@@ -904,7 +929,7 @@ class Templates {
 	/**
 	 * Get the list of disabled virtual template IDs for a given type.
 	 *
-	 * @param string $type Template type (receipt, report, display).
+	 * @param string $type Template type (receipt, report, display, closure).
 	 *
 	 * @return string[] Array of disabled virtual template IDs.
 	 */
@@ -922,7 +947,7 @@ class Templates {
 	 * Check if a virtual template is disabled.
 	 *
 	 * @param string $template_id Virtual template ID.
-	 * @param string $type        Template type (receipt, report, display).
+	 * @param string $type        Template type (receipt, report, display, closure).
 	 *
 	 * @return bool True if disabled.
 	 */
@@ -937,7 +962,7 @@ class Templates {
 	 *
 	 * @param string $template_id Virtual template ID.
 	 * @param bool   $disabled    True to disable, false to enable.
-	 * @param string $type        Template type (receipt, report, display).
+	 * @param string $type        Template type (receipt, report, display, closure).
 	 *
 	 * @return bool True on success.
 	 */
@@ -1139,21 +1164,12 @@ class Templates {
 	/**
 	 * Get available starter/example templates.
 	 *
-	 * Returns metadata for example templates bundled with the plugin.
-	 * These can be installed as custom templates by the user.
+	 * @deprecated No starter templates ship; the template gallery replaced them. Always returns an empty array.
 	 *
 	 * @return array Array of starter template definitions.
 	 */
 	public static function get_starter_templates(): array {
-		$starters = array();
-
-		// Only include starters whose files actually exist.
-		return array_filter(
-			$starters,
-			function ( $starter ) {
-				return file_exists( $starter['file'] );
-			}
-		);
+		return array();
 	}
 
 	/**
@@ -1324,56 +1340,15 @@ class Templates {
 	/**
 	 * Install a starter template as a custom (database) template.
 	 *
+	 * @deprecated See get_starter_templates().
+	 *
 	 * @param string $starter_key Key from get_starter_templates().
 	 *
 	 * @return int|\WP_Error Post ID on success, WP_Error on failure.
 	 */
 	public static function install_starter_template( string $starter_key ) {
-		$starters = self::get_starter_templates();
-
-		if ( ! isset( $starters[ $starter_key ] ) ) {
-			return new \WP_Error( 'invalid_starter', __( 'Starter template not found.', 'woocommerce-pos' ) );
-		}
-
-		$starter = $starters[ $starter_key ];
-		$content = file_get_contents( $starter['file'] );
-
-		if ( false === $content ) {
-			return new \WP_Error( 'read_failed', __( 'Could not read starter template file.', 'woocommerce-pos' ) );
-		}
-
-		$post_id = wp_insert_post(
-			array(
-				'post_title'   => $starter['title'],
-				'post_content' => $content,
-				'post_status'  => 'publish',
-				'post_type'    => 'wcpos_template',
-			),
-			true
-		);
-
-		if ( is_wp_error( $post_id ) ) {
-			return $post_id;
-		}
-
-		wp_set_object_terms( $post_id, $starter['type'], 'wcpos_template_type' );
-		update_post_meta( $post_id, '_template_language', $starter['language'] );
-		update_post_meta( $post_id, '_template_engine', $starter['engine'] );
-		update_post_meta( $post_id, '_template_output_type', 'html' );
-
-		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
-		if ( \in_array( $starter['engine'], self::OFFLINE_CAPABLE_ENGINES, true ) ) {
-			if ( ! self::save_raw_post_content( $post_id, $content ) ) {
-				wp_delete_post( $post_id, true );
-
-				return new \WP_Error(
-					'wcpos_template_content_save_failed',
-					__( 'Template was created but raw content could not be saved.', 'woocommerce-pos' )
-				);
-			}
-		}
-
-		return $post_id;
+		unset( $starter_key );
+		return new \WP_Error( 'invalid_starter', __( 'Starter template not found.', 'woocommerce-pos' ) );
 	}
 
 	/**
@@ -1384,17 +1359,9 @@ class Templates {
 	 * @return int|\WP_Error Post ID on success, WP_Error on failure.
 	 */
 	public static function install_gallery_template( string $gallery_key ) {
-		$gallery_templates = self::get_gallery_templates();
-		$template          = null;
+		$template = self::get_gallery_template_by_key( $gallery_key );
 
-		foreach ( $gallery_templates as $gt ) {
-			if ( $gt['key'] === $gallery_key ) {
-				$template = $gt;
-				break;
-			}
-		}
-
-		if ( ! $template ) {
+		if ( null === $template ) {
 			return new \WP_Error( 'invalid_gallery_key', __( 'Gallery template not found.', 'woocommerce-pos' ) );
 		}
 
@@ -1434,8 +1401,6 @@ class Templates {
 			$language = 'php';
 		}
 		update_post_meta( $post_id, '_template_language', $language );
-		update_post_meta( $post_id, '_template_gallery_key', $gallery_key );
-		update_post_meta( $post_id, '_template_gallery_version', $template['version'] ?? 1 );
 		update_post_meta( $post_id, '_template_tax_display', 'default' );
 
 		if ( ! empty( $template['paper_width'] ) ) {
@@ -1454,16 +1419,16 @@ class Templates {
 			}
 		}
 
-		// Fingerprint what was installed, so a later release can tell an untouched copy (safe to
+		// Record provenance for what was installed, so a later release can tell an untouched copy (safe to
 		// update in place) from one the merchant has edited (theirs; only ever offered).
 		// Must follow the raw save above, which is what finally decides the stored content.
-		Gallery_Update_Status::record_source_hash( $post_id, determine_locale() );
+		Gallery_Update_Status::record_install( $post_id, $gallery_key, (int) ( $template['version'] ?? 1 ), determine_locale() );
 
 		return $post_id;
 	}
 
 	/**
-	 * Register default template types (receipt, report, display).
+	 * Register default template types (receipt, report, display, closure).
 	 *
 	 * @return void
 	 */

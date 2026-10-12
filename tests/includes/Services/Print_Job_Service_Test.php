@@ -15,6 +15,19 @@ use WP_UnitTestCase;
  */
 class Print_Job_Service_Test extends WP_UnitTestCase {
 	/**
+	 * Virtual slugs use the requested type and default to receipts.
+	 */
+	public function test_load_template_resolves_virtual_slug_in_requested_type(): void {
+		// Arrange and act.
+		$closure = Print_Job_Service::load_template( 'plugin-core', 'closure' );
+		$receipt = Print_Job_Service::load_template( 'plugin-core' );
+
+		// Assert.
+		$this->assertSame( 'closure', $closure['type'] );
+		$this->assertSame( 'receipt', $receipt['type'] );
+	}
+
+	/**
 	 * It refuses to cancel a non-print post supplied as a job ID.
 	 */
 	public function test_cancel_if_waiting_refuses_non_print_post(): void {
