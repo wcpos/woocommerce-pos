@@ -160,6 +160,17 @@ class Orders {
 	 * POS orders are also matched by order origin because gateway webhooks and
 	 * reconciliation crons complete payment outside POS requests.
 	 *
+	 * A configured status WooCommerce does not itself call paid is not answered
+	 * while the order already reads as it with no date_paid. Two callers ask:
+	 * WC_Order::maybe_set_date_paid() asks from set_status(), after the status
+	 * prop has moved, and stamps date_paid when has_status( <answer> ) is true —
+	 * so a gateway landing a POS order on its stored pending, on-hold or failed
+	 * status with its own update_status() would book an unpaid sale as revenue.
+	 * Answering '' there fails has_status() and nothing is stamped.
+	 * payment_complete() asks while the order still reads its previous status,
+	 * and has stamped date_paid itself just before, so it gets the configured
+	 * status as before and a real payment is still booked.
+	 *
 	 * @param string            $status Order status.
 	 * @param int               $id     Order ID.
 	 * @param WC_Abstract_Order $order  The order object.
@@ -168,7 +179,17 @@ class Orders {
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
 		if ( woocommerce_pos_request() || woocommerce_pos_is_pos_order( $order ) ) {
-			return $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
+			$configured = $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
+
+			if (
+				$order->get_status() === $configured
+				&& ! $order->get_date_paid( 'edit' )
+				&& ! \in_array( $configured, wc_get_is_paid_statuses(), true )
+			) {
+				return '';
+			}
+
+			return $configured;
 		}
 
 		return $status;
