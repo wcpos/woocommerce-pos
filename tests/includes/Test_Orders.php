@@ -1799,6 +1799,160 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Data provider: stored statuses WooCommerce does not call paid, as a gateway
+	 * with no dedicated suppression would land them.
+	 *
+	 * @return array[]
+	 */
+	public function stored_unpaid_status_provider(): array {
+		return array(
+			'pending'   => array( 'wc-pending', 'pending' ),
+			'on-hold'   => array( 'wc-on-hold', 'on-hold' ),
+			'failed'    => array( 'wc-failed', 'failed' ),
+			'cancelled' => array( 'wc-cancelled', 'cancelled' ),
+		);
+	}
+
+	/**
+	 * Any gateway that lands a POS order on its stored unpaid status with its own
+	 * update_status() must not stamp date_paid.
+	 *
+	 * Only bacs, cheque and cod have a dedicated suppression; a third-party
+	 * gateway's update_status() on the order-pay page reaches
+	 * WC_Order::maybe_set_date_paid() after the status prop has moved, where
+	 * payment_complete_order_status() used to answer the stored status and
+	 * WooCommerce stamped date_paid on a sale nobody paid.
+	 *
+	 * @dataProvider stored_unpaid_status_provider
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::payment_complete_order_status
+	 *
+	 * @param string $configured The stored POS status, with prefix.
+	 * @param string $expected   The status the order lands on.
+	 */
+	public function test_gateway_landing_pos_order_on_stored_unpaid_status_does_not_stamp_date_paid( string $configured, string $expected ): void {
+		$this->with_stub_gateway(
+			'acme_invoice',
+			array( 'products' ),
+			function () use ( $configured, $expected ): void {
+				// Arrange.
+				$this->set_gateway_settings( 'acme_invoice', $configured );
+				$order = $this->create_pos_order( 'pos-open' );
+				$order->set_payment_method( 'acme_invoice' );
+				$order->save();
+
+				$_REQUEST['pos']         = '1';
+				$_SERVER['HTTP_X_WCPOS'] = '1';
+
+				// Act: what a third-party gateway's process_payment() does.
+				$order->update_status( $expected, 'Awaiting payment' );
+
+				// Assert.
+				$fresh = wc_get_order( $order->get_id() );
+				$this->assertSame( $expected, $fresh->get_status() );
+				$this->assertNull( $fresh->get_date_paid( 'edit' ), 'No money was taken, so date_paid must stay unset.' );
+			}
+		);
+	}
+
+	/**
+	 * The answer to payment_complete() is unchanged: it asks while the order still
+	 * reads pos-open and has stamped date_paid itself, so a stored unpaid status
+	 * still books a real payment and the order still lands on the stored status.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::payment_complete_order_status
+	 */
+	public function test_payment_complete_with_stored_unpaid_status_still_stamps_date_paid(): void {
+		$this->with_stub_gateway(
+			'acme_invoice',
+			array( 'products' ),
+			function (): void {
+				// Arrange.
+				$this->set_gateway_settings( 'acme_invoice', 'wc-pending' );
+				$order = $this->create_pos_order( 'pos-open' );
+				$order->set_payment_method( 'acme_invoice' );
+				$order->save();
+
+				$_REQUEST['pos']         = '1';
+				$_SERVER['HTTP_X_WCPOS'] = '1';
+
+				// Act.
+				$order->payment_complete( 'txn_123' );
+
+				// Assert.
+				$fresh = wc_get_order( $order->get_id() );
+				$this->assertSame( 'pending', $fresh->get_status(), 'payment_complete() still lands on the stored status.' );
+				$this->assertNotNull( $fresh->get_date_paid( 'edit' ), 'payment_complete() books the payment itself.' );
+			}
+		);
+	}
+
+	/**
+	 * A payment_complete() on an order already sitting on its stored unpaid status
+	 * (an async gateway's webhook confirming an on-hold order) keeps that status:
+	 * date_paid is already stamped when the filter is asked, so the stored status
+	 * is answered and set_status() is not handed '' to fall back to pending.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::payment_complete_order_status
+	 */
+	public function test_payment_complete_on_order_already_on_stored_unpaid_status_keeps_that_status(): void {
+		$this->with_stub_gateway(
+			'acme_invoice',
+			array( 'products' ),
+			function (): void {
+				// Arrange.
+				$this->set_gateway_settings( 'acme_invoice', 'wc-on-hold' );
+				$order = $this->create_pos_order( 'on-hold' );
+				$order->set_payment_method( 'acme_invoice' );
+				$order->save();
+				$this->assertNull( wc_get_order( $order->get_id() )->get_date_paid( 'edit' ) );
+
+				$_REQUEST['pos']         = '1';
+				$_SERVER['HTTP_X_WCPOS'] = '1';
+
+				// Act.
+				$order->payment_complete( 'txn_456' );
+
+				// Assert.
+				$fresh = wc_get_order( $order->get_id() );
+				$this->assertSame( 'on-hold', $fresh->get_status(), 'The order must not fall back to pending.' );
+				$this->assertNotNull( $fresh->get_date_paid( 'edit' ) );
+			}
+		);
+	}
+
+	/**
+	 * A stored status WooCommerce itself calls paid is unchanged: landing on it
+	 * stamps date_paid, as core does.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::payment_complete_order_status
+	 */
+	public function test_gateway_landing_pos_order_on_stored_paid_status_still_stamps_date_paid(): void {
+		$this->with_stub_gateway(
+			'acme_invoice',
+			array( 'products' ),
+			function (): void {
+				// Arrange.
+				$this->set_gateway_settings( 'acme_invoice', 'wc-completed' );
+				$order = $this->create_pos_order( 'pos-open' );
+				$order->set_payment_method( 'acme_invoice' );
+				$order->save();
+
+				$_REQUEST['pos']         = '1';
+				$_SERVER['HTTP_X_WCPOS'] = '1';
+
+				// Act.
+				$order->update_status( 'completed' );
+
+				// Assert.
+				$fresh = wc_get_order( $order->get_id() );
+				$this->assertSame( 'completed', $fresh->get_status() );
+				$this->assertNotNull( $fresh->get_date_paid( 'edit' ), 'A paid status keeps WooCommerce\'s own date_paid stamp.' );
+			}
+		);
+	}
+
+	/**
 	 * The suppression lasts for the gateway's status write only; it must not sit on
 	 * the filter afterwards, where it would reach a later payment on the same order.
 	 *
