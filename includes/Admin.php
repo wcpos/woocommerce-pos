@@ -134,14 +134,6 @@ class Admin {
 	 * @param WP_Screen $current_screen Current screen object.
 	 */
 	public function current_screen( $current_screen ): void {
-		/*
-		 * Backwards compatibility for WCPOS Pro 1.4.2 and below.
-		 * DO NOT USE THIS!
-		 *
-		 * @TODO: Remove in WCPOS 2.0.0.
-		 */
-		$this->screen_handlers['product'] = apply_filters( 'woocommerce_pos_single_product_admin_class', Single_Product::class );
-
 		/**
 		 * Filters the screen handlers for WCPOS admin screens.
 		 *

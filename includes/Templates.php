@@ -1130,6 +1130,8 @@ class Templates {
 	 * One-time migration: move the active template to first position in the order,
 	 * then delete the wcpos_active_template_{type} option.
 	 *
+	 * @deprecated 2.0.0 No callers in WCPOS or WCPOS Pro; removal pending a maintainer ruling.
+	 *
 	 * @param string $type Template type.
 	 */
 	public static function migrate_active_template_to_order( string $type = 'receipt' ): void {
@@ -1166,6 +1168,7 @@ class Templates {
 	 *
 	 * @deprecated No starter templates ship; the template gallery replaced them. Always returns an empty array.
 	 *
+	 * @deprecated 2.0.0 No callers in WCPOS or WCPOS Pro; removal pending a maintainer ruling.
 	 * @return array Array of starter template definitions.
 	 */
 	public static function get_starter_templates(): array {

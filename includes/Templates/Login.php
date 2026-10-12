@@ -79,7 +79,6 @@ class Login {
 			wcpos_get_stores()
 		);
 		$user_data['stores'] = $stores;
-		$credentials = wp_json_encode( $user_data );
 
 		echo '<script>
 	(function() {
