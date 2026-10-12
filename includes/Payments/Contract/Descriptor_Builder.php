@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Payment_Gateway;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 
 /** Builds the v1 payment method contract from registered gateways. */
 class Descriptor_Builder {
@@ -150,6 +151,12 @@ class Descriptor_Builder {
 	private function build( WC_Payment_Gateway $gateway, array $settings ): array {
 		$gateway_settings = (array) ( $settings['gateways'][ $gateway->id ] ?? array() );
 		$kind             = self::resolve_kind( $gateway );
+		$increment        = $gateway_settings['rounding_increment'] ?? '';
+		$rounding         = 'cash' === $kind && '' !== $increment && in_array( $increment, Payment_Gateways_Section::ROUNDING_INCREMENTS, true )
+			? array(
+				'increment' => $increment,
+				'mode'      => 'nearest',
+			) : null;
 		// The filter may answer with a provider-scoped key (`device:stripe`); the
 		// wire mode stays bare and the provider only steers the handler lookup.
 		$mode_key         = self::resolve_mode( $gateway );
@@ -208,7 +215,7 @@ class Descriptor_Builder {
 			),
 			'defaults'      => array(
 				'order_status' => $order_status ? $order_status : 'completed',
-				'rounding' => null,
+				'rounding' => $rounding,
 				'open_drawer' => 'cash' === $kind,
 			),
 			'provider_data' => empty( $provider_data ) ? new \stdClass() : $provider_data,

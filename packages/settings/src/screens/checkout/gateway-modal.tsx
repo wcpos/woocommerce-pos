@@ -13,6 +13,9 @@ interface GatewayModalProps {
 function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 	const [title, setTitle] = React.useState(gateway.title);
 	const [description, setDescription] = React.useState(gateway.description);
+	const [roundingIncrement, setRoundingIncrement] = React.useState(
+		gateway.rounding_increment ?? ''
+	);
 	const inputRef = React.useRef();
 
 	const handleSave = () => {
@@ -21,6 +24,7 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 				[gateway.id]: {
 					title,
 					description,
+					...(gateway.kind === 'cash' ? { rounding_increment: roundingIncrement } : {}),
 				},
 			},
 		});
@@ -84,6 +88,31 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 					className="wcpos:w-full wcpos:h-20 wcpos:p-2 wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color"
 				/>
 			</div>
+			{gateway.kind === 'cash' && (
+				<div className="wcpos:py-2">
+					<label
+						htmlFor="rounding_increment"
+						className="wcpos:block wcpos:mb-1 wcpos:font-medium wcpos:text-sm"
+					>
+						{t('checkout.rounding')}
+					</label>
+					<select
+						id="rounding_increment"
+						name="rounding_increment"
+						value={roundingIncrement}
+						onChange={(event) => setRoundingIncrement(event.target.value)}
+						className="wcpos:w-full wcpos:p-2 wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color"
+					>
+						<option value="">{t('checkout.no_rounding')}</option>
+						{['0.05', '0.10', '0.25', '0.50', '1', '5', '10'].map((increment) => (
+							<option key={increment} value={increment}>
+								{increment}
+							</option>
+						))}
+					</select>
+					<p className="wcpos:text-sm wcpos:text-gray-500">{t('checkout.rounding_tip')}</p>
+				</div>
+			)}
 			<div className="wcpos:text-right wcpos:pt-4 wcpos:flex wcpos:justify-end wcpos:gap-2">
 				<Button onClick={closeModal}>{t('common.cancel')}</Button>
 				<Button variant="primary" onClick={handleSave}>
