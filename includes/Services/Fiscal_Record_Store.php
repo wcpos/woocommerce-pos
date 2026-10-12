@@ -259,8 +259,8 @@ final class Fiscal_Record_Store {
 				return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to read register documents.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
 			}
 			$row = 'closure' === $match[1] ? ( new Closure_Store() )->get( strtolower( $match[2] ) ) : ( new Register_Session_Store() )->get( strtolower( $match[2] ) );
-			$scope = apply_filters( 'woocommerce_pos_closures_list_args', array(), $request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/closures' ) );
-			if ( ! current_user_can( 'access_woocommerce_pos' ) || ! $row || ( array_key_exists( 'store_id', $scope ) && ! in_array( (int) $row['store_id'], array_map( 'intval', (array) $scope['store_id'] ), true ) ) || ( 'xreport' === $match[1] && ! in_array( $row['status'], array( 'open', 'counting' ), true ) ) ) {
+			$reach = Store_Reach::for_request( $request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/closures' ) );
+			if ( ! current_user_can( 'access_woocommerce_pos' ) || ! $row || ! $reach->admits( $row['store_id'] ) || ( 'xreport' === $match[1] && ! in_array( $row['status'], array( 'open', 'counting' ), true ) ) ) {
 				return new \WP_Error( 'wcpos_receipt_document_missing', __( 'Receipt document not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 			}
 			return ( new Receipt_Data_Builder() )->build_closure_document( $row, 'xreport' === $match[1] );

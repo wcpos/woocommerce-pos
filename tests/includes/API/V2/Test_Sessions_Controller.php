@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Session and movement REST contracts. */
@@ -813,5 +814,40 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->post( $route, $close );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
+	}
+	/** Session details, movements and lists all honor the same reach. */
+	public function test_session_read_outside_store_reach_reads_as_absent(): void {
+		// Arrange: create directly; POST store sourcing is not under test.
+		$fields = $this->fields();
+		$row = ( new Register_Session_Store() )->create(
+			array(
+				'id' => $fields['id'],
+				'register_id' => $fields['register_id'],
+				'store_id' => 456,
+				'opened_at_gmt' => '2026-09-11 08:00:00',
+				'opened_by' => get_current_user_id(),
+				'expected_float' => null,
+				'counted_float' => '100',
+			)
+		);
+		$filter = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			foreach ( array( '', '/movements' ) as $suffix ) {
+				// Act.
+				$absent = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . wp_generate_uuid4() . $suffix ) );
+				$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $row['id'] . $suffix ) );
+				// Assert.
+				$this->assertSame( $absent->get_status(), $response->get_status() );
+				$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+			}
+			$list = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions' ) );
+			$this->assertSame( 200, $list->get_status() );
+			$this->assertNotContains( $row['id'], array_column( $list->get_data(), 'id' ) );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
 	}
 }

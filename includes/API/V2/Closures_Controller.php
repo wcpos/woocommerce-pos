@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\API\V1\Raw_Response;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Closure_Csv;
@@ -141,7 +142,8 @@ class Closures_Controller extends \WP_REST_Controller {
 
 			if ( null !== $id ) {
 				$row = $store->get( $id );
-				if ( ! $row ) {
+				// Out of reach answers exactly as absent, before any print, recount or correction read.
+				if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 					return $this->error( 'wcpos_closure_not_found', 404 );
 				}
 				if ( '/print' === substr( $route, -6 ) ) {
@@ -174,6 +176,7 @@ class Closures_Controller extends \WP_REST_Controller {
 				if ( is_wp_error( $args ) ) {
 					return $args;
 				}
+				$args = Store_Reach::for_request( $request )->narrow( $args );
 				if ( '/last' === substr( $route, -5 ) ) {
 					if ( empty( $args['register_id'] ) ) {
 						return $this->error( 'rest_invalid_param', 400 );
@@ -211,47 +214,20 @@ class Closures_Controller extends \WP_REST_Controller {
 		}
 	}
 
-	/** Download recorded figures without applying corrections or list filters.
-	 *
-	 * "The whole set" means no caller-supplied filters — but an extension's store
-	 * scoping is an authorization boundary, not a browsing filter. Pro restricts a
-	 * manager to its authorized stores through this filter, and
-	 * Fiscal_Record_Store::resolve_document() enforces the same scope on a single
-	 * document read, so an export that skipped it would be a way around both.
-	 * Resolved from an empty base so the caller's own query params are still ignored.
+	/** Export the whole set within store reach, ignoring caller filters.
 	 *
 	 * @param Closure_Store    $store Closure store.
 	 * @param \WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error
 	 */
 	private function export( Closure_Store $store, $request ) {
-		$scope = apply_filters( 'woocommerce_pos_closures_list_args', array(), $request );
-		if ( \is_array( $scope ) && ! $this->scope_store_ids_are_valid( $scope ) ) {
-			// The container being an array is not enough: a store restriction whose
-			// VALUE is malformed is an unreadable restriction, and an unreadable
-			// restriction must not be treated as an absent one. Today the predicate
-			// is rendered in SQL, where a bad value matches little and never NULL —
-			// but that safety is incidental to Closure_Store::list(), not stated
-			// here, so it is stated here instead of relied upon.
-			Logger::warning(
-				'Closure export refused: woocommerce_pos_closures_list_args returned a malformed store scope.',
-				array( 'store_id' => wp_json_encode( $scope['store_id'] ?? null ) )
-			);
-			return $this->error( 'wcpos_closure_export_failed', 500 );
-		}
-		if ( ! \is_array( $scope ) ) {
-			// A filter that returns a non-array has malfunctioned. Treating that as
-			// "no scope" would export every store's closures at exactly the moment
-			// something is wrong, so refuse instead — an export is never urgent
-			// enough to serve unscoped.
-			Logger::warning(
-				'Closure export refused: woocommerce_pos_closures_list_args returned a non-array scope.',
-				array( 'type' => \gettype( $scope ) )
-			);
+		$reach = Store_Reach::for_request( $request );
+		if ( $reach->is_malformed() ) {
+			// Store_Reach has logged the unreadable answer; an export is never urgent enough to serve unscoped.
 			return $this->error( 'wcpos_closure_export_failed', 500 );
 		}
 		try {
-			$csv = ( new Closure_Csv() )->build( $store, $scope );
+			$csv = ( new Closure_Csv() )->build( $store, $reach->narrow( array() ) );
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_closure_export_failed', 500 );
 		}
@@ -268,31 +244,6 @@ class Closures_Controller extends \WP_REST_Controller {
 				'Cache-Control' => 'no-store',
 			)
 		);
-	}
-
-	/** Every store id in an export scope must be a positive integer.
-	 *
-	 * An empty array is valid and means no store is permitted — that is a real
-	 * restriction, not a malformed one, and it correctly yields an empty export.
-	 *
-	 * @param array $scope Scope from woocommerce_pos_closures_list_args.
-	 */
-	private function scope_store_ids_are_valid( array $scope ): bool {
-		if ( ! \array_key_exists( 'store_id', $scope ) ) {
-			return true;
-		}
-		$ids = \is_array( $scope['store_id'] ) ? $scope['store_id'] : array( $scope['store_id'] );
-		foreach ( $ids as $id ) {
-			// Not is_scalar(): true and 1.0 both stringify to "1" and would pass the
-			// pattern, so a malformed scope would silently export store 1 — the same
-			// fail-open this validator exists to prevent, one type deeper.
-			$valid = ( \is_int( $id ) && $id > 0 )
-				|| ( \is_string( $id ) && 1 === preg_match( '/^[1-9]\d{0,17}$/D', $id ) );
-			if ( ! $valid ) {
-				return false;
-			}
-		}
-		return true;
 	}
 
 	/** Validate the immutable client fields, excluding server-owned columns.
@@ -380,7 +331,7 @@ class Closures_Controller extends \WP_REST_Controller {
 		return Closure_Store::sum( array( $value ) );
 	}
 
-	/** Validate list filters before the Pro scoping seam.
+	/** Validate list filters; Store_Reach narrows them in dispatch().
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return array|WP_Error
@@ -408,7 +359,7 @@ class Closures_Controller extends \WP_REST_Controller {
 			}
 			$args[ $key ] = $value;
 		}
-		return apply_filters( 'woocommerce_pos_closures_list_args', $args, $request );
+		return $args;
 	}
 
 	/** Shared closure error envelope.

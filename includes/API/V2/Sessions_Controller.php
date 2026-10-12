@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
@@ -83,7 +84,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$request->set_param( 'id', strtolower( $request['id'] ) );
 			$movement = '/wcpos/v2/movements' === rtrim( $request->get_route(), '/' );
 			$store = $movement ? new Cash_Movement_Store() : new Register_Session_Store();
-			/** Filter a directly addressed session or movement row; Pro returns null outside the caller's stores. */
+			/** Filter a directly addressed session or movement row on the write routes; nothing hooks it today. Read routes are checked by Store_Reach. */
 			$row = apply_filters( 'woocommerce_pos_session_row', $store->get( $request['id'] ), $request );
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
@@ -111,8 +112,9 @@ class Sessions_Controller extends \WP_REST_Controller {
 	private function read( $request ) {
 		$store = new Register_Session_Store();
 		if ( $request['id'] ) {
-			$row = apply_filters( 'woocommerce_pos_session_row', $store->get( strtolower( $request['id'] ) ), $request );
-			if ( ! $row ) {
+			$row = $store->get( strtolower( $request['id'] ) );
+			// Out of reach answers exactly as absent, before the movements or figures are read.
+			if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
 			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
@@ -148,7 +150,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			}
 			$args['register_id'] = strtolower( $request['register_id'] );
 		}
-		return new WP_REST_Response( $store->list( apply_filters( 'woocommerce_pos_sessions_list_args', $args, $request ) ) );
+		return new WP_REST_Response( $store->list( Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_sessions_list_args', $args, $request ) ) ) );
 	}
 
 	/** Validate an opening, retaining only the scoped store id from extensions.

@@ -1,16 +1,28 @@
 <?php
-/** Registers REST tests. @package WCPOS\WooCommercePOS\Tests\API\V2 */
+/**
+ * Registers REST tests.
+ *
+ * @package WCPOS\WooCommercePOS\Tests\API\V2
+ */
+
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Register_Store;
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
+/** Registers routing, permissions and store reach. */
 class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
+	/** Install register storage before each test. */
 	public function setUp(): void {
 		parent::setUp();
 		( new Register_Store() )->install();
 	}
 
+	/** Create a register through REST.
+	 *
+	 * @param array $fields Register fields.
+	 */
 	private function post_register( array $fields ) {
 		$request = $this->wp_rest_post_request( '/wcpos/v2/registers' );
 		$request->set_body_params( $fields );
@@ -107,11 +119,19 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 123, $response->get_data()['store_id'] );
 	}
 
+	/** Patch requires manager and list defaults to active. */
 	public function test_patch_requires_manager_and_list_defaults_to_active(): void {
 		$id = $this->post_register( array( 'name' => 'Front' ) )->get_data()['id'];
 		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $id );
 		$request->set_method( 'PATCH' );
-		$request->set_body_params( array( 'name' => 'Back', 'status' => 'retired', 'default_float' => '12.50', 'store_id' => 99 ) );
+		$request->set_body_params(
+			array(
+				'name' => 'Back',
+				'status' => 'retired',
+				'default_float' => '12.50',
+				'store_id' => 99,
+			)
+		);
 		$cashier = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		get_user_by( 'id', $cashier )->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $cashier );
@@ -129,12 +149,14 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( $id, array_column( $this->server->dispatch( $list )->get_data(), 'id' ) );
 	}
 
+	/** Unknown register returns 404. */
 	public function test_unknown_register_returns_404(): void {
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/' . wp_generate_uuid4() ) );
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'wcpos_register_not_found', $response->get_data()['code'] );
 	}
 
+	/** Health pos user receives diagnostics. */
 	public function test_health_pos_user_receives_diagnostics(): void {
 		$cashier = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		get_user_by( 'id', $cashier )->add_cap( 'access_woocommerce_pos' );
@@ -145,12 +167,14 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'unregistered', $response->get_data() );
 	}
 
+	/** Health without pos access returns forbidden. */
 	public function test_health_without_pos_access_returns_forbidden(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	/** Health literal is not an item id and is protocol exempt. */
 	public function test_health_literal_is_not_an_item_id_and_is_protocol_exempt(): void {
 		$routes = $this->server->get_routes();
 		$this->assertArrayHasKey( '/wcpos/v2/registers/health', $routes );
@@ -165,6 +189,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $classifier->is_protocol_exempt( '/wcpos/v2/registers/health' ) );
 	}
 
+	/** Health includes retired registers and applies store scope. */
 	public function test_health_includes_retired_registers_and_applies_store_scope(): void {
 		$store = new Register_Store();
 		$id = $store->create(
@@ -196,6 +221,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $id ), array_column( $response->get_data()['registers'], 'id' ) );
 	}
 
+	/** Health options describes diagnostics not register item. */
 	public function test_health_options_describes_diagnostics_not_register_item(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/registers/health' );
 		$request->set_method( 'OPTIONS' );
@@ -209,6 +235,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'status', $properties );
 	}
 
+	/** Health scope keeps global known ids and filters order stores. */
 	public function test_health_scope_keeps_global_known_ids_and_filters_order_stores(): void {
 		$unknown = wp_generate_uuid4();
 		$store = new Register_Store();
@@ -246,5 +273,70 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, $report['registers'][0]['orders'] );
 		$this->assertNotContains( $other, array_column( $report['unregistered'], 'register_id' ) );
 		$this->assertNotContains( $unknown, array_column( $report['unregistered'], 'register_id' ) );
+	}
+	/** Neither GET nor PATCH reveals or edits an unreachable register. */
+	public function test_register_item_outside_store_reach_reads_as_absent(): void {
+		// Arrange.
+		$store = new Register_Store();
+		$row = $store->create(
+			array(
+				'name' => 'Original',
+				'store_id' => 456,
+			)
+		);
+		$filter = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			foreach ( array( 'wp_rest_get_request', 'wp_rest_patch_request' ) as $method ) {
+				// Act.
+				$absent_request = $this->$method( '/wcpos/v2/registers/' . wp_generate_uuid4() );
+				$request = $this->$method( '/wcpos/v2/registers/' . $row['id'] );
+				if ( 'wp_rest_patch_request' === $method ) {
+					$absent_request->set_method( 'PATCH' );
+					$request->set_method( 'PATCH' );
+				}
+				$absent_request->set_param( 'name', 'Renamed' );
+				$request->set_param( 'name', 'Renamed' );
+				$absent = $this->server->dispatch( $absent_request );
+				$response = $this->server->dispatch( $request );
+				// Assert.
+				$this->assertSame( $absent->get_status(), $response->get_status() );
+				$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+			}
+			$this->assertSame( 'Original', $store->get( $row['id'] )['name'] );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
+	}
+
+	/** The register SQL list accepts the reach's array of allowed stores. */
+	public function test_register_list_is_narrowed_to_store_reach(): void {
+		// Arrange.
+		$store = new Register_Store();
+		foreach ( array( 456, 789 ) as $store_id ) {
+			$row = $store->create(
+				array(
+					'name' => 'Store ' . $store_id,
+					'store_id' => $store_id,
+				)
+			);
+		}
+		$filter = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			// Act.
+			$request = $this->wp_rest_get_request( '/wcpos/v2/registers' );
+			$request->set_param( 'status', 'all' );
+			$response = $this->server->dispatch( $request );
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( array( $row['id'] ), array_column( $response->get_data(), 'id' ) );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
 	}
 }

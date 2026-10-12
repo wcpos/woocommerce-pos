@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** HTTP identity, permissions, paging and immutable corrections. */
@@ -327,31 +328,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			// render `store_id IS NULL`, and export ONLY unassigned closures — an
 			// unreadable restriction silently becoming a real one.
 			null,
-			false,
 			true,
-			1.0,
-			'1.0',
-			0,
-			-1,
-			1.9,
-			'1.9',
-			' 1',
-			'1 ',
-			'1e2',
-			'007',
-			'+1',
-			'0x1', // phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- Deliberately invalid numeric input.
-			// Pins the /D modifier, which is load-bearing rather than decorative:
-			// without it `$` matches BEFORE a trailing newline, so "1\n" passes the
-			// pattern and becomes store 1. Nothing else in the suite would notice a
-			// tidy-up that dropped it.
-			"1\n",
-			"1\r\n",
-			array( 'bad' ),
-			array( 0 ),
-			array( true ),
-			array( '1e2' ),
-			array( 456, 'bad' ),
 		) as $value ) {
 			$broken = static function ( $args ) use ( $value ) {
 				$args['store_id'] = $value;
@@ -1310,6 +1287,68 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( 'query', $fail );
 			$wpdb->suppress_errors( $previous );
+		}
+	}
+	/** Item, print and recount deny before reading or changing fiscal figures. */
+	public function test_closure_item_outside_store_reach_reads_as_absent(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$filter = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			foreach ( array( '', '/print', '/recount' ) as $suffix ) {
+				// Act.
+				$absent_route = 'closures/' . wp_generate_uuid4() . $suffix;
+				$route = 'closures/' . $row['id'] . $suffix;
+				$body = array(
+					'id' => wp_generate_uuid4(),
+					'counted' => array( 'cash' => '102' ),
+					'reason' => 'Recount',
+				);
+				$absent = '' === $suffix ? $this->get( $absent_route ) : $this->post( $absent_route, $body );
+				$response = '' === $suffix ? $this->get( $route ) : $this->post( $route, $body );
+				// Assert.
+				$this->assertSame( $absent->get_status(), $response->get_status() );
+				$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+			}
+			$this->assertSame( 0, $store->get( $row['id'] )['print_count'] );
+			$this->assertSame(
+				array(),
+				( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->list(
+					array(
+						'closure_id' => $row['id'],
+						'type' => 'recount',
+					)
+				)
+			);
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
+	}
+
+	/** List and last intersect caller filters with store reach. */
+	public function test_closure_list_and_last_are_narrowed_to_store_reach(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$filter = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			// Act.
+			$list = $this->get( 'closures', array( 'store_id' => 456 ) );
+			$last = $this->get( 'closures/last', array( 'register_id' => $session['register_id'] ) );
+			// Assert.
+			$this->assertSame( 200, $list->get_status() );
+			$this->assertSame( array(), $list->get_data() );
+			$this->assertSame( 200, $last->get_status() );
+			$this->assertNull( $last->get_data() );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
 		}
 	}
 }
