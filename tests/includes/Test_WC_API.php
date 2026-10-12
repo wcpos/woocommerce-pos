@@ -4,6 +4,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Products;
 use WCPOS\WooCommercePOS\WC_API;
 use WP_REST_Request;
 
@@ -75,6 +76,78 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( $visible_product->get_id(), $data[0]['id'] );
 
 		delete_option( 'woocommerce_pos_settings_visibility' );
+	}
+
+	/**
+	 * WooCommerce Analytics reads the catalogue through the wc-analytics namespace
+	 * (its category filter calls wc_get_products() mid-request). That is the
+	 * merchant reporting on their shop, so POS Only products must be listed there
+	 * even though the request is neither wp-admin nor a POS request.
+	 */
+	public function test_pos_only_products_listed_on_wc_analytics_products_route(): void {
+		// Arrange.
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+
+				return $settings;
+			}
+		);
+		new Products(); // reinstantiate so the constructor sees the setting.
+		new WC_API();
+
+		$visible_product = ProductHelper::create_simple_product();
+		$hidden_product  = ProductHelper::create_simple_product();
+		$this->set_pos_only_product_ids( array( $hidden_product->get_id() ) );
+
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+		$store_request = new WP_REST_Request( 'GET', '/wc/v3/products' );
+		$store_request->set_param( 'per_page', 100 );
+		$analytics_request = new WP_REST_Request( 'GET', '/wc-analytics/products' );
+		$analytics_request->set_param( 'per_page', 100 );
+
+		// Act.
+		$store_response     = $this->server->dispatch( $store_request );
+		$analytics_response = $this->server->dispatch( $analytics_request );
+
+		// Assert: the same product list is filtered on the public API and complete for Analytics.
+		$this->assertSame( 200, $store_response->get_status() );
+		$store_ids = wp_list_pluck( $store_response->get_data(), 'id' );
+		$this->assertContains( $visible_product->get_id(), $store_ids );
+		$this->assertNotContains( $hidden_product->get_id(), $store_ids, 'The public API still hides POS Only products.' );
+
+		$this->assertSame( 200, $analytics_response->get_status() );
+		$analytics_ids = wp_list_pluck( $analytics_response->get_data(), 'id' );
+		$this->assertContains( $visible_product->get_id(), $analytics_ids );
+		$this->assertContains( $hidden_product->get_id(), $analytics_ids, 'Analytics must see POS Only products.' );
+
+		delete_option( 'woocommerce_pos_settings_visibility' );
+	}
+
+	/**
+	 * Store a POS Only product id list the way the settings screen does.
+	 *
+	 * @param int[] $ids Product ids.
+	 */
+	private function set_pos_only_product_ids( array $ids ): void {
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products'   => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => $ids ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array() ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+			)
+		);
 	}
 
 	/**
