@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.25
+Stable tag: 1.10.26
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,13 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.26 - 2026/10/12 =
+
+- **A sale through a gateway set to land on Pending payment or On hold now closes at the till.** The pay window no longer hangs on a checkmark with the order left in the cart; once the order reaches the status you stored for that gateway, the sale is done. Failed, cancelled and parked orders never close this way.
+- **A bank-transfer, cheque or cash-on-delivery sale set to land on an unpaid status is no longer marked as paid.** Such an order was stamped with a paid date and counted as revenue in Analytics while nothing had been paid; it now stays unpaid until payment is recorded.
+- **A server error quoted on the Logs screen keeps its comparison operators.** Only real HTML tags are stripped from the quoted text now.
+- Updates the bundled Sentry PHP SDK to 4.33.2.
 
 = 1.10.25 - 2026/10/08 =
 
