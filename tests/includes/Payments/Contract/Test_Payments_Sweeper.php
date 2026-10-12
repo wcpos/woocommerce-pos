@@ -107,6 +107,26 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertSame( 'pos-partial', wc_get_order( $stale->get_id() )->get_status() );
 	}
 
+	/**
+	 * Writing another leg must not postpone polling a stale leg.
+	 */
+	public function test_sweeper_polls_a_stale_leg_after_another_leg_on_the_order_was_written(): void {
+		list( $order, $id ) = $this->leg( 600 );
+		$rows              = Ledger::instance()->read( $order );
+		$rows[]            = array(
+			'id'           => wp_generate_uuid4(),
+			'method_id'    => 'pos_cash',
+			'capture_mode' => 'manual',
+			'amount'       => '1.00',
+			'status'       => 'captured',
+		);
+		Ledger::instance()->save( $order, $rows );
+
+		( new Payments_Sweeper() )->run();
+
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+	}
+
 	public function test_sweeper_expired_live_row_is_voided_after_status(): void {
 		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
 		list( $order, $id ) = $this->leg( 600, array( 'expires_at' => gmdate( 'c', time() - 60 ) ) );
