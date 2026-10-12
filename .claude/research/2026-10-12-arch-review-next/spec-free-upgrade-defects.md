@@ -30,12 +30,19 @@ In `woocommerce_pos_uninstall_cron_hooks()` (`:64-78`), insert one line after `'
 In the `woocommerce_init` closure inside `version_check()` (`:475-498`), insert a `catch` between the `try` block and `} finally {` (currently `:493`):
 ```php
 				} catch ( \RuntimeException $error ) {
-					// The schema latch keeps its old value, so the next request retries.
-					// Re-throwing would fatal every request until the database is fixed.
+					// Re-throwing would fatal every request until the database is fixed. The schema
+					// latch keeps its old value on its own; the plugin-version latch was bumped above,
+					// so put it back too, or a failed fiscal-store install after the versioned files
+					// would never be re-detected and the fiscal schema would stay stale for good.
+					if ( $locked_plugin_needs_upgrade ) {
+						update_option( 'woocommerce_pos_db_version', $locked_old );
+					}
 					Logger::error( 'WCPOS database upgrade failed: ' . $error->getMessage() );
 				} finally {
 ```
 `Logger` resolves as `WCPOS\WooCommercePOS\Logger`, because `Activator` sits in that namespace, so no `use` is needed. `Logger::error( $message, $context = null )` is at `includes/Logger.php:206`.
+
+Why the latch restore (review finding on #2183, applied): `Settings::bump_versions()` runs before the closure, so with the sync schema already current a throw after the versioned files (for example `Fiscal_Record_Store::install()` refused an `ALTER`) would leave both latches current and `version_check()` would never retry. Restoring the pre-upgrade plugin version keeps the failure eligible for retry; the second test below pins it.
 
 ### Static-analysis constant (same PR, one line)
 `phpstan-constants.php:41`: change `'5.3'` to `'9.0'` to match `woocommerce-pos.php:68`. This is static-analysis only.
@@ -68,6 +75,9 @@ In the `woocommerce_init` closure inside `version_check()` (`:475-498`), insert 
      - No exception escaped. The test simply reaches its assertions; before the fix, the `RuntimeException( 'Business day upgrade read failed.' )` fails the test.
      - `assertSame( '6', get_option( Api::SCHEMA_OPTION, null ) )`.
      - `assertFalse( get_option( 'woocommerce_pos_db_upgrade_lock.lock', false ) )`, meaning the lock was released.
+     - Capture `woocommerce_pos_logging` (the filter receives `( $enabled, $message )`) and assert exactly one message contains `WCPOS database upgrade failed: Business day upgrade read failed.`, so removing the `Logger::error()` call fails the test.
+
+3. `tests/includes/Sync/Test_Sync_Install.php`: add `test_version_check_failed_upgrade_restores_the_plugin_version_latch()` — the same arrange and the same breaking filter, but with `woocommerce_pos_db_version` set to an old version (`'1.10.0'`) so the plugin-upgrade path runs. After invoking `version_check` and before `do_action( 'woocommerce_init' )`, assert the latch already reads `VERSION` (bump_versions() ran). After the action: `assertSame( '1.10.0', get_option( 'woocommerce_pos_db_version' ) )`, schema still `'6'`, lock released. It fails against a catch that logs but does not restore the latch.
 
 Delete no tests.
 
