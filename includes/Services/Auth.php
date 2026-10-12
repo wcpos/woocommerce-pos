@@ -818,7 +818,37 @@ class Auth {
 		// Shop managers manage everyone's sessions except an administrator's:
 		// the staff rule (#1918) — WooCommerce likewise refuses a manager acting on an administrator.
 		if ( current_user_can( 'manage_woocommerce' ) ) {
-			return ! user_can( $target_user_id, 'manage_options' );
+			return ! $this->is_administrator_anywhere( $target_user_id );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether a user administers this site or, on a network, any site.
+	 *
+	 * POS sessions are one network-wide user-meta row with no site id, so a manager on one
+	 * subsite must not reach the sessions of a user who is an administrator on another.
+	 *
+	 * @param int $user_id The user to check.
+	 */
+	private function is_administrator_anywhere( int $user_id ): bool {
+		if ( user_can( $user_id, 'manage_options' ) ) {
+			return true;
+		}
+		if ( ! is_multisite() ) {
+			return false;
+		}
+		if ( is_super_admin( $user_id ) ) {
+			return true;
+		}
+		foreach ( array_keys( get_blogs_of_user( $user_id ) ) as $blog_id ) {
+			switch_to_blog( (int) $blog_id );
+			$administers = user_can( $user_id, 'manage_options' );
+			restore_current_blog();
+			if ( $administers ) {
+				return true;
+			}
 		}
 
 		return false;
