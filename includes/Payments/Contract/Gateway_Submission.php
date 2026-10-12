@@ -138,12 +138,13 @@ class Gateway_Submission {
 		// The status the merchant stored as THIS gateway's POS Order Status (§3.1 `settled`),
 		// read once before the gateway runs and compared with the fresh order after it.
 		$settled_status = ( new Gateway_Contract() )->get_settled_order_status( $descriptor['id'] );
-		// Twin of Orders::arm_paid_date_suppression(), which only the offline gateways get. A
-		// gateway's update_status() onto the stored status runs maybe_set_date_paid(), which
-		// asks this filter; Orders::payment_complete_order_status() answers the stored status,
-		// so WooCommerce would stamp date_paid on a sale nobody paid and Ledger::balance() would
-		// read 0. Answer '' only while the order already reads the stored status AND has no
-		// date_paid yet: maybe_set_date_paid() asks only while date_paid is empty, whereas
+		// A gateway's update_status() onto the stored status runs maybe_set_date_paid(), which
+		// asks this filter. Orders::payment_complete_order_status() (priority 10) already answers
+		// '' in that case since #2176; this closure repeats the answer at PHP_INT_MAX so a
+		// third-party filter between the two cannot hand back a paid status and have WooCommerce
+		// stamp date_paid on a sale nobody paid (Ledger::balance() would then read 0). Answer ''
+		// only while the order already reads the stored status AND has no date_paid yet:
+		// maybe_set_date_paid() asks only while date_paid is empty, whereas
 		// payment_complete() stamps date_paid on the line before it asks (and may ask while the
 		// order already sits on the stored status, e.g. a second submission of an on-hold order),
 		// so observed money always passes through and keeps the merchant's status.
