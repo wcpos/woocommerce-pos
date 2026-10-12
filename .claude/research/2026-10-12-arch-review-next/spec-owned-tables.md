@@ -109,7 +109,8 @@ Inside `if ( $remove_all ) {` (`:421-427`), replace the five `DROP TABLE` lines 
    - Arrange:
      - Walk `dirname( __DIR__, 2 ) . '/includes'` recursively with `RecursiveDirectoryIterator`.
      - For every `.php` file whose source matches `/function\s+schema_sql\s*\(/`, derive the class `WCPOS\WooCommercePOS\` plus the relative path with `/` → `\` and no `.php`.
-     - Instantiate it with no arguments. All eight have no-argument constructors.
+     - Skip anything that is not an instantiable class: `class_exists( $class )` and `! ( new \ReflectionClass( $class ) )->isAbstract()`. The `Owned_Table` trait declares `schema_sql()` abstractly, so it matches the regex too, and a trait cannot be constructed.
+     - Instantiate each remaining class with no arguments. All eight stores have no-argument constructors.
      - Collect `substr( $store->table_name(), strlen( $wpdb->prefix ) )`.
    - Assert:
      - `assertNotEmpty` on the discovered set.
