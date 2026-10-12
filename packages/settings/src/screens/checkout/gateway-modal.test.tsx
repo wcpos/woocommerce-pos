@@ -71,4 +71,17 @@ describe('GatewayModal rounding', () => {
 		render(<GatewayModal gateway={{ ...gateway, kind }} mutate={vi.fn()} closeModal={vi.fn()} />);
 		expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 	});
+
+	it('does not send rounding for a non-cash gateway', () => {
+		const mutate = vi.fn();
+		render(
+			<GatewayModal
+				gateway={{ ...gateway, id: 'pos_card', kind: 'card', rounding_increment: '0.2' }}
+				mutate={mutate}
+				closeModal={vi.fn()}
+			/>
+		);
+		fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		expect(mutate.mock.calls[0][0].gateways.pos_card).not.toHaveProperty('rounding_increment');
+	});
 });

@@ -56,13 +56,13 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 						'rounding_increment' => 5,
 						'kind'               => 'card',
 					),
-					'pos_card' => array(),
+					'pos_card' => array( 'rounding_increment' => '0.2' ),
 				),
 			)
 		);
 		$gateways = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways'];
 		$this->assertSame( '5', $gateways['pos_cash']['rounding_increment'] );
-		$this->assertSame( '', $gateways['pos_card']['rounding_increment'] );
+		$this->assertSame( '', $gateways['pos_card']['rounding_increment'], 'an unlisted value stores as no rounding' );
 		$this->assertArrayNotHasKey( 'kind', $gateways['pos_cash'] );
 	}
 

@@ -24,7 +24,7 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 				[gateway.id]: {
 					title,
 					description,
-					rounding_increment: roundingIncrement,
+					...(gateway.kind === 'cash' ? { rounding_increment: roundingIncrement } : {}),
 				},
 			},
 		});
