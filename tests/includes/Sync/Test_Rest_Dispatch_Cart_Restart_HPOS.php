@@ -22,13 +22,15 @@ class Test_Rest_Dispatch_Cart_Restart_HPOS extends Test_Rest_Dispatch_Cart_Resta
 	use HPOSToggleTrait;
 
 	/**
-	 * Enable HPOS after the inherited REST setup.
+	 * Enable HPOS after the inherited REST setup, with compatibility sync off so a
+	 * read that leaks to the mirrored posts data cannot pass here.
 	 */
 	public function setUp(): void {
 		parent::setUp();
 
 		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		$this->setup_cot();
+		$this->disable_cot_sync();
 		$this->toggle_cot_feature_and_usage( true );
 	}
 
