@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.10.26
+Stable tag: 1.10.27
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,13 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.10.27 - 2026/10/12 =
+
+- **The pay window closes a sale on the stored Order Status of whichever gateway the cashier picks on the pay page, not only the gateway the sale opened with.** A bank transfer chosen inside the pay page on a store whose default gateway is something else no longer leaves the till waiting on a checkmark.
+- **A gateway that lands a POS order on its stored unpaid status never marks the order as paid.** 1.10.26 fixed this for bank transfer, cheque and cash on delivery; it now holds for every gateway, including third-party ones, and for a save made by another plugin between the status filter and the gateway's own write.
+- **POS Only products show in WooCommerce Analytics and WP-CLI again.** They stay hidden from the storefront only; a category report over POS Only products no longer reads "No data".
+- Developers: a new filter, `woocommerce_pos_hide_pos_only_products`, switches the storefront exclusion off for a context of your own.
 
 = 1.10.26 - 2026/10/12 =
 
