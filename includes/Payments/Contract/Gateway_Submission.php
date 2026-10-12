@@ -11,12 +11,13 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_Error;
 
 /** Reads what a Woo gateway did, within the route's existing order lock. */
 class Gateway_Submission {
 	public const STAMP_META_KEY = '_wcpos_awaiting_customer';
-	/** Every sent or cancelled attempt for the order's life, so a delayed retry never sends again. */
+	/** Every sent, settled or cancelled attempt for the order's life, so a delayed retry never sends again. */
 	public const ATTEMPTS_META_KEY = '_wcpos_gateway_attempts';
 	/** Attempt ids the history keeps; older ones fall off (a till does not retry a week-old send). */
 	public const ATTEMPTS_CAP = 50;
@@ -68,9 +69,9 @@ class Gateway_Submission {
 			);
 		}
 		$history = self::read_attempts( $order );
-		if ( 'sent' === ( $history[ $attempt_id ] ?? null ) ) {
+		if ( in_array( $history[ $attempt_id ] ?? null, array( 'sent', 'settled' ), true ) ) {
 			return array(
-				'outcome' => 'sent',
+				'outcome' => $history[ $attempt_id ],
 				'payment' => null,
 				'order' => $ledger->summary( $order ),
 			);
@@ -134,6 +135,21 @@ class Gateway_Submission {
 		};
 		$threw           = null;
 		$previous_method = null;
+		// The status the merchant stored as THIS gateway's POS Order Status (§3.1 `settled`),
+		// read once before the gateway runs and compared with the fresh order after it.
+		$settled_status = ( new Gateway_Contract() )->get_settled_order_status( $descriptor['id'] );
+		// Twin of Orders::arm_paid_date_suppression(), which only the offline gateways get. A
+		// gateway's update_status() onto the stored status runs maybe_set_date_paid(), which
+		// asks this filter; Orders::payment_complete_order_status() answers the stored status,
+		// so WooCommerce would stamp date_paid on a sale nobody paid and Ledger::balance() would
+		// read 0. Answer '' only while the order already reads the stored status AND has no
+		// date_paid yet: maybe_set_date_paid() asks only while date_paid is empty, whereas
+		// payment_complete() stamps date_paid on the line before it asks (and may ask while the
+		// order already sits on the stored status, e.g. a second submission of an on-hold order),
+		// so observed money always passes through and keeps the merchant's status.
+		$suppress_date_paid = static function ( $status, $id, $filtered ) use ( $order, $settled_status ) {
+			return (int) $id === $order->get_id() && $filtered instanceof \WC_Abstract_Order && $filtered->has_status( $settled_status ) && ! $filtered->get_date_paid( 'edit' ) ? '' : $status;
+		};
 		try {
 			// A REST request has no WooCommerce session, cart or customer; wc_add_notice() /
 			// wc_clear_notices() (validate_fields(), most process_payment() implementations)
@@ -181,6 +197,11 @@ class Gateway_Submission {
 			// the invoice email, the pay link and wp-admin read it from the order. Remembered so
 			// a refused attempt can put the previous method back (§2.1: nothing written).
 			$previous_method = array( $order->get_payment_method(), $order->get_payment_method_title() );
+			if ( '' !== $settled_status && ! in_array( $settled_status, wc_get_is_paid_statuses(), true ) ) {
+				// Armed before the method save so it covers every write inside the submit
+				// window; WooCommerce only asks from set_status() on a real status change.
+				add_filter( 'woocommerce_payment_complete_order_status', $suppress_date_paid, PHP_INT_MAX, 3 );
+			}
 			$order->set_payment_method( $gateway->id );
 			$order->set_payment_method_title( (string) $descriptor['title'] );
 			$order->save();
@@ -194,6 +215,7 @@ class Gateway_Submission {
 		} finally {
 			self::$submitting_order_id = 0;
 			remove_filter( 'woocommerce_persistent_cart_enabled', array( self::class, 'deny' ) );
+			remove_filter( 'woocommerce_payment_complete_order_status', $suppress_date_paid, PHP_INT_MAX );
 			remove_action( 'woocommerce_payment_complete', $complete );
 			remove_action( 'woocommerce_order_status_changed', $status_changed, 10 );
 			foreach ( $ids as $id ) {
@@ -245,6 +267,11 @@ class Gateway_Submission {
 			'kind' => 'take',
 			'label' => $descriptor['title'],
 		);
+		// No money observed, but the gateway landed the fresh order on the merchant's stored status
+		// (§3.1 `settled`): the sale is finished at the till (BACS stored as Pending is "pay by
+		// invoice"). The reader itself refuses the never-settled statuses (failed, cancelled,
+		// refunded, checkout-draft, the parked POS ones).
+		$settled = ! $paid && '' !== $settled_status && $order->has_status( $settled_status );
 		if ( $paid ) {
 			self::clear_stamp( $order );
 			$row = Webview_Passthrough::mint(
@@ -260,6 +287,13 @@ class Gateway_Submission {
 					'cashier_id' => get_current_user_id(),
 				)
 			);
+		} elseif ( $settled ) {
+			// Not awaiting the customer: no stamp, and a stale one from an earlier send goes.
+			self::clear_stamp( $order );
+			self::remember_attempt( $order, $history, $attempt_id, 'settled' );
+			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the order status the merchant stored for this gateway. */
+			$order->add_order_note( sprintf( __( 'Settled via POS: %1$s on %2$s', 'woocommerce-pos' ), $verb['label'], wc_get_order_status_name( $settled_status ) ) );
+			$order->save();
 		} else {
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
 			$order->update_meta_data(
@@ -277,7 +311,7 @@ class Gateway_Submission {
 			$order->add_order_note( sprintf( __( 'Sent via POS: %1$s (%2$s)', 'woocommerce-pos' ), $verb['label'], (string) $destination ) );
 			$order->save();
 		}
-		$outcome = $paid ? 'recorded' : 'sent';
+		$outcome = $paid ? 'recorded' : ( $settled ? 'settled' : 'sent' );
 		Logger::log( sprintf( 'WCPOS gateway attempt %s on order #%d: %s via %s by cashier #%d (verb %s)', $attempt_id, $order->get_id(), $outcome, $descriptor['id'], get_current_user_id(), $verb['kind'] ) );
 		return array(
 			'outcome' => $outcome,
@@ -401,7 +435,7 @@ class Gateway_Submission {
 	}
 
 	/**
-	 * The order's attempt history: attempt id → `sent` | `cancelled`. Never cleared with the stamp.
+	 * The order's attempt history: attempt id → `sent` | `settled` | `cancelled`. Never cleared with the stamp.
 	 *
 	 * @param WC_Order $order Order object.
 	 * @return array<string, string>
@@ -417,7 +451,7 @@ class Gateway_Submission {
 	 * @param WC_Order $order      Order object.
 	 * @param array    $history    The history as read.
 	 * @param string   $attempt_id Attempt id (lowercase).
-	 * @param string   $fate       `sent` or `cancelled`.
+	 * @param string   $fate       `sent`, `settled` or `cancelled`.
 	 */
 	private static function remember_attempt( WC_Order $order, array $history, string $attempt_id, string $fate ): void {
 		unset( $history[ $attempt_id ] );
