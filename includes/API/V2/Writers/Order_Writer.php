@@ -342,6 +342,12 @@ class Order_Writer extends Null_Writer {
 						$order->set_date_created( $restart_gmt );
 					}
 				}
+				// Provenance only when there is provenance to write: a restart alone
+				// must not restamp the receipt time, or Provenance_Health would read
+				// a clock skew off an unchanged sale time.
+				if ( array() === ( $context['fill_provenance'] ?? array() ) ) {
+					return $order;
+				}
 				if ( $order->needs_payment() ) {
 					foreach ( $context['fill_provenance'] as $key => $value ) {
 						$order->update_meta_data( $key, $value );
