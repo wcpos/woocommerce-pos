@@ -130,6 +130,13 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.10.26 - 2026/10/12 =
+
+- **A sale through a gateway set to land on Pending payment or On hold now closes at the till.** The pay window no longer hangs on a checkmark with the order left in the cart; once the order reaches the status you stored for that gateway, the sale is done. Failed, cancelled and parked orders never close this way.
+- **A bank-transfer, cheque or cash-on-delivery sale set to land on an unpaid status is no longer marked as paid.** Such an order was stamped with a paid date and counted as revenue in Analytics while nothing had been paid; it now stays unpaid until payment is recorded.
+- **A server error quoted on the Logs screen keeps its comparison operators.** Only real HTML tags are stripped from the quoted text now.
+- Updates the bundled Sentry PHP SDK to 4.33.2.
+
 = 1.10.25 - 2026/10/08 =
 
 - **Saving or checking out a sale no longer fails with "Allowed memory size exhausted" on a store with a few thousand orders.** Since 1.9.0 every order save loaded the 200 most recent orders to guess which field holds VAT numbers; it now asks the database one small question instead.
