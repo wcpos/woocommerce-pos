@@ -5,10 +5,10 @@
  * When the cashier removes every line from an unpaid open cart and adds a line again,
  * the till restamps date_created_gmt and sends it on its next push. For an order that
  * already exists on the server that push is an update; wc/v3 drops the readonly field
- * on PUT, so the v2 writer carries it through the write intent exactly as on create —
- * only while the order is still an unpaid `pos-open` cart with no payment-ledger rows.
- * These pins drive the REAL registered route (`POST /wcpos/v2/push/orders`, real inner
- * wc/v3 dispatch, real Mutation_Store).
+ * on PUT, so the v2 writer carries it through the write intent — only while the order
+ * is still an unpaid `pos-open` cart with no payment-ledger rows, only forward in time,
+ * re-decided at pre-insert under the payment lock. These pins drive the REAL registered
+ * route (`POST /wcpos/v2/push/orders`, real inner wc/v3 dispatch, real Mutation_Store).
  *
  * @package WCPOS\WooCommercePOS\Tests\Sync
  */
@@ -19,6 +19,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
@@ -42,6 +43,17 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
+	}
+
+	/** A card leg in flight: the cart is spoken for even though nothing is captured yet. */
+	private function pending_card_row(): array {
+		return array(
+			'id'        => wp_generate_uuid4(),
+			'method_id' => 'pos_card',
+			'kind'      => 'card',
+			'amount'    => '5.00',
+			'status'    => 'pending',
+		);
 	}
 
 	private function push_envelope( string $operation, array $payload, $base_revision = null ) {
@@ -167,24 +179,25 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
 	}
 
+	/** The field only ever moves forward: a second till still holding the old date cannot undo a restart. */
+	public function test_update_with_an_earlier_date_created_gmt_keeps_the_stored_date(): void {
+		$product  = ProductHelper::create_simple_product();
+		$order_id = $this->make_order( 'pos-open' );
+		$payload  = $this->restart_payload( $product->get_id() );
+
+		$payload['date_created_gmt'] = '2026-04-30T23:59:59';
+		$response                    = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
+		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
+	}
+
 	public function test_update_of_an_open_cart_with_a_payment_row_keeps_the_stored_date(): void {
 		$product  = ProductHelper::create_simple_product();
 		$order_id = $this->make_order( 'pos-open', array( array( $product, 1 ) ) );
 		$order    = wc_get_order( $order_id );
-		// A card leg in flight: the cart is spoken for even though nothing is captured yet.
-		Ledger::instance()->save(
-			$order,
-			array(
-				array(
-					'id'        => wp_generate_uuid4(),
-					'method_id' => 'pos_card',
-					'kind'      => 'card',
-					'amount'    => '5.00',
-					'status'    => 'pending',
-				),
-			),
-			false
-		);
+		Ledger::instance()->save( $order, array( $this->pending_card_row() ), false );
 		$order->save();
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order_id ) ) );
 		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
@@ -193,6 +206,76 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
+	}
+
+	/** Still `pos-open` with no ledger rows, but a paid date: paid by some other path, so no restart. */
+	public function test_update_of_an_open_cart_with_a_paid_date_keeps_the_stored_date(): void {
+		$product  = ProductHelper::create_simple_product();
+		$order_id = $this->make_order( 'pos-open', array( array( $product, 1 ) ) );
+		$order    = wc_get_order( $order_id );
+		$order->set_date_paid( strtotime( self::STORED_GMT . 'Z' ) + HOUR_IN_SECONDS );
+		$order->save();
+		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order_id ) ) );
+
+		$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
+
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
+	}
+
+	/**
+	 * A payment row that lands AFTER the pre-read and BEFORE wc/v3 loads the order: the
+	 * restart is re-decided at pre-insert on the order about to be written, so the row wins.
+	 */
+	public function test_a_payment_row_landing_after_the_pre_read_refuses_the_restart(): void {
+		$product  = ProductHelper::create_simple_product();
+		$order_id = $this->make_order( 'pos-open' );
+		$landed   = 0;
+		$row      = $this->pending_card_row();
+		add_filter(
+			'rest_request_before_callbacks',
+			function ( $response, $handler, $request ) use ( $order_id, $row, &$landed ) {
+				if ( 'PUT' === $request->get_method() && '/wc/v3/orders/' . $order_id === $request->get_route() ) {
+					$order = wc_get_order( $order_id );
+					Ledger::instance()->save( $order, array( $row ), false );
+					$order->save();
+					++$landed;
+				}
+				return $response;
+			},
+			10,
+			3
+		);
+
+		$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
+
+		$this->assertSame( 1, $landed );
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
+		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order_id ) ) );
+		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
+	}
+
+	/** The payment lock held elsewhere means a payment operation is running: the push succeeds without the restart. */
+	public function test_a_held_payment_lock_forwards_the_update_without_the_restart(): void {
+		$product  = ProductHelper::create_simple_product();
+		$order_id = $this->make_order( 'pos-open' );
+		$lock     = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order_id ) );
+		try {
+			$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
+		} finally {
+			$lock->release( $order_id );
+		}
+
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
+		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
+		// Released: the same restart now goes through.
+		$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( self::RESTART_GMT, $this->stored_date_gmt( $order_id ) );
 	}
 
 	public function test_update_of_a_paid_order_keeps_the_stored_date(): void {
