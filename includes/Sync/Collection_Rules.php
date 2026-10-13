@@ -34,9 +34,9 @@ use WP_REST_Request;
  *   collection yields an EMPTY plan whose `filter()` is the identity and whose
  *   `around()` merely runs its callable. That is the adoption mechanism: a collection
  *   can be routed through the module before it has any rows, and nothing changes.
- * - `Collection_Rules_Plan::filter()` — the direct lane. Type-preserving clause
- *   bodies; it NEVER touches global filter state. Legacy callbacks can still delegate
- *   to it; collection reads use `around()` for search and visibility.
+ * - `Collection_Rules_Plan::filter()` — the clause-body dispatcher. Type-preserving;
+ *   it NEVER touches global filter state. `around()`'s bindings and non-installing
+ *   argument transforms call it; nothing hooks it directly.
  * - `Collection_Rules_Plan::around()` — the scoped read lanes, and the ONLY install path.
  *   Callbacks are installed, the forward runs, and every binding is unwound in reverse
  *   in a `finally`.
@@ -394,6 +394,7 @@ final class Collection_Rules {
 					'where_backstop' => true,
 				),
 				'sorts' => self::catalog_meta_sorts(),
+				'filters' => self::catalog_id_sets(),
 			),
 			'variations' => array(
 				'search' => array(
@@ -418,6 +419,7 @@ final class Collection_Rules {
 					'where_backstop' => true,
 				),
 				'sorts' => self::catalog_meta_sorts(),
+				'filters' => self::catalog_id_sets(),
 			),
 
 			/*
@@ -569,6 +571,27 @@ final class Collection_Rules {
 	 */
 	private static function is_list( array $value ): bool {
 		return array_keys( $value ) === range( 0, \count( $value ) - 1 );
+	}
+
+	/**
+	 * The catalog collections' raw id sets — `wcpos/v1`'s `wcpos_include` / `wcpos_exclude`.
+	 *
+	 * Claimed only where a lane's narrowing map exposes them (today: the v1 product and
+	 * variation controllers), and applied by the plan's guarded, scoped `posts_where`
+	 * binding instead of a request-long callback. The default id-set parse reproduces
+	 * v1's historic `array_map( 'intval', (array) $value )` cast verbatim.
+	 *
+	 * @return array<string, array>
+	 */
+	private static function catalog_id_sets(): array {
+		return array(
+			'include' => array(
+				'id_set' => array( 'operator' => 'IN' ),
+			),
+			'exclude' => array(
+				'id_set' => array( 'operator' => 'NOT IN' ),
+			),
+		);
 	}
 
 	/**

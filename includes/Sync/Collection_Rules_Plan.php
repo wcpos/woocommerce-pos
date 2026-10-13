@@ -28,8 +28,8 @@ use const WCPOS\WooCommercePOS\VERSION;
  *
  * # Two application modes
  *
- * `filter()` also serves legacy callbacks (Pro subclasses them). This method never
- * touches global filter state; search and visibility use the scoped `around()` path.
+ * `filter()` applies one clause body and installs nothing; `around()` is the only
+ * path that installs anything.
  *
  * `around()` is the scoped read path and the ONLY path that installs anything. Bindings are
  * captured as closures — never re-derived tuples — installed, and unwound in reverse
@@ -519,11 +519,9 @@ final class Collection_Rules_Plan {
 
 		if ( $this->claims_id_sets() || '' !== $this->search ) {
 			/*
-			 * `posts_where` fires for EVERY WP_Query, and `wcpos/v1` leaves its callback
-			 * installed for the remainder of the request without a post-type guard (frozen
-			 * behaviour, reproduced verbatim in the clause body). The proxy lane scopes the
-			 * binding to this forward AND guards it, so no unrelated query inside the
-			 * forward can pick up an order id set.
+			 * `posts_where` fires for EVERY WP_Query, so the binding is scoped to this read
+			 * AND guarded to `shop_order`: no unrelated query inside the read — a refund
+			 * lookup included — picks up an order id set or search.
 			 */
 			$where_callback = function ( $where, $query = null ) {
 				$post_type = $query->query_vars['post_type'] ?? null;

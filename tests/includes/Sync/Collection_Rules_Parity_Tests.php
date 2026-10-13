@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WC_Order;
-use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 
 /**
  * The headline test the Collection Rules module exists to make writable: the SAME query,
@@ -177,47 +176,89 @@ trait Collection_Rules_Parity_Tests {
 	}
 
 	/**
-	 * The proxy query must not inherit the direct lane's persistent callbacks.
+	 * Order reads unwind every scoped query callback on both lanes.
 	 */
-	public function test_proxy_lane_is_not_contaminated_by_direct_lane_hooks(): void {
-		$v1_callback_by_route = array();
-		$capture_callbacks     = static function ( array $args, $request ) use ( &$v1_callback_by_route ): array {
-			$has_v1_callback = false;
-			foreach ( $GLOBALS['wp_filter']['woocommerce_rest_shop_order_object_query']->callbacks as $callbacks ) {
-				foreach ( $callbacks as $callback ) {
-					$function = $callback['function'];
-					if ( \is_array( $function ) && $function[0] instanceof Orders_Controller ) {
-						$has_v1_callback = true;
-						break 2;
-					}
-				}
-			}
+	public function test_order_reads_on_both_lanes_leave_no_query_callbacks_installed(): void {
+		// Arrange.
+		$orders = $this->create_sort_fixtures();
+		$ids    = array( $orders['low']->get_id(), $orders['middle']->get_id(), $orders['high']->get_id() );
+		$before = $this->query_hook_counts();
 
-			$v1_callback_by_route[ $request->get_route() ] = $has_v1_callback;
-
-			return $args;
-		};
-
-		add_filter( 'woocommerce_rest_shop_order_object_query', $capture_callbacks, 1, 2 );
-		try {
-			$this->create_sort_fixtures();
-			$this->assert_lane_parity(
-				array(
-					'orderby' => 'total',
-					'order'   => 'asc',
-				)
-			);
-		} finally {
-			remove_filter( 'woocommerce_rest_shop_order_object_query', $capture_callbacks, 1 );
-		}
-
-		$this->assertEquals(
+		// Act / Assert: no hook snapshot is restored between dispatches.
+		$this->lane_order_ids(
+			'/wcpos/v1/orders',
 			array(
-				'/wcpos/v1/orders' => true,
-				'/wc/v3/orders'    => false,
-			),
-			$v1_callback_by_route
+				'wcpos_include' => $ids,
+				'orderby'       => 'status',
+				'order'         => 'asc',
+			)
 		);
+		$this->assertSame( $before, $this->query_hook_counts() );
+		$this->lane_order_ids(
+			'/wcpos/v2/orders',
+			array(
+				'orderby'     => 'status',
+				'order'       => 'asc',
+				'pos_cashier' => 123,
+			)
+		);
+		$this->assertSame( $before, $this->query_hook_counts() );
+	}
+
+	/**
+	 * An order id set must not narrow the nested refund lookup on either lane.
+	 */
+	public function test_id_set_read_keeps_each_orders_refunds_on_both_lanes(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_billing_last_name( 'RefundLaneProbe' );
+		$this->scrub_numeric_address_fields( $order );
+		// The helper order carries no total, and a refund must fit inside one.
+		$order->set_total( '10.00' );
+		$id     = $order->save();
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $id,
+				'amount'   => 1,
+				'reason'   => 'Refund lane probe',
+			)
+		);
+		$this->assertNotWPError( $refund );
+		wp_cache_flush();
+
+		// Act.
+		$direct = $this->lane_rows( '/wcpos/v1/orders', array( 'wcpos_include' => array( $id ) ) );
+		wp_cache_flush();
+		$proxy = $this->lane_rows(
+			'/wcpos/v2/orders',
+			array(
+				'include' => (string) $id,
+				'search'  => 'RefundLaneProbe',
+			)
+		);
+
+		// Assert.
+		foreach ( array( $direct, $proxy ) as $rows ) {
+			$this->assertCount( 1, $rows );
+			$this->assertSame( $id, $rows[0]['id'] );
+			$this->assertSame( array( $refund->get_id() ), array_map( 'intval', wp_list_pluck( $rows[0]['refunds'], 'id' ) ) );
+		}
+	}
+
+	/**
+	 * Count query callbacks across every priority, including absent hooks as zero.
+	 *
+	 * @return array<string, int>
+	 */
+	private function query_hook_counts(): array {
+		$counts = array();
+		foreach ( array( 'posts_where', 'posts_orderby', 'posts_clauses', 'woocommerce_orders_table_query_clauses', 'woocommerce_rest_shop_order_object_query' ) as $hook ) {
+			$counts[ $hook ] = 0;
+			foreach ( $GLOBALS['wp_filter'][ $hook ]->callbacks ?? array() as $callbacks ) {
+				$counts[ $hook ] += \count( $callbacks );
+			}
+		}
+		return $counts;
 	}
 
 	/**
@@ -268,14 +309,25 @@ trait Collection_Rules_Parity_Tests {
 	 * @return int[]
 	 */
 	private function lane_order_ids( string $route, array $query ): array {
+		return array_map( 'intval', wp_list_pluck( $this->lane_rows( $route, $query ), 'id' ) );
+	}
+
+	/**
+	 * Dispatch one lane and return its response rows without restoring hooks.
+	 *
+	 * @param string $route Route to dispatch.
+	 * @param array  $query Query params.
+	 * @return array
+	 */
+	private function lane_rows( string $route, array $query ): array {
 		$request = $this->wp_rest_get_request( $route );
 		$request->set_query_params( $query );
 
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 200, $response->get_status(), "{$route} did not return 200" );
+		$this->assertSame( 200, $response->get_status(), "{$route} did not return 200" );
 
-		return array_map( 'intval', wp_list_pluck( (array) $response->get_data(), 'id' ) );
+		return $response->get_data();
 	}
 
 	/**
