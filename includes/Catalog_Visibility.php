@@ -27,7 +27,8 @@ use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
  * # The invariant
  *
  * A product in {@see Pos_Visibility::pos_only_ids()} has catalog visibility
- * `hidden`. The catalog visibility it had before WCPOS forced it is recorded in
+ * equal to its filtered forced value (default `hidden`), unless the filter returns
+ * null to leave it alone. The catalog visibility it had before WCPOS forced it is recorded in
  * {@see PRIOR_META} and put back when the product leaves the set; a product that
  * a merchant explicitly hid gets `hidden` back. If no prior value was recorded,
  * `visible` is the fallback — a product moving online should be on the shop,
@@ -135,6 +136,32 @@ final class Catalog_Visibility {
 	}
 
 	/**
+	 * Resolve the catalog visibility to force, or null to leave the product alone.
+	 *
+	 * @param WC_Product $product The product.
+	 * @return string|null
+	 */
+	public function forced_visibility( WC_Product $product ): ?string {
+		/**
+		 * Filters the catalog visibility forced for a POS Only product.
+		 *
+		 * Return a key of wc_get_product_visibility_options() (visible, catalog,
+		 * search, hidden), or null to leave this product's visibility alone.
+		 * Any other return value is treated as hidden.
+		 *
+		 * @since 2.0.0
+		 * @param string     $visibility The catalog visibility WCPOS is about to force. Default 'hidden'.
+		 * @param WC_Product $product    The product entering or already in the POS Only set.
+		 */
+		$visibility = apply_filters( 'woocommerce_pos_pos_only_catalog_visibility', 'hidden', $product );
+		if ( null === $visibility ) {
+			return null;
+		}
+
+		return \is_string( $visibility ) && array_key_exists( $visibility, wc_get_product_visibility_options() ) ? $visibility : 'hidden';
+	}
+
+	/**
 	 * Force `hidden` on a product entering the POS Only set, remembering what it had.
 	 *
 	 * Idempotent: a product already hidden with a recorded prior is left alone.
@@ -147,10 +174,11 @@ final class Catalog_Visibility {
 			return;
 		}
 
-		if ( $product->meta_exists( self::PRIOR_META ) && 'hidden' === $product->get_catalog_visibility() ) {
+		$forced = $this->forced_visibility( $product );
+		if ( null === $forced || ( $product->meta_exists( self::PRIOR_META ) && $forced === $product->get_catalog_visibility() ) ) {
 			return;
 		}
-		$this->hide( $product );
+		$this->hide( $product, $forced );
 		$product->save();
 	}
 
@@ -165,6 +193,11 @@ final class Catalog_Visibility {
 			return;
 		}
 
+		$forced = $this->forced_visibility( $product );
+		if ( null === $forced && ! $product->meta_exists( self::PRIOR_META ) ) {
+			return; // Never forced, so there is nothing to put back.
+		}
+
 		$changed = false;
 		$prior   = $product->get_meta( self::PRIOR_META );
 		if ( ! \is_string( $prior ) || ! array_key_exists( $prior, wc_get_product_visibility_options() ) ) {
@@ -174,7 +207,11 @@ final class Catalog_Visibility {
 			$product->delete_meta_data( self::PRIOR_META );
 			$changed = true;
 		}
-		if ( 'hidden' === $product->get_catalog_visibility() ) {
+		// The value WCPOS forced is whatever the filter says now. A product forced
+		// before the filter later opted it out has a prior but no current forced
+		// value to compare against, so the recorded prior wins outright: the filter
+		// has handed the catalog visibility back to the merchant.
+		if ( ( null === $forced || $forced === $product->get_catalog_visibility() ) && $prior !== $product->get_catalog_visibility() ) {
 			$product->set_catalog_visibility( $prior );
 			$changed = true;
 		}
@@ -202,12 +239,14 @@ final class Catalog_Visibility {
 		if ( self::$restoring || ! $product instanceof WC_Product || $product->is_type( 'variation' ) ) {
 			return;
 		}
-		if ( 'hidden' === $product->get_catalog_visibility() && $product->meta_exists( self::PRIOR_META ) ) {
+		if ( ! isset( $this->members()[ $product->get_id() ] ) ) {
 			return;
 		}
-		if ( isset( $this->members()[ $product->get_id() ] ) ) {
-			$this->hide( $product );
+		$forced = $this->forced_visibility( $product );
+		if ( null === $forced || ( $forced === $product->get_catalog_visibility() && $product->meta_exists( self::PRIOR_META ) ) ) {
+			return;
 		}
+		$this->hide( $product, $forced );
 	}
 
 	/**
@@ -326,16 +365,17 @@ final class Catalog_Visibility {
 	}
 
 	/**
-	 * Record the prior value once and set `hidden` on the object, without saving.
+	 * Record the prior value once and set the forced value, without saving.
 	 *
 	 * @param WC_Product $product The product.
+	 * @param string     $forced  The forced catalog visibility.
 	 */
-	private function hide( WC_Product $product ): void {
+	private function hide( WC_Product $product, string $forced ): void {
 		if ( ! $product->meta_exists( self::PRIOR_META ) ) {
 			$product->update_meta_data( self::PRIOR_META, $product->get_catalog_visibility() );
 		}
-		if ( 'hidden' !== $product->get_catalog_visibility() ) {
-			$product->set_catalog_visibility( 'hidden' );
+		if ( $forced !== $product->get_catalog_visibility() ) {
+			$product->set_catalog_visibility( $forced );
 		}
 	}
 

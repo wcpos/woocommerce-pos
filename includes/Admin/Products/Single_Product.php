@@ -279,6 +279,10 @@ class Single_Product {
 		$prior_catalog        = get_post_meta( $post->ID, Catalog_Visibility::PRIOR_META, true );
 		$prior_catalog_label  = $visibility_options[ \is_string( $prior_catalog ) && isset( $visibility_options[ $prior_catalog ] ) ? $prior_catalog : 'visible' ];
 
+		$product              = wc_get_product( $post->ID );
+		$forced_catalog       = $product ? ( new Catalog_Visibility() )->forced_visibility( $product ) : null;
+		$forced_catalog_label = null === $forced_catalog ? null : $visibility_options[ $forced_catalog ];
+
 		include 'templates/post-metabox-visibility-select.php';
 	}
 
