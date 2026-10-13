@@ -39,7 +39,7 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_AUTHORIZATION'] );
-		unset( $_GET['authorization'] );
+		unset( $_GET['authorization'], $_GET['rest_route'] );
 		unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
 		parent::tearDown();
 	}
@@ -168,6 +168,8 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$order->save();
 		$token = Auth::instance()->generate_access_token( get_user_by( 'id', $this->user ) );
 		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		// A query token signs in REST requests only, so shape this one as the front controller would.
+		$this->arrange_rest_front_controller_request( '/wc/v3/orders/' . $order->get_id() );
 		$_GET['authorization'] = 'Bearer ' . $token;
 		global $current_user;
 		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- force authentication.
