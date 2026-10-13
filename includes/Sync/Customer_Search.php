@@ -56,11 +56,9 @@ final class Customer_Search {
 			$like = '%' . $wpdb->esc_like( $term ) . '%';
 			$args = array_merge( array_fill( 0, \count( $user_columns ), $like ), $meta_keys, array( $like ) );
 
-			// A term with digits and no letters is a phone fragment: compare the stored phone
-			// with its punctuation stripped, so `0412` finds `(04) 1234 5678`.
 			$phone  = '';
-			$digits = preg_replace( '/\D+/', '', $term );
-			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
+			$digits = Order_Search::phone_digits( $term );
+			if ( '' !== $digits ) {
 				$phone = " OR ( wcpos_search_meta.meta_key IN ($phone_key_placeholders) AND " . Order_Search::phone_digits_expression( 'wcpos_search_meta.meta_value' ) . ' LIKE %s )';
 				$args  = array_merge( $args, $phone_keys, array( '%' . $digits . '%' ) );
 			}

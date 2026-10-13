@@ -58,8 +58,8 @@ final class Order_Search {
 				array_unshift( $args, (int) $term );
 			}
 			$phone = '';
-			$digits = preg_replace( '/\D+/', '', $term );
-			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
+			$digits = self::phone_digits( $term );
+			if ( '' !== $digits ) {
 				$phone = ' OR ' . self::phone_digits_expression( 'phone' ) . ' LIKE %s';
 				$args[] = '%' . $digits . '%';
 			}
@@ -98,8 +98,8 @@ final class Order_Search {
 			$id   = ctype_digit( $term ) ? "{$wpdb->posts}.ID = %d OR " : '';
 			$args = array_merge( '' === $id ? array() : array( (int) $term ), $keys, array( $like ) );
 			$phone = '';
-			$digits = preg_replace( '/\D+/', '', $term );
-			if ( '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ) {
+			$digits = self::phone_digits( $term );
+			if ( '' !== $digits ) {
 				$phone = " OR ( wcpos_order_search_meta.meta_key IN ('_billing_phone','_shipping_phone') AND " . self::phone_digits_expression( 'wcpos_order_search_meta.meta_value' ) . ' LIKE %s )';
 				$args[] = '%' . $digits . '%';
 			}
@@ -148,6 +148,23 @@ final class Order_Search {
 			INNER JOIN {$wpdb->prefix}woocommerce_order_items AS wcpos_item ON wcpos_item.order_item_id = wcpos_ref.order_item_id AND wcpos_item.order_item_type = 'line_item'
 			WHERE wcpos_ref.meta_key IN ( '_product_id', '_variation_id' )
 		) AS wcpos_sku_order )";
+	}
+
+	/**
+	 * The digits of a phone-fragment search term, or '' when the term is not one.
+	 *
+	 * A term with at least one digit and no letters is a phone fragment: it is compared
+	 * against stored phones with their punctuation stripped (see phone_digits_expression()),
+	 * so `0412` finds `(04) 1234 5678`. The POS client applies the same digits-only rule.
+	 * Malformed UTF-8 is never a phone fragment.
+	 *
+	 * @param string $term One search term.
+	 * @return string
+	 */
+	public static function phone_digits( string $term ): string {
+		$digits = (string) preg_replace( '/\D+/', '', $term );
+
+		return '' !== $digits && 0 === preg_match( '/\p{L}/u', $term ) ? $digits : '';
 	}
 
 	/**
