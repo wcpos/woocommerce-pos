@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-13T09:51:18+00:00\n"
+"POT-Creation-Date: 2026-10-13T14:03:54+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -35,24 +35,24 @@ msgid "http://wcpos.com"
 msgstr ""
 
 #. translators: 1: Minimum PHP version, 2: Update URL.
-#: includes/Activator.php:283
+#: includes/Activator.php:286
 #, php-format
 msgid "<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
 msgstr ""
 
 #. translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
-#: includes/Activator.php:307
+#: includes/Activator.php:310
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:329
+#: includes/Activator.php:332
 msgid "<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:330
+#: includes/Activator.php:333
 msgid "Enable permalinks"
 msgstr ""
 
@@ -60,7 +60,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the POS cashier/operator who served the customer.
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Activator.php:558
+#: includes/Activator.php:561
 #: includes/Services/Receipt_Data_Schema.php:437
 #: includes/Services/Receipt_I18n_Labels.php:50
 #: includes/Templates/Payment.php:316
@@ -69,7 +69,7 @@ msgid "Cashier"
 msgstr ""
 
 #. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-#: includes/Activator.php:740
+#: includes/Activator.php:744
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -481,7 +481,7 @@ msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Checkout_Controller.php:279
-#: includes/API/V1/Receipts_Controller.php:170
+#: includes/API/V1/Receipts_Controller.php:161
 msgid "Order not found."
 msgstr ""
 
@@ -767,39 +767,39 @@ msgid "Operator to compare product tag terms."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Receipts_Controller.php:117
+#: includes/API/V1/Receipts_Controller.php:115
 msgid "Invalid order."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Receipts_Controller.php:128
+#: includes/API/V1/Receipts_Controller.php:125
 msgid "Invalid receipt mode."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:141
+#: includes/API/V1/Receipts_Controller.php:135
 msgid "No fiscal snapshot found for this order."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:179
+#: includes/API/V1/Receipts_Controller.php:170
 msgid "A template_id is required."
 msgstr ""
 
 #. translators: Error message displayed when a template cannot be found.
-#: includes/API/V1/Receipts_Controller.php:188
-#: includes/Template_Router.php:237
-#: includes/Template_Router.php:255
+#: includes/API/V1/Receipts_Controller.php:179
+#: includes/Template_Router.php:239
+#: includes/Template_Router.php:257
 msgid "Template not found."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:200
-#: includes/API/V1/Receipts_Controller.php:208
+#: includes/API/V1/Receipts_Controller.php:191
+#: includes/API/V1/Receipts_Controller.php:199
 #: includes/Templates/Receipt.php:195
 #: includes/Templates/Receipt.php:203
 #: includes/Templates/Receipt.php:214
 msgid "Could not generate the receipt PDF."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:235
+#: includes/API/V1/Receipts_Controller.php:226
 msgid "Sorry, you cannot view receipts."
 msgstr ""
 
@@ -1112,27 +1112,27 @@ msgid "WCPOS cannot run alongside the wePOS plugin due to compatibility issues. 
 msgstr ""
 
 #. translators: POS order status label.
-#: includes/Orders.php:102
-#: includes/Orders.php:1179
+#: includes/Orders.php:103
+#: includes/Orders.php:1138
 msgctxt "Order status"
 msgid "POS - Open"
 msgstr ""
 
 #. translators: POS order status label.
-#: includes/Orders.php:103
-#: includes/Orders.php:1197
+#: includes/Orders.php:104
+#: includes/Orders.php:1156
 msgctxt "Order status"
 msgid "POS - Partial Payment"
 msgstr ""
 
 #. translators: %s: payment gateway title.
-#: includes/Orders.php:502
+#: includes/Orders.php:461
 #, php-format
 msgid "Order status set by %s; no payment was taken at the till."
 msgstr ""
 
 #. translators: %s is the number of orders with POS - Open status.
-#: includes/Orders.php:1185
+#: includes/Orders.php:1144
 #, php-format
 msgid "POS - Open <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
@@ -1140,7 +1140,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s is the number of orders with POS - Partial Payment status.
-#: includes/Orders.php:1203
+#: includes/Orders.php:1162
 #, php-format
 msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
@@ -1160,8 +1160,8 @@ msgstr ""
 msgid "An identical request is already being processed."
 msgstr ""
 
-#: includes/Services/Auth.php:405
-#: includes/Services/Auth.php:484
+#: includes/Services/Auth.php:410
+#: includes/Services/Auth.php:502
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
@@ -3222,7 +3222,7 @@ msgid "Taxable: %s"
 msgstr ""
 
 #. translators: %d: receipt sequence number.
-#: includes/Services/Receipt_Snapshot_Store.php:203
+#: includes/Services/Receipt_Snapshot_Cleanup.php:184
 #, php-format
 msgid "POS fiscal receipt snapshot created (receipt #%d)."
 msgstr ""
@@ -3705,37 +3705,37 @@ msgstr ""
 msgid "Too many requests. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:256
+#: includes/Templates/Auth.php:267
 msgid "Auth session expired. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:262
+#: includes/Templates/Auth.php:273
 msgid "Invalid auth session. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:282
+#: includes/Templates/Auth.php:293
 msgid "Security check failed. Please try again."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Auth.php:292
+#: includes/Templates/Auth.php:303
 msgid "Authentication failed."
 msgstr ""
 
-#: includes/Templates/Auth.php:302
+#: includes/Templates/Auth.php:313
 msgid "This account is temporarily locked due to too many failed login attempts. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:343
+#: includes/Templates/Auth.php:354
 msgid "Failed to generate authentication tokens."
 msgstr ""
 
-#: includes/Templates/Auth.php:393
+#: includes/Templates/Auth.php:404
 msgid "Please enter both username and password."
 msgstr ""
 
-#: includes/Templates/Auth.php:407
-#: includes/Templates/Auth.php:416
+#: includes/Templates/Auth.php:418
+#: includes/Templates/Auth.php:427
 msgid "Invalid username or password."
 msgstr ""
 
