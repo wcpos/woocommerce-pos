@@ -34,6 +34,8 @@ use const WCPOS\WooCommercePOS\VERSION;
  * `around()` is the scoped read path and the ONLY path that installs anything. Bindings are
  * captured as closures — never re-derived tuples — installed, and unwound in reverse
  * inside a `finally`, so a throwing forward leaves `$wp_filter` exactly as it found it.
+ * Both storages' bindings apply only to `shop_order` queries, so a refund lookup inside
+ * the forward is never narrowed.
  *
  * # The WooCommerce-owned sorts
  *
@@ -490,6 +492,13 @@ final class Collection_Rules_Plan {
 			// 10, so the clauses are built in that order. One closure applying them in the
 			// same order produces the identical clause string.
 			$clauses_callback = function ( $clauses, $query = null, $args = array() ) {
+				// Response preparation runs inside the forward, and `get_refunds()` is its own
+				// orders-table query: order filters, search and id sets must not narrow it.
+				// Mirrors the `shop_order` guard on the legacy `posts_where` binding below.
+				$type = \is_array( $args ) ? ( $args['type'] ?? null ) : null;
+				if ( null !== $type && ! \in_array( 'shop_order', (array) $type, true ) ) {
+					return $clauses;
+				}
 				$clauses = $this->filter( self::HOOK_HPOS_FILTERS, $clauses, $query );
 
 				return $this->filter( self::HOOK_HPOS_ORDERBY, $clauses, $query, $args );
