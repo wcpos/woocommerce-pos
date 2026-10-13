@@ -17,11 +17,19 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	/** Live rendering must carry the persisted fiscal identity through the real builder. */
 	public function test_live_render_uses_frozen_identity(): void {
 		$order = OrderHelper::create_order();
-		$snapshot = ( new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder() )->build( $order, 'fiscal' );
-		$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
-		$store = \WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store::instance();
-		$store->persist_snapshot( $order->get_id(), $snapshot );
-		$number = $store->get_snapshot( $order->get_id() )['fiscal']['receipt_number'];
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		$enrich = static function ( array $snapshot ) {
+			$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
+			return $snapshot;
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale( $order );
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
+		$number = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload']['fiscal']['receipt_number'];
 		$tid = $this->create_thermal_template( '<receipt><text>ID:{{fiscal.receipt_number}} {{fiscal.qr_payload}}</text></receipt>' );
 		$id = $this->jobs->create(
 			array(

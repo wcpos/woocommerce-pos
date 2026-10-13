@@ -110,7 +110,7 @@ final class Fiscal_Record_Store {
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 		)[ $type ] ?? 'source_id';
-		if ( empty( $fields[ $identity ] ) || ( ! is_array( $fields['payload'] ?? null ) && ! is_callable( $fields['payload'] ?? null ) ) || ( 'sale' === $type && empty( $fields['number'] ) ) ) {
+		if ( empty( $fields[ $identity ] ) || ( ! is_array( $fields['payload'] ?? null ) && ! is_callable( $fields['payload'] ?? null ) ) ) {
 			return null;
 		}
 		$this->ensure_installed();
@@ -129,27 +129,30 @@ final class Fiscal_Record_Store {
 			}
 			$data = array_intersect_key( $fields, array_flip( array( 'type', 'series', 'order_id', 'refund_id', 'payment_id', 'closure_id', 'source_id', 'corrects_record_id', 'register_id', 'session_id', 'store_id', 'cashier_id', 'approver_id', 'device_time', 'device_tz' ) ) );
 			$data['series'] = $data['series'] ?? '';
-			if ( 'sale' === $type ) {
-				$data['number'] = (int) $fields['number'];
-			} else {
-				$option = 'wcpos_fiscal_sequence_' . $type;
-				// The lock protects the database, not a prior request-local option read.
-				wp_cache_delete( $option, 'options' );
-				wp_cache_delete( 'notoptions', 'options' );
-				$data['number'] = (int) get_option( $option, 0 ) + 1;
-				if ( ! update_option( $option, $data['number'], false ) ) {
-					Logger::log( 'Unable to advance fiscal record sequence.' );
-					return null;
-				}
+			$option = 'wcpos_fiscal_sequence_' . $type;
+			// The lock protects the database, not a prior request-local option read.
+			wp_cache_delete( $option, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+			$sequence = 'sale' === $type ? $this->seed_sale_sequence_locked() : (int) get_option( $option, 0 );
+			$data['number'] = $sequence + 1;
+			if ( ! update_option( $option, $data['number'], false ) ) {
+				Logger::log( 'Unable to advance fiscal record sequence.' );
+				return null;
 			}
 			$payload = is_callable( $fields['payload'] ) ? $fields['payload']( $data['number'] ) : $fields['payload'];
+			// Rendering labels are never stored: readers thaw the current labels for the
+			// document's locale through document(). Hashes computed by builders already
+			// cover the label-free bytes.
+			if ( is_array( $payload ) ) {
+				unset( $payload['i18n'] );
+			}
 			$json = is_array( $payload ) ? wp_json_encode( $payload ) : false;
 			if ( ! is_string( $json ) ) {
 				Logger::log( 'Unable to encode fiscal record payload.' );
 				return null;
 			}
 			$data['payload'] = $json;
-			$data['checksum'] = Receipt_Snapshot_Store::checksum( $json );
+			$data['checksum'] = self::checksum( $json );
 			$data['received_at_gmt'] = current_time( 'mysql', true );
 			if ( false === $wpdb->insert( $this->table_name(), $data ) ) {
 				// A duplicate-key race is a replay only for the same fiscal identity.
@@ -160,9 +163,66 @@ final class Fiscal_Record_Store {
 				return $existing;
 			}
 			return $this->get( (int) $wpdb->insert_id );
+		} catch ( \RuntimeException $e ) {
+			Logger::log( $e->getMessage() );
+			return null;
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::SEQUENCE_LOCK ) );
 		}
+	}
+
+	/**
+	 * Hash the exact stored JSON bytes.
+	 *
+	 * @param string $json Encoded payload.
+	 */
+	public static function checksum( string $json ): string {
+		return hash( 'sha256', $json );
+	}
+
+	/**
+	 * Seed before minting or retiring the legacy counter, using the existing lock.
+	 *
+	 * @throws \RuntimeException When the lock or seed cannot be obtained.
+	 */
+	public function seed_sale_sequence(): int {
+		global $wpdb;
+		$this->ensure_installed();
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::SEQUENCE_LOCK, self::LOCK_WAIT_SECONDS ) ) ) {
+			throw new \RuntimeException( 'Unable to acquire fiscal record sequence lock.' );
+		}
+		try {
+			return $this->seed_sale_sequence_locked();
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::SEQUENCE_LOCK ) );
+		}
+	}
+
+	/**
+	 * Seed once; record() already holds the lock and must not acquire it again.
+	 *
+	 * @throws \RuntimeException When reading or saving the seed fails.
+	 */
+	private function seed_sale_sequence_locked(): int {
+		global $wpdb;
+		$option = 'wcpos_fiscal_sequence_sale';
+		wp_cache_delete( $option, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		$sequence = get_option( $option );
+		if ( false !== $sequence ) {
+			return (int) $sequence;
+		}
+		$table = $this->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table and fixed predicates.
+		$maximum = $wpdb->get_var( "SELECT MAX(number) FROM {$table} WHERE type = 'sale' AND series = ''" );
+		if ( $wpdb->last_error ) {
+			throw new \RuntimeException( 'Unable to read fiscal sale sequence seed.' );
+		}
+		$sequence = max( (int) $maximum, (int) get_option( 'wcpos_receipt_sequence_counter', 0 ) );
+		if ( ! add_option( $option, $sequence, '', false ) ) {
+			throw new \RuntimeException( 'Unable to seed fiscal sale sequence.' );
+		}
+		return $sequence;
 	}
 
 	/**
@@ -248,7 +308,19 @@ final class Fiscal_Record_Store {
 			return new \WP_Error( 'wcpos_receipt_invalid_document', __( 'Invalid receipt document.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$record = $this->find_refund( $order_id, (int) $matches[1] );
-		return $record ? $record['payload'] : new \WP_Error( 'wcpos_receipt_document_missing', __( 'Receipt document not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		return $record ? $this->document( $record ) : new \WP_Error( 'wcpos_receipt_document_missing', __( 'Receipt document not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+	}
+
+	/**
+	 * Thaw current rendering labels for the document's stored locale.
+	 *
+	 * @param array $row Stored fiscal record.
+	 */
+	public function document( array $row ): array {
+		$payload = $row['payload'];
+		$locale          = $payload['presentation_hints']['locale'] ?? '';
+		$payload['i18n'] = Receipt_I18n_Labels::get_labels( is_string( $locale ) ? $locale : '' );
+		return $payload;
 	}
 
 	/**

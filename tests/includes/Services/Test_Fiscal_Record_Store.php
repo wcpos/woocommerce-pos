@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WP_UnitTestCase;
 
 /** Write-once identities and independent fiscal sequences. */
@@ -16,9 +15,64 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 	/** Reset fiscal sequences. */
 	public function setUp(): void {
 		parent::setUp();
+		delete_option( 'wcpos_receipt_sequence_counter' );
 		foreach ( Fiscal_Record_Store::TYPES as $type ) {
 			delete_option( 'wcpos_fiscal_sequence_' . $type );
 		}
+	}
+
+	/** Sales mint from their own counter. */
+	public function test_sale_number_is_minted_from_its_own_sequence(): void {
+		$store = new Fiscal_Record_Store();
+		$first = $store->record(
+			array(
+				'type' => 'sale',
+				'order_id' => 11,
+				'payload' => array( 'a' => 1 ),
+			)
+		);
+		$second = $store->record(
+			array(
+				'type' => 'sale',
+				'order_id' => 12,
+				'payload' => array( 'a' => 2 ),
+			)
+		);
+		$this->assertSame( 1, $first['number'] );
+		$this->assertSame( 2, $second['number'] );
+		$this->assertSame( 2, (int) get_option( 'wcpos_fiscal_sequence_sale' ) );
+	}
+
+	/** Existing rows and the retired counter both bound the first mint. */
+	public function test_sale_sequence_is_seeded_from_existing_rows_and_legacy_counter(): void {
+		global $wpdb;
+		$store = new Fiscal_Record_Store();
+		$store->ensure_installed();
+		foreach ( array( 5, 7 ) as $number ) {
+			$wpdb->insert(
+				$store->table_name(),
+				array(
+					'type' => 'sale',
+					'series' => '',
+					'number' => $number,
+					'order_id' => $number,
+					'payload' => '{}',
+					'checksum' => str_repeat( 'a', 64 ),
+					'received_at_gmt' => '2026-01-01 00:00:00',
+				)
+			);
+		}
+		update_option( 'wcpos_receipt_sequence_counter', 9, false );
+		delete_option( 'wcpos_fiscal_sequence_sale' );
+		$row = $store->record(
+			array(
+				'type' => 'sale',
+				'order_id' => 99,
+				'payload' => array(),
+			)
+		);
+		$this->assertSame( 10, $row['number'] );
+		$this->assertSame( 10, $store->seed_sale_sequence() );
 	}
 
 	/** Install and sale replay preserve original row. */
@@ -40,7 +94,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 		$this->assertIsArray( $first );
 		$this->assertSame( $fields['payload'], $first['payload'] );
 		$this->assertSame( hash( 'sha256', wp_json_encode( $fields['payload'] ) ), $first['checksum'] );
-		$this->assertSame( Receipt_Snapshot_Store::checksum( wp_json_encode( $fields['payload'] ) ), $first['checksum'] );
+		$this->assertSame( Fiscal_Record_Store::checksum( wp_json_encode( $fields['payload'] ) ), $first['checksum'] );
 		$this->assertSame( $first, $store->get( $first['id'] ) );
 		$fields['number'] = 8;
 		$fields['payload'] = array( 'changed' => true );
@@ -239,6 +293,8 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 				'payload' => array(),
 			)
 		);
+		// Force a collision through a damaged counter, not a caller-supplied number.
+		update_option( 'wcpos_fiscal_sequence_sale', $first['number'] - 1, false );
 		$previous = $wpdb->suppress_errors();
 		try {
 			$this->assertNull(

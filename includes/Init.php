@@ -106,16 +106,6 @@ class Init {
 				'phase'    => 'pre-latch',
 			),
 			array(
-				'hook'     => 'woocommerce_pos_order_services_ready',
-				'callback' => static function (): void {
-					Services\Fiscal_Record_Writers::instance();
-				},
-				'priority' => 10,
-				'args'     => 1,
-				'reason'   => 'Default; arm fiscal writers on every order-write lane when services are ready, regardless of the sync schema latch (#247).',
-				'phase'    => 'pre-latch',
-			),
-			array(
 				'hook'     => null,
 				'callback' => array( Sync\Meta_Normalizer::class, 'register_hooks' ),
 				'priority' => 10,

@@ -30,6 +30,7 @@ final class Fiscal_Record_Writers {
 	/** Arm observers when the order services become ready. */
 	private function __construct() {
 		$this->store = new Fiscal_Record_Store();
+		add_action( 'woocommerce_payment_complete', array( $this, 'handle_payment_complete' ) );
 		add_action( 'woocommerce_pos_payment_voided', array( $this, 'handle_void' ), 10, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'handle_cancellation' ), 10, 2 );
 		add_action( 'woocommerce_pos_refund_allocated', array( $this, 'handle_allocation' ), 10, 4 );
@@ -73,32 +74,70 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * Store or repair the sale using the receipt's already-minted sequence.
+	 * Record POS sales even when payment completes on a storefront webhook.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function handle_payment_complete( int $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( $order && wcpos_is_pos_order( $order ) ) {
+			try {
+				$this->record_sale( $order );
+			} catch ( \Throwable $error ) {
+				Logger::log( 'Fiscal sale record failed: ' . $error->getMessage() );
+				/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
+				$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), 'sale' ) );
+				do_action( 'woocommerce_pos_fiscal_record_failed', 'sale', $order, array() );
+			}
+		}
+	}
+
+	/**
+	 * Store the sale once using the record store's minted sequence.
 	 *
 	 * @param WC_Order $order Source order.
-	 * @param array    $snapshot Stored snapshot.
-	 * @param int      $sequence Receipt sequence.
 	 */
-	public function record_sale( WC_Order $order, array $snapshot, int $sequence ): void {
-		// Snapshot capture also runs for storefront orders; fiscal history is POS-only.
+	public function record_sale( WC_Order $order ): void {
+		// Fiscal history belongs only to POS orders, regardless of request lane.
 		if ( wcpos_is_pos_order( $order ) ) {
-			$this->write(
-				$order,
-				array_merge(
-					$this->store->provenance_from_order( $order ),
-					array(
-						'type' => 'sale',
-						'order_id' => $order->get_id(),
-						'number' => $sequence,
-						'payload' => $snapshot,
+			if ( null === $this->store->find_sale( $order->get_id() ) ) {
+				$snapshot = ( new Receipt_Data_Builder() )->build( $order, 'fiscal' );
+				$this->write(
+					$order,
+					array_merge(
+						$this->store->provenance_from_order( $order ),
+						array(
+							'type' => 'sale',
+							'order_id' => $order->get_id(),
+							'payload' => static function ( int $number ) use ( $order, $snapshot ): array {
+								$snapshot['fiscal']['sequence'] = $number;
+								$snapshot['fiscal']['receipt_number'] = (string) $number;
+								$snapshot['fiscal']['immutable_id'] = $order->get_id() . ':' . $number;
+								unset( $snapshot['i18n'] );
+								/**
+								 * Enrich the numbered, label-free document before storage.
+								 *
+								 * Runs under wcpos_fiscal_sequence_lock (five-second wait,
+								 * shared by all record types): local computation only, no
+								 * network I/O. Submit asynchronously after the row exists.
+								 *
+								 * @param array $snapshot Fiscal document.
+								 * @param int   $order_id Order ID.
+								 */
+								$enriched = apply_filters( 'woocommerce_pos_fiscal_snapshot_enrich', $snapshot, $order->get_id() );
+								return is_array( $enriched ) ? $enriched : $snapshot;
+							},
+						)
 					)
-				)
-			);
+				);
+			}
 			$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
 			$sale = $this->store->find_sale( $order->get_id() );
-			$snapshot_created = (string) $order->get_meta( Receipt_Snapshot_Store::META_KEY_CREATED_AT, true );
+			// Arrival time, deliberately: an offline sale paid before the close but synced after it
+			// was not in the closure's figures, so it must become a late_sale correction.
+			$sale_time_gmt = (string) ( $sale['received_at_gmt'] ?? '' );
 			// A replay of a sale already included in the closure is not a late sale.
-			if ( $closure && $sale && '' !== $snapshot_created && $snapshot_created >= $closure['received_at_gmt'] && $sale['id'] > ( $closure['last_receipt_id'] ?? 0 ) ) {
+			if ( $closure && $sale && $sale_time_gmt >= $closure['received_at_gmt'] && $sale['id'] > ( $closure['last_receipt_id'] ?? 0 ) ) {
 				$rows = array_values(
 					array_filter(
 						\WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $order ),

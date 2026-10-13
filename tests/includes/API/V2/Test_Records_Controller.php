@@ -23,6 +23,19 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 		return $this->server->dispatch( $request );
 	}
 
+	/** Audit reads return stored bytes, without rendering labels. */
+	public function test_record_route_returns_stored_payload_without_i18n(): void {
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale( $order );
+		$row = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/records/' . $row['id'] ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $row['payload'], $response->get_data()['payload'] );
+		$this->assertArrayNotHasKey( 'i18n', $response->get_data()['payload'] );
+	}
+
 	/** List filters paging headers and item. */
 	public function test_list_filters_paging_headers_and_item(): void {
 		$store = new Fiscal_Record_Store();
