@@ -231,4 +231,48 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		$this->assertSame( $live, $router->rewrite_rules( $live ) );
 		$this->assertFalse( $router->rewrite_rules( $stale ) );
 	}
+
+	/**
+	 * Only the exact auth path serves the auth form; a lookalike is a plain 404.
+	 *
+	 * WordPress matches rewrite regexes as prefixes, so an unanchored rule routed
+	 * /wcpos-authx/ to the auth template while the page-cache kill check refused it.
+	 */
+	public function test_auth_rewrite_matches_only_the_exact_path(): void {
+		// Arrange.
+		global $wp_rewrite;
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		$this->set_permalink_structure( '/%postname%/' );
+		$router = new Template_Router();
+		$wp_rewrite->flush_rules();
+		$rules = get_option( 'rewrite_rules' );
+
+		// Act: match the way WP::parse_request() does, as a prefix.
+		$matches = array();
+		foreach ( array( 'wcpos-auth', 'wcpos-auth/', 'wcpos-authx/', 'wcpos-authentication/', 'wcpos-auth/extra/' ) as $path ) {
+			$matches[ $path ] = 1 === preg_match( '#^' . Template_Router::AUTH_PATH . '/?$#', $path );
+		}
+		$this->go_to( '/wcpos-authx/' );
+
+		// Assert.
+		$this->assertArrayHasKey( '^wcpos-auth/?$', $rules );
+		$this->assertArrayNotHasKey( '^wcpos-auth/?', $rules );
+		$this->assertSame(
+			array(
+				'wcpos-auth'            => true,
+				'wcpos-auth/'           => true,
+				'wcpos-authx/'          => false,
+				'wcpos-authentication/' => false,
+				'wcpos-auth/extra/'     => false,
+			),
+			$matches
+		);
+		$this->assertArrayNotHasKey( 'wcpos-auth', $GLOBALS['wp']->query_vars );
+		$this->assertTrue( is_404() );
+		// A cache that still holds the unanchored rule is stale.
+		$stale = $rules;
+		unset( $stale['^wcpos-auth/?$'] );
+		$stale['^wcpos-auth/?'] = 'index.php?wcpos-auth=1';
+		$this->assertFalse( $router->rewrite_rules( $stale ) );
+	}
 }

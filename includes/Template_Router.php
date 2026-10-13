@@ -69,7 +69,9 @@ class Template_Router {
 	 */
 	public function __construct() {
 		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
-		$this->pos_auth_regex     = '^' . self::AUTH_PATH . '/?';
+		// Anchored: WordPress matches rewrite regexes as prefixes, so without `$` every
+		// `wcpos-auth*` path would serve the auth form, outside the page-cache kill check.
+		$this->pos_auth_regex     = '^' . self::AUTH_PATH . '/?$';
 		$this->pos_checkout_regex = '^' . self::CHECKOUT_PATH . '/([a-z-]+)/([0-9]+)[/]?$';
 
 		$this->add_rewrite_rules();
