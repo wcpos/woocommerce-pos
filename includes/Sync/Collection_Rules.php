@@ -375,7 +375,7 @@ final class Collection_Rules {
 					'hpos'            => null,
 					'query'           => 'meta_query',
 					'exact_sku_param' => 'sku',
-					// Both lanes split literal terms; v1 keeps over-cap collapse/EXISTS, v2 rejects/meta_query.
+					// Both lanes split literal terms and collapse over-cap terms to the phrase; v1 searches with EXISTS, v2 with meta_query.
 					'lanes'           => array(
 						'direct' => array(
 							'query'           => 'wp_terms',

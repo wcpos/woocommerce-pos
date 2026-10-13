@@ -185,7 +185,12 @@ final class Product_Search {
 			unset( $args['s'] );
 			$args['wcpos_variation_search'] = true;
 			$carriers = array( 'relation' => 'AND' );
-			foreach ( Collection_Rules::search_terms( trim( $search ) ) as $term ) {
+			$terms    = Collection_Rules::search_terms( trim( $search ) );
+			// Like the product lanes, collapse an over-cap list to the whole phrase.
+			if ( $rule['term_cap'] < \count( $terms ) ) {
+				$terms = array( trim( $search ) );
+			}
+			foreach ( $terms as $term ) {
 				$term_carriers = array( 'relation' => 'OR' );
 				foreach ( $rule['posts']['meta'] as $key ) {
 					$term_carriers[] = array(

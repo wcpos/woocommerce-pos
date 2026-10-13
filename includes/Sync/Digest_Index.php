@@ -606,8 +606,9 @@ final class Digest_Index {
 		foreach ( $sides as $bucket => $side ) {
 			$stored_count   = isset( $side['stored'] ) ? (int) $side['stored']['record_count'] : 0;
 			$current_count  = isset( $side['current'] ) ? (int) $side['current']['record_count'] : 0;
-			$stored_digest  = isset( $side['stored'] ) ? (string) $side['stored']['digest'] : '';
-			$current_digest = isset( $side['current'] ) ? (string) $side['current']['digest'] : '';
+			// A side with no rows is '0', the XOR of nothing (what the client's xor64([]) gives).
+			$stored_digest  = isset( $side['stored'] ) ? (string) $side['stored']['digest'] : '0';
+			$current_digest = isset( $side['current'] ) ? (string) $side['current']['digest'] : '0';
 			$buckets[]      = array(
 				'bucket'         => $bucket,
 				'range'          => array(

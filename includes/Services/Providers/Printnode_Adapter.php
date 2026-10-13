@@ -20,6 +20,11 @@ use WCPOS\WooCommercePOS\Services\PrintNode_Client;
  */
 class Printnode_Adapter implements Push_Provider_Adapter_Interface {
 	/**
+	 * PrintNode statuses no retry can clear: bad key, refused key or account, unknown printer.
+	 */
+	private const TERMINAL_STATUSES = array( 401, 403, 404 );
+
+	/**
 	 * Return the PrintNode default PDF content type.
 	 *
 	 * @return string
@@ -132,7 +137,10 @@ class Printnode_Adapter implements Push_Provider_Adapter_Interface {
 			base64_encode( $payload )
 		);
 		if ( is_wp_error( $result ) ) {
-			return $this->failure( $result->get_error_message(), true );
+			$data = $result->get_error_data();
+			$code = \is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+
+			return $this->failure( $result->get_error_message(), ! \in_array( $code, self::TERMINAL_STATUSES, true ) );
 		}
 
 		$drawer_error = '';

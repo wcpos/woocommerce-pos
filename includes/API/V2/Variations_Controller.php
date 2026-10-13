@@ -71,10 +71,9 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 
 	use Endpoint_Permissions;
 
-	private const MAX_SKU_LENGTH    = 4096;
-	private const MAX_SKU_TERMS     = 100;
-	private const MAX_SEARCH_LENGTH = 256;
-	private const MAX_PAGE          = 1000;
+	private const MAX_SKU_LENGTH = 4096;
+	private const MAX_SKU_TERMS  = 100;
+	private const MAX_PAGE       = 1000;
 
 
 	public function register_routes(): void {
@@ -386,20 +385,10 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			if ( self::MAX_SKU_TERMS < \count( $skus ) ) {
 				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'sku must not contain more than 100 comma-separated terms', array( 'status' => 400 ) );
 			}
-		} else {
-			$search = (string) $request->get_param( 'search' );
-			// Unlike mb_strlen(), PCRE is independent of blog_charset and detects malformed UTF-8.
-			$characters = preg_match_all( '/./us', $search );
-			if ( false === $characters ) {
-				return new WP_Error( 'woocommerce_pos_variations_search_invalid', 'search must be valid UTF-8', array( 'status' => 400 ) );
-			}
-			if ( self::MAX_SEARCH_LENGTH < $characters ) {
-				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not exceed 256 characters', array( 'status' => 400 ) );
-			}
-			$terms = Collection_Rules::search_terms( trim( $search ) );
-			if ( Collection_Rules::rules( 'variations' )['search']['term_cap'] < \count( $terms ) ) {
-				return new WP_Error( 'woocommerce_pos_variations_search_limit_exceeded', 'search must not contain more than 10 whitespace-separated terms', array( 'status' => 400 ) );
-			}
+		} elseif ( false === preg_match( '//u', (string) $request->get_param( 'search' ) ) ) {
+			// Unlike mb_check_encoding(), PCRE is independent of blog_charset. A long or many-word
+			// term is not rejected: like products, the search collapses it to one phrase.
+			return new WP_Error( 'woocommerce_pos_variations_search_invalid', 'search must be valid UTF-8', array( 'status' => 400 ) );
 		}
 
 		if ( self::MAX_PAGE < (int) $request->get_param( 'page' ) ) {
