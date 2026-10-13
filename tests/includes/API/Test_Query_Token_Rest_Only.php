@@ -74,8 +74,9 @@ class Test_Query_Token_Rest_Only extends WCPOS_REST_Unit_Test_Case {
 	 * @param string $request_uri Request URI.
 	 * @param string $permalink_structure Permalink structure.
 	 * @param bool   $front_controller Whether the theme front controller is running.
+	 * @param string $home_url Optional home URL.
 	 */
-	public function test_query_token_on_page_load_does_not_set_current_user( string $request_uri, string $permalink_structure, bool $front_controller ): void {
+	public function test_query_token_on_page_load_does_not_set_current_user( string $request_uri, string $permalink_structure, bool $front_controller, string $home_url = '' ): void {
 		// Arrange.
 		$this->set_permalink_structure( $permalink_structure );
 		add_filter( 'wp_using_themes', $front_controller ? '__return_true' : '__return_false' );
@@ -84,8 +85,15 @@ class Test_Query_Token_Rest_Only extends WCPOS_REST_Unit_Test_Case {
 		$_GET                  = array_merge( $_GET, $query );
 		$_GET['authorization'] = 'Bearer ' . $this->token;
 
+		$original_home = get_option( 'home' );
+		update_option( 'home', '' !== $home_url ? $home_url : $original_home );
+
 		// Act.
-		$user_id = $this->resolve_current_user();
+		try {
+			$user_id = $this->resolve_current_user();
+		} finally {
+			update_option( 'home', $original_home );
+		}
 
 		// Assert.
 		$this->assertSame( 0, $user_id );
@@ -103,6 +111,8 @@ class Test_Query_Token_Rest_Only extends WCPOS_REST_Unit_Test_Case {
 			'REST prefix only in the query string'    => array( '/?s=/wp-json/wcpos/v2/status', '/%postname%/', true ),
 			'REST path without pretty permalinks'     => array( '/wp-json/wcpos/v2/status', '', true ),
 			'lookalike prefix'                       => array( '/wp-jsonp/status', '/%postname%/', true ),
+			'zero rest_route'                        => array( '/?rest_route=0&authorization=x', '/%postname%/', true ),
+			'mismatched home prefix'                 => array( '/blog/wp-json/wcpos/v2/status', '/%postname%/', true, 'https://example.org/shop' ),
 			'rest_route outside the front controller' => array( '/wp-login.php?rest_route=/wcpos/v2/status', '/%postname%/', false ),
 		);
 	}
@@ -140,6 +150,52 @@ class Test_Query_Token_Rest_Only extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( $this->user, $user_id );
+	}
+
+	/**
+	 * Pretty REST paths support subdirectory and index.php installs.
+	 *
+	 * @dataProvider pretty_rest_install_requests
+	 * @param string $request_uri Request URI.
+	 * @param string $permalink_structure Permalink structure.
+	 * @param string $home_url Optional home URL.
+	 */
+	public function test_query_token_pretty_rest_install_authenticates_current_lane_route( string $request_uri, string $permalink_structure, string $home_url ): void {
+		// Arrange.
+		$this->set_permalink_structure( $permalink_structure );
+		add_filter( 'wp_using_themes', '__return_true' );
+		$_SERVER['REQUEST_URI'] = $request_uri;
+		// The test site pins its home URL by constant, so the option is inert: filter home_url() instead.
+		$home_filter = static function ( string $url ) use ( $home_url ): string {
+			return '' !== $home_url ? $home_url : $url;
+		};
+		add_filter( 'home_url', $home_filter );
+		// A token's `iss` is the site URL at mint time, so mint after the home change.
+		$_GET['authorization'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $this->user ) );
+
+		// Act.
+		try {
+			$user_id  = $this->resolve_current_user();
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
+		} finally {
+			remove_filter( 'home_url', $home_filter );
+		}
+
+		// Assert.
+		$this->assertSame( $this->user, $user_id );
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * Accepted pretty REST paths for alternate installation layouts.
+	 *
+	 * @return array
+	 */
+	public function pretty_rest_install_requests(): array {
+		return array(
+			'subdirectory install'  => array( '/shop/wp-json/wcpos/v2/status', '/%postname%/', 'https://example.org/shop' ),
+			'index.php permalinks' => array( '/index.php/wp-json/wcpos/v2/status', '/index.php/%postname%/', '' ),
+		);
 	}
 
 	/**

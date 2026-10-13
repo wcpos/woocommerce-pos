@@ -217,7 +217,7 @@ class Auth {
 		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing marker only.
-		if ( isset( $_GET['rest_route'] ) && \is_string( $_GET['rest_route'] ) && '' !== $_GET['rest_route'] ) {
+		if ( ! empty( $_GET['rest_route'] ) && \is_string( $_GET['rest_route'] ) ) {
 			return true;
 		}
 
