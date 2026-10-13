@@ -231,4 +231,47 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		$this->assertSame( $live, $router->rewrite_rules( $live ) );
 		$this->assertFalse( $router->rewrite_rules( $stale ) );
 	}
+
+	/**
+	 * Only the exact auth path routes to the auth template; a lookalike is a plain 404.
+	 *
+	 * WordPress matches rewrite regexes as prefixes, so an unanchored rule routed
+	 * /wcpos-authx/ to the auth template while the page-cache kill check refused it.
+	 */
+	public function test_auth_rewrite_matches_only_the_exact_path(): void {
+		// Arrange.
+		global $wp_rewrite;
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		$this->set_permalink_structure( '/%postname%/' );
+		$router = new Template_Router();
+		$wp_rewrite->flush_rules();
+		$rules = get_option( 'rewrite_rules' );
+		$this->assertArrayHasKey( '^wcpos-auth/?$', $rules );
+		$this->assertArrayNotHasKey( '^wcpos-auth/?', $rules );
+
+		foreach ( array( '/wcpos-auth/', '/wcpos-auth' ) as $path ) {
+			// Act: go_to() runs WP::main() (routing) but not template-loader.php, so nothing renders.
+			$this->go_to( $path );
+
+			// Assert: go_to() replaces the global $wp instance, so read it via $GLOBALS.
+			$this->assertSame( '^wcpos-auth/?$', $GLOBALS['wp']->matched_rule, "{$path} did not match the auth rule." );
+			$this->assertSame( '1', $GLOBALS['wp']->query_vars['wcpos-auth'], "{$path} did not set the auth query var." );
+		}
+
+		foreach ( array( '/wcpos-authx/', '/wcpos-authentication/', '/wcpos-auth/extra/' ) as $path ) {
+			// Act.
+			$this->go_to( $path );
+
+			// Assert.
+			$this->assertNotSame( '^wcpos-auth/?$', $GLOBALS['wp']->matched_rule, "{$path} matched the auth rule." );
+			$this->assertArrayNotHasKey( 'wcpos-auth', $GLOBALS['wp']->query_vars, "{$path} set the auth query var." );
+			$this->assertTrue( is_404(), "{$path} is not a 404." );
+		}
+
+		// A cache that still holds the unanchored rule is stale.
+		$stale = $rules;
+		unset( $stale['^wcpos-auth/?$'] );
+		$stale['^wcpos-auth/?'] = 'index.php?wcpos-auth=1';
+		$this->assertFalse( $router->rewrite_rules( $stale ) );
+	}
 }
