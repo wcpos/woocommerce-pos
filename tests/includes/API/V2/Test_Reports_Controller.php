@@ -847,7 +847,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 				// Assert.
 				$this->assertSame( $unassigned ? 200 : 404, $response->get_status() );
 				if ( $unassigned ) {
-					$this->assertSame( true, $this->received['allowed_unassigned'] );
+					$this->assertTrue( $this->received['allowed_unassigned'] );
 				} else {
 					$this->assertSame( 'wcpos_report_not_found', $response->get_data()['code'] );
 					$this->assertSame( null, $this->received );

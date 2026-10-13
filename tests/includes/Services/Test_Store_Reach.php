@@ -144,11 +144,11 @@ class Test_Store_Reach extends WCPOS_REST_Unit_Test_Case {
 		);
 		// Assert.
 		foreach ( array( null, 0, '0', 7 ) as $store_id ) {
-			$this->assertSame( true, $reach->admits( $store_id ) );
+			$this->assertTrue( $reach->admits( $store_id ) );
 		}
-		$this->assertSame( false, $reach->admits( 8 ) );
+		$this->assertFalse( $reach->admits( 8 ) );
 		$this->assertSame( array( 7 ), $reach->store_ids() );
-		$this->assertSame( false, $reach->is_malformed() );
+		$this->assertFalse( $reach->is_malformed() );
 	}
 
 	/** Other flag values are ignored without invalidating the stores. */
@@ -162,9 +162,9 @@ class Test_Store_Reach extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 			// Assert.
-			$this->assertSame( false, $reach->is_malformed() );
+			$this->assertFalse( $reach->is_malformed() );
 			$this->assertSame( array( 7 ), $reach->store_ids() );
-			$this->assertSame( false, $reach->admits( null ) );
+			$this->assertFalse( $reach->admits( null ) );
 		}
 	}
 
@@ -178,8 +178,8 @@ class Test_Store_Reach extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		// Assert.
-		$this->assertSame( true, $reach->is_malformed() );
-		$this->assertSame( false, $reach->admits( null ) );
+		$this->assertTrue( $reach->is_malformed() );
+		$this->assertFalse( $reach->admits( null ) );
 	}
 
 	/** A missing store key remains unrestricted. */
