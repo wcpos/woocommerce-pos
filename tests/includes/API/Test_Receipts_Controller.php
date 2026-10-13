@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\V1\Receipts_Controller;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 
 /**
  * Test_Receipts_Controller class.
@@ -45,23 +44,18 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test fiscal mode returns snapshot payload.
+	 * Test fiscal mode returns the existing missing-snapshot error.
 	 */
-	public function test_get_item_fiscal_mode_returns_snapshot(): void {
+	public function test_get_item_fiscal_mode_returns_404_without_snapshot(): void {
 		$order = OrderHelper::create_order();
-		Receipt_Snapshot_Store::instance()->handle_payment_complete( $order->get_id() );
+		$order->payment_complete();
 
-		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
 		$request->set_param( 'mode', 'fiscal' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 200, $response->get_status() );
-		$data = $response->get_data();
-
-		$this->assertEquals( 'fiscal', $data['mode'] );
-		$this->assertTrue( $data['has_snapshot'] );
-		$this->assertArrayNotHasKey( 'receipt', $data['data'] );
-		$this->assertNotEmpty( $data['data']['fiscal']['receipt_number'] );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_receipt_snapshot_missing', $response->get_data()['code'] );
 	}
 
 	/**
@@ -77,7 +71,23 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$data = $response->get_data();
 		$this->assertEquals( 'live', $data['mode'] );
+		$this->assertFalse( $data['has_snapshot'] );
+		$this->assertSame( 'pending', $data['submission_status'] );
 		$this->assertArrayHasKey( 'totals', $data['data'] );
+	}
+
+	/**
+	 * Test an omitted mode returns a live receipt regardless of the fiscal default.
+	 */
+	public function test_get_item_without_mode_returns_live_payload(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
+		// Act.
+		$response = $this->server->dispatch( $request );
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'live', $response->get_data()['mode'] );
 	}
 
 	/**
@@ -166,14 +176,25 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$native_pdf = "%PDF-1.4\n% native wp overnight invoice from POS download\n";
 		$callback   = static function () use ( $native_pdf ) {
 			return new class( $native_pdf ) {
+				/**
+				 * Native PDF fixture.
+				 *
+				 * @var string
+				 */
 				private $pdf;
 
+				/**
+				 * Store the fixture.
+				 *
+				 * @param string $pdf Native bytes.
+				 */
 				public function __construct( string $pdf ) {
-					$this->pdf = $pdf;
+					$this->pdf = $pdf; // phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- Instance of the nested anonymous class.
 				}
 
+				/** Return the native PDF bytes. */
 				public function get_pdf(): string {
-					return $this->pdf;
+					return $this->pdf; // phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- Instance of the nested anonymous class.
 				}
 			};
 		};
@@ -313,7 +334,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function serve_raw_response_body( \WP_REST_Response $response, \WP_REST_Request $request ): string {
 		ob_start();
-		apply_filters( 'rest_pre_serve_request', false, $response, $request, $this->server );
+		apply_filters( 'rest_pre_serve_request', false, $response, $request, $this->server ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core REST hook under test.
 		$body = ob_get_clean();
 
 		return false === $body ? '' : $body;

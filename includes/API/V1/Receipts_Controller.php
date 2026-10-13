@@ -10,8 +10,6 @@ namespace WCPOS\WooCommercePOS\API\V1;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
-use WCPOS\WooCommercePOS\Services\Fiscal_Receipt_Service;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
 use WP_Error;
 use WP_REST_Controller;
@@ -119,7 +117,6 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$snapshot_store = Receipt_Snapshot_Store::instance();
 		$requested_mode = $request->get_param( 'mode' );
 		if ( null !== $requested_mode && ! \in_array( $requested_mode, array( 'fiscal', 'live' ), true ) ) {
 			return new WP_Error(
@@ -130,28 +127,22 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$mode    = $snapshot_store->resolve_mode( $requested_mode );
-		$payload        = null;
-
+		$mode = $requested_mode ?? 'live';
+		$mode = \in_array( $mode, array( 'fiscal', 'live' ), true ) ? $mode : 'fiscal';
 		if ( 'fiscal' === $mode ) {
-			$payload = $snapshot_store->get_snapshot( $order_id );
-			if ( ! $payload ) {
-				return new WP_Error(
-					'wcpos_receipt_snapshot_missing',
-					__( 'No fiscal snapshot found for this order.', 'woocommerce-pos' ),
-					array( 'status' => 404 )
-				);
-			}
-		} else {
-			$payload = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+			return new WP_Error(
+				'wcpos_receipt_snapshot_missing',
+				__( 'No fiscal snapshot found for this order.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
 		}
 
 		return array(
-			'order_id'     => $order_id,
-			'mode'         => $mode,
-			'has_snapshot' => $snapshot_store->has_snapshot( $order_id ),
-			'submission_status' => ( new Fiscal_Receipt_Service() )->get_submission_status( $order_id ),
-			'data'         => $payload,
+			'order_id'          => $order_id,
+			'mode'              => $mode,
+			'has_snapshot'      => false,
+			'submission_status' => 'pending',
+			'data'              => ( new Receipt_Data_Builder() )->build( $order, 'live' ),
 		);
 	}
 

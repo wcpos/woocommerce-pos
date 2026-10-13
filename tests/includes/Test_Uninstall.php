@@ -321,7 +321,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
-	 * uninstall.php cannot load plugin code, so it mirrors the analytics count
+	 * Uninstall.php cannot load plugin code, so it mirrors the analytics count
 	 * bands by hand. Pin the copy against the constant it mirrors.
 	 */
 	public function test_uninstall_count_bands_match_the_analytics_profile(): void {
@@ -466,7 +466,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 		$this->assertNotFalse( get_option( 'woocommerce_pos_settings_general' ), 'settings should be preserved by default' );
 		$this->assertNotFalse( get_option( 'woocommerce_pos_settings_some_future_section' ), 'future settings sections must be preserved by pattern, not by list' );
 		$this->assertEquals( 42, get_option( 'wcpos_active_template_receipt' ), 'active template choice should be preserved by default' );
-		$this->assertEquals( 1234, get_option( 'wcpos_receipt_sequence_counter' ), 'receipt sequence should be preserved by default' );
+		$this->assertFalse( get_option( 'wcpos_receipt_sequence_counter' ), 'receipt sequence counter is removed' );
 	}
 
 	/**
