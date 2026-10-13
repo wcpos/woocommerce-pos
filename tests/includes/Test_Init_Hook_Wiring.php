@@ -248,6 +248,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
+			'wcpos_receipt_snapshot_cleanup'                        => array( 10 ),
 			'woocommerce_before_product_object_save'                => array( 10 ),
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
 			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
