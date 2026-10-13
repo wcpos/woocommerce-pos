@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Form_Handler;
 use WCPOS\WooCommercePOS\Services\Auth;
@@ -42,6 +43,7 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 		global $wp;
 		unset( $wp->query_vars['order-pay'], $wp->query_vars['wcpos'] );
 		unset( $_GET['key'], $_GET['token'], $_POST['woocommerce_pay'] );
+		unset( $_POST['pos_apply_coupon'], $_POST['pos_remove_coupon'], $_POST['pos_coupon_code'], $_POST['pos_coupon_nonce'] );
 		wp_set_current_user( 0 );
 		// Hooks added during the test (ours and Form_Handler's) are restored by
 		// the WP test framework's hook backup in parent::tearDown().
@@ -106,6 +108,147 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 		$token = Auth::instance()->generate_access_token( get_user_by( 'id', $this->cashier ) );
 		$this->assertIsString( $token, 'precondition: cashier JWT minted' );
 		$_GET['token'] = $token;
+	}
+
+	/**
+	 * Point the request context at a POS coupon POST for the given order.
+	 *
+	 * @param \WC_Order $order  The order being updated.
+	 * @param string    $action The coupon action: apply or remove.
+	 * @param string    $code   The coupon code.
+	 * @param ?string   $key    The order key, or null to omit it.
+	 */
+	private function arrange_pos_coupon_post( \WC_Order $order, string $action, string $code, ?string $key ): void {
+		global $wp;
+		$wp->query_vars['order-pay'] = $order->get_id();
+		$wp->query_vars['wcpos']     = 1;
+		$_POST['pos_coupon_nonce']  = wp_create_nonce( 'pos_coupon_action' );
+		if ( 'apply' === $action ) {
+			$_POST['pos_apply_coupon'] = '1';
+			$_POST['pos_coupon_code']  = $code;
+		} else {
+			$_POST['pos_remove_coupon'] = $code;
+		}
+		if ( null !== $key ) {
+			$_GET['key'] = $key;
+		}
+	}
+
+	/**
+	 * A missing order key must not allow a coupon to be applied.
+	 */
+	public function test_coupon_action_without_order_key_does_not_apply_coupon(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		CouponHelper::create_coupon( 'keycheck' );
+		wp_set_current_user(
+			$this->factory->user->create(
+				array(
+					'role' => 'customer',
+				)
+			)
+		);
+		$this->arrange_pos_coupon_post( $order, 'apply', 'keycheck', null );
+
+		// Act.
+		( new Form_Handler() )->coupon_action();
+
+		// Assert.
+		$this->assertSame( array(), wc_get_order( $order->get_id() )->get_coupon_codes() );
+	}
+
+	/**
+	 * A wrong order key must not allow a coupon to be removed.
+	 */
+	public function test_coupon_action_with_wrong_order_key_does_not_remove_coupon(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		CouponHelper::create_coupon( 'keycheck' );
+		$order->apply_coupon( 'keycheck' );
+		$order->save();
+		wp_set_current_user(
+			$this->factory->user->create(
+				array(
+					'role' => 'customer',
+				)
+			)
+		);
+		$this->arrange_pos_coupon_post( $order, 'remove', 'keycheck', 'wc_order_wrongkey' );
+
+		// Act.
+		( new Form_Handler() )->coupon_action();
+
+		// Assert.
+		$this->assertSame( array( 'keycheck' ), wc_get_order( $order->get_id() )->get_coupon_codes() );
+	}
+
+	/**
+	 * The correct order key allows a coupon to be applied.
+	 */
+	public function test_coupon_action_with_order_key_applies_coupon(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		CouponHelper::create_coupon( 'keycheck' );
+		wp_set_current_user(
+			$this->factory->user->create(
+				array(
+					'role' => 'customer',
+				)
+			)
+		);
+		$this->arrange_pos_coupon_post( $order, 'apply', 'keycheck', $order->get_order_key() );
+
+		// Act.
+		( new Form_Handler() )->coupon_action();
+
+		// Assert.
+		$this->assertSame( array( 'keycheck' ), wc_get_order( $order->get_id() )->get_coupon_codes() );
+	}
+
+	/**
+	 * The correct order key allows a coupon to be removed.
+	 */
+	public function test_coupon_action_with_order_key_removes_coupon(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		CouponHelper::create_coupon( 'keycheck' );
+		$order->apply_coupon( 'keycheck' );
+		$order->save();
+		wp_set_current_user(
+			$this->factory->user->create(
+				array(
+					'role' => 'customer',
+				)
+			)
+		);
+		$this->arrange_pos_coupon_post( $order, 'remove', 'keycheck', $order->get_order_key() );
+
+		// Act.
+		( new Form_Handler() )->coupon_action();
+
+		// Assert.
+		$this->assertSame( array(), wc_get_order( $order->get_id() )->get_coupon_codes() );
+	}
+
+	/**
+	 * An unknown order must return without attempting to apply a coupon.
+	 */
+	public function test_coupon_action_unknown_order_returns_without_error(): void {
+		global $wp;
+
+		// Arrange.
+		$wp->query_vars['order-pay'] = PHP_INT_MAX;
+		$wp->query_vars['wcpos']     = 1;
+		$_POST['pos_coupon_nonce']  = wp_create_nonce( 'pos_coupon_action' );
+		$_POST['pos_apply_coupon']  = '1';
+		$_POST['pos_coupon_code']   = 'keycheck';
+		$_GET['key']               = 'wc_order_wrongkey';
+
+		// Act.
+		( new Form_Handler() )->coupon_action();
+
+		// Assert.
+		$this->assertTrue( true );
 	}
 
 	/**

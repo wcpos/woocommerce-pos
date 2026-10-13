@@ -151,6 +151,13 @@ class Form_Handler {
 		$order_id    = absint( $wp->query_vars['order-pay'] );
 		$order       = wc_get_order( $order_id );
 
+		// Same proof of access as pay_action(): the order key from the pay URL. The coupon
+		// form posts back to that URL (action=""), so the key is always present for a real pay page.
+		$provided_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the order key is the access check; the nonce was verified above.
+		if ( ! $order || '' === $provided_key || ! $order->key_is_valid( $provided_key ) ) {
+			return;
+		}
+
 		if ( isset( $_POST['pos_apply_coupon'] ) ) {
 			$coupon_code = isset( $_POST['pos_coupon_code'] ) ? sanitize_text_field( wp_unslash( $_POST['pos_coupon_code'] ) ) : '';
 			$apply_result = $order->apply_coupon( $coupon_code );
