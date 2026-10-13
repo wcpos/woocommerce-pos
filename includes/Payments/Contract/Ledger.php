@@ -508,16 +508,8 @@ class Ledger {
 	 */
 	public function record_failure_events( WC_Order $order, string $id, WP_Error $error ): void {
 		$events = $error->get_error_data()['events'] ?? null;
-		if ( ! is_array( $events ) || empty( $events ) ) {
-			return;
-		}
-		$rows = $this->read( $order );
-		foreach ( $rows as $index => $row ) {
-			if ( strtolower( $id ) === $row['id'] ) {
-				$rows[ $index ]['events'] = array_merge( $row['events'] ?? array(), $events );
-				$this->save( $order, $rows, false );
-				return;
-			}
+		if ( is_array( $events ) && ! empty( $events ) ) {
+			$this->append_events( $order, $id, $events );
 		}
 	}
 
@@ -621,15 +613,12 @@ class Ledger {
 		if ( ! in_array( $row['status'], self::COUNTING_STATUSES, true ) ) {
 			return $this->invalid_transition();
 		}
-		$allocated = 0;
 		foreach ( $row['refunds'] ?? array() as $refund ) {
 			if ( (int) $refund['id'] === $refund_id ) {
 				return $row;
 			}
-			if ( in_array( $refund['status'], array( 'succeeded', 'pending' ), true ) ) {
-				$allocated += Money::minor( $refund['amount'] );
-			}
 		}
+		$available = self::available_for_refund( $row );
 		$refund = wc_get_order( $refund_id );
 		if ( ! $refund || 'shop_order_refund' !== $refund->get_type() || $refund->get_parent_id() !== $order->get_id() ) {
 			return $this->invalid( __( 'Refund must belong to this order.', 'woocommerce-pos' ) );
@@ -649,7 +638,7 @@ class Ledger {
 			}
 		}
 		$refund_amount = Money::minor( $refund->get_amount() );
-		if ( $allocated + $requested > Money::minor( $row['amount'] ) || $refund_allocated + $requested > $refund_amount ) {
+		if ( $requested > $available || $refund_allocated + $requested > $refund_amount ) {
 			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
@@ -662,18 +651,12 @@ class Ledger {
 			return $row;
 		}
 		// A handler may save a different amount than was requested: hold it to the same caps, and it must be positive.
-		$refunded = 0;
-		$reserved = 0;
+		$refunded = self::refunded_total( $row );
+		$reserved = self::reserved_total( $row );
 		$saved = 0;
 		foreach ( $row['refunds'] as $allocation ) {
-			if ( 'succeeded' === $allocation['status'] ) {
-				$refunded += Money::minor( $allocation['amount'] );
-			}
-			if ( in_array( $allocation['status'], array( 'succeeded', 'pending' ), true ) ) {
-				$reserved += Money::minor( $allocation['amount'] );
-				if ( (int) $allocation['id'] === $refund_id ) {
-					$saved += Money::minor( $allocation['amount'] );
-				}
+			if ( (int) $allocation['id'] === $refund_id && in_array( $allocation['status'], array( 'succeeded', 'pending' ), true ) ) {
+				$saved += Money::minor( $allocation['amount'] );
 			}
 		}
 		if ( $saved <= 0 || $reserved > Money::minor( $row['amount'] ) || $refund_allocated + $saved > $refund_amount ) {
@@ -682,9 +665,142 @@ class Ledger {
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $row );
 		$this->replace_and_save( $order, $rows, $row );
-		/** Fires after saving the allocation: order, payment row, refund, the saved amount. */
+		/**
+		 * Fires after an allocation is saved, and again when a pending allocation settles
+		 * (succeeded or failed) through settle_allocation(). $amount is the allocation's
+		 * amount on this row. Listeners read the allocation's status from $row['refunds'].
+		 *
+		 * @param WC_Order        $order  Order object.
+		 * @param array           $row    Payment row.
+		 * @param WC_Order_Refund $refund Refund object.
+		 * @param string          $amount Allocation amount on this row.
+		 *
+		 * @hook woocommerce_pos_refund_allocated
+		 */
 		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
 		return $row;
+	}
+
+	/**
+	 * Append a leg the Ledger did not open: money a WooCommerce gateway already took
+	 * (payment_complete(), the order-pay page), or a provider attempt started outside
+	 * the POS. It does no balance check and no handler call. The caller decides that
+	 * the payment is not already represented. One $order->save(), so order meta the
+	 * caller staged rides the same write.
+	 *
+	 * @param WC_Order $order  Order object.
+	 * @param array    $row    Payment row.
+	 * @param bool     $derive Whether to project payment state.
+	 * @return array|WP_Error
+	 */
+	public function adopt( WC_Order $order, array $row, bool $derive = true ) {
+		$id = strtolower( (string) ( $row['id'] ?? '' ) );
+		if ( ! Pos_Uuid::is_uuid( $id ) ) {
+			return $this->invalid( __( 'Payment id must be a UUID.', 'woocommerce-pos' ) );
+		}
+		$rows = $this->read( $order );
+		$stored = $this->find_in_rows( $rows, $id );
+		if ( $stored ) {
+			return new WP_Error(
+				'wcpos_payment_conflict',
+				__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
+				array(
+					'status'  => 409,
+					'payment' => self::to_wire( $stored ),
+				)
+			);
+		}
+		$row['id'] = $id;
+		$rows[] = $row;
+		$this->save( $order, $rows, $derive );
+		return $this->find( $order, $id );
+	}
+
+	/**
+	 * Apply a provider's later answer to a pending refund allocation. A final answer
+	 * (succeeded, failed) sets the allocation's status and reference, recomputes
+	 * refunded_amount, and fires woocommerce_pos_refund_allocated again. A pending
+	 * answer only records a reference the allocation does not have yet. An allocation
+	 * that is no longer pending, or does not exist, is returned unchanged. The caller
+	 * holds the order lock and has re-read the order's meta.
+	 *
+	 * @param WC_Order    $order        Order object.
+	 * @param string      $id           Payment ID.
+	 * @param int         $refund_id    WooCommerce refund ID.
+	 * @param string      $status       Provider allocation status.
+	 * @param string|null $provider_ref Provider reference, if answered.
+	 * @param array       $events       Redacted cashier-log events.
+	 * @return array|WP_Error
+	 */
+	public function settle_allocation( WC_Order $order, string $id, int $refund_id, string $status, ?string $provider_ref = null, array $events = array() ) {
+		if ( ! in_array( $status, array( 'pending', 'succeeded', 'failed' ), true ) ) {
+			return $this->invalid( __( 'Refund status is invalid.', 'woocommerce-pos' ) );
+		}
+		$rows = $this->read( $order );
+		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		if ( ! $row ) {
+			return $this->not_found();
+		}
+		$answered = null !== $provider_ref && '' !== $provider_ref ? $provider_ref : null;
+		foreach ( $row['refunds'] ?? array() as $i => $allocation ) {
+			if ( (int) $allocation['id'] !== $refund_id || 'pending' !== ( $allocation['status'] ?? '' ) ) {
+				continue;
+			}
+			if ( 'pending' === $status ) {
+				if ( null === $answered || ! in_array( $allocation['provider_ref'] ?? null, array( null, '' ), true ) ) {
+					return $row;
+				}
+				$row['refunds'][ $i ]['provider_ref'] = $answered;
+			} else {
+				$row['refunds'][ $i ]['status'] = $status;
+				$row['refunds'][ $i ]['provider_ref'] = $answered ?? ( $allocation['provider_ref'] ?? null );
+				$row['refunded_amount'] = Money::format( self::refunded_total( $row ) );
+			}
+			if ( $events ) {
+				$row['events'] = array_merge( $row['events'] ?? array(), $events );
+			}
+			$row = $this->normalize_row( $order, $row );
+			$this->replace_and_save( $order, $rows, $row, false );
+			if ( 'pending' !== $status ) {
+				$refund = wc_get_order( $refund_id );
+				if ( $refund instanceof \WC_Order_Refund && $refund->get_parent_id() === $order->get_id() ) {
+					do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( Money::minor( $allocation['amount'] ) ) );
+				}
+			}
+			return $row;
+		}
+		return $row;
+	}
+
+	/**
+	 * Pending and succeeded allocations reserve the leg. A failed one releases its
+	 * amount. Minor units, never negative.
+	 *
+	 * @param array $row Payment row.
+	 */
+	public static function available_for_refund( array $row ): int {
+		return max( 0, Money::minor( $row['amount'] ?? 0 ) - self::reserved_total( $row ) );
+	}
+
+	/**
+	 * Append cashier-log events to one leg (capped at EVENTS_MAX, newest kept).
+	 * Events are already redacted by the caller.
+	 *
+	 * @param WC_Order $order  Order object.
+	 * @param string   $id     Payment ID.
+	 * @param array    $events Redacted cashier-log events.
+	 */
+	public function append_events( WC_Order $order, string $id, array $events ): void {
+		if ( ! $events ) {
+			return;
+		}
+		$rows = $this->read( $order );
+		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		if ( ! $row ) {
+			return;
+		}
+		$row['events'] = array_merge( $row['events'] ?? array(), $events );
+		$this->replace_and_save( $order, $rows, $this->normalize_row( $order, $row ), false );
 	}
 
 	/**
@@ -965,6 +1081,11 @@ class Ledger {
 	/**
 	 * Normalize, persist, index, and derive a ledger.
 	 *
+	 * @internal The persistence step behind the Ledger's verbs, and the seeding seam
+	 * for tests. Code outside this class writes rows through a verb (record, intent,
+	 * capture, apply_result, refund, settle_allocation, adopt, append_events, void).
+	 * A raw save() skips the transition table, the refund caps and the hooks.
+	 *
 	 * @param WC_Order $order Order object.
 	 * @param array    $rows  Payment rows.
 	 * @param bool     $derive Whether to project payment state (deferred during offline arrival).
@@ -1131,6 +1252,36 @@ class Ledger {
 	private function reader_ref( array $input, array $context ): array {
 		$reader = $input['provider_refs']['reader'] ?? ( $context['reader'] ?? null );
 		return is_string( $reader ) && '' !== $reader ? array( 'reader' => sanitize_text_field( $reader ) ) : array();
+	}
+
+	/**
+	 * Unclamped sum of pending and succeeded allocations, in minor units.
+	 *
+	 * @param array $row Payment row.
+	 */
+	private static function reserved_total( array $row ): int {
+		$total = 0;
+		foreach ( $row['refunds'] ?? array() as $allocation ) {
+			if ( in_array( $allocation['status'], array( 'pending', 'succeeded' ), true ) ) {
+				$total += Money::minor( $allocation['amount'] );
+			}
+		}
+		return $total;
+	}
+
+	/**
+	 * Sum of succeeded allocations, in minor units.
+	 *
+	 * @param array $row Payment row.
+	 */
+	private static function refunded_total( array $row ): int {
+		$total = 0;
+		foreach ( $row['refunds'] ?? array() as $allocation ) {
+			if ( 'succeeded' === $allocation['status'] ) {
+				$total += Money::minor( $allocation['amount'] );
+			}
+		}
+		return $total;
 	}
 
 	/**

@@ -102,3 +102,13 @@ _Avoid_: adjustment, amendment, edit, re-close
 **Store reach**:
 The stores whose registers, till sessions, closures, fiscal records and reports one caller may read. The Store Reach module resolves it once per request from `woocommerce_pos_closures_list_args` applied to an EMPTY base. No `store_id` key means unrestricted. A well-formed list, even an empty one, restricts. Anything unreadable denies everything. A NULL-store row is never within a restricted reach. A named record out of reach answers exactly as an absent one (404, never 403). A collection is narrowed in its SQL. This is not the Store scope, which is the store a till *claims* (`X-WCPOS-Store`), and not the Report Scope Gate, which is the tier boundary (a visible 403).
 _Avoid_: store scope (for this), authorized-stores filter, store permission
+
+### Payments
+
+**Leg**:
+One attempt to take money for an order through one payment method. It is stored as one row of the order's Ledger (`_wcpos_payments`) and keyed by a client-minted UUID, which doubles as the attempt id. A leg moves `pending → authorized → captured` or ends `failed`/`voided`, only through the Ledger's transition table. Authorized and captured legs *count* toward paid. Pending, authorized and captured legs are *live* and block a second leg for the same balance. "Row" is the stored shape; the wire calls it a `payment`.
+_Avoid_: tender, transaction, payment attempt
+
+**Allocation**:
+One part of a WooCommerce refund assigned to one counting leg: `refunds[] = {id, amount, status pending|succeeded|failed, provider_ref}`. Pending and succeeded allocations reserve the leg's refundable amount. Succeeded ones sum to `refunded_amount`. The allocations of one refund across legs never exceed the refund. Written only by the Ledger: allocated by `refund()`, settled by `settle_allocation()`.
+_Avoid_: refund line, refund leg

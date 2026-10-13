@@ -394,6 +394,57 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'reallocation', $this->records( $filters )[0]['payload']['kind'] );
 	}
 
+	/**
+	 * A pending allocation settled after closure writes one fiscal reallocation.
+	 *
+	 * @dataProvider storage_modes
+	 * @param bool $hpos Use HPOS.
+	 */
+	public function test_refund_pending_allocation_settled_after_closure_records_reallocation( bool $hpos ): void {
+		// Arrange.
+		if ( $hpos ) {
+			$this->enable_hpos();
+		}
+		$session = $this->closure_session( null, 'open' );
+		list( $order, $payment ) = $this->sale( $session, 'pos_card' );
+		$refund = $this->refund( $order, $session );
+		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
+		$order = wc_get_order( $order->get_id() );
+		$rows = $ledger->read( $order );
+		$rows[0]['refunds'] = array(
+			array(
+				'id'           => $refund->get_id(),
+				'amount'       => '10.00',
+				'status'       => 'pending',
+				'provider_ref' => null,
+			),
+		);
+		$ledger->save( $order, $rows, false );
+		$session = ( new Register_Session_Store() )->transition(
+			$session,
+			array(
+				'status'                  => 'counting',
+				'counting_started_at_gmt' => '2026-09-11 11:00:00',
+			)
+		);
+		$closure = $this->close( $session );
+		$this->assertSame( '90.0000', $closure['expected']['cash'] );
+		$this->assertSame( '50.0000', $closure['expected']['card'] );
+		$filters = array(
+			'type'       => 'late_refund',
+			'closure_id' => $closure['id'],
+		);
+		// Act.
+		$ledger->settle_allocation( wc_get_order( $order->get_id() ), $payment, $refund->get_id(), 'succeeded', 'ref_1' );
+		// Assert.
+		$records = $this->records( $filters );
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'reallocation', $records[0]['payload']['kind'] );
+		$this->assertSame( '10.0000', $records[0]['payload']['expected_delta']['cash'] );
+		$ledger->settle_allocation( wc_get_order( $order->get_id() ), $payment, $refund->get_id(), 'succeeded', 'ref_1' );
+		$this->assertCount( 1, $this->records( $filters ) );
+	}
+
 	/** An allocation recovers a late-arrival record whose insert was lost, and writes no reallocation. */
 	public function test_refund_allocation_recovers_a_missing_late_arrival_record(): void {
 		// Arrange: a late refund whose late-arrival record is gone.
