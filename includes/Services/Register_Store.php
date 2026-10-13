@@ -14,32 +14,7 @@ final class Register_Store {
 	/** Table suffix. */
 	public const TABLE = 'wcpos_registers';
 
-	/**
-	 * Whether the table was verified this request.
-	 *
-	 * @var bool
-	 */
-	private static $installed = false;
-
-	/**
-	 * Create the table if an install predates it (dbDelta is idempotent; the
-	 * check is memoised per request so the cost is one SHOW TABLES).
-	 */
-	public function ensure_installed(): void {
-		if ( self::$installed ) {
-			return;
-		}
-		if ( ! \WCPOS\WooCommercePOS\Sync\Health::table_exists( $this->table_name() ) ) {
-			$this->install();
-		}
-		self::$installed = true;
-	}
-
-	/** Resolve the current site's table. */
-	public function table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . self::TABLE;
-	}
+	use Owned_Table;
 
 	/**
 	 * Build the portable register schema.
@@ -62,22 +37,6 @@ final class Register_Store {
 			PRIMARY KEY  (id),
 			KEY store_status (store_id, status)
 		) {$charset_collate};";
-	}
-
-	/**
-	 * Install the table, independently of sync health. A no-op once the table
-	 * exists: dbDelta is DDL, and DDL commits any open transaction (the PHPUnit
-	 * per-test transaction included), so it must not run on every upgrade pass.
-	 */
-	public function install(): void {
-		global $wpdb;
-		if ( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $this->table_name() ) ) {
-			return;
-		}
-		if ( ! function_exists( 'dbDelta' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		}
-		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
 	}
 
 	/**

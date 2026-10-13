@@ -214,6 +214,21 @@ class Activator {
 	}
 
 	/**
+	 * Install the till bookkeeping tables and seed the default register.
+	 *
+	 * Each install is a no-op once its table exists. Called from activation and from
+	 * every upgrade pass, independently of the sync schema latch.
+	 */
+	private function install_till_tables(): void {
+		( new Register_Store() )->install();
+		( new Register_Session_Store() )->install();
+		( new Cash_Movement_Store() )->install();
+		( new Closure_Store() )->install();
+		( new Register_Store() )->ensure_default();
+		( new Fiscal_Record_Store() )->install();
+	}
+
+	/**
 	 * Install the sync store and latch its aggregate schema version after verification.
 	 */
 	public function install_sync_schema(): void {
@@ -223,12 +238,7 @@ class Activator {
 		$journal->install();
 		( new Integrity_Digest() )->install();
 		( new Mutation_Store() )->install();
-		( new Register_Store() )->install();
-		( new Register_Session_Store() )->install();
-		( new Cash_Movement_Store() )->install();
-		( new Closure_Store() )->install();
-		( new Register_Store() )->ensure_default();
-		( new Fiscal_Record_Store() )->install();
+		$this->install_till_tables();
 
 		if ( null === $previous_schema || version_compare( (string) $previous_schema, '7', '<' ) ) {
 			$this->upgrade_business_days();
@@ -728,12 +738,7 @@ class Activator {
 			$this->install_sync_schema();
 		}
 
-		( new Register_Store() )->install();
-		( new Register_Session_Store() )->install();
-		( new Cash_Movement_Store() )->install();
-		( new Closure_Store() )->install();
-		( new Register_Store() )->ensure_default();
-		( new Fiscal_Record_Store() )->install();
+		$this->install_till_tables();
 
 		// Installs that predate 2026-09 wrote the per-request latches with
 		// autoload off; every upgrade re-asserts autoload so the flip is

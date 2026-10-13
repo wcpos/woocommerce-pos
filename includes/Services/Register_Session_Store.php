@@ -11,22 +11,12 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
-use WCPOS\WooCommercePOS\Sync\Health;
 
 /** Owns sessions independently of WooCommerce order storage. */
 final class Register_Session_Store {
 	public const TABLE = 'wcpos_register_sessions';
-	/** Tables verified this request.
-	 *
-	 * @var array
-	 */
-	private static $installed = array();
 
-	/** Resolve the site table. */
-	public function table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . self::TABLE;
-	}
+	use Owned_Table;
 
 	/** Build the schema.
 	 *
@@ -56,23 +46,6 @@ final class Register_Session_Store {
 			KEY register_status (register_id, status),
 			KEY store_status (store_id, status)
 		) {$charset_collate};";
-	}
-
-	/** Install without DDL when already present. */
-	public function install(): void {
-		global $wpdb;
-		if ( ! Health::table_exists( $this->table_name() ) ) {
-			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-			dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
-		}
-	}
-
-	/** Verify once per site per request. */
-	public function ensure_installed(): void {
-		if ( ! isset( self::$installed[ $this->table_name() ] ) ) {
-			$this->install();
-			self::$installed[ $this->table_name() ] = true;
-		}
 	}
 
 	/** Read one row.

@@ -57,6 +57,22 @@ function woocommerce_pos_uninstall_table_suffixes(): array {
 }
 
 /**
+ * Owned tables holding user-authored bookkeeping: registers, register sessions,
+ * cash movements, closures and fiscal records. Dropped only on a full wipe.
+ *
+ * @return string[] Table name suffixes.
+ */
+function woocommerce_pos_uninstall_configuration_table_suffixes(): array {
+	return array(
+		'wcpos_fiscal_records',
+		'wcpos_registers',
+		'wcpos_register_sessions',
+		'wcpos_cash_movements',
+		'wcpos_closures',
+	);
+}
+
+/**
  * Cron hooks whose scheduled events are cleared on uninstall.
  *
  * @return string[] Hook names.
@@ -420,11 +436,9 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	// floats, retired state) and the anchor of every sale's provenance, so the
 	// table goes only with a full wipe, like templates and the receipt sequence.
 	if ( $remove_all ) {
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_fiscal_records" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_registers" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_register_sessions" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_cash_movements" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_closures" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table name; uninstall context.
+		foreach ( woocommerce_pos_uninstall_configuration_table_suffixes() as $suffix ) {
+			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$suffix}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table names; uninstall context.
+		}
 	}
 
 	// 3. Delete plugin post types: the print-job queue always; receipt
