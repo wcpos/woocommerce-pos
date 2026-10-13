@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use Automattic\WooCommerce\Caches\OrderCache;
-use Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
 use RuntimeException;
 use WCPOS\WooCommercePOS\Logger;
 
@@ -30,7 +29,12 @@ final class Receipt_Snapshot_Cleanup {
 
 	/** Register on every request, independent of the sync schema latch. */
 	public static function register(): void {
-		add_action( self::HOOK, array( self::class, 'run' ) );
+		add_action(
+			self::HOOK,
+			static function (): void {
+				self::run();
+			}
+		);
 	}
 
 	/** Queue one pending run, including when a previous schedule was lost. */
@@ -39,7 +43,7 @@ final class Receipt_Snapshot_Cleanup {
 			return;
 		}
 		add_option( self::OPTION, 'pending', '', true );
-		if ( function_exists( 'as_schedule_single_action' ) && class_exists( 'ActionScheduler' ) && \ActionScheduler::is_initialized() ) {
+		if ( function_exists( 'as_schedule_single_action' ) && function_exists( 'as_get_scheduled_actions' ) && class_exists( 'ActionScheduler' ) && \ActionScheduler::is_initialized() ) {
 			// Only pending actions count: the currently running action must re-arm.
 			$pending = as_get_scheduled_actions(
 				array(
@@ -128,9 +132,6 @@ final class Receipt_Snapshot_Cleanup {
 			throw new RuntimeException( $wpdb->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Caught and logged, never rendered.
 		}
 		$order_ids = array_map( 'intval', array_unique( wp_list_pluck( $rows, 'order_id' ) ) );
-		if ( $hpos && method_exists( OrdersTableDataStore::class, 'clear_cached_data' ) ) {
-			wc_get_container()->get( OrdersTableDataStore::class )->clear_cached_data( $order_ids );
-		}
 		foreach ( $order_ids as $order_id ) {
 			wp_cache_delete( \WC_Order::generate_meta_cache_key( $order_id, 'orders' ), 'orders' );
 			if ( $hpos && class_exists( OrderCache::class ) ) {
