@@ -492,4 +492,24 @@ class Test_Access_Section extends WP_UnitTestCase {
 			}
 		}
 	}
+
+	/**
+	 * The reported-only capabilities reach the app (manage_woocommerce gates a card provider's
+	 * terms, delete_users gates deleting a customer) but are never Access screen toggles.
+	 */
+	public function test_reported_only_capabilities_reach_the_app_but_are_never_toggles(): void {
+		( new \WCPOS\WooCommercePOS\Activator() )->single_activate( false );
+		foreach ( Access_Section::REPORTED_ONLY_CAPABILITIES as $cap ) {
+			$this->assertNotContains( $cap, Access_Section::capability_names() );
+		}
+		$admin   = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$manager = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'shop_manager' ) ) );
+		$cashier = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'cashier' ) ) );
+		$this->assertContains( 'manage_woocommerce', Access_Section::effective_capabilities( $manager ) );
+		$this->assertNotContains( 'manage_woocommerce', Access_Section::effective_capabilities( $cashier ) );
+		// delete_users is an administrator's: a shop manager deletes no accounts.
+		$this->assertContains( 'delete_users', Access_Section::effective_capabilities( $admin ) );
+		$this->assertNotContains( 'delete_users', Access_Section::effective_capabilities( $manager ) );
+		$this->assertNotContains( 'delete_users', Access_Section::effective_capabilities( $cashier ) );
+	}
 }
