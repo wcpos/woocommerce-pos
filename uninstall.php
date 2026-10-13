@@ -69,6 +69,7 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
 		'wcpos_analytics_group_refresh',
+		'wcpos_file_integrity_check',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);

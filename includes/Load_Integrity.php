@@ -9,8 +9,9 @@
  * request dies with "Class not found". This class is the fallback for that
  * window and the classifier that says what happened when the fallback misses.
  *
- * It must stay dependency-free: it runs exactly when other WCPOS files may be
- * missing, so it is loaded at boot (Composer `files`) and never autoloaded.
+ * It runs exactly when other WCPOS files may be missing, so it is loaded at
+ * boot (Composer `files`) and never autoloaded. The loader itself needs nothing
+ * but PHP; reporting goes through Error_Reporter on a best-effort basis.
  *
  * @package WCPOS\WooCommercePOS
  */
@@ -27,8 +28,8 @@ class Load_Integrity {
 	const PREFIX = 'WCPOS\\WooCommercePOS\\';
 
 	/**
-	 * One wait per request before retrying a missing or torn file, in microseconds.
-	 * Core's rename-aside leaves the directory absent for roughly 200 ms.
+	 * One wait per request before retrying a shipped class's missing or torn file,
+	 * in microseconds. Core's rename-aside leaves the directory absent for ~200 ms.
 	 */
 	const RETRY_WAIT_US = 250000;
 
@@ -69,6 +70,10 @@ class Load_Integrity {
 		}
 		self::$base_dir = rtrim( str_replace( '\\', '/', $includes_dir ), '/' ) . '/';
 		spl_autoload_register( array( self::class, 'autoload' ), true, false );
+		// vendor/autoload.php also loads outside WordPress (PHPUnit, tooling).
+		if ( \function_exists( 'add_filter' ) ) {
+			add_filter( 'wp_php_error_args', array( self::class, 'fatal_error_args' ), 10, 2 );
+		}
 	}
 
 	/**
@@ -77,14 +82,14 @@ class Load_Integrity {
 	 * @param string $class_name Class being loaded.
 	 */
 	public static function autoload( string $class_name ): void {
-		if ( null !== self::$base_dir ) {
-			self::load( $class_name, self::$base_dir );
-		}
+		self::load( $class_name, (string) self::$base_dir );
 	}
 
 	/**
-	 * Include the PSR-4 file for a class, retrying once. Nothing is cached, so a
-	 * class that misses now still loads if its file appears later in the request.
+	 * Include the PSR-4 file for a class. Nothing is cached, so a class that misses
+	 * now still loads if its file appears later in the request. A class Composer
+	 * shipped gets one retry after a wait; a speculative class_exists() probe for a
+	 * class that never existed does not pay for it.
 	 *
 	 * @param string $class_name Class being loaded.
 	 * @param string $base_dir   includes/ directory, with a trailing slash.
@@ -98,7 +103,7 @@ class Load_Integrity {
 		}
 		for ( $attempt = 0; $attempt < 2; $attempt++ ) {
 			if ( 1 === $attempt ) {
-				if ( self::$waited ) {
+				if ( self::$waited || ! self::is_shipped( $class_name ) ) {
 					break;
 				}
 				self::$waited = true;
@@ -113,6 +118,23 @@ class Load_Integrity {
 				// A torn file mid-copy: treat as a miss and retry.
 			}
 			if ( class_exists( $class_name, false ) || interface_exists( $class_name, false ) || trait_exists( $class_name, false ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a Composer class map loaded this request lists the class.
+	 *
+	 * @param string $class_name Class name.
+	 */
+	private static function is_shipped( string $class_name ): bool {
+		if ( ! class_exists( \Composer\Autoload\ClassLoader::class, false ) || ! method_exists( \Composer\Autoload\ClassLoader::class, 'getRegisteredLoaders' ) ) {
+			return false;
+		}
+		foreach ( \Composer\Autoload\ClassLoader::getRegisteredLoaders() as $loader ) {
+			if ( isset( $loader->getClassMap()[ $class_name ] ) ) {
 				return true;
 			}
 		}
@@ -233,7 +255,9 @@ class Load_Integrity {
 	}
 
 	/**
-	 * A retryable 503 for a missing WCPOS class, or null for any other error.
+	 * A retryable 503 for a WCPOS class missing because of an update, or null for
+	 * any other error. Files that are simply missing stay an error: retrying
+	 * would never fix them.
 	 *
 	 * @param \Error $error Error thrown inside a WCPOS route.
 	 *
@@ -244,7 +268,10 @@ class Load_Integrity {
 		if ( null === $class_name ) {
 			return null;
 		}
-		$found    = self::report( $class_name );
+		$found = self::report( $class_name );
+		if ( ! self::is_transient( $found['classification'] ) ) {
+			return null;
+		}
 		$response = new \WP_REST_Response(
 			array(
 				'code'    => 'wcpos_updating',
@@ -258,6 +285,38 @@ class Load_Integrity {
 		);
 		$response->header( 'Retry-After', '5' );
 		return $response;
+	}
+
+	/**
+	 * Turn WordPress's fatal-error page into a retryable 503 for a WCPOS REST
+	 * request that died on a WCPOS class an update moved aside. This covers the
+	 * stages before dispatch (authentication, CORS, permission checks). The fatal
+	 * itself is untouched and still reported at shutdown.
+	 *
+	 * @param array $args  wp_die() arguments.
+	 * @param array $error error_get_last() of the fatal.
+	 *
+	 * @return array
+	 */
+	public static function fatal_error_args( $args, $error ) {
+		$uri        = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$class_name = \is_array( $error ) ? self::missing_class( (string) ( $error['message'] ?? '' ) ) : null;
+		if ( \is_array( $args ) && null !== $class_name && preg_match( '#wcpos/v\d#', $uri ) && self::is_transient( self::classify( self::signals( $class_name ) ) ) ) {
+			$args['response'] = 503;
+			if ( ! headers_sent() ) {
+				header( 'Retry-After: 5' );
+			}
+		}
+		return $args;
+	}
+
+	/**
+	 * Whether a classification is an update in flight, which a retry outlasts.
+	 *
+	 * @param string $classification Classification.
+	 */
+	private static function is_transient( string $classification ): bool {
+		return 'files_missing' !== $classification;
 	}
 
 	/**

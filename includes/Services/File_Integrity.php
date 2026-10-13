@@ -24,7 +24,7 @@ class File_Integrity {
 	/**
 	 * Cron hook for the daily and post-update checks.
 	 */
-	const CRON_HOOK = 'woocommerce_pos_file_integrity_check';
+	const CRON_HOOK = 'wcpos_file_integrity_check';
 
 	/**
 	 * Option holding the last result.
@@ -223,7 +223,7 @@ class File_Integrity {
 
 		if ( 'unknown' === $result['status'] ) {
 			$test['label']       = __( 'WCPOS files could not be verified', 'woocommerce-pos' );
-			$test['description'] = '<p>' . esc_html__( 'No checksums are available for this version of WCPOS, so its files were not compared. This is expected for development copies.', 'woocommerce-pos' ) . '</p>';
+			$test['description'] = '<p>' . esc_html__( 'No checksums are published for this version of WCPOS, so its files were not compared. Development copies and older builds that do not ship checksums.json have none.', 'woocommerce-pos' ) . '</p>';
 		} elseif ( 'ok' !== $result['status'] ) {
 			$paths               = array_merge( $result['missing'], $result['modified'] );
 			$items               = implode( '', array_map( static fn ( $path ) => '<li><code>' . esc_html( $path ) . '</code></li>', \array_slice( $paths, 0, self::MAX_LISTED ) ) );

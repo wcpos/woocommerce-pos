@@ -266,6 +266,43 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A class whose file is simply gone (no update in sight) is not dressed up as a retry.
+	 */
+	public function test_rest_dispatch_rethrows_a_class_missing_without_an_update(): void {
+		$api     = $this->api();
+		$route   = $this->wcpos_route();
+		$handler = array(
+			'callback' => static function () {
+				throw new \Error( 'Class "WCPOS\\WooCommercePOS\\Nope\\Never_Shipped" not found' );
+			},
+		);
+
+		$this->expectException( \Error::class );
+		$api->rest_dispatch_request( null, new WP_REST_Request( 'GET', $route ), $route, $handler );
+	}
+
+	/**
+	 * A fatal before dispatch (auth, CORS) on a WCPOS REST request becomes a 503 page.
+	 */
+	public function test_fatal_page_is_503_only_for_a_wcpos_rest_request_mid_update(): void {
+		$args  = array( 'response' => 500 );
+		$error = array( 'message' => 'Uncaught Error: Class "WCPOS\\WooCommercePOS\\Services\\Session_Registry" not found in /x/Auth.php:28' );
+		$saved = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Saved verbatim to restore it.
+
+		$_SERVER['REQUEST_URI'] = '/wp-json/wcpos/v2/sync/products';
+		$wcpos                  = Load_Integrity::fatal_error_args( $args, $error );
+		$_SERVER['REQUEST_URI'] = '/wp-json/wc/v3/products';
+		$other_route            = Load_Integrity::fatal_error_args( $args, $error );
+		$_SERVER['REQUEST_URI'] = '/wp-json/wcpos/v2/sync/products';
+		$other_error            = Load_Integrity::fatal_error_args( $args, array( 'message' => 'Uncaught Error: Class "Foo" not found' ) );
+		$_SERVER['REQUEST_URI'] = $saved;
+
+		$this->assertSame( 503, $wcpos['response'] );
+		$this->assertSame( 500, $other_route['response'] );
+		$this->assertSame( 500, $other_error['response'] );
+	}
+
+	/**
 	 * A WCPOS route the boundary owns still returns its callback's result unchanged.
 	 */
 	public function test_rest_dispatch_passes_a_normal_result_through(): void {

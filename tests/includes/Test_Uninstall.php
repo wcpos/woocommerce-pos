@@ -315,6 +315,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 		$this->assertContains( Cloud_Print_Trigger_Service::CRON_SUBMIT, $hooks );
 		$this->assertContains( Cloud_Print_Relay_Service::REREGISTER_HOOK, $hooks );
 		$this->assertContains( Lifecycle_Events::REFRESH_HOOK, $hooks );
+		$this->assertContains( \WCPOS\WooCommercePOS\Services\File_Integrity::CRON_HOOK, $hooks );
 		foreach ( self::LEGACY_CRON_HOOKS as $hook ) {
 			$this->assertContains( $hook, $hooks );
 		}
