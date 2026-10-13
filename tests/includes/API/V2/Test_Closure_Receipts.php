@@ -765,6 +765,30 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		return $page;
 	}
 
+	/** A closure without an enabled template must not render or count a sale receipt. */
+	public function test_storefront_closure_without_enabled_template_is_refused_and_not_counted(): void {
+		$row  = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$user = wp_set_current_user( self::factory()->user->create() );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos_cash' );
+		$user->add_cap( 'view_woocommerce_pos_reports' );
+		Templates::set_virtual_template_disabled( Templates::TEMPLATE_PLUGIN_CORE, true, 'closure' );
+		try {
+			$page = $this->render_receipt_page(
+				0,
+				array(
+					'document' => 'closure:' . $row['id'],
+					'intent'   => 'print',
+				)
+			);
+			$this->assertSame( 404, $page['status'] );
+			$this->assertSame( 0, ( new Closure_Store() )->get( $row['id'] )['print_count'] );
+		} finally {
+			Templates::set_virtual_template_disabled( Templates::TEMPLATE_PLUGIN_CORE, false, 'closure' );
+		}
+	}
+
 	/** A storefront PDF preview must not enter closure print bookkeeping. */
 	public function test_storefront_closure_pdf_preview_does_not_start_print_counting(): void {
 		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
