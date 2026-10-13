@@ -44,8 +44,9 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	 * added below is baked into the framework's global hook snapshot and comes
 	 * back after every later test — including non-REST ones, which then boot
 	 * the whole API (and its authentication guard) into a server they expected
-	 * to be bare. The dropper above only shields later REST test cases; this
-	 * makes the leaked callback inert for everyone else.
+	 * to be bare. The dropper below only shields later REST test cases; the
+	 * dispatcher hooked in setUp() makes the leaked callback inert for everyone
+	 * else, whichever rest_api_init() override a subclass supplies.
 	 *
 	 * @var null|self
 	 */
@@ -57,7 +58,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	public function setUp(): void {
 		$this->drop_stale_rest_api_init_callbacks();
 		self::$active = $this;
-		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) ); // Add the hook before parent::setUp().
+		add_action( 'rest_api_init', array( $this, 'boot_rest_api_if_active' ) ); // Add the hook before parent::setUp().
 
 		parent::setUp();
 		$this->user = $this->factory->user->create(
@@ -93,10 +94,19 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	 * Register the plugin's REST controllers.
 	 */
 	public function rest_api_init(): void {
-		if ( self::$active !== $this ) {
-			return; // A callback the hook snapshot carried over from another test case.
-		}
 		new API();
+	}
+
+	/**
+	 * The rest_api_init callback actually hooked: runs the (overridable)
+	 * rest_api_init() only for the test case that is currently set up, so a
+	 * callback the hook snapshot carried over from another case does nothing.
+	 */
+	final public function boot_rest_api_if_active(): void {
+		if ( self::$active !== $this ) {
+			return;
+		}
+		$this->rest_api_init();
 	}
 
 	/**
