@@ -164,8 +164,7 @@ final class Register_Store {
 		$where = array( '1=1' );
 		if ( array_key_exists( 'store_id', $args ) ) {
 			if ( is_array( $args['store_id'] ) ) {
-				$ids = array_map( 'intval', $args['store_id'] );
-				$where[] = $ids ? 'store_id IN (' . implode( ',', $ids ) . ')' : '1=0';
+				$where[] = Store_Reach::store_predicate( (array) $args['store_id'] );
 			} else {
 				$where[] = null === $args['store_id'] ? 'store_id IS NULL' : $wpdb->prepare( 'store_id = %d', $args['store_id'] );
 			}

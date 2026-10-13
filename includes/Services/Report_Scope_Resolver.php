@@ -26,8 +26,8 @@ final class Report_Scope_Resolver {
 		$closure = null;
 		$register_id = $args['register_id'] ?? null;
 		$reach = Store_Reach::for_request( $request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/reports' ) );
-		if ( array() === $reach->store_ids() ) {
-			// A caller allowed no stores at all can read no report.
+		if ( array() === $reach->store_ids() && ! $reach->admits( null ) ) {
+			// A caller allowed neither stores nor unassigned rows can read no report.
 			return new WP_Error( 'wcpos_report_not_found', __( 'Report not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		if ( 'session' === $args['mode'] ) {
@@ -104,6 +104,7 @@ final class Report_Scope_Resolver {
 					? ( $session['business_day'] ?? ( new DateTimeImmutable( $session['opened_at_gmt'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' ) )
 					: ( new DateTimeImmutable( 'today', $timezone ) )->format( 'Y-m-d' ),
 				'allowed_store_ids' => $reach->store_ids(),
+				'allowed_unassigned' => $reach->admits( null ),
 				'session' => $session,
 				'closure' => $closure,
 			)
@@ -122,7 +123,10 @@ final class Report_Scope_Resolver {
 		// to be told what the caller may reach. Without this a range request naming no store or
 		// register leaves `store_id` at 0 and the producer has no way to honour a Pro scope it
 		// cannot see — a duty assigned with no means of discharging it. Null means unrestricted.
+		// `allowed_unassigned` says whether rows with no store (NULL or 0) are also within reach;
+		// it is true when unrestricted.
 		$scope['allowed_store_ids'] = $context['allowed_store_ids'];
+		$scope['allowed_unassigned'] = $context['allowed_unassigned'];
 		if ( 'session' === $scope['mode'] ) {
 			$session = $context['session'];
 			$scope['register_id'] = $session['register_id'];

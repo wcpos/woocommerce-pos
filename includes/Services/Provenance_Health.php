@@ -37,6 +37,9 @@ final class Provenance_Health {
 		}
 		$groups = array();
 		$sessions = array();
+		if ( null !== $store_ids && in_array( null, $store_ids, true ) ) {
+			$store_ids[] = 0;
+		}
 		$store_ids = null === $store_ids ? null : array_map( 'strval', $store_ids );
 		foreach ( $orders as $id => $meta ) {
 			if ( null !== $store_ids && ! in_array( $meta['_pos_store'] ?? '', $store_ids, true ) ) {

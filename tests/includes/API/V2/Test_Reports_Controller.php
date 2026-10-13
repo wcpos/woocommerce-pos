@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Reports_Registry;
@@ -201,6 +202,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		// would otherwise be unable to see; null means unrestricted.
 		$this->assertArrayHasKey( 'allowed_store_ids', $this->received );
 		$this->assertNull( $this->received['allowed_store_ids'] );
+		$this->assertTrue( $this->received['allowed_unassigned'] );
 		$this->assertSame( 'Closure fixture', $this->received['register_name'] );
 		$this->assertArrayNotHasKey( 'session', $this->received );
 		$this->assertArrayNotHasKey( 'closure', $this->received );
@@ -809,5 +811,50 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertFalse( $data['fiscal']['is_x_report'] );
 		$this->assertTrue( $xreport['fiscal']['is_x_report'] );
 		$this->assertTrue( $data['fiscal']['is_closure_document'] );
+	}
+	/** An unassigned session report does not require any authorized positive store. */
+	public function test_unassigned_session_report_runs_only_with_the_unassigned_key(): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session();
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$wpdb->update(
+			( new Register_Session_Store() )->table_name(),
+			array(
+				'store_id' => null,
+				'business_day' => $this->args['from'],
+			),
+			array( 'id' => $session['id'] )
+		);
+		$wpdb->update( ( new Closure_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $closure['id'] ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params(
+			array(
+				'mode' => 'session',
+				'session_id' => $session['id'],
+				'register_id' => $session['register_id'],
+			)
+		);
+		foreach ( array( true, false ) as $unassigned ) {
+			$filter = static function () use ( $unassigned ) {
+				return array( 'store_id' => array() ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
+			};
+			add_filter( Store_Reach::FILTER, $filter );
+			try {
+				// Act.
+				$this->received = null;
+				$response = $this->server->dispatch( $request );
+				// Assert.
+				$this->assertSame( $unassigned ? 200 : 404, $response->get_status() );
+				if ( $unassigned ) {
+					$this->assertSame( true, $this->received['allowed_unassigned'] );
+				} else {
+					$this->assertSame( 'wcpos_report_not_found', $response->get_data()['code'] );
+					$this->assertSame( null, $this->received );
+				}
+			} finally {
+				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
 	}
 }

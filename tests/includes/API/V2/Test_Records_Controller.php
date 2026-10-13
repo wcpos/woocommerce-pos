@@ -162,4 +162,40 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 	}
+	/** Unassigned record detail, rows and total require the explicit key. */
+	public function test_unassigned_record_is_reachable_only_with_the_unassigned_key(): void {
+		// Arrange.
+		$row = ( new Fiscal_Record_Store() )->record(
+			array(
+				'type' => 'sale',
+				'order_id' => 123,
+				'number' => 123,
+				'store_id' => null,
+				'payload' => array( 'amount' => '12.00' ),
+			)
+		);
+		foreach ( array( true, false ) as $unassigned ) {
+			$filter = static function () use ( $unassigned ) {
+				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
+			};
+			add_filter( Store_Reach::FILTER, $filter );
+			try {
+				// Act.
+				$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/records/' . $row['id'] ) );
+				$list = $this->records();
+				// Assert.
+				$this->assertSame( $unassigned ? 200 : 404, $response->get_status() );
+				$this->assertSame( 200, $list->get_status() );
+				$this->assertSame( $unassigned ? array( $row ) : array(), $list->get_data() );
+				$this->assertSame( $unassigned ? '1' : '0', $list->get_headers()['X-WP-Total'] );
+				if ( ! $unassigned ) {
+					$absent = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/records/999999999' ) );
+					$this->assertSame( $absent->get_status(), $response->get_status() );
+					$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+				}
+			} finally {
+				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
+	}
 }

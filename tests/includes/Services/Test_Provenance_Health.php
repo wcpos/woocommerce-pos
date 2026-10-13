@@ -53,4 +53,26 @@ class Test_Provenance_Health extends WCPOS_REST_Unit_Test_Case {
 		$schema = ( new \WCPOS\WooCommercePOS\API\V2\Registers_Controller() )->get_health_schema();
 		$this->assertArrayHasKey( 'unknown_sessions', $schema['properties'] );
 	}
+	/** Unassigned scope includes both missing and zero order store metadata. */
+	public function test_report_unassigned_scope_includes_orders_without_a_store(): void {
+		// Arrange.
+		$session = wp_generate_uuid4();
+		foreach ( array( null, '0', 2 ) as $store_id ) {
+			$order = new \WC_Order();
+			$order->set_date_created( time() );
+			$order->update_meta_data( '_wcpos_session', $session );
+			if ( null !== $store_id ) {
+				$order->update_meta_data( '_pos_store', $store_id );
+			}
+			$order->save();
+		}
+		// Act.
+		$health = new Provenance_Health();
+		$included = $health->report( array(), array(), array( 1, null ) );
+		$excluded = $health->report( array(), array(), array( 1 ) );
+		// Assert.
+		$this->assertSame( array( $session ), array_column( $included['unknown_sessions'], 'session_id' ) );
+		$this->assertSame( 2, $included['unknown_sessions'][0]['orders'] );
+		$this->assertSame( array(), $excluded['unknown_sessions'] );
+	}
 }

@@ -101,7 +101,7 @@ class Test_Store_Reach extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Unassigned rows have no exemption from a restriction. */
+	/** Unassigned rows have no exemption without the unassigned key. */
 	public function test_store_reach_never_admits_an_unassigned_row_under_a_restriction(): void {
 		// Arrange / Act.
 		$reach = $this->reach( array( 'store_id' => array( 7 ) ) );
@@ -132,5 +132,92 @@ class Test_Store_Reach extends WCPOS_REST_Unit_Test_Case {
 			$expected = in_array( $index, array( 1, 2 ), true ) ? array( 2 ) : array();
 			$this->assertSame( array( 'store_id' => $expected ), $reach->narrow( array( 'store_id' => $requested ) ) );
 		}
+	}
+	/** An explicit boolean admits NULL and Free-era zero stores. */
+	public function test_store_reach_unassigned_key_admits_rows_without_a_store(): void {
+		// Arrange / Act.
+		$reach = $this->reach(
+			array(
+				'store_id' => array( 7 ),
+				'unassigned' => true,
+			)
+		);
+		// Assert.
+		foreach ( array( null, 0, '0', 7 ) as $store_id ) {
+			$this->assertSame( true, $reach->admits( $store_id ) );
+		}
+		$this->assertSame( false, $reach->admits( 8 ) );
+		$this->assertSame( array( 7 ), $reach->store_ids() );
+		$this->assertSame( false, $reach->is_malformed() );
+	}
+
+	/** Other flag values are ignored without invalidating the stores. */
+	public function test_store_reach_unassigned_key_accepts_only_boolean_true(): void {
+		foreach ( array( 1, '1', 'true', 'yes', array( true ), null, false ) as $value ) {
+			// Arrange / Act.
+			$reach = $this->reach(
+				array(
+					'store_id' => array( 7 ),
+					'unassigned' => $value,
+				)
+			);
+			// Assert.
+			$this->assertSame( false, $reach->is_malformed() );
+			$this->assertSame( array( 7 ), $reach->store_ids() );
+			$this->assertSame( false, $reach->admits( null ) );
+		}
+	}
+
+	/** The flag cannot repair a malformed authorization answer. */
+	public function test_store_reach_unassigned_key_never_repairs_a_malformed_restriction(): void {
+		// Arrange / Act.
+		$reach = $this->reach(
+			array(
+				'store_id' => array( 'x' ),
+				'unassigned' => true,
+			)
+		);
+		// Assert.
+		$this->assertSame( true, $reach->is_malformed() );
+		$this->assertSame( false, $reach->admits( null ) );
+	}
+
+	/** A missing store key remains unrestricted. */
+	public function test_store_reach_unassigned_key_is_irrelevant_when_unrestricted(): void {
+		// Arrange / Act.
+		$reach = $this->reach( array( 'unassigned' => true ) );
+		// Assert.
+		$this->assertSame( null, $reach->store_ids() );
+		$this->assertSame( array( 'x' => 1 ), $reach->narrow( array( 'x' => 1 ) ) );
+	}
+
+	/** Narrowed lists carry unassigned rows only as an explicit null member. */
+	public function test_store_reach_narrow_carries_unassigned_as_a_null_member(): void {
+		// Arrange / Act.
+		$reach = $this->reach(
+			array(
+				'store_id' => array( 1, 2 ),
+				'unassigned' => true,
+			)
+		);
+		// Assert.
+		$this->assertSame( array( 'store_id' => array( 1, 2, null ) ), $reach->narrow( array() ) );
+		foreach ( array( 2, null, 0, array( 2, null ), 3 ) as $index => $requested ) {
+			$expected = array( array( 2 ), array( null ), array( null ), array( 2, null ), array() )[ $index ];
+			$this->assertSame( array( 'store_id' => $expected ), $reach->narrow( array( 'store_id' => $requested ) ) );
+		}
+		$restricted = $this->reach( array( 'store_id' => array( 1, 2 ) ) );
+		foreach ( array( null, 0 ) as $requested ) {
+			$this->assertSame( array( 'store_id' => array() ), $restricted->narrow( array( 'store_id' => $requested ) ) );
+		}
+	}
+
+	/** All list stores share one parenthesized SQL predicate. */
+	public function test_store_reach_store_predicate_forms(): void {
+		// Arrange / Act / Assert.
+		$this->assertSame( '1=0', Store_Reach::store_predicate( array() ) );
+		$this->assertSame( '(store_id IN (1,2))', Store_Reach::store_predicate( array( 1, 2 ) ) );
+		$this->assertSame( '(store_id IS NULL OR store_id = 0)', Store_Reach::store_predicate( array( null ) ) );
+		$this->assertSame( '(store_id IN (1) OR store_id IS NULL OR store_id = 0)', Store_Reach::store_predicate( array( 1, null ) ) );
 	}
 }

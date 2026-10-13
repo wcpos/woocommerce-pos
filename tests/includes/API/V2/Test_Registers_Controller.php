@@ -339,4 +339,48 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( Store_Reach::FILTER, $filter );
 		}
 	}
+	/** Unassigned register reads, edits and health require the explicit key. */
+	public function test_unassigned_register_is_reachable_only_with_the_unassigned_key(): void {
+		// Arrange.
+		$row = ( new Register_Store() )->create( array( 'name' => 'Unassigned' ) );
+		foreach ( array( true, false ) as $unassigned ) {
+			$filter = static function () use ( $unassigned ) {
+				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
+			};
+			add_filter( Store_Reach::FILTER, $filter );
+			try {
+				foreach ( array( 'GET', 'PATCH' ) as $method ) {
+					// Act.
+					$request = $this->wp_rest_get_request( '/wcpos/v2/registers/' . $row['id'] );
+					$request->set_method( $method );
+					$request->set_param( 'name', 'Renamed' );
+					$response = $this->server->dispatch( $request );
+					// Assert.
+					$this->assertSame( $unassigned ? 200 : 404, $response->get_status() );
+					if ( ! $unassigned ) {
+						$request->set_route( '/wcpos/v2/registers/' . wp_generate_uuid4() );
+						$absent = $this->server->dispatch( $request );
+						$this->assertSame( $absent->get_status(), $response->get_status() );
+						$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+					}
+				}
+				foreach ( array( '', '/health' ) as $suffix ) {
+					$request = $this->wp_rest_get_request( '/wcpos/v2/registers' . $suffix );
+					$request->set_param( 'status', 'all' );
+					$response = $this->server->dispatch( $request );
+					$this->assertSame( 200, $response->get_status() );
+					$rows = $suffix ? $response->get_data()['registers'] : $response->get_data();
+					$ids  = array_column( $rows, 'id' );
+					// The seeded default register is unassigned too, so the list holds both or neither.
+					if ( $unassigned ) {
+						$this->assertContains( $row['id'], $ids );
+					} else {
+						$this->assertSame( array(), $ids );
+					}
+				}
+			} finally {
+				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
+	}
 }

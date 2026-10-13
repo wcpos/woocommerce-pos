@@ -955,4 +955,31 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringContainsString( 'Renamed register', $legacy );
 		$this->assertStringContainsString( 'Renamed operator', $legacy );
 	}
+	/** The closure document respects the explicit unassigned key. */
+	public function test_unassigned_closure_document_is_reachable_only_with_the_unassigned_key(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Closure_Store();
+		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$wpdb->update( $store->table_name(), array( 'store_id' => null ), array( 'id' => $row['id'] ) );
+		foreach ( array( true, false ) as $unassigned ) {
+			$filter = static function () use ( $unassigned ) {
+				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
+			};
+			add_filter( Store_Reach::FILTER, $filter );
+			try {
+				// Act.
+				$response = $this->document( 'closure:' . $row['id'] );
+				// Assert.
+				$this->assertSame( $unassigned ? 200 : 404, $response->get_status() );
+				if ( ! $unassigned ) {
+					$absent = $this->document( 'closure:' . wp_generate_uuid4() );
+					$this->assertSame( $absent->get_status(), $response->get_status() );
+					$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+				}
+			} finally {
+				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
+	}
 }
