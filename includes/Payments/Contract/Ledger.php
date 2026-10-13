@@ -62,6 +62,13 @@ class Ledger {
 	 */
 	private $logged_invalid_ledgers = array();
 
+	/**
+	 * Keeper acquisitions held until after-save, keyed by order id.
+	 *
+	 * @var array<int, int>
+	 */
+	private $closure_locks = array();
+
 	/** Get the shared ledger. */
 	public static function instance(): self {
 		if ( null === self::$instance ) {
@@ -109,6 +116,8 @@ class Ledger {
 	/** Keep server stamps on every order-writing lane. */
 	public static function register_hooks(): void {
 		add_action( 'woocommerce_before_order_object_save', array( self::instance(), 'keep_closure_stamps' ), 10, 1 );
+		add_action( 'woocommerce_after_order_object_save', array( self::instance(), 'release_closure_lock' ), 10, 1 );
+		add_action( 'shutdown', array( self::instance(), 'release_closure_lock' ), 10, 0 );
 	}
 
 	/** Decode both typed meta and the stored JSON form.
@@ -215,7 +224,8 @@ class Ledger {
 		}
 	}
 
-	/** Each pending leg inherits its stamp from storage, never the writer.
+	/** Hold Order_Lock across the storage read and save; stamps come only from storage.
+	 * Keep every stored stamped leg, even when the writer omits it or sends an undecodable ledger.
 	 *
 	 * @param mixed $order Order about to be saved.
 	 */
@@ -233,6 +243,12 @@ class Ledger {
 		if ( ! $pending ) {
 			return;
 		}
+		$order_id = $order->get_id();
+		if ( Order_Lock::instance()->acquire( $order_id ) ) {
+			$this->closure_locks[ $order_id ] = ( $this->closure_locks[ $order_id ] ?? 0 ) + 1;
+		} else {
+			Logger::warning( 'Closure stamps unguarded on an order save.', array( 'order_id' => $order_id ) );
+		}
 		$stored = $this->stored( $order->get_id(), false );
 		$stamps = array();
 		foreach ( $stored['payments'] ?? array() as $row ) {
@@ -243,11 +259,20 @@ class Ledger {
 		$raw = $order->get_meta( self::META_KEY, true );
 		$value = $this->decode( $raw );
 		if ( null === $value ) {
+			if ( $stamps ) {
+				$value = array(
+					'schema' => self::SCHEMA,
+					'payments' => $stored['payments'],
+				);
+				$order->update_meta_data( self::META_KEY, wp_json_encode( $value ) );
+			}
 			return;
 		}
 		$before = $value;
+		$present = array();
 		foreach ( $value['payments'] as &$row ) {
 			$id = strtolower( $row['id'] );
+			$present[ $id ] = true;
 			if ( isset( $stamps[ $id ] ) ) {
 				$row['closure_id'] = $stamps[ $id ];
 			} else {
@@ -255,8 +280,36 @@ class Ledger {
 			}
 		}
 		unset( $row );
+		foreach ( $stored['payments'] ?? array() as $row ) {
+			if ( ! empty( $row['closure_id'] ) && ! isset( $present[ strtolower( $row['id'] ) ] ) ) {
+				$value['payments'][] = $row;
+			}
+		}
 		if ( $value !== $before ) {
 			$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $value ) );
+		}
+	}
+
+	/** Release a keeper acquisition after saving, or all remaining acquisitions on shutdown.
+	 *
+	 * @param mixed $order Saved order, or null at shutdown.
+	 */
+	public function release_closure_lock( $order = null ): void {
+		if ( null !== $order && ! $order instanceof WC_Order ) {
+			return;
+		}
+		$orders = null === $order ? $this->closure_locks : array( $order->get_id() => 1 );
+		foreach ( $orders as $order_id => $count ) {
+			if ( ! isset( $this->closure_locks[ $order_id ] ) ) {
+				continue;
+			}
+			for ( $i = 0; $i < $count; ++$i ) {
+				Order_Lock::instance()->release( $order_id );
+				--$this->closure_locks[ $order_id ];
+			}
+			if ( 0 === $this->closure_locks[ $order_id ] ) {
+				unset( $this->closure_locks[ $order_id ] );
+			}
 		}
 	}
 
