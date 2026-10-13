@@ -54,6 +54,11 @@ use const HOUR_IN_SECONDS;
  */
 class Auth {
 	/**
+	 * Replace a session about to expire so the page's refresh token does not die within the hour.
+	 */
+	private const WEB_SESSION_REUSE_MIN_REMAINING = DAY_IN_SECONDS;
+
+	/**
 	 * Maximum retained idle sessions.
 	 *
 	 * @deprecated Use Session_Registry::MAX_SESSIONS_PER_USER.
@@ -510,6 +515,19 @@ class Auth {
 	 * @return string|WP_Error
 	 */
 	public function generate_refresh_token( WP_User $user ) {
+		return $this->issue_refresh_token( $user );
+	}
+
+	/**
+	 * Sign a new refresh token or reissue one for an existing session.
+	 *
+	 * @param WP_User $user   The user object.
+	 * @param string  $jti    Existing session JTI, or empty to create one.
+	 * @param int     $expire Existing session expiry.
+	 *
+	 * @return string|WP_Error
+	 */
+	private function issue_refresh_token( WP_User $user, string $jti = '', int $expire = 0 ) {
 		// First thing, check the secret key if not exist return a error.
 		if ( ! $this->get_refresh_secret_key() ) {
 			return new WP_Error(
@@ -523,10 +541,11 @@ class Auth {
 
 		/** Valid credentials, the user exists create the according Token */
 		$issued_at = time();
-		$expire    = $this->get_refresh_token_expire( $issued_at );
+		$reuse     = '' !== $jti;
+		$expire    = $reuse ? $expire : $this->get_refresh_token_expire( $issued_at );
 
 		// Generate unique JTI (JWT ID) for refresh token tracking.
-		$jti = wp_generate_uuid4();
+		$jti = $reuse ? $jti : wp_generate_uuid4();
 
 		$token = array(
 			'iss'  => get_bloginfo( 'url' ),
@@ -554,6 +573,12 @@ class Auth {
 		 * @hook woocommerce_pos_jwt_refresh_token_before_sign
 		 */
 		$token = JWT::encode( apply_filters( 'woocommerce_pos_jwt_refresh_token_before_sign', $token, $user ), $this->get_refresh_secret_key(), 'HS256' );
+
+		if ( $reuse ) {
+			$this->sessions->touch( $user->ID, $jti );
+
+			return $token;
+		}
 
 		// Store refresh token JTI for potential revocation.
 		$evicted   = $this->sessions->record( $user->ID, $jti, $expire, Session_Context::from_request() );
@@ -636,17 +661,29 @@ class Auth {
 	 * @return array
 	 */
 	public function get_user_data( WP_User $user, bool $is_web_frontend = false ): array {
-		// For web frontend, revoke previous session to prevent proliferation on page refresh.
-		if ( $is_web_frontend ) {
-			$this->cleanup_previous_web_session( $user->ID );
+		$jti     = $is_web_frontend &amp;&amp; isset( $_COOKIE['wcpos_web_session_jti'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['wcpos_web_session_jti'] ) ) : '';
+		$session = '' !== $jti &amp;&amp; $this->sessions->is_live( $user->ID, $jti ) ? $this->sessions->entry( $user->ID, $jti ) : array();
+		if ( ! empty( $session ) &amp;&amp; $session['expires'] > time() + self::WEB_SESSION_REUSE_MIN_REMAINING ) {
+			$refresh = $this->issue_refresh_token( $user, $jti, (int) $session['expires'] );
+			$access  = $this->generate_access_token_data( $user, $jti );
+			if ( is_wp_error( $refresh ) || is_wp_error( $access ) ) {
+				return array();
+			}
+			$tokens = array(
+				'access_token'  => $access['token'],
+				'refresh_token' => $refresh,
+				'token_type'    => 'Bearer',
+				'expires_at'    => (int) $access['expires_at'],
+			);
+		} else {
+			$tokens = $this->generate_token_pair( $user );
 		}
 
-		$tokens = $this->generate_token_pair( $user );
 		if ( is_wp_error( $tokens ) ) {
 			return array();
 		}
 
-		// For web frontend, store the new session JTI in a cookie for cleanup on next page load.
+		// Track the browser session for page-load reuse and WordPress logout.
 		if ( $is_web_frontend ) {
 			$this->set_web_session_cookie( $tokens['refresh_token'] );
 		}
@@ -1095,11 +1132,7 @@ class Auth {
 	}
 
 	/**
-	 * Clean up previous web session to prevent session proliferation.
-	 *
-	 * The web application generates new tokens on every page load. This method
-	 * revokes the previous session (stored in a cookie) so only one web session
-	 * exists per browser at a time.
+	 * Revoke this browser's web session on WordPress logout.
 	 *
 	 * @param int $user_id The user ID.
 	 */
@@ -1126,6 +1159,10 @@ class Auth {
 	 * @param string $refresh_token The refresh token to extract JTI from.
 	 */
 	private function set_web_session_cookie( string $refresh_token ): void {
+		if ( headers_sent() ) {
+			return;
+		}
+
 		$decoded = $this->validate_token( $refresh_token, 'refresh' );
 
 		if ( is_wp_error( $decoded ) || empty( $decoded->jti ) ) {
