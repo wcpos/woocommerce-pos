@@ -119,7 +119,7 @@ class Records_Controller extends WP_REST_Controller {
 			}
 			$args[ $key ] = $value;
 		}
-		/** Filter authorized history scope; Pro may constrain store_id. */
+		/** Extension filter for the record list; not an authorization seam. Store_Reach narrows the result below. */
 		$args = apply_filters( 'woocommerce_pos_records_list_args', $args, $request );
 		$args = Store_Reach::for_request( $request )->narrow( $args );
 		$store = new Fiscal_Record_Store();

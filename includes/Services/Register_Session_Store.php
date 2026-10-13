@@ -95,8 +95,7 @@ final class Register_Session_Store {
 		$where = array( '1=1' );
 		foreach ( array( 'id', 'register_id', 'status', 'store_id' ) as $key ) {
 			if ( 'store_id' === $key && isset( $args[ $key ] ) && is_array( $args[ $key ] ) ) {
-				$ids = array_map( 'intval', $args[ $key ] );
-				$where[] = $ids ? 'store_id IN (' . implode( ',', $ids ) . ')' : '1=0';
+				$where[] = Store_Reach::store_predicate( (array) $args['store_id'] );
 			} elseif ( array_key_exists( $key, $args ) && 'all' !== $args[ $key ] ) {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Allowlisted column.
 				$where[] = null === $args[ $key ] ? "{$key} IS NULL" : $wpdb->prepare( "{$key} = %s", $args[ $key ] );

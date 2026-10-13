@@ -346,8 +346,7 @@ final class Fiscal_Record_Store {
 			}
 		}
 		if ( isset( $args['store_id'] ) ) {
-			$ids = array_map( 'intval', (array) $args['store_id'] );
-			$where[] = $ids ? 'store_id IN (' . implode( ',', $ids ) . ')' : '1=0';
+			$where[] = Store_Reach::store_predicate( (array) $args['store_id'] );
 		}
 		return implode( ' AND ', $where );
 	}

@@ -850,4 +850,52 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( Store_Reach::FILTER, $filter );
 		}
 	}
+	/** Both NULL and zero sessions use the same item and list reach. */
+	public function test_unassigned_session_is_reachable_only_with_the_unassigned_key(): void {
+		// Arrange.
+		$ids = array();
+		foreach ( array( null, 0 ) as $store_id ) {
+			$fields = $this->fields();
+			$ids[] = ( new Register_Session_Store() )->create(
+				array(
+					'id' => $fields['id'],
+					'register_id' => $fields['register_id'],
+					'store_id' => $store_id,
+					'opened_at_gmt' => '2026-09-11 08:00:00',
+					'opened_by' => get_current_user_id(),
+					'expected_float' => null,
+					'counted_float' => '100',
+				)
+			)['id'];
+		}
+		foreach ( array( true, false ) as $unassigned ) {
+			$filter = static function () use ( $unassigned ) {
+				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
+			};
+			add_filter( Store_Reach::FILTER, $filter );
+			try {
+				foreach ( $ids as $id ) {
+					foreach ( array( '', '/movements' ) as $suffix ) {
+						// Act.
+						$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id . $suffix ) );
+						// Assert.
+						$this->assertSame( $unassigned ? 200 : 404, $response->get_status() );
+						if ( ! $unassigned ) {
+							$absent = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . wp_generate_uuid4() . $suffix ) );
+							$this->assertSame( $absent->get_status(), $response->get_status() );
+							$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+						}
+					}
+				}
+				$list = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions' ) );
+				$this->assertSame( 200, $list->get_status() );
+				$actual = array_column( $list->get_data(), 'id' );
+				sort( $actual );
+				sort( $ids );
+				$this->assertSame( $unassigned ? $ids : array(), $actual );
+			} finally {
+				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
+	}
 }

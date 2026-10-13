@@ -115,7 +115,7 @@ class Registers_Controller extends WP_REST_Controller {
 			}
 			$args['store_id'] = (int) $request['store_id'];
 		}
-		/** Filter authorized store scope for the register list. */
+		/** Extension filter for the register list; not an authorization seam. Store_Reach narrows the result. */
 		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', $args, $request ) );
 		return new WP_REST_Response( ( new Register_Store() )->list( $args ) );
 	}

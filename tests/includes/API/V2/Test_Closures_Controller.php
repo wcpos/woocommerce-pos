@@ -1351,4 +1351,41 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( Store_Reach::FILTER, $filter );
 		}
 	}
+	/** Unassigned closure detail, list and export share one reach. */
+	public function test_unassigned_closure_is_reachable_only_with_the_unassigned_key(): void {
+		// Arrange.
+		global $wpdb;
+		$empty = $this->get( 'closures/export' )->get_raw_body();
+		$store = new Closure_Store();
+		$row = $store->create( $this->closure_fields( $this->closure_session(), 42 ) );
+		$wpdb->update( $store->table_name(), array( 'store_id' => null ), array( 'id' => $row['id'] ) );
+		foreach ( array( true, false ) as $unassigned ) {
+			$filter = static function () use ( $unassigned ) {
+				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
+			};
+			add_filter( Store_Reach::FILTER, $filter );
+			try {
+				// Act.
+				$response = $this->get( 'closures/' . $row['id'] );
+				$list = $this->get( 'closures' );
+				$export = $this->get( 'closures/export' );
+				$csv = $this->export_csv( $export );
+				// Assert.
+				$this->assertSame( $unassigned ? 200 : 404, $response->get_status() );
+				$this->assertSame( 200, $list->get_status() );
+				$this->assertSame( $unassigned ? array( $row['id'] ) : array(), array_column( $list->get_data(), 'id' ) );
+				if ( $unassigned ) {
+					$this->assertSame( 2, count( $csv ) );
+					$this->assertSame( '42', $csv[1][ array_search( 'closure_number', $csv[0], true ) ] );
+				} else {
+					$absent = $this->get( 'closures/' . wp_generate_uuid4() );
+					$this->assertSame( $absent->get_status(), $response->get_status() );
+					$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+					$this->assertSame( $empty, $export->get_raw_body() );
+				}
+			} finally {
+				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
+	}
 }

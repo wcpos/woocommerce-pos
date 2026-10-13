@@ -242,4 +242,26 @@ trait Provenance_Health_Tests {
 		);
 		$this->assertSame( array(), $row['duplicates'] );
 	}
+	/**
+	 * Unassigned scope includes both missing and zero order store metadata.
+	 */
+	public function test_report_unassigned_scope_includes_orders_without_a_store(): void {
+		// Arrange.
+		$session = wp_generate_uuid4();
+		foreach ( array( null, '0', 2 ) as $store_id ) {
+			$order = wc_get_order( $this->provenance_order( '' ) );
+			$order->update_meta_data( '_wcpos_session', $session );
+			if ( null !== $store_id ) {
+				$order->update_meta_data( '_pos_store', $store_id );
+			}
+			$order->save();
+		}
+		// Act.
+		$included = ( new Provenance_Health() )->report( array(), array(), array( 1, null ) );
+		$excluded = ( new Provenance_Health() )->report( array(), array(), array( 1 ) );
+		// Assert.
+		$this->assertSame( array( $session ), array_column( $included['unknown_sessions'], 'session_id' ) );
+		$this->assertSame( 2, $included['unknown_sessions'][0]['orders'] );
+		$this->assertSame( array(), $excluded['unknown_sessions'] );
+	}
 }
