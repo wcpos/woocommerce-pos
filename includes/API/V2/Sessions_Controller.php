@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
@@ -117,17 +118,17 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
-			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
+			$figures = Session_Figures::for_session( $row );
 			if ( substr( rtrim( $request->get_route(), '/' ), -10 ) === '/movements' ) {
-				return new WP_REST_Response( $movements );
+				return new WP_REST_Response( $figures->movements() );
 			}
 			$detail = array(
-				'movements' => $movements,
-				'sales_count' => $store->sales_count( $row ),
+				'movements' => $figures->movements(),
+				'sales_count' => $figures->sales_count(),
 			);
 			// The expected figure is a report: a cashier counting blind never receives it.
 			if ( current_user_can( 'view_woocommerce_pos_reports' ) ) {
-				$detail['expected'] = $store->expected( $row );
+				$detail['expected'] = $figures->expected();
 			}
 			return new WP_REST_Response( $row + $detail );
 		}

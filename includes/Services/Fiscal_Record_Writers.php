@@ -107,14 +107,7 @@ final class Fiscal_Record_Writers {
 						}
 					)
 				);
-				$cash = array();
-				foreach ( $rows as $row ) {
-					// Every cash-kind gateway is the drawer.
-					if ( 'cash' === ( $row['kind'] ?? '' ) ) {
-						$cash[] = $row['amount'];
-					}
-				}
-				$delta = array( 'cash' => Closure_Store::sum( $cash ) );
+				$delta = Session_Figures::tender_totals( $rows );
 				$this->write(
 					$order,
 					array_merge(
@@ -127,7 +120,7 @@ final class Fiscal_Record_Writers {
 							'payload' => array(
 								'tender_rows' => $rows,
 								'expected_delta' => $delta,
-								'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
+								'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
 							),
 						)
 					)
@@ -309,9 +302,8 @@ final class Fiscal_Record_Writers {
 	private function record_late_arrival( WC_Order $order, WC_Order_Refund $refund, array $provenance, array $record, array $closure ): void {
 		$order_id = $order->get_id();
 		$refund_id = $refund->get_id();
-		$sessions = new Register_Session_Store();
-		$rows = $sessions->refund_tender_rows( $refund );
-		$delta = array( 'cash' => $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $rows )['cash'] );
+		$rows = Session_Figures::refund_tender_rows( $refund );
+		$delta = Session_Figures::tender_totals( $rows );
 		$this->write(
 			$order,
 			array_merge(
@@ -331,7 +323,7 @@ final class Fiscal_Record_Writers {
 						'amount' => Closure_Store::sum( array( (string) $refund->get_amount() ) ),
 						'tender_rows' => $rows,
 						'expected_delta' => $delta,
-						'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
+						'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
 					),
 				)
 			)
@@ -397,7 +389,6 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		$amount = Closure_Store::sum( array( $amount ) );
-		$delta = array( 'cash' => $amount );
 		$tender = array_intersect_key( $row, array_flip( array( 'method_id', 'kind' ) ) );
 		$tender['amount'] = '-' . $amount;
 		$tender['refund_id'] = $refund->get_id();
@@ -405,6 +396,7 @@ final class Fiscal_Record_Writers {
 		$cash['method_id'] = 'pos_cash';
 		$cash['kind'] = 'cash';
 		$cash['amount'] = $amount;
+		$delta = Session_Figures::tender_totals( array( $tender, $cash ) );
 		$provenance['type'] = 'late_refund';
 		// The column is CHAR(36): a deterministic UUID-shaped digest of the allocation identity.
 		$digest = md5( 'refund:' . $refund->get_id() . ':' . $row['id'] );
@@ -422,7 +414,7 @@ final class Fiscal_Record_Writers {
 			'amount' => $amount,
 			'tender_rows' => array( $tender, $cash ),
 			'expected_delta' => $delta,
-			'variance_delta' => ( new Closure_Store() )->variance( array( 'cash' => '0' ), $delta ),
+			'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
 		);
 		$this->write( $order, $provenance );
 	}

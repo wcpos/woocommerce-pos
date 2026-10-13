@@ -18,6 +18,28 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/** Raw negative and refund-kind legs both belong in period refunds. */
+	public function test_closure_period_totals_count_negative_and_refund_kind_legs_as_refunds(): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
+		$rows = $ledger->read( $order );
+		foreach ( array( array( '-5', 'cash' ), array( '7', 'refund' ) ) as list( $amount, $kind ) ) {
+			$rows[] = array_merge(
+				$rows[0],
+				array(
+					'id' => wp_generate_uuid4(),
+					'amount' => $amount,
+					'kind' => $kind,
+				)
+			);
+		}
+		$ledger->save( $order, $rows, false );
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$this->assertSame( '80.0000', $closure['period_sales_total'] );
+		$this->assertSame( '12.0000', $closure['period_refunds_total'] );
+	}
+
 	/** The aggregate upgrade adds missing columns and backfills only unstamped rows. */
 	public function test_business_day_upgrade_adds_columns_and_preserves_stamps(): void {
 		global $wpdb;

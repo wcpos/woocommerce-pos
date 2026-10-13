@@ -9,11 +9,49 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 
 /** Exercise owner and v2 detail balances against the same seeded ledger. */
 trait Session_Expected_Tests {
+	/** Cash-kind gateways share the drawer; other tenders retain their identity. */
+	public function test_expected_counts_every_cash_kind_tender_as_the_drawer(): void {
+		$store = new Register_Session_Store();
+		$register = ( new Register_Store() )->create( array( 'name' => 'Cash kind fixture' ) );
+		$session = $store->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'register_id' => $register['id'],
+				'opened_at_gmt' => '2026-09-11 10:00:00',
+				'opened_by' => get_current_user_id(),
+				'expected_float' => null,
+				'counted_float' => '100',
+			)
+		);
+		$order = new \WC_Order();
+		$order->save();
+		$rows = array();
+		foreach ( array( array( 'cod', 'cash', '20' ), array( 'ext_voucher', 'other', '5' ) ) as list( $method, $kind, $amount ) ) {
+			$rows[] = array(
+				'id' => wp_generate_uuid4(),
+				'method_id' => $method,
+				'kind' => $kind,
+				'amount' => $amount,
+				'status' => 'captured',
+				'session_id' => $session['id'],
+			);
+		}
+		Ledger::instance()->save( $order, $rows, false );
+		$this->assertSame(
+			array(
+				'cash' => '120.0000',
+				'ext_voucher' => '5.0000',
+			),
+			Session_Figures::for_session( $session )->expected()
+		);
+	}
+
 	/** The seeded contract is also exposed unchanged by the v2 detail resource. */
 	public function test_expected_seeded_ledger_and_distinct_sales_count(): void {
 		$store = new Register_Session_Store();
@@ -28,8 +66,8 @@ trait Session_Expected_Tests {
 				'counted_float' => '100',
 			)
 		);
-		$this->assertSame( array( 'cash' => '100.0000' ), $store->expected( $session ) );
-		$this->assertSame( 0, $store->sales_count( $session ) );
+		$this->assertSame( array( 'cash' => '100.0000' ), Session_Figures::for_session( $session )->expected() );
+		$this->assertSame( 0, Session_Figures::for_session( $session )->sales_count() );
 		$movements = new Cash_Movement_Store();
 		$base = array(
 			'session_id' => $session['id'],
@@ -111,12 +149,12 @@ trait Session_Expected_Tests {
 					'cash' => '165.0000',
 					'card' => '30.0000',
 				),
-				$store->expected( $session )
+				Session_Figures::for_session( $session )->expected()
 			);
-			$this->assertSame( 2, $store->sales_count( $session ) );
+			$this->assertSame( 2, Session_Figures::for_session( $session )->sales_count() );
 			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );
 			$this->assertSame( 200, $response->get_status() );
-			$this->assertSame( $store->expected( $session ), $response->get_data()['expected'] );
+			$this->assertSame( Session_Figures::for_session( $session )->expected(), $response->get_data()['expected'] );
 			$this->assertSame( 2, $response->get_data()['sales_count'] );
 			$this->assertCount( 4, $response->get_data()['movements'] );
 		} finally {

@@ -25,16 +25,11 @@ class Receipt_Data_Builder {
 	 */
 	public function build_closure_document( array $row, bool $xreport = false ): array {
 		if ( $xreport ) {
-			$sessions = new Register_Session_Store();
-			$orders = $sessions->captured_orders( $row );
-			$movements = ( new Cash_Movement_Store() )->list( $row['id'] );
-			// Read the session's refunds once: the drawer derivation and the count share them.
-			$refunds = $sessions->session_refunds( $row );
-			$row['expected'] = $sessions->expected( $row, $orders, $movements, array_merge( array(), ...array_column( $refunds, 'rows' ) ) );
+			$figures = Session_Figures::for_session( $row );
+			$row['expected'] = $figures->expected();
 			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
 			$cashiers = array();
-			$refund_count = count( $refunds );
-			foreach ( $refunds as $refund ) {
+			foreach ( $figures->refunds() as $refund ) {
 				$id = (int) $refund['refund']->get_refunded_by();
 				if ( $id ) {
 					$cashiers[ $id ] = array(
@@ -43,12 +38,8 @@ class Receipt_Data_Builder {
 					);
 				}
 			}
-			foreach ( $orders as $payments ) {
+			foreach ( $figures->legs() as $payments ) {
 				foreach ( $payments as $payment ) {
-					if ( 'refund' === $payment['kind'] || '-' === substr( $payment['amount'], 0, 1 ) ) {
-						++$refund_count;
-					}
-
 					$id = (int) ( $payment['cashier_id'] ?? 0 );
 					if ( $id ) {
 						$cashiers[ $id ] = array(
@@ -64,9 +55,9 @@ class Receipt_Data_Builder {
 					'counted' => $row['counted_float'],
 					'variance' => $row['opening_variance'],
 				),
-				'movements' => $movements,
-				'transaction_count' => count( $orders ),
-				'refund_count' => $refund_count,
+				'movements' => $figures->movements(),
+				'transaction_count' => $figures->sales_count(),
+				'refund_count' => $figures->refund_count(),
 				'cashiers' => array_values( $cashiers ),
 			);
 		}
