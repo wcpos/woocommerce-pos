@@ -103,6 +103,76 @@ trait Catalog_Proxy_Order_Search_Tests {
 	}
 
 	/**
+	 * Order search preserves refunds when preparing the matched order response.
+	 */
+	public function test_order_search_keeps_the_matched_orders_refunds(): void {
+		// Arrange: the fixture order carries no total, and wc_create_refund() refuses an
+		// amount above the refundable total.
+		$this->target_order->set_total( '10.00' );
+		$this->target_order->save();
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $this->target_order->get_id(),
+				'amount'   => 1,
+				'reason'   => 'Refund probe',
+			)
+		);
+		$this->assertNotWPError( $refund );
+		wp_cache_flush();
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_query_params(
+			array(
+				'search' => 'QuillonProbe',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, count( $data ) );
+		$this->assertSame( $this->target_order->get_id(), $data[0]['id'] );
+		$this->assertSame( array( $refund->get_id() ), wp_list_pluck( $data[0]['refunds'], 'id' ) );
+	}
+
+	/**
+	 * Creation-channel filtering preserves refunds in the matched order response.
+	 */
+	public function test_created_via_filter_keeps_the_matched_orders_refunds(): void {
+		// Arrange.
+		$this->target_order->set_created_via( 'wcpos-refund-probe' );
+		$this->target_order->set_total( '10.00' );
+		$this->target_order->save();
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $this->target_order->get_id(),
+				'amount'   => 1,
+				'reason'   => 'Refund probe',
+			)
+		);
+		$this->assertNotWPError( $refund );
+		wp_cache_flush();
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_query_params(
+			array(
+				'created_via' => 'wcpos-refund-probe',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, count( $data ) );
+		$this->assertSame( $this->target_order->get_id(), $data[0]['id'] );
+		$this->assertSame( array( $refund->get_id() ), wp_list_pluck( $data[0]['refunds'], 'id' ) );
+	}
+
+	/**
 	 * Partial billing emails retain V1 search semantics.
 	 */
 	public function test_order_search_by_billing_email_matches_v1(): void {
