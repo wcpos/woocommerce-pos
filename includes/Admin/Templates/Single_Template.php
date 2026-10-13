@@ -564,17 +564,23 @@ class Single_Template {
 	}
 
 	/**
-	 * Build the sample receipt data passed to the template editor.
+	 * Build the template's own Preview Document; with no template, the plain sample receipt.
 	 *
 	 * Money fields are run through Receipt_Data_Schema::format_money_fields() so
 	 * the editor's sample-mode preview renders formatted currency strings — the
 	 * same shape the live /preview endpoint returns. Without this the starter
 	 * templates' `*_display` placeholders resolve to empty strings.
 	 *
+	 * @param array|null $template Optional template record for its preview profile.
+	 *
 	 * @return array<string,mixed>
 	 */
-	public static function get_sample_receipt_data(): array {
-		$raw = ( new \WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder() )->build();
+	public static function get_sample_receipt_data( ?array $template = null ): array {
+		$raw = ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->for_template(
+			$template ?? array(
+				'type' => 'receipt',
+			)
+		);
 
 		return \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::format_money_fields(
 			$raw,
@@ -597,8 +603,14 @@ class Single_Template {
 			? ( TemplatesManager::get_active_template( 'display' )['content'] ?? null )
 			: null;
 
-		// Get sample receipt data from the preview builder.
-		$sample_data = \in_array( $type, array( 'closure', 'report' ), true ) ? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build( $type ) : self::get_sample_receipt_data();
+		// Keep closure and report samples unformatted; receipt profiles get money companions.
+		$sample_data = \in_array( $type, array( 'closure', 'report' ), true )
+			? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->for_template(
+				$template ?? array(
+					'type' => $type,
+				)
+			)
+			: self::get_sample_receipt_data( $template );
 
 		$preview_url = rest_url( 'wcpos/v2/templates/' . $post->ID . '/preview' );
 

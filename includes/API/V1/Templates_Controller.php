@@ -9,11 +9,11 @@ namespace WCPOS\WooCommercePOS\API\V1;
 
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
+use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
 use WP_Error;
 use WP_Query;
 use WP_REST_Controller;
@@ -1028,18 +1028,14 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		if ( 'report' === ( $template['type'] ?? '' ) ) {
-			$receipt_data = ( new Receipt_Preview_Fixture_Loader() )->build( 'report', $request->get_param( 'report' ) ?? 'sales' );
-		} elseif ( $order ) {
+		if ( $order ) {
 			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {
-			$pos_store = null === $request_pos_store ? wcpos_get_store() : $request_pos_store;
-			$preview_data_profile = isset( $template['preview_data'] ) && is_string( $template['preview_data'] )
-				? $template['preview_data']
-				: ( 'closure' === ( $template['type'] ?? '' ) ? 'closure' : null );
-			$receipt_data = null !== $preview_data_profile
-				? ( new Receipt_Preview_Fixture_Loader() )->build( $preview_data_profile, $pos_store )
-				: ( new Preview_Receipt_Builder() )->build( $pos_store );
+			$receipt_data = ( new Receipt_Preview_Fixture_Loader() )->for_template(
+				$template,
+				null === $request_pos_store ? wcpos_get_store() : $request_pos_store,
+				$request->get_param( 'report' ) ?? 'sales'
+			);
 		}
 
 		$currency       = $receipt_data['order']['currency'] ?? 'USD';
@@ -1174,10 +1170,10 @@ class Templates_Controller extends WP_REST_Controller {
 
 
 	/**
-	 * Render a logicless template with preview data and return the HTML string.
+	 * Render a logicless template for the `preview_html` diagnostic.
 	 *
-	 * Uses output buffering to capture the Logicless_Renderer output
-	 * without requiring a real WC_Abstract_Order.
+	 * Delegates to Logicless_Renderer so the diagnostic is a real render: barcodes rasterised,
+	 * print-colour styles kept. Money formatting is idempotent, so pre-formatted data is safe.
 	 *
 	 * @param array $template       Template metadata including content.
 	 * @param array $formatted_data Receipt data with money fields pre-formatted.
@@ -1185,35 +1181,14 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return string Rendered HTML.
 	 */
 	private function render_logicless_preview( array $template, array $formatted_data ): string {
-		$content = isset( $template['content'] ) && \is_string( $template['content'] ) ? $template['content'] : '';
+		ob_start();
+		try {
+			( new Logicless_Renderer() )->render( $template, null, $formatted_data );
 
-		if ( '' === $content ) {
-			return '<!-- Empty logicless receipt template -->';
+			return (string) ob_get_contents();
+		} finally {
+			ob_end_clean();
 		}
-
-		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
-		$content = preg_replace( '/<!--.*?-->/s', '', $content );
-
-		// Safety net for unresolved {{#t}}...{{/t}} markers in gallery templates.
-		$formatted_data['t'] = true;
-
-		$flags    = ENT_QUOTES | ENT_SUBSTITUTE;
-		$mustache = new \Mustache\Engine(
-			array(
-				'entity_flags' => $flags,
-				'escape'       => function ( $value ) use ( $flags ) {
-					if ( \is_array( $value ) ) {
-						return '';
-					}
-
-					return htmlspecialchars( (string) $value, $flags, 'UTF-8' );
-				},
-			)
-		);
-
-		$output = $mustache->render( $content, $formatted_data );
-
-		return wp_kses_post( $output );
 	}
 
 	/**
