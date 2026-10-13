@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-13T10:51:37+00:00\n"
+"POT-Creation-Date: 2026-10-13T12:46:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -70,7 +70,7 @@ msgid "Cashier"
 msgstr ""
 
 #. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-#: includes/Activator.php:854
+#: includes/Activator.php:860
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -254,33 +254,39 @@ msgstr ""
 
 #. translators: Product POS visibility or barcode label in WooCommerce admin.
 #. translators: Product POS visibility label in WooCommerce admin.
-#: includes/Admin/Products/templates/post-metabox-visibility-select.php:22
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:23
 #: includes/Admin/Products/templates/quick-edit-visibility-select.php:23
 #: includes/Admin/Products/templates/variation-metabox-visibility-select.php:25
 msgid "POS visibility"
 msgstr ""
 
 #. translators: Link text for editing product POS visibility in the WooCommerce product publish box.
-#: includes/Admin/Products/templates/post-metabox-visibility-select.php:28
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:29
 msgid "Edit"
 msgstr ""
 
 #. translators: Button text confirming product POS visibility changes in the WooCommerce product publish box.
-#: includes/Admin/Products/templates/post-metabox-visibility-select.php:47
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:48
 msgid "OK"
 msgstr ""
 
 #. translators: Link text cancelling product POS visibility changes in the WooCommerce product publish box.
-#: includes/Admin/Products/templates/post-metabox-visibility-select.php:54
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:55
 msgid "Cancel"
 msgstr ""
 
-#: includes/Admin/Products/templates/post-metabox-visibility-select.php:59
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:64
 msgid "POS Only products are never shown in the online catalog or search."
 msgstr ""
 
+#. translators: %s: a WooCommerce catalog visibility option, e.g. "Search results only".
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:67
+#, php-format
+msgid "Catalog visibility is kept at “%s” while this product is POS Only."
+msgstr ""
+
 #. translators: %s: a WooCommerce catalog visibility option, e.g. "Shop and search results".
-#: includes/Admin/Products/templates/post-metabox-visibility-select.php:63
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:74
 #, php-format
 msgid "Catalog visibility goes back to “%s” when you update. Change it afterwards if you want something else."
 msgstr ""
@@ -375,12 +381,12 @@ msgid "58mm (Narrow)"
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API.php:437
+#: includes/API.php:435
 #: includes/API/V1/Cashier.php:124
 msgid "Authentication required."
 msgstr ""
 
-#: includes/API.php:444
+#: includes/API.php:442
 msgid "You do not have permission to access the POS."
 msgstr ""
 
@@ -500,7 +506,7 @@ msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Checkout_Controller.php:279
-#: includes/API/V1/Receipts_Controller.php:284
+#: includes/API/V1/Receipts_Controller.php:283
 #: includes/API/V2/Payments_Controller.php:318
 #: includes/Payments/Contract/Settlement.php:92
 msgid "Order not found."
@@ -787,13 +793,13 @@ msgstr ""
 msgid "Operator to compare product tag terms."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:186
+#: includes/API/V1/Receipts_Controller.php:185
 msgid "The closure print could not be recorded."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Receipts_Controller.php:196
-#: includes/API/V1/Receipts_Controller.php:255
+#: includes/API/V1/Receipts_Controller.php:195
+#: includes/API/V1/Receipts_Controller.php:254
 msgid "Invalid order."
 msgstr ""
 
@@ -806,44 +812,44 @@ msgstr ""
 msgid "No fiscal snapshot found for this order."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:293
+#: includes/API/V1/Receipts_Controller.php:292
 msgid "A template_id is required."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:300
+#: includes/API/V1/Receipts_Controller.php:299
 msgid "A closure template is required."
 msgstr ""
 
 #. translators: Error message displayed when a template cannot be found.
-#: includes/API/V1/Receipts_Controller.php:305
-#: includes/Template_Router.php:239
-#: includes/Template_Router.php:257
+#: includes/API/V1/Receipts_Controller.php:304
+#: includes/Template_Router.php:246
+#: includes/Template_Router.php:264
 msgid "Template not found."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:353
-#: includes/API/V1/Receipts_Controller.php:361
+#: includes/API/V1/Receipts_Controller.php:352
+#: includes/API/V1/Receipts_Controller.php:360
 #: includes/Templates/Receipt.php:238
 #: includes/Templates/Receipt.php:246
 #: includes/Templates/Receipt.php:257
 msgid "Could not generate the receipt PDF."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:378
+#: includes/API/V1/Receipts_Controller.php:377
 msgid "Another print of this order is in progress; try again."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:396
+#: includes/API/V1/Receipts_Controller.php:395
 #: includes/API/V2/Closures_Controller.php:371
 #: includes/Templates/Receipt.php:528
 msgid "The closure request could not be completed."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:400
+#: includes/API/V1/Receipts_Controller.php:399
 msgid "Receipt document could not be read."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:415
+#: includes/API/V1/Receipts_Controller.php:414
 msgid "Sorry, you cannot view receipts."
 msgstr ""
 
@@ -1191,12 +1197,12 @@ msgid "Report \"%1$s\" failed: %2$s"
 msgstr ""
 
 #. translators: %s: name of the request field that was rejected.
-#: includes/API/V2/Sessions_Controller.php:368
+#: includes/API/V2/Sessions_Controller.php:369
 #, php-format
 msgid "Invalid parameter: %s"
 msgstr ""
 
-#: includes/API/V2/Sessions_Controller.php:370
+#: includes/API/V2/Sessions_Controller.php:371
 msgid "The session request could not be completed."
 msgstr ""
 
@@ -1568,8 +1574,8 @@ msgstr ""
 msgid "An identical request is already being processed."
 msgstr ""
 
-#: includes/Services/Auth.php:362
-#: includes/Services/Auth.php:441
+#: includes/Services/Auth.php:405
+#: includes/Services/Auth.php:484
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
@@ -1598,21 +1604,21 @@ msgstr ""
 msgid "The movement has already been voided or is unavailable."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:378
+#: includes/Services/Closure_Store.php:377
 msgid "The session cannot be closed."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:440
+#: includes/Services/Closure_Store.php:439
 msgid "This session already has a closure; the count was recorded as a recount."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:457
-#: includes/Services/Register_Session_Store.php:240
-#: includes/Services/Register_Session_Store.php:346
+#: includes/Services/Closure_Store.php:456
+#: includes/Services/Register_Session_Store.php:237
+#: includes/Services/Register_Session_Store.php:343
 msgid "The session state has changed."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:483
+#: includes/Services/Closure_Store.php:482
 msgid "The closure number precedes the register sequence."
 msgstr ""
 
@@ -1636,21 +1642,22 @@ msgstr ""
 msgid "POS audit metadata cannot be modified through this REST route."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Store.php:238
+#: includes/Services/Fiscal_Record_Store.php:298
 msgid "Sorry, you are not allowed to read register documents."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Store.php:243
-#: includes/Services/Fiscal_Record_Store.php:251
+#: includes/Services/Fiscal_Record_Store.php:303
+#: includes/Services/Fiscal_Record_Store.php:311
 msgid "Receipt document not found."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Store.php:248
+#: includes/Services/Fiscal_Record_Store.php:308
 msgid "Invalid receipt document."
 msgstr ""
 
 #. translators: %s: fiscal record type (sale, refund, void, cancellation).
-#: includes/Services/Fiscal_Record_Writers.php:64
+#: includes/Services/Fiscal_Record_Writers.php:65
+#: includes/Services/Fiscal_Record_Writers.php:89
 #, php-format
 msgid "POS fiscal %s record could not be written; it will need recovery."
 msgstr ""
@@ -1672,7 +1679,7 @@ msgstr ""
 #. translators: Customer name shown in an order note for a guest checkout.
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Services/Order_Notes.php:42
-#: includes/Services/Receipt_Data_Builder.php:515
+#: includes/Services/Receipt_Data_Builder.php:506
 #: includes/Templates/Payment.php:334
 #: tests/includes/Templates/Test_Receipt_Renderers.php:299
 msgid "Guest"
@@ -1682,9 +1689,9 @@ msgstr ""
 #. translators: %d: Historical POS store ID that no longer exists.
 #. translators: %d: store ID.
 #: includes/Services/Order_Notes.php:61
-#: includes/Services/Receipt_Data_Builder.php:495
-#: includes/Services/Receipt_Data_Builder.php:901
-#: tests/includes/Services/Test_Receipt_Data_Builder.php:1559
+#: includes/Services/Receipt_Data_Builder.php:486
+#: includes/Services/Receipt_Data_Builder.php:892
+#: tests/includes/Services/Test_Receipt_Data_Builder.php:1584
 #, php-format
 msgid "Store #%d"
 msgstr ""
@@ -1892,19 +1899,19 @@ msgid "Quick discount code \"%s\" belongs to a store coupon. Use another code."
 msgstr ""
 
 #. translators: %s: closed session number.
-#: includes/Services/Receipt_Data_Builder.php:238
+#: includes/Services/Receipt_Data_Builder.php:229
 #, php-format
 msgid "Session %s"
 msgstr ""
 
 #. translators: Receipt label for discount amount or discount line.
-#: includes/Services/Receipt_Data_Builder.php:656
+#: includes/Services/Receipt_Data_Builder.php:647
 #: includes/Services/Receipt_I18n_Labels.php:186
 msgid "Discount"
 msgstr ""
 
 #. translators: %s: Discount percentage.
-#: includes/Services/Receipt_Data_Builder.php:658
+#: includes/Services/Receipt_Data_Builder.php:649
 #, php-format
 msgid "Discount (%s%%)"
 msgstr ""
@@ -4587,21 +4594,15 @@ msgstr ""
 msgid "Taxable: %s"
 msgstr ""
 
-#. translators: %d: receipt sequence number.
-#: includes/Services/Receipt_Snapshot_Store.php:208
-#, php-format
-msgid "POS fiscal receipt snapshot created (receipt #%d)."
-msgstr ""
-
-#: includes/Services/Register_Session_Store.php:129
+#: includes/Services/Register_Session_Store.php:126
 msgid "This register already has an open session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:195
+#: includes/Services/Register_Session_Store.php:192
 msgid "The cashier who opened this session cannot approve it."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:299
+#: includes/Services/Register_Session_Store.php:296
 msgid "Manager approval is required to close this session."
 msgstr ""
 
