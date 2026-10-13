@@ -8,18 +8,15 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Sync\Health;
 
 /** Owns closure documents; only print bookkeeping can change. */
 final class Closure_Store {
 	public const TABLE = 'wcpos_closures';
+
+	use Owned_Table;
+
 	/** Shared cap for list consumers, including the whole-store export. */
 	public const MAX_PER_PAGE = 100;
-	/** Verified site tables.
-	 *
-	 * @var array
-	 */
-	private static $installed = array();
 
 	/** Validate a business day without normalizing impossible calendar dates.
 	 *
@@ -30,12 +27,6 @@ final class Closure_Store {
 			return false;
 		}
 		return checkdate( (int) substr( $value, 5, 2 ), (int) substr( $value, 8, 2 ), (int) substr( $value, 0, 4 ) );
-	}
-
-	/** Resolve the site table. */
-	public function table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . self::TABLE;
 	}
 
 	/** Build the portable schema.
@@ -83,23 +74,6 @@ final class Closure_Store {
 			UNIQUE KEY session_id (session_id),
 			KEY store_closed (store_id, closed_at_gmt)
 		) {$charset_collate};";
-	}
-
-	/** Install beside sessions, never running DDL inside a write transaction. */
-	public function install(): void {
-		global $wpdb;
-		if ( ! Health::table_exists( $this->table_name() ) ) {
-			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-			dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
-		}
-	}
-
-	/** Verify once per site per request. */
-	public function ensure_installed(): void {
-		if ( ! isset( self::$installed[ $this->table_name() ] ) ) {
-			$this->install();
-			self::$installed[ $this->table_name() ] = true;
-		}
 	}
 
 	/** Read a document.

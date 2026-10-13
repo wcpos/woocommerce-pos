@@ -17,16 +17,9 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use WP_UnitTestCase;
 use WCPOS\WooCommercePOS\Activator;
-use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
-use WCPOS\WooCommercePOS\Services\Cloud_Print_Relay_Service;
-use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Analytics_Profile;
-use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
-use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Sync\Health;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
-use WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge;
 
 /**
  * Tests for uninstall.php behavior.
@@ -43,6 +36,9 @@ class Test_Uninstall extends WP_UnitTestCase {
 	private const LEGACY_CRON_HOOKS = array(
 		'wcpos_change_log_purge',
 	);
+
+	/** Retired tables retained in uninstall for sites skipping old upgrades. */
+	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index' );
 
 	/**
 	 * User fixture committed by real DDL.
@@ -287,44 +283,234 @@ class Test_Uninstall extends WP_UnitTestCase {
 		}
 	}
 
-	/**
-	 * The hardcoded uninstall table list must cover every current sync table.
-	 *
-	 * The uninstall script runs without the plugin loaded so it hardcodes
-	 * names; this guards against schema drift (a new table added without
-	 * uninstall coverage).
-	 */
-	public function test_uninstall_table_list_covers_health_required_tables(): void {
+	/** Every schema owner must belong to exactly one uninstall table list. */
+	public function test_uninstall_table_lists_cover_every_owned_table(): void {
 		global $wpdb;
 
-		$suffixes = woocommerce_pos_uninstall_table_suffixes();
+		// Arrange: discover owners rather than maintaining another table list.
+		$root       = \dirname( __DIR__, 2 ) . '/includes';
+		$files      = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root ) );
+		$discovered = array();
+		foreach ( $files as $file ) {
+			if ( 'php' !== $file->getExtension() || ! preg_match( '/function\s+schema_sql\s*\(/', file_get_contents( $file->getPathname() ) ) ) {
+				continue;
+			}
+			$class = 'WCPOS\\WooCommercePOS\\' . str_replace( '/', '\\', substr( $file->getPathname(), \strlen( $root ) + 1, -4 ) );
+			if ( ! class_exists( $class ) || ( new \ReflectionClass( $class ) )->isAbstract() ) {
+				continue;
+			}
+			$store        = new $class();
+			$discovered[] = substr( $store->table_name(), \strlen( $wpdb->prefix ) );
+		}
+		$derived       = woocommerce_pos_uninstall_table_suffixes();
+		$configuration = woocommerce_pos_uninstall_configuration_table_suffixes();
+		$listed        = array_values( array_diff( array_merge( $derived, $configuration ), self::LEGACY_TABLES ) );
+		sort( $discovered );
+		sort( $listed );
+
+		// Assert: new tables cannot silently escape uninstall coverage.
+		$message = 'a new Owned Table needs a line in uninstall.php';
+		$this->assertNotEmpty( $discovered, $message );
+		$this->assertSame( $discovered, $listed, $message );
+		$this->assertSame( array(), array_intersect( $derived, $configuration ) );
 		foreach ( Health::required_tables() as $table ) {
-			$this->assertContains(
-				substr( $table, \strlen( $wpdb->prefix ) ),
-				$suffixes,
-				"uninstall.php must drop {$table}"
-			);
+			$this->assertContains( substr( $table, \strlen( $wpdb->prefix ) ), $derived, $message );
 		}
 	}
 
-	/**
-	 * The hardcoded cron hook list must cover every hook the plugin
-	 * schedules, asserted via the owning class constants so renames fail here.
-	 */
-	public function test_uninstall_cron_list_covers_known_hooks(): void {
-		$hooks = woocommerce_pos_uninstall_cron_hooks();
-
-		$this->assertContains( Sync_Journal_Purge::PURGE_HOOK, $hooks );
-		$this->assertContains( Print_Job_Service::PURGE_HOOK, $hooks );
-		$this->assertContains( Integrity_Digest::REBUILD_HOOK, $hooks );
-		$this->assertContains( Cloud_Print_Trigger_Service::CRON_SUBMIT, $hooks );
-		$this->assertContains( Cloud_Print_Relay_Service::REREGISTER_HOOK, $hooks );
-		$this->assertContains( Lifecycle_Events::REFRESH_HOOK, $hooks );
-		$this->assertContains( Font_Pack_Loader::ACTION, $hooks );
-		$this->assertContains( Payments_Sweeper::HOOK, $hooks );
+	/** Every scheduled hook, plus retired hooks, must be cleared on uninstall. */
+	public function test_uninstall_cron_list_covers_every_scheduled_hook(): void {
+		$scheduled = $this->scheduled_cron_hooks();
+		$hooks     = woocommerce_pos_uninstall_cron_hooks();
+		$this->assertNotEmpty( $scheduled );
+		foreach ( $scheduled as $hook => $location ) {
+			$this->assertContains( $hook, $hooks, "uninstall.php must clear {$hook} (scheduled at {$location})" );
+		}
 		foreach ( self::LEGACY_CRON_HOOKS as $hook ) {
 			$this->assertContains( $hook, $hooks );
 		}
+	}
+
+	/** Fully qualified schedulers match, but namespaced lookalikes do not. */
+	public function test_cron_scanner_accepts_fully_qualified_scheduler_calls(): void {
+		// Arrange.
+		$source = <<<'PHP'
+<?php
+namespace WCPOS\WooCommercePOS\Tests;
+class Cron_Scanner_Fqn_Probe {
+	const HOOK = 'wcpos_fqn_probe';
+	public function schedule(): void {
+		\wp_schedule_event( time(), 'hourly', self::HOOK );
+	}
+}
+PHP;
+		$qualified_source = <<<'PHP'
+<?php
+namespace WCPOS\WooCommercePOS\Tests;
+Other\wp_schedule_event( time(), 'hourly', 'wcpos_not_a_hook' );
+PHP;
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- Load the fixture constant without invoking its scheduling method.
+		eval( substr( $source, 5 ) );
+
+		// Act.
+		$hooks           = $this->scheduled_cron_hooks_in_source( $source, 'fully-qualified.php' );
+		$qualified_hooks = $this->scheduled_cron_hooks_in_source( $qualified_source, 'qualified.php' );
+
+		// Assert.
+		$this->assertArrayHasKey( 'wcpos_fqn_probe', $hooks );
+		$this->assertSame( array( 'wcpos_fqn_probe' => 'fully-qualified.php:6' ), $hooks );
+		$this->assertSame( array(), $qualified_hooks );
+	}
+
+	/**
+	 * Discover scheduled hooks: hand-named lists drifted (wcpos_payments_sweep).
+	 * Unresolved expressions fail loudly so new scheduling styles need coverage.
+	 *
+	 * @return array<string,string> Hook names mapped to file:line locations.
+	 */
+	private function scheduled_cron_hooks(): array {
+		$hooks = array();
+		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( \dirname( __DIR__, 2 ) . '/includes' ) );
+		foreach ( $files as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			$hooks = array_replace( $hooks, $this->scheduled_cron_hooks_in_source( file_get_contents( $file->getPathname() ), $file->getPathname() ) );
+		}
+		return $hooks;
+	}
+
+	/**
+	 * Discover scheduled hooks in PHP source.
+	 *
+	 * @param string $source   PHP source text.
+	 * @param string $location Source file location.
+	 * @return array<string,string> Hook names mapped to file:line locations.
+	 */
+	private function scheduled_cron_hooks_in_source( string $source, string $location ): array {
+		$hooks      = array();
+		$schedulers = array(
+			'wp_schedule_event'         => 2,
+			'wp_schedule_single_event'  => 1,
+			'as_schedule_single_action' => 1,
+		);
+		$name_tokens = array( T_STRING, T_NS_SEPARATOR );
+		if ( \defined( 'T_NAME_QUALIFIED' ) ) {
+			$name_tokens[] = T_NAME_QUALIFIED;
+			$name_tokens[] = T_NAME_FULLY_QUALIFIED;
+		}
+		$tokens = array();
+		foreach ( token_get_all( $source ) as $token ) {
+			if ( ! \is_array( $token ) ) {
+				$token = array( 0, $token, 0 );
+			}
+			if ( ! \in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				$tokens[] = $token;
+			}
+		}
+		$namespace = '';
+		$class     = '';
+		$imports   = array();
+		$depth     = 0;
+		$top_depth = 0;
+		foreach ( $tokens as $i => $token ) {
+			if ( '{' === $token[1] || T_CURLY_OPEN === $token[0] || T_DOLLAR_OPEN_CURLY_BRACES === $token[0] ) {
+				++$depth;
+			} elseif ( '}' === $token[1] ) {
+				--$depth;
+			}
+			if ( T_NAMESPACE === $token[0] ) {
+				$namespace = '';
+				$imports   = array();
+				$j         = $i + 1;
+				while ( isset( $tokens[ $j ] ) && \in_array( $tokens[ $j ][0], $name_tokens, true ) ) {
+					$namespace .= $tokens[ $j++ ][1];
+				}
+				$top_depth = '{' === $tokens[ $j ][1] ? $depth + 1 : $depth;
+			}
+			if ( T_USE === $token[0] && $depth === $top_depth && \in_array( $tokens[ $i + 1 ][0], $name_tokens, true ) ) {
+				$name  = '';
+				$alias = '';
+				for ( $j = $i + 1; isset( $tokens[ $j ] ); ++$j ) {
+					$part = $tokens[ $j ];
+					if ( T_AS === $part[0] ) {
+						$alias = $tokens[ ++$j ][1];
+					} elseif ( \in_array( $part[0], $name_tokens, true ) ) {
+						$name .= $part[1];
+					} elseif ( ',' === $part[1] || ';' === $part[1] ) {
+						$segments = explode( '\\', $name );
+						$imports[ strtolower( $alias ? $alias : end( $segments ) ) ] = ltrim( $name, '\\' );
+						$name  = '';
+						$alias = '';
+						if ( ';' === $part[1] ) {
+							break;
+						}
+					}
+				}
+			}
+			if ( T_CLASS === $token[0] && T_STRING === $tokens[ $i + 1 ][0] ) {
+				$class = $namespace . '\\' . $tokens[ $i + 1 ][1];
+			}
+			$scheduler = '';
+			if ( T_STRING === $token[0] ) {
+				$scheduler = $token[1];
+			} elseif ( \defined( 'T_NAME_FULLY_QUALIFIED' ) && T_NAME_FULLY_QUALIFIED === $token[0] ) {
+				$scheduler = ltrim( $token[1], '\\' );
+			}
+			if ( ! isset( $schedulers[ $scheduler ] ) || '(' !== $tokens[ $i + 1 ][1] ) {
+				continue;
+			}
+			if ( \in_array( $tokens[ $i - 1 ][0], array( T_FUNCTION, T_OBJECT_OPERATOR, T_DOUBLE_COLON ), true ) ) {
+				continue;
+			}
+			// PHP 7.4 splits qualified names into namespace, separator, and name tokens.
+			if ( T_NS_SEPARATOR === $tokens[ $i - 1 ][0] && \in_array( $tokens[ $i - 2 ][0], array( T_STRING, T_NAMESPACE ), true ) ) {
+				continue;
+			}
+			$arguments = array( array() );
+			$argument  = 0;
+			$nesting   = 1;
+			for ( $j = $i + 2; isset( $tokens[ $j ] ); ++$j ) {
+				$part = $tokens[ $j ];
+				if ( \in_array( $part[1], array( '(', '[', '{' ), true ) ) {
+					++$nesting;
+				} elseif ( \in_array( $part[1], array( ')', ']', '}' ), true ) ) {
+					--$nesting;
+				}
+				if ( 0 === $nesting ) {
+					break;
+				}
+				if ( 1 === $nesting && ',' === $part[1] ) {
+					$arguments[ ++$argument ] = array();
+				} else {
+					$arguments[ $argument ][] = $part;
+				}
+			}
+			$operand       = $arguments[ $schedulers[ $scheduler ] ] ?? array();
+			$hook_location = $location . ':' . $token[2];
+			$hook          = null;
+			if ( 1 === count( $operand ) && T_CONSTANT_ENCAPSED_STRING === $operand[0][0] ) {
+				$literal = $operand[0][1];
+				$hook    = "'" === $literal[0] ? str_replace( array( "\\'", '\\\\' ), array( "'", '\\' ), substr( $literal, 1, -1 ) ) : stripcslashes( substr( $literal, 1, -1 ) );
+			} elseif ( preg_match( '/^([\\\\\w]+)::(\w+)$/', implode( '', array_column( $operand, 1 ) ), $match ) ) {
+				$owner = $match[1];
+				if ( \in_array( strtolower( $owner ), array( 'self', 'static' ), true ) ) {
+					$owner = $class;
+				} elseif ( '\\' !== $owner[0] ) {
+					$segments = explode( '\\', $owner, 2 );
+					$owner    = isset( $imports[ strtolower( $segments[0] ) ] ) ? $imports[ strtolower( $segments[0] ) ] . ( isset( $segments[1] ) ? '\\' . $segments[1] : '' ) : $namespace . '\\' . $owner;
+				}
+				$constant = $owner . '::' . $match[2];
+				if ( \defined( $constant ) ) {
+					$hook = constant( $constant );
+				}
+			}
+			if ( ! \is_string( $hook ) ) {
+				$this->fail( "{$hook_location}: extend the resolver for the scheduled hook" );
+			}
+			$hooks[ $hook ] = $hook_location;
+		}
+		return $hooks;
 	}
 
 	/**

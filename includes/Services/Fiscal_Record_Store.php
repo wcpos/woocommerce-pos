@@ -15,6 +15,9 @@ use WCPOS\WooCommercePOS\Sync\Health;
 final class Fiscal_Record_Store {
 	/** Stable suffix for site-local fiscal history. */
 	public const TABLE = 'wcpos_fiscal_records';
+
+	use Owned_Table;
+
 	/** PHP validation keeps the portable schema free of ENUMs. */
 	public const TYPES = array( 'sale', 'refund', 'void', 'cancellation', 'late_sale', 'late_refund', 'late_movement', 'recount' );
 	/** Bound payload-heavy read responses. */
@@ -25,18 +28,6 @@ final class Fiscal_Record_Store {
 	private const SEQUENCE_LOCK = 'wcpos_fiscal_sequence_lock';
 	/** Match the receipt sequence's bounded lock wait. */
 	private const LOCK_WAIT_SECONDS = 5;
-	/**
-	 * Tables verified this request, keyed by site table name.
-	 *
-	 * @var array
-	 */
-	private static $installed = array();
-
-	/** Resolve the current site's table. */
-	public function table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . self::TABLE;
-	}
 
 	/**
 	 * Build the portable schema.
@@ -98,19 +89,7 @@ final class Fiscal_Record_Store {
 			}
 			return;
 		}
-		if ( ! function_exists( 'dbDelta' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		}
-		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
-	}
-
-	/** Verify storage once per site per request. */
-	public function ensure_installed(): void {
-		$table = $this->table_name();
-		if ( ! isset( self::$installed[ $table ] ) ) {
-			$this->install();
-			self::$installed[ $table ] = true;
-		}
+		$this->create_table_if_missing();
 	}
 
 	/**

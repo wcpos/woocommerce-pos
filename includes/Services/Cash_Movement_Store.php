@@ -8,22 +8,12 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Sync\Health;
 
 /** Append-only movements, except for the target's one-time void stamp. */
 final class Cash_Movement_Store {
 	public const TABLE = 'wcpos_cash_movements';
-	/** Tables verified this request.
-	 *
-	 * @var array
-	 */
-	private static $installed = array();
 
-	/** Resolve the site table. */
-	public function table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . self::TABLE;
-	}
+	use Owned_Table;
 
 	/** Build the schema.
 	 *
@@ -45,23 +35,6 @@ final class Cash_Movement_Store {
 			KEY session_id (session_id),
 			KEY voids (voids)
 		) {$charset_collate};";
-	}
-
-	/** Install without DDL when already present. */
-	public function install(): void {
-		global $wpdb;
-		if ( ! Health::table_exists( $this->table_name() ) ) {
-			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-			dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
-		}
-	}
-
-	/** Verify once per site per request. */
-	public function ensure_installed(): void {
-		if ( ! isset( self::$installed[ $this->table_name() ] ) ) {
-			$this->install();
-			self::$installed[ $this->table_name() ] = true;
-		}
 	}
 
 	/** Read one movement.
