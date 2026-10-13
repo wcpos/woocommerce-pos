@@ -68,8 +68,8 @@
       "WCPOS\\WooCommercePOS\\": "includes/"
     },
     "files": [
-      "includes/load-integrity.php",
-      "includes/API/class-aliases.php"
+      "includes/API/class-aliases.php",
+      "includes/load-integrity.php"
     ]
   },
   "autoload-dev": {

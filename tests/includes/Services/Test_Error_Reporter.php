@@ -225,6 +225,19 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The update 503 is not reported a second time as a REST 5xx.
+	 */
+	public function test_wcpos_updating_503_is_not_reported_as_a_rest_error(): void {
+		$this->enable_consent();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/sync/products' );
+		$response = new \WP_REST_Response( array( 'code' => 'wcpos_updating' ), 503 );
+
+		Error_Reporter::filter_rest_request_after_callbacks( $response, array(), $request );
+
+		$this->assertSame( array(), $this->transport->events );
+	}
+
+	/**
 	 * Integrity findings during an update are warnings.
 	 */
 	public function test_mid_update_integrity_report_is_a_warning(): void {
@@ -816,6 +829,18 @@ PHP;
 				)
 			);
 		};
+
+		// A REST test case that opened the run leaves its rest_api_init callback in
+		// WP's hook snapshot (see WCPOS_REST_Unit_Test_Case); the API it boots would
+		// claim this stub route. Production boots one API, so drop the stale one.
+		global $wp_filter;
+		foreach ( isset( $wp_filter['rest_api_init'] ) ? $wp_filter['rest_api_init']->callbacks : array() as $priority => $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				if ( \is_array( $callback['function'] ) && $callback['function'][0] instanceof \WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case ) {
+					remove_action( 'rest_api_init', $callback['function'], $priority );
+				}
+			}
+		}
 
 		add_action( 'rest_api_init', $register_route );
 		do_action( 'rest_api_init', rest_get_server() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook under test.

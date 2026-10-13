@@ -160,7 +160,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	public function classification_provider(): array {
 		return array(
 			'nothing at all'          => array( array(), 'files_missing' ),
-			'file is back now'        => array( array( 'file_exists_now' => true ), 'mid_update' ),
+			'file just written'       => array( array( 'fresh_file' => true ), 'mid_update' ),
 			'fresh maintenance file'  => array( array( 'maintenance_age' => 30 ), 'mid_update' ),
 			'stale maintenance file'  => array( array( 'maintenance_age' => 3600 ), 'files_missing' ),
 			'temp backup dir'         => array( array( 'temp_backup' => true ), 'mid_update' ),
@@ -194,11 +194,11 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		update_option( 'auto_updater.lock', time() );
 
 		// Act.
-		$signals = Load_Integrity::signals( 'WCPOS\\WooCommercePOS\\Nope\\Missing', $abspath, $content );
+		$signals = Load_Integrity::signals( $this->includes() . 'Nope/Missing.php', $abspath, $content );
 		delete_option( 'auto_updater.lock' );
 
 		// Assert.
-		$this->assertFalse( $signals['file_exists_now'] );
+		$this->assertFalse( $signals['fresh_file'] );
 		$this->assertIsInt( $signals['maintenance_age'] );
 		$this->assertLessThan( 60, $signals['maintenance_age'] );
 		$this->assertTrue( $signals['temp_backup'] );
@@ -209,10 +209,48 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Debris a failed update left behind days ago is not an update in progress.
+	 */
+	public function test_signals_ignore_stale_update_debris(): void {
+		// Arrange.
+		$abspath = $this->temp_dir();
+		$content = $this->temp_dir();
+		$old     = time() - DAY_IN_SECONDS;
+		$this->mkdir( $content . 'upgrade-temp-backup' );
+		$this->mkdir( $content . 'upgrade-temp-backup/plugins' );
+		$this->mkdir( $content . 'upgrade-temp-backup/plugins/woocommerce-pos' );
+		$this->mkdir( $content . 'upgrade' );
+		$this->mkdir( $content . 'upgrade/woocommerce-pos.1.10.99' );
+		touch( $content . 'upgrade-temp-backup/plugins/woocommerce-pos', $old );
+		touch( $content . 'upgrade/woocommerce-pos.1.10.99', $old );
+		update_option( 'auto_updater.lock', $old );
+
+		// Act.
+		$signals = Load_Integrity::signals( $this->includes() . 'Services/Auth.php', $abspath, $content );
+		delete_option( 'auto_updater.lock' );
+
+		// Assert: Auth.php exists but was not just written either.
+		$this->assertSame( 'files_missing', Load_Integrity::classify( $signals ) );
+	}
+
+	/**
+	 * A WCPOS file that failed to parse (torn mid-copy) is an affected file; others are not.
+	 */
+	public function test_affected_file_covers_missing_classes_and_torn_wcpos_files(): void {
+		$base = $this->includes();
+
+		$this->assertSame( $base . 'Services/Auth.php', Load_Integrity::affected_file( 'Class "WCPOS\\WooCommercePOS\\Services\\Auth" not found', '/x/y.php', false ) );
+		$this->assertSame( $base . 'Services/Auth.php', Load_Integrity::affected_file( 'syntax error, unexpected end of file', $base . 'Services/Auth.php', true ) );
+		$this->assertNull( Load_Integrity::affected_file( 'syntax error, unexpected end of file', '/elsewhere/plugin.php', true ) );
+		$this->assertNull( Load_Integrity::affected_file( 'Undefined index: x', $base . 'Services/Auth.php', false ) );
+	}
+
+	/**
 	 * The REST boundary turns a missing WCPOS class into a retryable 503.
 	 */
 	public function test_rest_dispatch_returns_503_for_a_missing_wcpos_class(): void {
-		// Arrange.
+		// Arrange: the file was just written, as an update copying it in.
+		touch( $this->includes() . 'Services/Session_Registry.php' );
 		$api     = $this->api();
 		$route   = $this->wcpos_route();
 		$handler = array(
@@ -222,7 +260,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		);
 
 		// Act.
-		$response = $api->rest_dispatch_request( null, new WP_REST_Request( 'GET', $route ), $route, $handler );
+		$response = $api->rest_dispatch_wcpos_callback( null, new WP_REST_Request( 'GET', $route ), $route, $handler );
 
 		// Assert.
 		$this->assertInstanceOf( WP_REST_Response::class, $response );
@@ -248,7 +286,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		);
 
 		$this->expectException( \get_class( $error ) );
-		$api->rest_dispatch_request( null, new WP_REST_Request( 'GET', $route ), $route, $handler );
+		$api->rest_dispatch_wcpos_callback( null, new WP_REST_Request( 'GET', $route ), $route, $handler );
 	}
 
 	/**
@@ -278,13 +316,14 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		);
 
 		$this->expectException( \Error::class );
-		$api->rest_dispatch_request( null, new WP_REST_Request( 'GET', $route ), $route, $handler );
+		$api->rest_dispatch_wcpos_callback( null, new WP_REST_Request( 'GET', $route ), $route, $handler );
 	}
 
 	/**
 	 * A fatal before dispatch (auth, CORS) on a WCPOS REST request becomes a 503 page.
 	 */
 	public function test_fatal_page_is_503_only_for_a_wcpos_rest_request_mid_update(): void {
+		touch( $this->includes() . 'Services/Session_Registry.php' );
 		$args  = array( 'response' => 500 );
 		$error = array( 'message' => 'Uncaught Error: Class "WCPOS\\WooCommercePOS\\Services\\Session_Registry" not found in /x/Auth.php:28' );
 		$saved = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Saved verbatim to restore it.
@@ -303,6 +342,25 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An earlier listener's answer stands, and the callback is not run behind it.
+	 */
+	public function test_rest_dispatch_leaves_an_earlier_answer_alone(): void {
+		$api     = $this->api();
+		$route   = $this->wcpos_route();
+		$ran     = false;
+		$handler = array(
+			'callback' => static function () use ( &$ran ) {
+				$ran = true;
+			},
+		);
+		$earlier = new WP_REST_Response( array( 'halted' => true ), 429 );
+
+		$this->assertSame( $earlier, $api->rest_dispatch_wcpos_callback( $earlier, new WP_REST_Request( 'GET', $route ), $route, $handler ) );
+		$this->assertNull( $api->rest_dispatch_wcpos_callback( null, new WP_REST_Request( 'GET', '/wc/v3/products' ), '/wc/v3/products', $handler ) );
+		$this->assertFalse( $ran );
+	}
+
+	/**
 	 * A WCPOS route the boundary owns still returns its callback's result unchanged.
 	 */
 	public function test_rest_dispatch_passes_a_normal_result_through(): void {
@@ -314,7 +372,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 			},
 		);
 
-		$this->assertSame( array( 'ok' => true ), $api->rest_dispatch_request( null, new WP_REST_Request( 'GET', $route ), $route, $handler ) );
+		$this->assertSame( array( 'ok' => true ), $api->rest_dispatch_wcpos_callback( null, new WP_REST_Request( 'GET', $route ), $route, $handler ) );
 	}
 
 	/**
@@ -325,7 +383,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	private function quiet_signals(): array {
 		return array(
 			'path'            => 'includes/Services/Auth.php',
-			'file_exists_now' => false,
+			'fresh_file'      => false,
 			'maintenance_age' => null,
 			'temp_backup'     => false,
 			'upgrade_dir'     => false,
@@ -366,6 +424,15 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 			}
 		}
 		$this->fail( 'No /wcpos/v1/cashier route registered.' );
+	}
+
+	/**
+	 * The running copy's includes/ directory.
+	 *
+	 * @return string
+	 */
+	private function includes(): string {
+		return str_replace( '\\', '/', \WCPOS\WooCommercePOS\PLUGIN_PATH ) . 'includes/';
 	}
 
 	/**

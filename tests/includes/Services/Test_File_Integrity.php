@@ -105,6 +105,26 @@ class Test_File_Integrity extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Composer's build-stamped files differ between the GitHub and WordPress.org
+	 * builds, so their content is not compared; their absence still counts.
+	 */
+	public function test_compare_skips_content_of_build_stamped_files(): void {
+		mkdir( $this->root . 'vendor' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Test fixture.
+		file_put_contents( $this->root . 'vendor/autoload.php', 'local build' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
+		$manifest = array(
+			'vendor/autoload.php'                => array( 'sha256' => hash( 'sha256', 'other build' ) ),
+			'vendor/composer/autoload_static.php' => array( 'sha256' => hash( 'sha256', 'other build' ) ),
+		);
+
+		$result = File_Integrity::compare( $this->root, $manifest );
+		unlink( $this->root . 'vendor/autoload.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Test fixture cleanup.
+		rmdir( $this->root . 'vendor' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Test fixture cleanup.
+
+		$this->assertSame( array(), $result['modified'] );
+		$this->assertSame( array( 'vendor/composer/autoload_static.php' ), $result['missing'] );
+	}
+
+	/**
 	 * A shipped checksums.json (Pro, non-WordPress.org builds) is read locally, with no request.
 	 */
 	public function test_check_reads_a_local_manifest(): void {
@@ -172,11 +192,16 @@ class Test_File_Integrity extends WP_UnitTestCase {
 	public function test_check_skips_a_git_checkout(): void {
 		$this->stub_http( 200, array( 'files' => array( 'gone.php' => array( 'sha256' => 'x' ) ) ) );
 		mkdir( $this->root . '.git' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Test fixture.
-
-		$result = File_Integrity::check( $this->target( 'woocommerce-pos' ) );
+		$checkout = File_Integrity::check( $this->target( 'woocommerce-pos' ) );
 		rmdir( $this->root . '.git' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Test fixture cleanup.
 
-		$this->assertSame( 'unknown', $result['status'] );
+		// A worktree's .git is a file.
+		file_put_contents( $this->root . '.git', 'gitdir: /elsewhere' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
+		$worktree = File_Integrity::check( $this->target( 'woocommerce-pos' ) );
+		unlink( $this->root . '.git' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Test fixture cleanup.
+
+		$this->assertSame( 'unknown', $checkout['status'] );
+		$this->assertSame( 'unknown', $worktree['status'] );
 		$this->assertSame( array(), $this->requests );
 	}
 
@@ -246,7 +271,35 @@ class Test_File_Integrity extends WP_UnitTestCase {
 		$this->assertSame( 'critical', $test['status'] );
 		$this->assertStringContainsString( 'includes/Services/Auth.php', $test['description'] );
 
+		update_option(
+			File_Integrity::RESULT_OPTION,
+			array(
+				'status'   => 'files_modified',
+				'missing'  => array(),
+				'modified' => array( 'includes/API.php' ),
+				'version'  => '1.2.3',
+				'checked'  => time(),
+			)
+		);
+		$this->assertSame( 'recommended', File_Integrity::site_health_test()['status'] );
+
 		$this->assertArrayHasKey( 'wcpos_file_integrity', File_Integrity::site_status_tests( array( 'direct' => array() ) )['direct'] );
+	}
+
+	/**
+	 * With no stored result, Site Health queues a check instead of running one in the page.
+	 */
+	public function test_site_health_without_a_result_queues_a_check(): void {
+		$this->stub_http( 200, array( 'files' => $this->manifest() ) );
+
+		$test = File_Integrity::site_health_test();
+		$next = wp_next_scheduled( File_Integrity::CRON_HOOK, array( 'site_health' ) );
+		wp_clear_scheduled_hook( File_Integrity::CRON_HOOK, array( 'site_health' ) );
+
+		$this->assertSame( 'good', $test['status'] );
+		$this->assertIsInt( $next );
+		$this->assertSame( array(), $this->requests );
+		$this->assertFalse( get_option( File_Integrity::RESULT_OPTION ) );
 	}
 
 	/**

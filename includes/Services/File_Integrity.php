@@ -51,6 +51,24 @@ class File_Integrity {
 	 */
 	const MAX_LISTED = 20;
 
+	/**
+	 * Composer-generated files that embed a per-build hash or commit. The GitHub
+	 * release zip and the WordPress.org build of one version differ only in
+	 * these (checked for 1.10.27), so their content is never compared; they
+	 * still count when missing.
+	 */
+	const BUILD_STAMPED = array(
+		'vendor/autoload.php',
+		'vendor/composer/autoload_real.php',
+		'vendor/composer/autoload_static.php',
+		'vendor/composer/installed.php',
+	);
+
+	/**
+	 * A stored result older than this is refreshed in the background.
+	 */
+	const STALE_AFTER = 2 * DAY_IN_SECONDS;
+
 	/** Register the cron listener, the update trigger and the Site Health test. */
 	public static function register(): void {
 		add_action(
@@ -62,7 +80,8 @@ class File_Integrity {
 		add_action( 'upgrader_process_complete', array( self::class, 'on_upgrade' ), 10, 2 );
 		add_filter( 'site_status_tests', array( self::class, 'site_status_tests' ) );
 
-		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
+		// The files are shared by every site of a network: one site checks them.
+		if ( is_main_site() && ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
 		}
 	}
@@ -134,8 +153,8 @@ class File_Integrity {
 			'checked'  => time(),
 		);
 
-		// A git checkout is a development copy: nothing published describes it.
-		if ( is_dir( $target['root'] . '.git' ) ) {
+		// A git checkout (or worktree, where .git is a file) is a development copy.
+		if ( file_exists( $target['root'] . '.git' ) ) {
 			return $result;
 		}
 		$files = self::manifest( $target['root'], $result['version'], $target['slug'] );
@@ -170,6 +189,9 @@ class File_Integrity {
 				$missing[] = $path;
 				continue;
 			}
+			if ( \in_array( $path, self::BUILD_STAMPED, true ) ) {
+				continue;
+			}
 			$algo     = isset( $sums['sha256'] ) ? 'sha256' : 'md5';
 			$expected = (array) ( $sums[ $algo ] ?? array() );
 			if ( $expected && ! \in_array( hash_file( $algo, $file ), $expected, true ) ) {
@@ -200,14 +222,22 @@ class File_Integrity {
 	}
 
 	/**
-	 * Site Health result, from a check no older than a day.
+	 * Site Health result, read from the last check so the page never waits on a
+	 * download or on hashing. A missing or stale result queues a check.
 	 *
 	 * @return array
 	 */
 	public static function site_health_test(): array {
 		$result = get_option( self::RESULT_OPTION );
-		if ( ! \is_array( $result ) || ( $result['checked'] ?? 0 ) < time() - DAY_IN_SECONDS ) {
-			$result = self::run( 'site_health' );
+		if ( ! \is_array( $result ) || ( $result['checked'] ?? 0 ) < time() - self::STALE_AFTER ) {
+			wp_schedule_single_event( time(), self::CRON_HOOK, array( 'site_health' ) );
+		}
+		if ( ! \is_array( $result ) ) {
+			$result = array(
+				'status'   => 'pending',
+				'missing'  => array(),
+				'modified' => array(),
+			);
 		}
 		$test = array(
 			'test'        => 'wcpos_file_integrity',
@@ -221,14 +251,18 @@ class File_Integrity {
 			'actions'     => '',
 		);
 
-		if ( 'unknown' === $result['status'] ) {
+		if ( 'pending' === $result['status'] ) {
+			$test['label']       = __( 'WCPOS files have not been checked yet', 'woocommerce-pos' );
+			$test['description'] = '<p>' . esc_html__( 'A check of the WCPOS plugin files has been queued. Reload this page in a minute to see the result.', 'woocommerce-pos' ) . '</p>';
+		} elseif ( 'unknown' === $result['status'] ) {
 			$test['label']       = __( 'WCPOS files could not be verified', 'woocommerce-pos' );
 			$test['description'] = '<p>' . esc_html__( 'No checksums are published for this version of WCPOS, so its files were not compared. Development copies and older builds that do not ship checksums.json have none.', 'woocommerce-pos' ) . '</p>';
 		} elseif ( 'ok' !== $result['status'] ) {
 			$paths               = array_merge( $result['missing'], $result['modified'] );
 			$items               = implode( '', array_map( static fn ( $path ) => '<li><code>' . esc_html( $path ) . '</code></li>', \array_slice( $paths, 0, self::MAX_LISTED ) ) );
-			$test['status']      = 'critical';
-			$test['badge']['color'] = 'red';
+			// A missing file breaks loading; a modified one may be a deliberate edit.
+			$test['status']      = 'files_missing' === $result['status'] ? 'critical' : 'recommended';
+			$test['badge']['color'] = 'critical' === $test['status'] ? 'red' : 'orange';
 			$test['label']       = __( 'Some WCPOS files are missing or modified', 'woocommerce-pos' );
 			$test['description'] = '<p>' . esc_html(
 				\sprintf(

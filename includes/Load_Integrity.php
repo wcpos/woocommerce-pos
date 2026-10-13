@@ -39,6 +39,11 @@ class Load_Integrity {
 	const MAINTENANCE_TTL = 600;
 
 	/**
+	 * Core releases an unreleased auto_updater.lock after an hour (WP_Upgrader::create_lock()).
+	 */
+	const LOCK_TTL = 3600;
+
+	/**
 	 * The includes/ directory of the copy that registered the fallback.
 	 *
 	 * @var string|null
@@ -172,17 +177,38 @@ class Load_Integrity {
 	}
 
 	/**
-	 * Probe the filesystem for update debris. Stat calls only; failure path only.
+	 * The WCPOS file an error is about: the PSR-4 file of a missing WCPOS class,
+	 * or a WCPOS file that failed to parse (torn mid-copy, which Composer's own
+	 * include throws before the fallback ever runs).
 	 *
-	 * @param string      $class_name  The missing class.
+	 * @param string $message        Error message.
+	 * @param string $file           File the error was raised in.
+	 * @param bool   $is_parse_error Whether the error is a parse error.
+	 *
+	 * @return string|null Absolute path, or null when the error is not about a WCPOS file.
+	 */
+	public static function affected_file( string $message, string $file, bool $is_parse_error ): ?string {
+		$base       = self::base();
+		$class_name = self::missing_class( $message );
+		if ( null !== $class_name ) {
+			return self::file_for( $class_name, $base );
+		}
+		$file = str_replace( '\\', '/', $file );
+		return $is_parse_error && 0 === strpos( $file, $base ) ? $file : null;
+	}
+
+	/**
+	 * Probe the filesystem for update debris. Stat calls only; failure path only.
+	 * Debris counts only while fresh: a failed update can leave it for days.
+	 *
+	 * @param string      $file        The affected file (absolute).
 	 * @param string|null $abspath     WordPress root (test seam).
 	 * @param string|null $content_dir wp-content directory (test seam).
 	 *
-	 * @return array{path:string, file_exists_now:bool, maintenance_age:int|null, temp_backup:bool, upgrade_dir:bool, updater_lock:bool, disk_version:string}
+	 * @return array{path:string, fresh_file:bool, maintenance_age:int|null, temp_backup:bool, upgrade_dir:bool, updater_lock:bool, disk_version:string}
 	 */
-	public static function signals( string $class_name, ?string $abspath = null, ?string $content_dir = null ): array {
-		$base        = self::$base_dir ?? PLUGIN_PATH . 'includes/';
-		$file        = (string) self::file_for( $class_name, $base );
+	public static function signals( string $file, ?string $abspath = null, ?string $content_dir = null ): array {
+		$base        = self::base();
 		$abspath     = trailingslashit( $abspath ?? ABSPATH );
 		$content_dir = trailingslashit( $content_dir ?? WP_CONTENT_DIR );
 		$slug        = self::slug( $base );
@@ -191,14 +217,16 @@ class Load_Integrity {
 		$maintenance = is_file( $abspath . '.maintenance' ) ? filemtime( $abspath . '.maintenance' ) : false;
 		$main_file   = \dirname( $base ) . '/woocommerce-pos.php';
 		$disk        = is_readable( $main_file ) ? get_file_data( $main_file, array( 'Version' => 'Version' ), 'plugin' ) : array();
+		$lock        = (int) get_option( 'auto_updater.lock', 0 );
+		$upgrading   = array_filter( (array) glob( $content_dir . 'upgrade/' . $slug . '*', GLOB_NOSORT ), array( self::class, 'is_fresh' ) );
 
 		return array(
 			'path'            => 'includes/' . substr( $file, \strlen( $base ) ),
-			'file_exists_now' => is_file( $file ),
+			'fresh_file'      => self::is_fresh( $file ),
 			'maintenance_age' => false === $maintenance ? null : max( 0, time() - $maintenance ),
-			'temp_backup'     => is_dir( $content_dir . 'upgrade-temp-backup/plugins/' . $slug ),
-			'upgrade_dir'     => ! empty( glob( $content_dir . 'upgrade/' . $slug . '*', GLOB_NOSORT ) ),
-			'updater_lock'    => false !== get_option( 'auto_updater.lock', false ),
+			'temp_backup'     => self::is_fresh( $content_dir . 'upgrade-temp-backup/plugins/' . $slug ),
+			'upgrade_dir'     => ! empty( $upgrading ),
+			'updater_lock'    => $lock > 0 && time() - $lock < self::LOCK_TTL,
 			'disk_version'    => (string) ( $disk['Version'] ?? '' ),
 		);
 	}
@@ -212,7 +240,7 @@ class Load_Integrity {
 	 */
 	public static function classify( array $signals ): string {
 		$fresh_maintenance = null !== $signals['maintenance_age'] && $signals['maintenance_age'] < self::MAINTENANCE_TTL;
-		if ( $signals['file_exists_now'] || $fresh_maintenance || $signals['temp_backup'] || $signals['upgrade_dir'] || $signals['updater_lock'] ) {
+		if ( $signals['fresh_file'] || $fresh_maintenance || $signals['temp_backup'] || $signals['upgrade_dir'] || $signals['updater_lock'] ) {
 			return 'mid_update';
 		}
 		if ( '' !== $signals['disk_version'] && VERSION !== $signals['disk_version'] ) {
@@ -222,22 +250,24 @@ class Load_Integrity {
 	}
 
 	/**
-	 * Classify a missing class and report it once per request.
+	 * Classify an affected file and report it once per request.
 	 *
-	 * @param string $class_name The missing class.
+	 * @param string $file    The affected file (absolute).
+	 * @param string $message Error message for the report.
 	 *
 	 * @return array{classification:string, path:string} What was found.
 	 */
-	public static function report( string $class_name ): array {
-		$signals = self::signals( $class_name );
+	public static function report( string $file, string $message ): array {
+		$signals = self::signals( $file );
 		$result  = array(
 			'classification' => self::classify( $signals ),
 			'path'           => $signals['path'],
 		);
-		if ( ! isset( self::$reported[ $class_name ] ) ) {
-			self::$reported[ $class_name ] = true;
+		if ( ! isset( self::$reported[ $file ] ) ) {
 			try {
-				Services\Error_Reporter::instance()->report_integrity( $result['classification'], $result['path'], 'Class "' . $class_name . '" not found' );
+				if ( Services\Error_Reporter::instance()->report_integrity( $result['classification'], $result['path'], $message ) ) {
+					self::$reported[ $file ] = true;
+				}
 			} catch ( \Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 				// The reporter's own file may be the one missing.
 			}
@@ -246,16 +276,16 @@ class Load_Integrity {
 	}
 
 	/**
-	 * Whether report() already sent this class this request.
+	 * Whether report() already sent this file this request.
 	 *
-	 * @param string $class_name Class name.
+	 * @param string $file Affected file (absolute).
 	 */
-	public static function was_reported( string $class_name ): bool {
-		return isset( self::$reported[ $class_name ] );
+	public static function was_reported( string $file ): bool {
+		return isset( self::$reported[ $file ] );
 	}
 
 	/**
-	 * A retryable 503 for a WCPOS class missing because of an update, or null for
+	 * A retryable 503 for a WCPOS file missing or torn by an update, or null for
 	 * any other error. Files that are simply missing stay an error: retrying
 	 * would never fix them.
 	 *
@@ -264,11 +294,11 @@ class Load_Integrity {
 	 * @return \WP_REST_Response|null
 	 */
 	public static function rest_unavailable( \Error $error ): ?\WP_REST_Response {
-		$class_name = self::missing_class( $error->getMessage() );
-		if ( null === $class_name ) {
+		$file = self::affected_file( $error->getMessage(), $error->getFile(), $error instanceof \ParseError );
+		if ( null === $file ) {
 			return null;
 		}
-		$found = self::report( $class_name );
+		$found = self::report( $file, $error->getMessage() );
 		if ( ! self::is_transient( $found['classification'] ) ) {
 			return null;
 		}
@@ -289,7 +319,7 @@ class Load_Integrity {
 
 	/**
 	 * Turn WordPress's fatal-error page into a retryable 503 for a WCPOS REST
-	 * request that died on a WCPOS class an update moved aside. This covers the
+	 * request that died on a WCPOS file an update moved aside. This covers the
 	 * stages before dispatch (authentication, CORS, permission checks). The fatal
 	 * itself is untouched and still reported at shutdown.
 	 *
@@ -299,15 +329,32 @@ class Load_Integrity {
 	 * @return array
 	 */
 	public static function fatal_error_args( $args, $error ) {
-		$uri        = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
-		$class_name = \is_array( $error ) ? self::missing_class( (string) ( $error['message'] ?? '' ) ) : null;
-		if ( \is_array( $args ) && null !== $class_name && preg_match( '#wcpos/v\d#', $uri ) && self::is_transient( self::classify( self::signals( $class_name ) ) ) ) {
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$file = \is_array( $error ) ? self::affected_file( (string) ( $error['message'] ?? '' ), (string) ( $error['file'] ?? '' ), E_PARSE === (int) ( $error['type'] ?? 0 ) ) : null;
+		if ( \is_array( $args ) && null !== $file && preg_match( '#wcpos/v\d#', $uri ) && self::is_transient( self::classify( self::signals( $file ) ) ) ) {
 			$args['response'] = 503;
 			if ( ! headers_sent() ) {
 				header( 'Retry-After: 5' );
 			}
 		}
 		return $args;
+	}
+
+	/**
+	 * Whether a path exists and changed within the maintenance window.
+	 *
+	 * @param string $path File or directory.
+	 */
+	private static function is_fresh( string $path ): bool {
+		$mtime = file_exists( $path ) ? filemtime( $path ) : false;
+		return false !== $mtime && time() - $mtime < self::MAINTENANCE_TTL;
+	}
+
+	/**
+	 * The includes/ directory of the running copy.
+	 */
+	private static function base(): string {
+		return self::$base_dir ?? str_replace( '\\', '/', PLUGIN_PATH ) . 'includes/';
 	}
 
 	/**

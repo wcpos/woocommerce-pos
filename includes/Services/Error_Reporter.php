@@ -364,7 +364,8 @@ class Error_Reporter {
 						$message = $code;
 					}
 
-					if ( 500 <= $status ) {
+					// A wcpos_updating 503 was already reported as an integrity event.
+					if ( 500 <= $status && 'wcpos_updating' !== $code ) {
 						// $code can originate in a third-party response body (a
 						// relay or upstream error forwarded by a controller), so it
 						// is allow-listed before it becomes a grouping key or tag.
@@ -479,14 +480,14 @@ class Error_Reporter {
 			$level        = 'critical';
 			$fingerprint  = array( 'wcpos-fatal', $relative, $line );
 
-			// A missing WCPOS class is almost always an update caught mid-swap:
-			// tag it with what the disk shows, once, under the integrity grouping.
-			$missing = class_exists( Load_Integrity::class, false ) ? Load_Integrity::missing_class( (string) $error['message'] ) : null;
-			if ( null !== $missing ) {
-				if ( Load_Integrity::was_reported( $missing ) ) {
+			// A missing (or torn) WCPOS file is almost always an update caught
+			// mid-swap: tag it with what the disk shows, once, under the integrity grouping.
+			$affected = Load_Integrity::affected_file( (string) $error['message'], (string) $error['file'], E_PARSE === (int) $error['type'] );
+			if ( null !== $affected ) {
+				if ( Load_Integrity::was_reported( $affected ) ) {
 					return;
 				}
-				$signals                 = Load_Integrity::signals( $missing );
+				$signals                 = Load_Integrity::signals( $affected );
 				$classification          = Load_Integrity::classify( $signals );
 				$tags['wcpos_integrity'] = $classification;
 				$tags['integrity_path']  = $signals['path'];
