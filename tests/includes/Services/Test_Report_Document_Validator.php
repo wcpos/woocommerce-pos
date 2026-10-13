@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Report_Document_Validator;
 use WP_UnitTestCase;
@@ -20,7 +21,7 @@ class Test_Report_Document_Validator extends WP_UnitTestCase {
 		foreach ( array( 'sales', 'cash-movements' ) as $key ) {
 			$document = $loader->build( 'report', $key );
 			$this->assertTrue( Report_Document_Validator::validate( $document ) );
-			$this->assertSame( $document['report'], Receipt_Data_Schema::format_money_fields( $document, 'USD' )['report'] );
+			$this->assertSame( $document['report'], Receipt_Money_Formatter::format( $document, 'USD' )['report'] );
 			$this->assert_tree_paths( $document, Receipt_Data_Schema::get_field_tree( 'report' ) );
 		}
 		$this->assertSame( $loader->build( 'report', 'sales' ), $loader->build( 'report' ) );
@@ -32,7 +33,7 @@ class Test_Report_Document_Validator extends WP_UnitTestCase {
 		$document = ( new Receipt_Preview_Fixture_Loader() )->build( 'report' );
 		$document['report']['total'] = 12.50;
 		$document['report']['rows'][0] = array( 'total' => 12.50 );
-		$this->assertSame( $document['report'], Receipt_Data_Schema::format_money_fields( $document )['report'] );
+		$this->assertSame( $document['report'], Receipt_Money_Formatter::format( $document )['report'] );
 	}
 
 	/** Missing cells and misordered keys fail at their exact location. */

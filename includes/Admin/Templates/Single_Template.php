@@ -566,7 +566,7 @@ class Single_Template {
 	/**
 	 * Build the template's own Preview Document; with no template, the plain sample receipt.
 	 *
-	 * Money fields are run through Receipt_Data_Schema::format_money_fields() so
+	 * Money fields are run through Receipt_Money_Formatter::format() so
 	 * the editor's sample-mode preview renders formatted currency strings — the
 	 * same shape the live /preview endpoint returns. Without this the starter
 	 * templates' `*_display` placeholders resolve to empty strings.
@@ -582,7 +582,7 @@ class Single_Template {
 			)
 		);
 
-		return \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::format_money_fields(
+		return \WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter::format(
 			$raw,
 			$raw['order']['currency'] ?? 'USD'
 		);
