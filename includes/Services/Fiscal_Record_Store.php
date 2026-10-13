@@ -318,7 +318,8 @@ final class Fiscal_Record_Store {
 	 */
 	public function document( array $row ): array {
 		$payload = $row['payload'];
-		$payload['i18n'] = Receipt_I18n_Labels::get_labels( $payload['presentation_hints']['locale'] ?? '' );
+		$locale          = $payload['presentation_hints']['locale'] ?? '';
+		$payload['i18n'] = Receipt_I18n_Labels::get_labels( is_string( $locale ) ? $locale : '' );
 		return $payload;
 	}
 

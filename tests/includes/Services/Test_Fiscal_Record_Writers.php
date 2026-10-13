@@ -495,9 +495,13 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $fields );
 		$order = $this->closure_ledger( $session );
-		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, $closure['received_at_gmt'] );
-		$order->save();
-		Fiscal_Record_Writers::instance()->record_sale( $order, array( 'fiscal' => array() ), 876545 );
+		// Equal-second ordering: the sale row arrives in the closure's own second.
+		global $wpdb;
+		Fiscal_Record_Writers::instance()->record_sale( $order );
+		$store = new Fiscal_Record_Store();
+		$sale = $store->find_sale( $order->get_id() );
+		$wpdb->update( $store->table_name(), array( 'received_at_gmt' => $closure['received_at_gmt'] ), array( 'id' => $sale['id'] ) );
+		Fiscal_Record_Writers::instance()->record_sale( $order );
 		$records = ( new Fiscal_Record_Store() )->list(
 			array(
 				'type' => 'late_sale',

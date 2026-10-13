@@ -133,8 +133,9 @@ final class Fiscal_Record_Writers {
 			}
 			$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
 			$sale = $this->store->find_sale( $order->get_id() );
-			$paid = $order->get_date_paid();
-			$sale_time_gmt = $paid ? gmdate( 'Y-m-d H:i:s', $paid->getTimestamp() ) : ( $sale['received_at_gmt'] ?? '' );
+			// Arrival time, deliberately: an offline sale paid before the close but synced after it
+			// was not in the closure's figures, so it must become a late_sale correction.
+			$sale_time_gmt = (string) ( $sale['received_at_gmt'] ?? '' );
 			// A replay of a sale already included in the closure is not a late sale.
 			if ( $closure && $sale && $sale_time_gmt >= $closure['received_at_gmt'] && $sale['id'] > ( $closure['last_receipt_id'] ?? 0 ) ) {
 				$rows = array_values(
