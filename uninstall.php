@@ -398,6 +398,10 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
 		wp_unschedule_hook( $hook );
 	}
+	if ( function_exists( 'as_unschedule_all_actions' ) ) {
+		as_unschedule_all_actions( 'wcpos_receipt_snapshot_cleanup', array(), 'wcpos' );
+	}
+	wp_clear_scheduled_hook( 'wcpos_receipt_snapshot_cleanup' );
 
 	// 2. Drop plugin tables. All are derived from WooCommerce data and are
 	// rebuilt on reinstall.
@@ -472,7 +476,6 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 				$wpdb->esc_like( 'wcpos_active_template_' ) . '%',
 				$wpdb->esc_like( 'wcpos_template_order_' ) . '%',
 				$wpdb->esc_like( 'wcpos_disabled_virtual_templates_' ) . '%',
-				$wpdb->esc_like( 'wcpos_receipt_sequence_counter' ),
 			)
 		);
 	}
