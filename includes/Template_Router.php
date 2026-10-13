@@ -33,18 +33,21 @@ class Template_Router {
 	public const CHECKOUT_PATH = 'wcpos-checkout';
 
 	/**
+	 * Rewrite regex of the retired /wcpos-login/ page.
+	 *
+	 * Earlier versions registered this rule; sites still carry it in their cached
+	 * rewrite_rules option until WordPress regenerates them, and while it is cached
+	 * the path serves the front page instead of a 404. rewrite_rules() treats a
+	 * cache that still holds it as stale.
+	 */
+	private const RETIRED_LOGIN_REGEX = '^wcpos-login/?';
+
+	/**
 	 * POS frontend slug.
 	 *
 	 * @var string
 	 */
 	private $pos_regex;
-
-	/**
-	 * POS login slug.
-	 *
-	 * @var string
-	 */
-	private $pos_login_regex;
 
 	/**
 	 * POS auth slug.
@@ -66,7 +69,6 @@ class Template_Router {
 	 */
 	public function __construct() {
 		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
-		$this->pos_login_regex    = '^wcpos-login/?';
 		$this->pos_auth_regex     = '^' . self::AUTH_PATH . '/?';
 		$this->pos_checkout_regex = '^' . self::CHECKOUT_PATH . '/([a-z-]+)/([0-9]+)[/]?$';
 
@@ -121,12 +123,18 @@ class Template_Router {
 	/**
 	 * Make sure cache contains POS rewrite rules.
 	 *
+	 * A cache that still routes the retired /wcpos-login/ page is also stale.
+	 *
 	 * @param array|bool $rules Rewrite rules.
 	 *
 	 * @return array|bool
 	 */
 	public function rewrite_rules( $rules ) {
-		return isset( $rules[ $this->pos_regex ], $rules[ $this->pos_login_regex ], $rules[ $this->pos_auth_regex ], $rules[ $this->pos_checkout_regex ] ) ? $rules : false;
+		if ( ! isset( $rules[ $this->pos_regex ], $rules[ $this->pos_auth_regex ], $rules[ $this->pos_checkout_regex ] ) ) {
+			return false;
+		}
+
+		return isset( $rules[ self::RETIRED_LOGIN_REGEX ] ) ? false : $rules;
 	}
 
 	/**
@@ -137,7 +145,6 @@ class Template_Router {
 
 		$rewrite_rules_to_templates = array(
 			$this->pos_regex          => __NAMESPACE__ . '\\Templates\\Frontend',
-			$this->pos_login_regex    => __NAMESPACE__ . '\\Templates\\Login',
 			$this->pos_auth_regex     => __NAMESPACE__ . '\\Templates\\Auth',
 			$this->pos_checkout_regex => array(
 				'order-pay'      => __NAMESPACE__ . '\\Templates\\Payment',
@@ -198,10 +205,8 @@ class Template_Router {
 	private function add_rewrite_rules(): void {
 		add_rewrite_tag( '%wcpos%', '([^&]+)' );
 		add_rewrite_tag( '%wcpos-receipt%', '([^&]+)' );
-		add_rewrite_tag( '%wcpos-login%', '([^&]+)' );
 		add_rewrite_tag( '%wcpos-auth%', '([^&]+)' );
 		add_rewrite_rule( $this->pos_regex, 'index.php?wcpos=1', 'top' );
-		add_rewrite_rule( $this->pos_login_regex, 'index.php?wcpos-login=1', 'top' );
 		add_rewrite_rule( $this->pos_auth_regex, 'index.php?wcpos-auth=1', 'top' );
 		add_rewrite_rule( $this->pos_checkout_regex, 'index.php?$matches[1]=$matches[2]&wcpos=1', 'top' );
 	}

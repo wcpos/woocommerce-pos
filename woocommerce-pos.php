@@ -191,7 +191,8 @@ add_action(
 			return;
 		}
 
-		if ( preg_match( '#^/(wcpos-login|wcpos-checkout)(/|$)#i', sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) ) {
+		// The auth page renders a per-request CSRF state and must never be served from a page cache.
+		if ( preg_match( '#^/(wcpos-auth|wcpos-checkout)(/|$)#i', sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) ) {
 			// 1) Hard kill all LSCache features (cache + optimisation).
 			if ( ! \defined( 'LITESPEED_DISABLE_ALL' ) ) {
 				\define( 'LITESPEED_DISABLE_ALL', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.

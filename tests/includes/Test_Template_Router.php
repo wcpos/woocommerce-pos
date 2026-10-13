@@ -190,4 +190,45 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 			);
 		}
 	}
+
+	/**
+	 * The retired login path is a normal 404 with no POS frame exemption.
+	 */
+	public function test_retired_login_path_resolves_to_404_without_frame_exemption(): void {
+		// Arrange.
+		global $wp_rewrite;
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		$this->set_permalink_structure( '/%postname%/' );
+		new Template_Router();
+		$wp_rewrite->flush_rules();
+
+		// Act.
+		$this->go_to( '/wcpos-login/' );
+
+		// Assert: go_to() replaces the global $wp instance, so read it via $GLOBALS.
+		$this->assertNotSame( '^wcpos-login/?', $GLOBALS['wp']->matched_rule );
+		$this->assertArrayNotHasKey( 'wcpos-login', $GLOBALS['wp']->query_vars );
+		$this->assertTrue( is_404() );
+		// This is the frame-exemption predicate; headers_list() is always empty under the CLI SAPI.
+		$this->assertFalse( woocommerce_pos_request() );
+	}
+
+	/**
+	 * Cached rules that still route the retired login page must be regenerated.
+	 */
+	public function test_rewrite_rules_cache_holding_retired_login_rule_is_rejected(): void {
+		// Arrange.
+		global $wp_rewrite;
+		$this->set_permalink_structure( '/%postname%/' );
+		$router = new Template_Router();
+		$wp_rewrite->flush_rules();
+		$live  = $router->rewrite_rules( get_option( 'rewrite_rules' ) );
+		$stale = $live + array(
+			'^wcpos-login/?' => 'index.php?wcpos-login=1',
+		);
+
+		// Act and Assert.
+		$this->assertSame( $live, $router->rewrite_rules( $live ) );
+		$this->assertFalse( $router->rewrite_rules( $stale ) );
+	}
 }
