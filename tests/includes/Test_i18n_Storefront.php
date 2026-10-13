@@ -110,6 +110,11 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 	public function test_storefront_request_loads_a_file_from_the_uploads_fallback_directory(): void {
 		// Stores whose WP_LANG_DIR is unwritable keep their translations under
 		// uploads. The .mo path handed to WordPress must point at THAT directory.
+		// The fallback is only read when no primary copy exists, so drop any real
+		// de_DE file a previous run of the container left in WP_LANG_DIR.
+		foreach ( array( 'de_DE', 'de' ) as $locale ) {
+			wp_delete_file( WP_LANG_DIR . '/plugins/woocommerce-pos-' . $locale . '.l10n.php' );
+		}
 		wp_mkdir_p( $this->fallback_dir() );
 		file_put_contents( $this->fallback_dir() . 'woocommerce-pos-de_DE.l10n.php', "<?php\nreturn array('messages' => array('Receipt' => 'Beleg (uploads)'));" );
 

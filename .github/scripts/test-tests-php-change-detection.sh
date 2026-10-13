@@ -54,6 +54,7 @@ for required_branch in main next; do
 done
 
 for required_path in \
+  'tests/bin/phpunit-shard.sh' \
   '.github/test-matrix.json' \
   '.github/scripts/generate-matrix.sh' \
   '.github/scripts/get-woocommerce-stable-version.sh'
