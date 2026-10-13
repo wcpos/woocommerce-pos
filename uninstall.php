@@ -69,6 +69,7 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
 		'wcpos_analytics_group_refresh',
+		'wcpos_payments_sweep',
 		// WP-Cron fallback for the receipt font install (Action Scheduler is the
 		// primary queue; its pending actions are cancelled in the sweep below).
 		'wcpos_install_font_packs',
