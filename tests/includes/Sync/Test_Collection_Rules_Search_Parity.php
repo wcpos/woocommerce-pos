@@ -99,8 +99,8 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $expected, $lanes[1] );
 	}
 
-	/** Direct variations collapse over-cap phrases; the flat v2 lane still rejects them. */
-	public function test_variation_search_over_cap_keeps_each_lanes_policy(): void {
+	/** Every variation lane collapses an over-cap phrase instead of rejecting it. */
+	public function test_variation_search_over_cap_collapses_on_every_lane(): void {
 		// Arrange.
 		$this->install_sync_read_lane();
 		$parent   = ProductHelper::create_variation_product();
@@ -125,13 +125,9 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 				$response = $this->server->dispatch( $request );
 
 				// Assert.
-				if ( '/wcpos/v2/variations' === $route ) {
-					$this->assertSame( 400, $response->get_status() );
-					$this->assertSame( 'woocommerce_pos_variations_search_limit_exceeded', $response->get_data()['code'] );
-				} else {
-					$this->assertSame( 200, $response->get_status() );
-					$this->assertSame( array( $target->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
-				}
+				$this->assertSame( 200, $response->get_status() );
+				$rows = '/wcpos/v2/variations' === $route ? $response->get_data()['documents'] : $response->get_data();
+				$this->assertSame( array( $target->get_id() ), wp_list_pluck( $rows, 'id' ) );
 			} finally {
 				$GLOBALS['wp_filter'] = $snapshot;
 			}

@@ -87,8 +87,8 @@ final class Collection_Rules {
 	 *
 	 * Existing defaults: product phrase null uses WP_Query terms; orders use the supplied
 	 * string; variation args/discovery default to '', and validation casts null to ''.
-	 * Product phrases collapse over-cap terms; orders slice; v2 variations reject.
-	 * Every product/variation lane uses this splitter; v1 collapses over-cap, v2 flat variations reject.
+	 * Product and variation phrases collapse over-cap terms to the phrase; orders slice.
+	 * Every product/variation lane uses this splitter.
 	 * Malformed UTF-8 yields an empty array, including offset-capture callers.
 	 *
 	 * @param string $search Search text.
@@ -375,7 +375,7 @@ final class Collection_Rules {
 					'hpos'            => null,
 					'query'           => 'meta_query',
 					'exact_sku_param' => 'sku',
-					// Both lanes split literal terms; v1 keeps over-cap collapse/EXISTS, v2 rejects/meta_query.
+					// Both lanes split literal terms and collapse over-cap terms to the phrase; v1 searches with EXISTS, v2 with meta_query.
 					'lanes'           => array(
 						'direct' => array(
 							'query'           => 'wp_terms',

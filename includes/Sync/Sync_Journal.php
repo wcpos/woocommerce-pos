@@ -179,7 +179,7 @@ final class Sync_Journal {
 		return false !== $wpdb->query(
 			$wpdb->prepare(
 				'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, deleted, revision, modified_gmt, origin, created_gmt)'
-				. " SELECT 'customer', ID, 0, '', %s, 'schema-upgrade', %s FROM " . $wpdb->users,
+				. " SELECT 'customer', ID, 0, '', %s, 'schema-upgrade', %s FROM " . $wpdb->users . ' WHERE ID > 0',
 				$now,
 				$now
 			)
@@ -636,6 +636,9 @@ final class Sync_Journal {
 	 */
 	public function record_order_change( int $order_id, string $origin, bool $deleted, $order = null ): bool {
 		global $wpdb;
+		if ( $order_id <= 0 ) {
+			return true; // No order has an id below 1, so there is nothing to write; see record().
+		}
 		if ( 'hook:update' !== $origin ) {
 			if ( 'hook:create' === $origin && $this->queue()->owes( 'order', $order_id ) ) {
 				// The Store API saves a checkout-draft several times BEFORE
@@ -692,6 +695,11 @@ final class Sync_Journal {
 
 	public function record( string $object_type, int $object_id, bool $deleted, string $revision = '', string $origin = 'hook', bool $dedup = true, string $dedup_namespace = '' ): void {
 		global $wpdb;
+		// No server record has an id below 1. Customer 0 is the client's Guest sentinel,
+		// and a row for it wedges the client's change-signal lane (customers?include=0).
+		if ( $object_id <= 0 ) {
+			return;
+		}
 		$dedup_key = null;
 		if ( 'customer' === $object_type ) {
 			$dedup_key = ( $dedup ? '' : 'persisted:' ) . $object_id . ':' . ( '' !== $dedup_namespace ? $dedup_namespace : ( $deleted ? 'delete' : 'update' ) );

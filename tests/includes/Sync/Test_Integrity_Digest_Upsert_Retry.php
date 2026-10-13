@@ -108,6 +108,76 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 		}
 	}
 
+	public function test_rebuild_retries_each_statement_once_on_record_changed(): void {
+		// Arrange: every prune and INSERT...SELECT fails once with MariaDB 1020.
+		$id     = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$digest = new Integrity_Digest();
+		$table  = $digest->table_name();
+		$this->original_wpdb->delete( $table, array( 'object_type' => 'customer' ) );
+		$GLOBALS['wpdb'] = new class( $this->original_wpdb, $table ) extends \wpdb {
+			public $attempts = array();
+			private $original;
+			private $digest_table;
+
+			public function __construct( \wpdb $original, string $table ) {
+				foreach ( array( 'prefix', 'posts', 'postmeta', 'users', 'usermeta', 'term_relationships', 'term_taxonomy', 'terms', 'options' ) as $key ) {
+					$this->$key = $original->$key;
+				}
+				$this->original     = $original;
+				$this->digest_table = $table;
+			}
+
+			public function query( $query ) {
+				if ( 0 === strpos( $query, 'DELETE FROM ' . $this->digest_table . ' ' ) || 0 === strpos( $query, 'INSERT INTO ' . $this->digest_table . ' ' ) ) {
+					$this->attempts[ $query ] = ( $this->attempts[ $query ] ?? 0 ) + 1;
+					if ( 1 === $this->attempts[ $query ] ) {
+						$this->last_error = "Record has changed since last read in table 'wp_wcpos_sync_stored_digest'";
+						return false;
+					}
+				}
+				$r = $this->original->query( $query );
+				$this->last_error = $this->original->last_error;
+				return $r;
+			}
+
+			public function get_var( $query = null, $x = 0, $y = 0 ) {
+				return $this->original->get_var( $query, $x, $y );
+			}
+
+			public function get_row( $query = null, $output = OBJECT, $y = 0 ) {
+				return $this->original->get_row( $query, $output, $y );
+			}
+
+			public function get_results( $query = null, $output = OBJECT ) {
+				return $this->original->get_results( $query, $output );
+			}
+
+			public function insert( $table, $data, $format = null ) {
+				return $this->original->insert( $table, $data, $format );
+			}
+
+			public function update( $table, $data, $where, $format = null, $where_format = null ) {
+				return $this->original->update( $table, $data, $where, $format, $where_format );
+			}
+
+			public function prepare( $query, ...$args ) {
+				return $this->original->prepare( $query, ...$args );
+			}
+
+			public function _escape( $data ) {
+				return $this->original->_escape( $data );
+			}
+		};
+
+		// Act.
+		$result = $digest->rebuild();
+
+		// Assert: six statements, each tried twice, and the customer digest landed.
+		$this->assertSame( array( 2, 2, 2, 2, 2, 2 ), array_values( $GLOBALS['wpdb']->attempts ) );
+		$this->assertGreaterThan( 0, $result['stored_total'] );
+		$this->assertSame( '1', $this->original_wpdb->get_var( $this->original_wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE object_type = 'customer' AND object_id = %d", $id ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Internal table name.
+	}
+
 	public static function upsert_failures(): array {
 		$changed = "Record has changed since last read in table 'wp_wcpos_sync_stored_digest'; try restarting transaction";
 		$cases   = array();

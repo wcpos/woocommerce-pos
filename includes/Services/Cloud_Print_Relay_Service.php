@@ -85,6 +85,16 @@ class Cloud_Print_Relay_Service {
 				array( 'status' => 403 )
 			);
 		}
+		// The WCPOS relay accepts https sites only; say so here rather than relay its raw rejection
+		// as a 502. A filtered (local or staging) relay makes its own rules.
+		$site_url = home_url();
+		if ( self::RELAY_URL === self::relay_url() && 'https' !== wp_parse_url( $site_url, PHP_URL_SCHEME ) ) {
+			return new WP_Error(
+				'wcpos_relay_requires_https',
+				__( 'WCPOS Cloud Print needs your site to use HTTPS. Set the Site Address (URL) in Settings > General to an https:// address, then try again.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
 		try {
 			$token = bin2hex( random_bytes( 24 ) );
 		} catch ( \Exception $exception ) {
@@ -98,7 +108,7 @@ class Cloud_Print_Relay_Service {
 				'headers' => array( 'Content-Type' => 'application/json' ),
 				'body'    => wp_json_encode(
 					array(
-						'site_url'     => home_url(),
+						'site_url'     => $site_url,
 						'verify_token' => $token,
 					)
 				),

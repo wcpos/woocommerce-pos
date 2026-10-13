@@ -313,6 +313,39 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assert_datetime_revision( $revision_before_delete, (string) $deleted['revision'] );
 	}
 
+	public function test_non_positive_ids_write_no_journal_row(): void {
+		global $wpdb;
+		// Arrange: no logged-in user, so the current WP_User is the empty guest (ID 0).
+		wp_set_current_user( 0 );
+
+		// Act: customer 0 is the client's Guest sentinel, never a server record.
+		wp_get_current_user()->set_role( 'customer' );
+		do_action( 'woocommerce_update_customer', 0, new \WC_Customer() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hook under test.
+		do_action( 'woocommerce_new_customer', 0, new \WC_Customer() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hook under test.
+		$this->journal->record( 'product', 0, false );
+		$this->journal->record( 'customer', -1, false );
+		$this->journal->record_order_change( 0, 'hook:update', false );
+
+		// Assert.
+		$this->assertSame( '0', $wpdb->get_var( 'SELECT COUNT(*) FROM ' . $this->journal->table_name() . ' WHERE object_id <= 0' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+	}
+
+	public function test_schema_upgrade_customer_backfill_skips_a_zero_user_id(): void {
+		global $wpdb;
+		// Arrange: a dump restored under NO_AUTO_VALUE_ON_ZERO can leave a wp_users row with ID 0.
+		$sql_mode = $wpdb->get_var( 'SELECT @@SESSION.sql_mode' );
+		$wpdb->query( "SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',NO_AUTO_VALUE_ON_ZERO')" );
+		$wpdb->query( "INSERT INTO {$wpdb->users} (ID, user_login, user_pass, user_email, user_registered) VALUES (0, 'zero-id', '', 'zero@example.org', NOW())" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Core table name.
+		$wpdb->query( $wpdb->prepare( 'SET SESSION sql_mode = %s', $sql_mode ) );
+		$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->users} WHERE ID = 0" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Core table name.
+
+		// Act.
+		$this->journal->append_customer_updates_for_all_users();
+
+		// Assert.
+		$this->assertSame( '0', $wpdb->get_var( 'SELECT COUNT(*) FROM ' . $this->journal->table_name() . " WHERE object_type = 'customer' AND object_id <= 0" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+	}
+
 	public function test_order_create_update_trash_untrash_and_delete_rows_keep_order_semantics(): void {
 		$cursor   = $this->journal->head_sequence();
 		$order    = wc_create_order();
