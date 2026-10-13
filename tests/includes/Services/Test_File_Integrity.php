@@ -42,7 +42,7 @@ class Test_File_Integrity extends WP_UnitTestCase {
 		file_put_contents( $this->root . 'main.php', 'main' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
 		file_put_contents( $this->root . 'includes/A.php', 'a' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
 		$this->requests = array();
-		delete_option( File_Integrity::RESULT_OPTION );
+		delete_site_option( File_Integrity::RESULT_OPTION );
 	}
 
 	/**
@@ -56,7 +56,7 @@ class Test_File_Integrity extends WP_UnitTestCase {
 		}
 		rmdir( $this->root . 'includes' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Test fixture cleanup.
 		rmdir( $this->root ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Test fixture cleanup.
-		delete_option( File_Integrity::RESULT_OPTION );
+		delete_site_option( File_Integrity::RESULT_OPTION );
 		remove_all_filters( 'pre_http_request' );
 		Error_Reporter::set_transport_factory_for_testing( null );
 		Error_Reporter::set_dev_override_for_testing( null );
@@ -233,7 +233,7 @@ class Test_File_Integrity extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertSame( 'files_missing', $result['status'] );
-		$this->assertSame( $result, get_option( File_Integrity::RESULT_OPTION ) );
+		$this->assertSame( $result, File_Integrity::stored( $this->target( 'woocommerce-pos' ) ) );
 		$this->assertCount( 1, $transport->events );
 		$event = $transport->events[0];
 		$this->assertSame( 'error', (string) $event->getLevel() );
@@ -245,25 +245,23 @@ class Test_File_Integrity extends WP_UnitTestCase {
 	 * Site Health shows the stored result: unknown passes, a mismatch is critical with the list.
 	 */
 	public function test_site_health_reflects_the_stored_result(): void {
-		update_option(
-			File_Integrity::RESULT_OPTION,
+		File_Integrity::store(
 			array(
 				'status'   => 'unknown',
 				'missing'  => array(),
 				'modified' => array(),
-				'version'  => '1.2.3',
+				'version'  => \WCPOS\WooCommercePOS\VERSION,
 				'checked'  => time(),
 			)
 		);
 		$this->assertSame( 'good', File_Integrity::site_health_test()['status'] );
 
-		update_option(
-			File_Integrity::RESULT_OPTION,
+		File_Integrity::store(
 			array(
 				'status'   => 'files_missing',
 				'missing'  => array( 'includes/Services/Auth.php' ),
 				'modified' => array(),
-				'version'  => '1.2.3',
+				'version'  => \WCPOS\WooCommercePOS\VERSION,
 				'checked'  => time(),
 			)
 		);
@@ -271,19 +269,39 @@ class Test_File_Integrity extends WP_UnitTestCase {
 		$this->assertSame( 'critical', $test['status'] );
 		$this->assertStringContainsString( 'includes/Services/Auth.php', $test['description'] );
 
-		update_option(
-			File_Integrity::RESULT_OPTION,
+		File_Integrity::store(
 			array(
 				'status'   => 'files_modified',
 				'missing'  => array(),
 				'modified' => array( 'includes/API.php' ),
-				'version'  => '1.2.3',
+				'version'  => \WCPOS\WooCommercePOS\VERSION,
 				'checked'  => time(),
 			)
 		);
 		$this->assertSame( 'recommended', File_Integrity::site_health_test()['status'] );
 
 		$this->assertArrayHasKey( 'wcpos_file_integrity', File_Integrity::site_status_tests( array( 'direct' => array() ) )['direct'] );
+	}
+
+	/**
+	 * Results are kept per plugin folder and version: a free result never stands in for Pro's.
+	 */
+	public function test_stored_results_are_separate_per_folder_and_version(): void {
+		$free   = $this->target( 'woocommerce-pos' );
+		$pro    = array_merge( $free, array( 'root' => $this->root . 'includes/' ) );
+		$result = array(
+			'status'   => 'ok',
+			'missing'  => array(),
+			'modified' => array(),
+			'version'  => '1.2.3',
+			'checked'  => time(),
+		);
+
+		File_Integrity::store( $result, $free );
+
+		$this->assertSame( $result, File_Integrity::stored( $free ) );
+		$this->assertNull( File_Integrity::stored( $pro ) );
+		$this->assertNull( File_Integrity::stored( array_merge( $free, array( 'version' => '1.2.4' ) ) ) );
 	}
 
 	/**
@@ -299,7 +317,7 @@ class Test_File_Integrity extends WP_UnitTestCase {
 		$this->assertSame( 'good', $test['status'] );
 		$this->assertIsInt( $next );
 		$this->assertSame( array(), $this->requests );
-		$this->assertFalse( get_option( File_Integrity::RESULT_OPTION ) );
+		$this->assertNull( File_Integrity::stored() );
 	}
 
 	/**

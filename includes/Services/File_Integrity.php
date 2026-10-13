@@ -123,16 +123,15 @@ class File_Integrity {
 	 * @return array The result.
 	 */
 	public static function run( string $context = 'daily', ?array $target = null ): array {
-		// Stored network-wide: every site of a network runs the same files.
-		$previous = get_site_option( self::RESULT_OPTION, array() );
-		if ( 'daily' === $context && null === $target && \is_array( $previous ) && ( $previous['checked'] ?? 0 ) > time() - self::REUSE_WITHIN ) {
+		$previous = self::stored( $target );
+		if ( 'daily' === $context && null === $target && null !== $previous && ( $previous['checked'] ?? 0 ) > time() - self::REUSE_WITHIN ) {
 			return $previous;
 		}
 		$result = self::check( $target );
-		update_site_option( self::RESULT_OPTION, $result );
+		self::store( $result, $target );
 
 		$failed = \in_array( $result['status'], array( 'files_missing', 'files_modified' ), true );
-		$same   = \is_array( $previous ) && array_intersect_key( $previous, array_flip( array( 'status', 'missing', 'modified', 'version' ) ) ) === array_intersect_key( $result, array_flip( array( 'status', 'missing', 'modified', 'version' ) ) );
+		$same   = null !== $previous && array_intersect_key( $previous, array_flip( array( 'status', 'missing', 'modified', 'version' ) ) ) === array_intersect_key( $result, array_flip( array( 'status', 'missing', 'modified', 'version' ) ) );
 		if ( $failed && ! $same ) {
 			$paths = array_merge( $result['missing'], $result['modified'] );
 			Error_Reporter::instance()->report_integrity(
@@ -237,11 +236,11 @@ class File_Integrity {
 	 * @return array
 	 */
 	public static function site_health_test(): array {
-		$result = get_site_option( self::RESULT_OPTION );
-		if ( ! \is_array( $result ) || ( $result['checked'] ?? 0 ) < time() - self::STALE_AFTER ) {
+		$result = self::stored();
+		if ( null === $result || ( $result['checked'] ?? 0 ) < time() - self::STALE_AFTER ) {
 			wp_schedule_single_event( time(), self::CRON_HOOK, array( 'site_health' ) );
 		}
-		if ( ! \is_array( $result ) ) {
+		if ( null === $result ) {
 			$result = array(
 				'status'   => 'pending',
 				'missing'  => array(),
@@ -285,6 +284,37 @@ class File_Integrity {
 		}
 
 		return $test;
+	}
+
+	/**
+	 * The stored result for a plugin folder and version. Results live in one
+	 * network-wide option, keyed by folder: the sites of a network share files,
+	 * but one network can run free on some sites and Pro on others.
+	 *
+	 * @param array|null $target Root, version and slug; defaults to the running install.
+	 *
+	 * @return array|null The result, or null when that folder and version were never checked.
+	 */
+	public static function stored( ?array $target = null ): ?array {
+		$target  = $target ?? self::target();
+		$results = get_site_option( self::RESULT_OPTION, array() );
+		$result  = \is_array( $results ) ? ( $results[ md5( $target['root'] ) ] ?? null ) : null;
+
+		return \is_array( $result ) && ( $result['version'] ?? '' ) === (string) $target['version'] ? $result : null;
+	}
+
+	/**
+	 * Store a result for a plugin folder.
+	 *
+	 * @param array      $result Result of check().
+	 * @param array|null $target Root, version and slug; defaults to the running install.
+	 */
+	public static function store( array $result, ?array $target = null ): void {
+		$target                            = $target ?? self::target();
+		$results                           = get_site_option( self::RESULT_OPTION, array() );
+		$results                           = \is_array( $results ) ? $results : array();
+		$results[ md5( $target['root'] ) ] = $result;
+		update_site_option( self::RESULT_OPTION, $results );
 	}
 
 	/**

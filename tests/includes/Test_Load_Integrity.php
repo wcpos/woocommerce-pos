@@ -192,6 +192,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 
 	/**
 	 * Missing-class messages are recognised in both PHP 7 and PHP 8 form, ours only.
+	 */
 	public function test_missing_class_parses_wcpos_messages_only(): void {
 		$this->assertSame( 'WCPOS\\WooCommercePOS\\Services\\Session_Registry', Load_Integrity::missing_class( 'Class "WCPOS\\WooCommercePOS\\Services\\Session_Registry" not found' ) );
 		$this->assertSame( 'WCPOS\\WooCommercePOS\\Sync\\Cors', Load_Integrity::missing_class( "Uncaught Error: Class 'WCPOS\\WooCommercePOS\\Sync\\Cors' not found in /x/Rest_Cors.php:206" ) );
@@ -393,6 +394,8 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 
 		$_SERVER['REQUEST_URI'] = '/wp-json/wcpos/v2/sync/products';
 		$wcpos                  = Load_Integrity::fatal_error_args( $args, $error );
+		$_SERVER['REQUEST_URI'] = '/?rest_route=%2Fwcpos%2Fv2%2Fsync%2Fproducts';
+		$plain                  = Load_Integrity::fatal_error_args( $args, $error );
 		$_SERVER['REQUEST_URI'] = '/wp-json/wc/v3/products';
 		$other_route            = Load_Integrity::fatal_error_args( $args, $error );
 		$_SERVER['REQUEST_URI'] = '/wp-json/wcpos/v2/sync/products';
@@ -400,6 +403,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		$_SERVER['REQUEST_URI'] = $saved;
 
 		$this->assertSame( 503, $wcpos['response'] );
+		$this->assertSame( 503, $plain['response'] );
 		$this->assertSame( 500, $other_route['response'] );
 		$this->assertSame( 500, $other_error['response'] );
 	}
@@ -421,6 +425,28 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		$this->assertSame( $earlier, $api->rest_dispatch_wcpos_callback( $earlier, new WP_REST_Request( 'GET', $route ), $route, $handler ) );
 		$this->assertNull( $api->rest_dispatch_wcpos_callback( null, new WP_REST_Request( 'GET', '/wc/v3/products' ), '/wc/v3/products', $handler ) );
 		$this->assertFalse( $ran );
+	}
+
+	/**
+	 * A bootstrap row whose class is missing fails as class-not-found, which the
+	 * integrity path recognises, not as a malformed manifest.
+	 */
+	public function test_hook_manifest_reports_a_missing_class_as_class_not_found(): void {
+		$row = array(
+			'hook'     => null,
+			'callback' => array( 'WCPOS\\WooCommercePOS\\Services\\Gone_Mid_Update', 'register' ),
+			'priority' => 10,
+			'args'     => 0,
+			'reason'   => 'Test.',
+			'phase'    => 'post-latch',
+		);
+
+		try {
+			\WCPOS\WooCommercePOS\Hook_Manifest::validate( array( $row ) );
+			$this->fail( 'A missing class was accepted.' );
+		} catch ( \Error $error ) {
+			$this->assertSame( 'WCPOS\\WooCommercePOS\\Services\\Gone_Mid_Update', Load_Integrity::missing_class( $error->getMessage() ) );
+		}
 	}
 
 	/**

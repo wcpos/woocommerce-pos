@@ -336,7 +336,8 @@ class Load_Integrity {
 	 * @return array
 	 */
 	public static function fatal_error_args( $args, $error ) {
-		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		// Decoded: the plain-permalink form sends ?rest_route=%2Fwcpos%2Fv2%2F….
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( rawurldecode( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) : '';
 		$file = \is_array( $error ) ? self::affected_file( (string) ( $error['message'] ?? '' ), (string) ( $error['file'] ?? '' ), E_PARSE === (int) ( $error['type'] ?? 0 ) ) : null;
 		if ( \is_array( $args ) && null !== $file && preg_match( '#wcpos/v\d#', $uri ) && self::is_transient( self::classify( self::signals( $file ) ) ) ) {
 			$args['response'] = 503;
