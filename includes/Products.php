@@ -162,15 +162,25 @@ class Products {
 			return;
 		}
 		$exclude_ids = $this->get_pos_only_excluded_ids( $query );
-
-		// Apply exclusions if any.
-		if ( ! empty( $exclude_ids ) ) {
-			$existing_excludes = $query->get( 'post__not_in' );
-			if ( ! \is_array( $existing_excludes ) ) {
-				$existing_excludes = array();
-			}
-			$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
+		if ( empty( $exclude_ids ) ) {
+			return;
 		}
+
+		// WordPress ignores post__not_in whenever post__in is set, and a
+		// get_posts() caller suppresses the posts_where clause below as well, so
+		// an id list is trimmed here. An emptied list keeps an impossible id:
+		// an empty post__in would turn the query into an unrestricted one.
+		$post__in = (array) $query->get( 'post__in' );
+		if ( ! empty( $post__in ) ) {
+			$post__in = array_values( array_diff( array_map( 'intval', $post__in ), $exclude_ids ) );
+			$query->set( 'post__in', empty( $post__in ) ? array( 0 ) : $post__in );
+		}
+
+		$existing_excludes = $query->get( 'post__not_in' );
+		if ( ! \is_array( $existing_excludes ) ) {
+			$existing_excludes = array();
+		}
+		$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
 	}
 
 	/**
@@ -200,7 +210,7 @@ class Products {
 	 * @param int  $product_id The product or variation ID.
 	 */
 	public function filter_pos_only_product_visibility( $visible, $product_id ) {
-		if ( ! $this->is_storefront_request() ) {
+		if ( ! $visible || ! $this->is_storefront_request() ) {
 			return $visible;
 		}
 

@@ -249,6 +249,50 @@ class Test_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * get_posts() sets suppress_filters, so posts_where never runs; the id list itself must be trimmed.
+	 */
+	public function test_pos_only_products_get_posts_include_returns_only_visible_id(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+
+		// Act.
+		$ids = get_posts(
+			array(
+				'post_type' => 'product',
+				'include'   => array( $visible->get_id(), $hidden->get_id() ),
+				'fields'    => 'ids',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array( $visible->get_id() ), $ids );
+	}
+
+	/**
+	 * An id list made of POS Only products only must return nothing, not every product.
+	 */
+	public function test_pos_only_products_get_posts_include_all_hidden_returns_nothing(): void {
+		// Arrange.
+		ProductHelper::create_simple_product();
+		$hidden = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+
+		// Act.
+		$ids = get_posts(
+			array(
+				'post_type' => 'product',
+				'include'   => array( $hidden->get_id() ),
+				'fields'    => 'ids',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array(), $ids );
+	}
+
+	/**
 	 * Enable the registered storefront hooks and store visibility settings for these fixtures.
 	 */
 	private function configure_storefront_visibility( array $product_ids, array $variation_ids = array() ): void {
