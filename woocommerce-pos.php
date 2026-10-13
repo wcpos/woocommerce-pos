@@ -184,6 +184,24 @@ add_action(
 	}
 );
 
+/**
+ * Check whether the request path must bypass page caching.
+ *
+ * @param string $request_uri Raw request URI.
+ * @param string $home_path   Site home URL path.
+ * @return bool
+ */
+function woocommerce_pos_is_uncacheable_request( string $request_uri, string $home_path ): bool {
+	$path      = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
+	$home_path = '/' . trim( $home_path, '/' );
+
+	if ( '/' !== $home_path && 0 === stripos( $path, $home_path . '/' ) ) {
+		$path = substr( $path, strlen( $home_path ) );
+	}
+
+	return 1 === preg_match( '#^(wcpos-auth|wcpos-checkout)(/|$)#i', trim( $path, '/' ) );
+}
+
 // Caching can cause all sorts of issues with the POS, so we attempt to disable caching for POS templates.
 add_action(
 	'plugins_loaded',
@@ -193,7 +211,8 @@ add_action(
 			return;
 		}
 
-		if ( preg_match( '#^/(wcpos-login|wcpos-checkout)(/|$)#i', sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) ) {
+		// The auth page renders a per-request CSRF state and must never be served from a page cache.
+		if ( woocommerce_pos_is_uncacheable_request( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), (string) wp_parse_url( home_url(), PHP_URL_PATH ) ) ) {
 			// 1) Hard kill all LSCache features (cache + optimisation).
 			if ( ! \defined( 'LITESPEED_DISABLE_ALL' ) ) {
 				\define( 'LITESPEED_DISABLE_ALL', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.

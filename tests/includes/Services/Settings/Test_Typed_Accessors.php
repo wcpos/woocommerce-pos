@@ -67,7 +67,6 @@ class Test_Typed_Accessors extends WP_UnitTestCase {
 		$this->assertFalse( $settings->pos_only_products_enabled() );
 		$this->assertEquals( 0, $settings->default_customer_id() );
 		$this->assertEquals( 'undecided', $settings->tracking_consent() );
-		$this->assertFalse( $settings->use_jwt_as_param_enabled() );
 		$this->assertIsArray( $settings->admin_emails() );
 		$this->assertTrue( $settings->admin_emails()['enabled'] );
 		$this->assertIsArray( $settings->dequeue_script_handles() );

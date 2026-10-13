@@ -432,11 +432,21 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_tools_settings
 	 */
-	public function test_direct_get_tools_settings(): void {
+	public function test_get_tools_settings_omits_retired_use_jwt_as_param(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_tools',
+			array(
+				'use_jwt_as_param' => true,
+			)
+		);
+
+		// Act.
 		$result = $this->settings->get_tools_settings();
 
+		// Assert.
 		$this->assertIsArray( $result );
-		$this->assertArrayHasKey( 'use_jwt_as_param', $result );
+		$this->assertArrayNotHasKey( 'use_jwt_as_param', $result );
 	}
 
 	/**
