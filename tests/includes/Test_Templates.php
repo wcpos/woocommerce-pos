@@ -23,6 +23,63 @@ use WP_UnitTestCase;
  * Class Test_Templates
  */
 class Test_Templates extends WP_UnitTestCase {
+	/**
+	 * Numeric references resolve stored templates without enforcing the requested type.
+	 */
+	public function test_find_template_numeric_reference_returns_stored_template_of_any_type(): void {
+		// Arrange.
+		$id = self::factory()->post->create(
+			array(
+				'post_title'  => 'Display template',
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+			)
+		);
+		wp_set_object_terms( $id, 'display', 'wcpos_template_type' );
+		update_post_meta( $id, '_template_engine', 'logicless' );
+
+		// Act.
+		$template = Templates::find_template( (string) $id, 'receipt' );
+
+		// Assert.
+		$this->assertSame( 'display', $template['type'] );
+	}
+
+	/**
+	 * Virtual references resolve in the requested type.
+	 */
+	public function test_find_template_string_reference_resolves_virtual_template_in_type(): void {
+		// Arrange and act.
+		$template = Templates::find_template( Templates::TEMPLATE_PLUGIN_CORE, 'closure' );
+
+		// Assert.
+		$this->assertStringEndsWith( 'gallery/closure-default.html', $template['file_path'] );
+	}
+
+	/**
+	 * Gallery fallback is available only through the explicit gallery lookup.
+	 */
+	public function test_find_template_or_gallery_falls_back_to_gallery_key(): void {
+		// Arrange and act.
+		$template = Templates::find_template( 'standard-receipt' );
+		$gallery  = Templates::find_template_or_gallery( 'standard-receipt' );
+
+		// Assert.
+		$this->assertNull( $template );
+		$this->assertSame( 'gallery', $gallery['source'] );
+	}
+
+	/**
+	 * A missing numeric reference does not resolve through the gallery.
+	 */
+	public function test_find_template_or_gallery_numeric_reference_never_falls_back(): void {
+		// Arrange and act.
+		$template = Templates::find_template_or_gallery( '999999999' );
+
+		// Assert.
+		$this->assertNull( $template );
+	}
+
 	/** Reports have a usable virtual default and two installable formats. */
 	public function test_report_default_gallery_and_activation(): void {
 		$template = Templates::get_active_template( 'report' );

@@ -497,13 +497,7 @@ class Templates_Controller extends WP_REST_Controller {
 		$id   = $request['id'];
 		$type = $request->get_param( 'type' ) ?? 'receipt';
 
-		// Check if it's a numeric ID (database template).
-		if ( is_numeric( $id ) ) {
-			$template = TemplatesManager::get_template( (int) $id );
-		} else {
-			// It's a virtual template ID.
-			$template = TemplatesManager::get_virtual_template( $id, $type );
-		}
+		$template = TemplatesManager::find_template( $id, $type );
 
 		if ( ! $template ) {
 			return new WP_Error(
@@ -978,14 +972,7 @@ class Templates_Controller extends WP_REST_Controller {
 		$type = $request->get_param( 'type' ) ?? 'receipt';
 
 		// Validate the template exists (database, virtual, or gallery).
-		if ( is_numeric( $id ) ) {
-			$template = TemplatesManager::get_template( (int) $id );
-		} else {
-			$template = TemplatesManager::get_virtual_template( $id, $type );
-			if ( ! $template ) {
-				$template = TemplatesManager::get_gallery_template_by_key( $id );
-			}
-		}
+		$template = TemplatesManager::find_template_or_gallery( $id, $type );
 
 		if ( ! $template ) {
 			return new WP_Error(
