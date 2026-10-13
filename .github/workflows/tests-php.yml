@@ -7,6 +7,8 @@ on:
       - next
     paths:
       - "**.php"
+      - ".phpunit.xml.dist"
+      - ".phpunit.multisite.xml.dist"
       - "composer.json"
       - "composer.lock"
       - "php-scoper/composer.json"
@@ -63,6 +65,10 @@ jobs:
               # lock-only PR unmergeable — the suite was skipped, and the gate
               # read that skip as a failure for a check that could never run.
               - '**.php'
+              # The two PHPUnit configurations decide what the suite and the
+              # multisite group select; a change to either must run them.
+              - '.phpunit.xml.dist'
+              - '.phpunit.multisite.xml.dist'
               - 'composer.json'
               - 'composer.lock'
               # php-scoper's manifest and lock decide what CI scopes into
