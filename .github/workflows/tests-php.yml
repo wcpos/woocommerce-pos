@@ -410,12 +410,18 @@ jobs:
         id: test
         run: pnpm run test:unit:php
 
+      - name: Run multisite PHPUnit group
+        id: test-multisite
+        run: pnpm run test:unit:php:multisite
+
       - name: Upload test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: phpunit-results-smoke-test
-          path: phpunit.xml
+          path: |
+            phpunit.xml
+            phpunit-multisite.xml
           retention-days: 7
 
   generate-matrix:
