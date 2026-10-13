@@ -240,7 +240,21 @@ class Ledger {
 				break;
 			}
 		}
-		if ( ! $pending ) {
+		$deleting = false;
+		try {
+			$property = new \ReflectionProperty( \WC_Data::class, 'meta_data' );
+			$property->setAccessible( true );
+			foreach ( $property->getValue( $order ) as $meta ) {
+				if ( self::META_KEY === $meta->key && null === $meta->value ) {
+					$deleting = true;
+					break;
+				}
+			}
+		} catch ( \Throwable $error ) {
+			// If raw metadata is unavailable, retain the normal pending-change check.
+			$deleting = false;
+		}
+		if ( ! $pending && ! $deleting ) {
 			return;
 		}
 		$order_id = $order->get_id();
@@ -258,11 +272,11 @@ class Ledger {
 		}
 		$raw = $order->get_meta( self::META_KEY, true );
 		$value = $this->decode( $raw );
-		if ( null === $value ) {
+		if ( $deleting || null === $value ) {
 			if ( $stamps ) {
 				$value = array(
-					'schema' => self::SCHEMA,
-					'payments' => $stored['payments'],
+					'schema'   => self::SCHEMA,
+					'payments' => array_map( array( __CLASS__, 'to_wire' ), $stored['payments'] ),
 				);
 				$order->update_meta_data( self::META_KEY, wp_json_encode( $value ) );
 			}
@@ -286,6 +300,9 @@ class Ledger {
 			}
 		}
 		if ( $value !== $before ) {
+			if ( ! is_array( $raw ) ) {
+				$value['payments'] = array_map( array( __CLASS__, 'to_wire' ), $value['payments'] );
+			}
 			$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $value ) );
 		}
 	}

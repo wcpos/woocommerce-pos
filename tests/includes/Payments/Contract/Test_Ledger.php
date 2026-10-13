@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WC_Tax;
@@ -166,6 +167,78 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				$this->assertArrayNotHasKey( 'closure_id', $rows[0] );
 			}
 		}
+	}
+
+	/** Deleting the ledger preserves all stored legs only when a closure counted one. */
+	public function test_order_save_deleting_the_ledger_keeps_the_stored_stamped_ledger(): void {
+		foreach ( array( true, false ) as $stamp ) {
+			// Arrange.
+			$order      = $this->create_pos_order();
+			$ledger     = Ledger::instance();
+			$first      = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+			$second     = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+			$closure_id = wp_generate_uuid4();
+			if ( $stamp ) {
+				$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+			}
+			$before = $ledger->read( wc_get_order( $order->get_id() ) );
+			// Act.
+			$order->delete_meta_data( Ledger::META_KEY );
+			$order->save();
+			$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+			// Assert.
+			if ( $stamp ) {
+				$this->assertSame( $before, $rows );
+				$this->assertSame( array( $first['id'], $second['id'] ), array_column( $rows, 'id' ) );
+				$this->assertSame( $closure_id, $rows[0]['closure_id'] );
+				$this->assertCount( 1, $this->stored_ledger_values( $order->get_id() ) );
+			} else {
+				$this->assertSame( array(), $rows );
+				$this->assertCount( 0, $this->stored_ledger_values( $order->get_id() ) );
+			}
+		}
+	}
+
+	/** JSON keeper write-backs preserve the wire contract for both empty maps. */
+	public function test_keeper_write_back_encodes_empty_maps_as_objects(): void {
+		// Arrange.
+		$order      = $this->create_pos_order();
+		$ledger     = Ledger::instance();
+		$first      = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$second     = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$closure_id = wp_generate_uuid4();
+		$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+		// Act.
+		$value = array(
+			'schema'   => Ledger::SCHEMA,
+			'payments' => array( $second ),
+		);
+		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		$order->save();
+		$raw  = $this->stored_ledger_values( $order->get_id() )[0];
+		$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+		// Assert.
+		foreach ( array( 'provider_refs', 'receipt' ) as $field ) {
+			$this->assertStringContainsString( '"' . $field . '":{}', $raw );
+			$this->assertStringNotContainsString( '"' . $field . '":[]', $raw );
+		}
+		$this->assertSame( array( $second['id'], $first['id'] ), array_column( $rows, 'id' ) );
+		$this->assertSame( $closure_id, $rows[1]['closure_id'] );
+	}
+
+	/**
+	 * Read every raw ledger meta row from the active order storage backend.
+	 *
+	 * @param int $order_id Order ID.
+	 * @return array Stored meta values.
+	 */
+	private function stored_ledger_values( int $order_id ): array {
+		global $wpdb;
+		$hpos  = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$owner = $hpos ? 'order_id' : 'post_id';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Inspect actual ledger rows on the active storage backend.
+		return $wpdb->get_col( $wpdb->prepare( "SELECT meta_value FROM {$table} WHERE {$owner} = %d AND meta_key = %s", $order_id, Ledger::META_KEY ) );
 	}
 
 	/** Undecodable writes cannot erase stored fiscal facts. */
