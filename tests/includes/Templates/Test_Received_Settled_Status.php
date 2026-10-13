@@ -8,10 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\Templates\Received;
 use WC_Order;
-use WC_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
  * The received page emits the payment-received message when the order has reached
@@ -27,31 +26,7 @@ use WC_REST_Unit_Test_Case;
  *
  * @coversNothing
  */
-class Test_Received_Settled_Status extends WC_REST_Unit_Test_Case {
-	/**
-	 * Admin user ID.
-	 *
-	 * @var int
-	 */
-	private $user;
-
-	/**
-	 * Set up test fixtures.
-	 */
-	public function setUp(): void {
-		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) );
-		parent::setUp();
-		$this->user = $this->factory->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $this->user );
-	}
-
-	/**
-	 * Register the WCPOS REST API routes.
-	 */
-	public function rest_api_init(): void {
-		new API();
-	}
-
+class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Tear down test fixtures.
 	 */
@@ -59,7 +34,6 @@ class Test_Received_Settled_Status extends WC_REST_Unit_Test_Case {
 		wp_set_current_user( 0 );
 		delete_option( 'woocommerce_pos_settings_payment_gateways' );
 		delete_option( 'woocommerce_pos_settings_checkout' );
-		remove_action( 'rest_api_init', array( $this, 'rest_api_init' ) );
 		parent::tearDown();
 	}
 
