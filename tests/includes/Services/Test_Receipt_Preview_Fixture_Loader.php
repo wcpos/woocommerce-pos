@@ -19,6 +19,76 @@ use WP_UnitTestCase;
  */
 class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 
+	/**
+	 * Closure template previews use the requested store identity.
+	 */
+	public function test_for_template_closure_uses_the_given_store(): void {
+		// Arrange.
+		$store = new class() {
+			/**
+			 * Return the preview store ID.
+			 *
+			 * @return int Store ID.
+			 */
+			public function get_id(): int {
+				return 7;
+			}
+		};
+		$filter = static function ( $resolved_store, $the_store, $args ) use ( $store ) {
+			return 7 === $the_store ? $store : $resolved_store;
+		};
+		add_filter( 'woocommerce_pos_get_store', $filter, 10, 3 );
+
+		try {
+			// Act.
+			$data = ( new Receipt_Preview_Fixture_Loader() )->for_template(
+				array(
+					'type' => 'closure',
+				),
+				$store
+			);
+
+			// Assert.
+			$this->assertSame( 7, $data['store']['id'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $filter, 10 );
+		}
+	}
+
+	/**
+	 * Receipt template previews use their gallery profile.
+	 */
+	public function test_for_template_uses_the_template_preview_profile(): void {
+		// Arrange.
+		$template = array(
+			'type'         => 'receipt',
+			'preview_data' => 'invoice',
+		);
+
+		// Act.
+		$data = ( new Receipt_Preview_Fixture_Loader() )->for_template( $template );
+
+		// Assert.
+		$this->assertSame( 'INV-2048', $data['order']['number'] );
+	}
+
+	/**
+	 * Report template previews use the report key instead of their gallery profile.
+	 */
+	public function test_for_template_report_uses_report_key_and_ignores_profile(): void {
+		// Arrange.
+		$template = array(
+			'type'         => 'report',
+			'preview_data' => 'invoice',
+		);
+
+		// Act.
+		$data = ( new Receipt_Preview_Fixture_Loader() )->for_template( $template, null, 'cash-movements' );
+
+		// Assert.
+		$this->assertSame( 'cash-movements', $data['report']['key'] );
+	}
+
 	/** Closure previews carry every optional section without sale identity. */
 	public function test_closure_fixture_contains_full_document(): void {
 		$data = ( new Receipt_Preview_Fixture_Loader() )->build( 'closure' );

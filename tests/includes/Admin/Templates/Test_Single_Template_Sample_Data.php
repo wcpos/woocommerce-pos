@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Admin\Templates\Single_Template;
+use WCPOS\WooCommercePOS\Templates;
 use WC_REST_Unit_Test_Case;
 
 /**
@@ -23,6 +24,29 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Single_Template_Sample_Data extends WC_REST_Unit_Test_Case {
+
+	/**
+	 * Installed templates seed the editor with their formatted gallery profile.
+	 */
+	public function test_editor_bootstrap_uses_installed_template_preview_profile(): void {
+		// Arrange.
+		$post_id = Templates::install_gallery_template( 'invoice' );
+		try {
+			$this->assertIsInt( $post_id );
+			$method = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
+			$method->setAccessible( true );
+
+			// Act.
+			$script = $method->invoke( new Single_Template(), get_post( $post_id ) );
+			$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+
+			// Assert.
+			$this->assertSame( 'INV-2048', $config['sampleData']['order']['number'] );
+			$this->assertIsString( $config['sampleData']['totals']['total_incl_display'] );
+		} finally {
+			wp_delete_post( $post_id, true );
+		}
+	}
 
 	/**
 	 * The editor's sample data must carry formatted `*_display` money companions

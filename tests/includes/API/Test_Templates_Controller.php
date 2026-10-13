@@ -33,6 +33,30 @@ use WCPOS\WooCommercePOS\Templates;
  * @coversNothing
  */
 class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
+	/**
+	 * Diagnostic preview HTML preserves rasterized barcode images.
+	 */
+	public function test_preview_html_keeps_barcode_images(): void {
+		// Arrange.
+		$post_id = $this->create_template( 'Barcode preview' );
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => '<div><barcode type="code128" height="40">{{order.number}}</barcode></div>',
+			)
+		);
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $post_id . '/preview' );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertStringContainsString( '<img', $data['preview_html'] );
+		$this->assertStringContainsString( 'data:image/png', $data['preview_html'] );
+	}
+
 	/** Both API lanes preview reports without selecting an order. */
 	public function test_report_previews_render_grouped_thermal_and_partial_documents(): void {
 		// wcpos/v2 inherits the v1 controller; the current lane is the one the till uses.
