@@ -57,7 +57,20 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	 * Tear down.
 	 */
 	public function tearDown(): void {
+		unset( $_GET['rest_route'] );
 		parent::tearDown();
+	}
+
+	/**
+	 * Make this request look like a REST request entering the front controller
+	 * (`index.php?rest_route=…`), the shape on which Auth accepts `?authorization=`
+	 * before REST_REQUEST is defined.
+	 *
+	 * @param string $route REST route, e.g. '/wcpos/v2/status'.
+	 */
+	protected function arrange_rest_front_controller_request( string $route ): void {
+		$_GET['rest_route'] = $route;
+		add_filter( 'wp_using_themes', '__return_true' );
 	}
 
 	/**

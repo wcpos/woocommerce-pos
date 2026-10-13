@@ -13,7 +13,6 @@ namespace WCPOS\WooCommercePOS;
 use WCPOS\WooCommercePOS\API\Controller_Registry;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Client_Signal;
-use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -303,7 +302,6 @@ class API {
 		$response->data['wp_version']       = get_bloginfo( 'version' );
 		$response->data['wc_version']       = WC()->version;
 		$response->data['wcpos_version']    = VERSION;
-		$response->data['use_jwt_as_param'] = SettingsService::instance()->use_jwt_as_param_enabled();
 
 		// Add WCPOS authentication endpoint to the response.
 		$response->data['authentication']['wcpos'] = array(

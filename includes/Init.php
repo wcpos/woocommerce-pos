@@ -338,7 +338,8 @@ class Init {
 	 *
 	 * This runs BEFORE rest_api_init, so we can authenticate users before WP REST API
 	 * permission callbacks run. This is especially important for authorization via
-	 * query parameter (?authorization=Bearer...) which some servers require.
+	 * query parameter (?authorization=Bearer...), which some servers require;
+	 * Auth::get_auth_header() accepts it on REST requests only.
 	 *
 	 * Note: We don't check for X-WCPOS header here because:
 	 * 1. The header check uses getallheaders() which may not work in all environments
