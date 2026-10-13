@@ -492,4 +492,17 @@ class Test_Access_Section extends WP_UnitTestCase {
 			}
 		}
 	}
+
+	/**
+	 * The WooCommerce manager capability is reported to the app (it gates a card provider's
+	 * terms, Tap to Pay) but is never one of the Access screen's toggles.
+	 */
+	public function test_manage_woocommerce_is_reported_but_never_a_toggle(): void {
+		( new \WCPOS\WooCommercePOS\Activator() )->single_activate( false );
+		$this->assertNotContains( 'manage_woocommerce', Access_Section::capability_names() );
+		$manager = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'shop_manager' ) ) );
+		$cashier = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'cashier' ) ) );
+		$this->assertContains( 'manage_woocommerce', Access_Section::effective_capabilities( $manager ) );
+		$this->assertNotContains( 'manage_woocommerce', Access_Section::effective_capabilities( $cashier ) );
+	}
 }

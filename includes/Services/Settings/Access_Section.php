@@ -61,7 +61,8 @@ class Access_Section implements Settings_Section_Interface {
 	 *
 	 * @param WP_User $user User to report on.
 	 *
-	 * @return string[] Capability names, in capability_names() order.
+	 * @return string[] Capability names, in capability_names() order, then `manage_woocommerce`
+	 *                  when the user holds it (reported for the app's gates, never a toggle).
 	 */
 	public static function effective_capabilities( WP_User $user ): array {
 		$names = self::capability_names();
@@ -69,7 +70,7 @@ class Access_Section implements Settings_Section_Interface {
 		// (WP_User::has_cap), so mirror that bypass for the two filtered names.
 		$super_admin = is_multisite() && is_super_admin( $user->ID );
 
-		return array_values(
+		$effective = array_values(
 			array_filter(
 				$names,
 				function ( $cap ) use ( $user, $super_admin ) {
@@ -88,6 +89,13 @@ class Access_Section implements Settings_Section_Interface {
 				}
 			)
 		);
+		// Reported, never a toggle: the WooCommerce manager capability. The app gates a card
+		// provider's terms (Tap to Pay) on it, so it is sent whenever the user holds it.
+		if ( user_can( $user, 'manage_woocommerce' ) ) {
+			$effective[] = 'manage_woocommerce';
+		}
+
+		return $effective;
 	}
 
 	/**
