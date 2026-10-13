@@ -842,7 +842,9 @@ class Auth {
 		if ( is_super_admin( $user_id ) ) {
 			return true;
 		}
-		foreach ( array_keys( get_blogs_of_user( $user_id ) ) as $blog_id ) {
+		// Every site the user belongs to, archived, spam and deleted ones included: an administrator
+		// of a parked site still must not be reachable by a manager elsewhere on the network.
+		foreach ( array_keys( get_blogs_of_user( $user_id, true ) ) as $blog_id ) {
 			// A WP_User built for a site id carries that site's capabilities; no blog switch needed.
 			if ( ( new \WP_User( $user_id, '', (int) $blog_id ) )->has_cap( 'manage_options' ) ) {
 				return true;
