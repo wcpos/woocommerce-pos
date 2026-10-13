@@ -203,7 +203,7 @@ class Auth {
 	 * Checks multiple sources for the authorization token:
 	 * 1. HTTP_AUTHORIZATION server variable (standard)
 	 * 2. REDIRECT_HTTP_AUTHORIZATION (Apache CGI workaround)
-	 * 3. authorization query parameter (for servers that strip auth headers)
+	 * 3. authorization query parameter, on REST requests only (for hosts that strip auth headers; never a page load)
 	 *
 	 * @return false|string The authorization value or false if not found.
 	 */
@@ -218,12 +218,55 @@ class Auth {
 			return sanitize_text_field( wp_unslash( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) );
 		}
 
-		// Check authorization query param.
-		if ( ! empty( $_GET['authorization'] ) ) {
+		// Query param: REST requests only. A token in a page URL must never sign a browser in.
+		if ( ! empty( $_GET['authorization'] ) &amp;&amp; $this->is_rest_request() ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- a bearer credential, not a form.
 			return sanitize_text_field( wp_unslash( $_GET['authorization'] ) );
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether the current request is served by the REST API.
+	 *
+	 * `?authorization=` is the till's fallback for hosts that strip the Authorization
+	 * header, so it is a REST credential only. Identity is usually resolved from
+	 * WP::init(), before parse_request defines REST_REQUEST, so the URL is matched the
+	 * way core's rest_api_loaded() will route it. Every test here is strict. A REST
+	 * request this misses is still authenticated by API::rest_authentication_errors()
+	 * once REST_REQUEST is defined; a page load it wrongly accepted would be signed in.
+	 *
+	 * @return bool
+	 */
+	private function is_rest_request(): bool {
+		if ( \defined( 'REST_REQUEST' ) &amp;&amp; REST_REQUEST ) {
+			return true;
+		}
+
+		// Only the theme front controller (index.php) routes to REST: never wp-admin,
+		// admin-ajax.php, wp-login.php, xmlrpc.php or wp-cron.php.
+		if ( ! wp_using_themes() ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing marker only.
+		if ( ! empty( $_GET['rest_route'] ) &amp;&amp; \is_string( $_GET['rest_route'] ) ) {
+			return true;
+		}
+
+		// The /wp-json/ path form exists only as a rewrite rule.
+		if ( '' === (string) get_option( 'permalink_structure' ) ) {
+			return false;
+		}
+
+		$uri       = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only matched against a prefix.
+		$path      = trim( (string) wp_parse_url( $uri, PHP_URL_PATH ), '/' );
+		$home_path = trim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
+		if ( '' !== $home_path ) {
+			$path = trim( (string) preg_replace( '|^' . preg_quote( $home_path, '|' ) . '|i', '', $path ), '/' );
+		}
+
+		return 1 === preg_match( '#^(?:index\.php/)?' . preg_quote( rest_get_url_prefix(), '#' ) . '(?:/|$)#', $path );
 	}
 
 	/**
