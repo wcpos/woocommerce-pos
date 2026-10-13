@@ -510,5 +510,6 @@ class Test_Access_Section extends WP_UnitTestCase {
 		// delete_users is an administrator's: a shop manager deletes no accounts.
 		$this->assertContains( 'delete_users', Access_Section::effective_capabilities( $admin ) );
 		$this->assertNotContains( 'delete_users', Access_Section::effective_capabilities( $manager ) );
+		$this->assertNotContains( 'delete_users', Access_Section::effective_capabilities( $cashier ) );
 	}
 }
