@@ -39,6 +39,51 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/**
+	 * Saving a changed leg preserves the stored timestamp of its untouched sibling.
+	 */
+	public function test_save_keeps_the_stamp_of_an_untouched_leg_and_restamps_a_changed_one(): void {
+		$order  = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$extra  = array(
+			'capture_mode' => 'manual',
+			'status'       => 'captured',
+		);
+		$ledger->save(
+			$order,
+			array(
+				$this->payment( 'pos_cash', '5.00', $extra ),
+				$this->payment( 'pos_cash', '5.00', $extra ),
+			)
+		);
+		$rows  = $ledger->read( $order );
+		$stamp = gmdate( 'c', time() - 3600 );
+		foreach ( $rows as &$row ) {
+			$row['updated_at_gmt'] = $stamp;
+		}
+		unset( $row );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema'   => 1,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save();
+
+		$rows               = $ledger->read( $order );
+		$rows[1]['receipt'] = array(
+			'number' => 'R-2',
+		);
+		$ledger->save( $order, $rows );
+
+		$rows = $ledger->read( $order );
+		$this->assertSame( $stamp, $rows[0]['updated_at_gmt'] );
+		$this->assertGreaterThan( time() - 60, strtotime( $rows[1]['updated_at_gmt'] ) );
+	}
+
 	public function test_record_provenance_survives_transitions_and_register_replay_conflicts(): void {
 		$order = $this->create_pos_order();
 		$ledger = Ledger::instance();

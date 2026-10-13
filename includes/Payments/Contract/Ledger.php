@@ -970,9 +970,24 @@ class Ledger {
 	 * @param bool     $derive Whether to project payment state (deferred during offline arrival).
 	 */
 	public function save( WC_Order $order, array $rows, bool $derive = true ): void {
+		// updated_at_gmt is when a leg last changed. normalize_row() stamps now, so a row whose
+		// content is what is already stored keeps its stored stamp: a write to one leg must not
+		// make every other leg on the order look fresh to Payments_Sweeper.
+		$stored = array();
+		foreach ( $this->read( $order ) as $existing ) {
+			if ( is_array( $existing ) && isset( $existing['id'] ) ) {
+				$stored[ strtolower( (string) $existing['id'] ) ] = $existing;
+			}
+		}
 		$normalized = array();
 		foreach ( $rows as $row ) {
-			$normalized[] = $this->normalize_row( $order, $row );
+			$row      = $this->normalize_row( $order, $row );
+			$previous = $stored[ $row['id'] ] ?? null;
+			$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
+			if ( null !== $stamp && $this->same_content( $this->normalize_row( $order, $previous ), $row ) ) {
+				$row['updated_at_gmt'] = $stamp;
+			}
+			$normalized[] = $row;
 		}
 		$wire = array_map( array( __CLASS__, 'to_wire' ), $normalized );
 		$order->update_meta_data(
@@ -1276,6 +1291,17 @@ class Ledger {
 		}
 		unset( $row );
 		$this->save( $order, $rows, $derive );
+	}
+
+	/**
+	 * Whether two normalized rows hold the same content, ignoring when they were written.
+	 *
+	 * @param array $a Normalized row.
+	 * @param array $b Normalized row.
+	 */
+	private function same_content( array $a, array $b ): bool {
+		unset( $a['updated_at_gmt'], $b['updated_at_gmt'] );
+		return wp_json_encode( $a ) === wp_json_encode( $b );
 	}
 
 	/**
