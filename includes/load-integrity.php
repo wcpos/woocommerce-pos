@@ -17,3 +17,10 @@ if ( ! class_exists( Load_Integrity::class, false ) ) {
 	require_once __DIR__ . '/Load_Integrity.php';
 }
 Load_Integrity::register( __DIR__ );
+
+// The legacy class aliases, loaded here rather than as a Composer `files` entry of
+// their own: Composer require()s each entry unconditionally, so an entry caught
+// mid-copy would fatal before any recovery could run. One entry is one exposure.
+if ( is_file( __DIR__ . '/API/class-aliases.php' ) ) {
+	require_once __DIR__ . '/API/class-aliases.php';
+}
