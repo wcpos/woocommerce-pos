@@ -52,6 +52,8 @@ class Products {
 		if ( $pos_only_products ) {
 			add_filter( 'rest_pre_dispatch', array( $this, 'record_rest_route' ), 10, 3 );
 			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ) );
+			add_filter( 'posts_where', array( $this, 'exclude_pos_only_products_from_where' ), 10, 2 );
+			add_filter( 'woocommerce_product_is_visible', array( $this, 'filter_pos_only_product_visibility' ), 10, 2 );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
 			add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_prevent_pos_only_add_to_cart' ) );
 
@@ -113,17 +115,13 @@ class Products {
 	}
 
 	/**
-	 * Hide POS only products and variations from storefront queries.
+	 * Get POS Only product and variation ids for the query post types.
 	 *
 	 * @param \WP_Query $query The WP_Query instance (passed by reference).
 	 *
-	 * @return void
+	 * @return int[]
 	 */
-	public function hide_pos_only_products( \WP_Query $query ): void {
-		if ( ! $this->should_hide_pos_only_products( $query ) ) {
-			return;
-		}
-
+	private function get_pos_only_excluded_ids( \WP_Query $query ): array {
 		// WP_Query post_type can be string or array.
 		$post_types        = (array) $query->get( 'post_type' );
 		$settings_instance = Settings::instance();
@@ -151,14 +149,80 @@ class Products {
 			}
 		}
 
-		// Apply exclusions if any.
-		if ( ! empty( $exclude_ids ) ) {
-			$existing_excludes = $query->get( 'post__not_in' );
-			if ( ! \is_array( $existing_excludes ) ) {
-				$existing_excludes = array();
-			}
-			$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
+		return $exclude_ids;
+	}
+
+	/**
+	 * Hide POS Only ids, including for callers that suppress SQL filters.
+	 *
+	 * @param \WP_Query $query The query being filtered.
+	 */
+	public function hide_pos_only_products( \WP_Query $query ): void {
+		if ( ! $this->should_hide_pos_only_products( $query ) ) {
+			return;
 		}
+		$exclude_ids = $this->get_pos_only_excluded_ids( $query );
+		if ( empty( $exclude_ids ) ) {
+			return;
+		}
+
+		// WordPress ignores post__not_in whenever post__in is set, and a
+		// get_posts() caller suppresses the posts_where clause below as well, so
+		// an id list is trimmed here. An emptied list keeps an impossible id:
+		// an empty post__in would turn the query into an unrestricted one.
+		$post__in = (array) $query->get( 'post__in' );
+		if ( ! empty( $post__in ) ) {
+			$post__in = array_values( array_diff( array_map( 'intval', $post__in ), $exclude_ids ) );
+			$query->set( 'post__in', empty( $post__in ) ? array( 0 ) : $post__in );
+		}
+
+		$existing_excludes = $query->get( 'post__not_in' );
+		if ( ! \is_array( $existing_excludes ) ) {
+			$existing_excludes = array();
+		}
+		$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
+	}
+
+	/**
+	 * Exclude POS Only ids even when WordPress gives post__in precedence.
+	 *
+	 * @param string    $where The SQL WHERE clause.
+	 * @param \WP_Query $query The query being filtered.
+	 */
+	public function exclude_pos_only_products_from_where( $where, $query ) {
+		global $wpdb;
+
+		$exclude_ids = $this->should_hide_pos_only_products( $query ) ? $this->get_pos_only_excluded_ids( $query ) : array();
+		if ( ! empty( $exclude_ids ) ) {
+			$ids_format = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
+			$where     .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
+		}
+
+		return $where;
+	}
+
+	/**
+	 * Cover related products, upsells, cross-sells and classic theme loops,
+	 * which never run the query filter. Use the same gate as the query filter
+	 * minus the per-query hook.
+	 *
+	 * @param bool $visible    Whether the product is visible.
+	 * @param int  $product_id The product or variation ID.
+	 */
+	public function filter_pos_only_product_visibility( $visible, $product_id ) {
+		if ( ! $visible || ! $this->is_storefront_request() ) {
+			return $visible;
+		}
+
+		$settings = Settings::instance();
+		return $settings->is_product_pos_only( $product_id ) || $settings->is_variation_pos_only( $product_id ) ? false : $visible;
+	}
+
+	/**
+	 * Whether the request is a storefront rather than an operator context.
+	 */
+	private function is_storefront_request(): bool {
+		return ! ( is_admin() || woocommerce_pos_request() || $this->is_cli_request() || $this->is_operator_rest_request() );
 	}
 
 	/**
@@ -177,7 +241,7 @@ class Products {
 	 * @return bool
 	 */
 	public function should_hide_pos_only_products( \WP_Query $query ): bool {
-		$hide = ! ( is_admin() || woocommerce_pos_request() || $this->is_cli_request() || $this->is_operator_rest_request() );
+		$hide = $this->is_storefront_request();
 
 		/**
 		 * Filters whether POS Only products are excluded from a product query.
