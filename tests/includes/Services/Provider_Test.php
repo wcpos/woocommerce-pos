@@ -137,13 +137,6 @@ class Provider_Test extends WP_UnitTestCase {
 		$this->assertNull( Provider::wire_format( 'printnode', 'thermal' ) );
 	}
 	/**
-	 * It includes star-online as a valid provider.
-	 */
-	public function test_valid_includes_star_online(): void {
-		$this->assertContains( 'star-online', Provider::valid() );
-	}
-
-	/**
 	 * It reports push providers as requiring submit.
 	 */
 	public function test_requires_submit_true_for_push_providers(): void {

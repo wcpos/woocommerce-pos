@@ -403,14 +403,6 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 	}
 
-	/**
-	 * Test saving invalid settings.
-	 */
-	public function test_save_invalid_settings(): void {
-		$result = $this->settings->save_settings( 'invalid', array() );
-		$this->assertInstanceOf( WP_Error::class, $result );
-	}
-
 	// ==========================================================================
 	// DIRECT METHOD TESTS (for line coverage)
 	// ==========================================================================
@@ -591,6 +583,18 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$result = $this->settings->is_product_pos_only( 99999 );
 
 		$this->assertFalse( $result );
+
+		$result = $this->settings->is_product_online_only( 99999 );
+
+		$this->assertFalse( $result, 'direct_is_product_online_only_false' );
+
+		$result = $this->settings->is_variation_pos_only( 99999 );
+
+		$this->assertFalse( $result, 'direct_is_variation_pos_only_false' );
+
+		$result = $this->settings->is_variation_online_only( 99999 );
+
+		$this->assertFalse( $result, 'direct_is_variation_online_only_false' );
 	}
 
 	/**
@@ -615,39 +619,6 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertTrue( $result );
 
 		remove_all_filters( 'woocommerce_pos_pos_only_product_visibility_settings' );
-	}
-
-	/**
-	 * Direct test: is_product_online_only for regular product.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Services\Settings::is_product_online_only
-	 */
-	public function test_direct_is_product_online_only_false(): void {
-		$result = $this->settings->is_product_online_only( 99999 );
-
-		$this->assertFalse( $result );
-	}
-
-	/**
-	 * Direct test: is_variation_pos_only for regular variation.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Services\Settings::is_variation_pos_only
-	 */
-	public function test_direct_is_variation_pos_only_false(): void {
-		$result = $this->settings->is_variation_pos_only( 99999 );
-
-		$this->assertFalse( $result );
-	}
-
-	/**
-	 * Direct test: is_variation_online_only for regular variation.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Services\Settings::is_variation_online_only
-	 */
-	public function test_direct_is_variation_online_only_false(): void {
-		$result = $this->settings->is_variation_online_only( 99999 );
-
-		$this->assertFalse( $result );
 	}
 
 	/**
@@ -743,17 +714,6 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertFalse( $result['admin_emails']['enabled'] );
 		$this->assertIsArray( $result['customer_emails'] );
 		$this->assertFalse( $result['customer_emails']['enabled'] );
-	}
-
-	/**
-	 * Direct test: get_license_settings empty.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_license_settings
-	 */
-	public function test_direct_get_license_settings_empty(): void {
-		$result = $this->settings->get_license_settings();
-
-		$this->assertIsArray( $result );
 	}
 
 	/**

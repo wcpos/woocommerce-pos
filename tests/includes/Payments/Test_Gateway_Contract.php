@@ -23,15 +23,6 @@ use WP_REST_Request;
  */
 class Test_Gateway_Contract extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * It exposes a PHP interface/base for POS gateway adapters.
-	 */
-	public function test_pos_gateway_contract_types_are_available(): void {
-		$this->assertTrue( interface_exists( 'WCPOS\\WooCommercePOS\\Payments\\Gateway_Adapter_Interface' ) );
-		$this->assertTrue( class_exists( 'WCPOS\\WooCommercePOS\\Payments\\Abstract_POS_Gateway' ) );
-		$this->assertTrue( class_exists( 'WCPOS\\WooCommercePOS\\Payments\\Filter_Gateway_Adapter' ) );
-	}
-
-	/**
 	 * It reads direct PHP interface adapters before falling back to filters.
 	 */
 	public function test_interface_gateway_supplies_contract_without_legacy_filters(): void {

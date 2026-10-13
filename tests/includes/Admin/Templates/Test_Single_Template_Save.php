@@ -797,27 +797,6 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Diagnostic: what does wp_filter_post_kses actually do to XML template content?
-	 *
-	 * This test documents the exact mangling behavior so we know what to defend against.
-	 */
-	public function test_kses_behavior_on_xml_content(): void {
-		$xml = '<receipt paper-width="32"><bold>{{store.name}}</bold><line /><cut /></receipt>';
-
-		$filtered = wp_filter_post_kses( $xml );
-
-		// Document what kses actually produces — is it stripped or entity-encoded?
-		$has_entities = strpos( $filtered, '&lt;' ) !== false;
-		$has_raw_tags = strpos( $filtered, '<receipt' ) !== false;
-
-		// Log the actual output for debugging.
-		fwrite( STDERR, "\n[KSES OUTPUT]: " . var_export( $filtered, true ) . "\n" );
-
-		// At minimum, verify the content was modified (kses did something).
-		$this->assertNotSame( $xml, $filtered, 'wp_filter_post_kses should modify unknown XML tags' );
-	}
-
-	/**
 	 * Document what happens when $_POST['content'] arrives entity-encoded.
 	 *
 	 * This simulates a JS bug where the hidden textarea receives

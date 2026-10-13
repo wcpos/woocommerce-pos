@@ -277,6 +277,8 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 		$this->assertSame( 1, $buckets[0]['stored_count'] );
 		$this->assertSame( 1, $buckets[0]['current_count'] );
 		$this->assertSame( $buckets[0]['stored_digest'], $buckets[0]['current_digest'] );
+		$this->assertIsString( $buckets[0]['stored_digest'], 'bucket_aggregates_reports_digests_as_strings' );
+		$this->assertIsString( $buckets[0]['current_digest'], 'bucket_aggregates_reports_digests_as_strings' );
 	}
 
 	/**
@@ -296,20 +298,6 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 
 		$this->assertFalse( $buckets[0]['match'] );
 		$this->assertNotSame( $buckets[0]['stored_digest'], $buckets[0]['current_digest'] );
-	}
-
-	/**
-	 * Digests stay strings: an unsigned 64-bit value cannot survive an int cast.
-	 */
-	public function test_bucket_aggregates_reports_digests_as_strings(): void {
-		$this->clear_stored_product_digests();
-		$product = ProductHelper::create_simple_product();
-		$this->digests->upsert_digest( $product->get_id() );
-
-		$bucket = $this->index->bucket_aggregates( $this->whole_space() )['buckets'][0];
-
-		$this->assertIsString( $bucket['stored_digest'] );
-		$this->assertIsString( $bucket['current_digest'] );
 	}
 
 	/**
@@ -601,19 +589,12 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 	 * Live products with an empty stored side is the "never backfilled" signal.
 	 */
 	public function test_needs_product_rebuild_true_when_stored_digests_are_empty(): void {
-		ProductHelper::create_simple_product();
+		$product = ProductHelper::create_simple_product();
 		$this->clear_stored_product_digests();
 
 		$this->assertTrue( $this->index->needs_product_rebuild() );
-	}
-
-	/**
-	 * One stored digest is enough to say the store was backfilled.
-	 */
-	public function test_needs_product_rebuild_false_once_a_digest_is_stored(): void {
-		$product = ProductHelper::create_simple_product();
 		$this->digests->upsert_digest( $product->get_id() );
-
-		$this->assertFalse( $this->index->needs_product_rebuild() );
+		$this->assertFalse( $this->index->needs_product_rebuild(), 'needs_product_rebuild_false_once_a_digest_is_stored' );
 	}
+
 }

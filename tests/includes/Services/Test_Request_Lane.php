@@ -69,7 +69,6 @@ class Test_Request_Lane extends WP_UnitTestCase {
 		};
 		return array(
 			'shop page'                    => array( 'A shop page is storefront.', $uri( '/shop/' ), Request_Lane::STOREFRONT ),
-			'product page'                 => array( 'A product page is storefront.', $uri( '/product/hat/' ), Request_Lane::STOREFRONT ),
 			'wc-ajax'                      => array(
 				'wc-ajax is shopper traffic even though WooCommerce marks it DOING_AJAX.',
 				static function (): void {

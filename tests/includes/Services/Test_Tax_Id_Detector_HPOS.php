@@ -10,15 +10,17 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 
+require_once __DIR__ . '/Test_Tax_Id_Detector.php';
+
 /**
- * Run the Tax_Id_Detector tests with orders stored in the HPOS tables and
+ * Run the storage-dependent Tax_Id_Detector tests with orders stored in the HPOS tables and
  * compatibility sync off, the WooCommerce default for new stores.
  *
  * @internal
  *
  * @coversNothing
  */
-class Test_Tax_Id_Detector_HPOS extends Test_Tax_Id_Detector {
+class Test_Tax_Id_Detector_HPOS extends Tax_Id_Detector_Storage_Test_Case {
 	use HPOSToggleTrait;
 
 	/**

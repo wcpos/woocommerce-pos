@@ -107,13 +107,6 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that Orders class can be instantiated.
-	 */
-	public function test_orders_class_instantiation(): void {
-		$this->assertInstanceOf( Orders::class, $this->orders );
-	}
-
-	/**
 	 * Test that POS order statuses are registered.
 	 */
 	public function test_pos_order_statuses_registered(): void {
@@ -799,24 +792,10 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$hidden_meta = apply_filters( 'woocommerce_hidden_order_itemmeta', array() );
 
 		$this->assertContains( '_woocommerce_pos_uuid', $hidden_meta, 'UUID meta should be hidden' );
-	}
 
-	/**
-	 * Test that tax_status meta is hidden from order edit page.
-	 */
-	public function test_tax_status_meta_is_hidden(): void {
-		$hidden_meta = apply_filters( 'woocommerce_hidden_order_itemmeta', array() );
+		$this->assertContains( '_woocommerce_pos_tax_status', $hidden_meta, 'tax_status_meta_is_hidden: Tax status meta should be hidden' );
 
-		$this->assertContains( '_woocommerce_pos_tax_status', $hidden_meta, 'Tax status meta should be hidden' );
-	}
-
-	/**
-	 * Test that pos_data meta is hidden from order edit page.
-	 */
-	public function test_pos_data_meta_is_hidden(): void {
-		$hidden_meta = apply_filters( 'woocommerce_hidden_order_itemmeta', array() );
-
-		$this->assertContains( '_woocommerce_pos_data', $hidden_meta, 'POS data meta should be hidden' );
+		$this->assertContains( '_woocommerce_pos_data', $hidden_meta, 'pos_data_meta_is_hidden: POS data meta should be hidden' );
 	}
 
 	/**

@@ -1044,18 +1044,6 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Direct test: get_user_data with web frontend flag.
-	 *
-	 * NOTE: This test is skipped because the web frontend flag triggers cookie operations
-	 * which fail in PHPUnit (headers already sent).
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Services\Auth::get_user_data
-	 */
-	public function test_direct_get_user_data_web_frontend(): void {
-		$this->markTestSkipped( 'Web frontend flag triggers cookie operations that fail in PHPUnit' );
-	}
-
-	/**
 	 * Direct test: get_redirect_data returns expected structure.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Services\Auth::get_redirect_data

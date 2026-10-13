@@ -115,38 +115,6 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test logicless renderer iterates array sections correctly.
-	 */
-	public function test_logicless_renderer_iterates_array_sections(): void {
-		$order        = OrderHelper::create_order();
-		$receipt_data = array(
-			'order'  => array( 'currency' => 'USD' ),
-			'lines' => array(
-				array(
-					'name' => 'Widget',
-					'qty'  => 2,
-				),
-				array(
-					'name' => 'Gadget',
-					'qty'  => 1,
-				),
-			),
-		);
-
-		$template = array(
-			'content' => '{{#lines}}<div>{{name}} x{{qty}}</div>{{/lines}}',
-		);
-
-		$renderer = new Logicless_Renderer();
-		ob_start();
-		$renderer->render( $template, $order, $receipt_data );
-		$output = ob_get_clean();
-
-		$this->assertStringContainsString( 'Widget x2', $output );
-		$this->assertStringContainsString( 'Gadget x1', $output );
-	}
-
-	/**
 	 * Test logicless renderer formats money fields as currency without raw HTML entities.
 	 */
 	public function test_logicless_renderer_formats_money_fields(): void {

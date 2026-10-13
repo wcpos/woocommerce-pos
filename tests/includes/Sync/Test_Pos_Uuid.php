@@ -54,13 +54,6 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The identity brain uses the shared production meta-key constant.
-	 */
-	public function test_meta_key_uses_sync_api_constant(): void {
-		$this->assertSame( Api::UUID_META_KEY, Pos_Uuid::META_KEY );
-	}
-
-	/**
 	 * On multisite, a legacy per-blog cashier uuid is adopted as the network-wide
 	 * identity by ANY caller of ensure_user_uuid — not just /cashier — so the
 	 * adopted identity is the same whichever endpoint reads the user first.

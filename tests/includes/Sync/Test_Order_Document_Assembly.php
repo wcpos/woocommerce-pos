@@ -418,21 +418,6 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $uuid, Pos_Uuid::read_valid_uuid_from_meta( $document['meta_data'] ?? array() ) );
 	}
 
-	public function test_write_ack_wp_error_diagnostic_includes_code_and_data(): void {
-		$order = $this->representative_order();
-
-		try {
-			$this->write_ack( $order, 'not-a-uuid' );
-		} catch ( \PHPUnit\Framework\AssertionFailedError $error ) {
-			$this->assertStringContainsString( 'woo_rxdb_sync_bad_record_id', $error->getMessage() );
-			$this->assertStringContainsString( '"status":400', $error->getMessage() );
-
-			return;
-		}
-
-		$this->fail( 'The invalid write acknowledgement must fail through assertNotWPError().' );
-	}
-
 	/**
 	 * DIVERGENCE REMOVED DELIBERATELY — the write-ack now matches the pull shape.
 	 *

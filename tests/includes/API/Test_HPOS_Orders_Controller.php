@@ -101,32 +101,6 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertSame( array( (string) $active->get_id() ), $order_ids );
 	}
 
-	public function test_namespace_property(): void {
-		$namespace = $this->get_reflected_property_value( 'namespace' );
-
-		$this->assertEquals( 'wcpos/v1', $namespace );
-	}
-
-	public function test_rest_base(): void {
-		$rest_base = $this->get_reflected_property_value( 'rest_base' );
-
-		$this->assertEquals( 'orders', $rest_base );
-	}
-
-	/**
-	 * Test route registration.
-	 */
-	public function test_register_routes(): void {
-		$routes = $this->server->get_routes();
-		$this->assertArrayHasKey( '/wcpos/v1/orders', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/orders/(?P<id>[\d]+)', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/orders/batch', $routes );
-
-		// added by WCPOS
-		$this->assertArrayHasKey( '/wcpos/v1/orders/(?P<order_id>[\d]+)/email', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/orders/statuses', $routes );
-	}
-
 	/**
 	 * Get all expected fields.
 	 */

@@ -19,7 +19,7 @@ class Test_Order_Writer extends WP_UnitTestCase {
 		$this->assertSame( array( array( 'key' => 'public', 'value' => 'kept' ) ), $prepared['payload']['meta_data'] );
 	}
 
-	/** Require a non-null mutation store dependency. */
+	/** Require a non-null mutation store dependency (pinned in review, 0ae23b11). */
 	public function test_constructor_requires_mutation_store(): void {
 		$constructor = new \ReflectionMethod( Order_Writer::class, '__construct' );
 

@@ -289,6 +289,18 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		$this->assertTrue( $found, 'Expected meta count warning log not found. Logs: ' . implode( ' | ', $this->captured_logs ) );
+
+		// Verify warning was logged with the product ID.
+		$found = false;
+		foreach ( $this->captured_logs as $log ) {
+			if ( strpos( $log, 'meta_data entries' ) !== false
+				&& strpos( $log, (string) $product->get_id() ) !== false
+			) {
+				$found = true;
+				break;
+			}
+		}
+		$this->assertTrue( $found, 'meta_count_warning_fires_with_many_meta_keys: Expected meta count warning log not found. Logs: ' . implode( ' | ', $this->captured_logs ) );
 	}
 
 	/**
@@ -486,46 +498,6 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		$this->assertTrue( $found, 'Expected response size warning log not found. Logs: ' . implode( ' | ', $this->captured_logs ) );
-	}
-
-	/**
-	 * Test: meta count warning fires for products with many different meta keys.
-	 *
-	 * Note: the top meta keys context is appended after the logging filter fires,
-	 * so we verify the warning message itself and test the key extraction directly.
-	 */
-	public function test_meta_count_warning_fires_with_many_meta_keys(): void {
-		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
-			function () {
-				return 5;
-			}
-		);
-
-		$product = ProductHelper::create_simple_product(
-			array(
-				'regular_price' => 10,
-				'price'         => 10,
-			)
-		);
-		// Add recognizable meta keys.
-		$this->add_bulk_post_meta( $product->get_id(), 10, '_yoast_seo' );
-		$this->add_bulk_post_meta( $product->get_id(), 5, '_elementor' );
-
-		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
-		$this->server->dispatch( $request );
-
-		// Verify warning was logged with the product ID.
-		$found = false;
-		foreach ( $this->captured_logs as $log ) {
-			if ( strpos( $log, 'meta_data entries' ) !== false
-				&& strpos( $log, (string) $product->get_id() ) !== false
-			) {
-				$found = true;
-				break;
-			}
-		}
-		$this->assertTrue( $found, 'Expected meta count warning log not found. Logs: ' . implode( ' | ', $this->captured_logs ) );
 	}
 
 	/**

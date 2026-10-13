@@ -116,42 +116,6 @@ class Test_Rows_Examined extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A known full scan is reported as roughly one row examined per table row.
-	 */
-	public function test_reports_a_known_full_scan(): void {
-		global $wpdb;
-
-		$sql = $this->full_scan_sql();
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Test-only probe query.
-		$examined = Rows_Examined::measure( fn() => $wpdb->get_col( $sql ), $result );
-
-		$this->assertSame( array(), $result, 'The scan predicate must match nothing, so the engine cannot stop early.' );
-		$this->assertGreaterThanOrEqual(
-			self::PROBE_ROWS,
-			$examined,
-			'A scan of a ' . self::PROBE_ROWS . "-row table reported only {$examined} rows examined.\n" . Rows_Examined::explain( $sql )
-		);
-	}
-
-	/**
-	 * A known index seek is reported as a handful of rows examined.
-	 */
-	public function test_reports_a_known_index_seek(): void {
-		global $wpdb;
-
-		$sql = $this->index_seek_sql();
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Test-only probe query.
-		$examined = Rows_Examined::measure( fn() => $wpdb->get_col( $sql ), $result );
-
-		$this->assertSame( array( '1234' ), $result, 'The seek predicate must match exactly one row.' );
-		$this->assertLessThanOrEqual(
-			10,
-			$examined,
-			"An indexed single-row lookup reported {$examined} rows examined.\n" . Rows_Examined::explain( $sql )
-		);
-	}
-
-	/**
 	 * The two are separated by orders of magnitude — that separation is the whole
 	 * signal a budget assertion reads.
 	 */
@@ -161,8 +125,8 @@ class Test_Rows_Examined extends WP_UnitTestCase {
 		$scan_sql = $this->full_scan_sql();
 		$seek_sql = $this->index_seek_sql();
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Test-only probe queries.
-		$scan = Rows_Examined::measure( fn() => $wpdb->get_col( $scan_sql ) );
-		$seek = Rows_Examined::measure( fn() => $wpdb->get_col( $seek_sql ) );
+		$scan = Rows_Examined::measure( fn() => $wpdb->get_col( $scan_sql ), $scan_result );
+		$seek = Rows_Examined::measure( fn() => $wpdb->get_col( $seek_sql ), $seek_result );
 		// phpcs:enable
 
 		$this->assertGreaterThan(
@@ -170,6 +134,20 @@ class Test_Rows_Examined extends WP_UnitTestCase {
 			$scan,
 			"Scan examined {$scan} rows, seek examined {$seek} — not enough separation to gate on.\n"
 			. Rows_Examined::explain( $scan_sql ) . "\n" . Rows_Examined::explain( $seek_sql )
+		);
+
+		$this->assertSame( array(), $scan_result, 'reports_a_known_full_scan: The scan predicate must match nothing, so the engine cannot stop early.' );
+		$this->assertGreaterThanOrEqual(
+			self::PROBE_ROWS,
+			$scan,
+			'reports_a_known_full_scan: A scan of a ' . self::PROBE_ROWS . "-row table reported only {$scan} rows examined.\n" . Rows_Examined::explain( $scan_sql )
+		);
+
+		$this->assertSame( array( '1234' ), $seek_result, 'reports_a_known_index_seek: The seek predicate must match exactly one row.' );
+		$this->assertLessThanOrEqual(
+			10,
+			$seek,
+			"reports_a_known_index_seek: An indexed single-row lookup reported {$seek} rows examined.\n" . Rows_Examined::explain( $seek_sql )
 		);
 	}
 

@@ -17,7 +17,7 @@ use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 /**
  * Pins servability and query scaling for meta-heavy catalog records.
  */
-class Test_Catalog_Proxy_Meta_Scaling extends Sync_REST_Store_Test_Case {
+abstract class Catalog_Proxy_Meta_Scaling_Test_Case extends Sync_REST_Store_Test_Case {
 	/**
 	 * Enable the v2 routes before REST initialization.
 	 */
@@ -39,7 +39,7 @@ class Test_Catalog_Proxy_Meta_Scaling extends Sync_REST_Store_Test_Case {
 	 * @param int    $count   Number of rows.
 	 * @param string $prefix  Meta key prefix.
 	 */
-	private function add_bulk_post_meta( int $post_id, int $count, string $prefix ): void {
+	protected function add_bulk_post_meta( int $post_id, int $count, string $prefix ): void {
 		global $wpdb;
 
 		$values = array();
@@ -95,26 +95,8 @@ class Test_Catalog_Proxy_Meta_Scaling extends Sync_REST_Store_Test_Case {
 	 *
 	 * @param array $payload REST payload.
 	 */
-	private function meta_data( array $payload ): array {
+	protected function meta_data( array $payload ): array {
 		return array_column( $payload['meta_data'], 'value', 'key' );
-	}
-
-	/**
-	 * A product with 300 meta rows remains intact through the products proxy.
-	 */
-	public function test_product_with_300_meta_entries_survives_catalog_proxy(): void {
-		$product = ProductHelper::create_simple_product();
-		$this->add_bulk_post_meta( $product->get_id(), 300, '_wcpos_scale_product' );
-
-		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
-		$request->set_param( 'include', array( $product->get_id() ) );
-		$response = $this->server->dispatch( $request );
-		$rows     = $response->get_data();
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertCount( 1, $rows );
-		$this->assertGreaterThanOrEqual( 300, \count( $rows[0]['meta_data'] ) );
-		$this->assertSame( 'value_299', $this->meta_data( $rows[0] )['_wcpos_scale_product_299'] );
 	}
 
 	/**
@@ -154,6 +136,28 @@ class Test_Catalog_Proxy_Meta_Scaling extends Sync_REST_Store_Test_Case {
 		$pull_payload = $pull_data['documents'][0]['payload'];
 		$this->assertGreaterThanOrEqual( 200, \count( $pull_payload['meta_data'] ) );
 		$this->assertSame( 'value_199', $this->meta_data( $pull_payload )['_wcpos_scale_order_199'] );
+	}
+
+}
+
+/** Posts-only product coverage plus the shared order case. */
+class Test_Catalog_Proxy_Meta_Scaling extends Catalog_Proxy_Meta_Scaling_Test_Case {
+	/**
+	 * A product with 300 meta rows remains intact through the products proxy.
+	 */
+	public function test_product_with_300_meta_entries_survives_catalog_proxy(): void {
+		$product = ProductHelper::create_simple_product();
+		$this->add_bulk_post_meta( $product->get_id(), 300, '_wcpos_scale_product' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_param( 'include', array( $product->get_id() ) );
+		$response = $this->server->dispatch( $request );
+		$rows     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $rows );
+		$this->assertGreaterThanOrEqual( 300, \count( $rows[0]['meta_data'] ) );
+		$this->assertSame( 'value_299', $this->meta_data( $rows[0] )['_wcpos_scale_product_299'] );
 	}
 
 	/**

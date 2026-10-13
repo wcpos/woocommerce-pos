@@ -31,7 +31,6 @@
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Payment_Gateways_Controller": { "behavior": "Payment gateway listing" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Permissions": { "behavior": "POS endpoint permission checks" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Print_Queue": { "behavior": "Print queue lifecycle" },
-    "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Brands_Controller": { "behavior": "Product brand reads" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Categories_Controller": { "behavior": "Product category reads" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Tags_Controller": { "behavior": "Product tag reads" },
     "WCPOS\\WooCommercePOS\\Tests\\API\\Test_Product_Variations_Controller": { "behavior": "Variation reads, barcode and GTIN handling" },
