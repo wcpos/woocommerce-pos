@@ -672,7 +672,7 @@ class Ledger {
 		 *
 		 * @param WC_Order        $order  Order object.
 		 * @param array           $row    Payment row.
-		 * @param WC_Order_Refund $refund Refund object.
+		 * @param \WC_Order_Refund $refund Refund object.
 		 * @param string          $amount Allocation amount on this row.
 		 *
 		 * @hook woocommerce_pos_refund_allocated

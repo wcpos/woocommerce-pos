@@ -20,13 +20,37 @@ class Test_Ledger_Sole_Writer extends \WP_UnitTestCase {
 			if ( ! $file->isFile() || 'php' !== $file->getExtension() || $root . '/Payments/Contract/Ledger.php' === $file->getPathname() ) {
 				continue;
 			}
-			foreach ( file( $file->getPathname() ) as $line => $source ) {
-				if ( preg_match( '/(?:\$ledger|Ledger::instance\(\s*\))\s*->\s*save\s*\(/', $source ) ) {
-					$hits[] = $file->getPathname() . ':' . ( $line + 1 );
-				}
+			foreach ( self::raw_save_lines( (string) file_get_contents( $file->getPathname() ) ) as $line ) {
+				$hits[] = $file->getPathname() . ':' . $line;
 			}
 		}
 		// Assert.
 		$this->assertSame( array(), $hits, implode( "\n", $hits ) );
+	}
+
+	/** A call split across lines is still a raw save. */
+	public function test_scanner_catches_a_multiline_raw_save(): void {
+		// Arrange.
+		$source = "<?php\n\$rows = array();\nLedger::instance()\n\t->save(\n\t\t\$order,\n\t\t\$rows\n\t);\n\$ledger\n\t->save( \$order, \$rows );\n\$ledger->find( \$order, \$id );\n";
+		// Act.
+		$lines = self::raw_save_lines( $source );
+		// Assert.
+		$this->assertSame( array( 3, 8 ), $lines );
+	}
+
+	/**
+	 * Line numbers of every `$ledger->save(` / `Ledger::instance()->save(` call in a source, across line breaks.
+	 *
+	 * @param string $source PHP source.
+	 * @return int[]
+	 */
+	private static function raw_save_lines( string $source ): array {
+		$lines = array();
+		if ( preg_match_all( '/(?:\$ledger|Ledger::instance\(\s*\))\s*->\s*save\s*\(/', $source, $matches, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $matches[0] as $match ) {
+				$lines[] = substr_count( $source, "\n", 0, $match[1] ) + 1;
+			}
+		}
+		return $lines;
 	}
 }
