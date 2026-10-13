@@ -1354,6 +1354,240 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 501, $error->get_error_data()['status'] );
 	}
 
+	/** Pending and succeeded allocations reserve balance; failed ones do not. */
+	public function test_available_for_refund_counts_pending_and_succeeded_allocations(): void {
+		// Arrange.
+		$row = array(
+			'amount'  => '20.00',
+			'refunds' => array(
+				array(
+					'amount' => '5.00',
+					'status' => 'pending',
+				),
+				array(
+					'amount' => '3.00',
+					'status' => 'succeeded',
+				),
+				array(
+					'amount' => '4.00',
+					'status' => 'failed',
+				),
+			),
+		);
+		// Act / Assert.
+		$this->assertSame( 1200, Ledger::available_for_refund( $row ) );
+		$row['refunds'][0]['amount'] = '15.00';
+		$row['refunds'][1]['amount'] = '10.00';
+		$this->assertSame( 0, Ledger::available_for_refund( $row ) );
+		unset( $row['refunds'] );
+		$this->assertSame( 2000, Ledger::available_for_refund( $row ) );
+	}
+
+	/** Settlement persists the final allocation and notifies listeners with its amount. */
+	public function test_settle_allocation_final_answer_updates_refunded_amount_and_fires_allocated(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->seed_settlement_allocation();
+		$calls = array();
+		$listener = static function ( $order, $row, $refund, $amount ) use ( &$calls ) {
+			$calls[] = array( $order, $row, $refund, $amount );
+		};
+		add_action( 'woocommerce_pos_refund_allocated', $listener, 10, 4 );
+		$events = array(
+			array(
+				't'       => gmdate( 'c' ),
+				'level'   => 'info',
+				'message' => 'settled',
+			),
+		);
+		// Act.
+		Ledger::instance()->settle_allocation( $order, $row['id'], $refund->get_id(), 'succeeded', 'ref_1', $events );
+		remove_action( 'woocommerce_pos_refund_allocated', $listener, 10 );
+		// Assert.
+		$saved = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertSame(
+			array(
+				'id'           => $refund->get_id(),
+				'amount'       => '15.00',
+				'status'       => 'succeeded',
+				'provider_ref' => 'ref_1',
+			),
+			$saved['refunds'][0]
+		);
+		$this->assertSame( '15.00', $saved['refunded_amount'] );
+		$this->assertSame( 'settled', end( $saved['events'] )['message'] );
+		$this->assertCount( 1, $calls );
+		$this->assertSame( $order, $calls[0][0] );
+		$this->assertSame( $refund->get_id(), $calls[0][2]->get_id() );
+		$this->assertSame( '15.00', $calls[0][3] );
+		$this->assertSame( 'succeeded', $calls[0][1]['refunds'][0]['status'] );
+	}
+
+	/** A failed answer releases the reservation and preserves a known reference. */
+	public function test_settle_allocation_failed_answer_releases_the_reservation_and_fires_allocated(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->seed_settlement_allocation( 'pending', 'ref_seed' );
+		$before = did_action( 'woocommerce_pos_refund_allocated' );
+		// Act.
+		Ledger::instance()->settle_allocation( $order, $row['id'], $refund->get_id(), 'failed', null );
+		// Assert.
+		$saved = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertSame( 'failed', $saved['refunds'][0]['status'] );
+		$this->assertSame( 'ref_seed', $saved['refunds'][0]['provider_ref'] );
+		$this->assertSame( '0.00', $saved['refunded_amount'] );
+		$this->assertSame( 2000, Ledger::available_for_refund( $saved ) );
+		$this->assertSame( $before + 1, did_action( 'woocommerce_pos_refund_allocated' ) );
+	}
+
+	/** A pending answer fills a reference only once and never fires the allocation hook. */
+	public function test_settle_allocation_pending_answer_records_a_missing_reference_only(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->seed_settlement_allocation();
+		$ledger = Ledger::instance();
+		$before = did_action( 'woocommerce_pos_refund_allocated' );
+		// Act / Assert.
+		$this->assertSame( $row, $ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'pending', null ) );
+		$this->assertSame( $row, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] ) );
+		$ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'pending', 'ref_late' );
+		$saved = $ledger->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertSame( 'ref_late', $saved['refunds'][0]['provider_ref'] );
+		$this->assertSame( 'pending', $saved['refunds'][0]['status'] );
+		$ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'pending', 'ref_other' );
+		$this->assertSame( $saved, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] ) );
+		$this->assertSame( $before, did_action( 'woocommerce_pos_refund_allocated' ) );
+	}
+
+	/** Settled and missing allocations are no-ops; invalid requests return contract errors. */
+	public function test_settle_allocation_on_a_settled_or_unknown_allocation_changes_nothing(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->seed_settlement_allocation( 'succeeded' );
+		$ledger = Ledger::instance();
+		$before = did_action( 'woocommerce_pos_refund_allocated' );
+		// Act / Assert.
+		$this->assertSame( $row, $ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'failed', 'x' ) );
+		$this->assertSame( $row, $ledger->settle_allocation( $order, $row['id'], 0, 'succeeded' ) );
+		$this->assertSame( 'wcpos_payment_not_found', $ledger->settle_allocation( $order, wp_generate_uuid4(), $refund->get_id(), 'succeeded' )->get_error_code() );
+		$this->assertSame( 'rest_invalid_param', $ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'refunded' )->get_error_code() );
+		$this->assertSame( $row, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] ) );
+		$this->assertSame( $before, did_action( 'woocommerce_pos_refund_allocated' ) );
+	}
+
+	/** Adoption normalizes identity, indexes the leg and refuses duplicates. */
+	public function test_adopt_appends_a_row_and_refuses_an_existing_id(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$uuid = wp_generate_uuid4();
+		$status = $order->get_status();
+		$input = $this->payment(
+			'pos_card',
+			'92.95',
+			array(
+				'id'           => strtoupper( $uuid ),
+				'capture_mode' => 'server',
+				'status'       => 'pending',
+			)
+		);
+		// Act.
+		$row = $ledger->adopt( $order, $input, false );
+		// Assert.
+		$this->assertSame( $uuid, $row['id'] );
+		$this->assertCount( 1, $ledger->read( $order ) );
+		$this->assertContains( $uuid, wp_list_pluck( $order->get_meta( Ledger::LIVE_LEG_META_KEY, false ), 'value' ) );
+		$this->assertSame( $status, wc_get_order( $order->get_id() )->get_status() );
+		$error = $ledger->adopt( $order, $input );
+		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
+		$this->assertSame( 409, $error->get_error_data()['status'] );
+		$this->assertCount( 1, $ledger->read( $order ) );
+		$input['id'] = 'not-a-uuid';
+		$this->assertSame( 'rest_invalid_param', $ledger->adopt( $order, $input )->get_error_code() );
+	}
+
+	/** Adoption saves the caller's staged meta in its single order write. */
+	public function test_adopt_writes_the_order_once_with_the_callers_staged_meta(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->update_meta_data( '_wcpos_test_staged', 'yes' );
+		$count = 0;
+		$listener = static function ( $saving ) use ( $order, &$count ) {
+			if ( $saving->get_id() === $order->get_id() ) {
+				++$count;
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $listener );
+		// Act.
+		Ledger::instance()->adopt( $order, $this->payment( 'pos_card', '92.95', array( 'status' => 'captured' ) ), false );
+		remove_action( 'woocommerce_before_order_object_save', $listener );
+		// Assert.
+		$this->assertSame( 1, $count );
+		$this->assertSame( 'yes', wc_get_order( $order->get_id() )->get_meta( '_wcpos_test_staged' ) );
+	}
+
+	/** Appending events caps the target log without restamping an untouched sibling. */
+	public function test_append_events_appends_to_one_leg_and_keeps_the_newest(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$rows = $ledger->read( $order );
+		$stamp = gmdate( 'c', time() - 3600 );
+		$rows[0]['updated_at_gmt'] = $stamp;
+		$rows[1]['updated_at_gmt'] = $stamp;
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema'   => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save();
+		$events = array();
+		for ( $i = 0; $i < Ledger::EVENTS_MAX + 5; ++$i ) {
+			$events[] = array( 'message' => 'e' . $i );
+		}
+		// Act.
+		$ledger->append_events( $order, $rows[0]['id'], $events );
+		// Assert.
+		$saved = $ledger->read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( Ledger::EVENTS_MAX, $saved[0]['events'] );
+		$this->assertSame( 'e5', $saved[0]['events'][0]['message'] );
+		$this->assertSame( 'e' . ( Ledger::EVENTS_MAX + 4 ), end( $saved[0]['events'] )['message'] );
+		$this->assertSame( $stamp, $saved[1]['updated_at_gmt'] );
+		$ledger->append_events( $order, wp_generate_uuid4(), $events );
+		$ledger->append_events( $order, $rows[0]['id'], array() );
+		$this->assertSame( $saved, $ledger->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/**
+	 * Seed a real refund and its allocation for settlement tests.
+	 *
+	 * @param string      $status Allocation status.
+	 * @param string|null $ref    Existing provider reference.
+	 * @return array Order, saved payment row and refund.
+	 */
+	private function seed_settlement_allocation( string $status = 'pending', ?string $ref = null ): array {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$row = $ledger->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '20.00' );
+		$refund->save();
+		$row['refunds'] = array(
+			array(
+				'id'           => $refund->get_id(),
+				'amount'       => '15.00',
+				'status'       => $status,
+				'provider_ref' => $ref,
+			),
+		);
+		$row['refunded_amount'] = 'succeeded' === $status ? '15.00' : '0.00';
+		$ledger->save( $order, array( $row ) );
+		return array( $order, $ledger->find( $order, $row['id'] ), $refund );
+	}
+
 	/** The multi-valued index meta as a plain list of method ids, in write order. */
 	private function index_values( \WC_Order $order ): array {
 		return array_values( wp_list_pluck( $order->get_meta( Ledger::INDEX_META_KEY, false ), 'value' ) );

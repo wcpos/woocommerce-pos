@@ -192,8 +192,7 @@ class Webview_Passthrough {
 			),
 			$overrides
 		);
-		$rows[] = $row;
-		$ledger->save( $order, $rows );
-		return $ledger->find( $order, $row['id'] );
+		$adopted = $ledger->adopt( $order, $row );
+		return is_wp_error( $adopted ) ? null : $adopted;
 	}
 }
