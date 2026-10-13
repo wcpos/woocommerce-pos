@@ -419,11 +419,11 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	 */
 	private function wcpos_route(): string {
 		foreach ( array_keys( rest_get_server()->get_routes() ) as $route ) {
-			if ( 0 === strpos( $route, '/wcpos/v1/cashier' ) ) {
+			if ( 0 === strpos( $route, '/wcpos/v2/cashier' ) ) {
 				return $route;
 			}
 		}
-		$this->fail( 'No /wcpos/v1/cashier route registered.' );
+		$this->fail( 'No /wcpos/v2/cashier route registered.' );
 	}
 
 	/**
