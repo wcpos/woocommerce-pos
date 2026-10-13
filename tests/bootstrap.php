@@ -41,6 +41,7 @@ class Bootstrap {
 		// while.
 		\define( 'GUTENBERG_LOAD_VENDOR_SCRIPTS', false );
 
+		tests_add_filter( 'muplugins_loaded', array( $this, 'block_outbound_http' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'manually_load_plugin' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
@@ -94,6 +95,33 @@ class Bootstrap {
 	 */
 	public static function default_request_lane(): string {
 		return \WCPOS\WooCommercePOS\Services\Request_Lane::REST;
+	}
+
+	/**
+	 * Refuse every outbound HTTP request the suite does not stub.
+	 *
+	 * Receipt rendering switches locale, the translation loader then downloads
+	 * the real language file from the CDN, and the file lands in WP_LANG_DIR —
+	 * outside the per-test transaction, so it outlives the test and changes what
+	 * later classes see (Test_I18n_Storefront failed only when a print-job class
+	 * ran before it). Priority 1, so a test's own pre_http_request stub at the
+	 * default priority still wins by returning its response.
+	 */
+	public function block_outbound_http(): void {
+		add_filter( 'pre_http_request', array( __CLASS__, 'refuse_unstubbed_request' ), 1, 3 );
+	}
+
+	/**
+	 * @param false|array|\WP_Error $pre  A response another filter already supplied.
+	 * @param array                 $args Request arguments (unused).
+	 * @param string                $url  Request URL, named in the error.
+	 * @return array|\WP_Error
+	 */
+	public static function refuse_unstubbed_request( $pre, $args, $url ) {
+		if ( false !== $pre ) {
+			return $pre;
+		}
+		return new \WP_Error( 'wcpos_tests_http_blocked', 'Outbound HTTP is blocked in the test suite; stub it with pre_http_request: ' . $url );
 	}
 
 	/**
