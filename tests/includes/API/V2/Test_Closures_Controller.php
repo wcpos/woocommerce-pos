@@ -956,9 +956,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->get( 'closures/' . $empty['id'] )->get_data()['corrections'] );
 		$records = new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store();
 		$order = $this->closure_ledger( $session );
-		$order->update_meta_data( \WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store::META_KEY_CREATED_AT, $row['received_at_gmt'] );
-		$order->save();
-		\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale( $order, array(), 987654 );
+		\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale( $order );
 		$this->assertSame(
 			201,
 			$this->post(

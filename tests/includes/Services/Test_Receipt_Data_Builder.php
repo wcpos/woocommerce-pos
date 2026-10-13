@@ -11,7 +11,8 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
@@ -122,6 +123,21 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Live receipts without a recorded sale cannot invent fiscal identity. */
+	public function test_build_live_without_sale_row_keeps_empty_identity(): void {
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		$this->assertNull( ( new Fiscal_Record_Store() )->find_sale( $order->get_id() ) );
+
+		$data = $this->builder->build( $order, 'live' );
+
+		$this->assertSame( '', $data['fiscal']['immutable_id'] );
+		$this->assertSame( '', $data['fiscal']['receipt_number'] );
+		$this->assertSame( '', $data['fiscal']['hash'] );
+		$this->assertNull( $data['fiscal']['sequence'] );
+	}
+
 	/** Only the identity allowlist freezes; order and provenance remain live. */
 	public function test_live_build_preserves_snapshot_identity_after_edits(): void {
 		$order = OrderHelper::create_order();
@@ -133,19 +149,29 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$order->update_meta_data( '_wcpos_register', $id );
 		$order->update_meta_data( '_wcpos_app_version', '1.8.7' );
 		$order->save();
-		$snapshot = $this->builder->build( $order, 'fiscal' );
-		foreach ( array( 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label' ) as $key ) {
-			$snapshot['fiscal'][ $key ] = 'Frozen-' . $key;
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		$enrich = static function ( array $snapshot ) {
+			foreach ( array( 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label' ) as $key ) {
+				$snapshot['fiscal'][ $key ] = 'Frozen-' . $key;
+			}
+			$snapshot['fiscal']['extra_fields'] = array(
+				array(
+					'label' => 'Code',
+					'value' => 'Frozen',
+				),
+			);
+			return $snapshot;
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			Fiscal_Record_Writers::instance()->record_sale( $order );
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}
-		$snapshot['fiscal']['extra_fields'] = array(
-			array(
-				'label' => 'Code',
-				'value' => 'Frozen',
-			),
-		);
-		$store = Receipt_Snapshot_Store::instance();
-		$store->persist_snapshot( $order->get_id(), $snapshot );
-		$snapshot = $store->get_snapshot( $order->get_id() );
+		$store = new Fiscal_Record_Store();
+		$sale = $store->find_sale( $order->get_id() );
+		$snapshot = $sale['payload'];
 		$order = wc_get_order( $order->get_id() );
 		$order->set_customer_note( 'Edited note' );
 		$order->update_meta_data( '_wcpos_app_version', 'changed' );
@@ -182,8 +208,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 'Renamed till', $fiscal['register']['name'] );
 		$this->assertSame( 'changed', $fiscal['software']['app_version'] );
 		unset( $snapshot['register'], $snapshot['software'], $snapshot['fiscal']['qr_payload'] );
-		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_PAYLOAD, wp_json_encode( $snapshot ) );
-		$order->save();
+		$wpdb->update( $store->table_name(), array( 'payload' => wp_json_encode( $snapshot ) ), array( 'id' => $sale['id'] ) );
 		$data = $this->builder->build( $order, 'live' );
 		$this->assertSame( $fiscal['register'], $data['register'] );
 		$this->assertSame( $fiscal['software'], $data['software'] );
@@ -2742,7 +2767,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( $cashier, $data['cashier']['id'] );
 		$this->assertSame( 'Refund operator', $data['cashier']['name'] );
 		$this->assertSame( 'refund', $data['fiscal']['document_type'] );
-		$this->assertSame( $data['i18n']['document_refund'], $data['fiscal']['document_label'] );
+		$this->assertArrayHasKey( 'i18n', $data );
+		$copy = $data;
+		unset( $copy['i18n'] );
+		$copy['fiscal']['hash'] = '';
+		$this->assertSame( Fiscal_Record_Store::checksum( wp_json_encode( $copy ) ), $data['fiscal']['hash'] );
+		$this->assertSame( \WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels::get_labels( $data['presentation_hints']['locale'] )['document_refund'], $data['fiscal']['document_label'] );
 		$this->assertSame( '7', $data['fiscal']['receipt_number'] );
 		$this->assertSame( 7, $data['fiscal']['sequence'] );
 		$this->assertSame( 'sale:42', $data['fiscal']['corrects'] );
@@ -2760,9 +2790,6 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 6, $data['tax_summary'][0]['tax_amount'] );
 		$this->assertEquals( 30, $data['totals']['total_excl'] );
 		$this->assertEquals( 36, $data['totals']['total_incl'] );
-		$hash = $data['fiscal']['hash'];
-		$data['fiscal']['hash'] = '';
-		$this->assertSame( hash( 'sha256', wp_json_encode( $data ) ), $hash );
 	}
 
 }

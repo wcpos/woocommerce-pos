@@ -9,7 +9,9 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\V1\Receipts_Controller;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
+use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 
 /**
  * Test_Receipts_Controller class.
@@ -49,7 +51,9 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_get_item_fiscal_mode_returns_snapshot(): void {
 		$order = OrderHelper::create_order();
-		Receipt_Snapshot_Store::instance()->handle_payment_complete( $order->get_id() );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
 		$request->set_param( 'mode', 'fiscal' );
@@ -62,6 +66,67 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $data['has_snapshot'] );
 		$this->assertArrayNotHasKey( 'receipt', $data['data'] );
 		$this->assertNotEmpty( $data['data']['fiscal']['receipt_number'] );
+	}
+
+	/** Fiscal reads thaw labels and no longer expose submission state. */
+	public function test_get_item_fiscal_mode_returns_document_with_labels(): void {
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
+		$request->set_param( 'mode', 'fiscal' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$body = $response->get_data();
+		$this->assertTrue( $body['has_snapshot'] );
+		$this->assertArrayNotHasKey( 'submission_status', $body );
+		$this->assertSame( Receipt_I18n_Labels::get_labels( $body['data']['presentation_hints']['locale'] ), $body['data']['i18n'] );
+		$unpaid = OrderHelper::create_order();
+		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $unpaid->get_id() );
+		$request->set_param( 'mode', 'fiscal' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_receipt_snapshot_missing', $response->get_data()['code'] );
+		$request->set_param( 'mode', 'live' );
+		$this->assertFalse( $this->server->dispatch( $request )->get_data()['has_snapshot'] );
+	}
+
+	/** Reprint labels use the stored locale, not stale sale-time labels. */
+	public function test_document_thaws_labels_for_the_stored_locale(): void {
+		global $wpdb;
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+		$store = new Fiscal_Record_Store();
+		$sale = $store->find_sale( $order->get_id() );
+		$payload = $sale['payload'];
+		$payload['presentation_hints']['locale'] = 'fr_FR';
+		$payload['i18n'] = array( 'order' => 'Stale label' );
+		$wpdb->update( $store->table_name(), array( 'payload' => wp_json_encode( $payload ) ), array( 'id' => $sale['id'] ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
+		$request->set_param( 'mode', 'fiscal' );
+		// Advertise the test locale without downloading a language pack, and make
+		// labels visibly locale-dependent so an English fallback cannot pass.
+		global $wp_locale_switcher;
+		$languages = new \ReflectionProperty( \WP_Locale_Switcher::class, 'available_languages' );
+		$languages->setAccessible( true );
+		$available = $languages->getValue( $wp_locale_switcher );
+		$languages->setValue( $wp_locale_switcher, array_merge( $available, array( 'fr_FR' ) ) );
+		$translate = static function () {
+			return 'Label:' . get_locale();
+		};
+		add_filter( 'gettext_woocommerce-pos', $translate );
+		try {
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( 'Label:fr_FR', $response->get_data()['data']['i18n']['order'] );
+			$this->assertSame( Receipt_I18n_Labels::get_labels( 'fr_FR' ), $response->get_data()['data']['i18n'] );
+		} finally {
+			remove_filter( 'gettext_woocommerce-pos', $translate );
+			$languages->setValue( $wp_locale_switcher, $available );
+		}
 	}
 
 	/**
@@ -323,9 +388,11 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_print_intent_counts_without_marking_plain_reads_or_snapshot(): void {
 		foreach ( array( 'live', 'fiscal' ) as $mode ) {
 			$order = OrderHelper::create_order();
-			$store = Receipt_Snapshot_Store::instance();
-			$store->handle_payment_complete( $order->get_id() );
-			$snapshot = $store->get_snapshot( $order->get_id() );
+			$order->set_created_via( 'woocommerce-pos' );
+			$order->save();
+			$store = new Fiscal_Record_Store();
+			Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+			$snapshot = $store->find_sale( $order->get_id() )['payload'];
 			$route = '/wcpos/v2/receipts/' . $order->get_id();
 			foreach ( array( array( 'print', false, 0, 1 ), array( null, false, 0, 1 ), array( 'print', true, 1, 2 ), array( null, false, 0, 2 ) ) as $case ) {
 				$request = $this->wp_rest_get_request( $route );
@@ -343,7 +410,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $this->wp_rest_post_request( $route . '/print' ) );
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( array( 'print_count' => 3, 'is_reprint' => true, 'reprint_count' => 2 ), $response->get_data() );
-			$this->assertSame( $snapshot, $store->get_snapshot( $order->get_id() ) );
+			$this->assertSame( $snapshot, $store->find_sale( $order->get_id() )['payload'] );
 		}
 	}
 
@@ -359,7 +426,9 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_pdf_print_intent_counts(): void {
 		$order = OrderHelper::create_order();
 		$template_id = $this->create_receipt_template();
-		Receipt_Snapshot_Store::instance()->handle_payment_complete( $order->get_id() );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
 		foreach ( array( 'live', 'fiscal' ) as $index => $mode ) {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() . '/pdf' );
 			$request->set_param( 'template_id', (string) $template_id );
@@ -406,7 +475,8 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( 'fiscal', $response->get_data()['mode'] );
-			$this->assertSame( $record['payload'], $response->get_data()['data'] );
+			$this->assertSame( ( new Fiscal_Record_Store() )->document( $record ), $response->get_data()['data'] );
+			$this->assertSame( Receipt_I18n_Labels::get_labels( $record['payload']['presentation_hints']['locale'] ), $response->get_data()['data']['i18n'] );
 		}
 		$template_id = $this->create_receipt_template();
 		// A live rebuild must not be consulted by either rendering engine.

@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
+use WCPOS\WooCommercePOS\Services\Service_Groups;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Fiscal lifecycle observers and immutable corrections. */
@@ -25,7 +25,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		add_action( 'woocommerce_pos_payment_voided', array( $writers, 'handle_void' ), 10, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $writers, 'handle_cancellation' ), 10, 2 );
 		add_action( 'woocommerce_order_refunded', array( $writers, 'handle_refund' ), 10, 2 );
-		add_action( 'woocommerce_payment_complete', array( Receipt_Snapshot_Store::instance(), 'handle_payment_complete' ) );
+		add_action( 'woocommerce_payment_complete', array( $writers, 'handle_payment_complete' ) );
 		foreach ( Fiscal_Record_Store::TYPES as $type ) {
 			delete_option( 'wcpos_fiscal_sequence_' . $type );
 		}
@@ -54,17 +54,21 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		return $order;
 	}
 
-	/** Payment complete writes matching sale once. */
-	public function test_payment_complete_writes_matching_sale_once(): void {
+	/** Payment completion freezes one numbered document without order-meta copies. */
+	public function test_payment_complete_writes_sale_once_without_meta_or_i18n(): void {
 		$order = $this->order();
 		$order->payment_complete();
 		$order = wc_get_order( $order->get_id() );
 		$store = new Fiscal_Record_Store();
 		$sale = $store->find_sale( $order->get_id() );
 		$this->assertIsArray( $sale );
-		$this->assertSame( (int) $order->get_meta( '_wcpos_receipt_sequence' ), $sale['number'] );
-		$this->assertSame( $order->get_meta( '_wcpos_receipt_snapshot_checksum' ), $sale['checksum'] );
-		$this->assertSame( Receipt_Snapshot_Store::instance()->get_snapshot( $order->get_id() ), $sale['payload'] );
+		$this->assertSame( (int) get_option( 'wcpos_fiscal_sequence_sale' ), $sale['number'] );
+		$this->assertSame( $order->get_id() . ':' . $sale['number'], $sale['payload']['fiscal']['immutable_id'] );
+		$this->assertSame( (string) $sale['number'], $sale['payload']['fiscal']['receipt_number'] );
+		$this->assertArrayNotHasKey( 'i18n', $sale['payload'] );
+		foreach ( array( 'snapshot', 'sequence', 'snapshot_checksum', 'snapshot_created_at_gmt', 'submission_status', 'submission_status_updated_at' ) as $key ) {
+			$this->assertSame( '', $order->get_meta( '_wcpos_receipt_' . $key, true ) );
+		}
 		$this->assertSame( $order->get_meta( '_wcpos_register' ), $sale['register_id'] );
 		$this->assertSame( 12, $sale['store_id'] );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Exercise WooCommerce lifecycle hooks.
@@ -72,29 +76,118 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $sale ), $store->list( array( 'order_id' => $order->get_id() ) ) );
 	}
 
-	/** Existing snapshot is repaired without new receipt sequence. */
-	public function test_existing_snapshot_is_repaired_without_new_receipt_sequence(): void {
+	/** Building must succeed before a number is taken, without undoing payment. */
+	public function test_failed_sale_build_consumes_no_number(): void {
 		$order = $this->order();
-		$payload = array(
-			'fiscal' => array(
-				'sequence' => 77,
-				'immutable_id' => 'legacy:77',
-			),
-		);
-		$order->update_meta_data( '_wcpos_receipt_snapshot', wp_json_encode( $payload ) );
-		$order->update_meta_data( '_wcpos_receipt_sequence', '77' );
-		$order->save();
-		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Exercise WooCommerce lifecycle hooks.
-		do_action( 'woocommerce_payment_complete', $order->get_id() );
+		$before = get_option( 'wcpos_fiscal_sequence_sale' );
+		$filter = static function () {
+			throw new \RuntimeException( 'boom' );
+		};
+		add_filter( 'woocommerce_pos_receipt_data', $filter );
+		try {
+			$order->payment_complete();
+		} finally {
+			remove_filter( 'woocommerce_pos_receipt_data', $filter );
+		}
+
+		$this->assertNull( ( new Fiscal_Record_Store() )->find_sale( $order->get_id() ) );
+		$this->assertSame( $before, get_option( 'wcpos_fiscal_sequence_sale' ) );
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+	}
+
+	/** Extension errors are contained and leave a visible recovery signal. */
+	public function test_enrich_filter_throwing_error_is_contained(): void {
+		$order = $this->order();
+		$failed = array();
+		$enrich = static function () {
+			throw new \Error( 'boom' );
+		};
+		$observe = static function ( $type ) use ( &$failed ) {
+			$failed[] = $type;
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+		try {
+			$order->payment_complete();
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+		}
+
+		$this->assertNull( ( new Fiscal_Record_Store() )->find_sale( $order->get_id() ) );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$this->assertStringContainsString( 'could not be written', implode( '\n', wp_list_pluck( $notes, 'content' ) ) );
+		$this->assertSame( array( 'sale' ), $failed );
+	}
+
+	/** Enrichers receive the minted identity and the label-free document. */
+	public function test_enrich_filter_sees_minted_number_and_no_i18n(): void {
+		$order = $this->order();
+		$seen = null;
+		$enrich = static function ( array $snapshot, int $id ) use ( &$seen ) {
+			$seen = array( $snapshot, $id );
+			$snapshot['fiscal']['qr_payload'] = 'ENRICHED';
+			return $snapshot;
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich, 10, 2 );
+		try {
+			$order->payment_complete();
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
 		$sale = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
-		$this->assertSame( 77, $sale['number'] );
-		$this->assertSame( $payload, $sale['payload'] );
+		$this->assertSame( $sale['number'], $seen[0]['fiscal']['sequence'] );
+		$this->assertSame( $order->get_id(), $seen[1] );
+		$this->assertArrayNotHasKey( 'i18n', $seen[0] );
+		$this->assertSame( 'ENRICHED', $sale['payload']['fiscal']['qr_payload'] );
+	}
+
+	/** Invalid extension returns cannot discard the sale. */
+	public function test_enrich_filter_returning_non_array_is_ignored(): void {
+		$order = $this->order();
+		$enrich = static function () {
+			return 'oops';
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$order->payment_complete();
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
+		$sale = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
+		$this->assertIsArray( $sale );
+		$this->assertSame( '', $sale['payload']['fiscal']['qr_payload'] );
+		$this->assertSame( $order->get_id() . ':' . $sale['number'], $sale['payload']['fiscal']['immutable_id'] );
+	}
+
+	/** A storefront webhook arms the writer before completing a POS payment. */
+	public function test_payment_complete_from_storefront_lane_writes_sale(): void {
+		$writers = Fiscal_Record_Writers::instance();
+		remove_action( 'woocommerce_payment_complete', array( $writers, 'handle_payment_complete' ) );
+		$instance = new \ReflectionProperty( Fiscal_Record_Writers::class, 'instance' );
+		$instance->setAccessible( true );
+		$instance->setValue( null, null );
+		Service_Groups::reset();
+		Service_Groups::arm_order_group();
+		try {
+			$order = $this->order();
+			$order->payment_complete();
+			$this->assertIsArray( ( new Fiscal_Record_Store() )->find_sale( $order->get_id() ) );
+		} finally {
+			$instance->setValue( null, $writers );
+			Service_Groups::reset();
+		}
 	}
 
 	/** Online payment and refund write no records. */
 	public function test_online_payment_and_refund_write_no_records(): void {
 		$order = $this->order( false );
 		$order->payment_complete();
+		$this->assertFalse( get_option( 'wcpos_fiscal_sequence_sale' ) );
+		$fresh = wc_get_order( $order->get_id() );
+		foreach ( array( 'snapshot', 'sequence', 'snapshot_checksum', 'snapshot_created_at_gmt', 'submission_status', 'submission_status_updated_at' ) as $key ) {
+			$this->assertSame( '', $fresh->get_meta( '_wcpos_receipt_' . $key, true ) );
+		}
 		$refund = wc_create_refund(
 			array(
 				'order_id' => $order->get_id(),
@@ -107,12 +200,35 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
 	}
 
+	/** The refund hash covers the stored dataset, with only its hash blanked. */
+	public function test_refund_document_hash_covers_stored_bytes_without_i18n(): void {
+		$order = $this->order();
+		$order->payment_complete();
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => 10,
+				'refund_payment' => false,
+			)
+		);
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		$store = new Fiscal_Record_Store();
+		$row = $store->find_refund( $order->get_id(), $refund->get_id() );
+		$this->assertIsArray( $row );
+		$stored = $row['payload'];
+		$this->assertArrayNotHasKey( 'i18n', $stored );
+		$copy = $stored;
+		$copy['fiscal']['hash'] = '';
+		$this->assertSame( Fiscal_Record_Store::checksum( wp_json_encode( $copy ) ), $stored['fiscal']['hash'] );
+		$this->assertSame( Fiscal_Record_Store::checksum( wp_json_encode( $stored ) ), $row['checksum'] );
+	}
+
 	/** Captured manual void records before and after rows. */
 	public function test_captured_manual_void_records_before_and_after_rows(): void {
 		$order = $this->order();
 		$store = new Fiscal_Record_Store();
 		// A sale anchor on an in-progress order: Ledger refuses voids on completed orders.
-		Receipt_Snapshot_Store::instance()->persist_snapshot( $order->get_id(), array( 'fiscal' => array() ) );
+		Fiscal_Record_Writers::instance()->record_sale( $order );
 		$sale = $store->find_sale( $order->get_id() );
 		$row = Ledger::instance()->record(
 			$order,
@@ -414,11 +530,9 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$rows = Ledger::instance()->read( $order );
 		$rows[0]['method_id'] = 'extension_cash_drawer';
 		Ledger::instance()->save( $order, $rows, false );
-		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, $closure['received_at_gmt'] );
-		$order->save();
 		$writers = Fiscal_Record_Writers::instance();
-		$writers->record_sale( $order, array( 'fiscal' => array() ), 876543 );
-		$writers->record_sale( $order, array( 'fiscal' => array() ), 876543 );
+		$writers->record_sale( $order );
+		$writers->record_sale( $order );
 		$records = ( new Fiscal_Record_Store() )->list(
 			array(
 				'type' => 'late_sale',
@@ -434,7 +548,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $closure, $store->get( $closure['id'] ) );
 		$open = $this->closure_session( null, 'open' );
 		$early = $this->closure_ledger( $open );
-		$writers->record_sale( $early, array(), 876544 );
+		$writers->record_sale( $early );
 		$this->assertSame(
 			array(),
 			( new Fiscal_Record_Store() )->list(
@@ -453,7 +567,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$store->create( $this->closure_fields( $counting ) );
-		$writers->record_sale( $early, array(), 876544 );
+		$writers->record_sale( $early );
 		$this->assertSame(
 			array(),
 			( new Fiscal_Record_Store() )->list(
@@ -467,15 +581,18 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$early->delete( true );
 	}
 
-	/** Repairing a snapshot captured before close does not duplicate its frozen ledger. */
+	/** Replaying a sale captured before close does not duplicate its frozen ledger. */
 	public function test_repaired_preclosure_sale_is_not_a_late_sale(): void {
 		$session = $this->closure_session();
 		$order = $this->closure_ledger( $session );
-		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, '2000-01-01 00:00:00' );
-		$order->save();
+		global $wpdb;
+		Fiscal_Record_Writers::instance()->record_sale( $order );
+		$store = new Fiscal_Record_Store();
+		$sale = $store->find_sale( $order->get_id() );
+		$wpdb->update( $store->table_name(), array( 'received_at_gmt' => '2000-01-01 00:00:00' ), array( 'id' => $sale['id'] ) );
 		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
 
-		Fiscal_Record_Writers::instance()->record_sale( $order, array( 'fiscal' => array() ), 876545 );
+		Fiscal_Record_Writers::instance()->record_sale( $order );
 
 		$records = ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) );
 		$this->assertCount( 1, $records );

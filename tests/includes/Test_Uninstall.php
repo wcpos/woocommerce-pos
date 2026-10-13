@@ -685,7 +685,7 @@ PHP;
 		$this->assertNotFalse( get_option( 'woocommerce_pos_settings_general' ), 'settings should be preserved by default' );
 		$this->assertNotFalse( get_option( 'woocommerce_pos_settings_some_future_section' ), 'future settings sections must be preserved by pattern, not by list' );
 		$this->assertEquals( 42, get_option( 'wcpos_active_template_receipt' ), 'active template choice should be preserved by default' );
-		$this->assertEquals( 1234, get_option( 'wcpos_receipt_sequence_counter' ), 'receipt sequence should be preserved by default' );
+		$this->assertFalse( get_option( 'wcpos_receipt_sequence_counter' ), 'retired receipt sequence should be deleted' );
 	}
 
 	/**
