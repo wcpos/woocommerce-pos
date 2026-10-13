@@ -48,6 +48,11 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 		// was already reset by the test framework, so go to the controller.
 		unload_textdomain( 'woocommerce-pos', true );
 		\WP_Translation_Controller::get_instance()->unload_textdomain( 'woocommerce-pos' );
+		// The registry remembers the directory each domain+locale last resolved
+		// to, so a path from an earlier test's deleted temp dir would steer the
+		// just-in-time lookup below. Core's own JIT tests start it fresh too.
+		$GLOBALS['wp_textdomain_registry'] = new \WP_Textdomain_Registry(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test isolation.
+		$GLOBALS['wp_textdomain_registry']->init();
 		$this->temp_lang_dir = sys_get_temp_dir() . '/wcpos-i18n-storefront-' . uniqid() . '/';
 		wp_mkdir_p( $this->temp_lang_dir );
 		add_filter(
