@@ -168,11 +168,15 @@ final class Receipt_Snapshot_Cleanup {
 		}
 		// A translation may spell the placeholder positionally.
 		$placeholders = array( '%1$d', '%d' );
+		$charset      = preg_replace( '/[^a-z0-9]/', '', strtolower( (string) $wpdb->charset ) );
+		$collation    = ( '' === $charset ? 'utf8mb4' : $charset ) . '_bin';
 		$where        = array();
 		$args         = array();
 		foreach ( array_unique( array( self::NOTE_FORMAT, $translated ) ) as $format ) {
-			// Binary for case-sensitivity; the '#' sentinel keeps $ from matching before a trailing newline.
-			$where[] = "( comment_content LIKE %s AND CAST( CONCAT( comment_content, '#' ) AS BINARY ) REGEXP %s )";
+			// A _bin collation of the column's own charset makes the match case-sensitive on
+			// MySQL 5.7, MySQL 8 and MariaDB alike (MySQL 8.0.22+ rejects a binary string in
+			// REGEXP); the '#' sentinel keeps $ from matching before a trailing newline.
+			$where[] = "( comment_content LIKE %s AND CONCAT( comment_content, '#' ) COLLATE {$collation} REGEXP %s )";
 			$args[]  = str_replace( array( '\%1$d', '\%d' ), '%', $wpdb->esc_like( $format ) );
 			$args[]  = '^' . str_replace( '__NUMBER__', '[0-9]+', self::regexp_quote( str_replace( $placeholders, '__NUMBER__', $format ) ) ) . '#$';
 		}
