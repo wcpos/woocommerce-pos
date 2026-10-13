@@ -356,8 +356,10 @@ class Load_Integrity {
 				'code'    => 'wcpos_updating',
 				'message' => __( 'WCPOS is being updated on this site. Please try again in a few seconds.', 'woocommerce-pos' ),
 				'data'    => array(
-					'status'         => 503,
-					'classification' => $classification,
+					'status'              => 503,
+					'classification'      => $classification,
+					// In the body too: a cross-origin browser may not be allowed to read the header.
+					'retry_after_seconds' => 5,
 				),
 			),
 			503

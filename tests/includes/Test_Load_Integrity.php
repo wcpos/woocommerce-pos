@@ -365,6 +365,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		$this->assertSame( 503, $response->get_status() );
 		$this->assertSame( '5', $response->get_headers()['Retry-After'] ?? null );
 		$this->assertSame( 'wcpos_updating', $response->get_data()['code'] ?? null );
+		$this->assertSame( 5, $response->get_data()['data']['retry_after_seconds'] ?? null );
 	}
 
 	/**
