@@ -233,7 +233,7 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Only the exact auth path serves the auth form; a lookalike is a plain 404.
+	 * Only the exact auth path routes to the auth template; a lookalike is a plain 404.
 	 *
 	 * WordPress matches rewrite regexes as prefixes, so an unanchored rule routed
 	 * /wcpos-authx/ to the auth template while the page-cache kill check refused it.
@@ -246,29 +246,28 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		$router = new Template_Router();
 		$wp_rewrite->flush_rules();
 		$rules = get_option( 'rewrite_rules' );
-
-		// Act: match the way WP::parse_request() does, as a prefix.
-		$matches = array();
-		foreach ( array( 'wcpos-auth', 'wcpos-auth/', 'wcpos-authx/', 'wcpos-authentication/', 'wcpos-auth/extra/' ) as $path ) {
-			$matches[ $path ] = 1 === preg_match( '#^' . Template_Router::AUTH_PATH . '/?$#', $path );
-		}
-		$this->go_to( '/wcpos-authx/' );
-
-		// Assert.
 		$this->assertArrayHasKey( '^wcpos-auth/?$', $rules );
 		$this->assertArrayNotHasKey( '^wcpos-auth/?', $rules );
-		$this->assertSame(
-			array(
-				'wcpos-auth'            => true,
-				'wcpos-auth/'           => true,
-				'wcpos-authx/'          => false,
-				'wcpos-authentication/' => false,
-				'wcpos-auth/extra/'     => false,
-			),
-			$matches
-		);
-		$this->assertArrayNotHasKey( 'wcpos-auth', $GLOBALS['wp']->query_vars );
-		$this->assertTrue( is_404() );
+
+		foreach ( array( '/wcpos-auth/', '/wcpos-auth' ) as $path ) {
+			// Act: go_to() runs WP::main() (routing) but not template-loader.php, so nothing renders.
+			$this->go_to( $path );
+
+			// Assert: go_to() replaces the global $wp instance, so read it via $GLOBALS.
+			$this->assertSame( '^wcpos-auth/?$', $GLOBALS['wp']->matched_rule, "{$path} did not match the auth rule." );
+			$this->assertSame( '1', $GLOBALS['wp']->query_vars['wcpos-auth'], "{$path} did not set the auth query var." );
+		}
+
+		foreach ( array( '/wcpos-authx/', '/wcpos-authentication/', '/wcpos-auth/extra/' ) as $path ) {
+			// Act.
+			$this->go_to( $path );
+
+			// Assert.
+			$this->assertNotSame( '^wcpos-auth/?$', $GLOBALS['wp']->matched_rule, "{$path} matched the auth rule." );
+			$this->assertArrayNotHasKey( 'wcpos-auth', $GLOBALS['wp']->query_vars, "{$path} set the auth query var." );
+			$this->assertTrue( is_404(), "{$path} is not a 404." );
+		}
+
 		// A cache that still holds the unanchored rule is stale.
 		$stale = $rules;
 		unset( $stale['^wcpos-auth/?$'] );
