@@ -69,6 +69,7 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
 		'wcpos_analytics_group_refresh',
+		'wcpos_file_integrity_check',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);
@@ -562,5 +563,6 @@ if ( \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	// Network-wide surfaces, once: user meta is a shared table, and the
 	// object-cache flush is global.
 	woocommerce_pos_uninstall_user_meta();
+	delete_site_option( 'woocommerce_pos_file_integrity' ); // File_Integrity::RESULT_OPTION, stored network-wide.
 	wp_cache_flush();
 }

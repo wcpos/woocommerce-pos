@@ -241,12 +241,14 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// so WCPOS writes after core's rest_send_cors_headers at 10.
 			'rest_pre_serve_request'                                => array( 20 ),
 			'send_headers'                                          => array( 99, 9999 ),
+			'site_status_tests'                                     => array( 10 ),
 			// Pos_Uuid re-proves uuid ownership on restore (#1805); unconditional
 			// like stamp_on_save — identity is core. The sync observers add their
 			// own callbacks on the same two hooks once the latch is set.
 			'untrashed_post'                                        => array( 10 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
+			'wcpos_file_integrity_check'                            => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
 			'wcpos_receipt_snapshot_cleanup'                        => array( 10 ),
 			'woocommerce_before_product_object_save'                => array( 10 ),

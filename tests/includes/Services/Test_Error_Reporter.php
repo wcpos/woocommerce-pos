@@ -204,6 +204,53 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A missing WCPOS class at shutdown is tagged with its integrity class, not a bare fatal.
+	 */
+	public function test_missing_wcpos_class_fatal_is_tagged_with_its_integrity_class(): void {
+		// Arrange.
+		$this->enable_consent();
+		$error            = $this->fatal_error();
+		$error['message'] = 'Uncaught Error: Class "WCPOS\\WooCommercePOS\\Nope\\Gone_' . uniqid() . '" not found in /x/Auth.php:28';
+
+		// Act.
+		Error_Reporter::instance()->report_fatal( $error );
+
+		// Assert: nothing on disk points at an update, so the files are just missing.
+		$this->assertCount( 1, $this->transport->events );
+		$event = $this->transport->events[0];
+		$this->assertSame( 'error', (string) $event->getLevel() );
+		$this->assertSame( 'files_missing', $event->getTags()['wcpos_integrity'] ?? null );
+		$this->assertStringStartsWith( 'includes/Nope/Gone_', $event->getTags()['integrity_path'] ?? '' );
+		$this->assertSame( 'wcpos-integrity', $event->getFingerprint()[0] );
+	}
+
+	/**
+	 * The update 503 is not reported a second time as a REST 5xx.
+	 */
+	public function test_wcpos_updating_503_is_not_reported_as_a_rest_error(): void {
+		$this->enable_consent();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/sync/products' );
+		$response = new \WP_REST_Response( array( 'code' => 'wcpos_updating' ), 503 );
+
+		Error_Reporter::filter_rest_request_after_callbacks( $response, array(), $request );
+
+		$this->assertSame( array(), $this->transport->events );
+	}
+
+	/**
+	 * Integrity findings during an update are warnings.
+	 */
+	public function test_mid_update_integrity_report_is_a_warning(): void {
+		$this->enable_consent();
+
+		Error_Reporter::instance()->report_integrity( 'mid_update', 'includes/Services/Auth.php', 'Class not found' );
+
+		$this->assertCount( 1, $this->transport->events );
+		$this->assertSame( 'warning', (string) $this->transport->events[0]->getLevel() );
+		$this->assertSame( 'mid_update', $this->transport->events[0]->getTags()['wcpos_integrity'] ?? null );
+	}
+
+	/**
 	 * The per-request cap suppresses a second distinct logger error.
 	 */
 	public function test_two_distinct_logger_errors_send_only_first_event(): void {
@@ -782,6 +829,18 @@ PHP;
 				)
 			);
 		};
+
+		// A REST test case that opened the run leaves its rest_api_init callback in
+		// WP's hook snapshot (see WCPOS_REST_Unit_Test_Case); the API it boots would
+		// claim this stub route. Production boots one API, so drop the stale one.
+		global $wp_filter;
+		foreach ( isset( $wp_filter['rest_api_init'] ) ? $wp_filter['rest_api_init']->callbacks : array() as $priority => $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				if ( \is_array( $callback['function'] ) && $callback['function'][0] instanceof \WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case ) {
+					remove_action( 'rest_api_init', $callback['function'], $priority );
+				}
+			}
+		}
 
 		add_action( 'rest_api_init', $register_route );
 		do_action( 'rest_api_init', rest_get_server() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook under test.
