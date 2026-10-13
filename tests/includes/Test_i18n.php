@@ -165,6 +165,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
 		$this->assertFileExists( $file, 'Translation file should be saved to languages directory' );
 
+		$this->assertNotEmpty( $this->http_requests, 'non_english_locale_triggers_download' );
 		$expected_url = 'https://cdn.jsdelivr.net/gh/wcpos/translations@1.8.7/translations/php/de_DE/woocommerce-pos-de_DE.l10n.php';
 		$this->assertEquals( $expected_url, $this->http_requests[0]['url'], 'cdn_url_format_is_correct' );
 

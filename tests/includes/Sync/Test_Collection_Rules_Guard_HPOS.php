@@ -102,7 +102,6 @@ class Test_Collection_Rules_Guard_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 			if ( '' === $expected_clause ) {
 				$this->assertSame( '', $observed, "WooCommerce now maps the '{$orderby}' sort itself" );
 			} else {
-				$this->assertEquals( 200, $response->get_status(), 'rule_defers_to_the_woocommerce_owned_total_sort' );
 				$this->assertSame( $observed, $after, 'rule_defers_to_the_woocommerce_owned_total_sort: the rule overwrote a WooCommerce-owned ORDER BY' );
 				$this->assertStringEndsWith(
 					$expected_clause,

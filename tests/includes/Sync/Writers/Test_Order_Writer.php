@@ -19,6 +19,14 @@ class Test_Order_Writer extends WP_UnitTestCase {
 		$this->assertSame( array( array( 'key' => 'public', 'value' => 'kept' ) ), $prepared['payload']['meta_data'] );
 	}
 
+	/** Require a non-null mutation store dependency (pinned in review, 0ae23b11). */
+	public function test_constructor_requires_mutation_store(): void {
+		$constructor = new \ReflectionMethod( Order_Writer::class, '__construct' );
+
+		$this->assertSame( 1, $constructor->getNumberOfRequiredParameters() );
+		$this->assertFalse( $constructor->getParameters()[0]->allowsNull() );
+	}
+
 	/** Ignore an invalid value returned by the public WooCommerce pre-insert filter. */
 	public function test_create_forward_ignores_non_order_filter_value(): void {
 		$prepared = array(
