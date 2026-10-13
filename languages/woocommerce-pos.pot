@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-13T06:20:35+00:00\n"
+"POT-Creation-Date: 2026-10-13T09:20:43+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -409,34 +409,34 @@ msgid "The user ID that owns the session."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Auth.php:354
+#: includes/API/V1/Auth.php:344
 msgid "Missing required parameters."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Auth.php:369
+#: includes/API/V1/Auth.php:359
 msgid "Session revoked successfully."
 msgstr ""
 
-#: includes/API/V1/Auth.php:377
+#: includes/API/V1/Auth.php:367
 msgid "Failed to revoke session."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Auth.php:398
+#: includes/API/V1/Auth.php:388
 msgid "Missing user_id parameter."
 msgstr ""
 
-#: includes/API/V1/Auth.php:414
+#: includes/API/V1/Auth.php:404
 msgid "Could not determine current session."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Auth.php:429
+#: includes/API/V1/Auth.php:419
 msgid "Sessions revoked successfully."
 msgstr ""
 
-#: includes/API/V1/Auth.php:437
+#: includes/API/V1/Auth.php:427
 msgid "Failed to revoke sessions."
 msgstr ""
 
@@ -823,9 +823,9 @@ msgstr ""
 
 #: includes/API/V1/Receipts_Controller.php:353
 #: includes/API/V1/Receipts_Controller.php:361
-#: includes/Templates/Receipt.php:232
-#: includes/Templates/Receipt.php:240
-#: includes/Templates/Receipt.php:251
+#: includes/Templates/Receipt.php:238
+#: includes/Templates/Receipt.php:246
+#: includes/Templates/Receipt.php:257
 msgid "Could not generate the receipt PDF."
 msgstr ""
 
@@ -835,7 +835,7 @@ msgstr ""
 
 #: includes/API/V1/Receipts_Controller.php:396
 #: includes/API/V2/Closures_Controller.php:371
-#: includes/Templates/Receipt.php:522
+#: includes/Templates/Receipt.php:528
 msgid "The closure request could not be completed."
 msgstr ""
 
@@ -876,12 +876,12 @@ msgid "Template type."
 msgstr ""
 
 #: includes/API/V1/Templates_Controller.php:112
-#: includes/API/V1/Templates_Controller.php:1392
+#: includes/API/V1/Templates_Controller.php:1367
 msgid "Filter by template type."
 msgstr ""
 
 #: includes/API/V1/Templates_Controller.php:118
-#: includes/API/V1/Templates_Controller.php:1414
+#: includes/API/V1/Templates_Controller.php:1389
 msgid "Filter by template category slug."
 msgstr ""
 
@@ -1010,55 +1010,55 @@ msgstr ""
 msgid "Store not found."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1115
+#: includes/API/V1/Templates_Controller.php:1111
 msgid "Mustache template syntax error. Check your template."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1378
+#: includes/API/V1/Templates_Controller.php:1353
 msgid "Current page of the collection."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1385
+#: includes/API/V1/Templates_Controller.php:1360
 msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1400
+#: includes/API/V1/Templates_Controller.php:1375
 msgid "Scope under which the request is made."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1408
+#: includes/API/V1/Templates_Controller.php:1383
 msgid "Search templates by title or description."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1420
+#: includes/API/V1/Templates_Controller.php:1395
 msgid "Limit to templates modified after this ISO 8601 date."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1426
+#: includes/API/V1/Templates_Controller.php:1401
 msgid "Limit results to templates resolved for a specific store."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1595
+#: includes/API/V1/Templates_Controller.php:1570
 msgid "Sorry, you cannot list templates."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1604
+#: includes/API/V1/Templates_Controller.php:1579
 msgid "Sorry, you are not allowed to edit templates."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1623
+#: includes/API/V1/Templates_Controller.php:1598
 msgid "Sorry, you cannot view this template."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1632
+#: includes/API/V1/Templates_Controller.php:1607
 msgid "Sorry, you are not allowed to edit this template."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1653
+#: includes/API/V1/Templates_Controller.php:1628
 msgid "Sorry, you cannot preview this template."
 msgstr ""
 
-#: includes/API/V1/Templates_Controller.php:1672
+#: includes/API/V1/Templates_Controller.php:1647
 msgid "Sorry, you cannot update templates."
 msgstr ""
 
@@ -4234,7 +4234,7 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
 #: includes/Services/Receipt_I18n_Labels.php:223
-#: includes/Templates.php:1483
+#: includes/Templates.php:1486
 #: includes/Templates/Gallery_Registry.php:420
 msgid "Invoice"
 msgstr ""
@@ -4253,7 +4253,7 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:226
 #: includes/Storefront_Receipts.php:138
-#: includes/Templates.php:1482
+#: includes/Templates.php:1485
 #: templates/receipt.php:184
 #: tests/includes/Test_i18n_Storefront.php:95
 #: tests/includes/Test_i18n_Storefront.php:105
@@ -4268,7 +4268,7 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
 #: includes/Services/Receipt_I18n_Labels.php:227
-#: includes/Templates.php:1484
+#: includes/Templates.php:1487
 #: includes/Templates/Gallery_Registry.php:407
 msgid "Gift Receipt"
 msgstr ""
@@ -4276,7 +4276,7 @@ msgstr ""
 #. translators: Document title for a credit note/refund document.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:228
-#: includes/Templates.php:1485
+#: includes/Templates.php:1488
 msgid "Credit Note"
 msgstr ""
 
@@ -4777,7 +4777,7 @@ msgid "Filter orders by POS register."
 msgstr ""
 
 #. translators: %s: the unrecognised Collection Rules hook key.
-#: includes/Sync/Collection_Rules_Plan.php:343
+#: includes/Sync/Collection_Rules_Plan.php:345
 #, php-format
 msgid "Unknown Collection Rules hook \"%s\"; the value was passed through unchanged."
 msgstr ""
@@ -5124,60 +5124,60 @@ msgstr ""
 msgid "Renders the PDF Invoices & Packing Slips packing slip HTML through the WP Overnight document API."
 msgstr ""
 
-#: includes/Templates.php:1351
+#: includes/Templates.php:1354
 msgid "Starter template not found."
 msgstr ""
 
-#: includes/Templates.php:1365
+#: includes/Templates.php:1368
 msgid "Gallery template not found."
 msgstr ""
 
-#: includes/Templates.php:1417
+#: includes/Templates.php:1420
 msgid "Template was created but raw content could not be saved."
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1443
+#: includes/Templates.php:1446
 msgid "Receipt templates for printing orders"
 msgstr ""
 
-#: includes/Templates.php:1454
+#: includes/Templates.php:1457
 msgid "Report templates for analytics"
 msgstr ""
 
-#: includes/Templates.php:1469
+#: includes/Templates.php:1472
 msgid "Customer-facing display templates"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1486
+#: includes/Templates.php:1489
 msgid "Purchase Order"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
-#: includes/Templates.php:1487
+#: includes/Templates.php:1490
 #: includes/Templates/Gallery_Registry.php:537
 msgid "Kitchen Ticket"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1488
+#: includes/Templates.php:1491
 msgid "Bar Ticket"
 msgstr ""
 
 #. translators: Display template category label.
-#: includes/Templates.php:1489
+#: includes/Templates.php:1492
 msgid "General"
 msgstr ""
 
 #. translators: Display template category label.
-#: includes/Templates.php:1490
+#: includes/Templates.php:1493
 msgid "Seasonal"
 msgstr ""
 
 #. translators: Display template category label.
-#: includes/Templates.php:1491
+#: includes/Templates.php:1494
 msgid "Promotion"
 msgstr ""
 
@@ -5654,60 +5654,64 @@ msgstr ""
 msgid "You do not have permission to view this receipt."
 msgstr ""
 
-#: includes/Templates/Receipt.php:206
+#: includes/Templates/Receipt.php:130
+msgid "No closure template is enabled."
+msgstr ""
+
+#: includes/Templates/Receipt.php:212
 msgid "No receipt template is configured."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:371
+#: includes/Templates/Receipt.php:377
 msgid "Receipt Error"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:432
+#: includes/Templates/Receipt.php:438
 msgid "Receipt Template Error"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:433
+#: includes/Templates/Receipt.php:439
 msgid "There was a problem rendering the receipt template. This is usually caused by a syntax error or undefined variable in the template code."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:439
+#: includes/Templates/Receipt.php:445
 msgid "File:"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:440
+#: includes/Templates/Receipt.php:446
 msgid "Line:"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Receipt.php:444
+#: includes/Templates/Receipt.php:450
 msgid "Suggestions:"
 msgstr ""
 
 #. translators: Help text shown on the receipt template fatal error page.
-#: includes/Templates/Receipt.php:446
+#: includes/Templates/Receipt.php:452
 msgid "Check the template file for syntax errors (missing semicolons, brackets, etc.)"
 msgstr ""
 
 #. translators: Help text shown on the receipt template fatal error page.
-#: includes/Templates/Receipt.php:447
+#: includes/Templates/Receipt.php:453
 msgid "Ensure all variables used in the template are defined"
 msgstr ""
 
 #. translators: Help text shown on the receipt template fatal error page.
-#: includes/Templates/Receipt.php:448
+#: includes/Templates/Receipt.php:454
 msgid "Verify that any custom functions or classes exist"
 msgstr ""
 
-#: includes/Templates/Receipt.php:449
+#: includes/Templates/Receipt.php:455
 msgid "Try resetting to the default receipt template"
 msgstr ""
 
-#: includes/Templates/Receipt.php:453
+#: includes/Templates/Receipt.php:459
 msgid "Please contact the site administrator for assistance."
 msgstr ""
 
