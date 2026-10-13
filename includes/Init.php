@@ -502,7 +502,7 @@ class Init {
 
 	/**
 	 * Some security plugins will set X-Frame-Options: SAMEORIGIN/DENY, which will prevent the POS desktop
-	 * application from opening pages like the login in an iframe.
+	 * application from opening POS pages such as checkout in an iframe.
 	 *
 	 * For pages we need, we will remove the X-Frame-Options header.
 	 *
@@ -511,7 +511,7 @@ class Init {
 	 * @return void
 	 */
 	public function remove_x_frame_options( $wp ): void {
-		if ( woocommerce_pos_request() || isset( $wp->query_vars['wcpos-login'] ) ) {
+		if ( woocommerce_pos_request() ) {
 			if ( ! headers_sent() && \function_exists( 'header_remove' ) ) {
 				header_remove( 'X-Frame-Options' );
 			}
