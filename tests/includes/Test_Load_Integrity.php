@@ -42,9 +42,20 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	private $api = null;
 
 	/**
+	 * Original mtimes of shipped files a test touched, restored in tearDown.
+	 *
+	 * @var array<string, int>
+	 */
+	private $touched = array();
+
+	/**
 	 * Remove fixtures, deepest first.
 	 */
 	public function tearDown(): void {
+		foreach ( $this->touched as $file => $mtime ) {
+			touch( $file, $mtime );
+		}
+		$this->touched = array();
 		if ( null !== $this->api ) {
 			$GLOBALS['wp_rest_server'] = $this->saved_server; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Restoring core's REST server.
 			$this->api                 = null;
@@ -129,8 +140,58 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Missing-class messages are recognised in both PHP 7 and PHP 8 form, ours only.
+	 * A shipped class (in a Composer class map) whose file is missing waits once per
+	 * request; a class no class map lists never waits.
 	 */
+	public function test_only_a_shipped_class_waits_and_only_once_per_request(): void {
+		// Arrange.
+		$dir    = $this->temp_dir();
+		$class  = 'WCPOS\\WooCommercePOS\\Shipped_' . str_replace( '.', '', uniqid( '', true ) );
+		$loader = new \Composer\Autoload\ClassLoader( $dir ); // A vendor dir is what lists it in getRegisteredLoaders().
+		$loader->addClassMap( array( $class => $dir . 'gone.php' ) );
+		$loader->register( false );
+		$waited = new \ReflectionProperty( Load_Integrity::class, 'waited' );
+		$waited->setAccessible( true );
+		$waited->setValue( null, false );
+
+		try {
+			// Act.
+			$start      = microtime( true );
+			$unlisted   = Load_Integrity::load( 'WCPOS\\WooCommercePOS\\Never_Listed', $dir );
+			$t_unlisted = microtime( true ) - $start;
+			$start      = microtime( true );
+			$first      = Load_Integrity::load( $class, $dir );
+			$t_first    = microtime( true ) - $start;
+			$start      = microtime( true );
+			$second     = Load_Integrity::load( $class, $dir );
+			$t_second   = microtime( true ) - $start;
+		} finally {
+			$loader->unregister();
+		}
+
+		// Assert.
+		$this->assertFalse( $unlisted );
+		$this->assertFalse( $first );
+		$this->assertFalse( $second );
+		$this->assertLessThan( 0.1, $t_unlisted );
+		$this->assertGreaterThanOrEqual( Load_Integrity::RETRY_WAIT_US / 1e6, $t_first );
+		$this->assertLessThan( 0.1, $t_second );
+	}
+
+	/**
+	 * An unrelated Error from an included file is not swallowed.
+	 */
+	public function test_fallback_rethrows_an_unrelated_error_from_the_file(): void {
+		$dir   = $this->temp_dir();
+		$name  = 'Throws_' . str_replace( '.', '', uniqid( '', true ) );
+		$this->write( $dir . $name . '.php', "<?php\nnamespace WCPOS\\WooCommercePOS;\nthrow new \\TypeError( 'boom' );\n" );
+
+		$this->expectException( \TypeError::class );
+		Load_Integrity::load( 'WCPOS\\WooCommercePOS\\' . $name, $dir );
+	}
+
+	/**
+	 * Missing-class messages are recognised in both PHP 7 and PHP 8 form, ours only.
 	public function test_missing_class_parses_wcpos_messages_only(): void {
 		$this->assertSame( 'WCPOS\\WooCommercePOS\\Services\\Session_Registry', Load_Integrity::missing_class( 'Class "WCPOS\\WooCommercePOS\\Services\\Session_Registry" not found' ) );
 		$this->assertSame( 'WCPOS\\WooCommercePOS\\Sync\\Cors', Load_Integrity::missing_class( "Uncaught Error: Class 'WCPOS\\WooCommercePOS\\Sync\\Cors' not found in /x/Rest_Cors.php:206" ) );
@@ -224,12 +285,14 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		touch( $content . 'upgrade-temp-backup/plugins/woocommerce-pos', $old );
 		touch( $content . 'upgrade/woocommerce-pos.1.10.99', $old );
 		update_option( 'auto_updater.lock', $old );
+		$this->write( $abspath . 'Old.php', '<?php' );
+		touch( $abspath . 'Old.php', $old );
 
 		// Act.
-		$signals = Load_Integrity::signals( $this->includes() . 'Services/Auth.php', $abspath, $content );
+		$signals = Load_Integrity::signals( $abspath . 'Old.php', $abspath, $content );
 		delete_option( 'auto_updater.lock' );
 
-		// Assert: Auth.php exists but was not just written either.
+		// Assert: the file exists but was not just written either.
 		$this->assertSame( 'files_missing', Load_Integrity::classify( $signals ) );
 	}
 
@@ -250,7 +313,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	 */
 	public function test_rest_dispatch_returns_503_for_a_missing_wcpos_class(): void {
 		// Arrange: the file was just written, as an update copying it in.
-		touch( $this->includes() . 'Services/Session_Registry.php' );
+		$this->touch_shipped( 'Services/Session_Registry.php' );
 		$api     = $this->api();
 		$route   = $this->wcpos_route();
 		$handler = array(
@@ -323,7 +386,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	 * A fatal before dispatch (auth, CORS) on a WCPOS REST request becomes a 503 page.
 	 */
 	public function test_fatal_page_is_503_only_for_a_wcpos_rest_request_mid_update(): void {
-		touch( $this->includes() . 'Services/Session_Registry.php' );
+		$this->touch_shipped( 'Services/Session_Registry.php' );
 		$args  = array( 'response' => 500 );
 		$error = array( 'message' => 'Uncaught Error: Class "WCPOS\\WooCommercePOS\\Services\\Session_Registry" not found in /x/Auth.php:28' );
 		$saved = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Saved verbatim to restore it.
@@ -424,6 +487,19 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 			}
 		}
 		$this->fail( 'No /wcpos/v2/cashier route registered.' );
+	}
+
+	/**
+	 * Mark a shipped file as just written, restoring its mtime in tearDown.
+	 *
+	 * @param string $relative Path under includes/.
+	 */
+	private function touch_shipped( string $relative ): void {
+		$file = $this->includes() . $relative;
+		if ( ! isset( $this->touched[ $file ] ) ) {
+			$this->touched[ $file ] = (int) filemtime( $file );
+		}
+		touch( $file );
 	}
 
 	/**

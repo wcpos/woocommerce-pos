@@ -99,6 +99,8 @@ class Load_Integrity {
 	 * @param string $class_name Class being loaded.
 	 * @param string $base_dir   includes/ directory, with a trailing slash.
 	 *
+	 * @throws \Error An error from the included file other than a missing WCPOS class.
+	 *
 	 * @return bool Whether the class is now declared.
 	 */
 	public static function load( string $class_name, string $base_dir ): bool {
@@ -119,8 +121,13 @@ class Load_Integrity {
 				if ( is_file( $file ) ) {
 					include $file;
 				}
-			} catch ( \Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			} catch ( \ParseError $error ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 				// A torn file mid-copy: treat as a miss and retry.
+			} catch ( \Error $error ) {
+				// A WCPOS dependency of this file may be missing too; anything else is a real error.
+				if ( null === self::missing_class( $error->getMessage() ) ) {
+					throw $error;
+				}
 			}
 			if ( class_exists( $class_name, false ) || interface_exists( $class_name, false ) || trait_exists( $class_name, false ) ) {
 				return true;

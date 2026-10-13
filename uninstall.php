@@ -563,5 +563,6 @@ if ( \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	// Network-wide surfaces, once: user meta is a shared table, and the
 	// object-cache flush is global.
 	woocommerce_pos_uninstall_user_meta();
+	delete_site_option( 'woocommerce_pos_file_integrity' ); // File_Integrity::RESULT_OPTION, stored network-wide.
 	wp_cache_flush();
 }

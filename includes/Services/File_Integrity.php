@@ -69,6 +69,12 @@ class File_Integrity {
 	 */
 	const STALE_AFTER = 2 * DAY_IN_SECONDS;
 
+	/**
+	 * A daily run reuses a result this fresh: every site of a network schedules
+	 * its own daily event, but the files (and the stored result) are shared.
+	 */
+	const REUSE_WITHIN = 20 * HOUR_IN_SECONDS;
+
 	/** Register the cron listener, the update trigger and the Site Health test. */
 	public static function register(): void {
 		add_action(
@@ -80,8 +86,7 @@ class File_Integrity {
 		add_action( 'upgrader_process_complete', array( self::class, 'on_upgrade' ), 10, 2 );
 		add_filter( 'site_status_tests', array( self::class, 'site_status_tests' ) );
 
-		// The files are shared by every site of a network: one site checks them.
-		if ( is_main_site() && ! wp_next_scheduled( self::CRON_HOOK ) ) {
+		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
 		}
 	}
@@ -118,9 +123,13 @@ class File_Integrity {
 	 * @return array The result.
 	 */
 	public static function run( string $context = 'daily', ?array $target = null ): array {
-		$previous = get_option( self::RESULT_OPTION, array() );
-		$result   = self::check( $target );
-		update_option( self::RESULT_OPTION, $result, false );
+		// Stored network-wide: every site of a network runs the same files.
+		$previous = get_site_option( self::RESULT_OPTION, array() );
+		if ( 'daily' === $context && null === $target && \is_array( $previous ) && ( $previous['checked'] ?? 0 ) > time() - self::REUSE_WITHIN ) {
+			return $previous;
+		}
+		$result = self::check( $target );
+		update_site_option( self::RESULT_OPTION, $result );
 
 		$failed = \in_array( $result['status'], array( 'files_missing', 'files_modified' ), true );
 		$same   = \is_array( $previous ) && array_intersect_key( $previous, array_flip( array( 'status', 'missing', 'modified', 'version' ) ) ) === array_intersect_key( $result, array_flip( array( 'status', 'missing', 'modified', 'version' ) ) );
@@ -228,7 +237,7 @@ class File_Integrity {
 	 * @return array
 	 */
 	public static function site_health_test(): array {
-		$result = get_option( self::RESULT_OPTION );
+		$result = get_site_option( self::RESULT_OPTION );
 		if ( ! \is_array( $result ) || ( $result['checked'] ?? 0 ) < time() - self::STALE_AFTER ) {
 			wp_schedule_single_event( time(), self::CRON_HOOK, array( 'site_health' ) );
 		}
