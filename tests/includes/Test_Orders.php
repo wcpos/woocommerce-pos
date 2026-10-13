@@ -2056,6 +2056,30 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * An armed suppression must let a real payment keep the configured status.
+	 */
+	public function test_offline_gateway_date_paid_suppression_lets_a_payment_complete_through_on_an_order_at_the_configured_status(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'bacs', 'wc-on-hold' );
+		$order = $this->create_pos_order( 'on-hold' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+		$this->assertNull( wc_get_order( $order->get_id() )->get_date_paid( 'edit' ) );
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act.
+		apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
+		$order->payment_complete( 'txn_789' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $fresh->get_status() );
+		$this->assertNotNull( $fresh->get_date_paid( 'edit' ) );
+	}
+
+	/**
 	 * The suppression lasts for the gateway's status write only; it must not sit on
 	 * the filter afterwards, where it would reach a later payment on the same order.
 	 *
@@ -2569,6 +2593,47 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertSame( 'bacs', $fresh_related->get_payment_method(), 'Fixture changed: the expected status below is derived from the bacs default.' );
 		$this->assertSame( 'on-hold', $fresh_related->get_status(), 'The suppression filter clobbered a nested payment_complete().' );
 		$this->assertNotNull( $fresh_related->get_date_paid(), 'The nested order should have been marked paid.' );
+	}
+
+	/**
+	 * A nested payment on the same order must retain its configured status.
+	 *
+	 * bacs, not a made-up gateway: payment_complete_order_status() reads the
+	 * configured status through woocommerce_pos_get_settings(), which only knows
+	 * registered gateways, so an unknown id would answer 'completed' there.
+	 */
+	public function test_unpaid_gateway_success_lets_a_nested_payment_complete_on_the_same_order_keep_its_status(): void {
+		// Arrange.
+		$this->set_gateway_settings( 'bacs', 'wc-on-hold' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$settled      = false;
+		$settle_order = static function ( $id ) use ( $order, &$settled ): void {
+			if ( $settled || (int) $id !== $order->get_id() ) {
+				return;
+			}
+
+			$settled = true;
+			wc_get_order( $id )->payment_complete( 'txn_nested' );
+		};
+		add_action( 'woocommerce_order_status_on-hold', $settle_order );
+
+		// Act.
+		try {
+			apply_filters( 'woocommerce_payment_successful_result', $this->finished_result( $order ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
+		} finally {
+			remove_action( 'woocommerce_order_status_on-hold', $settle_order );
+		}
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'on-hold', $fresh->get_status() );
+		$this->assertNotNull( $fresh->get_date_paid( 'edit' ) );
 	}
 
 	/**

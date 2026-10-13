@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
+use WCPOS\WooCommercePOS\Payments\Paid_Date_Suppression;
 use WP_Error;
 
 /** Reads what a Woo gateway did, within the route's existing order lock. */
@@ -138,20 +139,9 @@ class Gateway_Submission {
 		// The status the merchant stored as THIS gateway's POS Order Status (§3.1 `settled`),
 		// read once before the gateway runs and compared with the fresh order after it.
 		$settled_status = ( new Gateway_Contract() )->get_settled_order_status( $descriptor['id'] );
-		// A gateway's update_status() onto the stored status runs maybe_set_date_paid(), which
-		// asks this filter. Orders::payment_complete_order_status() (priority 10) already answers
-		// '' in that case since #2176; this closure repeats the answer at PHP_INT_MAX so a
-		// third-party filter between the two cannot hand back the order's current (stored) status,
-		// which is what makes maybe_set_date_paid() stamp date_paid on a sale nobody paid
-		// (Ledger::balance() would then read 0). Answer ''
-		// only while the order already reads the stored status AND has no date_paid yet:
-		// maybe_set_date_paid() asks only while date_paid is empty, whereas
-		// payment_complete() stamps date_paid on the line before it asks (and may ask while the
-		// order already sits on the stored status, e.g. a second submission of an on-hold order),
-		// so observed money always passes through and keeps the merchant's status.
-		$suppress_date_paid = static function ( $status, $id, $filtered ) use ( $order, $settled_status ) {
-			return (int) $id === $order->get_id() && $filtered instanceof \WC_Abstract_Order && $filtered->has_status( $settled_status ) && ! $filtered->get_date_paid( 'edit' ) ? '' : $status;
-		};
+		// Armed at PHP_INT_MAX so a third-party filter between priority 10 and here cannot hand
+		// back the stored status while date_paid is empty; the rule is Paid_Date_Suppression.
+		$suppress_date_paid = Paid_Date_Suppression::filter_for( $order->get_id(), $settled_status );
 		try {
 			// A REST request has no WooCommerce session, cart or customer; wc_add_notice() /
 			// wc_clear_notices() (validate_fields(), most process_payment() implementations)
