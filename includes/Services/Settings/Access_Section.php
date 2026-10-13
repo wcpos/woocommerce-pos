@@ -39,6 +39,12 @@ class Access_Section implements Settings_Section_Interface {
 	}
 
 	/**
+	 * Capabilities the app's gates read that the Access screen never offers as toggles: they are
+	 * WordPress's and WooCommerce's own. Reported in effective_capabilities() when held.
+	 */
+	public const REPORTED_ONLY_CAPABILITIES = array( 'manage_woocommerce', 'delete_users' );
+
+	/**
 	 * Get the flat list of capability names.
 	 *
 	 * @return array
@@ -50,7 +56,8 @@ class Access_Section implements Settings_Section_Interface {
 	}
 
 	/**
-	 * Capabilities the user can actually exercise, in the Access-settings vocabulary.
+	 * Capabilities the user can actually exercise: the Access-settings vocabulary, then the
+	 * reported-only names in REPORTED_ONLY_CAPABILITIES.
 	 *
 	 * The user_can() check is what every REST permission callback asks, so it is the
 	 * answer the client must be given; it also runs the `user_has_cap` filter that
@@ -61,8 +68,8 @@ class Access_Section implements Settings_Section_Interface {
 	 *
 	 * @param WP_User $user User to report on.
 	 *
-	 * @return string[] Capability names, in capability_names() order, then `manage_woocommerce`
-	 *                  when the user holds it (reported for the app's gates, never a toggle).
+	 * @return string[] Capability names, in capability_names() order, then each reported-only
+	 *                  capability the user holds (read by the app's gates, never a toggle).
 	 */
 	public static function effective_capabilities( WP_User $user ): array {
 		$names = self::capability_names();
@@ -89,10 +96,13 @@ class Access_Section implements Settings_Section_Interface {
 				}
 			)
 		);
-		// Reported, never a toggle: the WooCommerce manager capability. The app gates a card
-		// provider's terms (Tap to Pay) on it, so it is sent whenever the user holds it.
-		if ( user_can( $user, 'manage_woocommerce' ) ) {
-			$effective[] = 'manage_woocommerce';
+		// Reported, never toggles: capabilities the app's gates read that are not the Access
+		// screen's to grant. `manage_woocommerce` gates a card provider's terms (Tap to Pay);
+		// `delete_users` gates deleting a customer. Each is sent whenever the user holds it.
+		foreach ( self::REPORTED_ONLY_CAPABILITIES as $cap ) {
+			if ( user_can( $user, $cap ) ) {
+				$effective[] = $cap;
+			}
 		}
 
 		return $effective;
