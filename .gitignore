@@ -35,6 +35,7 @@ yarn.lock
 hookdocs
 *.cache
 phpunit.xml
+.phpunit.shard.xml
 tests/logs/junit.xml
 .turbo
 playwright-report/
