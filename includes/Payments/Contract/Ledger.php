@@ -247,7 +247,11 @@ class Ledger {
 			}
 			unset( $row );
 			if ( $value !== $before ) {
-				$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( array( 'schema' => self::SCHEMA, 'payments' => array_map( array( __CLASS__, 'to_wire' ), $value['payments'] ) ) ) );
+				$wire = array(
+					'schema'   => self::SCHEMA,
+					'payments' => array_map( array( __CLASS__, 'to_wire' ), $value['payments'] ),
+				);
+				$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $wire ) );
 			}
 			return;
 		}
