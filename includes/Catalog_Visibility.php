@@ -194,12 +194,8 @@ final class Catalog_Visibility {
 		}
 
 		$forced = $this->forced_visibility( $product );
-		if ( null === $forced ) {
-			if ( ! $product->meta_exists( self::PRIOR_META ) ) {
-				return; // Never forced, so there is nothing to put back.
-			}
-			// Forced before the filter opted this product out; the recorded prior still wins.
-			$forced = 'hidden';
+		if ( null === $forced && ! $product->meta_exists( self::PRIOR_META ) ) {
+			return; // Never forced, so there is nothing to put back.
 		}
 
 		$changed = false;
@@ -211,7 +207,11 @@ final class Catalog_Visibility {
 			$product->delete_meta_data( self::PRIOR_META );
 			$changed = true;
 		}
-		if ( $forced === $product->get_catalog_visibility() ) {
+		// The value WCPOS forced is whatever the filter says now. A product forced
+		// before the filter later opted it out has a prior but no current forced
+		// value to compare against, so the recorded prior wins outright: the filter
+		// has handed the catalog visibility back to the merchant.
+		if ( ( null === $forced || $forced === $product->get_catalog_visibility() ) && $prior !== $product->get_catalog_visibility() ) {
 			$product->set_catalog_visibility( $prior );
 			$changed = true;
 		}

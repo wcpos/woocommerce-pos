@@ -699,4 +699,28 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 			'opt-out' => array( null ),
 		);
 	}
+
+	/**
+	 * A product forced to a custom value, then opted out before leaving, still gets its prior back.
+	 */
+	public function test_catalog_visibility_filter_opting_out_after_forcing_search_restores_prior(): void {
+		// Arrange.
+		$id     = ProductHelper::create_simple_product()->get_id();
+		$search = static function () {
+			return 'search';
+		};
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $search );
+		$this->set_visibility( $id );
+		$this->assertSame( 'search', wc_get_product( $id )->get_catalog_visibility() );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $search );
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+
+		// Act.
+		$this->set_visibility( $id, '' );
+
+		// Assert.
+		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+	}
 }
