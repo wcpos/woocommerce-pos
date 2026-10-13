@@ -133,4 +133,26 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 		remove_filter( 'wcpos_rest_site_info', $filter );
 		$this->assertEquals( 'extension-value', $response->get_data()['extension_field'] );
 	}
+
+	/**
+	 * Discovery omits the retired server toggle even when stored as enabled.
+	 */
+	public function test_site_payload_omits_use_jwt_as_param(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_tools',
+			array(
+				'use_jwt_as_param' => true,
+			)
+		);
+		wp_set_current_user( 0 );
+
+		// Act.
+		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'use_jwt_as_param', $data );
+	}
 }
