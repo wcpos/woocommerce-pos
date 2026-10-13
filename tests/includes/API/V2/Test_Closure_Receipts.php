@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
@@ -18,6 +19,29 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 /** Stored figures, live sessions and independent print bookkeeping. */
 class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
+
+	/** An unreadable restriction must not coerce into an unassigned closure's store. */
+	public function test_document_unreadable_store_restriction_denies_an_unassigned_closure(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Closure_Store();
+		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$wpdb->update( $store->table_name(), array( 'store_id' => null ), array( 'id' => $row['id'] ) );
+		$filter = static function () {
+			return array( 'store_id' => array( 'invalid' ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			// Act.
+			$absent = $this->document( 'closure:' . wp_generate_uuid4() );
+			$response = $this->document( 'closure:' . $row['id'] );
+			// Assert.
+			$this->assertSame( $absent->get_status(), $response->get_status() );
+			$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
+	}
 
 	/** Read a document without requiring an unrelated order.
 	 *

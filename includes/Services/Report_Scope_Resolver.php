@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use DateTimeImmutable;
 use DateTimeZone;
-use WCPOS\WooCommercePOS\Logger;
 use WP_Error;
 
 /** Loads stored scope facts before the gate; builds query bounds only after it. */
@@ -26,8 +25,8 @@ final class Report_Scope_Resolver {
 		$session = null;
 		$closure = null;
 		$register_id = $args['register_id'] ?? null;
-		$allowed = self::allowed_store_ids( $request );
-		if ( array() === $allowed ) {
+		$reach = Store_Reach::for_request( $request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/reports' ) );
+		if ( array() === $reach->store_ids() ) {
 			// A caller allowed no stores at all can read no report.
 			return new WP_Error( 'wcpos_report_not_found', __( 'Report not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
@@ -35,7 +34,7 @@ final class Report_Scope_Resolver {
 			$session = ( new Register_Session_Store() )->get( $args['session_id'] );
 			// Out of scope answers exactly as absent does, and before the closed check, so the
 			// refusal cannot be read as "this session exists elsewhere, and it is still open".
-			if ( ! $session || ! self::row_in_scope( $session['store_id'], $allowed ) ) {
+			if ( ! $session || ! $reach->admits( $session['store_id'] ) ) {
 				return new WP_Error( 'wcpos_report_session_not_found', __( 'Session not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 			}
 			if ( empty( $session['closure_id'] ) || empty( $session['closed_at_gmt'] ) ) {
@@ -63,7 +62,7 @@ final class Report_Scope_Resolver {
 		if ( null !== $register_id && ! $register ) {
 			return new WP_Error( 'wcpos_report_register_not_found', __( 'Register not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
-		if ( ! $session && null !== $register_id && ! self::row_in_scope( $register['store_id'], $allowed ) ) {
+		if ( ! $session && null !== $register_id && ! $reach->admits( $register['store_id'] ) ) {
 			return new WP_Error( 'wcpos_report_register_not_found', __( 'Register not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		// A closed session retains its store even if its register has since moved.
@@ -74,7 +73,7 @@ final class Report_Scope_Resolver {
 		// A store named outright is checked the same way a row's store is. A store nobody named
 		// leaves $store_id at 0, and there is nothing to authorize: scoping the query is then the
 		// report's own responsibility per the contract.
-		if ( isset( $args['store_id'] ) && ! self::row_in_scope( $args['store_id'], $allowed ) ) {
+		if ( isset( $args['store_id'] ) && ! $reach->admits( $args['store_id'] ) ) {
 			return new WP_Error( 'wcpos_report_not_found', __( 'Report not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		$resolver = new Receipt_Store_Resolver( wcpos_get_store( $store_id ) );
@@ -90,7 +89,7 @@ final class Report_Scope_Resolver {
 				// its live name is out-of-scope metadata — and renaming it would otherwise leak
 				// through every replay of the old session. Fall back to the label the closure
 				// captured at the time, which is what the closure builder prints anyway.
-				'register_name' => ( $session && ! self::row_in_scope( $register['store_id'] ?? null, $allowed ) )
+				'register_name' => ( $session && ! $reach->admits( $register['store_id'] ?? null ) )
 					? (string) ( $closure['breakdowns']['labels']['register_name'] ?? '' )
 					: ( $register['name'] ?? '' ),
 				'timezone' => $timezone->getName(),
@@ -104,7 +103,7 @@ final class Report_Scope_Resolver {
 				'business_day' => $session
 					? ( $session['business_day'] ?? ( new DateTimeImmutable( $session['opened_at_gmt'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' ) )
 					: ( new DateTimeImmutable( 'today', $timezone ) )->format( 'Y-m-d' ),
-				'allowed_store_ids' => $allowed,
+				'allowed_store_ids' => $reach->store_ids(),
 				'session' => $session,
 				'closure' => $closure,
 			)
@@ -144,88 +143,6 @@ final class Report_Scope_Resolver {
 			'from_utc' => $from->setTimezone( $utc )->format( 'Y-m-d H:i:s' ),
 			'to_utc' => $to->setTimezone( $utc )->format( 'Y-m-d H:i:s' ),
 		);
-	}
-
-	/**
-	 * The stores this caller may reach, or null when unrestricted.
-	 *
-	 * `woocommerce_pos_closures_list_args` reads like a filter for list arguments, but called
-	 * with an **empty base** it is the store-authorization seam: Pro answers it with the stores
-	 * the caller may reach, and `Fiscal_Record_Store::resolve_document()` uses it exactly this
-	 * way before handing back a closure or X-report. Without consulting it, a manager scoped to
-	 * one store could name another store's `session_id` or `register_id` and receive a document
-	 * whose scope carries that store's register name and closure number.
-	 *
-	 * @param \WP_REST_Request|null $request Request passed to the seam.
-	 * @return int[]|null
-	 */
-	private static function allowed_store_ids( ?\WP_REST_Request $request ): ?array {
-		$args = apply_filters(
-			'woocommerce_pos_closures_list_args',
-			array(),
-			$request ?? new \WP_REST_Request( 'GET', '/wcpos/v2/reports' )
-		);
-		if ( ! \is_array( $args ) ) {
-			// A filter that answers with something other than an array has malfunctioned, and we
-			// cannot know what this caller may reach. Deny — `array()` is the allow-nothing scope
-			// the caller refuses on. Returning null here would read as "unrestricted" and hand
-			// every store out at precisely the moment something is wrong: the safe-looking
-			// fallback is the unsafe one.
-			Logger::warning(
-				'Report scope refused: woocommerce_pos_closures_list_args did not return an array',
-				array( 'type' => \gettype( $args ) )
-			);
-			return array();
-		}
-		// An array without a store_id key is the ordinary unrestricted case: no Pro plugin is
-		// scoping this caller. That is not the same as a malformed answer.
-		if ( ! array_key_exists( 'store_id', $args ) ) {
-			return null;
-		}
-		// The values have to be validated before coercion, not after. `intval()` turns `false`,
-		// `null` or `'invalid'` into 0 — and `row_in_scope()` turns a row's NULL store into 0 too,
-		// so a malformed restriction would match exactly the unassigned rows the restriction is
-		// there to protect. A restriction we cannot read is a restriction we must not guess at.
-		$ids = array();
-		foreach ( (array) $args['store_id'] as $id ) {
-			// Deliberately narrower than is_numeric(), which accepts shapes that then *coerce* into
-			// a different, plausible-looking restriction rather than failing: 1.9 and '1.9' and
-			// ' 1' all become store 1, '1e2' becomes store 100, '007' becomes store 7. Silently
-			// turning an unreadable restriction into a readable one is the same guessing this
-			// guard exists to prevent — only harder to notice, because the result looks valid.
-			$well_formed = ( \is_int( $id ) && $id > 0 )
-				|| ( \is_string( $id ) && preg_match( '/^[1-9][0-9]*$/D', $id ) );
-			if ( ! $well_formed ) {
-				Logger::warning(
-					'Report scope refused: woocommerce_pos_closures_list_args gave an unreadable store restriction',
-					array( 'type' => \gettype( $id ) )
-				);
-				return array();
-			}
-			$ids[] = (int) $id;
-		}
-		return $ids;
-	}
-
-	/**
-	 * Whether an addressed resource's store is within the caller's scope.
-	 *
-	 * Membership is required whenever a scope is in force, with **no exemption for 0**. The
-	 * `store_id` columns on the sessions, registers and closures tables are all `BIGINT NULL`, so
-	 * an unassigned row casts to 0; treating 0 as "nothing was named" would let a scoped caller
-	 * read any unassigned register or session. `Fiscal_Record_Store::resolve_document()` refuses
-	 * the same row, and this must not be laxer than the read it sits beside.
-	 *
-	 * Every refusal built on this answers **404, not 403**: out of scope reads as absent, as it
-	 * does on the records and closures reads, so a scoped manager cannot probe what exists
-	 * elsewhere. That is the opposite of `Report_Scope_Gate`'s 403, which is a tier boundary the
-	 * merchant is meant to see and the app turns into a *See Pro* button.
-	 *
-	 * @param mixed      $store_id The row's store, possibly null.
-	 * @param int[]|null $allowed  Allowed stores, or null when unrestricted.
-	 */
-	private static function row_in_scope( $store_id, ?array $allowed ): bool {
-		return null === $allowed || \in_array( (int) $store_id, $allowed, true );
 	}
 
 	/** Conflicting identifiers cannot widen a report's scope. */

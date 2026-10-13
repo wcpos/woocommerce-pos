@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use DateTimeImmutable;
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
@@ -120,6 +121,7 @@ class Records_Controller extends WP_REST_Controller {
 		}
 		/** Filter authorized history scope; Pro may constrain store_id. */
 		$args = apply_filters( 'woocommerce_pos_records_list_args', $args, $request );
+		$args = Store_Reach::for_request( $request )->narrow( $args );
 		$store = new Fiscal_Record_Store();
 		$response = new WP_REST_Response( $store->list( $args ) );
 		$total = $store->count( $args );
@@ -139,9 +141,8 @@ class Records_Controller extends WP_REST_Controller {
 		if ( ! $row ) {
 			return $this->not_found();
 		}
-		// The same store scope the list applies (Pro sets store_id); out of scope reads as absent.
-		$args = apply_filters( 'woocommerce_pos_records_list_args', array(), $request );
-		if ( isset( $args['store_id'] ) && ! in_array( (int) $row['store_id'], array_map( 'intval', (array) $args['store_id'] ), true ) ) {
+		// Out of reach reads as absent.
+		if ( ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 			return $this->not_found();
 		}
 		return new WP_REST_Response( $row );

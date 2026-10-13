@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Provenance_Health;
 use WCPOS\WooCommercePOS\Services\Register_Store;
@@ -115,7 +116,7 @@ class Registers_Controller extends WP_REST_Controller {
 			$args['store_id'] = (int) $request['store_id'];
 		}
 		/** Filter authorized store scope for the register list. */
-		$args = apply_filters( 'woocommerce_pos_registers_list_args', $args, $request );
+		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', $args, $request ) );
 		return new WP_REST_Response( ( new Register_Store() )->list( $args ) );
 	}
 
@@ -126,7 +127,7 @@ class Registers_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function get_health( $request ) {
-		$args = apply_filters( 'woocommerce_pos_registers_list_args', array( 'status' => 'all' ), $request );
+		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', array( 'status' => 'all' ), $request ) );
 		$registers = ( new Register_Store() )->list( $args );
 		$known_ids = array_column( ( new Register_Store() )->list( array( 'status' => 'all' ) ), 'id' );
 		$store_ids = isset( $args['store_id'] ) ? (array) $args['store_id'] : null;
@@ -145,7 +146,7 @@ class Registers_Controller extends WP_REST_Controller {
 	 */
 	public function get_item( $request ) {
 		$row = ( new Register_Store() )->get( strtolower( $request['id'] ) );
-		return $row ? new WP_REST_Response( $row ) : $this->not_found();
+		return $row && Store_Reach::for_request( $request )->admits( $row['store_id'] ) ? new WP_REST_Response( $row ) : $this->not_found();
 	}
 
 	/**
@@ -158,7 +159,7 @@ class Registers_Controller extends WP_REST_Controller {
 		$store = new Register_Store();
 		$id = strtolower( $request['id'] );
 		$row = $store->get( $id );
-		if ( ! $row ) {
+		if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 			return $this->not_found();
 		}
 		$fields = $this->validated_fields( $request, false );

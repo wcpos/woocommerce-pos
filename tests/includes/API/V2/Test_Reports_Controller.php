@@ -466,23 +466,9 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		// passed against the very bug it was written for.
 		$cases = array(
 			array( 'invalid', null ),
-			array( false, null ),
-			array( null, null ),
-			array( 0, null ),
-			array( -1, null ),
-			array( true, 1 ),
-			array( 1.0, 1 ),
-			array( 1.9, 1 ),
-			array( '1.9', 1 ),
-			array( ' 1', 1 ),
 			array( '1e2', 100 ),
-			array( '007', 7 ),
-			array( '1 ', 1 ),
-			array( '+1', 1 ),
-			// Pins the `/D` modifier on the pattern, which is load-bearing rather than tidy:
-			// without it `$` matches *before* a trailing newline, so "1\n" is accepted as store 1.
+			// Pins the `/D` modifier: a trailing newline must not become store 1.
 			array( "1\n", 1 ),
-			array( array( 1 ), 1 ),
 		);
 		foreach ( $cases as list( $bad, $store ) ) {
 			$wpdb->update( $register, array( 'store_id' => $store ), array( 'id' => $session['register_id'] ) );

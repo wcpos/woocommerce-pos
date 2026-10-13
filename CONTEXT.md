@@ -76,3 +76,29 @@ THE content fingerprint of a record — a sha256 over its schema-scoped, canonic
 serialization, computed at read time, never stored. The `baseRevision` a client echoes for
 optimistic concurrency.
 _Avoid_: version, hash (unqualified), rev
+
+### Till
+
+**Register**:
+The server record of one cash drawer: sessions open on it and its closures number in one gap-free sequence. It belongs to at most one store (`store_id` is NULL on Free and for an unassigned register). Only an administrator moves it between stores, and only while no session is open. A move carries no history, because every closure records the store its register belonged to when it was written. A register is the drawer, not the device: several devices may point at one register.
+_Avoid_: till (in code or UI), terminal, device, station
+
+**Till session**:
+One register's opened-to-closed period, `open` → `counting` → `closed`. It opens with a counted float and closes with a count. It is keyed on the register, never the cashier. The code says `session` in `Register_Session_Store`, `Sessions_Controller` and `/wcpos/v2/sessions`. That is not the auth session (a refresh-token family in `Session_Registry`), so say "till session" wherever the two could meet.
+_Avoid_: shift, drawer session, cash session; bare "session" in auth code
+
+**Closure**:
+The immutable, numbered document `Closure_Store::create()` writes once when a till session closes. It holds expected, counted and variance per payment method, the period and perpetual grand totals, and the breakdowns as recorded. It is never edited: a later change is a Correction that points at it. Its print is the Z-report. The X-report is a live print of an open session and is never stored.
+_Avoid_: Z-report (for the record), end of day, shift report
+
+**Business day**:
+The trading day a till session, and so its closure, belongs to: the date in the store's timezone on which the session opened. It is stamped on the session at opening and copied onto the closure. The closure never takes it from its own request. A session that runs past midnight is one day's trade. Legacy unstamped rows derive it from `opened_at_gmt` in `wp_timezone()`, the way `Activator::upgrade_business_days()` back-fills them.
+_Avoid_: calendar day, day start, cutoff time
+
+**Correction**:
+A write-once fiscal record with a `closure_id`. It changes what a closure settles to without touching the closure. The types are `recount`, `late_sale`, `late_refund` (including a post-closure `reallocation` between tenders) and `late_movement`. A closure reads as recorded plus its corrections. `Closure_Store::corrections_for()` is the one projection.
+_Avoid_: adjustment, amendment, edit, re-close
+
+**Store reach**:
+The stores whose registers, till sessions, closures, fiscal records and reports one caller may read. The Store Reach module resolves it once per request from `woocommerce_pos_closures_list_args` applied to an EMPTY base. No `store_id` key means unrestricted. A well-formed list, even an empty one, restricts. Anything unreadable denies everything. A NULL-store row is never within a restricted reach. A named record out of reach answers exactly as an absent one (404, never 403). A collection is narrowed in its SQL. This is not the Store scope, which is the store a till *claims* (`X-WCPOS-Store`), and not the Report Scope Gate, which is the tier boundary (a visible 403).
+_Avoid_: store scope (for this), authorized-stores filter, store permission

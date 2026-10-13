@@ -41,7 +41,7 @@ final class Closure_Csv {
 	 * cache this union outside the scope.
 	 *
 	 * @param Closure_Store $store Closure store.
-	 * @param array         $scope Authorization scope from woocommerce_pos_closures_list_args.
+	 * @param array         $scope List args from `Store_Reach::narrow()`: only `store_id`, when restricted.
 	 *                             Required, with no default: a default meaning "no scope"
 	 *                             would let a future caller export every store by omission.
 	 * @throws \RuntimeException On read, stream or page-limit failure.

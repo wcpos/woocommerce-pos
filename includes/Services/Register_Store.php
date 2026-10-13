@@ -163,7 +163,12 @@ final class Register_Store {
 		$table = $this->table_name();
 		$where = array( '1=1' );
 		if ( array_key_exists( 'store_id', $args ) ) {
-			$where[] = null === $args['store_id'] ? 'store_id IS NULL' : $wpdb->prepare( 'store_id = %d', $args['store_id'] );
+			if ( is_array( $args['store_id'] ) ) {
+				$ids = array_map( 'intval', $args['store_id'] );
+				$where[] = $ids ? 'store_id IN (' . implode( ',', $ids ) . ')' : '1=0';
+			} else {
+				$where[] = null === $args['store_id'] ? 'store_id IS NULL' : $wpdb->prepare( 'store_id = %d', $args['store_id'] );
+			}
 		}
 		if ( isset( $args['status'] ) && 'all' !== $args['status'] ) {
 			$where[] = $wpdb->prepare( 'status = %s', $args['status'] );
