@@ -463,6 +463,11 @@ class Auth extends WP_REST_Controller {
 				continue;
 			}
 
+			// Only rows the caller may manage: a shop manager does not see administrators' sessions.
+			if ( ! $auth_service->can_manage_user_sessions( (int) $user_id ) ) {
+				continue;
+			}
+
 			$sessions = $auth_service->get_user_sessions( (int) $user_id );
 
 			// Only include users with active sessions.

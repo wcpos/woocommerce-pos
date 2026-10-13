@@ -732,6 +732,69 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Shop managers cannot manage an administrator's sessions.
+	 */
+	public function test_can_manage_user_sessions_shop_manager_targeting_administrator_returns_false(): void {
+		// Arrange.
+		$shop_manager_id = $this->factory->user->create(
+			array(
+				'role' => 'shop_manager',
+			)
+		);
+		wp_set_current_user( $shop_manager_id );
+
+		// Act.
+		$can_manage = $this->auth_service->can_manage_user_sessions( $this->test_user->ID );
+
+		// Assert.
+		$this->assertFalse( $can_manage );
+	}
+
+	/**
+	 * Shop managers can manage cashiers even when cashiers can edit users.
+	 */
+	public function test_can_manage_user_sessions_shop_manager_targeting_cashier_returns_true(): void {
+		// Arrange.
+		$shop_manager_id = $this->factory->user->create(
+			array(
+				'role' => 'shop_manager',
+			)
+		);
+		$cashier_id      = $this->factory->user->create(
+			array(
+				'role' => 'cashier',
+			)
+		);
+		wp_set_current_user( $shop_manager_id );
+		$this->assertTrue( user_can( $cashier_id, 'edit_users' ) );
+
+		// Act.
+		$can_manage = $this->auth_service->can_manage_user_sessions( $cashier_id );
+
+		// Assert.
+		$this->assertTrue( $can_manage );
+	}
+
+	/**
+	 * Administrators can manage another administrator's sessions.
+	 */
+	public function test_can_manage_user_sessions_administrator_targeting_other_administrator_returns_true(): void {
+		// Arrange.
+		$administrator_id = $this->factory->user->create(
+			array(
+				'role' => 'administrator',
+			)
+		);
+		wp_set_current_user( $this->test_user->ID );
+
+		// Act.
+		$can_manage = $this->auth_service->can_manage_user_sessions( $administrator_id );
+
+		// Assert.
+		$this->assertTrue( $can_manage );
+	}
+
+	/**
 	 * Test permission checking for non-admin.
 	 */
 	public function test_non_admin_cannot_manage_others_sessions(): void {
