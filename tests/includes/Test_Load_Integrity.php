@@ -42,20 +42,10 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	private $api = null;
 
 	/**
-	 * Original mtimes of shipped files a test touched, restored in tearDown.
-	 *
-	 * @var array<string, int>
-	 */
-	private $touched = array();
-
-	/**
 	 * Remove fixtures, deepest first.
 	 */
 	public function tearDown(): void {
-		foreach ( $this->touched as $file => $mtime ) {
-			touch( $file, $mtime );
-		}
-		$this->touched = array();
+		delete_option( 'auto_updater.lock' );
 		$missed        = new \ReflectionProperty( Load_Integrity::class, 'missed' );
 		$missed->setAccessible( true );
 		$missed->setValue( null, array() );
@@ -357,8 +347,8 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	 * The REST boundary turns a missing WCPOS class into a retryable 503.
 	 */
 	public function test_rest_dispatch_returns_503_for_a_missing_wcpos_class(): void {
-		// Arrange: the file was just written, as an update copying it in.
-		$this->touch_shipped( 'Services/Session_Registry.php' );
+		// Arrange: core's updater holds its lock, as during an auto-update.
+		update_option( 'auto_updater.lock', time() );
 		$api     = $this->api();
 		$route   = $this->wcpos_route();
 		$handler = array(
@@ -431,7 +421,7 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 	 * A fatal before dispatch (auth, CORS) on a WCPOS REST request becomes a 503 page.
 	 */
 	public function test_fatal_page_is_503_only_for_a_wcpos_rest_request_mid_update(): void {
-		$this->touch_shipped( 'Services/Session_Registry.php' );
+		update_option( 'auto_updater.lock', time() );
 		$args  = array( 'response' => 500 );
 		$error = array( 'message' => 'Uncaught Error: Class "WCPOS\\WooCommercePOS\\Services\\Session_Registry" not found in /x/Auth.php:28' );
 		$saved = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Saved verbatim to restore it.
@@ -557,19 +547,6 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 			}
 		}
 		$this->fail( 'No /wcpos/v2/cashier route registered.' );
-	}
-
-	/**
-	 * Mark a shipped file as just written, restoring its mtime in tearDown.
-	 *
-	 * @param string $relative Path under includes/.
-	 */
-	private function touch_shipped( string $relative ): void {
-		$file = $this->includes() . $relative;
-		if ( ! isset( $this->touched[ $file ] ) ) {
-			$this->touched[ $file ] = (int) filemtime( $file );
-		}
-		touch( $file );
 	}
 
 	/**
