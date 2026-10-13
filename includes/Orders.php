@@ -23,6 +23,7 @@ use WC_Product;
 use WC_Product_Simple;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
+use WCPOS\WooCommercePOS\Payments\Paid_Date_Suppression;
 
 /**
  * Orders Class
@@ -160,16 +161,7 @@ class Orders {
 	 * POS orders are also matched by order origin because gateway webhooks and
 	 * reconciliation crons complete payment outside POS requests.
 	 *
-	 * A configured status WooCommerce does not itself call paid is not answered
-	 * while the order already reads as it with no date_paid. Two callers ask:
-	 * WC_Order::maybe_set_date_paid() asks from set_status(), after the status
-	 * prop has moved, and stamps date_paid when has_status( <answer> ) is true —
-	 * so a gateway landing a POS order on its stored pending, on-hold or failed
-	 * status with its own update_status() would book an unpaid sale as revenue.
-	 * Answering '' there fails has_status() and nothing is stamped.
-	 * payment_complete() asks while the order still reads its previous status,
-	 * and has stamped date_paid itself just before, so it gets the configured
-	 * status as before and a real payment is still booked.
+	 * Paid_Date_Suppression distinguishes unpaid status writes from real payments.
 	 *
 	 * @param string            $status Order status.
 	 * @param int               $id     Order ID.
@@ -182,8 +174,7 @@ class Orders {
 			$configured = $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
 
 			if (
-				$order->get_status() === $configured
-				&& ! $order->get_date_paid( 'edit' )
+				Paid_Date_Suppression::withholds( $order, $configured )
 				&& ! \in_array( $configured, wc_get_is_paid_statuses(), true )
 			) {
 				return '';
@@ -242,12 +233,7 @@ class Orders {
 	/**
 	 * Suppress the date_paid stamp for one order until the gateway's status write.
 	 *
-	 * Scoped to the order id: a status-transition handler can call
-	 * payment_complete() on a *different* order while this filter is live
-	 * (subscriptions, bundles and gift-card plugins all do), and an
-	 * unconditional '' would reach that order too — set_status() rejects an
-	 * unknown status and falls back to 'pending', leaving an order that was
-	 * just paid sitting unpaid.
+	 * Scoped to the order id by Paid_Date_Suppression.
 	 *
 	 * Released on `woocommerce_after_order_object_save` for that order once the
 	 * save is the status write it was armed for (see
@@ -263,24 +249,8 @@ class Orders {
 			return;
 		}
 
-		/*
-		 * Only the write that lands the order on the configured status is
-		 * suppressed. WC_Order::set_status() has already moved the status prop
-		 * when maybe_set_date_paid() asks this filter, so the order reads as the
-		 * configured status there; payment_complete() asks it while the order
-		 * still sits on its previous status, and is passed through untouched.
-		 */
-		$suppress = static function ( $payment_status, $filtered_order_id, $filtered_order = null ) use ( $order_id, $configured ) {
-			if ( (int) $filtered_order_id !== $order_id ) {
-				return $payment_status;
-			}
-
-			if ( $filtered_order instanceof WC_Abstract_Order && $filtered_order->get_status() !== $configured ) {
-				return $payment_status;
-			}
-
-			return '';
-		};
+		// See Paid_Date_Suppression for the shared withholding rule.
+		$suppress = Paid_Date_Suppression::filter_for( $order_id, $configured );
 
 		$this->paid_date_suppressions[ $order_id ] = array(
 			'filter' => $suppress,
@@ -465,24 +435,13 @@ class Orders {
 		}
 
 		/*
-		 * payment_complete_order_status() reports the configured status as this
-		 * order's paid status, which makes WC_Order::set_status() stamp date_paid
-		 * the moment the status changes — booking an unpaid order as revenue. No
-		 * payment was taken here, so suppress it for this transition only.
-		 *
-		 * Scoped to this order id: a status-transition handler can call
-		 * payment_complete() on a *different* order while this filter is live
-		 * (subscriptions, bundles and gift-card plugins all do), and an
-		 * unconditional '' would reach that order too — set_status() rejects an
-		 * unknown status and falls back to 'pending', leaving an order that was
-		 * just paid sitting unpaid.
+		 * See Paid_Date_Suppression for the shared withholding rule.
+		 * A paid configured status is suppressed here too because no money was taken.
 		 */
 		$target_id          = $order->get_id();
-		$suppress_paid_date = static function ( $payment_status, $filtered_order_id ) use ( $target_id ) {
-			return (int) $filtered_order_id === $target_id ? '' : $payment_status;
-		};
+		$suppress_paid_date = Paid_Date_Suppression::filter_for( $target_id, $status );
 
-		add_filter( 'woocommerce_payment_complete_order_status', $suppress_paid_date, PHP_INT_MAX, 2 );
+		add_filter( 'woocommerce_payment_complete_order_status', $suppress_paid_date, PHP_INT_MAX, 3 );
 
 		try {
 			/*
