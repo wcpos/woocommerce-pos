@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\i18n;
 use WCPOS\WooCommercePOS\Orders;
 use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Products;
 use WCPOS\WooCommercePOS\Templates;
@@ -178,6 +179,7 @@ final class Service_Groups {
 		// order-pay page is a storefront request, so this cannot wait for the
 		// deferred order services.
 		Webview_Passthrough::register_hooks();
+		Ledger::register_hooks();
 		Gateway_Submission::register_hooks();
 		Stock_Validator::instance();
 		Order_Write_Intent::register();

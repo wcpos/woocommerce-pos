@@ -326,4 +326,77 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 	}
+	/** Captured session legs alone receive the closure stamp. */
+	public function test_closure_stamps_every_leg_it_counted_and_no_other(): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
+		$before = $ledger->read( $order );
+		$store = new Closure_Store();
+		$row = $store->create( $this->closure_fields( $session ) );
+		$after = $ledger->read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( $row['id'], $after[0]['closure_id'] );
+		$this->assertSame( $row['id'], $after[1]['closure_id'] );
+		$this->assertArrayNotHasKey( 'closure_id', $after[2] );
+		$this->assertArrayNotHasKey( 'closure_id', $after[3] );
+		$this->assertSame( array_column( $before, 'updated_at_gmt' ), array_column( $after, 'updated_at_gmt' ) );
+		$this->assertSame( $row, $store->get( $row['id'] ) );
+	}
+
+	/** A failed closure leaves neither stamps nor held locks behind. */
+	public function test_failed_closure_leaves_no_stamps_and_releases_its_locks(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$store = new Closure_Store();
+		$fields = $this->closure_fields( $session );
+		$fail = static function ( $sql ) use ( $store ) {
+			return 0 === strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' ) ? 'INVALID CLOSURE INSERT' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		try {
+			$store->create( $fields );
+			$this->fail( 'Expected closure failure.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertNull( $store->get( $fields['id'] ) );
+			$this->assertSame( $session, ( new Register_Session_Store() )->get( $session['id'] ) );
+			$this->assertNull( ( new Register_Store() )->get( $session['register_id'] )['counters_started_at_gmt'] );
+			$order->read_meta_data( true );
+			foreach ( \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $order ) as $row ) {
+				$this->assertArrayNotHasKey( 'closure_id', $row );
+			}
+			$this->assertSame( '1', (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', sprintf( 'wcpos_order_%d_%d', $order->get_id(), get_current_blog_id() ) ) ) );
+			$lock = \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::instance();
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			$lock->release( $order->get_id() );
+			$this->assertSame( '1', (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK( %s )', 'wcpos_register_' . $session['register_id'] ) ) );
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+	}
+
+	/** The register is locked before the transaction and released after commit. */
+	public function test_closure_holds_the_register_lock_across_its_transaction(): void {
+		$session = $this->closure_session();
+		$queries = array();
+		$trace = static function ( $sql ) use ( &$queries ) {
+			$queries[] = $sql;
+			return $sql;
+		};
+		add_filter( 'query', $trace );
+		try {
+			( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		} finally {
+			remove_filter( 'query', $trace );
+		}
+		$sql = implode( "\n", $queries );
+		$lock = strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$release = strpos( $sql, "RELEASE_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$this->assertNotFalse( $lock );
+		$this->assertNotFalse( $release );
+		$this->assertLessThan( strpos( $sql, 'START TRANSACTION' ), $lock );
+		$this->assertGreaterThan( strpos( $sql, 'COMMIT' ), $release );
+	}
 }

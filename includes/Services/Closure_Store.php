@@ -378,7 +378,18 @@ final class Closure_Store {
 		}
 		( new Cash_Movement_Store() )->ensure_installed();
 		( new Fiscal_Record_Store() )->ensure_installed();
+		if ( ! ( new Register_Store() )->lock( $session['register_id'] ) ) {
+			Logger::warning(
+				'Closure register lock failed.',
+				array(
+					'closure_id' => $fields['id'],
+					'session_id' => $fields['session_id'],
+				)
+			);
+			throw new \RuntimeException( 'Closure register lock failed.' );
+		}
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			( new Register_Store() )->unlock( $session['register_id'] );
 			Logger::warning(
 				'Closure transaction failed.',
 				array(
@@ -398,6 +409,7 @@ final class Closure_Store {
 		// A replay found only under the register lock is logged from finally too: its
 		// transaction is rolled back on the way out and would take the row with it.
 		$replay = null;
+		$figures = null;
 		try {
 			$table = ( new Register_Store() )->table_name();
 			// The row lock lasts through commit; subsequent reads see the preceding closure.
@@ -625,6 +637,10 @@ final class Closure_Store {
 			if ( ! $created && ! $rolled_back ) {
 				$wpdb->query( 'ROLLBACK' );
 			}
+			if ( $figures ) {
+				$figures->release();
+			}
+			( new Register_Store() )->unlock( $session['register_id'] );
 			if ( $deferred ) {
 				Logger::warning( $deferred[0], $deferred[1] );
 			}

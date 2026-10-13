@@ -39,6 +39,104 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** A client cannot claim that a closure counted a payment. */
+	public function test_record_drops_a_client_closure_id(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_cash', '5.00', array( 'closure_id' => wp_generate_uuid4() ) );
+		Ledger::instance()->record( $order, $input );
+		$this->assertArrayNotHasKey( 'closure_id', Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] ) );
+	}
+
+	/** Stamping changes only the named row's closure id, including on replay. */
+	public function test_stamp_closure_stamps_only_the_named_legs_and_keeps_updated_at(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$before = $ledger->read( $order );
+		foreach ( $before as &$row ) {
+			$row['updated_at_gmt'] = '2020-01-01T00:00:00+00:00';
+		}
+		unset( $row );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $before,
+				)
+			)
+		);
+		$order->save();
+		$closure_id = wp_generate_uuid4();
+		for ( $i = 0; $i < 2; ++$i ) {
+			$ledger->stamp_closure( $order, array( $before[0]['id'] ), $closure_id );
+			$after = $ledger->read( wc_get_order( $order->get_id() ) );
+			$this->assertSame( $closure_id, $after[0]['closure_id'] );
+			$this->assertArrayNotHasKey( 'closure_id', $after[1] );
+			unset( $after[0]['closure_id'] );
+			$this->assertSame( $before, $after );
+		}
+	}
+
+	/** A locking storage read must not erase a leg appended to another object. */
+	public function test_stamp_closure_never_writes_back_a_stale_order_object(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$first = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$stale = wc_get_order( $order->get_id() );
+		$stale->get_meta( Ledger::META_KEY, true );
+		$second = $ledger->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '5.00' ) );
+		$ledger->stamp_closure( $stale, array( $first['id'] ), wp_generate_uuid4() );
+		$this->assertSame( array( $first['id'], $second['id'] ), array_column( $ledger->read( wc_get_order( $order->get_id() ) ), 'id' ) );
+	}
+
+	/** Missing ids and a different closure cannot rewrite the fiscal fact. */
+	public function test_stamp_closure_refuses_a_missing_leg_or_another_closures_leg(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$row = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$closure_id = wp_generate_uuid4();
+		try {
+			$ledger->stamp_closure( $order, array( wp_generate_uuid4() ), $closure_id );
+			$this->fail( 'Expected a missing-leg refusal.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure stamp: leg missing.', $error->getMessage() );
+		}
+		$ledger->stamp_closure( $order, array( $row['id'] ), $closure_id );
+		try {
+			$ledger->stamp_closure( $order, array( $row['id'] ), wp_generate_uuid4() );
+			$this->fail( 'Expected a different-closure refusal.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure stamp: leg belongs to another closure.', $error->getMessage() );
+		}
+		$this->assertSame( $closure_id, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] )['closure_id'] );
+	}
+
+	/** Typed-meta and JSON order pushes preserve only server-written stamps. */
+	public function test_order_save_carrying_the_ledger_keeps_server_stamps_and_drops_forged_ones(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$first = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$closure_id = wp_generate_uuid4();
+		$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+		foreach ( array( false, true ) as $json ) {
+			$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+			unset( $rows[0]['closure_id'] );
+			$rows[1]['closure_id'] = wp_generate_uuid4();
+			$value = array(
+				'schema' => Ledger::SCHEMA,
+				'payments' => $rows,
+			);
+			$order->update_meta_data( Ledger::META_KEY, $json ? wp_json_encode( $value ) : $value );
+			$order->save();
+			$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+			$this->assertSame( $closure_id, $rows[0]['closure_id'] );
+			$this->assertArrayNotHasKey( 'closure_id', $rows[1] );
+		}
+	}
+
 	/**
 	 * Saving a changed leg preserves the stored timestamp of its untouched sibling.
 	 */

@@ -96,35 +96,28 @@ final class Fiscal_Record_Writers {
 			);
 			$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
 			$sale = $this->store->find_sale( $order->get_id() );
-			$snapshot_created = (string) $order->get_meta( Receipt_Snapshot_Store::META_KEY_CREATED_AT, true );
-			// A replay of a sale already included in the closure is not a late sale.
-			if ( $closure && $sale && '' !== $snapshot_created && $snapshot_created >= $closure['received_at_gmt'] && $sale['id'] > ( $closure['last_receipt_id'] ?? 0 ) ) {
-				$rows = array_values(
-					array_filter(
-						\WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $order ),
-						static function ( $row ) use ( $closure ) {
-							return 'captured' === ( $row['status'] ?? null ) && ( $row['session_id'] ?? null ) === $closure['session_id'];
-						}
-					)
-				);
-				$delta = Session_Figures::tender_totals( $rows );
-				$this->write(
-					$order,
-					array_merge(
-						$this->store->provenance_from_order( $order ),
-						array(
-							'type' => 'late_sale',
-							'order_id' => $order->get_id(),
-							'closure_id' => $closure['id'],
-							'corrects_record_id' => $sale['id'],
-							'payload' => array(
-								'tender_rows' => $rows,
-								'expected_delta' => $delta,
-								'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
-							),
+			if ( $closure && $sale ) {
+				$rows = Session_Figures::late_legs( $order, $closure );
+				if ( $rows ) {
+					$delta = Session_Figures::tender_totals( $rows );
+					$this->write(
+						$order,
+						array_merge(
+							$this->store->provenance_from_order( $order ),
+							array(
+								'type' => 'late_sale',
+								'order_id' => $order->get_id(),
+								'closure_id' => $closure['id'],
+								'corrects_record_id' => $sale['id'],
+								'payload' => array(
+									'tender_rows' => $rows,
+									'expected_delta' => $delta,
+									'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
+								),
+							)
 						)
-					)
-				);
+					);
+				}
 			}
 		}
 	}
@@ -236,7 +229,7 @@ final class Fiscal_Record_Writers {
 			$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
 			$record = $this->store->find_refund( $order_id, $refund_id );
 			// A refund the closure counted (or a replay of one) is not late.
-			if ( $closure && $record && ! $this->closure_counted( $refund, $closure ) ) {
+			if ( $closure && $record && ! Session_Figures::counted( $refund->get_meta( '_wcpos_closure', true ), $closure ) ) {
 				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
 			}
 		} catch ( \Throwable $error ) {
@@ -280,15 +273,6 @@ final class Fiscal_Record_Writers {
 		}
 		$provenance['store_id'] = $session['store_id'] ?? $provenance['store_id'];
 		return $provenance;
-	}
-
-	/** Whether the closure's figures already include this refund.
-	 *
-	 * @param WC_Order_Refund $refund Refund object.
-	 * @param array           $closure Closure row.
-	 */
-	private function closure_counted( WC_Order_Refund $refund, array $closure ): bool {
-		return (string) $refund->get_meta( '_wcpos_closure', true ) === (string) $closure['id'];
 	}
 
 	/** Write the late-arrival correction for a refund received after its closure.
@@ -382,7 +366,7 @@ final class Fiscal_Record_Writers {
 		$provenance = $this->refund_provenance( $order, $refund );
 		// A refund the closure did not count is a late arrival whose record projects the live
 		// allocations: recover that record if its insert failed, and never write a reallocation.
-		if ( ! $this->closure_counted( $refund, $closure ) ) {
+		if ( ! Session_Figures::counted( $refund->get_meta( '_wcpos_closure', true ), $closure ) ) {
 			if ( ! $this->store->find_by_source( 'late_refund', 'refund:' . $refund->get_id() ) ) {
 				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
 			}

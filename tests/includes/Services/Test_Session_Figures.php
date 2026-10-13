@@ -160,4 +160,29 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertSame( 3, $figures->refund_count() );
 	}
+	/** Only a nonempty string matching this closure is counted. */
+	public function test_counted_requires_this_closures_id(): void {
+		$closure = array( 'id' => wp_generate_uuid4() );
+		foreach ( array( null, '', wp_generate_uuid4() ) as $stamp ) {
+			$this->assertFalse( Session_Figures::counted( $stamp, $closure ) );
+		}
+		$this->assertTrue( Session_Figures::counted( $closure['id'], $closure ) );
+	}
+
+	/** Late legs are captured, session-bound and not stamped by this closure. */
+	public function test_late_legs_are_captured_session_legs_without_this_closures_stamp(): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$ledger = Ledger::instance();
+		$rows = $ledger->read( $order );
+		$stale = clone $order;
+		$closure = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $session['id'],
+		);
+		$ledger->stamp_closure( $order, array( $rows[0]['id'] ), $closure['id'] );
+		$this->assertSame( array( $rows[1]['id'] ), array_column( Session_Figures::late_legs( $stale, $closure ), 'id' ) );
+		$ledger->stamp_closure( $order, array( $rows[1]['id'] ), wp_generate_uuid4() );
+		$this->assertSame( array( $rows[1]['id'] ), array_column( Session_Figures::late_legs( $stale, $closure ), 'id' ) );
+	}
 }

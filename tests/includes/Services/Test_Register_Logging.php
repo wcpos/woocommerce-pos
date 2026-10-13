@@ -753,4 +753,35 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 	}
+	/** A failed ledger stamp rolls back before its warning is emitted. */
+	public function test_closure_stamp_failure_is_logged_after_the_rollback(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$fields = $this->closure_fields( $session );
+		$fail = static function ( $sql ) {
+			return 0 === strpos( $sql, 'UPDATE' ) && false !== strpos( $sql, '_wcpos_payments' ) ? 'INVALID LEDGER STAMP' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		$this->logs = array();
+		$this->rollbacks = array();
+		try {
+			( new Closure_Store() )->create( $fields );
+			$this->fail( 'Expected stamp failure.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure stamp failed.', $error->getMessage() );
+			$this->assert_event( 'warning', $error->getMessage(), array( 'closure_id' => $fields['id'] ) );
+			$this->assert_logged_after_rollback( $error->getMessage() );
+			$this->assertNull( ( new Closure_Store() )->get( $fields['id'] ) );
+			$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $session['id'] )['status'] );
+			$order->read_meta_data( true );
+			foreach ( \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $order ) as $row ) {
+				$this->assertArrayNotHasKey( 'closure_id', $row );
+			}
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+	}
 }

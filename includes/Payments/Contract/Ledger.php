@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_Error;
 
 /** Persists payment legs and derives WooCommerce order payment state. */
@@ -90,14 +91,11 @@ class Ledger {
 		$raw = $order->get_meta( self::META_KEY, true );
 		// The app sends the ledger as a typed-meta object on order writes, so the value may
 		// arrive already decoded (array) rather than as the JSON string this class stores.
-		if ( is_array( $raw ) ) {
-			$decoded = $raw;
-		} elseif ( is_string( $raw ) && '' !== $raw ) {
-			$decoded = json_decode( $raw, true );
-		} else {
+		if ( ! is_array( $raw ) && ( ! is_string( $raw ) || '' === $raw ) ) {
 			return array();
 		}
-		if ( ! is_array( $decoded ) || self::SCHEMA !== ( $decoded['schema'] ?? null ) || ! isset( $decoded['payments'] ) || ! is_array( $decoded['payments'] ) ) {
+		$decoded = $this->decode( $raw );
+		if ( null === $decoded ) {
 			$id = $order->get_id();
 			if ( empty( $this->logged_invalid_ledgers[ $id ] ) ) {
 				Logger::log( sprintf( 'Invalid WCPOS payment ledger on order #%d; treating as empty.', $id ) );
@@ -106,6 +104,160 @@ class Ledger {
 			return array();
 		}
 		return $decoded['payments'];
+	}
+
+	/** Keep server stamps on every order-writing lane. */
+	public static function register_hooks(): void {
+		add_action( 'woocommerce_before_order_object_save', array( self::instance(), 'keep_closure_stamps' ), 10, 1 );
+	}
+
+	/** Decode both typed meta and the stored JSON form.
+	 *
+	 * @param mixed $raw Ledger value.
+	 */
+	private function decode( $raw ): ?array {
+		$value = is_array( $raw ) ? $raw : ( is_string( $raw ) ? json_decode( $raw, true ) : null );
+		return is_array( $value ) && self::SCHEMA === ( $value['schema'] ?? null ) && isset( $value['payments'] ) && is_array( $value['payments'] ) ? $value : null;
+	}
+
+	/** Read storage, not the possibly stale order object.
+	 *
+	 * @param int  $order_id Order id.
+	 * @param bool $lock Use a current locking read, not the transaction snapshot.
+	 * @return array|null Meta id and payments, or no readable ledger.
+	 * @throws \RuntimeException On a read failure or an invalid locked ledger.
+	 */
+	private function stored( int $order_id, bool $lock ): ?array {
+		global $wpdb;
+		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$id = $hpos ? 'id' : 'meta_id';
+		$owner = $hpos ? 'order_id' : 'post_id';
+		$suffix = $lock ? ' FOR UPDATE' : '';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage identifiers and lock clause are selected above.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT {$id} AS meta_id, meta_value FROM {$table} WHERE {$owner} = %d AND meta_key = %s ORDER BY {$id} ASC LIMIT 1{$suffix}", $order_id, self::META_KEY ), ARRAY_A );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Ledger storage read failed.' );
+		}
+		if ( ! $row ) {
+			return null;
+		}
+		$value = $this->decode( maybe_unserialize( $row['meta_value'] ) );
+		if ( null === $value ) {
+			if ( $lock ) {
+				throw new \RuntimeException( 'Ledger storage decode failed.' );
+			}
+			return null;
+		}
+		return array(
+			'meta_id' => (int) $row['meta_id'],
+			'payments' => $value['payments'],
+		);
+	}
+
+	/** Record permanently which legs a closure counted, without changing timestamps.
+	 *
+	 * The caller holds Order_Lock inside its transaction until commit or rollback.
+	 * A locking read avoids erasing legs written after the caller's snapshot began.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $row_ids Counted leg ids.
+	 * @param string   $closure_id Closure UUID.
+	 * @throws \RuntimeException On missing/conflicting legs or an unverifiable write.
+	 */
+	public function stamp_closure( WC_Order $order, array $row_ids, string $closure_id ): void {
+		$stored = $this->stored( $order->get_id(), true );
+		if ( null === $stored && $row_ids ) {
+			throw new \RuntimeException( 'Closure stamp: ledger missing.' );
+		}
+		$wanted = array_fill_keys( array_map( 'strtolower', $row_ids ), true );
+		$missing = $wanted;
+		$payments = $stored['payments'] ?? array();
+		$changed = false;
+		foreach ( $payments as &$row ) {
+			$id = strtolower( $row['id'] );
+			if ( ! isset( $wanted[ $id ] ) ) {
+				continue;
+			}
+			unset( $missing[ $id ] );
+			if ( ( $row['closure_id'] ?? null ) === $closure_id ) {
+				continue;
+			}
+			if ( ! empty( $row['closure_id'] ) ) {
+				throw new \RuntimeException( 'Closure stamp: leg belongs to another closure.' );
+			}
+			$row['closure_id'] = $closure_id;
+			$changed = true;
+		}
+		unset( $row );
+		if ( $missing ) {
+			throw new \RuntimeException( 'Closure stamp: leg missing.' );
+		}
+		if ( ! $changed ) {
+			return;
+		}
+		$json = wp_json_encode(
+			array(
+				'schema' => self::SCHEMA,
+				'payments' => array_map( array( __CLASS__, 'to_wire' ), $payments ),
+			)
+		);
+		$order->update_meta_data( self::META_KEY, $json, $stored['meta_id'] );
+		$order->save_meta_data();
+		$check = $this->stored( $order->get_id(), true );
+		foreach ( $check['payments'] ?? array() as $row ) {
+			if ( ( $row['closure_id'] ?? null ) === $closure_id ) {
+				unset( $wanted[ strtolower( $row['id'] ) ] );
+			}
+		}
+		if ( $wanted ) {
+			throw new \RuntimeException( 'Closure stamp failed.' );
+		}
+	}
+
+	/** Each pending leg inherits its stamp from storage, never the writer.
+	 *
+	 * @param mixed $order Order about to be saved.
+	 */
+	public function keep_closure_stamps( $order ): void {
+		if ( ! $order instanceof WC_Order || 0 >= $order->get_id() ) {
+			return;
+		}
+		$pending = false;
+		foreach ( $order->get_meta_data() as $meta ) {
+			if ( self::META_KEY === $meta->key && ( null === $meta->id || $meta->get_changes() ) ) {
+				$pending = true;
+				break;
+			}
+		}
+		if ( ! $pending ) {
+			return;
+		}
+		$stored = $this->stored( $order->get_id(), false );
+		$stamps = array();
+		foreach ( $stored['payments'] ?? array() as $row ) {
+			if ( ! empty( $row['closure_id'] ) ) {
+				$stamps[ strtolower( $row['id'] ) ] = $row['closure_id'];
+			}
+		}
+		$raw = $order->get_meta( self::META_KEY, true );
+		$value = $this->decode( $raw );
+		if ( null === $value ) {
+			return;
+		}
+		$before = $value;
+		foreach ( $value['payments'] as &$row ) {
+			$id = strtolower( $row['id'] );
+			if ( isset( $stamps[ $id ] ) ) {
+				$row['closure_id'] = $stamps[ $id ];
+			} else {
+				unset( $row['closure_id'] );
+			}
+		}
+		unset( $row );
+		if ( $value !== $before ) {
+			$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $value ) );
+		}
 	}
 
 	/**
@@ -187,6 +339,7 @@ class Ledger {
 	 * @return array|\WP_Error
 	 */
 	public function record( WC_Order $order, array $input, array $context = array() ) {
+		unset( $input['closure_id'] );
 		$validated = $this->validate_input( $order, $input );
 		if ( is_wp_error( $validated ) ) {
 			return $validated;

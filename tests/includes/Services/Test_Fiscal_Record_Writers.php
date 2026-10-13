@@ -483,4 +483,62 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $closure, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $closure['id'] ) );
 		$order->delete( true );
 	}
+	/** Only the newly arrived leg belongs in the correction. */
+	public function test_late_sale_freezes_only_the_legs_the_closure_did_not_count(): void {
+		$session = $this->closure_session( null, 'open' );
+		$order = $this->closure_ledger( $session );
+		$ledger = Ledger::instance();
+		$rows = array( $ledger->read( $order )[0] );
+		$ledger->save( $order, $rows, false );
+		$order->set_status( 'pos-partial' );
+		$order->save();
+		$session = ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->transition(
+			$session,
+			array(
+				'status' => 'counting',
+				'counting_started_at_gmt' => '2026-09-11 11:00:00',
+			)
+		);
+		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		$leg_b = wp_generate_uuid4();
+		$rows[] = array_merge(
+			$rows[0],
+			array(
+				'id' => $leg_b,
+				'amount' => '20',
+			)
+		);
+		$ledger->save( $order, $rows, false );
+		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, $closure['received_at_gmt'] );
+		$order->save();
+		Fiscal_Record_Writers::instance()->record_sale( $order, array( 'fiscal' => array() ), 876546 );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( array( $leg_b ), array_column( $records[0]['payload']['tender_rows'], 'id' ) );
+		$this->assertSame( '20.0000', $records[0]['payload']['expected_delta']['cash'] );
+	}
+
+	/** Snapshot clocks cannot turn counted legs into late sales. */
+	public function test_sale_counted_by_the_closure_is_not_late_whatever_its_snapshot_clock(): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, gmdate( 'Y-m-d H:i:s', strtotime( $closure['received_at_gmt'] . ' UTC' ) + HOUR_IN_SECONDS ) );
+		$order->save();
+		Fiscal_Record_Writers::instance()->record_sale( $order, array( 'fiscal' => array() ), 876547 );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'type' => 'late_sale',
+					'order_id' => $order->get_id(),
+				)
+			)
+		);
+	}
 }
