@@ -41,7 +41,6 @@ use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
-use WP_Query;
 use WP_REST_Server;
 
 /**
@@ -66,6 +65,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * The direct lane's narrowing map. `created_via` is DELIBERATELY absent: the rule row
 	 * exists (the proxy lane claims it), but `wcpos/v1` has never supported the filter and
 	 * adding it here would be a wire change, not a refactor. See `Sync\Collection_Rules`.
+	 * `search` is deliberately absent too: `wcpos/v1` order search has always been
+	 * WooCommerce's native search (no POS search was ever wired on this lane, here or on
+	 * `main`); POS order search is a `wcpos/v2` feature. Claiming it here would be a wire
+	 * change on a frozen lane, and would also need WooCommerce's own `s` handling
+	 * stripped from the request.
 	 *
 	 * @var array<string, string>
 	 */
@@ -257,7 +261,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 1 );
-		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
 		// Negative-fee tax handling is registered globally by WCPOS\WooCommercePOS\Orders
 		// (request-gated) so the v2 push forward shares it — no per-dispatch registration.
 
@@ -936,69 +939,35 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Filter the order query.
+	 * Apply the collection's declared rules for the duration of a direct read.
 	 *
-	 * @param array           $args    Query arguments.
-	 * @param WP_REST_Request $request Request object.
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|WP_REST_Response
 	 */
-	public function wcpos_shop_order_query( array $args, WP_REST_Request $request ) {
-		// Which id-set rows this request claims is the declaration table's question,
-		// not a literal list of param names — so a new `id_set` row installs on this
-		// lane too, instead of only on the proxy lane.
-		if ( $this->wcpos_collection_plan( $request )->claims_id_sets() ) {
-			if ( $this->hpos_enabled ) {
-				add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orders_table_query_clauses' ), 10, 3 );
-			} else {
-				add_filter( 'posts_where', array( $this, 'wcpos_posts_where_order_include_exclude' ), 10, 2 );
+	public function get_items( $request ) {
+		return $this->wcpos_collection_plan( $request )->around(
+			function () use ( $request ) {
+				return parent::get_items( $request );
 			}
-		}
-
-		return $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, $args );
+		);
 	}
 
 	/**
 	 * The Collection Rules plan for the order query in flight.
 	 *
-	 * One declaration table feeds both Read Lanes; this lane keeps its own `add_filter`
-	 * topology (Pro subclasses these callbacks) and delegates only the clause bodies.
+	 * The direct lane's plan; `get_items()` runs the read inside `around()`.
 	 *
-	 * @param WP_REST_Request|null $request Request to plan against, defaulting to the dispatched one.
+	 * @param WP_REST_Request $request Request to plan against.
 	 *
 	 * @return Collection_Rules_Plan
 	 */
-	private function wcpos_collection_plan( ?WP_REST_Request $request = null ): Collection_Rules_Plan {
-		$request = $request instanceof WP_REST_Request ? $request : $this->wcpos_request;
-
+	private function wcpos_collection_plan( WP_REST_Request $request ): Collection_Rules_Plan {
 		return Collection_Rules::for_request(
 			'orders',
-			$request instanceof WP_REST_Request ? $request : new WP_REST_Request(),
+			$request,
 			self::WCPOS_COLLECTION_PARAM_MAP,
 			$this->hpos_enabled ? Collection_Rules::STORAGE_HPOS : Collection_Rules::STORAGE_POSTS
 		);
-	}
-
-	/**
-	 * Filter the WHERE clause of the query.
-	 *
-	 * @param string $where WHERE clause of the query.
-	 * @param object $query The WP_Query instance.
-	 *
-	 * @return string
-	 */
-	public function wcpos_posts_where_order_include_exclude( string $where, $query ) {
-		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_WHERE, $where, $query );
-	}
-
-	/**
-	 * Filters all query clauses at once.
-	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
-	 *
-	 * @param string[] $clauses Associative array of the clauses for the query.
-	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
-	 * @param array    $args    Query args.
-	 */
-	public function wcpos_hpos_orders_table_query_clauses( array $clauses, $query, array $args ) {
-		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, $clauses, $query );
 	}
 
 	/**
@@ -1063,77 +1032,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		} catch ( Exception $e ) {
 			return Bulk_ID_Fast_Path::fetch_error( 'Error fetching order data: ' . $e->getMessage(), 'Error fetching order data.' );
 		}
-	}
-
-	/**
-	 * Filters all query clauses at once.
-	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
-	 *
-	 * @param string[] $clauses Associative array of the clauses for the query.
-	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
-	 * @param array    $args    Query args.
-	 *
-	 * @return string[] $clauses
-	 */
-	public function wcpos_hpos_orderby_query( array $clauses, $query, $args ) {
-		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_ORDERBY, $clauses, $query, (array) $args );
-	}
-
-	/**
-	 * Modify ORDER BY clause for legacy (non-HPOS) order status sorting.
-	 *
-	 * @param string   $orderby The ORDER BY clause.
-	 * @param WP_Query $query   The WP_Query instance.
-	 *
-	 * @return string Modified ORDER BY clause.
-	 */
-	public function wcpos_legacy_order_status_orderby( string $orderby, WP_Query $query ): string {
-		$rewritten = $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_ORDERBY, $orderby, $query );
-
-		// Remove filter after use. The rule rewrites the clause only for a shop_order
-		// query, so a changed value is exactly the "this was our order query" signal the
-		// inline post_type check used to provide.
-		if ( $rewritten !== $orderby ) {
-			remove_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10 );
-		}
-
-		return $rewritten;
-	}
-
-	/**
-	 * Prepare objects query.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
-	 */
-	protected function prepare_objects_query( $request ) {
-		$args = parent::prepare_objects_query( $request );
-
-		/*
-		 * Extend the orderby parameter to include custom options.
-		 * Legacy order options.
-		 */
-		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
-			// Whether the claimed sort needs the legacy rewrite is declared by the sort's
-			// own row, so a second `posts_orderby` recipe reaches both Read Lanes.
-			if ( $this->wcpos_collection_plan( $request )->needs_legacy_posts_orderby() ) {
-				// Use posts_orderby filter since post_status isn't a valid WP_Query orderby.
-				add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
-			}
-
-			$args = $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, $args );
-		}
-
-		/*
-		 * Extend the orderby parameter to include custom options.
-		 * HOPS orders options.
-		 */
-		if ( isset( $request['orderby'] ) && $this->hpos_enabled ) {
-			add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orderby_query' ), 10, 3 );
-		}
-
-		return $args;
 	}
 
 	/**

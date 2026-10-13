@@ -58,7 +58,8 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	protected $wcpos_request;
 
 	/**
-	 * Request keys the variation Collection Rules plan reads on this lane.
+	 * Request keys the variation Collection Rules plan reads on this lane
+	 * (sort, search, and the `wcpos_include`/`wcpos_exclude` id sets).
 	 *
 	 * @var array
 	 */
@@ -66,6 +67,8 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		'orderby' => 'orderby',
 		'order'   => 'order',
 		'search'  => 'search',
+		'include' => 'wcpos_include',
+		'exclude' => 'wcpos_exclude',
 	);
 
 	/**
@@ -81,7 +84,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'wcpos_variation_response' ), 10, 3 );
 		add_action( 'woocommerce_rest_insert_product_variation_object', array( $this, 'wcpos_insert_product_variation_object' ), 10, 3 );
-		add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'wcpos_product_variation_query' ), 10, 2 );
 
 		/*
 		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
@@ -325,24 +327,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	}
 
 	/**
-	 * Filter the query arguments for a request.
-	 *
-	 * @param array           $args    Key value array of query var to query value.
-	 * @param WP_REST_Request $request The request used.
-	 *
-	 * @return array $args Key value array of query var to query value.
-	 */
-	public function wcpos_product_variation_query( array $args, WP_REST_Request $request ) {
-		// Check for wcpos_include/wcpos_exclude parameter.
-		// The Collection Rules visibility backstop runs first, at priority 10.
-		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
-			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_variation_include_exclude' ), 20, 2 );
-		}
-
-		return $args;
-	}
-
-	/**
 	 * Filters the WHERE clause of the query.
 	 *
 	 * Exclusion set and feature gate both come from Sync\Pos_Visibility, the single POS visibility
@@ -358,34 +342,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		global $wpdb;
 
 		return ( new Pos_Visibility() )->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::VARIATIONS );
-	}
-
-	/**
-	 * Filters the WHERE clause of the query.
-	 *
-	 * @param string   $where The WHERE clause of the query.
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 */
-	public function wcpos_posts_where_product_variation_include_exclude( string $where, WP_Query $query ) {
-		global $wpdb;
-
-		// Handle 'wcpos_include'.
-		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
-			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
-			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
-		}
-
-		// Handle 'wcpos_exclude'.
-		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
-			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
-			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
-		}
-
-		return $where;
 	}
 
 	/**
