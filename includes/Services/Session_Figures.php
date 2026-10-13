@@ -9,11 +9,12 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 
 /**
- * One instance shares the session snapshot; Part B adds leg stamps and register serialization.
- * Captured session legs are counted by the closure; Part B marks them late without its closure_id.
+ * One instance shares the session snapshot; movements and closure serialize on the register.
+ * Captured session legs are counted by their closure_id and late without this closure's stamp.
  * Refunds are counted by _wcpos_closure and late without this closure's stamp, even with no ledger leg.
  * Movements are counted before the closure snapshot and late when the closure already exists at write.
  * Late rows correct, never edit, the closure.
@@ -29,6 +30,12 @@ final class Session_Figures {
 	 * @var array
 	 */
 	private $memo = array();
+
+	/** Order locks held until the closure transaction ends.
+	 *
+	 * @var int[]
+	 */
+	private $locked_orders = array();
 
 	/** Create a lazy view of a session.
 	 *
@@ -102,13 +109,26 @@ final class Session_Figures {
 		return $count;
 	}
 
-	/** Record the refunds counted by this closure; Part A does not stamp legs.
+	/** Record the legs and refunds counted by this closure.
 	 *
 	 * @param string $closure_id Closure UUID.
-	 * @throws \RuntimeException When a refund stamp cannot be verified.
+	 * @throws \RuntimeException When a lock, order read or stamp fails.
 	 */
 	public function stamp( string $closure_id ): void {
 		global $wpdb;
+		$orders = $this->legs();
+		ksort( $orders, SORT_NUMERIC );
+		foreach ( $orders as $order_id => $legs ) {
+			if ( ! Order_Lock::instance()->acquire( $order_id ) ) {
+				throw new \RuntimeException( 'Closure stamp lock failed.' );
+			}
+			$this->locked_orders[] = $order_id;
+			$order = wc_get_order( $order_id );
+			if ( ! $order instanceof \WC_Order ) {
+				throw new \RuntimeException( 'Closure stamp: order could not be read.' );
+			}
+			Ledger::instance()->stamp_closure( $order, array_column( $legs, 'id' ), $closure_id );
+		}
 		// The refund writers ask this stamp, not the clock, whether a refund was inside the closure.
 		foreach ( $this->refunds() as $refund ) {
 			$refund['refund']->update_meta_data( '_wcpos_closure', $closure_id );
@@ -122,6 +142,42 @@ final class Session_Figures {
 				throw new \RuntimeException( 'Closure refund stamp failed.' );
 			}
 		}
+	}
+
+	/** Release only after the caller has committed or rolled back; safe to repeat. */
+	public function release(): void {
+		foreach ( $this->locked_orders as $order_id ) {
+			Order_Lock::instance()->release( $order_id );
+		}
+		$this->locked_orders = array();
+	}
+
+	/** Whether this closure counted the row, never inferred from clocks.
+	 *
+	 * @param mixed $stamp Row's closure stamp.
+	 * @param array $closure Closure row.
+	 */
+	public static function counted( $stamp, array $closure ): bool {
+		return is_string( $stamp ) && '' !== $stamp && $stamp === (string) $closure['id'];
+	}
+
+	/** Captured session legs that this closure did not count.
+	 *
+	 * @param \WC_Order $order Order object.
+	 * @param array     $closure Closure row.
+	 */
+	public static function late_legs( \WC_Order $order, array $closure ): array {
+		// A caller can still hold the object loaded before the closure stamped it.
+		$order = clone $order;
+		$order->read_meta_data( true );
+		return array_values(
+			array_filter(
+				Ledger::instance()->read( $order ),
+				static function ( $leg ) use ( $closure ) {
+					return 'captured' === ( $leg['status'] ?? null ) && ( $leg['session_id'] ?? null ) === $closure['session_id'] && ! self::counted( $leg['closure_id'] ?? null, $closure );
+				}
+			)
+		);
 	}
 
 	/** Map a tender to its drawer/report key.

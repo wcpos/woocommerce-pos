@@ -16,6 +16,27 @@ final class Register_Store {
 
 	use Owned_Table;
 
+	/** A close stamps every session leg, so allow longer than Order_Lock's wait. */
+	private const LOCK_WAIT_SECONDS = 10;
+
+	/** Serialize a close and movements without requiring a movement transaction.
+	 *
+	 * @param string $register_id Register UUID.
+	 */
+	public function lock( string $register_id ): bool {
+		global $wpdb;
+		return '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', 'wcpos_register_' . strtolower( $register_id ), self::LOCK_WAIT_SECONDS ) );
+	}
+
+	/** Release the register after the write or closure transaction ends.
+	 *
+	 * @param string $register_id Register UUID.
+	 */
+	public function unlock( string $register_id ): void {
+		global $wpdb;
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', 'wcpos_register_' . strtolower( $register_id ) ) );
+	}
+
 	/**
 	 * Build the portable register schema.
 	 *

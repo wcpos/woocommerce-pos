@@ -10,6 +10,8 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WC_Tax;
@@ -37,6 +39,306 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				return $settings;
 			}
 		);
+	}
+
+	/** A client cannot claim that a closure counted a payment. */
+	public function test_record_drops_a_client_closure_id(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_cash', '5.00', array( 'closure_id' => wp_generate_uuid4() ) );
+		Ledger::instance()->record( $order, $input );
+		$this->assertArrayNotHasKey( 'closure_id', Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] ) );
+	}
+
+	/** Stamping changes only the named row's closure id, including on replay. */
+	public function test_stamp_closure_stamps_only_the_named_legs_and_keeps_updated_at(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$before = $ledger->read( $order );
+		foreach ( $before as &$row ) {
+			$row['updated_at_gmt'] = '2020-01-01T00:00:00+00:00';
+		}
+		unset( $row );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $before,
+				)
+			)
+		);
+		$order->save();
+		$closure_id = wp_generate_uuid4();
+		for ( $i = 0; $i < 2; ++$i ) {
+			$ledger->stamp_closure( $order, array( $before[0]['id'] ), $closure_id );
+			$after = $ledger->read( wc_get_order( $order->get_id() ) );
+			$this->assertSame( $closure_id, $after[0]['closure_id'] );
+			$this->assertArrayNotHasKey( 'closure_id', $after[1] );
+			unset( $after[0]['closure_id'] );
+			$this->assertSame( $before, $after );
+		}
+	}
+
+	/** A locking storage read must not erase a leg appended to another object. */
+	public function test_stamp_closure_never_writes_back_a_stale_order_object(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$first = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$stale = wc_get_order( $order->get_id() );
+		$stale->get_meta( Ledger::META_KEY, true );
+		$second = $ledger->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '5.00' ) );
+		$ledger->stamp_closure( $stale, array( $first['id'] ), wp_generate_uuid4() );
+		$this->assertSame( array( $first['id'], $second['id'] ), array_column( $ledger->read( wc_get_order( $order->get_id() ) ), 'id' ) );
+	}
+
+	/** Missing ids and a different closure cannot rewrite the fiscal fact. */
+	public function test_stamp_closure_refuses_a_missing_leg_or_another_closures_leg(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$row = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$closure_id = wp_generate_uuid4();
+		try {
+			$ledger->stamp_closure( $order, array( wp_generate_uuid4() ), $closure_id );
+			$this->fail( 'Expected a missing-leg refusal.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure stamp: leg missing.', $error->getMessage() );
+		}
+		$ledger->stamp_closure( $order, array( $row['id'] ), $closure_id );
+		try {
+			$ledger->stamp_closure( $order, array( $row['id'] ), wp_generate_uuid4() );
+			$this->fail( 'Expected a different-closure refusal.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure stamp: leg belongs to another closure.', $error->getMessage() );
+		}
+		$this->assertSame( $closure_id, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] )['closure_id'] );
+	}
+
+	/** Typed-meta and JSON order pushes preserve only server-written stamps. */
+	public function test_order_save_carrying_the_ledger_keeps_server_stamps_and_drops_forged_ones(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$first = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$closure_id = wp_generate_uuid4();
+		$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+		foreach ( array( false, true ) as $json ) {
+			$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+			unset( $rows[0]['closure_id'] );
+			$rows[1]['closure_id'] = wp_generate_uuid4();
+			$value = array(
+				'schema' => Ledger::SCHEMA,
+				'payments' => $rows,
+			);
+			$order->update_meta_data( Ledger::META_KEY, $json ? wp_json_encode( $value ) : $value );
+			$order->save();
+			$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+			$this->assertSame( $closure_id, $rows[0]['closure_id'] );
+			$this->assertArrayNotHasKey( 'closure_id', $rows[1] );
+		}
+	}
+
+	/** A new order has no storage to inherit from, so every stamp it carries is forged. */
+	public function test_order_create_carrying_a_forged_stamp_drops_it(): void {
+		foreach ( array( true, false ) as $typed ) {
+			// Arrange.
+			$order = new \WC_Order();
+			$row   = array(
+				'id'         => wp_generate_uuid4(),
+				'closure_id' => wp_generate_uuid4(),
+				'amount'     => '5.00',
+			);
+			$value = array(
+				'schema'   => Ledger::SCHEMA,
+				'payments' => array( $row ),
+			);
+			$order->update_meta_data( Ledger::META_KEY, $typed ? $value : wp_json_encode( $value ) );
+			// Act.
+			$order->save();
+			$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+			// Assert.
+			$this->assertCount( 1, $rows );
+			$this->assertSame( $row['id'], $rows[0]['id'] );
+			$this->assertArrayNotHasKey( 'closure_id', $rows[0] );
+		}
+	}
+
+	/** A full-ledger payload may remove uncounted legs, but never counted ones. */
+	public function test_order_save_keeps_a_stamped_row_the_incoming_ledger_omits(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$first = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$second = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$closure_id = wp_generate_uuid4();
+		$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+		$stamped = $ledger->read( wc_get_order( $order->get_id() ) )[0];
+		foreach ( array( array( $second ), array() ) as $incoming ) {
+			// Act.
+			$value = array(
+				'schema' => Ledger::SCHEMA,
+				'payments' => $incoming,
+			);
+			$order->update_meta_data( Ledger::META_KEY, $value );
+			$order->save();
+			$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+			// Assert.
+			$this->assertCount( count( $incoming ) + 1, $rows );
+			$this->assertSame( $stamped, $rows[ count( $incoming ) ] );
+			$this->assertSame( $closure_id, $rows[ count( $incoming ) ]['closure_id'] );
+			if ( $incoming ) {
+				$this->assertSame( $second['id'], $rows[0]['id'] );
+				$this->assertArrayNotHasKey( 'closure_id', $rows[0] );
+			}
+		}
+	}
+
+	/** Deleting the ledger preserves all stored legs only when a closure counted one. */
+	public function test_order_save_deleting_the_ledger_keeps_the_stored_stamped_ledger(): void {
+		foreach ( array( true, false ) as $stamp ) {
+			// Arrange.
+			$order      = $this->create_pos_order();
+			$ledger     = Ledger::instance();
+			$first      = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+			$second     = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+			$closure_id = wp_generate_uuid4();
+			if ( $stamp ) {
+				$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+			}
+			$before = $ledger->read( wc_get_order( $order->get_id() ) );
+			// Act.
+			$order->delete_meta_data( Ledger::META_KEY );
+			$order->save();
+			$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+			// Assert.
+			if ( $stamp ) {
+				$this->assertSame( $before, $rows );
+				$this->assertSame( array( $first['id'], $second['id'] ), array_column( $rows, 'id' ) );
+				$this->assertSame( $closure_id, $rows[0]['closure_id'] );
+				$this->assertCount( 1, $this->stored_ledger_values( $order->get_id() ) );
+			} else {
+				$this->assertSame( array(), $rows );
+				$this->assertCount( 0, $this->stored_ledger_values( $order->get_id() ) );
+			}
+		}
+	}
+
+	/** JSON keeper write-backs preserve the wire contract for both empty maps. */
+	public function test_keeper_write_back_encodes_empty_maps_as_objects(): void {
+		// Arrange.
+		$order      = $this->create_pos_order();
+		$ledger     = Ledger::instance();
+		$first      = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$second     = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$closure_id = wp_generate_uuid4();
+		$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+		// Act.
+		$value = array(
+			'schema'   => Ledger::SCHEMA,
+			'payments' => array( $second ),
+		);
+		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		$order->save();
+		$raw  = $this->stored_ledger_values( $order->get_id() )[0];
+		$rows = $ledger->read( wc_get_order( $order->get_id() ) );
+		// Assert.
+		foreach ( array( 'provider_refs', 'receipt' ) as $field ) {
+			$this->assertStringContainsString( '"' . $field . '":{}', $raw );
+			$this->assertStringNotContainsString( '"' . $field . '":[]', $raw );
+		}
+		$this->assertSame( array( $second['id'], $first['id'] ), array_column( $rows, 'id' ) );
+		$this->assertSame( $closure_id, $rows[1]['closure_id'] );
+	}
+
+	/**
+	 * Read every raw ledger meta row from the active order storage backend.
+	 *
+	 * @param int $order_id Order ID.
+	 * @return array Stored meta values.
+	 */
+	private function stored_ledger_values( int $order_id ): array {
+		global $wpdb;
+		$hpos  = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$owner = $hpos ? 'order_id' : 'post_id';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Inspect actual ledger rows on the active storage backend.
+		return $wpdb->get_col( $wpdb->prepare( "SELECT meta_value FROM {$table} WHERE {$owner} = %d AND meta_key = %s", $order_id, Ledger::META_KEY ) );
+	}
+
+	/** Undecodable writes cannot erase stored fiscal facts. */
+	public function test_order_save_with_an_undecodable_ledger_keeps_the_stored_stamped_ledger(): void {
+		foreach ( array( true, false ) as $stamp ) {
+			// Arrange.
+			$order = $this->create_pos_order();
+			$ledger = Ledger::instance();
+			$first = $ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+			$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+			$closure_id = wp_generate_uuid4();
+			if ( $stamp ) {
+				$ledger->stamp_closure( $order, array( $first['id'] ), $closure_id );
+			}
+			$before = $ledger->read( wc_get_order( $order->get_id() ) );
+			// Act.
+			$order->update_meta_data( Ledger::META_KEY, 'not json' );
+			$order->save();
+			$fresh = wc_get_order( $order->get_id() );
+			$rows = $ledger->read( $fresh );
+			// Assert.
+			if ( $stamp ) {
+				$this->assertCount( 2, $rows );
+				$this->assertSame( $before, $rows );
+				$this->assertSame( $closure_id, $rows[0]['closure_id'] );
+				$this->assertTrue( is_string( $fresh->get_meta( Ledger::META_KEY, true ) ) );
+			} else {
+				$this->assertSame( array(), $rows );
+				$this->assertSame( 'not json', $fresh->get_meta( Ledger::META_KEY, true ) );
+			}
+		}
+	}
+
+	/** The keeper owns the lock across persistence, not just its storage read. */
+	public function test_order_save_carrying_the_ledger_holds_the_order_lock_until_after_save(): void {
+		// Arrange.
+		$supports = new \ReflectionMethod( Order_Lock::class, 'supports_multiple_locks' );
+		$supports->setAccessible( true );
+		if ( ! $supports->invoke( null ) ) {
+			$this->markTestSkipped( 'Order_Lock uses an option lease: this server does not support multiple named locks.' );
+		}
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$connection = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$name = sprintf( 'wcpos_order_%d_%d', absint( $order->get_id() ), get_current_blog_id() );
+		$before = null;
+		$after = null;
+		$before_probe = static function ( $saving ) use ( $order, $connection, $name, &$before ) {
+			if ( $saving->get_id() === $order->get_id() ) {
+				$before = $connection->get_var( $connection->prepare( 'SELECT IS_FREE_LOCK(%s)', $name ) );
+			}
+		};
+		$after_probe = static function ( $saving ) use ( $order, $connection, $name, &$after ) {
+			if ( $saving->get_id() === $order->get_id() ) {
+				$after = $connection->get_var( $connection->prepare( 'SELECT IS_FREE_LOCK(%s)', $name ) );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $before_probe, 11, 1 );
+		add_action( 'woocommerce_after_order_object_save', $after_probe, 11, 1 );
+		try {
+			// Act.
+			$value = array(
+				'schema' => Ledger::SCHEMA,
+				'payments' => array(),
+			);
+			$order->update_meta_data( Ledger::META_KEY, $value );
+			$order->save();
+			// Assert.
+			$this->assertSame( '0', $before );
+			$this->assertSame( '1', $after );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $before_probe, 11 );
+			remove_action( 'woocommerce_after_order_object_save', $after_probe, 11 );
+			$connection->close();
+		}
 	}
 
 	/**

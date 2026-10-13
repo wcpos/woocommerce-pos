@@ -94,24 +94,32 @@ final class Cash_Movement_Store {
 		if ( $session && ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
 			return new \WP_Error( 'wcpos_session_not_open', __( 'This movement was recorded after counting began.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
-		$closure = ( new Closure_Store() )->for_session( $fields['session_id'] );
-		if ( $closure ) {
-			( new Fiscal_Record_Store() )->ensure_installed();
-		}
-		$void = 'void' === $fields['type'];
-		$transaction = $void || null !== $closure;
-		if ( $transaction && false === $wpdb->query( 'START TRANSACTION' ) ) {
+		$register = $session['register_id'] ?? '';
+		$locked = $session && ( new Register_Store() )->lock( $register );
+		if ( $session && ! $locked ) {
 			Logger::warning(
-				'Movement transaction failed.',
+				'Movement register lock failed.',
 				array(
 					'movement_id' => $fields['id'],
 					'session_id' => $fields['session_id'],
 					'user_id' => $fields['actor'],
 				)
 			);
-			throw new \RuntimeException( 'Movement transaction failed.' );
+			throw new \RuntimeException( 'Movement register lock failed.' );
 		}
+		$transaction = false;
 		try {
+			$closure = ( new Closure_Store() )->for_session( $fields['session_id'] );
+			if ( $closure ) {
+				( new Fiscal_Record_Store() )->ensure_installed();
+			}
+			$void = 'void' === $fields['type'];
+			if ( $void || null !== $closure ) {
+				if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+					throw new \RuntimeException( 'Movement transaction failed.' );
+				}
+				$transaction = true;
+			}
 			if ( false === $wpdb->insert( $this->table_name(), $fields ) ) {
 				throw new \RuntimeException( 'Movement write failed.' );
 			}
@@ -181,6 +189,10 @@ final class Cash_Movement_Store {
 				)
 			);
 			throw $error;
+		} finally {
+			if ( $locked ) {
+				( new Register_Store() )->unlock( $register );
+			}
 		}
 		$row = $this->get( $fields['id'] );
 		Logger::log(

@@ -12,6 +12,8 @@ use WP_UnitTestCase;
 
 /** Tests write-once movements and atomic void refusal. */
 class Test_Cash_Movement_Store extends WP_UnitTestCase {
+	use Closure_Test_Fixture;
+
 	/** Create, replay and stamp without changing the original movement. */
 	public function test_create_void_and_double_void_refused(): void {
 		$store = new Cash_Movement_Store();
@@ -98,5 +100,51 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			$wpdb->delete( $store->table_name(), array( 'session_id' => $target['session_id'] ) );
 			$wpdb->query( 'COMMIT' );
 		}
+	}
+	/** Closure classification and movement insertion are inside the register lock. */
+	public function test_movement_reads_the_closure_only_under_the_register_lock(): void {
+		$session = $this->closure_session();
+		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		$queries = array();
+		$trace = static function ( $sql ) use ( &$queries ) {
+			$queries[] = $sql;
+			return $sql;
+		};
+		$store = new Cash_Movement_Store();
+		add_filter( 'query', $trace );
+		try {
+			$store->create(
+				array(
+					'id' => wp_generate_uuid4(),
+					'session_id' => $session['id'],
+					'type' => 'paid_in',
+					'amount' => '7',
+					'reason' => 'Late arrival',
+					'actor' => 1,
+					'created_at_gmt' => '2026-09-11 10:00:00',
+				)
+			);
+		} finally {
+			remove_filter( 'query', $trace );
+		}
+		$sql = implode( "\n", $queries );
+		$lock = strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$lookup = strpos( $sql, 'SELECT * FROM ' . ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->table_name() . ' WHERE 1=1 AND session_id =' );
+		$insert = strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' );
+		$release = strpos( $sql, "RELEASE_LOCK( 'wcpos_register_" . $session['register_id'] );
+		foreach ( array( $lock, $lookup, $insert, $release ) as $position ) {
+			$this->assertNotFalse( $position );
+		}
+		$this->assertLessThan( $lookup, $lock );
+		$this->assertGreaterThan( $insert, $release );
+		$this->assertCount(
+			1,
+			( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->list(
+				array(
+					'type' => 'late_movement',
+					'closure_id' => $closure['id'],
+				)
+			)
+		);
 	}
 }

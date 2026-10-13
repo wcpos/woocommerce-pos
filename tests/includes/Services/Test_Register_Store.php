@@ -95,4 +95,19 @@ class Test_Register_Store extends WP_UnitTestCase {
 		$this->assertSame( 'Register', $active[0]['name'] );
 		$this->assertNull( $active[0]['store_id'] );
 	}
+	/** The named register lock excludes a different database connection. */
+	public function test_register_lock_excludes_another_connection(): void {
+		$other = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$id = wp_generate_uuid4();
+		$store = new Register_Store();
+		try {
+			$this->assertTrue( $store->lock( strtoupper( $id ) ) );
+			$this->assertSame( '0', (string) $other->get_var( $other->prepare( 'SELECT IS_FREE_LOCK( %s )', 'wcpos_register_' . $id ) ) );
+			$store->unlock( $id );
+			$this->assertSame( '1', (string) $other->get_var( $other->prepare( 'SELECT IS_FREE_LOCK( %s )', 'wcpos_register_' . $id ) ) );
+		} finally {
+			$store->unlock( $id );
+			$other->close();
+		}
+	}
 }
