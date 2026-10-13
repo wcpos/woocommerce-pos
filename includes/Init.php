@@ -291,6 +291,14 @@ class Init {
 				'reason'   => 'Background snapshot cleanup runs independently of the sync schema latch.',
 				'phase'    => 'post-latch',
 			),
+			array(
+				'hook'     => null,
+				'callback' => array( Services\File_Integrity::class, 'register' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; checksum check after updates, daily and in Site Health, independent of the sync latch.',
+				'phase'    => 'post-latch',
+			),
 		);
 
 		return array_values(

@@ -486,6 +486,8 @@ class API {
 	 * @param string          $route           Route matched for the request.
 	 * @param array           $handler         Route handler used for the request.
 	 *
+	 * @throws \Error Any Error other than a missing WCPOS class, unchanged.
+	 *
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
@@ -512,8 +514,27 @@ class API {
 		@ini_set( 'precision', '10' );
 		@ini_set( 'serialize_precision', '10' );
 
-		if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
-			return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
+		/*
+		 * The update-window boundary. A WCPOS class whose file an in-place update
+		 * has moved aside throws "Class not found"; answer 503 + Retry-After so the
+		 * POS retries instead of showing a fatal. The callback is therefore run
+		 * here rather than by core, which has no try/catch. Every other Error is
+		 * rethrown untouched.
+		 */
+		try {
+			if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
+				$dispatch_result = $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
+			}
+			if ( null === $dispatch_result && isset( $handler['callback'] ) && \is_callable( $handler['callback'] ) ) {
+				// Never hand null back: core would run the callback a second time.
+				$dispatch_result = \call_user_func( $handler['callback'], $request ) ?? new WP_REST_Response( null );
+			}
+		} catch ( \Error $error ) {
+			$unavailable = Load_Integrity::rest_unavailable( $error );
+			if ( null === $unavailable ) {
+				throw $error;
+			}
+			return $unavailable;
 		}
 
 		return $dispatch_result;

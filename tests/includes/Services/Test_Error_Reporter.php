@@ -204,6 +204,40 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A missing WCPOS class at shutdown is tagged with its integrity class, not a bare fatal.
+	 */
+	public function test_missing_wcpos_class_fatal_is_tagged_with_its_integrity_class(): void {
+		// Arrange.
+		$this->enable_consent();
+		$error            = $this->fatal_error();
+		$error['message'] = 'Uncaught Error: Class "WCPOS\\WooCommercePOS\\Nope\\Gone_' . uniqid() . '" not found in /x/Auth.php:28';
+
+		// Act.
+		Error_Reporter::instance()->report_fatal( $error );
+
+		// Assert: nothing on disk points at an update, so the files are just missing.
+		$this->assertCount( 1, $this->transport->events );
+		$event = $this->transport->events[0];
+		$this->assertSame( 'error', (string) $event->getLevel() );
+		$this->assertSame( 'files_missing', $event->getTags()['wcpos_integrity'] ?? null );
+		$this->assertStringStartsWith( 'includes/Nope/Gone_', $event->getTags()['integrity_path'] ?? '' );
+		$this->assertSame( 'wcpos-integrity', $event->getFingerprint()[0] );
+	}
+
+	/**
+	 * Integrity findings during an update are warnings.
+	 */
+	public function test_mid_update_integrity_report_is_a_warning(): void {
+		$this->enable_consent();
+
+		Error_Reporter::instance()->report_integrity( 'mid_update', 'includes/Services/Auth.php', 'Class not found' );
+
+		$this->assertCount( 1, $this->transport->events );
+		$this->assertSame( 'warning', (string) $this->transport->events[0]->getLevel() );
+		$this->assertSame( 'mid_update', $this->transport->events[0]->getTags()['wcpos_integrity'] ?? null );
+	}
+
+	/**
 	 * The per-request cap suppresses a second distinct logger error.
 	 */
 	public function test_two_distinct_logger_errors_send_only_first_event(): void {

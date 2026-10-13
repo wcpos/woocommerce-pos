@@ -15,6 +15,7 @@ use WCPOS\Vendor\Sentry\Severity;
 use WCPOS\Vendor\Sentry\UserDataBag;
 use WP_REST_Request;
 use WP_REST_Response;
+use WCPOS\WooCommercePOS\Load_Integrity;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
@@ -470,21 +471,64 @@ class Error_Reporter {
 			$content_path = rtrim( str_replace( '\\', '/', WP_CONTENT_DIR ), '/' ) . '/';
 			$relative     = 0 === strpos( $file, $content_path ) ? substr( $file, strlen( $content_path ) ) : basename( $file );
 			$line         = isset( $error['line'] ) ? (string) $error['line'] : '0';
-
-			$this->capture(
-				'critical',
-				substr( (string) $error['message'], 0, 8 * 1024 ),
-				array(
-					'source'     => 'fatal',
-					'fatal_file' => $relative,
-					'fatal_line' => $line,
-				),
-				array( 'wcpos-fatal', $relative, $line ),
-				true
+			$tags         = array(
+				'source'     => 'fatal',
+				'fatal_file' => $relative,
+				'fatal_line' => $line,
 			);
+			$level        = 'critical';
+			$fingerprint  = array( 'wcpos-fatal', $relative, $line );
+
+			// A missing WCPOS class is almost always an update caught mid-swap:
+			// tag it with what the disk shows, once, under the integrity grouping.
+			$missing = class_exists( Load_Integrity::class, false ) ? Load_Integrity::missing_class( (string) $error['message'] ) : null;
+			if ( null !== $missing ) {
+				if ( Load_Integrity::was_reported( $missing ) ) {
+					return;
+				}
+				$signals                 = Load_Integrity::signals( $missing );
+				$classification          = Load_Integrity::classify( $signals );
+				$tags['wcpos_integrity'] = $classification;
+				$tags['integrity_path']  = $signals['path'];
+				$level                   = self::integrity_level( $classification );
+				$fingerprint             = array( 'wcpos-integrity', $classification, $signals['path'] );
+			}
+
+			$this->capture( $level, substr( (string) $error['message'], 0, 8 * 1024 ), $tags, $fingerprint, true );
 		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Fatal reporting must not create another fatal.
 		}
+	}
+
+	/**
+	 * Report a load-integrity finding: a missing class, or a checksum mismatch.
+	 *
+	 * @param string $classification mid_update, swapped_mid_request, files_missing or files_modified.
+	 * @param string $path           Plugin-relative path of the (first) affected file.
+	 * @param string $message        Event message.
+	 *
+	 * @return bool Whether an event was handed to the client.
+	 */
+	public function report_integrity( string $classification, string $path, string $message ): bool {
+		return $this->capture(
+			self::integrity_level( $classification ),
+			$message,
+			array(
+				'source'          => 'integrity',
+				'wcpos_integrity' => $classification,
+				'integrity_path'  => $path,
+			),
+			array( 'wcpos-integrity', $classification, $path )
+		);
+	}
+
+	/**
+	 * An update in flight is expected noise; files that stay missing or modified are not.
+	 *
+	 * @param string $classification Integrity classification.
+	 */
+	private static function integrity_level( string $classification ): string {
+		return \in_array( $classification, array( 'mid_update', 'swapped_mid_request' ), true ) ? 'warning' : 'error';
 	}
 
 	/**
@@ -528,7 +572,11 @@ class Error_Reporter {
 			}
 
 			$event = Event::createEvent();
-			$event->setLevel( 'critical' === $level ? Severity::fatal() : Severity::error() );
+			$severities = array(
+				'critical' => Severity::fatal(),
+				'warning'  => Severity::warning(),
+			);
+			$event->setLevel( $severities[ $level ] ?? Severity::error() );
 			$event->setMessage( $message );
 			if ( ! empty( $fingerprint ) ) {
 				$event->setFingerprint( $fingerprint );

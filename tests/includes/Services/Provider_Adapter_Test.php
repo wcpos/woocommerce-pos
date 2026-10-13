@@ -349,4 +349,60 @@ class Provider_Adapter_Test extends WP_UnitTestCase {
 		// Assert.
 		$this->assertStringContainsString( 'Printer: Till [[cut]]', $markup );
 	}
+
+	/**
+	 * Star Online statuses and whether the adapter should retry them.
+	 *
+	 * @return array<string, array{int, bool}>
+	 */
+	public function star_online_status_provider(): array {
+		return array(
+			'401 bad key'        => array( 401, false ),
+			'403 refused'        => array( 403, false ),
+			'404 unknown device' => array( 404, false ),
+			'429 rate limited'   => array( 429, true ),
+			'500 server error'   => array( 500, true ),
+		);
+	}
+
+	/**
+	 * A Star Online 401/403/404 is terminal; anything else stays retryable.
+	 *
+	 * @dataProvider star_online_status_provider
+	 *
+	 * @param int  $status    HTTP status Star Online answers with.
+	 * @param bool $retryable Expected retry decision.
+	 */
+	public function test_star_online_submit_4xx_is_terminal( int $status, bool $retryable ): void {
+		// Arrange.
+		$respond = static function () use ( $status ) {
+			return array(
+				'headers'  => array(),
+				'body'     => '{}',
+				'response' => array(
+					'code'    => $status,
+					'message' => '',
+				),
+				'cookies'  => array(),
+			);
+		};
+		add_filter( 'pre_http_request', $respond );
+
+		// Act.
+		$result = ( new Star_Online_Adapter() )->submit(
+			array(
+				'star_api_key'       => 'key',
+				'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/test',
+				'star_device_id'     => 'device',
+			),
+			array(),
+			'[feed]',
+			'WCPOS Test'
+		);
+		remove_filter( 'pre_http_request', $respond );
+
+		// Assert.
+		$this->assertFalse( $result['success'] );
+		$this->assertSame( $retryable, $result['retryable'] );
+	}
 }
