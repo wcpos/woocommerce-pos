@@ -59,7 +59,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		}
 		$this->denied_caps = array();
 
-		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'] );
+		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'], $_GET['rest_route'] );
 		parent::tearDown();
 		unset( $this->auth_service );
 
@@ -108,21 +108,35 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	/**
 	 * Authenticate_request reads the authorization query parameter.
 	 */
-	public function test_authenticate_request_accepts_bearer_authorization_query_parameter(): void {
+	public function test_authenticate_request_accepts_bearer_authorization_query_parameter_on_rest_request(): void {
+		// Arrange.
+		$_GET['rest_route'] = '/wcpos/v2/status';
+		add_filter( 'wp_using_themes', '__return_true' );
 		$token                 = $this->auth_service->generate_access_token( $this->test_user );
 		$_GET['authorization'] = 'Bearer ' . $token;
 
-		$this->assertEquals( $this->test_user->ID, $this->auth_service->authenticate_request() );
+		// Act.
+		$user_id = $this->auth_service->authenticate_request();
+
+		// Assert.
+		$this->assertSame( $this->test_user->ID, $user_id );
 	}
 
 	/**
 	 * Authenticate_request accepts a bare JWT in the authorization query parameter.
 	 */
-	public function test_authenticate_request_accepts_bare_jwt_authorization_query_parameter(): void {
+	public function test_authenticate_request_accepts_bare_jwt_authorization_query_parameter_on_rest_request(): void {
+		// Arrange.
+		$_GET['rest_route'] = '/wcpos/v2/status';
+		add_filter( 'wp_using_themes', '__return_true' );
 		$token                 = $this->auth_service->generate_access_token( $this->test_user );
 		$_GET['authorization'] = $token;
 
-		$this->assertEquals( $this->test_user->ID, $this->auth_service->authenticate_request() );
+		// Act.
+		$user_id = $this->auth_service->authenticate_request();
+
+		// Assert.
+		$this->assertSame( $this->test_user->ID, $user_id );
 	}
 
 	/**

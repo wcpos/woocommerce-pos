@@ -625,10 +625,13 @@ class Settings {
 	}
 
 	/**
-	 * Whether the JWT may be passed as a query parameter (Tools).
+	 * Whether the JWT may be passed as a query parameter.
+	 *
+	 * @deprecated The `use_jwt_as_param` setting was removed. `?authorization=` is accepted
+	 *             on REST requests only (Auth::get_auth_header()); this always returns false.
 	 */
 	public function use_jwt_as_param_enabled(): bool {
-		return (bool) $this->section_value( 'tools', 'use_jwt_as_param' );
+		return false;
 	}
 
 	/**
