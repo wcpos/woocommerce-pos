@@ -252,6 +252,36 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * WooCommerce product visibility must distinguish operator REST namespaces from wc/v3.
+	 *
+	 * @dataProvider product_visibility_rest_route_provider
+	 */
+	public function test_pos_only_visibility_rest_route_preserves_context_decision( string $route, bool $expected ): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$product = ProductHelper::create_simple_product();
+		$this->set_pos_only_product_ids( array( $product->get_id() ) );
+		$products = new Products();
+		$products->record_rest_route( null, rest_get_server(), new WP_REST_Request( 'GET', $route ) );
+
+		// Act.
+		$visible = wc_get_product( $product->get_id() )->is_visible();
+
+		// Assert.
+		$this->assertSame( $expected, $visible );
+	}
+
+	/**
+	 * Operator and shopper-facing WooCommerce REST visibility expectations.
+	 */
+	public function product_visibility_rest_route_provider(): array {
+		return array(
+			'wc-analytics report'  => array( '/wc-analytics/reports/products', true ),
+			'WooCommerce REST API' => array( '/wc/v3/products', false ),
+		);
+	}
+
+	/**
 	 * A site can switch the exclusion off for a context of its own through the filter.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products

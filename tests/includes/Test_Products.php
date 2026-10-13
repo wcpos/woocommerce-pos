@@ -168,4 +168,116 @@ class Test_Products extends WP_UnitTestCase {
 		// Assert that the variation without '_pos_visibility' set is in the query
 		$this->assertContains( $variation_ids[2], $queried_variation_ids );
 	}
+
+	/**
+	 * WordPress ignores post__not_in when post__in is set; the SQL guard must still exclude POS Only ids.
+	 */
+	public function test_pos_only_products_post_in_returns_only_visible_id(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type' => 'product',
+				'post__in'  => array( $visible->get_id(), $hidden->get_id() ),
+				'fields'    => 'ids',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array( $visible->get_id() ), $query->posts );
+	}
+
+	/**
+	 * WooCommerce maps wc_get_products() include to WordPress post__in.
+	 */
+	public function test_pos_only_products_wc_include_returns_only_visible_id(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+
+		// Act.
+		$ids = wc_get_products(
+			array(
+				'include' => array( $visible->get_id(), $hidden->get_id() ),
+				'return'  => 'ids',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array( $visible->get_id() ), $ids );
+	}
+
+	/**
+	 * WooCommerce related products, upsells and cross-sells use WC_Product::is_visible().
+	 */
+	public function test_pos_only_products_shop_visibility_hides_only_pos_only_product(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+
+		// Act.
+		$hidden_visible = wc_get_product( $hidden->get_id() )->is_visible();
+		$normal_visible = wc_get_product( $visible->get_id() )->is_visible();
+
+		// Assert.
+		$this->assertFalse( $hidden_visible );
+		$this->assertTrue( $normal_visible );
+	}
+
+	/**
+	 * WooCommerce variation is_visible() uses the product visibility hook, not variation_is_visible().
+	 */
+	public function test_pos_only_variations_shop_visibility_hides_only_pos_only_variation(): void {
+		// Arrange.
+		$product = ProductHelper::create_variation_product();
+		$ids     = $product->get_children();
+		$this->configure_storefront_visibility( array(), array( $ids[0] ) );
+
+		// Act.
+		$hidden_visible  = wc_get_product( $ids[0] )->is_visible();
+		$sibling_visible = wc_get_product( $ids[1] )->is_visible();
+
+		// Assert.
+		$this->assertFalse( $hidden_visible );
+		$this->assertTrue( $sibling_visible );
+	}
+
+	/**
+	 * Enable the registered storefront hooks and store visibility settings for these fixtures.
+	 */
+	private function configure_storefront_visibility( array $product_ids, array $variation_ids = array() ): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+
+				return $settings;
+			}
+		);
+		new Products();
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products'   => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => $product_ids ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => $variation_ids ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+			)
+		);
+		$this->go_to( wc_get_page_id( 'shop' ) );
+	}
 }
