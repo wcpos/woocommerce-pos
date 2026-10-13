@@ -7,6 +7,8 @@ on:
       - next
     paths:
       - "**.php"
+      - ".phpunit.xml.dist"
+      - ".phpunit.multisite.xml.dist"
       - "composer.json"
       - "composer.lock"
       - "php-scoper/composer.json"
@@ -63,6 +65,10 @@ jobs:
               # lock-only PR unmergeable — the suite was skipped, and the gate
               # read that skip as a failure for a check that could never run.
               - '**.php'
+              # The two PHPUnit configurations decide what the suite and the
+              # multisite group select; a change to either must run them.
+              - '.phpunit.xml.dist'
+              - '.phpunit.multisite.xml.dist'
               - 'composer.json'
               - 'composer.lock'
               # php-scoper's manifest and lock decide what CI scopes into
@@ -410,12 +416,18 @@ jobs:
         id: test
         run: pnpm run test:unit:php
 
+      - name: Run multisite PHPUnit group
+        id: test-multisite
+        run: pnpm run test:unit:php:multisite
+
       - name: Upload test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: phpunit-results-smoke-test
-          path: phpunit.xml
+          path: |
+            phpunit.xml
+            phpunit-multisite.xml
           retention-days: 7
 
   generate-matrix:
