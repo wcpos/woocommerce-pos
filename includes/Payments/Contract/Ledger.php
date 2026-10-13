@@ -230,7 +230,25 @@ class Ledger {
 	 * @param mixed $order Order about to be saved.
 	 */
 	public function keep_closure_stamps( $order ): void {
-		if ( ! $order instanceof WC_Order || 0 >= $order->get_id() ) {
+		if ( ! $order instanceof WC_Order ) {
+			return;
+		}
+		if ( 0 >= $order->get_id() ) {
+			// A new order has nothing in storage, so no stamp can be kept and every stamp it
+			// carries is the client's claim: drop them all before the first save.
+			$raw   = $order->get_meta( self::META_KEY, true );
+			$value = $this->decode( $raw );
+			if ( null === $value ) {
+				return;
+			}
+			$before = $value;
+			foreach ( $value['payments'] as &$row ) {
+				unset( $row['closure_id'] );
+			}
+			unset( $row );
+			if ( $value !== $before ) {
+				$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( array( 'schema' => self::SCHEMA, 'payments' => array_map( array( __CLASS__, 'to_wire' ), $value['payments'] ) ) ) );
+			}
 			return;
 		}
 		$pending = false;

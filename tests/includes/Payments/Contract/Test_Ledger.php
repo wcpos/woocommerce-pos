@@ -139,6 +139,31 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** A new order has no storage to inherit from, so every stamp it carries is forged. */
+	public function test_order_create_carrying_a_forged_stamp_drops_it(): void {
+		foreach ( array( true, false ) as $typed ) {
+			// Arrange.
+			$order = new \WC_Order();
+			$row   = array(
+				'id'         => wp_generate_uuid4(),
+				'closure_id' => wp_generate_uuid4(),
+				'amount'     => '5.00',
+			);
+			$value = array(
+				'schema'   => Ledger::SCHEMA,
+				'payments' => array( $row ),
+			);
+			$order->update_meta_data( Ledger::META_KEY, $typed ? $value : wp_json_encode( $value ) );
+			// Act.
+			$order->save();
+			$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+			// Assert.
+			$this->assertCount( 1, $rows );
+			$this->assertSame( $row['id'], $rows[0]['id'] );
+			$this->assertArrayNotHasKey( 'closure_id', $rows[0] );
+		}
+	}
+
 	/** A full-ledger payload may remove uncounted legs, but never counted ones. */
 	public function test_order_save_keeps_a_stamped_row_the_incoming_ledger_omits(): void {
 		// Arrange.
