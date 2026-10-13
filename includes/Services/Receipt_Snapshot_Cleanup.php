@@ -83,7 +83,11 @@ final class Receipt_Snapshot_Cleanup {
 				$found += self::delete_meta_batch( $wpdb->prefix . 'wc_orders_meta', $batch );
 			}
 			$found += self::delete_meta_batch( $wpdb->postmeta, $batch );
-			$found += self::delete_notes_batch( $batch );
+			if ( 0 === $found ) {
+				// Nothing indexes comment content: sweep notes only once the meta tables are drained,
+				// so the comments scan runs once per note batch instead of once per meta batch.
+				$found += self::delete_notes_batch( $batch );
+			}
 		} catch ( RuntimeException $e ) {
 			// A failed query is not an empty table. Let admin_init re-arm the work.
 			Logger::log( 'Receipt snapshot cleanup: ' . $e->getMessage() );
@@ -146,9 +150,13 @@ final class Receipt_Snapshot_Cleanup {
 	/**
 	 * Remove only complete numbered snapshot notes in English or the site locale.
 	 *
+	 * The LIKE narrows by prefix; the REGEXP decides, in SQL (case-sensitive, whole
+	 * content), so every row returned is ours and a batch can never be pinned by
+	 * candidates the pattern rejects.
+	 *
 	 * @param int $batch Maximum notes.
 	 * @return int Candidate notes found.
-	 * @throws RuntimeException On a failed query.
+	 * @throws RuntimeException On a failed query or a delete that left the note in place.
 	 */
 	private static function delete_notes_batch( int $batch ): int {
 		global $wpdb;
@@ -158,33 +166,43 @@ final class Receipt_Snapshot_Cleanup {
 		if ( $switched ) {
 			restore_previous_locale();
 		}
-		$patterns = array();
-		$likes = array();
-		foreach ( array( self::NOTE_FORMAT, $translated ) as $format ) {
-			$likes[] = str_replace( '\%d', '%', $wpdb->esc_like( $format ) );
-			$patterns[] = '/^' . str_replace( '%d', '[0-9]+', preg_quote( $format, '/' ) ) . '$/u';
+		// A translation may spell the placeholder positionally.
+		$placeholders = array( '%1$d', '%d' );
+		$where        = array();
+		$args         = array();
+		foreach ( array_unique( array( self::NOTE_FORMAT, $translated ) ) as $format ) {
+			// Binary for case-sensitivity; the '#' sentinel keeps $ from matching before a trailing newline.
+			$where[] = "( comment_content LIKE %s AND CAST( CONCAT( comment_content, '#' ) AS BINARY ) REGEXP %s )";
+			$args[]  = str_replace( array( '\%1$d', '\%d' ), '%', $wpdb->esc_like( $format ) );
+			$args[]  = '^' . str_replace( '__NUMBER__', '[0-9]+', self::regexp_quote( str_replace( $placeholders, '__NUMBER__', $format ) ) ) . '#$';
 		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Bounded scan; wp_delete_comment invalidates comment caches.
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT comment_ID, comment_content FROM {$wpdb->comments} WHERE comment_type = 'order_note' AND ( comment_content LIKE %s OR comment_content LIKE %s ) LIMIT %d", $likes[0], $likes[1], $batch ) );
+		$args[] = $batch;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $where holds placeholder-only predicates, prepared here; wp_delete_comment invalidates comment caches.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT comment_ID FROM {$wpdb->comments} WHERE comment_type = 'order_note' AND ( " . implode( ' OR ', $where ) . ' ) LIMIT %d', $args ) );
 		if ( $wpdb->last_error ) {
 			throw new RuntimeException( $wpdb->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Caught and logged, never rendered.
 		}
-		// Only exact matches count as found: a note the LIKE admits but the pattern
-		// rejects is not ours and must not keep the job pending forever.
-		$found = 0;
 		wp_defer_comment_counting( true );
 		try {
-			foreach ( $rows as $row ) {
-				if ( ! preg_match( $patterns[0], $row->comment_content ) && ! preg_match( $patterns[1], $row->comment_content ) ) {
-					continue;
+			foreach ( $ids as $id ) {
+				// A note another process already removed is harmless; one that survives a
+				// refused delete is a database failure and must take the failed-run path.
+				if ( ! wp_delete_comment( (int) $id, true ) && get_comment( (int) $id ) ) {
+					throw new RuntimeException( 'Unable to delete snapshot note ' . (int) $id );
 				}
-				++$found;
-				// A note already deleted by another process is still one we found.
-				wp_delete_comment( (int) $row->comment_ID, true );
 			}
 		} finally {
 			wp_defer_comment_counting( false );
 		}
-		return $found;
+		return count( $ids );
+	}
+
+	/**
+	 * Quote a literal for MySQL REGEXP (Spencer, ICU and PCRE dialects alike).
+	 *
+	 * @param string $literal Literal text.
+	 */
+	private static function regexp_quote( string $literal ): string {
+		return preg_replace( '/[.\\\\+*?\\[^\\]$(){}=!<>|:#\\/-]/', '\\\\$0', $literal );
 	}
 }

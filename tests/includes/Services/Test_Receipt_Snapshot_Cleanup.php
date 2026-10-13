@@ -259,6 +259,64 @@ class Test_Receipt_Snapshot_Cleanup extends WC_Unit_Test_Case {
 		}
 	}
 
+	/** A positional placeholder in a translation still identifies the note. */
+	public function test_run_deletes_translated_snapshot_notes_with_positional_placeholder(): void {
+		// Arrange.
+		$translate = static function ( $translation, $text ) {
+			return Receipt_Snapshot_Cleanup::NOTE_FORMAT === $text ? 'Fiscaler Beleg Nr. %1$d gesichert.' : $translation;
+		};
+		add_filter( 'gettext', $translate, 10, 2 );
+		try {
+			$order = OrderHelper::create_order();
+			$id    = $order->add_order_note( sprintf( 'Fiscaler Beleg Nr. %1$d gesichert.', 12 ) );
+			// Act.
+			Receipt_Snapshot_Cleanup::run();
+			// Assert.
+			$this->assertNull( get_comment( $id ) );
+		} finally {
+			remove_filter( 'gettext', $translate, 10 );
+		}
+	}
+
+	/** Notes the prefix admits but the pattern rejects never pin a batch or end the job early. */
+	public function test_rejected_like_candidates_do_not_pin_the_batch(): void {
+		// Arrange: two look-alikes that sort first, then one genuine note.
+		$order = OrderHelper::create_order();
+		$look_alike = array(
+			$order->add_order_note( 'POS fiscal receipt snapshot created (receipt #oops).' ),
+			$order->add_order_note( 'POS fiscal receipt snapshot created (receipt #7) and more.' ),
+		);
+		$genuine = $order->add_order_note( sprintf( Receipt_Snapshot_Cleanup::NOTE_FORMAT, 7 ) );
+		// Act: batch of one, until done.
+		$runs = 0;
+		while ( 'done' !== get_option( Receipt_Snapshot_Cleanup::OPTION ) && $runs < 5 ) {
+			Receipt_Snapshot_Cleanup::run( 1 );
+			++$runs;
+		}
+		// Assert.
+		$this->assertNull( get_comment( $genuine ) );
+		foreach ( $look_alike as $id ) {
+			$this->assertNotNull( get_comment( $id ) );
+		}
+		$this->assertSame( 'done', get_option( Receipt_Snapshot_Cleanup::OPTION ) );
+	}
+
+	/** The comments scan starts only when both meta tables report nothing left. */
+	public function test_notes_sweep_waits_for_meta_to_drain(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_wcpos_receipt_snapshot', 'snapshot' );
+		$order->save();
+		$note = $order->add_order_note( sprintf( Receipt_Snapshot_Cleanup::NOTE_FORMAT, 3 ) );
+		// Act / Assert.
+		$this->assertSame( 1, Receipt_Snapshot_Cleanup::run( 1 ) );
+		$this->assertNotNull( get_comment( $note ), 'meta drains first' );
+		$this->assertSame( 1, Receipt_Snapshot_Cleanup::run( 1 ) );
+		$this->assertNull( get_comment( $note ) );
+		$this->assertSame( 0, Receipt_Snapshot_Cleanup::run( 1 ) );
+		$this->assertSame( 'done', get_option( Receipt_Snapshot_Cleanup::OPTION ) );
+	}
+
 	/** A bounded run must leave work pending until an empty run confirms completion. */
 	public function test_run_is_resumable_in_batches(): void {
 		// Arrange.
