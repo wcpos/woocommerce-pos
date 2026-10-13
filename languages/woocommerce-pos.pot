@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-13T14:03:54+00:00\n"
+"POT-Creation-Date: 2026-10-13T23:50:33+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -356,12 +356,12 @@ msgid "58mm (Narrow)"
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API.php:410
+#: includes/API.php:411
 #: includes/API/V1/Cashier.php:124
 msgid "Authentication required."
 msgstr ""
 
-#: includes/API.php:417
+#: includes/API.php:418
 msgid "You do not have permission to access the POS."
 msgstr ""
 
@@ -678,7 +678,7 @@ msgstr ""
 #: includes/API/V1/Print_Jobs_Controller.php:810
 #: includes/API/V1/Print_Jobs_Controller.php:1012
 #: includes/API/V1/Print_Jobs_Controller.php:1116
-#: includes/Services/Providers/Star_Online_Adapter.php:181
+#: includes/Services/Providers/Star_Online_Adapter.php:189
 msgid "Print job could not be created."
 msgstr ""
 
@@ -1111,6 +1111,10 @@ msgstr ""
 msgid "WCPOS cannot run alongside the wePOS plugin due to compatibility issues. WCPOS has been deactivated."
 msgstr ""
 
+#: includes/Load_Integrity.php:357
+msgid "WCPOS is being updated on this site. Please try again in a few seconds."
+msgstr ""
+
 #. translators: POS order status label.
 #: includes/Orders.php:103
 #: includes/Orders.php:1138
@@ -1186,20 +1190,70 @@ msgstr ""
 msgid "WCPOS Cloud Print is disabled on this site."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:91
+#: includes/Services/Cloud_Print_Relay_Service.php:94
+msgid "WCPOS Cloud Print needs your site to use HTTPS. Set the Site Address (URL) in Settings > General to an https:// address, then try again."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:101
 msgid "Could not create a relay verification token."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:117
+#: includes/Services/Cloud_Print_Relay_Service.php:127
 msgid "Relay registration failed."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:124
+#: includes/Services/Cloud_Print_Relay_Service.php:134
 msgid "Relay registration returned invalid credentials."
 msgstr ""
 
 #: includes/Services/Core_Order_Audit_Guard.php:186
 msgid "POS audit metadata cannot be modified through this REST route."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:225
+msgid "WCPOS file integrity"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:254
+msgid "WCPOS"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:257
+msgid "WCPOS files match the published checksums"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:258
+msgid "Every WCPOS plugin file matches the checksums published for this version."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:263
+msgid "WCPOS files have not been checked yet"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:264
+msgid "A check of the WCPOS plugin files has been queued. Reload this page in a minute to see the result."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:266
+msgid "WCPOS files could not be verified"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:267
+msgid "No checksums are published for this version of WCPOS, so its files were not compared. Development copies and older builds that do not ship checksums.json have none."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:274
+msgid "Some WCPOS files are missing or modified"
+msgstr ""
+
+#. translators: 1: number of missing files, 2: number of modified files.
+#: includes/Services/File_Integrity.php:278
+#, php-format
+msgid "%1$d files are missing and %2$d files differ from the published version. An interrupted update can cause this, and it can make WCPOS fail to load."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:283
+msgid "Reinstall the plugin to restore its files."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
@@ -1344,13 +1398,17 @@ msgstr ""
 msgid "PrintNode authentication failed."
 msgstr ""
 
+#: includes/Services/PrintNode_Client.php:208
+msgid "PrintNode refused the request. Check that the API key is correct and the PrintNode account is active."
+msgstr ""
+
 #. translators: %d: HTTP status code.
-#: includes/Services/PrintNode_Client.php:222
+#: includes/Services/PrintNode_Client.php:230
 #, php-format
 msgid "PrintNode request failed with status %d."
 msgstr ""
 
-#: includes/Services/PrintNode_Client.php:250
+#: includes/Services/PrintNode_Client.php:258
 msgid "PrintNode returned an unexpected print job response."
 msgstr ""
 
@@ -1398,11 +1456,11 @@ msgstr ""
 msgid "spooler stopped"
 msgstr ""
 
-#: includes/Services/Providers/Printnode_Adapter.php:202
+#: includes/Services/Providers/Printnode_Adapter.php:210
 msgid "This PrintNode printer is missing its API key or printer id."
 msgstr ""
 
-#: includes/Services/Providers/Printnode_Adapter.php:216
+#: includes/Services/Providers/Printnode_Adapter.php:224
 msgid "Could not generate the test print."
 msgstr ""
 
@@ -2969,10 +3027,10 @@ msgstr ""
 #: templates/receipt.php:184
 #: tests/includes/Test_i18n_Storefront.php:95
 #: tests/includes/Test_i18n_Storefront.php:105
-#: tests/includes/Test_i18n_Storefront.php:118
-#: tests/includes/Test_i18n_Storefront.php:169
-#: tests/includes/Test_i18n_Storefront.php:181
-#: tests/includes/Test_i18n_Storefront.php:199
+#: tests/includes/Test_i18n_Storefront.php:123
+#: tests/includes/Test_i18n_Storefront.php:174
+#: tests/includes/Test_i18n_Storefront.php:186
+#: tests/includes/Test_i18n_Storefront.php:204
 msgid "Receipt"
 msgstr ""
 
@@ -4058,6 +4116,6 @@ msgstr ""
 msgid "The WP Overnight packing slip document could not be rendered for this order."
 msgstr ""
 
-#: woocommerce-pos.php:159
+#: woocommerce-pos.php:161
 msgid "The WCPOS plugin failed to load correctly."
 msgstr ""
