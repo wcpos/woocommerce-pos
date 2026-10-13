@@ -265,22 +265,12 @@ class Auth extends WP_REST_Controller {
 		$result       = $auth_service->refresh_access_token( $refresh_token );
 
 		if ( is_wp_error( $result ) ) {
-			$error_code = $result->get_error_code();
-			$error_msg  = $result->get_error_message();
-			$status     = $result->get_error_data()['status'] ?? 400;
-
-			// Map error codes to OAuth 2.0 standard error responses.
-			$oauth_error = 'invalid_grant'; // Default OAuth error for refresh token issues.
-
-			if ( false !== strpos( $error_code, 'invalid_token' ) || false !== strpos( $error_code, 'revoked' ) ) {
-				$oauth_error = 'invalid_grant';
-			} elseif ( false !== strpos( $error_code, 'user_not_found' ) ) {
-				$oauth_error = 'invalid_grant';
-			}
+			$error_msg = $result->get_error_message();
+			$status    = $result->get_error_data()['status'] ?? 400;
 
 			return new WP_REST_Response(
 				array(
-					'error'             => $oauth_error,
+					'error'             => 'invalid_grant', // OAuth 2.0: every refresh-token failure is invalid_grant; the status code carries the detail.
 					'error_description' => $error_msg,
 				),
 				$status

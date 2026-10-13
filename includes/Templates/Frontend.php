@@ -67,15 +67,6 @@ class Frontend {
 		// last chance before frontend template is rendered.
 		do_action( 'woocommerce_pos_frontend_template_redirect' );
 
-		/*
-		 * Deprecated action.
-		 *
-		 * @TODO remove in 1.5.0
-		 */
-		if ( has_action( 'woocommerce_pos_template_redirect' ) ) {
-			do_action_deprecated( 'woocommerce_pos_template_redirect', array(), 'Version_1.4.0', 'woocommerce_pos_frontend_template_redirect' );
-		}
-
 		// add head & footer actions.
 		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
 		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );

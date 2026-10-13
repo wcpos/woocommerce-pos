@@ -191,6 +191,7 @@ if ( ! \function_exists( 'wcpos_admin_request' ) ) {
 	/**
 	 * Check for POS admin requests.
 	 *
+	 * @deprecated 2.0.0 No callers; its header lookups never match. Removal pending a maintainer ruling.
 	 * @return mixed Admin request header value or false.
 	 */
 	function wcpos_admin_request() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.

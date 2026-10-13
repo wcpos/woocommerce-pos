@@ -490,6 +490,8 @@ class Settings {
 	/**
 	 * Delete settings in WP options table.
 	 *
+	 * @deprecated 2.0.0 No callers; removal pending a maintainer ruling.
+	 *
 	 * @param string $id The settings section ID.
 	 *
 	 * @return bool|WP_Error

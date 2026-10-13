@@ -401,6 +401,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * Covers the WHERE, GROUP BY, JOIN, ORDER BY, DISTINCT,
 	 * fields (SELECT), and LIMIT clauses.
 	 *
+	 * @deprecated Collection Rules now installs this behavior.
+	 *
 	 * @param string[] $clauses  Associative array of the clauses for the query.
 	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 */
@@ -715,7 +717,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		 * mapped onto `meta_key` + `orderby => meta_value` here any more. That pair
 		 * INNER JOINs postmeta, so it dropped every product with no value for the key —
 		 * a sort acting as a filter (#1779 follow-up). `Sync\Collection_Rules` declares
-		 * them and `wcpos_posts_clauses()` applies them as a LEFT JOIN, on this lane and
+		 * them and its plan applies them on `posts_clauses` as a LEFT JOIN, on this lane and
 		 * on the v2 proxy alike.
 		 */
 
