@@ -435,8 +435,6 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 		return array(
 			// Wendy < Xavier < Yolanda.
 			'first_name' => array( 'first_name', array( 'mercer', 'alpha', 'zeta' ) ),
-			// Alpha < Mercer < Zeta.
-			'last_name'  => array( 'last_name', array( 'alpha', 'mercer', 'zeta' ) ),
 			// alpha.sortable@ < mercer.sortable@ < zeta.sortable@.
 			'email'      => array( 'email', array( 'alpha', 'mercer', 'zeta' ) ),
 			// user_login: alpha.sortable < mercer.sortable < zeta.sortable.

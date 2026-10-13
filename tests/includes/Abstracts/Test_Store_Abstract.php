@@ -234,13 +234,109 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$store_id = $this->store->get_id();
 		$this->assertIsInt( $store_id );
 		$this->assertEquals( 0, $store_id );
-	}
 
-	public function test_get_store_name_falls_back_to_blog_name_when_unset(): void {
 		// Test uses the real get_bloginfo function from WordPress test environment.
 		$store_name = $this->store->get_name();
-		$this->assertIsString( $store_name );
-		$this->assertEquals( 'Test Blog', $store_name );
+		$this->assertIsString( $store_name, 'get_store_name_falls_back_to_blog_name_when_unset' );
+		$this->assertEquals( 'Test Blog', $store_name, 'get_store_name_falls_back_to_blog_name_when_unset' );
+
+		$store_locale = $this->store->get_locale();
+		$this->assertIsString( $store_locale, 'get_store_locale' );
+		$this->assertEquals( 'en_US', $store_locale, 'get_store_locale' );
+
+		$store_address = $this->store->get_store_address();
+		$this->assertIsString( $store_address, 'get_store_address' );
+		$this->assertEquals( '', $store_address, 'get_store_address' ); // Assuming default is empty string
+
+		$store_address_2 = $this->store->get_store_address_2();
+		$this->assertIsString( $store_address_2, 'get_store_address_2' );
+		$this->assertEquals( '', $store_address_2, 'get_store_address_2' ); // Assuming default is empty string
+
+		$store_city = $this->store->get_store_city();
+		$this->assertIsString( $store_city, 'get_store_city' );
+		$this->assertEquals( '', $store_city, 'get_store_city' ); // Assuming default is empty string
+
+		$store_postcode = $this->store->get_store_postcode();
+		$this->assertIsString( $store_postcode, 'get_store_postcode' );
+		$this->assertEquals( '', $store_postcode, 'get_store_postcode' ); // Assuming default is empty string
+
+		$store_customer_address = $this->store->get_default_customer_address();
+		$this->assertIsString( $store_customer_address, 'get_default_customer_address' );
+		$this->assertEquals( 'base', $store_customer_address, 'get_default_customer_address' ); // Assuming default is empty string
+
+		$calc_taxes = $this->store->get_calc_taxes();
+		$this->assertIsString( $calc_taxes, 'get_calc_taxes' );
+		$this->assertEquals( 'no', $calc_taxes, 'get_calc_taxes' ); // Default value
+
+		$enable_coupons = $this->store->get_enable_coupons();
+		$this->assertIsString( $enable_coupons, 'get_enable_coupons' );
+		$this->assertEquals( 'yes', $enable_coupons, 'get_enable_coupons' ); // Default value
+
+		$calc_discounts_sequentially = $this->store->get_calc_discounts_sequentially();
+		$this->assertIsString( $calc_discounts_sequentially, 'get_calc_discounts_sequentially' );
+		$this->assertEquals( 'no', $calc_discounts_sequentially, 'get_calc_discounts_sequentially' ); // Default value
+
+		$currency = $this->store->get_currency();
+		$this->assertIsString( $currency, 'get_currency' );
+		$this->assertEquals( 'USD', $currency, 'get_currency' ); // Default value
+
+		$currency_pos = $this->store->get_currency_position();
+		$this->assertIsString( $currency_pos, 'get_currency_position' );
+		$this->assertEquals( 'left', $currency_pos, 'get_currency_position' ); // Default value
+
+		$separator = $this->store->get_price_thousand_separator();
+		$this->assertIsString( $separator, 'get_price_thousand_separator' );
+		$this->assertEquals( ',', $separator, 'get_price_thousand_separator' ); // Default value
+
+		$separator = $this->store->get_price_decimal_separator();
+		$this->assertIsString( $separator, 'get_price_decimal_separator' );
+		$this->assertEquals( '.', $separator, 'get_price_decimal_separator' ); // Default value
+
+		$decimals = $this->store->get_price_number_of_decimals();
+		$this->assertIsInt( $decimals, 'get_price_number_of_decimals' );
+		$this->assertEquals( 2, $decimals, 'get_price_number_of_decimals' ); // Default value
+
+		$include_tax = $this->store->get_prices_include_tax();
+		$this->assertIsString( $include_tax, 'get_prices_include_tax' );
+		$this->assertEquals( 'no', $include_tax, 'get_prices_include_tax' ); // Default value
+
+		$tax_based_on = $this->store->get_tax_based_on();
+		$this->assertIsString( $tax_based_on, 'get_tax_based_on' );
+		$this->assertEquals( 'base', $tax_based_on, 'get_tax_based_on' ); // Default value
+
+		$tax_class = $this->store->get_shipping_tax_class();
+		$this->assertIsString( $tax_class, 'get_shipping_tax_class' );
+		$this->assertEquals( 'inherit', $tax_class, 'get_shipping_tax_class' ); // Default value
+
+		$round_at_subtotal = $this->store->get_tax_round_at_subtotal();
+		$this->assertIsString( $round_at_subtotal, 'get_tax_round_at_subtotal' );
+		$this->assertEquals( 'no', $round_at_subtotal, 'get_tax_round_at_subtotal' ); // Default value
+
+		$tax_display_shop = $this->store->get_tax_display_shop();
+		$this->assertIsString( $tax_display_shop, 'get_tax_display_shop' );
+		$this->assertEquals( 'excl', $tax_display_shop, 'get_tax_display_shop' ); // Default value
+
+		$tax_display_cart = $this->store->get_tax_display_cart();
+		$this->assertIsString( $tax_display_cart, 'get_tax_display_cart' );
+		$this->assertEquals( 'excl', $tax_display_cart, 'get_tax_display_cart' ); // Default value
+
+		$display_suffix = $this->store->get_price_display_suffix();
+		$this->assertIsString( $display_suffix, 'get_price_display_suffix' );
+		$this->assertEquals( '', $display_suffix, 'get_price_display_suffix' ); // Default value
+
+		$tax_total_display = $this->store->get_tax_total_display();
+		$this->assertIsString( $tax_total_display, 'get_tax_total_display' );
+		$this->assertEquals( 'itemized', $tax_total_display, 'get_tax_total_display' ); // Default value
+
+		$customer = $this->store->get_default_customer();
+		$this->assertIsInt( $customer, 'get_default_customer' );
+		$this->assertEquals( 0, $customer, 'get_default_customer' ); // Default value
+
+		$is_cashier = $this->store->get_default_customer_is_cashier();
+		$this->assertIsBool( $is_cashier, 'get_default_customer_is_cashier' );
+		$this->assertFalse( $is_cashier, 'get_default_customer_is_cashier' ); // Default value
+
+		$this->assertSame( 'undecided', $this->store->get_tracking_consent(), 'get_tracking_consent_defaults_to_undecided' );
 	}
 
 	public function test_get_store_name_falls_back_to_wc_pos_option_when_setting_blank(): void {
@@ -307,102 +403,6 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertEquals( 'Returns within 30 days.', $store->get_policies_and_conditions() );
 	}
 
-	public function test_get_store_locale(): void {
-		$store_locale = $this->store->get_locale();
-		$this->assertIsString( $store_locale );
-		$this->assertEquals( 'en_US', $store_locale );
-	}
-
-	public function test_get_store_address(): void {
-		$store_address = $this->store->get_store_address();
-		$this->assertIsString( $store_address );
-		$this->assertEquals( '', $store_address ); // Assuming default is empty string
-	}
-
-	public function test_get_store_address_2(): void {
-		$store_address_2 = $this->store->get_store_address_2();
-		$this->assertIsString( $store_address_2 );
-		$this->assertEquals( '', $store_address_2 ); // Assuming default is empty string
-	}
-
-	public function test_get_store_city(): void {
-		$store_city = $this->store->get_store_city();
-		$this->assertIsString( $store_city );
-		$this->assertEquals( '', $store_city ); // Assuming default is empty string
-	}
-
-	public function test_get_store_postcode(): void {
-		$store_postcode = $this->store->get_store_postcode();
-		$this->assertIsString( $store_postcode );
-		$this->assertEquals( '', $store_postcode ); // Assuming default is empty string
-	}
-
-	public function test_get_default_customer_address(): void {
-		$store_customer_address = $this->store->get_default_customer_address();
-		$this->assertIsString( $store_customer_address );
-		$this->assertEquals( 'base', $store_customer_address ); // Assuming default is empty string
-	}
-
-	public function test_get_calc_taxes(): void {
-		$calc_taxes = $this->store->get_calc_taxes();
-		$this->assertIsString( $calc_taxes );
-		$this->assertEquals( 'no', $calc_taxes ); // Default value
-	}
-
-	public function test_get_enable_coupons(): void {
-		$enable_coupons = $this->store->get_enable_coupons();
-		$this->assertIsString( $enable_coupons );
-		$this->assertEquals( 'yes', $enable_coupons ); // Default value
-	}
-
-	public function test_get_calc_discounts_sequentially(): void {
-		$calc_discounts_sequentially = $this->store->get_calc_discounts_sequentially();
-		$this->assertIsString( $calc_discounts_sequentially );
-		$this->assertEquals( 'no', $calc_discounts_sequentially ); // Default value
-	}
-
-	public function test_get_currency(): void {
-		$currency = $this->store->get_currency();
-		$this->assertIsString( $currency );
-		$this->assertEquals( 'USD', $currency ); // Default value
-	}
-
-	public function test_get_currency_position(): void {
-		$currency_pos = $this->store->get_currency_position();
-		$this->assertIsString( $currency_pos );
-		$this->assertEquals( 'left', $currency_pos ); // Default value
-	}
-
-	public function test_get_price_thousand_separator(): void {
-		$separator = $this->store->get_price_thousand_separator();
-		$this->assertIsString( $separator );
-		$this->assertEquals( ',', $separator ); // Default value
-	}
-
-	public function test_get_price_decimal_separator(): void {
-		$separator = $this->store->get_price_decimal_separator();
-		$this->assertIsString( $separator );
-		$this->assertEquals( '.', $separator ); // Default value
-	}
-
-	public function test_get_price_number_of_decimals(): void {
-		$decimals = $this->store->get_price_number_of_decimals();
-		$this->assertIsInt( $decimals );
-		$this->assertEquals( 2, $decimals ); // Default value
-	}
-
-	public function test_get_prices_include_tax(): void {
-		$include_tax = $this->store->get_prices_include_tax();
-		$this->assertIsString( $include_tax );
-		$this->assertEquals( 'no', $include_tax ); // Default value
-	}
-
-	public function test_get_tax_based_on(): void {
-		$tax_based_on = $this->store->get_tax_based_on();
-		$this->assertIsString( $tax_based_on );
-		$this->assertEquals( 'base', $tax_based_on ); // Default value
-	}
-
 	/**
 	 * WooCommerce's billing setting becomes the store default.
 	 */
@@ -439,58 +439,6 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertSame( 'base', $store->get_tax_based_on() );
 	}
 
-	public function test_get_shipping_tax_class(): void {
-		$tax_class = $this->store->get_shipping_tax_class();
-		$this->assertIsString( $tax_class );
-		$this->assertEquals( 'inherit', $tax_class ); // Default value
-	}
-
-	public function test_get_tax_round_at_subtotal(): void {
-		$round_at_subtotal = $this->store->get_tax_round_at_subtotal();
-		$this->assertIsString( $round_at_subtotal );
-		$this->assertEquals( 'no', $round_at_subtotal ); // Default value
-	}
-
-	public function test_get_tax_display_shop(): void {
-		$tax_display_shop = $this->store->get_tax_display_shop();
-		$this->assertIsString( $tax_display_shop );
-		$this->assertEquals( 'excl', $tax_display_shop ); // Default value
-	}
-
-	public function test_get_tax_display_cart(): void {
-		$tax_display_cart = $this->store->get_tax_display_cart();
-		$this->assertIsString( $tax_display_cart );
-		$this->assertEquals( 'excl', $tax_display_cart ); // Default value
-	}
-
-	public function test_get_price_display_suffix(): void {
-		$display_suffix = $this->store->get_price_display_suffix();
-		$this->assertIsString( $display_suffix );
-		$this->assertEquals( '', $display_suffix ); // Default value
-	}
-
-	public function test_get_tax_total_display(): void {
-		$tax_total_display = $this->store->get_tax_total_display();
-		$this->assertIsString( $tax_total_display );
-		$this->assertEquals( 'itemized', $tax_total_display ); // Default value
-	}
-
-
-	public function test_get_default_customer(): void {
-		$customer = $this->store->get_default_customer();
-		$this->assertIsInt( $customer );
-		$this->assertEquals( 0, $customer ); // Default value
-	}
-
-	public function test_get_default_customer_is_cashier(): void {
-		$is_cashier = $this->store->get_default_customer_is_cashier();
-		$this->assertIsBool( $is_cashier );
-		$this->assertFalse( $is_cashier ); // Default value
-	}
-
-	public function test_get_tracking_consent_defaults_to_undecided(): void {
-		$this->assertSame( 'undecided', $this->store->get_tracking_consent() );
-	}
 
 	public function test_get_tracking_consent_mirrors_general_setting(): void {
 		$settings                     = (array) get_option( 'woocommerce_pos_settings_general', array() );

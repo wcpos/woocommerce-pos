@@ -17,6 +17,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
  * @internal
  *
  * @coversNothing
+ * @group benchmark
  */
 class Test_Meta_Data_Benchmark extends WCPOS_REST_Unit_Test_Case {
 	/**

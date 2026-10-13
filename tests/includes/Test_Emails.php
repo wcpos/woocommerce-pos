@@ -71,14 +71,6 @@ class Test_Emails extends WC_Unit_Test_Case {
 	// ==========================================================================
 
 	/**
-	 * Test that Emails class can be instantiated.
-	 */
-	public function test_emails_class_instantiation(): void {
-		$emails = new Emails();
-		$this->assertInstanceOf( Emails::class, $emails );
-	}
-
-	/**
 	 * Test that admin email filters are registered.
 	 */
 	public function test_admin_email_filters_registered(): void {

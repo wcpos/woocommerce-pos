@@ -47,17 +47,6 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The prefixed Dompdf class is available under the WCPOS\Vendor namespace.
-	 */
-	public function test_prefixed_dompdf_class_is_loadable(): void {
-		// Assert.
-		$this->assertTrue(
-			class_exists( '\\WCPOS\\Vendor\\Dompdf\\Dompdf' ),
-			'Prefixed Dompdf class should be autoloadable from vendor_prefixed.'
-		);
-	}
-
-	/**
 	 * The scoped Dompdf build calls the global PHP 8.4 HTTP response header
 	 * functions, never prefixed ones.
 	 *

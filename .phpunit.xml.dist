@@ -7,6 +7,13 @@
 	convertNoticesToExceptions="true"
 	convertWarningsToExceptions="true"
 	>
+	<!-- Benchmarks print timings and assert nothing: excluded by default, run on
+	     demand by passing the "benchmark" group to PHPUnit. -->
+	<groups>
+		<exclude>
+			<group>benchmark</group>
+		</exclude>
+	</groups>
 	<testsuites>
 		<testsuite name="default">
 			<directory prefix="test-" suffix=".php">./tests/</directory>

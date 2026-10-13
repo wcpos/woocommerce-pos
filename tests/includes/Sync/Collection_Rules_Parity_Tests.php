@@ -39,7 +39,8 @@ trait Collection_Rules_Parity_Tests {
 	 * Both lanes return the same id sequence for every sort, in both directions.
 	 */
 	public function test_every_sort_returns_identical_id_sequences_on_both_lanes(): void {
-		$this->create_sort_fixtures();
+		$orders = $this->create_sort_fixtures();
+		$by_low = array( $orders['low']->get_id(), $orders['middle']->get_id(), $orders['high']->get_id() );
 
 		foreach ( array( 'status', 'customer_id', 'payment_method', 'total' ) as $orderby ) {
 			foreach ( array( 'asc', 'desc' ) as $order ) {
@@ -51,37 +52,11 @@ trait Collection_Rules_Parity_Tests {
 				);
 
 				$this->assertCount( 3, $ids, "{$orderby} {$order} returned an unexpected number of orders" );
+				if ( 'total' === $orderby ) {
+					$this->assertEquals( 'asc' === $order ? $by_low : array_reverse( $by_low ), $ids, 'total_sort_returns_the_expected_sequence_on_both_lanes: ' . $order );
+				}
 			}
 		}
-	}
-
-	/**
-	 * The `total` sort is unambiguous, so both lanes are pinned to the exact sequence.
-	 *
-	 * Guards against the two lanes agreeing on the WRONG order.
-	 */
-	public function test_total_sort_returns_the_expected_sequence_on_both_lanes(): void {
-		$orders = $this->create_sort_fixtures();
-		$by_low = array( $orders['low']->get_id(), $orders['middle']->get_id(), $orders['high']->get_id() );
-
-		$this->assertEquals(
-			$by_low,
-			$this->assert_lane_parity(
-				array(
-					'orderby' => 'total',
-					'order'   => 'asc',
-				)
-			)
-		);
-		$this->assertEquals(
-			array_reverse( $by_low ),
-			$this->assert_lane_parity(
-				array(
-					'orderby' => 'total',
-					'order'   => 'desc',
-				)
-			)
-		);
 	}
 
 	/**

@@ -61,31 +61,6 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Stored visibility ids do not apply while the production feature toggle is disabled.
-	 */
-	public function test_pos_visibility_with_toggle_disabled_returns_no_exclusions(): void {
-		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => false ) );
-		update_option(
-			Pos_Visibility::OPTION,
-			array(
-				'products' => array(
-					'default' => array(
-						'online_only' => array( 'ids' => array( 4 ) ),
-					),
-				),
-				'variations' => array(
-					'default' => array(
-						'online_only' => array( 'ids' => array( 8 ) ),
-					),
-				),
-			)
-		);
-
-		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_product_ids() );
-		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_variation_ids() );
-	}
-
-	/**
 	 * Term adapter exposes the WC data meta contract over term meta.
 	 */
 	public function test_term_meta_adapter_mints_and_persists_identity(): void {

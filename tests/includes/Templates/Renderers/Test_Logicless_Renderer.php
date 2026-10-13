@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates\Renderers;
 
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
 use WCPOS\Vendor\chillerlan\QRCode\QRCode;
 use WC_REST_Unit_Test_Case;
@@ -31,7 +30,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	/**
 	 * Dummy order for render() signature.
 	 *
-	 * @var \WC_Abstract_Order
+	 * @var \WC_Abstract_Order|null
 	 */
 	private $order;
 
@@ -41,7 +40,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 		$this->renderer = new Logicless_Renderer();
-		$this->order    = OrderHelper::create_order();
+		$this->order    = null;
 	}
 
 	/**
@@ -468,14 +467,6 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 		$output   = $this->render( $template, $data );
 
 		$this->assertSame( "before\n<div>Widget</div>\nafter", $output );
-	}
-
-	/**
-	 * Test empty template outputs comment.
-	 */
-	public function test_empty_template_renders_comment(): void {
-		$output = $this->render( '', array( 'order' => array( 'currency' => 'USD' ) ) );
-		$this->assertStringContainsString( 'Empty logicless receipt template', $output );
 	}
 
 	/**

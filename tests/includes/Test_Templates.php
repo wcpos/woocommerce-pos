@@ -1416,33 +1416,17 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertEquals( 'Standard Receipt', $post->post_title );
 		$this->assertNotEmpty( $post->post_content );
 
-		wp_delete_post( $post_id, true );
-	}
 
-	/**
-	 * Test install_gallery_template sets metadata.
-	 */
-	public function test_install_gallery_template_sets_metadata(): void {
-		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ), 'install_gallery_template_sets_metadata' );
+		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ), 'install_gallery_template_sets_metadata' );
+		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ), 'install_gallery_template_sets_metadata' );
 
-		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ) );
-		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
-		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
-
-		wp_delete_post( $post_id, true );
-	}
-
-	/**
-	 * Test install_gallery_template sets taxonomies.
-	 */
-	public function test_install_gallery_template_sets_taxonomies(): void {
-		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
 
 		$type_terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
-		$this->assertEquals( 'receipt', $type_terms[0]->slug );
+		$this->assertEquals( 'receipt', $type_terms[0]->slug, 'install_gallery_template_sets_taxonomies' );
 
 		$cat_terms = wp_get_post_terms( $post_id, 'wcpos_template_category' );
-		$this->assertEquals( 'receipt', $cat_terms[0]->slug );
+		$this->assertEquals( 'receipt', $cat_terms[0]->slug, 'install_gallery_template_sets_taxonomies' );
 
 		wp_delete_post( $post_id, true );
 	}

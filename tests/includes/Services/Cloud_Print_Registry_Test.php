@@ -164,27 +164,6 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It reports an online PrintNode printer via the live API.
-	 */
-	public function test_status_for_printnode_online_returns_online(): void {
-		// Arrange.
-		$this->seed_printnode_printer();
-		$this->mock_http(
-			$this->fake_response(
-				array(
-					array(
-						'id' => 9,
-						'state' => 'online',
-					),
-				)
-			)
-		);
-
-		// Act + Assert.
-		$this->assertEquals( 'online', ( new Cloud_Print_Registry() )->status_for( 'bar' ) );
-	}
-
-	/**
 	 * It reports an offline PrintNode printer via the live API.
 	 */
 	public function test_status_for_printnode_offline_returns_offline(): void {

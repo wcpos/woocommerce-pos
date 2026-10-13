@@ -271,17 +271,6 @@ class Test_Consent extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The REST route is registered under the WCPOS namespace at rest_api_init.
-	 */
-	public function test_rest_route_is_registered(): void {
-		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
-		do_action( 'rest_api_init' );
-
-		$routes = rest_get_server()->get_routes();
-		$this->assertArrayHasKey( '/wcpos/v1/consent', $routes );
-	}
-
-	/**
 	 * End-to-end: an admin hitting the registered route via rest_do_request()
 	 * persists the choice. Covers route wiring, arg schema, and the
 	 * permission callback — things unit-calling save_consent() won't.

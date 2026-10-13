@@ -65,6 +65,7 @@ class Test_Collection_Rules_Guard_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 		foreach ( $expected as $orderby => $expected_clause ) {
 			$observed = null;
+			$after    = null;
 			$probe    = static function ( $clauses ) use ( &$observed ) {
 				if ( null === $observed ) {
 					$observed = $clauses['orderby'] ?? null;
@@ -75,6 +76,13 @@ class Test_Collection_Rules_Guard_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 			// Priority 9: before the rule (and, on the direct lane, before v1's own
 			// callbacks) writes anything.
 			add_filter( 'woocommerce_orders_table_query_clauses', $probe, 9, 1 );
+			$check = static function ( $clauses ) use ( &$after ) {
+				if ( null === $after ) {
+					$after = $clauses['orderby'] ?? null;
+				}
+				return $clauses;
+			};
+			add_filter( 'woocommerce_orders_table_query_clauses', $check, 11, 1 );
 
 			$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 			$request->set_query_params(
@@ -86,6 +94,7 @@ class Test_Collection_Rules_Guard_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 
 			remove_filter( 'woocommerce_orders_table_query_clauses', $probe, 9 );
+			remove_filter( 'woocommerce_orders_table_query_clauses', $check, 11 );
 
 			$this->assertEquals( 200, $response->get_status(), "v1 orders request failed for {$orderby}" );
 			$this->assertIsString( $observed, "the clauses filter never fired for {$orderby}" );
@@ -93,6 +102,8 @@ class Test_Collection_Rules_Guard_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 			if ( '' === $expected_clause ) {
 				$this->assertSame( '', $observed, "WooCommerce now maps the '{$orderby}' sort itself" );
 			} else {
+				$this->assertEquals( 200, $response->get_status(), 'rule_defers_to_the_woocommerce_owned_total_sort' );
+				$this->assertSame( $observed, $after, 'rule_defers_to_the_woocommerce_owned_total_sort: the rule overwrote a WooCommerce-owned ORDER BY' );
 				$this->assertStringEndsWith(
 					$expected_clause,
 					$observed,
@@ -102,44 +113,4 @@ class Test_Collection_Rules_Guard_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		}
 	}
 
-	/**
-	 * The rule leaves a WooCommerce-owned ORDER BY exactly as WooCommerce wrote it.
-	 */
-	public function test_rule_defers_to_the_woocommerce_owned_total_sort(): void {
-		OrderHelper::create_order();
-
-		$before = null;
-		$after  = null;
-		$probe  = static function ( $clauses ) use ( &$before ) {
-			if ( null === $before ) {
-				$before = $clauses['orderby'] ?? null;
-			}
-
-			return $clauses;
-		};
-		$check  = static function ( $clauses ) use ( &$after ) {
-			if ( null === $after ) {
-				$after = $clauses['orderby'] ?? null;
-			}
-
-			return $clauses;
-		};
-		add_filter( 'woocommerce_orders_table_query_clauses', $probe, 9, 1 );
-		add_filter( 'woocommerce_orders_table_query_clauses', $check, 11, 1 );
-
-		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_query_params(
-			array(
-				'orderby' => 'total',
-				'order'   => 'asc',
-			)
-		);
-		$response = $this->server->dispatch( $request );
-
-		remove_filter( 'woocommerce_orders_table_query_clauses', $probe, 9 );
-		remove_filter( 'woocommerce_orders_table_query_clauses', $check, 11 );
-
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertSame( $before, $after, 'the rule overwrote a WooCommerce-owned ORDER BY' );
-	}
 }

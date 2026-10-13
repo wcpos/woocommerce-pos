@@ -115,28 +115,11 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 			'/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i',
 			$uuid
 		);
-	}
 
-	/**
-	 * Test get_cashier_uuid returns consistent UUID.
-	 */
-	public function test_get_cashier_uuid_is_consistent(): void {
-		$uuid1 = $this->service->get_cashier_uuid( $this->user );
 		$uuid2 = $this->service->get_cashier_uuid( $this->user );
-
-		$this->assertEquals( $uuid1, $uuid2 );
-	}
-
-	/**
-	 * Test get_cashier_uuid persists to user meta.
-	 */
-	public function test_get_cashier_uuid_persists_to_user_meta(): void {
-		$uuid = $this->service->get_cashier_uuid( $this->user );
-
-		// Check it was stored in user meta.
+		$this->assertEquals( $uuid, $uuid2, 'get_cashier_uuid_is_consistent' );
 		$stored_uuid = get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true );
-
-		$this->assertEquals( $uuid, $stored_uuid );
+		$this->assertEquals( $uuid, $stored_uuid, 'get_cashier_uuid_persists_to_user_meta' );
 	}
 
 	/**

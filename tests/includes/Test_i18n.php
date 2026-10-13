@@ -140,63 +140,6 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 	}
 
 	/**
-	 * Verify that non-English locale triggers a CDN download.
-	 *
-	 * @covers ::__construct
-	 * @covers ::load_translations
-	 * @covers ::download_translation
-	 */
-	public function test_non_english_locale_triggers_download(): void {
-		add_filter(
-			'locale',
-			function () {
-				return 'de_DE';
-			}
-		);
-
-		$this->http_responder = function ( $request, $url ) {
-			if ( false !== strpos( $url, 'cdn.jsdelivr.net' ) ) {
-				return array(
-					'response' => array( 'code' => 200 ),
-					'body'     => "<?php\nreturn array('messages' => array());",
-				);
-			}
-
-			return false;
-		};
-
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
-
-		$this->assertNotEmpty( $this->http_requests, 'An HTTP request should be made for de_DE locale' );
-	}
-
-	/**
-	 * Verify CDN URL includes correct version, locale, and text domain.
-	 *
-	 * @covers ::download_translation
-	 */
-	public function test_cdn_url_format_is_correct(): void {
-		add_filter(
-			'locale',
-			function () {
-				return 'de_DE';
-			}
-		);
-
-		$this->http_responder = function ( $request, $url ) {
-			return array(
-				'response' => array( 'code' => 200 ),
-				'body'     => "<?php\nreturn array('messages' => array());",
-			);
-		};
-
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
-
-		$expected_url = 'https://cdn.jsdelivr.net/gh/wcpos/translations@1.8.7/translations/php/de_DE/woocommerce-pos-de_DE.l10n.php';
-		$this->assertEquals( $expected_url, $this->http_requests[0]['url'] );
-	}
-
-	/**
 	 * Verify successful download writes the translation file to disk.
 	 *
 	 * @covers ::download_translation
@@ -221,32 +164,12 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 
 		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
 		$this->assertFileExists( $file, 'Translation file should be saved to languages directory' );
-	}
 
-	/**
-	 * Verify successful download caches the version in a transient.
-	 *
-	 * @covers ::load_translations
-	 */
-	public function test_successful_download_sets_version_transient(): void {
-		add_filter(
-			'locale',
-			function () {
-				return 'de_DE';
-			}
-		);
-
-		$this->http_responder = function ( $request, $url ) {
-			return array(
-				'response' => array( 'code' => 200 ),
-				'body'     => "<?php\nreturn array('messages' => array());",
-			);
-		};
-
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		$expected_url = 'https://cdn.jsdelivr.net/gh/wcpos/translations@1.8.7/translations/php/de_DE/woocommerce-pos-de_DE.l10n.php';
+		$this->assertEquals( $expected_url, $this->http_requests[0]['url'], 'cdn_url_format_is_correct' );
 
 		$cached = get_transient( 'wcpos_i18n_woocommerce-pos_de_DE' );
-		$this->assertEquals( '1.8.7', $cached, 'Transient should store the current version after successful download' );
+		$this->assertEquals( '1.8.7', $cached, 'successful_download_sets_version_transient: Transient should store the current version after successful download' );
 	}
 
 	/**

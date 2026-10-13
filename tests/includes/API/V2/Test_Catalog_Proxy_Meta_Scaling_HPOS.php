@@ -10,12 +10,10 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 
-/**
- * Re-runs every meta-scaling pin with the custom orders table enabled, so the
- * HPOS branch of the order-meta fixtures and the HPOS read path are exercised
- * (the parent class runs under CPT storage only).
- */
-class Test_Catalog_Proxy_Meta_Scaling_HPOS extends Test_Catalog_Proxy_Meta_Scaling {
+require_once __DIR__ . '/Test_Catalog_Proxy_Meta_Scaling.php';
+
+/** Runs the shared order-meta scaling case with HPOS storage. */
+class Test_Catalog_Proxy_Meta_Scaling_HPOS extends Catalog_Proxy_Meta_Scaling_Test_Case {
 	use HPOSToggleTrait;
 
 	/**

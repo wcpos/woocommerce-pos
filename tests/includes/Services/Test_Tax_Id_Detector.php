@@ -19,15 +19,7 @@ use WP_UnitTestCase;
  *
  * @coversNothing
  */
-class Test_Tax_Id_Detector extends WP_UnitTestCase {
-	/**
-	 * Reset general settings option after each test.
-	 */
-	public function tearDown(): void {
-		delete_option( 'woocommerce_pos_settings_general' );
-		parent::tearDown();
-	}
-
+class Test_Tax_Id_Detector extends Tax_Id_Detector_Storage_Test_Case {
 	/**
 	 * Defaults are returned when nothing is detected and no overrides exist.
 	 */
@@ -122,6 +114,18 @@ class Test_Tax_Id_Detector extends WP_UnitTestCase {
 		$map = Tax_Id_Detector::compose_write_map( $defaults, array(), array(), $overrides );
 
 		$this->assertSame( '_billing_cpf', $map[ Tax_Id_Types::TYPE_BR_CPF ] );
+	}
+
+}
+
+/** Storage-dependent coverage shared by posts and HPOS. */
+abstract class Tax_Id_Detector_Storage_Test_Case extends WP_UnitTestCase {
+	/**
+	 * Reset general settings option after each test.
+	 */
+	public function tearDown(): void {
+		delete_option( 'woocommerce_pos_settings_general' );
+		parent::tearDown();
 	}
 
 	/**

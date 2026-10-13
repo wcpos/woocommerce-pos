@@ -417,41 +417,18 @@ class Test_Session_Registry extends WP_UnitTestCase {
 	 * Eviction trims IDLE sessions down to the cap.
 	 */
 	public function test_store_refresh_token_beyond_cap_keeps_only_the_capped_number_of_sessions(): void {
-		$this->plant_sessions( Session_Registry::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
+		$planted = $this->plant_sessions( Session_Registry::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
 
-		$this->auth_service->generate_refresh_token( $this->test_user );
+		$newest = $this->auth_service->generate_refresh_token( $this->test_user );
 
 		$refresh_tokens = $this->auth_service->sessions()->entries( $this->test_user->ID );
 
 		$this->assertCount( Session_Registry::MAX_SESSIONS_PER_USER, $refresh_tokens );
-	}
 
-	/**
-	 * The session created by the most recent login survives the eviction.
-	 */
-	public function test_store_refresh_token_beyond_cap_retains_the_newest_session(): void {
-		$this->plant_sessions( Session_Registry::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
-
-		$newest         = $this->auth_service->generate_refresh_token( $this->test_user );
 		$newest_decoded = $this->auth_service->validate_token( $newest, 'refresh' );
-
-		$refresh_tokens = $this->auth_service->sessions()->entries( $this->test_user->ID );
-
-		$this->assertArrayHasKey( $newest_decoded->jti, $refresh_tokens );
-	}
-
-	/**
-	 * The least recently seen session is the one evicted.
-	 */
-	public function test_store_refresh_token_beyond_cap_evicts_the_oldest_session(): void {
-		$planted = $this->plant_sessions( Session_Registry::MAX_SESSIONS_PER_USER, $this->idle_timestamp() );
-		$oldest  = array_key_last( $planted );
-
-		$this->auth_service->generate_refresh_token( $this->test_user );
-
-		$refresh_tokens = $this->auth_service->sessions()->entries( $this->test_user->ID );
-
-		$this->assertArrayNotHasKey( $oldest, $refresh_tokens );
+		$this->assertArrayHasKey( $newest_decoded->jti, $refresh_tokens, 'store_refresh_token_beyond_cap_retains_the_newest_session' );
+		$oldest = array_key_last( $planted );
+		$this->assertArrayNotHasKey( $oldest, $refresh_tokens, 'store_refresh_token_beyond_cap_evicts_the_oldest_session' );
 	}
 
 	/**

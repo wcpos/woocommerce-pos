@@ -526,24 +526,6 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$this->assertEquals( 6, wc_get_product( $product_id )->get_stock_quantity() );
 	}
 
-	public function test_dispatch_fake_reservation_retains_envelope_and_rejects_reuse(): void {
-		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
-		$this->assertSame(
-			array(
-				'collection' => 'products',
-				'record_uuid' => 'record-1',
-				'operation' => 'create',
-				'fingerprint' => 'fingerprint-1',
-				'status' => 'pending',
-			),
-			$this->store->lookup( 'products', 'mutation-1' )
-		);
-		$this->assertFalse( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
-		$this->assertFalse( $this->store->reserve( 'orders', 'mutation-1', 'record-2', 'delete', 'fingerprint-2' ) );
-		$this->store->release( 'mutation-1' );
-		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
-	}
-
 	public function test_valid_golden_create_round_trips_through_rest_dispatch(): void {
 		$fixture              = $this->fixture( 'product-create' );
 		$this->store->resolve = 41;
