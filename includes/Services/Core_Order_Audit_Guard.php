@@ -275,7 +275,7 @@ final class Core_Order_Audit_Guard {
 			return false;
 		}
 
-		$auth_header = $this->get_auth_header();
+		$auth_header = Auth::instance()->get_auth_header();
 		if ( ! \is_string( $auth_header ) || '' === $auth_header ) {
 			return false;
 		}
@@ -292,29 +292,5 @@ final class Core_Order_Audit_Guard {
 		}
 
 		return absint( $decoded->data->user->id ) === $user_id;
-	}
-
-	/**
-	 * Extract the Authorization credential from the request environment.
-	 *
-	 * Same three sources as Init::get_auth_header_early() (private there);
-	 * candidates for consolidation into the Auth service.
-	 *
-	 * @return false|string
-	 */
-	private function get_auth_header() {
-		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) );
-		}
-
-		if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) );
-		}
-
-		if ( ! empty( $_GET['authorization'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return sanitize_text_field( wp_unslash( $_GET['authorization'] ) );
-		}
-
-		return false;
 	}
 }

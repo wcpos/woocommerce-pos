@@ -39,6 +39,7 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		unset( $_GET['authorization'] );
 		unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
 		parent::tearDown();
 	}
@@ -154,6 +155,40 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'original', wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
+	}
+
+	/**
+	 * Query-token-authenticated updates cannot supply POS audit meta.
+	 */
+	public function test_audit_guard_jwt_query_param_order_update_with_audit_key_returns_forbidden(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_store', 'original' );
+		$order->save();
+		$token = Auth::instance()->generate_access_token( get_user_by( 'id', $this->user ) );
+		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		$_GET['authorization'] = 'Bearer ' . $token;
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- force authentication.
+		$request      = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_store',
+						'value' => 'forged',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
 		$this->assertSame( 'original', wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
 	}
 
