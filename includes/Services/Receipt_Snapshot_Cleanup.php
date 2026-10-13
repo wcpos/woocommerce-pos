@@ -101,8 +101,27 @@ final class Receipt_Snapshot_Cleanup {
 		return $found;
 	}
 
-	/** Remove the obsolete counter only once every table is drained. */
+	/**
+	 * Remove the obsolete counter only once every table is drained.
+	 *
+	 * On 2.0 the fiscal record store seeds its own sale sequence from this
+	 * counter, so where that store exists it is seeded first and a failed seed
+	 * keeps the counter (and the job) for a later run. On 1.10 there is no store
+	 * and the counter simply goes.
+	 */
 	public static function finish(): void {
+		$store = '\\WCPOS\\WooCommercePOS\\Services\\Fiscal_Record_Store';
+		if ( class_exists( $store ) ) {
+			$seed = array( new $store(), 'seed_sale_sequence' );
+			if ( is_callable( $seed ) ) {
+				try {
+					call_user_func( $seed );
+				} catch ( RuntimeException $e ) {
+					Logger::log( 'Receipt snapshot cleanup: sale sequence seed deferred: ' . $e->getMessage() );
+					return;
+				}
+			}
+		}
 		delete_option( 'wcpos_receipt_sequence_counter' );
 		update_option( self::OPTION, 'done', true );
 	}

@@ -317,6 +317,25 @@ class Test_Receipt_Snapshot_Cleanup extends WC_Unit_Test_Case {
 		$this->assertSame( 'done', get_option( Receipt_Snapshot_Cleanup::OPTION ) );
 	}
 
+	/** Where the 2.0 record store exists, the sale sequence is seeded from the counter before it goes. */
+	public function test_finish_seeds_sale_sequence_before_deleting_legacy_counter(): void {
+		// Arrange.
+		update_option( 'wcpos_receipt_sequence_counter', 9, false );
+		delete_option( 'wcpos_fiscal_sequence_sale' );
+		$store = '\\WCPOS\\WooCommercePOS\\Services\\Fiscal_Record_Store';
+		if ( ! class_exists( $store ) ) {
+			// 1.10: no store. Stand one in so the ordering contract is still exercised.
+			eval( 'namespace WCPOS\\WooCommercePOS\\Services; class Fiscal_Record_Store { public function seed_sale_sequence(): int { $legacy = (int) get_option( "wcpos_receipt_sequence_counter", 0 ); update_option( "wcpos_fiscal_sequence_sale", $legacy, false ); return $legacy; } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- Test stand-in for a class that exists only on the 2.0 line.
+		}
+		// Act.
+		Receipt_Snapshot_Cleanup::run();
+		// Assert: seeded from the legacy counter, then the counter removed.
+		$this->assertSame( 9, (int) get_option( 'wcpos_fiscal_sequence_sale' ) );
+		$this->assertFalse( get_option( 'wcpos_receipt_sequence_counter' ) );
+		$this->assertSame( 'done', get_option( Receipt_Snapshot_Cleanup::OPTION ) );
+		delete_option( 'wcpos_fiscal_sequence_sale' );
+	}
+
 	/** A bounded run must leave work pending until an empty run confirms completion. */
 	public function test_run_is_resumable_in_batches(): void {
 		// Arrange.
