@@ -1204,9 +1204,9 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	public function test_offline_completed_create_snapshots_cashier_and_tender_at_payment_complete(): void {
 		// An offline-completed sale arrives as ONE create carrying set_paid — so
 		// woocommerce_payment_complete fires INSIDE the forwarded create, where
-		// Receipt_Snapshot_Store persists its immutable fiscal snapshot. v1 stamped
+		// Fiscal_Record_Writers stores the immutable fiscal sale. v1 stamped
 		// _pos_user before those hooks; v2's post-forward stamp is too late for a
-		// snapshot that refuses to be overwritten. JWT-armed like the tax test.
+		// sale record that refuses to be overwritten. JWT-armed like the tax test.
 		$cashier_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $cashier_id );
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $cashier_id ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
@@ -1267,7 +1267,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		// A pos-open order completed by an update that carries set_paid + the cash
 		// tender: the fill-if-absent stamps must be on the order DURING the inner
 		// wc/v3 update, not only in the post-forward stamps — payment_complete
-		// (and the fiscal snapshot) fire inside the forward.
+		// (and the fiscal sale writer) fire inside the forward.
 		$cashier_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $cashier_id );
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $cashier_id ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput

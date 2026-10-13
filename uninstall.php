@@ -508,7 +508,6 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 				$wpdb->esc_like( 'wcpos_active_template_' ) . '%',
 				$wpdb->esc_like( 'wcpos_template_order_' ) . '%',
 				$wpdb->esc_like( 'wcpos_disabled_virtual_templates_' ) . '%',
-				$wpdb->esc_like( 'wcpos_receipt_sequence_counter' ),
 				$wpdb->esc_like( 'wcpos_fiscal_sequence_' ) . '%',
 			)
 		);

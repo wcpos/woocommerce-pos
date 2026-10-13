@@ -106,16 +106,6 @@ class Init {
 				'phase'    => 'pre-latch',
 			),
 			array(
-				'hook'     => 'woocommerce_pos_order_services_ready',
-				'callback' => static function (): void {
-					Services\Fiscal_Record_Writers::instance();
-				},
-				'priority' => 10,
-				'args'     => 1,
-				'reason'   => 'Default; arm fiscal writers on every order-write lane when services are ready, regardless of the sync schema latch (#247).',
-				'phase'    => 'pre-latch',
-			),
-			array(
 				'hook'     => null,
 				'callback' => array( Sync\Meta_Normalizer::class, 'register_hooks' ),
 				'priority' => 10,
@@ -377,7 +367,8 @@ class Init {
 	 *
 	 * This runs BEFORE rest_api_init, so we can authenticate users before WP REST API
 	 * permission callbacks run. This is especially important for authorization via
-	 * query parameter (?authorization=Bearer...) which some servers require.
+	 * query parameter (?authorization=Bearer...), which some servers require;
+	 * Auth::get_auth_header() accepts it on REST requests only.
 	 *
 	 * Note: We don't check for X-WCPOS header here because:
 	 * 1. The header check uses getallheaders() which may not work in all environments
@@ -542,7 +533,7 @@ class Init {
 
 	/**
 	 * Some security plugins will set X-Frame-Options: SAMEORIGIN/DENY, which will prevent the POS desktop
-	 * application from opening pages like the login in an iframe.
+	 * application from opening POS pages such as checkout in an iframe.
 	 *
 	 * For pages we need, we will remove the X-Frame-Options header.
 	 *
@@ -551,7 +542,7 @@ class Init {
 	 * @return void
 	 */
 	public function remove_x_frame_options( $wp ): void {
-		if ( woocommerce_pos_request() || isset( $wp->query_vars['wcpos-login'] ) ) {
+		if ( woocommerce_pos_request() ) {
 			if ( ! headers_sent() && \function_exists( 'header_remove' ) ) {
 				header_remove( 'X-Frame-Options' );
 			}

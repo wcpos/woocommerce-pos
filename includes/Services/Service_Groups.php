@@ -190,7 +190,7 @@ final class Service_Groups {
 	 * The order-event observers, plus the action that lets others join them.
 	 */
 	private static function construct_order(): void {
-		Receipt_Snapshot_Store::instance();
+		Fiscal_Record_Writers::instance();
 		new Emails();
 		new Templates();
 		new Print_Job_Service();

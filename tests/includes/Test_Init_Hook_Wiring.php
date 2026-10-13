@@ -267,8 +267,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
 			'woocommerce_duplicate_product_exclude_meta'            => array( 10 ),
 			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
-			// Fiscal_Record_Writers (row 3b): armed once the order services are ready.
-			'woocommerce_pos_order_services_ready'                  => array( 10 ),
 			'woocommerce_product_duplicate_before_save'             => array( 10 ),
 			'woocommerce_untrash_order'                             => array( 10 ),
 			'woocommerce_update_coupon'                             => array( 10 ),
@@ -411,8 +409,8 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 				$this->assertSame( $row['args'], $registered['accepted_args'] );
 				if ( 'determine_current_user' === $row['hook'] ) {
 					$this->assertSame( 20, $row['priority'] );
-					// JWT row index after four next-only rows; seven sync-latched rows are omitted when unlatched.
-					$this->assertSame( $latched ? 24 : 17, array_search( $row, $rows, true ) );
+					// JWT row index after three next-only rows; seven sync-latched rows are omitted when unlatched.
+					$this->assertSame( $latched ? 23 : 16, array_search( $row, $rows, true ) );
 					$auth_rows[] = self::label_for( $row['callback'] );
 				}
 			}

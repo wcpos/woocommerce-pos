@@ -14,8 +14,7 @@ use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Print_Counter;
 use WCPOS\WooCommercePOS\Services\Print_Counter_Busy_Exception;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
-use WCPOS\WooCommercePOS\Services\Fiscal_Receipt_Service;
+use WCPOS\WooCommercePOS\Services\Receipt_Mode;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
 use WP_Error;
@@ -198,7 +197,8 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$snapshot_store = Receipt_Snapshot_Store::instance();
+		$store = new Fiscal_Record_Store();
+		$sale = $store->find_sale( $order_id );
 		$requested_mode = null !== $document ? 'fiscal' : $request->get_param( 'mode' );
 		if ( null !== $requested_mode && ! \in_array( $requested_mode, array( 'fiscal', 'live' ), true ) ) {
 			return new WP_Error(
@@ -209,11 +209,11 @@ class Receipts_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$mode    = $snapshot_store->resolve_mode( $requested_mode );
+		$mode    = Receipt_Mode::resolve( $requested_mode );
 		$payload        = null;
 
 		if ( 'fiscal' === $mode ) {
-			$payload = null !== $document ? $document : $snapshot_store->get_snapshot( $order_id );
+			$payload = null !== $document ? $document : ( $sale ? $store->document( $sale ) : null );
 			if ( ! $payload ) {
 				return new WP_Error(
 					'wcpos_receipt_snapshot_missing',
@@ -237,8 +237,7 @@ class Receipts_Controller extends WP_REST_Controller {
 		return array(
 			'order_id'     => $order_id,
 			'mode'         => $mode,
-			'has_snapshot' => $snapshot_store->has_snapshot( $order_id ),
-			'submission_status' => ( new Fiscal_Receipt_Service() )->get_submission_status( $order_id ),
+			'has_snapshot' => null !== $sale,
 			'data'         => $payload,
 		);
 	}

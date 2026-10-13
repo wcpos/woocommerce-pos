@@ -473,4 +473,254 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'hidden', wc_get_product( $id )->get_catalog_visibility() );
 		$this->assertSame( 'visible', get_post_meta( $id, Catalog_Visibility::PRIOR_META, true ) );
 	}
+
+	/**
+	 * Opted-out products keep their catalog choice without restoration metadata.
+	 *
+	 * @dataProvider opted_out_visibility_provider
+	 * @param string $prior Original catalog visibility.
+	 */
+	public function test_catalog_visibility_null_filter_leaves_product_untouched( string $prior ): void {
+		// Arrange.
+		$product = ProductHelper::create_simple_product();
+		$product->set_catalog_visibility( $prior );
+		$product->save();
+		$id = $product->get_id();
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+		$saves = 0;
+		$count_save = static function () use ( &$saves ) {
+			++$saves;
+		};
+		add_action( 'woocommerce_update_product', $count_save );
+
+		// Act.
+		$this->set_visibility( $id );
+
+		// Assert.
+		$this->assertSame( 0, $saves );
+		$this->assertSame( $prior, wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
+
+		// Act: leaving must also preserve an explicitly hidden product.
+		$this->set_visibility( $id, '' );
+
+		// Assert.
+		$this->assertSame( 0, $saves );
+		$this->assertSame( $prior, wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
+
+		// Act.
+		$this->set_visibility( $id );
+		$product = wc_get_product( $id );
+		$product->set_catalog_visibility( 'visible' );
+		$product->save();
+
+		// Assert.
+		$this->assertSame( 1, $saves );
+		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
+
+		// Act.
+		$this->set_visibility( $id, '' );
+
+		// Assert.
+		$this->assertSame( 1, $saves );
+		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
+		remove_action( 'woocommerce_update_product', $count_save );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+	}
+
+	/**
+	 * Opt-out must not accidentally restore already hidden products.
+	 *
+	 * @return array<string, string[]>
+	 */
+	public function opted_out_visibility_provider(): array {
+		return array(
+			'visible' => array( 'visible' ),
+			'hidden'  => array( 'hidden' ),
+		);
+	}
+
+	/**
+	 * A custom forced value follows the same record, enforce and restore path.
+	 */
+	public function test_catalog_visibility_search_filter_restores_original_after_saves(): void {
+		// Arrange.
+		$id     = ProductHelper::create_simple_product()->get_id();
+		$filter = static function () {
+			return 'search';
+		};
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+
+		// Act.
+		$this->set_visibility( $id );
+
+		// Assert.
+		$this->assertSame( 'search', wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertSame( 'visible', get_post_meta( $id, Catalog_Visibility::PRIOR_META, true ) );
+
+		// Act.
+		$product = wc_get_product( $id );
+		$product->set_catalog_visibility( 'visible' );
+		$product->save();
+
+		// Assert.
+		$this->assertSame( 'search', wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertSame( 'visible', get_post_meta( $id, Catalog_Visibility::PRIOR_META, true ) );
+
+		// Act.
+		$this->set_visibility( $id, '' );
+
+		// Assert.
+		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+	}
+
+	/**
+	 * Unknown filter values fall back to hidden.
+	 */
+	public function test_catalog_visibility_invalid_filter_forces_hidden(): void {
+		// Arrange.
+		$id     = ProductHelper::create_simple_product()->get_id();
+		$filter = static function () {
+			return 'bogus';
+		};
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+
+		// Act.
+		$this->set_visibility( $id );
+
+		// Assert.
+		$this->assertSame( 'hidden', wc_get_product( $id )->get_catalog_visibility() );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+	}
+
+	/**
+	 * The filter receives the default and the product being forced.
+	 */
+	public function test_catalog_visibility_filter_arguments_receive_default_and_product(): void {
+		// Arrange.
+		$id     = ProductHelper::create_simple_product()->get_id();
+		$called = false;
+		$filter = function ( $visibility, \WC_Product $product ) use ( $id, &$called ) {
+			$this->assertSame( 'hidden', $visibility );
+			$this->assertSame( $id, $product->get_id() );
+			$called = true;
+			return $visibility;
+		};
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter, 10, 2 );
+
+		// Act.
+		$this->set_visibility( $id );
+
+		// Assert.
+		$this->assertTrue( $called );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+	}
+
+	/**
+	 * One option write resolves the filter separately for each product.
+	 */
+	public function test_catalog_visibility_product_filter_only_opts_out_matching_id(): void {
+		// Arrange.
+		$first  = ProductHelper::create_simple_product()->get_id();
+		$second = ProductHelper::create_simple_product()->get_id();
+		$filter = static function ( $visibility, $product ) use ( $first ) {
+			return $first === $product->get_id() ? null : $visibility;
+		};
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter, 10, 2 );
+
+		// Act.
+		Settings::instance()->update_visibility_settings(
+			array(
+				'post_type'  => 'products',
+				'visibility' => 'pos_only',
+				'ids'        => array( $first, $second ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 'visible', wc_get_product( $first )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $first, Catalog_Visibility::PRIOR_META ) );
+		$this->assertSame( 'hidden', wc_get_product( $second )->get_catalog_visibility() );
+		$this->assertSame( 'visible', get_post_meta( $second, Catalog_Visibility::PRIOR_META, true ) );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+	}
+
+	/**
+	 * The edit screen describes the forced value, or omits both notes on opt-out.
+	 *
+	 * @dataProvider forced_catalog_note_provider
+	 * @param string|null $forced Forced visibility or opt-out.
+	 */
+	public function test_catalog_visibility_admin_filter_renders_matching_notes( ?string $forced ): void {
+		// Arrange.
+		global $post;
+		$previous_post   = $post;
+		$previous_screen = get_current_screen();
+		$id              = ProductHelper::create_simple_product()->get_id();
+		$filter          = static function () use ( $forced ) {
+			return $forced;
+		};
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		$this->set_visibility( $id );
+		$post = get_post( $id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Render the product edit screen.
+		set_current_screen( 'product' );
+
+		// Act.
+		ob_start();
+		( new Single_Product() )->post_submitbox_misc_actions();
+		$output = ob_get_clean();
+		$post   = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore the previous screen context.
+		set_current_screen( $previous_screen );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+
+		// Assert.
+		if ( null === $forced ) {
+			$this->assertStringNotContainsString( 'id="pos-visibility-catalog-note"', $output );
+			$this->assertStringNotContainsString( 'id="pos-visibility-catalog-restore-note"', $output );
+		} else {
+			$this->assertStringContainsString( 'Catalog visibility is kept at “Search results only” while this product is POS Only.', $output );
+			$this->assertStringContainsString( 'data-forced-label="Search results only"', $output );
+		}
+	}
+
+	/**
+	 * Custom visibility and opt-out both reach the rendered template.
+	 *
+	 * @return array<string, array>
+	 */
+	public function forced_catalog_note_provider(): array {
+		return array(
+			'search'  => array( 'search' ),
+			'opt-out' => array( null ),
+		);
+	}
+
+	/**
+	 * A product forced to a custom value, then opted out before leaving, still gets its prior back.
+	 */
+	public function test_catalog_visibility_filter_opting_out_after_forcing_search_restores_prior(): void {
+		// Arrange.
+		$id     = ProductHelper::create_simple_product()->get_id();
+		$search = static function () {
+			return 'search';
+		};
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $search );
+		$this->set_visibility( $id );
+		$this->assertSame( 'search', wc_get_product( $id )->get_catalog_visibility() );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $search );
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+
+		// Act.
+		$this->set_visibility( $id, '' );
+
+		// Assert.
+		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
+		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
+		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+	}
 }

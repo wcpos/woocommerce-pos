@@ -848,7 +848,7 @@ class Receipt_Data_Builder {
 		// (`woocommerce_pos_fiscal_snapshot_enrich`). Order details and provenance
 		// stay live. A 1.3 snapshot without a key keeps the live value.
 		if ( 'live' === $mode ) {
-			$snapshot = Receipt_Snapshot_Store::instance()->get_snapshot( $order->get_id() );
+			$snapshot = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload'] ?? null;
 			if ( null !== $snapshot ) {
 				foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
 					if ( array_key_exists( $key, $snapshot['fiscal'] ?? array() ) ) {
@@ -1015,12 +1015,17 @@ class Receipt_Data_Builder {
 		// The minted identity is core-owned: an extension unaware of the refund mode
 		// cannot rewrite it after the number and the row are fixed.
 		$data['fiscal']         = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
+		// The hash covers the stored bytes: the document without rendering labels
+		// (Fiscal_Record_Store::record() strips i18n on write) and with its own hash blank.
+		// The returned document keeps its labels so it can also be rendered directly.
 		$data['fiscal']['hash'] = '';
-		$json = wp_json_encode( $data );
+		$hashed = $data;
+		unset( $hashed['i18n'] );
+		$json = wp_json_encode( $hashed );
 		if ( ! is_string( $json ) ) {
 			throw new \RuntimeException( 'Unable to encode refund document.' );
 		}
-		$data['fiscal']['hash'] = Receipt_Snapshot_Store::checksum( $json );
+		$data['fiscal']['hash'] = Fiscal_Record_Store::checksum( $json );
 		return $data;
 	}
 

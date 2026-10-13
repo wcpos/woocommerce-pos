@@ -740,6 +740,12 @@ class Activator {
 
 		$this->install_till_tables();
 
+		try {
+			( new Services\Fiscal_Record_Store() )->seed_sale_sequence();
+		} catch ( \RuntimeException $error ) {
+			Logger::log( 'Fiscal sale sequence seed deferred: ' . $error->getMessage() );
+		}
+
 		// Installs that predate 2026-09 wrote the per-request latches with
 		// autoload off; every upgrade re-asserts autoload so the flip is
 		// idempotent and needs no versioned update file.
