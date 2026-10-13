@@ -382,6 +382,10 @@ class Frontend {
 	 * Disable caching conflicts.
 	 */
 	private function no_cache(): void {
+		if ( ! headers_sent() ) {
+			nocache_headers();
+		}
+
 		// disable W3 Total Cache minify.
 		if ( ! \defined( 'DONOTMINIFY' ) ) {
 			\define( 'DONOTMINIFY', 'true' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- Third-party constant

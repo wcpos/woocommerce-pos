@@ -197,6 +197,10 @@ class Auth {
 		global $wcpos_auth_instance; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
 		$wcpos_auth_instance = $this; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
 
+		if ( ! headers_sent() ) {
+			nocache_headers();
+		}
+
 		include woocommerce_pos_locate_template( 'auth.php' );
 		exit;
 	}
@@ -242,6 +246,13 @@ class Auth {
 		$session_key = 'wcpos_auth_session_' . md5( $this->state . $this->redirect_uri );
 
 		if ( empty( $this->auth_session ) ) {
+			$stored = get_transient( $session_key );
+			if ( $stored ) {
+				$this->auth_session = $stored;
+
+				return true;
+			}
+
 			// First visit - create session.
 			$this->auth_session = wp_generate_password( 32, false );
 			set_transient( $session_key, $this->auth_session, self::AUTH_SESSION_EXPIRY );
