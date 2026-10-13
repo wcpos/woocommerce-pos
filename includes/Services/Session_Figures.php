@@ -1,0 +1,274 @@
+<?php
+/**
+ * Shared figures for one till session.
+ *
+ * @package WCPOS\WooCommercePOS\Services
+ */
+
+namespace WCPOS\WooCommercePOS\Services;
+
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+
+/**
+ * One instance shares the session snapshot; Part B adds leg stamps and register serialization.
+ * Captured session legs are counted by the closure; Part B marks them late without its closure_id.
+ * Refunds are counted by _wcpos_closure and late without this closure's stamp, even with no ledger leg.
+ * Movements are counted before the closure snapshot and late when the closure already exists at write.
+ * Late rows correct, never edit, the closure.
+ */
+final class Session_Figures {
+	/** Session row.
+	 *
+	 * @var array
+	 */
+	private $session;
+	/** Instance-local results, never shared across requests.
+	 *
+	 * @var array
+	 */
+	private $memo = array();
+
+	/** Create a lazy view of a session.
+	 *
+	 * @param array $session Session row.
+	 */
+	public static function for_session( array $session ): self {
+		$figures = new self();
+		$figures->session = $session;
+		return $figures;
+	}
+
+	/** Read the movement log once. */
+	public function movements(): array {
+		$this->memo['movements'] = $this->memo['movements'] ?? ( new Cash_Movement_Store() )->list( $this->session['id'] );
+		return $this->memo['movements'];
+	}
+
+	/** Derive four-place expected balances from the shared snapshot. */
+	public function expected(): array {
+		if ( isset( $this->memo['expected'] ) ) {
+			return $this->memo['expected'];
+		}
+		$rows = array_merge( array(), ...array_values( $this->legs() ) );
+		foreach ( $this->refunds() as $refund ) {
+			$rows = array_merge( $rows, $refund['rows'] );
+		}
+		$cash = array( $this->session['counted_float'] );
+		foreach ( $this->movements() as $row ) {
+			if ( null === $row['voided_by'] && in_array( $row['type'], array( 'paid_in', 'paid_out' ), true ) ) {
+				$cash[] = ( 'paid_out' === $row['type'] ? '-' : '' ) . $row['amount'];
+			}
+		}
+		$this->memo['expected'] = self::sum_rows( $rows, $cash );
+		return $this->memo['expected'];
+	}
+
+	/** Count distinct orders with captured session legs. */
+	public function sales_count(): int {
+		return count( $this->legs() );
+	}
+
+	/** Split unsigned amounts for closure period and perpetual totals. */
+	public function period_amounts(): array {
+		$totals = array(
+			'sales' => array(),
+			'refunds' => array(),
+		);
+		foreach ( $this->legs() as $rows ) {
+			foreach ( $rows as $row ) {
+				$totals[ self::is_refund_tender( $row ) ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
+			}
+		}
+		foreach ( $this->refunds() as $refund ) {
+			foreach ( $refund['rows'] as $row ) {
+				$totals['refunds'][] = ltrim( $row['amount'], '-' );
+			}
+		}
+		return $totals;
+	}
+
+	/** Count refund records and the raw refund leg forms used by X-reports. */
+	public function refund_count(): int {
+		$count = count( $this->refunds() );
+		foreach ( $this->legs() as $rows ) {
+			foreach ( $rows as $row ) {
+				if ( self::is_refund_tender( $row ) ) {
+					++$count;
+				}
+			}
+		}
+		return $count;
+	}
+
+	/** Record the refunds counted by this closure; Part A does not stamp legs.
+	 *
+	 * @param string $closure_id Closure UUID.
+	 * @throws \RuntimeException When a refund stamp cannot be verified.
+	 */
+	public function stamp( string $closure_id ): void {
+		global $wpdb;
+		// The refund writers ask this stamp, not the clock, whether a refund was inside the closure.
+		foreach ( $this->refunds() as $refund ) {
+			$refund['refund']->update_meta_data( '_wcpos_closure', $closure_id );
+			$refund['refund']->save_meta_data();
+			// An unstamped counted refund would later read as a late arrival: fail the closure instead.
+			$stored = wc_get_order( $refund['refund']->get_id() );
+			if ( $stored instanceof \WC_Order_Refund ) {
+				$stored->read_meta_data( true );
+			}
+			if ( '' !== $wpdb->last_error || ! $stored instanceof \WC_Order_Refund || (string) $stored->get_meta( '_wcpos_closure', true ) !== (string) $closure_id ) {
+				throw new \RuntimeException( 'Closure refund stamp failed.' );
+			}
+		}
+	}
+
+	/** Map a tender to its drawer/report key.
+	 *
+	 * @param array $row Tender row.
+	 */
+	public static function tender_key( array $row ): string {
+		// Every cash-kind gateway (pos_cash, cod, an extension's cash tender) is the drawer.
+		$method = $row['method'] ?? $row['method_id'];
+		return 'cash' === ( $row['kind'] ?? '' ) ? 'cash' : ( array( 'pos_card' => 'card' )[ $method ] ?? $method );
+	}
+
+	/** Raw Ledger::save() rows can carry refund kind or negative amounts, unlike validated legs.
+	 *
+	 * @param array $row Tender row.
+	 */
+	public static function is_refund_tender( array $row ): bool {
+		return 'refund' === ( $row['kind'] ?? '' ) || '-' === substr( (string) $row['amount'], 0, 1 );
+	}
+
+	/** Derive correction deltas without a session, float or movements.
+	 *
+	 * @param array $rows Tender rows in appearance order.
+	 */
+	public static function tender_totals( array $rows ): array {
+		return self::sum_rows( $rows, array( '0' ) );
+	}
+
+	/** Group tenders with cash first and sum exactly through SQL DECIMAL(65,4).
+	 *
+	 * @param array $rows Tender rows in appearance order.
+	 * @param array $cash Opening float and signed movements, or zero.
+	 */
+	private static function sum_rows( array $rows, array $cash ): array {
+		$totals = array( 'cash' => $cash );
+		foreach ( $rows as $row ) {
+			$totals[ self::tender_key( $row ) ][] = $row['amount'];
+		}
+		return array_map( array( Closure_Store::class, 'sum' ), $totals );
+	}
+
+	/** Attribute a refund to succeeded ledger allocations, with the remainder in cash.
+	 *
+	 * @param \WC_Order_Refund $refund Refund to attribute.
+	 * @throws \RuntimeException When the parent order cannot be read.
+	 */
+	public static function refund_tender_rows( \WC_Order_Refund $refund ): array {
+		$order = wc_get_order( $refund->get_parent_id() );
+		if ( ! $order ) {
+			// Silently attributing nothing would let a closure count a zero refund and stamp it.
+			throw new \RuntimeException( 'Refund parent order could not be read.' );
+		}
+		$rows = array();
+		$remaining = Money::minor( $refund->get_amount() );
+		// A succeeded allocation is a fact about the refund, kept even if its row was voided later.
+		foreach ( Ledger::instance()->read( $order ) as $row ) {
+			foreach ( $row['refunds'] ?? array() as $allocation ) {
+				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() && $remaining > 0 && Money::minor( $allocation['amount'] ) > 0 ) {
+					// Rows written before the handler-result checks may over- or mis-allocate: attribute at most the refund, never a negative.
+					$amount = min( Money::minor( $allocation['amount'] ), $remaining );
+					$remaining -= $amount;
+					$rows[] = array(
+						'method_id' => $row['method_id'],
+						'kind' => $row['kind'],
+						'amount' => Money::format( -$amount ),
+						'refund_id' => $refund->get_id(),
+					);
+				}
+			}
+		}
+		if ( $remaining > 0 ) {
+			$rows[] = array(
+				'method_id' => 'pos_cash',
+				'kind' => 'cash',
+				'amount' => Money::format( -$remaining ),
+				'refund_id' => $refund->get_id(),
+			);
+		}
+		return $rows;
+	}
+
+	/** Read refunds by their own session stamp in either order storage mode.
+	 *
+	 * @throws \RuntimeException On read failure.
+	 */
+	public function refunds(): array {
+		if ( isset( $this->memo['refunds'] ) ) {
+			return $this->memo['refunds'];
+		}
+		$session = $this->session;
+		global $wpdb;
+		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$key = $hpos ? 'order_id' : 'post_id';
+		$orders = $hpos ? $wpdb->prefix . 'wc_orders' : $wpdb->posts;
+		$type = $hpos ? 'type' : 'post_type';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT m.{$key} FROM {$table} m INNER JOIN {$orders} o ON o.id = m.{$key} WHERE m.meta_key = %s AND LOWER(m.meta_value) = %s AND o.{$type} = %s ORDER BY m.{$key} DESC", '_wcpos_session', strtolower( $session['id'] ), 'shop_order_refund' ) );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Session refunds read failed.' );
+		}
+		$result = array();
+		foreach ( $ids as $id ) {
+			$refund = wc_get_order( $id );
+			if ( ! $refund instanceof \WC_Order_Refund ) {
+				throw new \RuntimeException( 'Session refund could not be read.' );
+			}
+			$result[ $id ] = array(
+				'refund' => $refund,
+				'rows' => self::refund_tender_rows( $refund ),
+			);
+		}
+		$this->memo['refunds'] = $result;
+		return $this->memo['refunds'];
+	}
+
+	/** Read all captured session rows in either storage mode; fiscal totals cannot truncate.
+	 *
+	 * @throws \RuntimeException On read failure.
+	 */
+	public function legs(): array {
+		if ( isset( $this->memo['legs'] ) ) {
+			return $this->memo['legs'];
+		}
+		$session = $this->session;
+		global $wpdb;
+		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$key = $hpos ? 'order_id' : 'post_id';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value LIKE %s ORDER BY {$key} DESC", Ledger::META_KEY, '%' . $wpdb->esc_like( '"session_id":"' . $session['id'] . '"' ) . '%' ) );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Session ledger read failed.' );
+		}
+		$result = array();
+		foreach ( $ids as $id ) {
+			$order = wc_get_order( $id );
+			if ( ! $order ) {
+				throw new \RuntimeException( 'Session order could not be read.' );
+			}
+			foreach ( Ledger::instance()->read( $order ) as $row ) {
+				if ( ( $row['session_id'] ?? null ) === $session['id'] && 'captured' === ( $row['status'] ?? null ) ) {
+					$result[ $id ][] = $row;
+				}
+			}
+		}
+		$this->memo['legs'] = $result;
+		return $this->memo['legs'];
+	}
+}

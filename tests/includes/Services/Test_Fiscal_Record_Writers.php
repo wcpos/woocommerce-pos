@@ -369,6 +369,42 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $data['fiscal']['extra_fields']['allocations'] );
 		$this->assertSame( array(), $data['payments'] );
 	}
+	/** The audit payload freezes all tenders and variance for the counted tenders. */
+	public function test_late_sale_freezes_expected_delta_for_every_tender(): void {
+		$session = $this->closure_session();
+		$fields = $this->closure_fields( $session );
+		$fields['counted'] = array(
+			'cash' => '101',
+			'card' => '30',
+		);
+		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $fields );
+		$order = $this->closure_ledger( $session );
+		$order->update_meta_data( Receipt_Snapshot_Store::META_KEY_CREATED_AT, $closure['received_at_gmt'] );
+		$order->save();
+		Fiscal_Record_Writers::instance()->record_sale( $order, array( 'fiscal' => array() ), 876545 );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame(
+			array(
+				'cash' => '50.0000',
+				'card' => '30.0000',
+			),
+			$records[0]['payload']['expected_delta']
+		);
+		$this->assertSame(
+			array(
+				'cash' => '-50.0000',
+				'card' => '-30.0000',
+			),
+			$records[0]['payload']['variance_delta']
+		);
+	}
+
 	/** Late sales have one correction, while replay of an included sale has none. */
 	public function test_late_sale_is_replay_safe_and_does_not_mutate_closure(): void {
 		$session = $this->closure_session();

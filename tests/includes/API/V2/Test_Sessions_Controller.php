@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
@@ -68,6 +69,40 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			'opened_at' => '2026-09-11T10:00:00+02:00',
 			'expected_float' => '95',
 			'counted_float' => '100',
+		);
+	}
+
+	/** Session detail shares its ledger and movement reads across report figures. */
+	public function test_session_detail_reads_ledger_and_movements_once(): void {
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		$id = $this->counting_session_with_cash_sale();
+		$reads = array(
+			'orders' => 0,
+			'movements' => 0,
+		);
+		$observe = static function ( $sql ) use ( &$reads ) {
+			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::META_KEY ) ) {
+				++$reads['orders'];
+			}
+			if ( 0 === strpos( $sql, 'SELECT * FROM' ) && false !== strpos( $sql, 'wcpos_cash_movements' ) ) {
+				++$reads['movements'];
+			}
+			return $sql;
+		};
+		add_filter( 'query', $observe );
+		try {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id ) );
+		} finally {
+			remove_filter( 'query', $observe );
+		}
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'cash' => '100.0000' ), $response->get_data()['expected'] );
+		$this->assertSame(
+			array(
+				'orders' => 1,
+				'movements' => 1,
+			),
+			$reads
 		);
 	}
 
@@ -502,7 +537,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertSame( 'captured', $payment['status'] );
-		$this->assertSame( array( 'cash' => '100.0000' ), ( new Register_Session_Store() )->expected( ( new Register_Session_Store() )->get( $id ) ) );
+		$this->assertSame( array( 'cash' => '100.0000' ), Session_Figures::for_session( ( new Register_Session_Store() )->get( $id ) )->expected() );
 		$this->assertSame(
 			200,
 			$this->post(

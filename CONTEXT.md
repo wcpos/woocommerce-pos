@@ -99,6 +99,10 @@ _Avoid_: calendar day, day start, cutoff time
 A write-once fiscal record with a `closure_id`. It changes what a closure settles to without touching the closure. The types are `recount`, `late_sale`, `late_refund` (including a post-closure `reallocation` between tenders) and `late_movement`. A closure reads as recorded plus its corrections. `Closure_Store::corrections_for()` is the one projection.
 _Avoid_: adjustment, amendment, edit, re-close
 
+**Expected**:
+What each tender should hold at the end of a till session: the counted opening float plus every cash-kind leg (any gateway whose kind is `cash`, not only `pos_cash`), the session's refund rows and paid-in minus paid-out for cash, and for any other tender the sum of its captured legs bound to the session plus its refund rows. `Session_Figures::expected()` is the one derivation. A correction's expected delta uses the same tender rule without the float or movements (`Session_Figures::tender_totals()`), and the written record freezes every tender, not only cash.
+_Avoid_: drawer total, balance, takings
+
 **Store reach**:
 The stores whose registers, till sessions, closures, fiscal records and reports one caller may read. The Store Reach module resolves it once per request from `woocommerce_pos_closures_list_args` applied to an EMPTY base. No `store_id` key means unrestricted. A well-formed list, even an empty one, restricts. Anything unreadable denies everything. A row with no store (NULL or 0) is outside a restricted reach unless the answer also carries `'unassigned' => true`; under Pro that is administrators only. A named record out of reach answers exactly as an absent one (404, never 403). A collection is narrowed in its SQL. This is not the Store scope, which is the store a till *claims* (`X-WCPOS-Store`), and not the Report Scope Gate, which is the tier boundary (a visible 403).
 _Avoid_: store scope (for this), authorized-stores filter, store permission

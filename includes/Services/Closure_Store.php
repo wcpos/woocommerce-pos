@@ -227,11 +227,11 @@ final class Closure_Store {
 			$figures = array();
 			if ( 'late_sale' === $record['type'] ) {
 				$tenders = $payload['tender_rows'];
-				$figures['expected_delta'] = ( new Register_Session_Store() )->expected( array( 'counted_float' => '0' ), array( $tenders ), array(), array() );
+				$figures['expected_delta'] = Session_Figures::tender_totals( $tenders );
 				$sales = array();
 				$refunds = array();
 				foreach ( $tenders as $tender ) {
-					if ( 'refund' === $tender['kind'] || '-' === substr( $tender['amount'], 0, 1 ) ) {
+					if ( Session_Figures::is_refund_tender( $tender ) ) {
 						$refunds[] = ltrim( $tender['amount'], '-' );
 					} else {
 						$sales[] = $tender['amount'];
@@ -240,14 +240,13 @@ final class Closure_Store {
 				$figures['sales_delta'] = self::sum( $sales );
 				$figures['refunds_delta'] = self::sum( $refunds );
 			} elseif ( 'late_refund' === $record['type'] ) {
-				$sessions = new Register_Session_Store();
 				$reallocation = 'reallocation' === ( $payload['kind'] ?? null );
 				$refund = $reallocation ? null : wc_get_order( $record['refund_id'] );
 				if ( self::read_failed() ) {
 					throw new \RuntimeException( 'Closure correction refund read failed.' );
 				}
-				$tenders = $refund instanceof \WC_Order_Refund ? $sessions->refund_tender_rows( $refund ) : $payload['tender_rows'];
-				$figures['expected_delta'] = $sessions->expected( array( 'counted_float' => '0' ), array(), array(), $tenders );
+				$tenders = $refund instanceof \WC_Order_Refund ? Session_Figures::refund_tender_rows( $refund ) : $payload['tender_rows'];
+				$figures['expected_delta'] = Session_Figures::tender_totals( $tenders );
 				$figures['refunds_delta'] = $reallocation ? '0.0000' : self::sum(
 					array_map(
 						static function ( $row ) {
@@ -482,39 +481,11 @@ final class Closure_Store {
 				);
 				return new \WP_Error( 'wcpos_closure_number_invalid', __( 'The closure number precedes the register sequence.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			}
-			// Read the session's sales and refunds once for the drawer derivation and the totals.
-			$orders = $sessions->captured_orders( $session );
-			$refunds = $sessions->session_refunds( $session );
-			$fields['expected'] = $sessions->expected( $session, $orders, null, array_merge( array(), ...array_column( $refunds, 'rows' ) ) );
+			$figures = Session_Figures::for_session( $session );
+			$fields['expected'] = $figures->expected();
 			$fields['variance'] = $this->variance( $fields['counted'], $fields['expected'] );
-			$totals = array(
-				'sales' => array(),
-				'refunds' => array(),
-			);
-			foreach ( $orders as $rows ) {
-				foreach ( $rows as $row ) {
-					$refund = 'refund' === $row['kind'] || '-' === substr( $row['amount'], 0, 1 );
-					$totals[ $refund ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
-				}
-			}
-			foreach ( $refunds as $refund ) {
-				foreach ( $refund['rows'] as $row ) {
-					$totals['refunds'][] = ltrim( $row['amount'], '-' );
-				}
-			}
-			// The refund writers ask this stamp, not the clock, whether a refund was inside the closure.
-			foreach ( $refunds as $refund ) {
-				$refund['refund']->update_meta_data( '_wcpos_closure', $fields['id'] );
-				$refund['refund']->save_meta_data();
-				// An unstamped counted refund would later read as a late arrival: fail the closure instead.
-				$stored = wc_get_order( $refund['refund']->get_id() );
-				if ( $stored instanceof \WC_Order_Refund ) {
-					$stored->read_meta_data( true );
-				}
-				if ( '' !== $wpdb->last_error || ! $stored instanceof \WC_Order_Refund || (string) $stored->get_meta( '_wcpos_closure', true ) !== (string) $fields['id'] ) {
-					throw new \RuntimeException( 'Closure refund stamp failed.' );
-				}
-			}
+			$totals = $figures->period_amounts();
+			$figures->stamp( $fields['id'] );
 			$findings = array();
 			foreach ( $totals as $kind => $amounts ) {
 				$period = self::sum( $amounts );
