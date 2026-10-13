@@ -56,6 +56,9 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 			touch( $file, $mtime );
 		}
 		$this->touched = array();
+		$missed        = new \ReflectionProperty( Load_Integrity::class, 'missed' );
+		$missed->setAccessible( true );
+		$missed->setValue( null, array() );
 		if ( null !== $this->api ) {
 			$GLOBALS['wp_rest_server'] = $this->saved_server; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Restoring core's REST server.
 			$this->api                 = null;
@@ -176,6 +179,47 @@ class Test_Load_Integrity extends WP_UnitTestCase {
 		$this->assertLessThan( 0.1, $t_unlisted );
 		$this->assertGreaterThanOrEqual( Load_Integrity::RETRY_WAIT_US / 1e6, $t_first );
 		$this->assertLessThan( 0.1, $t_second );
+	}
+
+	/**
+	 * A WCPOS route that 404s because a shipped class missed mid-update answers 503;
+	 * other 404s, and 404s with no shipped miss behind them, pass through.
+	 */
+	public function test_no_route_after_a_shipped_miss_mid_update_is_503(): void {
+		// Arrange: a shipped class misses, then its file lands (an update copying it in).
+		$dir    = $this->temp_dir();
+		$name   = 'Controller_' . str_replace( '.', '', uniqid( '', true ) );
+		$class  = 'WCPOS\\WooCommercePOS\\' . $name;
+		$loader = new \Composer\Autoload\ClassLoader( $dir );
+		$loader->addClassMap( array( $class => $dir . $name . '.php' ) );
+		$loader->register( false );
+		try {
+			$this->assertFalse( Load_Integrity::load( $class, $dir ) );
+		} finally {
+			$loader->unregister();
+		}
+		$this->write( $dir . $name . '.php', '<?php' );
+		$no_route = static function (): WP_REST_Response {
+			return new WP_REST_Response( array( 'code' => 'rest_no_route' ), 404 );
+		};
+
+		// Act.
+		$wcpos = Load_Integrity::no_route_unavailable( $no_route(), rest_get_server(), new WP_REST_Request( 'GET', '/wcpos/v2/sync/products' ) );
+		$other = Load_Integrity::no_route_unavailable( $no_route(), rest_get_server(), new WP_REST_Request( 'GET', '/wc/v3/products' ) );
+
+		// Assert.
+		$this->assertSame( 503, $wcpos->get_status() );
+		$this->assertSame( '5', $wcpos->get_headers()['Retry-After'] ?? null );
+		$this->assertSame( 404, $other->get_status() );
+	}
+
+	/**
+	 * Without a shipped miss, a WCPOS 404 is just a 404.
+	 */
+	public function test_no_route_without_a_shipped_miss_stays_404(): void {
+		$response = Load_Integrity::no_route_unavailable( new WP_REST_Response( array( 'code' => 'rest_no_route' ), 404 ), rest_get_server(), new WP_REST_Request( 'GET', '/wcpos/v2/nope' ) );
+
+		$this->assertSame( 404, $response->get_status() );
 	}
 
 	/**

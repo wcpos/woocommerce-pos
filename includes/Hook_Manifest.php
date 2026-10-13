@@ -31,6 +31,7 @@ final class Hook_Manifest {
 	 *
 	 * @param array $rows Ordered hook rows.
 	 * @throws \InvalidArgumentException When required metadata is absent or invalid.
+	 * @throws \Error When a callback's class is missing (an update in flight).
 	 */
 	public static function validate( array $rows ): void {
 		foreach ( $rows as $index => $row ) {

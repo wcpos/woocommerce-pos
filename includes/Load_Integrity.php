@@ -65,6 +65,15 @@ class Load_Integrity {
 	private static $reported = array();
 
 	/**
+	 * Shipped classes the fallback could not load this request: class => file.
+	 * A caller that probes with class_exists() and carries on (route registration,
+	 * the bootstrap's Activator check) leaves no Error behind, only a missing route.
+	 *
+	 * @var array<string, string>
+	 */
+	private static $missed = array();
+
+	/**
 	 * Append the fallback after Composer. Idempotent; the first copy to register wins.
 	 *
 	 * @param string $includes_dir The includes/ directory of the calling copy.
@@ -78,6 +87,7 @@ class Load_Integrity {
 		// vendor/autoload.php also loads outside WordPress (PHPUnit, tooling).
 		if ( \function_exists( 'add_filter' ) ) {
 			add_filter( 'wp_php_error_args', array( self::class, 'fatal_error_args' ), 10, 2 );
+			add_filter( 'rest_post_dispatch', array( self::class, 'no_route_unavailable' ), 10, 3 );
 		}
 	}
 
@@ -132,6 +142,9 @@ class Load_Integrity {
 			if ( class_exists( $class_name, false ) || interface_exists( $class_name, false ) || trait_exists( $class_name, false ) ) {
 				return true;
 			}
+		}
+		if ( self::is_shipped( $class_name ) ) {
+			self::$missed[ $class_name ] = $file;
 		}
 		return false;
 	}
@@ -306,16 +319,45 @@ class Load_Integrity {
 			return null;
 		}
 		$found = self::report( $file, $error->getMessage() );
-		if ( ! self::is_transient( $found['classification'] ) ) {
-			return null;
+		return self::is_transient( $found['classification'] ) ? self::unavailable( $found['classification'] ) : null;
+	}
+
+	/**
+	 * A WCPOS route that 404s because a shipped class went missing mid-update
+	 * (its controller was never registered) answers the retryable 503 instead.
+	 *
+	 * @param mixed            $response Response about to be served.
+	 * @param \WP_REST_Server  $server   REST server.
+	 * @param \WP_REST_Request $request  Request.
+	 *
+	 * @return mixed
+	 */
+	public static function no_route_unavailable( $response, $server, $request ) {
+		if ( empty( self::$missed ) || ! $response instanceof \WP_REST_Response || ! $request instanceof \WP_REST_Request || 404 !== $response->get_status() ) {
+			return $response;
 		}
+		$data = $response->get_data();
+		if ( ! \is_array( $data ) || 'rest_no_route' !== ( $data['code'] ?? '' ) || ! preg_match( '#^/wcpos/v\d#', $request->get_route() ) ) {
+			return $response;
+		}
+		$class_name = (string) array_key_first( self::$missed );
+		$found      = self::report( self::$missed[ $class_name ], 'Class "' . $class_name . '" not found' );
+		return self::is_transient( $found['classification'] ) ? self::unavailable( $found['classification'] ) : $response;
+	}
+
+	/**
+	 * The retryable "being updated" response.
+	 *
+	 * @param string $classification Integrity classification.
+	 */
+	private static function unavailable( string $classification ): \WP_REST_Response {
 		$response = new \WP_REST_Response(
 			array(
 				'code'    => 'wcpos_updating',
 				'message' => __( 'WCPOS is being updated on this site. Please try again in a few seconds.', 'woocommerce-pos' ),
 				'data'    => array(
 					'status'         => 503,
-					'classification' => $found['classification'],
+					'classification' => $classification,
 				),
 			),
 			503
@@ -336,13 +378,18 @@ class Load_Integrity {
 	 * @return array
 	 */
 	public static function fatal_error_args( $args, $error ) {
-		// Decoded: the plain-permalink form sends ?rest_route=%2Fwcpos%2Fv2%2F….
-		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( rawurldecode( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) : '';
+		// Decoded: the plain-permalink form sends ?rest_route=%2Fwcpos%2Fv2%2F…, and
+		// esc_url_raw() keeps those octets where sanitize_text_field() strips them.
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? rawurldecode( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) : '';
 		$file = \is_array( $error ) ? self::affected_file( (string) ( $error['message'] ?? '' ), (string) ( $error['file'] ?? '' ), E_PARSE === (int) ( $error['type'] ?? 0 ) ) : null;
 		if ( \is_array( $args ) && null !== $file && preg_match( '#wcpos/v\d#', $uri ) && self::is_transient( self::classify( self::signals( $file ) ) ) ) {
 			$args['response'] = 503;
 			if ( ! headers_sent() ) {
+				// Rest_Cors never ran: send its contract (any origin, no credentials) so a
+				// browser POS can read the status and the retry hint.
 				header( 'Retry-After: 5' );
+				header( 'Access-Control-Allow-Origin: *' );
+				header( 'Access-Control-Expose-Headers: Retry-After' );
 			}
 		}
 		return $args;
