@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Services\Report_Scope_Resolver;
 use WCPOS\WooCommercePOS\Services\Report_Document_Validator;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -204,7 +205,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'Closure fixture', $this->received['register_name'] );
 		$this->assertArrayNotHasKey( 'session', $this->received );
 		$this->assertArrayNotHasKey( 'closure', $this->received );
-		$this->assertSame( $data['report'], Receipt_Data_Schema::format_money_fields( $data )['report'] );
+		$this->assertSame( $data['report'], Receipt_Money_Formatter::format( $data )['report'] );
 		$start = new \DateTimeImmutable( $this->received['from_utc'], new \DateTimeZone( 'UTC' ) );
 		$end = new \DateTimeImmutable( $this->received['to_utc'], new \DateTimeZone( 'UTC' ) );
 		$this->assertSame( $this->args['from'] . ' 00:00:00', $start->setTimezone( new \DateTimeZone( 'America/New_York' ) )->format( 'Y-m-d H:i:s' ) );

@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WC_REST_Unit_Test_Case;
 
@@ -2686,7 +2687,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$payload   = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
 		$currency  = $payload['order']['currency'] ?? 'USD';
-		$formatted = Receipt_Data_Schema::format_money_fields( $payload, $currency );
+		$formatted = Receipt_Money_Formatter::format( $payload, $currency );
 
 		// Full refund: refund_total === total, so net_total clamps to 0.
 		$this->assertEqualsWithDelta( 0.0, (float) $payload['totals']['net_total'], 0.001 );

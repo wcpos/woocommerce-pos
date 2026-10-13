@@ -12,7 +12,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
-use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 use WP_Error;
 use WP_Query;
@@ -1043,7 +1043,7 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		$currency       = $receipt_data['order']['currency'] ?? 'USD';
-		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
+		$formatted_data = Receipt_Money_Formatter::format( $receipt_data, $currency );
 
 		// Determine engine.
 		$engine = $template['engine'] ?? 'legacy-php';

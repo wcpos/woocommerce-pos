@@ -566,7 +566,7 @@ class Single_Template {
 	/**
 	 * Build the sample receipt data passed to the template editor.
 	 *
-	 * Money fields are run through Receipt_Data_Schema::format_money_fields() so
+	 * Money fields are run through Receipt_Money_Formatter::format() so
 	 * the editor's sample-mode preview renders formatted currency strings — the
 	 * same shape the live /preview endpoint returns. Without this the starter
 	 * templates' `*_display` placeholders resolve to empty strings.
@@ -576,7 +576,7 @@ class Single_Template {
 	public static function get_sample_receipt_data(): array {
 		$raw = ( new \WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder() )->build();
 
-		return \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::format_money_fields(
+		return \WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter::format(
 			$raw,
 			$raw['order']['currency'] ?? 'USD'
 		);

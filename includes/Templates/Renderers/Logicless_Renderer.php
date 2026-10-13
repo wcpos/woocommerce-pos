@@ -17,7 +17,7 @@ namespace WCPOS\WooCommercePOS\Templates\Renderers;
 
 use Mustache\Engine as Mustache_Engine;
 use WCPOS\WooCommercePOS\Interfaces\Receipt_Renderer_Interface;
-use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Templates\Barcode_Image;
 use WC_Abstract_Order;
 
@@ -42,7 +42,7 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 		}
 
 		$currency       = $receipt_data['order']['currency'] ?? 'USD';
-		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
+		$formatted_data = Receipt_Money_Formatter::format( $receipt_data, $currency );
 
 		// Safety net: if a template uses {{#t}}...{{/t}} markers (from gallery source),
 		// setting t = true makes Mustache pass the inner text through unchanged.
