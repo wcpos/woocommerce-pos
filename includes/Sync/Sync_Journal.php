@@ -637,7 +637,7 @@ final class Sync_Journal {
 	public function record_order_change( int $order_id, string $origin, bool $deleted, $order = null ): bool {
 		global $wpdb;
 		if ( $order_id <= 0 ) {
-			return false; // No order has an id below 1; see record().
+			return true; // No order has an id below 1, so there is nothing to write; see record().
 		}
 		if ( 'hook:update' !== $origin ) {
 			if ( 'hook:create' === $origin && $this->queue()->owes( 'order', $order_id ) ) {

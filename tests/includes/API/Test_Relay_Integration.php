@@ -246,6 +246,34 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A filtered (local or staging) relay is still called for a non-https site.
+	 */
+	public function test_register_endpoint_leaves_the_https_rule_to_a_filtered_relay(): void {
+		// Arrange.
+		remove_filter( 'home_url', array( $this, 'https_home_url' ) );
+		add_filter(
+			'woocommerce_pos_cloud_print_relay_url',
+			static function () {
+				return 'http://relay.test';
+			}
+		);
+		$relay_called = false;
+		$this->mock_http(
+			function () use ( &$relay_called ) {
+				$relay_called = true;
+
+				return $this->http_response( 400, array( 'error' => 'rejected' ) );
+			}
+		);
+
+		// Act.
+		rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/relay/register' ) );
+
+		// Assert.
+		$this->assertTrue( $relay_called );
+	}
+
+	/**
 	 * It never trusts a relay-supplied printer base URL.
 	 */
 	public function test_register_ignores_relay_supplied_printer_base_url(): void {

@@ -460,6 +460,44 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A customer-0 row journalled before record() refused it is not served, and the cursor still passes it.
+	 */
+	public function test_sequence_log_drops_a_stored_customer_zero_row_and_advances_past_it(): void {
+		// Arrange: a row written by an older plugin, before the id guard.
+		global $wpdb;
+		$journal = new Sync_Journal();
+		$wpdb->insert(
+			$journal->table_name(),
+			array(
+				'object_type' => 'customer',
+				'object_id' => 0,
+				'deleted' => 0,
+				'revision' => '',
+				'modified_gmt' => gmdate( 'Y-m-d H:i:s' ),
+				'origin' => 'hook',
+				'created_gmt' => gmdate( 'Y-m-d H:i:s' ),
+			)
+		);
+		$zero_sequence = (int) $wpdb->insert_id;
+
+		// Act.
+		$data = ( new Changes_Controller( $journal ) )->sequence_log(
+			$this->request(
+				array(
+					'collection' => 'all',
+					'since' => 0,
+					'limit' => 10,
+				)
+			)
+		)->get_data();
+
+		// Assert.
+		$this->assertSame( array(), $data['changes'] );
+		$this->assertSame( $zero_sequence, $data['checkpoint']['since'] );
+		$this->assertSame( $zero_sequence, $data['checkpoint']['head'] );
+	}
+
+	/**
 	 * A complete filtered page skips foreign rows in the shared sequence space.
 	 */
 	public function test_interleaved_order_write_does_not_move_catalogue_head_and_tick_304s(): void {

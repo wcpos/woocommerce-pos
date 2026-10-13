@@ -222,6 +222,13 @@ final class Changes_Controller extends WP_REST_Controller {
 				'revision'     => (string) ( $row['revision'] ?? '' ),
 				'modified_gmt' => (string) ( $row['modified_gmt'] ?? '' ),
 			);
+			// NO RECORD HAS AN ID BELOW 1. Customer 0 is the client's Guest sentinel; a row for it,
+			// journalled before Sync_Journal::record() refused one, has a till pull customers?include=0
+			// and wedges its lane. Compaction never supersedes it, so drop it here — the checkpoint
+			// above already advanced past this sequence.
+			if ( $change['id'] <= 0 ) {
+				continue;
+			}
 			// POS-HIDDEN RECORDS. An update row for a record the catalog lane will never serve
 			// tells every till to pull an id that comes back empty, counts toward the backlog that
 			// trips the client's re-baseline guard, and moves a head no till can act on. Drop it —
