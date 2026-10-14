@@ -10,7 +10,7 @@
  * - Honeypot field for bot detection
  * - Auth session expiration
  * - State parameter validation
- * - Redirect URI scheme validation
+ * - Redirect URI scheme and origin validation
  *
  * @package WCPOS\WooCommercePOS
  */
@@ -66,6 +66,20 @@ class Auth {
 	 * @var array
 	 */
 	private const ALLOWED_SCHEMES = array( 'wcpos', 'wcpos-dev', 'wcpos-adhoc', 'exp', 'https', 'http' );
+
+	/**
+	 * Web origins that may receive a login redirect besides the site's own.
+	 *
+	 * `https://wcpos.expo.app` is the hosted production client (monorepo
+	 * `.github/workflows/deploy.yml`, job "Deploy production"). Preview
+	 * deployments live on variable `wcpos--<id>.expo.app` hosts and are NOT
+	 * listed: any Expo account can register an `expo.app` subdomain, so a
+	 * wildcard would reopen the hole. A test store allows its preview origins
+	 * through `woocommerce_pos_auth_redirect_origin_allowed`.
+	 *
+	 * @var array
+	 */
+	private const ALLOWED_WEB_ORIGINS = array( 'https://wcpos.expo.app' );
 
 	/**
 	 * The redirect URI.
@@ -208,6 +222,8 @@ class Auth {
 	/**
 	 * Validate and sanitize redirect URI.
 	 *
+	 * `http(s)` destinations must sit on a known origin; see `is_allowed_web_destination()`.
+	 *
 	 * @param string $uri The URI to validate.
 	 *
 	 * @return string Empty string if invalid.
@@ -225,7 +241,9 @@ class Auth {
 			if ( 0 === stripos( $uri, $scheme . '://' ) ) {
 				// For http/https, use esc_url for full validation.
 				if ( 'http' === $scheme || 'https' === $scheme ) {
-					return esc_url( $uri, array( 'http', 'https' ) );
+					$escaped = esc_url( $uri, array( 'http', 'https' ) );
+
+					return $escaped && $this->is_allowed_web_destination( $escaped ) ? $escaped : '';
 				}
 
 				// For custom schemes (wcpos://, exp://), just return it
@@ -235,6 +253,82 @@ class Auth {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Whether a web redirect destination sits on an origin that may receive tokens.
+	 *
+	 * Compares scheme, host and effective port — the origin — never the path or
+	 * query, and never the request's own Host/Origin/Referer headers, which the
+	 * caller controls. A URL with userinfo (`https://site@attacker.example`) is
+	 * refused outright because it reads as the site to a person.
+	 *
+	 * @param string $url The escaped http(s) URL.
+	 *
+	 * @return bool
+	 */
+	private function is_allowed_web_destination( string $url ): bool {
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || ! in_array( $parts['scheme'] ?? '', array( 'http', 'https' ), true ) || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) {
+			return false;
+		}
+
+		$origin  = $this->origin_from_parts( $parts );
+		$allowed = in_array( strtolower( $parts['host'] ), array( 'localhost', '127.0.0.1', '[::1]' ), true );
+
+		foreach ( array( home_url(), site_url() ) as $site_url ) {
+			$site = wp_parse_url( $site_url );
+			if ( ! is_array( $site ) || ! in_array( $site['scheme'] ?? '', array( 'http', 'https' ), true ) || empty( $site['host'] ) || isset( $site['user'] ) || isset( $site['pass'] ) ) {
+				continue;
+			}
+
+			if ( $origin === $this->origin_from_parts( $site ) ) {
+				$allowed = true;
+			}
+			if ( 'https' === $parts['scheme'] && 443 === ( $parts['port'] ?? 443 )
+				&& 'http' === $site['scheme'] && 80 === ( $site['port'] ?? 80 )
+				&& strtolower( $parts['host'] ) === strtolower( $site['host'] ) ) {
+				$allowed = true;
+			}
+		}
+
+		if ( in_array( $origin, self::ALLOWED_WEB_ORIGINS, true ) ) {
+			$allowed = true;
+		}
+
+		/*
+		 * Allow a login redirect to a web origin the plugin does not know.
+		 *
+		 * Runs after the built-in checks (the site's own origin, the hosted
+		 * client, loopback hosts). Return true only for an origin you operate:
+		 * whoever receives the redirect receives the cashier's tokens.
+		 *
+		 * @param bool   $allowed Whether the origin passed the built-in checks.
+		 * @param string $origin  `scheme://host[:port]`, lower-cased, default port omitted.
+		 * @param string $url     The full escaped destination.
+		 *
+		 * @return bool
+		 *
+		 * @since 1.11.1
+		 *
+		 * @hook woocommerce_pos_auth_redirect_origin_allowed
+		 */
+		return (bool) apply_filters( 'woocommerce_pos_auth_redirect_origin_allowed', $allowed, $origin, $url );
+	}
+
+	/**
+	 * `scheme://host[:port]` for parsed URL parts, with the default port omitted.
+	 *
+	 * @param array $parts Output of wp_parse_url().
+	 *
+	 * @return string
+	 */
+	private function origin_from_parts( array $parts ): string {
+		$scheme       = strtolower( $parts['scheme'] );
+		$default_port = 'https' === $scheme ? 443 : 80;
+		$port         = $parts['port'] ?? $default_port;
+
+		return $scheme . '://' . strtolower( $parts['host'] ) . ( $port !== $default_port ? ':' . $port : '' );
 	}
 
 	/**
