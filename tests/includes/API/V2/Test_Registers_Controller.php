@@ -97,6 +97,32 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
 	}
 
+	/** A default float keeps its four decimals above 2^53, where floatval() would drop them. */
+	public function test_default_float_keeps_its_fraction_above_float_precision_on_create_and_update(): void {
+		// Arrange / Act.
+		$created = $this->post_register(
+			array(
+				'name' => 'Front',
+				'default_float' => '100000000000000.0001',
+			)
+		);
+		// Assert.
+		$this->assertSame( 201, $created->get_status() );
+		$this->assertSame( '100000000000000.0001', $created->get_data()['default_float'] );
+		$this->assertSame( '100000000000000.0001', ( new Register_Store() )->get( $created->get_data()['id'] )['default_float'] );
+
+		// Arrange / Act: the same value through PATCH, and rounding stays half-up at the fourth decimal.
+		foreach ( array( '100000000000000.0001' => '100000000000000.0001', '1.23456' => '1.2346', '0000000000000001' => '1.0000' ) as $sent => $stored ) {
+			$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $created->get_data()['id'] );
+			$request->set_method( 'PATCH' );
+			$request->set_body_params( array( 'default_float' => (string) $sent ) );
+			$updated = $this->server->dispatch( $request );
+			// Assert.
+			$this->assertSame( 200, $updated->get_status(), $sent );
+			$this->assertSame( $stored, $updated->get_data()['default_float'], $sent );
+		}
+	}
+
 	/** The Pro filter sees, but cannot replace, the final server identity. */
 	public function test_create_filter_cannot_replace_server_id(): void {
 		$seen = null;
