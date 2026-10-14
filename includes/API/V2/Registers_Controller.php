@@ -202,9 +202,15 @@ class Registers_Controller extends WP_REST_Controller {
 			if ( null !== $value && ( ! is_string( $value ) || ! preg_match( '/^\d+(?:\.\d+)?$/D', $value ) ) ) {
 				return $this->invalid( 'default_float' );
 			}
-			$normalized = null === $value ? null : wc_format_decimal( $value, 4 );
-			if ( null !== $normalized && ! preg_match( '/^\d{1,15}\.\d{4}$/D', $normalized ) ) {
-				return $this->invalid( 'default_float' );
+			// Normalise through SQL DECIMAL, as the session and closure amounts are: wc_format_decimal()
+			// goes through floatval(), which drops the fraction of any float above 2^53.
+			global $wpdb;
+			$normalized = null;
+			if ( null !== $value ) {
+				$normalized = $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(%s AS DECIMAL(65,4))', $value ) );
+				if ( ! is_string( $normalized ) || ! preg_match( '/^\d{1,15}\.\d{4}$/D', $normalized ) ) {
+					return $this->invalid( 'default_float' );
+				}
 			}
 			$fields['default_float'] = $normalized;
 		}

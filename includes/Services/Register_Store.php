@@ -250,7 +250,9 @@ final class Register_Store {
 	 */
 	private function normalize_row( array $row, ?array $closure = null ): array {
 		$row['store_id'] = null === $row['store_id'] ? null : (int) $row['store_id'];
-		$row['default_float'] = null === $row['default_float'] ? null : wc_format_decimal( $row['default_float'], 4 );
+		// The column is DECIMAL(19,4), so the row already carries four exact decimals;
+		// wc_format_decimal() would pass it through floatval() and drop them above 2^53.
+		$row['default_float'] = null === $row['default_float'] ? null : (string) $row['default_float'];
 		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt', 'last_seen_at_gmt' ) as $key ) {
 			$row[ $key ] = null === $row[ $key ] ? null : str_replace( ' ', 'T', $row[ $key ] ) . 'Z';
 		}
