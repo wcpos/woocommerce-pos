@@ -50,6 +50,22 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A client cannot supply the server-owned payment assertion on create.
+	 */
+	public function test_sanitize_create_meta_never_accepts_a_client_payment_assertion(): void {
+		$meta = array(
+			array(
+				'key'   => '_pos_payment_asserted',
+				'value' => 'offline',
+			),
+		);
+
+		$result = Pos_Order_Audit::sanitize_create_meta( $meta );
+
+		$this->assertSame( array(), $result );
+	}
+
+	/**
 	 * Valid till values survive create; non-numeric cash amounts and empty
 	 * values are dropped.
 	 */

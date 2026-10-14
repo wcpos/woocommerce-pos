@@ -141,6 +141,57 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
 	}
 
+	/**
+	 * A restart alone neither creates nor overwrites the receipt time.
+	 *
+	 * @dataProvider receipt_time_cases
+	 * @param string|null $received_gmt Existing receipt time, or null when absent.
+	 */
+	public function test_restart_alone_leaves_the_receipt_time_untouched( ?string $received_gmt ): void {
+		$product  = ProductHelper::create_simple_product();
+		$order_id = $this->make_order( 'pos-open' );
+		if ( null !== $received_gmt ) {
+			$order = wc_get_order( $order_id );
+			$order->update_meta_data( '_wcpos_sale_received_gmt', $received_gmt );
+			$order->save();
+		}
+
+		$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
+
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( self::RESTART_GMT, $this->stored_date_gmt( $order_id ) );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( null !== $received_gmt, $order->meta_exists( '_wcpos_sale_received_gmt' ) );
+		$this->assertSame( $received_gmt ?? '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+	}
+
+	/**
+	 * Receipt-time states before the cart restarts.
+	 *
+	 * @return array
+	 */
+	public static function receipt_time_cases(): array {
+		return array(
+			'absent'   => array( null ),
+			'existing' => array( '2026-05-01T09:01:00Z' ),
+		);
+	}
+
+	/** The loaded open cart can restart even when the same push closes it. */
+	public function test_restart_and_checkout_in_one_push_takes_the_restart_date(): void {
+		$product            = ProductHelper::create_simple_product();
+		$order_id           = $this->make_order( 'pos-open' );
+		$payload            = $this->restart_payload( $product->get_id() );
+		$payload['status']   = 'completed';
+		$payload['set_paid'] = true;
+
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( self::RESTART_GMT, $this->stored_date_gmt( $order_id ) );
+		$this->assertSame( 'completed', wc_get_order( $order_id )->get_status() );
+	}
+
 	/** The `Z`-suffixed form the till may send is the same instant. */
 	public function test_update_of_an_unpaid_open_cart_takes_a_zulu_client_date_created_gmt(): void {
 		$product  = ProductHelper::create_simple_product();
