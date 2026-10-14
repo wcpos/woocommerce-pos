@@ -13,6 +13,11 @@ name: OPFS Worker Drift
 #          what dev-next loads. Checked on `next` pushes/PRs and by the schedule, because
 #          the worker fell one rxdb minor behind for five days unnoticed and dev-next failed
 #          every boot with RxDB RM1 the moment the bundle was published (2026-10-05).
+#
+# The `drift` job also checks that the worker's RXDB_VERSION has not moved inside a
+# published plugin lane (major.minor): installed sites keep their old worker but load
+# the newest bundle on their lane, and RxDB refuses any version mismatch (RM1). It is a
+# step there, not its own job, because main's ruleset requires that job by name.
 
 on:
   pull_request:
@@ -36,7 +41,9 @@ concurrency:
 
 jobs:
   drift:
-    name: 🧵 SQLite worker and WASM match the bundle
+    # Keep this name: main's ruleset requires the context `🧵 OPFS worker matches the
+    # bundle`, so a renamed job leaves every PR to main waiting once `next` is promoted.
+    name: 🧵 OPFS worker matches the bundle
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -53,6 +60,17 @@ jobs:
           # A `next` push or PR compares against the lane's branch; `main` resolves a tag.
           BUNDLE_REF: ${{ (github.base_ref == 'next' || github.ref_name == 'next') && 'next' || '' }}
         run: bash .github/scripts/check-opfs-worker-drift.sh
+
+      # `!cancelled()`: report the RxDB lane check even when the drift check is red.
+      - name: Test the worker RxDB lane script
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/test-check-worker-rxdb-minor.sh
+
+      - name: Check the worker's RxDB version against the plugin's lane
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/check-worker-rxdb-minor.sh
 
   # The schedule runs from the default branch, so the `next` lane gets its own checkout.
   drift-next:
