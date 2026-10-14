@@ -1,0 +1,4121 @@
+# Copyright (C) 2026 kilbot
+# This file is distributed under the GPL-3.0+.
+msgid ""
+msgstr ""
+"Project-Id-Version: WCPOS 1.10.27\n"
+"Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-10-13T23:50:33+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: woocommerce-pos\n"
+
+#. Plugin Name of the plugin
+msgid "WCPOS – Point of Sale for WooCommerce"
+msgstr ""
+
+#. Plugin URI of the plugin
+msgid "https://wordpress.org/plugins/woocommerce-pos/"
+msgstr ""
+
+#. Description of the plugin
+msgid "A simple front-end for taking WooCommerce orders at the Point of Sale. Requires <a href=\"http://wordpress.org/plugins/woocommerce/\">WooCommerce</a>."
+msgstr ""
+
+#. Author of the plugin
+msgid "kilbot"
+msgstr ""
+
+#. Author URI of the plugin
+msgid "http://wcpos.com"
+msgstr ""
+
+#. translators: 1: Minimum PHP version, 2: Update URL.
+#: includes/Activator.php:286
+#, php-format
+msgid "<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
+msgstr ""
+
+#. translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
+#: includes/Activator.php:310
+#, php-format
+msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
+msgstr ""
+
+#. translators: Plugin activation notice label.
+#: includes/Activator.php:332
+msgid "<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly"
+msgstr ""
+
+#. translators: Plugin activation notice label.
+#: includes/Activator.php:333
+msgid "Enable permalinks"
+msgstr ""
+
+#. translators: Plugin activation notice label.
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt label for the POS cashier/operator who served the customer.
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Activator.php:561
+#: includes/Services/Receipt_Data_Schema.php:437
+#: includes/Services/Receipt_I18n_Labels.php:50
+#: includes/Templates/Payment.php:316
+#: templates/receipt.php:198
+msgid "Cashier"
+msgstr ""
+
+#. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
+#: includes/Activator.php:744
+#, php-format
+msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
+msgstr ""
+
+#: includes/Admin/Consent.php:318
+msgid "You do not have permission to update WCPOS settings."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Admin/Consent.php:334
+msgid "Invalid consent value."
+msgstr ""
+
+#: includes/Admin/Consent.php:339
+msgid "Unable to load general settings."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Admin/Consent.php:384
+msgid "No current user."
+msgstr ""
+
+#. translators: WordPress admin menu label for WCPOS.
+#. translators: Order channel filter value shown in WooCommerce admin for POS orders.
+#: includes/Admin/Menu.php:128
+#: includes/Admin/Menu.php:148
+#: includes/Admin/Menu.php:150
+#: includes/Admin/Orders/List_Orders.php:42
+msgid "POS"
+msgstr ""
+
+#. translators: WordPress admin menu label for WCPOS.
+#: includes/Admin/Menu.php:160
+#: includes/Admin/Menu.php:162
+msgid "View POS"
+msgstr ""
+
+#. translators: WordPress admin submenu label that opens WCPOS settings.
+#. translators: Plugin row action link that opens WCPOS settings.
+#: includes/Admin/Menu.php:170
+#: includes/Admin/Menu.php:172
+#: includes/Admin/Plugins.php:38
+msgid "Settings"
+msgstr ""
+
+#. translators: WordPress admin menu label for WCPOS.
+#. translators: Receipt template post type or template option label.
+#: includes/Admin/Menu.php:182
+#: includes/Admin/Menu.php:184
+#: includes/Templates.php:146
+#: includes/Templates.php:151
+msgid "Templates"
+msgstr ""
+
+#. translators: WordPress admin menu label for WCPOS.
+#. translators: Plugin admin screen label or notice for WCPOS.
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Menu.php:194
+#: includes/Admin/Plugins.php:54
+#: includes/Admin/Products/Single_Product.php:207
+msgid "Upgrade to Pro"
+msgstr ""
+
+#: includes/Admin/Menu.php:446
+msgid "You do not have permission to access this page."
+msgstr ""
+
+#. translators: Order channel filter value shown in WooCommerce admin for online orders.
+#: includes/Admin/Orders/List_Orders.php:43
+msgid "Online"
+msgstr ""
+
+#. translators: Order list label shown in WooCommerce admin for POS orders.
+#: includes/Admin/Orders/Single_Order.php:86
+msgid "POS Cashier"
+msgstr ""
+
+#. translators: Order list label shown in WooCommerce admin for POS orders.
+#: includes/Admin/Orders/Single_Order.php:87
+msgid "Search for a cashier&hellip;"
+msgstr ""
+
+#. translators: 1: old POS cashier, 2: new POS cashier.
+#: includes/Admin/Orders/Single_Order.php:129
+#: includes/Services/Order_Notes.php:72
+#, php-format
+msgid "POS cashier changed from %1$s to %2$s."
+msgstr ""
+
+#. translators: Fallback cashier name shown when the POS cashier user cannot be found.
+#: includes/Admin/Orders/Single_Order.php:130
+#: includes/Admin/Orders/Single_Order.php:131
+#: includes/Services/Order_Notes.php:24
+msgid "Unknown"
+msgstr ""
+
+#. translators: Permalink settings label for the POS base URL.
+#: includes/Admin/Permalink.php:91
+msgctxt "Permalink setting, eg: /pos"
+msgid "POS base"
+msgstr ""
+
+#. translators: Prefix for an important plugin update notice in the WordPress plugins screen.
+#: includes/Admin/Plugins.php:84
+msgid "Important:"
+msgstr ""
+
+#. translators: Plugin admin screen label or notice for WCPOS.
+#: includes/Admin/Plugins.php:98
+msgid "Major Update"
+msgstr ""
+
+#: includes/Admin/Plugins.php:101
+msgid "Update when you have time to test the POS. You can rollback to the previous version if needed."
+msgstr ""
+
+#. translators: Plugin admin screen label or notice for WCPOS.
+#: includes/Admin/Plugins.php:105
+msgid "Pro Users:"
+msgstr ""
+
+#. translators: %s: URL to My Account page
+#: includes/Admin/Plugins.php:109
+#, php-format
+msgid "WCPOS Pro is now a standalone plugin. Download the latest version from %s"
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Products/List_Products.php:46
+#: includes/Admin/Products/Single_Product.php:45
+msgid "POS & Online"
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Products/List_Products.php:47
+#: includes/Admin/Products/List_Products.php:122
+#: includes/Admin/Products/Single_Product.php:46
+msgid "POS Only"
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Products/List_Products.php:48
+#: includes/Admin/Products/List_Products.php:123
+#: includes/Admin/Products/Single_Product.php:47
+msgid "Online Only"
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Products/List_Products.php:93
+#: includes/Admin/Products/Single_Product.php:77
+#: includes/Admin/Products/templates/variation-metabox-pos-barcode.php:23
+msgid "POS Barcode"
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Products/List_Products.php:95
+#: includes/Admin/Products/Single_Product.php:79
+#: includes/Admin/Products/templates/variation-metabox-pos-barcode.php:24
+msgid "Product barcode used at the point of sale"
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Products/Single_Product.php:103
+#: includes/Admin/Products/Single_Product.php:180
+msgid "Enable POS specific prices."
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#: includes/Admin/Products/Single_Product.php:128
+#: includes/Admin/Products/Single_Product.php:194
+msgid "Enable POS specific taxes."
+msgstr ""
+
+#. translators: Product POS visibility or barcode label in WooCommerce admin.
+#. translators: Product POS visibility label in WooCommerce admin.
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:21
+#: includes/Admin/Products/templates/quick-edit-visibility-select.php:23
+#: includes/Admin/Products/templates/variation-metabox-visibility-select.php:25
+msgid "POS visibility"
+msgstr ""
+
+#. translators: Link text for editing product POS visibility in the WooCommerce product publish box.
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:27
+msgid "Edit"
+msgstr ""
+
+#. translators: Button text confirming product POS visibility changes in the WooCommerce product publish box.
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:46
+msgid "OK"
+msgstr ""
+
+#. translators: Link text cancelling product POS visibility changes in the WooCommerce product publish box.
+#: includes/Admin/Products/templates/post-metabox-visibility-select.php:53
+msgid "Cancel"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#. translators: Checkout/payment form error message title.
+#: includes/Admin/Settings.php:59
+#: includes/Form_Handler.php:54
+#: includes/Form_Handler.php:66
+#: includes/Form_Handler.php:80
+#: includes/Form_Handler.php:94
+#: includes/Templates/Payment.php:178
+#: includes/Templates/Payment.php:458
+#: includes/Templates/Received.php:92
+msgid "Error"
+msgstr ""
+
+#: includes/Admin/Settings.php:60
+msgid "Settings failed to load, please contact support"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:58
+msgid "HTML (Offline)"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:59
+msgid "XML (Receipt Printer)"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:60
+msgid "PHP (Legacy)"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:125
+msgid "Enter template name"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:149
+msgid "Back to Templates"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:178
+msgid "Publish"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:188
+msgid "Template Settings"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:199
+msgid "Revisions"
+msgstr ""
+
+#: includes/Admin/Templates/Single_Template.php:229
+msgid "Prints using your browser's print dialog. Renders on the device without needing a server connection."
+msgstr ""
+
+#: includes/Admin/Templates/Single_Template.php:230
+msgid "Sends output directly to thermal printers like Epson or Star. Works offline."
+msgstr ""
+
+#: includes/Admin/Templates/Single_Template.php:231
+msgid "Prints using your browser's print dialog. Requires a server connection to generate the receipt."
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:237
+msgid "Template Engine"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:255
+msgid "Paper Size"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:257
+msgid "80mm (Standard)"
+msgstr ""
+
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:258
+msgid "58mm (Narrow)"
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API.php:411
+#: includes/API/V1/Cashier.php:124
+msgid "Authentication required."
+msgstr ""
+
+#: includes/API.php:418
+msgid "You do not have permission to access the POS."
+msgstr ""
+
+#: includes/API/V1/Auth.php:83
+msgid "The refresh token to use for generating a new access token."
+msgstr ""
+
+#: includes/API/V1/Auth.php:101
+msgid "The user ID to get sessions for. Defaults to current user."
+msgstr ""
+
+#: includes/API/V1/Auth.php:122
+msgid "The user ID to delete sessions for."
+msgstr ""
+
+#: includes/API/V1/Auth.php:130
+msgid "Whether to keep the current session."
+msgstr ""
+
+#: includes/API/V1/Auth.php:149
+msgid "The session JTI to delete."
+msgstr ""
+
+#: includes/API/V1/Auth.php:158
+msgid "The user ID that owns the session."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Auth.php:353
+msgid "Missing required parameters."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Auth.php:368
+msgid "Session revoked successfully."
+msgstr ""
+
+#: includes/API/V1/Auth.php:376
+msgid "Failed to revoke session."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Auth.php:397
+msgid "Missing user_id parameter."
+msgstr ""
+
+#: includes/API/V1/Auth.php:413
+msgid "Could not determine current session."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Auth.php:428
+msgid "Sessions revoked successfully."
+msgstr ""
+
+#: includes/API/V1/Auth.php:436
+msgid "Failed to revoke sessions."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Cashier.php:59
+#: includes/API/V1/Cashier.php:77
+#: includes/API/V1/Cashier.php:95
+msgid "Unique identifier for the cashier (WordPress user ID)."
+msgstr ""
+
+#: includes/API/V1/Cashier.php:100
+msgid "Unique identifier for the store."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Cashier.php:138
+#: includes/API/V1/Cashier.php:181
+#: includes/API/V1/Cashier.php:216
+#: includes/API/V1/Cashier.php:261
+msgid "Cashier not found."
+msgstr ""
+
+#: includes/API/V1/Cashier.php:149
+msgid "User does not have POS cashier permissions."
+msgstr ""
+
+#: includes/API/V1/Cashier.php:158
+msgid "You can only access your own cashier data."
+msgstr ""
+
+#: includes/API/V1/Cashier.php:239
+msgid "Failed to retrieve store data."
+msgstr ""
+
+#: includes/API/V1/Cashier.php:272
+msgid "Store not found or not accessible by this cashier."
+msgstr ""
+
+#: includes/API/V1/Checkout_Controller.php:102
+msgid "Sorry, you cannot view checkout state."
+msgstr ""
+
+#: includes/API/V1/Checkout_Controller.php:113
+msgid "Sorry, you cannot process checkout."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Checkout_Controller.php:141
+msgid "Missing X-WCPOS-Idempotency-Key header."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Checkout_Controller.php:152
+#: includes/API/V1/Gateway_Bootstrap_Controller.php:98
+msgid "Payment gateway not found."
+msgstr ""
+
+#: includes/API/V1/Checkout_Controller.php:160
+msgid "Payment gateway is not available for POS checkout."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Checkout_Controller.php:279
+#: includes/API/V1/Receipts_Controller.php:161
+msgid "Order not found."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Customers_Controller.php:103
+msgid "Customer tax IDs."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Customers_Controller.php:112
+msgid "Tax ID type."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Customers_Controller.php:116
+msgid "Tax ID value."
+msgstr ""
+
+#: includes/API/V1/Customers_Controller.php:120
+msgid "ISO 3166-1 alpha-2 country code."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Customers_Controller.php:124
+msgid "Optional human-readable label."
+msgstr ""
+
+#: includes/API/V1/Customers_Controller.php:194
+msgid "Filter customers by roles."
+msgstr ""
+
+#. translators: Use default WordPress translation.
+#: includes/API/V1/Customers_Controller.php:328
+#: includes/API/V1/Orders_Controller.php:585
+msgid "Invalid email address."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Data_Order_Statuses_Controller.php:124
+msgid "Order Status."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Data_Order_Statuses_Controller.php:130
+msgid "Order Status Label."
+msgstr ""
+
+#: includes/API/V1/Extensions.php:77
+msgid "Could not clear the extensions cache."
+msgstr ""
+
+#: includes/API/V1/Extensions.php:88
+msgid "Could not refresh extensions. Please try again."
+msgstr ""
+
+#: includes/API/V1/Extensions.php:111
+msgid "You do not have permission to view extensions."
+msgstr ""
+
+#: includes/API/V1/Gateway_Bootstrap_Controller.php:82
+msgid "Sorry, you cannot bootstrap payment gateways."
+msgstr ""
+
+#: includes/API/V1/Logs.php:654
+msgid "You do not have permission to view logs."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Orders_Controller.php:280
+#: includes/API/V2/Order_Email_Controller.php:40
+msgid "Email address"
+msgstr ""
+
+#: includes/API/V1/Orders_Controller.php:285
+#: includes/API/V2/Order_Email_Controller.php:45
+msgid "Save email to order"
+msgstr ""
+
+#: includes/API/V1/Orders_Controller.php:320
+msgid "Customer tax IDs snapshotted at sale time."
+msgstr ""
+
+#. translators: %s: email address.
+#: includes/API/V1/Orders_Controller.php:640
+#, php-format
+msgid "Email address %s added to billing details from WCPOS."
+msgstr ""
+
+#. translators: %s: email address.
+#: includes/API/V1/Orders_Controller.php:653
+#, php-format
+msgid "Order details manually sent to %s from WCPOS."
+msgstr ""
+
+#: includes/API/V1/Orders_Controller.php:718
+msgid "Unique identifier for the order status."
+msgstr ""
+
+#: includes/API/V1/Orders_Controller.php:724
+msgid "Display name of the order status."
+msgstr ""
+
+#: includes/API/V1/Orders_Controller.php:750
+msgid "Whether the order email was sent."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:162
+msgid "Payment gateway ID."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:168
+msgid "Payment gateway title shown at the POS."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:174
+msgid "Payment gateway description."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:180
+msgid "Whether the gateway is enabled for the POS."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:186
+msgid "Provider family identifier."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:192
+msgid "POS handling type for the gateway."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:198
+msgid "POS capabilities exposed by the gateway."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:222
+msgid "Provider-specific public metadata."
+msgstr ""
+
+#: includes/API/V1/Payment_Gateways.php:228
+msgid "Order status (without the wc- prefix) the merchant configured this gateway to settle a POS sale to, or null when none is stored."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:303
+msgid "The PrintNode API key must be sent in the request body, not the query string."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:316
+msgid "A PrintNode API key is required."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:363
+msgid "The Star Online API key must be sent in the request body, not the query string."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:378
+msgid "A Star Online API key and a valid stario.online CloudPRNT URL are required."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:464
+#: includes/API/V1/Print_Jobs_Controller.php:485
+#: includes/API/V1/Print_Jobs_Controller.php:726
+#: includes/Services/Providers/Star_Cloudprnt_Adapter.php:142
+msgid "Print job not found."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:498
+msgid "The print job could not be deleted."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:514
+msgid "Only pending or claimed print jobs can be cancelled."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:690
+msgid "No print jobs were selected."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:698
+msgid "One or more selected print jobs are invalid."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:733
+msgid "This print job has already been retried."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:745
+msgid "This job's stored receipt has been cleaned up and it has no template to re-render from."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:762
+msgid "This job's template no longer exists, so it cannot be re-rendered."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:810
+#: includes/API/V1/Print_Jobs_Controller.php:1012
+#: includes/API/V1/Print_Jobs_Controller.php:1116
+#: includes/Services/Providers/Star_Online_Adapter.php:189
+msgid "Print job could not be created."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:819
+msgid "Print job retry could not be recorded."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:873
+#: includes/API/V1/Print_Jobs_Controller.php:895
+msgid "Invalid printer token."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:952
+msgid "A printer_id is required."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:977
+msgid "PrintNode print jobs require an order and a template."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:992
+#: includes/API/V1/Print_Jobs_Controller.php:1091
+msgid "Unknown printer."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1041
+msgid "Unknown order."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1050
+msgid "Unknown template."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1067
+msgid "The selected template cannot be printed on this printer."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1173
+msgid "Epson Server Direct Print accepts order-based ePOS-Print jobs only, not raw payloads."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1180
+msgid "Epson Server Direct Print requires the epos-xml format."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1191
+msgid "Star CloudPRNT does not accept the epos-xml format."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1203
+msgid "Star CloudPRNT printers require order-based template jobs or a raw payload."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1221
+msgid "No relay verification is pending."
+msgstr ""
+
+#: includes/API/V1/Print_Jobs_Controller.php:1261
+msgid "Sorry, you cannot manage print jobs."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Products_Controller.php:173
+#: includes/API/V1/Product_Variations_Controller.php:174
+msgid "Barcode"
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/V1/Products_Controller.php:217
+msgid "Limit result set to products assigned to brand IDs or slugs, separated by commas."
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/V1/Products_Controller.php:225
+msgid "Operator to compare product brand terms."
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/V1/Products_Controller.php:235
+msgid "Operator to compare product category terms."
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/V1/Products_Controller.php:245
+msgid "Operator to compare product tag terms."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Receipts_Controller.php:115
+msgid "Invalid order."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Receipts_Controller.php:125
+msgid "Invalid receipt mode."
+msgstr ""
+
+#: includes/API/V1/Receipts_Controller.php:135
+msgid "No fiscal snapshot found for this order."
+msgstr ""
+
+#: includes/API/V1/Receipts_Controller.php:170
+msgid "A template_id is required."
+msgstr ""
+
+#. translators: Error message displayed when a template cannot be found.
+#: includes/API/V1/Receipts_Controller.php:179
+#: includes/Template_Router.php:239
+#: includes/Template_Router.php:257
+msgid "Template not found."
+msgstr ""
+
+#: includes/API/V1/Receipts_Controller.php:191
+#: includes/API/V1/Receipts_Controller.php:199
+#: includes/Templates/Receipt.php:195
+#: includes/Templates/Receipt.php:203
+#: includes/Templates/Receipt.php:214
+msgid "Could not generate the receipt PDF."
+msgstr ""
+
+#: includes/API/V1/Receipts_Controller.php:226
+msgid "Sorry, you cannot view receipts."
+msgstr ""
+
+#: includes/API/V1/Settings.php:416
+msgid "Settings section not registered."
+msgstr ""
+
+#: includes/API/V1/Stores.php:93
+msgid "Failed to retrieve store data"
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Stores.php:113
+msgid "Store not found"
+msgstr ""
+
+#: includes/API/V1/Stores.php:158
+msgid "You do not have permissions to view this data."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:77
+#: includes/API/V1/Templates_Controller.php:207
+msgid "Template type."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:96
+#: includes/API/V1/Templates_Controller.php:1278
+msgid "Filter by template type."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:102
+#: includes/API/V1/Templates_Controller.php:1300
+msgid "Filter by template category slug."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:121
+msgid "Template type for ordering."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:129
+msgid "Array of templates to update."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:152
+msgid "Ordered array of all template IDs (int for database, string for virtual)."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:159
+msgid "Array of virtual template IDs to disable."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:164
+msgid "Array of virtual template IDs to enable."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:182
+msgid "Gallery template key to install."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:202
+msgid "Unique identifier for the template (numeric for database, string for virtual)."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:254
+msgid "Template ID to copy."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:272
+msgid "Template ID to preview."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:277
+msgid "Order ID or \"latest\" for most recent POS order. Omit for sample data."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:283
+msgid "POS store ID for store-specific data."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:289
+msgid "Include temporary PHP-rendered HTML diagnostics for logicless previews."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:310
+msgid "Template ID to delete."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:468
+#: includes/API/V1/Templates_Controller.php:519
+#: includes/API/V1/Templates_Controller.php:695
+#: includes/API/V1/Templates_Controller.php:793
+#: includes/API/V1/Templates_Controller.php:885
+msgid "Invalid template ID."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:494
+msgid "No active template found."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:559
+msgid "Template not found after update."
+msgstr ""
+
+#. translators: %d: batch item index.
+#: includes/API/V1/Templates_Controller.php:619
+#, php-format
+msgid "Batch item %d must include a numeric id."
+msgstr ""
+
+#. translators: %s: original template title
+#: includes/API/V1/Templates_Controller.php:706
+#, php-format
+msgid "Copy of %s"
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:753
+msgid "Failed to save copied template content."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:763
+msgid "Failed to retrieve copied template."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:801
+msgid "Built-in templates cannot be deleted."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:811
+msgid "Failed to delete template."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:845
+msgid "Template was installed but could not be retrieved."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:915
+msgid "Order not found or is not a POS order."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/API/V1/Templates_Controller.php:929
+msgid "Store not found."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1017
+msgid "Mustache template syntax error. Check your template."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1264
+msgid "Current page of the collection."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1271
+msgid "Maximum number of items to be returned in result set."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1286
+msgid "Scope under which the request is made."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1294
+msgid "Search templates by title or description."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1306
+msgid "Limit to templates modified after this ISO 8601 date."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1312
+msgid "Limit results to templates resolved for a specific store."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1481
+msgid "Sorry, you cannot list templates."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1490
+msgid "Sorry, you are not allowed to edit templates."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1509
+msgid "Sorry, you cannot view this template."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1518
+msgid "Sorry, you are not allowed to edit this template."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1539
+msgid "Sorry, you cannot preview this template."
+msgstr ""
+
+#: includes/API/V1/Templates_Controller.php:1558
+msgid "Sorry, you cannot update templates."
+msgstr ""
+
+#: includes/API/V1/Traits/WCPOS_REST_API.php:68
+msgid "Invalid _woocommerce_pos_uuid meta_data value."
+msgstr ""
+
+#: includes/API/V2/Proxy/Products_Proxy_Behavior.php:194
+msgid "Could not fetch products."
+msgstr ""
+
+#. translators: Checkout/payment form error message shown when the order cannot be found.
+#: includes/Form_Handler.php:52
+msgid "Order does not exist."
+msgstr ""
+
+#. translators: Checkout/payment form error message shown when the order key does not match.
+#: includes/Form_Handler.php:64
+msgid "Order key mismatch."
+msgstr ""
+
+#. translators: Checkout/payment form error message shown when no cashier token is provided.
+#: includes/Form_Handler.php:78
+msgid "Token not provided."
+msgstr ""
+
+#. translators: Checkout/payment form error message shown when the cashier token does not match.
+#: includes/Form_Handler.php:92
+msgid "Cashier token mismatch."
+msgstr ""
+
+#. translators: POS payment gateway label shown during checkout.
+#: includes/Gateways/Card.php:27
+msgid "Card"
+msgstr ""
+
+#. translators: POS payment gateway label shown during checkout.
+#. translators: Fee line-item name for cashback charged on card payment.
+#: includes/Gateways/Card.php:67
+#: includes/Gateways/Card.php:70
+#: includes/Gateways/Card.php:148
+#: includes/Gateways/Card.php:230
+#: tests/includes/Gateways/Test_Card_Gateway.php:234
+msgid "Cashback"
+msgstr ""
+
+#. translators: Checkout error shown when card nonce validation fails.
+#. translators: Checkout error shown when cash nonce validation fails.
+#: includes/Gateways/Card.php:89
+#: includes/Gateways/Cash.php:141
+msgid "Nonce verification failed"
+msgstr ""
+
+#: includes/Gateways/Card.php:216
+msgid "Cashback amount must be zero or greater."
+msgstr ""
+
+#. translators: POS payment gateway label shown during checkout.
+#. translators: Sample receipt label or value used in receipt template previews.
+#: includes/Gateways/Cash.php:29
+#: includes/Services/Preview_Receipt_Builder.php:815
+msgid "Cash"
+msgstr ""
+
+#. translators: Cash checkout field label for the amount of money received from the customer.
+#. translators: Cash numpad label for the amount of money received from the customer.
+#. translators: Order note label for the cash amount received from the customer at checkout.
+#: includes/Gateways/Cash.php:91
+#: includes/Gateways/Cash.php:94
+#: includes/Gateways/Cash.php:205
+msgid "Amount Tendered"
+msgstr ""
+
+#. translators: Cash checkout label for money returned to the customer when the received amount exceeds the total.
+#. translators: Template-editor field label for total cash returned to the customer after payments; not "change" meaning modify.
+#. translators: Template-editor field label for cash returned to the customer after payment; not "change" meaning modify.
+#. translators: Receipt/payment label for cash returned to the customer when the received amount is greater than the total; not "change" meaning modify.
+#: includes/Gateways/Cash.php:99
+#: includes/Services/Receipt_Data_Schema.php:916
+#: includes/Services/Receipt_Data_Schema.php:1031
+#: includes/Services/Receipt_I18n_Labels.php:174
+#: templates/receipt.php:362
+msgid "Change"
+msgstr ""
+
+#. translators: Money returned to the customer after a cash payment.
+#: includes/Gateways/Cash.php:207
+msgctxt "Money returned from cash sale"
+msgid "Change"
+msgstr ""
+
+#. translators: Checkout validation error for the cash amount received from the customer.
+#: includes/Gateways/Cash.php:278
+msgid "Tendered amount must be zero or greater."
+msgstr ""
+
+#: includes/Gateways/Cash.php:298
+msgid "Partial cash payments are not supported by the POS API checkout flow."
+msgstr ""
+
+#. translators: Fee line-item name added when a cash payment is partial.
+#: includes/Gateways/Cash.php:306
+msgid "Partial Payment"
+msgstr ""
+
+#: includes/Integrations/WePOS.php:42
+msgid "WCPOS cannot run alongside the wePOS plugin due to compatibility issues. WCPOS has been deactivated."
+msgstr ""
+
+#: includes/Load_Integrity.php:357
+msgid "WCPOS is being updated on this site. Please try again in a few seconds."
+msgstr ""
+
+#. translators: POS order status label.
+#: includes/Orders.php:103
+#: includes/Orders.php:1138
+msgctxt "Order status"
+msgid "POS - Open"
+msgstr ""
+
+#. translators: POS order status label.
+#: includes/Orders.php:104
+#: includes/Orders.php:1156
+msgctxt "Order status"
+msgid "POS - Partial Payment"
+msgstr ""
+
+#. translators: %s: payment gateway title.
+#: includes/Orders.php:461
+#, php-format
+msgid "Order status set by %s; no payment was taken at the till."
+msgstr ""
+
+#. translators: %s is the number of orders with POS - Open status.
+#: includes/Orders.php:1144
+#, php-format
+msgid "POS - Open <span class=\"count\">(%s)</span>"
+msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s is the number of orders with POS - Partial Payment status.
+#: includes/Orders.php:1162
+#, php-format
+msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
+msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: API conflict error; idempotency key is a request identifier header/token, not a keyboard key.
+#: includes/Payments/Idempotency_Repository.php:84
+#: includes/Payments/Idempotency_Repository.php:123
+#: includes/Payments/Idempotency_Repository.php:135
+#: includes/Payments/Idempotency_Repository.php:164
+msgid "Idempotency key was reused with a different request."
+msgstr ""
+
+#. translators: API conflict error shown while an identical POS payment request is still running.
+#: includes/Payments/Idempotency_Repository.php:143
+msgid "An identical request is already being processed."
+msgstr ""
+
+#: includes/Services/Auth.php:410
+#: includes/Services/Auth.php:502
+msgid "JWT is not configured properly, please contact the admin"
+msgstr ""
+
+#. translators: %s: Comma-separated missing capability names.
+#: includes/Services/Cashier.php:247
+#, php-format
+msgid "This account cannot use the POS. Missing capabilities: %s."
+msgstr ""
+
+#. translators: %s: Comma-separated role names.
+#: includes/Services/Cashier.php:258
+#, php-format
+msgid "It has the roles %s. A capability denied on one role can override a grant from another, and role-editor plugins such as Members apply that deny first. Remove the extra role or clear the deny in the role editor."
+msgstr ""
+
+#. translators: Guidance for granting missing POS capabilities.
+#: includes/Services/Cashier.php:262
+msgid "Grant them under WCPOS Settings, Access, or assign a role that has them."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:84
+msgid "WCPOS Cloud Print is disabled on this site."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:94
+msgid "WCPOS Cloud Print needs your site to use HTTPS. Set the Site Address (URL) in Settings > General to an https:// address, then try again."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:101
+msgid "Could not create a relay verification token."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:127
+msgid "Relay registration failed."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:134
+msgid "Relay registration returned invalid credentials."
+msgstr ""
+
+#: includes/Services/Core_Order_Audit_Guard.php:186
+msgid "POS audit metadata cannot be modified through this REST route."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:225
+msgid "WCPOS file integrity"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:254
+msgid "WCPOS"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:257
+msgid "WCPOS files match the published checksums"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:258
+msgid "Every WCPOS plugin file matches the checksums published for this version."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:263
+msgid "WCPOS files have not been checked yet"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:264
+msgid "A check of the WCPOS plugin files has been queued. Reload this page in a minute to see the result."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:266
+msgid "WCPOS files could not be verified"
+msgstr ""
+
+#: includes/Services/File_Integrity.php:267
+msgid "No checksums are published for this version of WCPOS, so its files were not compared. Development copies and older builds that do not ship checksums.json have none."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:274
+msgid "Some WCPOS files are missing or modified"
+msgstr ""
+
+#. translators: 1: number of missing files, 2: number of modified files.
+#: includes/Services/File_Integrity.php:278
+#, php-format
+msgid "%1$d files are missing and %2$d files differ from the published version. An interrupted update can cause this, and it can make WCPOS fail to load."
+msgstr ""
+
+#: includes/Services/File_Integrity.php:283
+msgid "Reinstall the plugin to restore its files."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Services/Opening_Hours_Formatter.php:200
+msgid "Closed"
+msgstr ""
+
+#. translators: Customer name shown in an order note for a guest checkout.
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Services/Order_Notes.php:31
+#: includes/Services/Receipt_Data_Builder.php:115
+#: includes/Templates/Payment.php:334
+#: tests/includes/Templates/Test_Receipt_Renderers.php:299
+msgid "Guest"
+msgstr ""
+
+#. translators: %d: POS store post ID.
+#. translators: %d: Historical POS store ID that no longer exists.
+#: includes/Services/Order_Notes.php:50
+#: includes/Services/Receipt_Data_Builder.php:95
+#: tests/includes/Services/Test_Receipt_Data_Builder.php:1264
+#, php-format
+msgid "Store #%d"
+msgstr ""
+
+#. translators: 1: POS cashier, 2: POS store.
+#: includes/Services/Order_Notes.php:61
+#, php-format
+msgid "Order created via POS by %1$s at %2$s."
+msgstr ""
+
+#. translators: 1: old POS store, 2: new POS store.
+#: includes/Services/Order_Notes.php:83
+#, php-format
+msgid "POS store changed from %1$s to %2$s."
+msgstr ""
+
+#. translators: 1: POS cashier, 2: POS store.
+#: includes/Services/Order_Notes.php:94
+#, php-format
+msgid "Order re-opened via POS by %1$s at %2$s."
+msgstr ""
+
+#. translators: 1: old customer, 2: new customer.
+#: includes/Services/Order_Notes.php:105
+#, php-format
+msgid "Customer changed from %1$s to %2$s via WCPOS."
+msgstr ""
+
+#. translators: 1: old customer, 2: new customer.
+#: includes/Services/Order_Notes.php:116
+#, php-format
+msgid "Customer changed from %1$s to %2$s."
+msgstr ""
+
+#. translators: 1: cash amount tendered, 2: change given.
+#: includes/Services/Order_Notes.php:130
+#, php-format
+msgid "Cash payment received — amount tendered: %1$s, change given: %2$s."
+msgstr ""
+
+#: includes/Services/Permission_Rules.php:534
+msgid "Sorry, you are not allowed to give users that role."
+msgstr ""
+
+#: includes/Services/Permission_Rules.php:548
+msgid "Only an administrator can edit or delete a staff account from the POS."
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#: includes/Services/Preview_Receipt_Builder.php:656
+msgid "Gift Wrapping"
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#: includes/Services/Preview_Receipt_Builder.php:662
+msgid "Flat Rate Shipping"
+msgstr ""
+
+#. translators: %s: discount percentage
+#: includes/Services/Preview_Receipt_Builder.php:671
+#, php-format
+msgid "Summer Sale (%s%%)"
+msgstr ""
+
+#: includes/Services/Preview_Receipt_Builder.php:737
+msgid "Please gift wrap this order. Thank you!"
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#: includes/Services/Preview_Receipt_Builder.php:838
+msgid "Tax Receipt"
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Preview_Receipt_Builder.php:843
+#: includes/Services/Receipt_I18n_Labels.php:67
+#: includes/Services/Receipt_I18n_Labels.php:95
+#: includes/Services/Receipt_I18n_Labels.php:124
+#: includes/Services/Tax_Id_Types.php:300
+msgid "Tax ID"
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#: includes/Services/Preview_Receipt_Builder.php:847
+msgid "Auth Code"
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#: includes/Services/Preview_Receipt_Builder.php:894
+msgid "Thank you for shopping with us! We appreciate your business."
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#: includes/Services/Preview_Receipt_Builder.php:895
+msgid "Returns accepted within 30 days with original receipt. Items must be unused and in original packaging."
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#. translators: Receipt footer message thanking the customer for a completed purchase.
+#: includes/Services/Preview_Receipt_Builder.php:896
+#: includes/Services/Receipt_I18n_Labels.php:216
+#: templates/receipt.php:374
+msgid "Thank you for your purchase!"
+msgstr ""
+
+#. translators: Sample receipt label or value used in receipt template previews.
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt label for tax/VAT/GST amount, not a tax rate percentage.
+#: includes/Services/Preview_Receipt_Builder.php:1212
+#: includes/Services/Preview_Receipt_Builder.php:1237
+#: includes/Services/Receipt_Data_Schema.php:938
+#: includes/Services/Receipt_I18n_Labels.php:170
+msgid "Tax"
+msgstr ""
+
+#: includes/Services/PrintNode_Client.php:200
+msgid "PrintNode authentication failed."
+msgstr ""
+
+#: includes/Services/PrintNode_Client.php:208
+msgid "PrintNode refused the request. Check that the API key is correct and the PrintNode account is active."
+msgstr ""
+
+#. translators: %d: HTTP status code.
+#: includes/Services/PrintNode_Client.php:230
+#, php-format
+msgid "PrintNode request failed with status %d."
+msgstr ""
+
+#: includes/Services/PrintNode_Client.php:258
+msgid "PrintNode returned an unexpected print job response."
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:240
+msgid "no response from printer"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:241
+msgid "offline"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:242
+msgid "cover open"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:243
+msgid "waiting for online recovery"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:244
+msgid "mechanical error"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:245
+msgid "autocutter error"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:246
+msgid "unrecoverable error"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:247
+msgid "auto-recoverable error"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:248
+msgid "paper near end"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:249
+msgid "paper end"
+msgstr ""
+
+#: includes/Services/Providers/Epson_Sdp_Adapter.php:250
+msgid "spooler stopped"
+msgstr ""
+
+#: includes/Services/Providers/Printnode_Adapter.php:210
+msgid "This PrintNode printer is missing its API key or printer id."
+msgstr ""
+
+#: includes/Services/Providers/Printnode_Adapter.php:224
+msgid "Could not generate the test print."
+msgstr ""
+
+#: includes/Services/Providers/Star_Cloudprnt_Adapter.php:200
+msgid "The print job is not available in the requested media type."
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt label for the order number or order reference.
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Services/Receipt_Data_Schema.php:316
+#: includes/Services/Receipt_I18n_Labels.php:44
+#: includes/Templates/Adapters/Html_Output_Adapter.php:36
+msgid "Order"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:320
+msgid "Order ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:324
+msgid "Order Number"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:328
+msgid "Currency"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt section heading for a note/message supplied by or about the customer.
+#: includes/Services/Receipt_Data_Schema.php:332
+#: includes/Services/Receipt_I18n_Labels.php:199
+msgid "Customer Note"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:336
+msgid "WC Status"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:340
+msgid "Status Label"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:344
+msgid "Created Via"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:348
+msgid "Needs Payment"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:352
+msgid "Payment URL"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:357
+msgid "Order Created"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:361
+msgid "Order Paid"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:365
+msgid "Order Completed"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:369
+msgid "Receipt Printed"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:373
+msgid "Store"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:377
+msgid "Store ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:381
+msgid "Store Name"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:385
+msgid "Address Lines"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:389
+msgid "Phone"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:393
+msgid "Email"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:397
+msgid "Logo URL"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt label for the store business opening hours.
+#: includes/Services/Receipt_Data_Schema.php:402
+#: includes/Services/Receipt_I18n_Labels.php:237
+msgid "Opening Hours"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:407
+msgid "Opening Hours (Vertical)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:412
+msgid "Opening Hours (Inline)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:417
+msgid "Opening Hours Notes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:422
+msgid "Personal Notes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:427
+msgid "Policies & Conditions"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:432
+msgid "Footer Imprint"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:441
+msgid "Cashier ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:445
+msgid "Cashier Name"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt label for the customer name or customer details.
+#: includes/Services/Receipt_Data_Schema.php:450
+#: includes/Services/Receipt_I18n_Labels.php:51
+#: templates/receipt.php:202
+msgid "Customer"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:454
+msgid "Customer ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:458
+msgid "Customer Name"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt/invoice address heading for the billing address.
+#: includes/Services/Receipt_Data_Schema.php:462
+#: includes/Services/Receipt_I18n_Labels.php:133
+msgid "Billing Address"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:466
+msgid "Shipping Address"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt section label for multiple customer tax/VAT/GST identification numbers.
+#: includes/Services/Receipt_Data_Schema.php:471
+#: includes/Services/Receipt_I18n_Labels.php:53
+msgid "Customer Tax IDs"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:476
+#: includes/Services/Receipt_Data_Schema.php:498
+msgid "Type"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:480
+#: includes/Services/Receipt_Data_Schema.php:502
+#: includes/Services/Receipt_Data_Schema.php:1257
+msgid "Value"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:484
+#: includes/Services/Receipt_Data_Schema.php:506
+#: includes/Services/Receipt_Data_Schema.php:539
+msgid "Country"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:488
+#: includes/Services/Receipt_Data_Schema.php:510
+#: includes/Services/Receipt_Data_Schema.php:1253
+msgid "Label"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:493
+msgid "Store Tax IDs"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:515
+msgid "Store Address"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:519
+msgid "Address line 1"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:523
+msgid "Address line 2"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:527
+msgid "City"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:531
+msgid "State / Region"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:535
+msgid "Postcode"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:544
+msgid "Line Items"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:549
+msgid "Item Key"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt table column heading for product SKU/reference code.
+#: includes/Services/Receipt_Data_Schema.php:553
+#: includes/Services/Receipt_Data_Schema.php:1115
+#: includes/Services/Receipt_I18n_Labels.php:137
+msgid "SKU"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:557
+#: includes/Services/Receipt_Data_Schema.php:1111
+msgid "Product Name"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:561
+#: includes/Services/Receipt_Data_Schema.php:1119
+msgid "Quantity"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:565
+msgid "Quantity Refunded"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:570
+msgid "Regular price per item"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:575
+msgid "Regular price per item (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:580
+msgid "Regular price per item (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:585
+msgid "Selling price per item, before coupons"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:590
+msgid "Selling price per item, before coupons (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:595
+msgid "Selling price per item, before coupons (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:600
+msgid "Savings per item"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:605
+msgid "Savings per item (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:610
+msgid "Savings per item (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:615
+msgid "Regular-price total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:620
+msgid "Regular-price total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:625
+msgid "Regular-price total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:630
+msgid "Selling-price total, before coupons"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:635
+msgid "Selling-price total, before coupons (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:640
+msgid "Selling-price total, before coupons (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:645
+msgid "Total savings for this item"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:650
+msgid "Total savings for this item (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:655
+msgid "Total savings for this item (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:659
+msgid "Savings already included in WooCommerce discounts"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:663
+msgid "Unit Subtotal"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:667
+msgid "Unit Subtotal (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:671
+msgid "Unit Subtotal (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt table column heading for unit price.
+#: includes/Services/Receipt_Data_Schema.php:675
+#: includes/Services/Receipt_I18n_Labels.php:139
+msgid "Unit Price"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:679
+msgid "Unit Price (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:683
+msgid "Unit Price (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt total-row label for the order subtotal before final total adjustments.
+#: includes/Services/Receipt_Data_Schema.php:687
+#: includes/Services/Receipt_Data_Schema.php:838
+#: includes/Services/Receipt_I18n_Labels.php:163
+msgid "Subtotal"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:691
+#: includes/Services/Receipt_Data_Schema.php:842
+msgid "Subtotal (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:695
+#: includes/Services/Receipt_Data_Schema.php:846
+msgid "Subtotal (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:699
+#: includes/Services/Receipt_Data_Schema.php:804
+msgid "Discounts"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:703
+msgid "Discounts (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:707
+msgid "Discounts (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:711
+msgid "Line Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:715
+msgid "Line Total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:719
+msgid "Line Total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt total-row label for the total amount refunded to the customer.
+#: includes/Services/Receipt_Data_Schema.php:723
+#: includes/Services/Receipt_I18n_Labels.php:194
+msgid "Total Refunded"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:727
+msgid "Line Taxes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:731
+msgid "Item Meta"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:735
+msgid "Product Attributes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:740
+msgid "Fees"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:745
+#: includes/Services/Receipt_Data_Schema.php:1146
+msgid "Fee Label"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt total-row label for the final amount due/paid for the order.
+#: includes/Services/Receipt_Data_Schema.php:749
+#: includes/Services/Receipt_Data_Schema.php:783
+#: includes/Services/Receipt_Data_Schema.php:821
+#: includes/Services/Receipt_Data_Schema.php:900
+#: includes/Services/Receipt_I18n_Labels.php:165
+#: templates/receipt.php:224
+msgid "Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:753
+#: includes/Services/Receipt_Data_Schema.php:787
+#: includes/Services/Receipt_Data_Schema.php:825
+msgid "Total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:757
+#: includes/Services/Receipt_Data_Schema.php:791
+#: includes/Services/Receipt_Data_Schema.php:829
+msgid "Total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:761
+msgid "Fee Taxes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:765
+msgid "Fee Meta"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:770
+msgid "Shipping"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:775
+#: includes/Services/Receipt_Data_Schema.php:1173
+msgid "Shipping Label"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:779
+#: includes/Services/Receipt_Data_Schema.php:1177
+msgid "Shipping Method ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:795
+msgid "Shipping Taxes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:799
+msgid "Shipping Meta"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:809
+msgid "Discount Label"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:813
+msgid "Coupon Code"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:817
+msgid "Coupon Type"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:834
+msgid "Totals"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:850
+msgid "Discount Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:854
+msgid "Discount Total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:858
+msgid "Discount Total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:863
+msgid "Sale Savings Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:868
+msgid "Sale Savings Total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:873
+msgid "Sale Savings Total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:878
+msgid "Total Saved (sale savings + discounts)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:883
+msgid "Total Saved (sale savings + discounts, incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:888
+msgid "Total Saved (sale savings + discounts, excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:892
+msgid "Total Saved Is Complete"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:896
+msgid "Tax Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt total-row label for the order total including tax/VAT/GST.
+#: includes/Services/Receipt_Data_Schema.php:904
+#: includes/Services/Receipt_I18n_Labels.php:168
+msgid "Total (incl. tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:908
+msgid "Total (excl. tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:912
+msgid "Paid Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:920
+msgid "Refund Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt total-row label for total after subtracting refunds.
+#: includes/Services/Receipt_Data_Schema.php:924
+#: includes/Services/Receipt_I18n_Labels.php:196
+#: templates/receipt.php:311
+msgid "Net Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:928
+msgid "Total Quantity"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:932
+msgid "Line Count"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:942
+msgid "Tax Display Mode"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:946
+msgid "Tax Display Is Inclusive"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:950
+msgid "Tax Display Is Exclusive"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:954
+msgid "Tax Breakdown Mode"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:958
+msgid "Tax Breakdown Hidden"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:962
+msgid "Tax Breakdown Single"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:966
+msgid "Tax Breakdown Itemized"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:972
+msgid "Has Tax Summary"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt section heading for the tax/VAT/GST breakdown.
+#: includes/Services/Receipt_Data_Schema.php:976
+#: includes/Services/Receipt_I18n_Labels.php:177
+msgid "Tax Summary"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:981
+msgid "Tax Code"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:985
+msgid "Tax Label"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:989
+msgid "Tax Rate (%)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:993
+msgid "Compound Tax"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:997
+msgid "Taxable Amount (excl)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt tax summary label for tax/VAT/GST amount, not a tax rate percentage.
+#: includes/Services/Receipt_Data_Schema.php:1001
+#: includes/Services/Receipt_I18n_Labels.php:179
+msgid "Tax Amount"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1005
+msgid "Taxable Amount (incl)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1010
+msgid "Payments"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1015
+msgid "Method ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1019
+msgid "Payment Method"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Generic receipt column/field label for a monetary amount.
+#: includes/Services/Receipt_Data_Schema.php:1023
+#: includes/Services/Receipt_I18n_Labels.php:193
+msgid "Amount"
+msgstr ""
+
+#. translators: Template-editor field label for the money received from the customer at checkout; use the target-language equivalent of "Received", not procurement tender/bid language.
+#. translators: Standalone receipt/payment label meaning money received from the customer at checkout. Use the target-language equivalent of "Received" as a concise label; do not use wording that means "Amount paid/deposited", and do not use procurement tender/bid language.
+#: includes/Services/Receipt_Data_Schema.php:1027
+#: includes/Services/Receipt_I18n_Labels.php:173
+#: templates/receipt.php:358
+msgid "Tendered"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1035
+msgid "Transaction ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1040
+msgid "Refunds"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1045
+msgid "Refund ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1049
+msgid "Refund Date"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1053
+msgid "Refund Amount"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1057
+msgid "Refund Subtotal"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1061
+msgid "Refund Tax Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1065
+#: includes/Services/Receipt_Data_Schema.php:1181
+msgid "Refund Shipping Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1069
+msgid "Refund Shipping Tax"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1073
+msgid "Refund Reason"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1078
+msgid "Refunded By (User ID)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1082
+msgid "Refunded By (Name)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1086
+msgid "Refunded Payment"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1090
+msgid "Refund Destination"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1094
+msgid "Refund Gateway ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1098
+msgid "Refund Gateway Title"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1102
+msgid "Refund Processing Mode"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1106
+msgid "Refund Lines"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1123
+msgid "Refund Line Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1127
+msgid "Refund Line Total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1131
+msgid "Refund Line Total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1135
+msgid "Refund Line Taxes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1141
+msgid "Refund Fees"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1150
+msgid "Refund Fee Total"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1154
+msgid "Refund Fee Total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1158
+msgid "Refund Fee Total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1162
+msgid "Refund Fee Taxes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1168
+msgid "Refund Shipping"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1185
+msgid "Refund Shipping Total (incl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1189
+msgid "Refund Shipping Total (excl tax)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1193
+msgid "Refund Shipping Taxes"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1200
+msgid "Fiscal"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1204
+msgid "Immutable ID"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1208
+msgid "Receipt Number"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1212
+msgid "Sequence"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1216
+msgid "Hash"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1220
+msgid "QR Payload"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1224
+msgid "Tax Agency Code"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1228
+msgid "Signed At"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1232
+msgid "Signature Excerpt"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1236
+msgid "Document Label"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1240
+msgid "Is Reprint"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1244
+msgid "Reprint Count"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1248
+msgid "Extra Fields"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1264
+msgid "Labels (i18n)"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1298
+msgid "Date & Time"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#. translators: Receipt label for the sale/order date.
+#: includes/Services/Receipt_Data_Schema.php:1302
+#: includes/Services/Receipt_I18n_Labels.php:45
+msgid "Date"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1306
+msgid "Time"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1310
+msgid "Short Date & Time"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1314
+msgid "Long Date & Time"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1318
+msgid "Full Date & Time"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1322
+msgid "Short Date"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1326
+msgid "Long Date"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1330
+msgid "Full Date"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1334
+msgid "YYYY-MM-DD"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1338
+msgid "DD/MM/YYYY"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1342
+msgid "MM/DD/YYYY"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1346
+msgid "Weekday Short"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1350
+msgid "Weekday Long"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1354
+msgid "Day"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1358
+msgid "Month Number"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1362
+msgid "Month Short"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1366
+msgid "Month Long"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1370
+msgid "Year"
+msgstr ""
+
+#. translators: Receipt label for an invoice number.
+#: includes/Services/Receipt_I18n_Labels.php:46
+msgid "Invoice No."
+msgstr ""
+
+#. translators: Receipt label for a reference code, transaction reference, or document reference.
+#: includes/Services/Receipt_I18n_Labels.php:47
+msgid "Reference"
+msgstr ""
+
+#. translators: Receipt label for one customer tax/VAT/GST identification number.
+#: includes/Services/Receipt_I18n_Labels.php:52
+msgid "Customer Tax ID"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:54
+#: includes/Services/Receipt_I18n_Labels.php:55
+#: includes/Services/Receipt_I18n_Labels.php:56
+#: includes/Services/Tax_Id_Types.php:242
+msgid "VAT Number"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:57
+#: includes/Services/Receipt_I18n_Labels.php:77
+#: includes/Services/Receipt_I18n_Labels.php:106
+#: includes/Services/Tax_Id_Types.php:245
+msgid "ABN"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:58
+#: includes/Services/Receipt_I18n_Labels.php:78
+#: includes/Services/Receipt_I18n_Labels.php:107
+#: includes/Services/Tax_Id_Types.php:248
+msgid "CPF"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:59
+#: includes/Services/Receipt_I18n_Labels.php:79
+#: includes/Services/Receipt_I18n_Labels.php:108
+#: includes/Services/Tax_Id_Types.php:251
+msgid "CNPJ"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:60
+#: includes/Services/Receipt_I18n_Labels.php:80
+#: includes/Services/Receipt_I18n_Labels.php:109
+#: includes/Services/Tax_Id_Types.php:254
+msgid "GSTIN"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:61
+#: includes/Services/Receipt_I18n_Labels.php:81
+#: includes/Services/Receipt_I18n_Labels.php:110
+#: includes/Services/Tax_Id_Types.php:257
+msgid "Codice Fiscale"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:62
+#: includes/Services/Tax_Id_Types.php:260
+msgid "Partita IVA"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:63
+#: includes/Services/Receipt_I18n_Labels.php:83
+#: includes/Services/Receipt_I18n_Labels.php:112
+#: includes/Services/Tax_Id_Types.php:263
+msgid "NIF"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:64
+#: includes/Services/Receipt_I18n_Labels.php:84
+#: includes/Services/Receipt_I18n_Labels.php:113
+#: includes/Services/Tax_Id_Types.php:266
+msgid "CUIT"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:65
+#: includes/Services/Tax_Id_Types.php:269
+msgid "GST/HST"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:66
+#: includes/Services/Receipt_I18n_Labels.php:86
+#: includes/Services/Receipt_I18n_Labels.php:115
+#: includes/Services/Tax_Id_Types.php:272
+msgid "EIN"
+msgstr ""
+
+#. translators: Receipt section label for store tax/VAT/GST/business identification numbers.
+#: includes/Services/Receipt_I18n_Labels.php:70
+msgid "Tax IDs"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#: includes/Services/Receipt_I18n_Labels.php:74
+#: includes/Services/Receipt_I18n_Labels.php:103
+msgid "VAT ID"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#: includes/Services/Receipt_I18n_Labels.php:75
+#: includes/Services/Receipt_I18n_Labels.php:76
+#: includes/Services/Receipt_I18n_Labels.php:104
+#: includes/Services/Receipt_I18n_Labels.php:105
+msgid "VAT No."
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#: includes/Services/Receipt_I18n_Labels.php:82
+#: includes/Services/Receipt_I18n_Labels.php:111
+msgid "P.IVA"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#: includes/Services/Receipt_I18n_Labels.php:85
+#: includes/Services/Receipt_I18n_Labels.php:114
+msgid "GST/HST No."
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:87
+#: includes/Services/Receipt_I18n_Labels.php:116
+#: includes/Services/Tax_Id_Types.php:275
+msgid "USt-IdNr."
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:88
+#: includes/Services/Receipt_I18n_Labels.php:117
+#: includes/Services/Tax_Id_Types.php:278
+msgid "Steuernummer"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:89
+#: includes/Services/Receipt_I18n_Labels.php:118
+#: includes/Services/Tax_Id_Types.php:281
+msgid "HRB"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:90
+#: includes/Services/Receipt_I18n_Labels.php:119
+#: includes/Services/Tax_Id_Types.php:284
+msgid "KVK"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:91
+#: includes/Services/Receipt_I18n_Labels.php:120
+#: includes/Services/Tax_Id_Types.php:287
+msgid "SIRET"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:92
+#: includes/Services/Receipt_I18n_Labels.php:121
+#: includes/Services/Tax_Id_Types.php:290
+msgid "SIREN"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:93
+#: includes/Services/Receipt_I18n_Labels.php:122
+#: includes/Services/Tax_Id_Types.php:293
+msgid "Company No."
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:94
+#: includes/Services/Receipt_I18n_Labels.php:123
+#: includes/Services/Tax_Id_Types.php:296
+msgid "UID"
+msgstr ""
+
+#. translators: Receipt/quote label for the customer or recipient the document was prepared for.
+#: includes/Services/Receipt_I18n_Labels.php:126
+msgid "Prepared For"
+msgstr ""
+
+#. translators: Receipt label for the staff member/cashier who processed the order.
+#: includes/Services/Receipt_I18n_Labels.php:127
+msgid "Processed by"
+msgstr ""
+
+#. translators: Receipt/invoice address heading for the billing customer.
+#: includes/Services/Receipt_I18n_Labels.php:130
+msgid "Bill To"
+msgstr ""
+
+#. translators: Receipt/invoice address heading for the shipping recipient.
+#: includes/Services/Receipt_I18n_Labels.php:131
+msgid "Ship To"
+msgstr ""
+
+#. translators: Receipt/invoice address heading for the customer being billed.
+#: includes/Services/Receipt_I18n_Labels.php:132
+msgid "Billed To"
+msgstr ""
+
+#. translators: Receipt table column heading for product/item name.
+#: includes/Services/Receipt_I18n_Labels.php:136
+#: templates/receipt.php:222
+msgid "Item"
+msgstr ""
+
+#. translators: Receipt table column heading for quantity.
+#: includes/Services/Receipt_I18n_Labels.php:138
+#: templates/receipt.php:223
+msgid "Qty"
+msgstr ""
+
+#. translators: Receipt label for the original or regular product price.
+#: includes/Services/Receipt_I18n_Labels.php:140
+msgid "Regular price"
+msgstr ""
+
+#. translators: Receipt label for the product selling price before coupons.
+#: includes/Services/Receipt_I18n_Labels.php:141
+msgid "Selling price"
+msgstr ""
+
+#. translators: Receipt label for money saved from the regular price.
+#: includes/Services/Receipt_I18n_Labels.php:142
+msgid "Savings"
+msgstr ""
+
+#. translators: Receipt total-row label for coupon discounts plus savings from regular prices.
+#: includes/Services/Receipt_I18n_Labels.php:143
+msgid "Total saved"
+msgstr ""
+
+#. translators: Receipt table column heading for unit price excluding tax/VAT/GST.
+#: includes/Services/Receipt_I18n_Labels.php:144
+msgid "Unit (excl.)"
+msgstr ""
+
+#. translators: Receipt table column heading for line total excluding tax/VAT/GST.
+#: includes/Services/Receipt_I18n_Labels.php:145
+msgid "Total (excl.)"
+msgstr ""
+
+#. translators: Receipt label for discount amount or discount line.
+#: includes/Services/Receipt_I18n_Labels.php:146
+msgid "Discount"
+msgstr ""
+
+#. translators: Packing slip label indicating an item/order has been packed.
+#: includes/Services/Receipt_I18n_Labels.php:147
+msgid "Packed"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — heading above a signature block where the warehouse picker signs/dates the slip.
+#: includes/Services/Receipt_I18n_Labels.php:148
+msgid "Packed By"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — sublabel under a blank signature line indicating the printed name field.
+#: includes/Services/Receipt_I18n_Labels.php:149
+msgid "Name"
+msgstr ""
+
+#. translators: Short receipt table header for product/item name. Keep very short, ideally 3–8 characters.
+#: includes/Services/Receipt_I18n_Labels.php:152
+msgctxt "short receipt table header"
+msgid "Item"
+msgstr ""
+
+#. translators: Short receipt table header for SKU/reference/product code. Keep very short.
+#: includes/Services/Receipt_I18n_Labels.php:153
+msgctxt "short receipt table header"
+msgid "SKU"
+msgstr ""
+
+#. translators: Short receipt table header for quantity. Keep very short.
+#: includes/Services/Receipt_I18n_Labels.php:154
+msgctxt "short receipt table header"
+msgid "Qty"
+msgstr ""
+
+#. translators: Short receipt table header for unit price excluding tax/VAT/GST. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:155
+msgctxt "short receipt table header"
+msgid "Unit excl."
+msgstr ""
+
+#. translators: Short receipt table header for tax/VAT/GST rate percentage, not tax amount. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:156
+msgctxt "short receipt table header: tax rate percentage"
+msgid "Tax %"
+msgstr ""
+
+#. translators: Short receipt table header for tax/VAT/GST amount, not tax rate. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:157
+msgctxt "short receipt table header: tax amount"
+msgid "Tax"
+msgstr ""
+
+#. translators: Short receipt table header for line total including tax/VAT/GST. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:158
+msgctxt "short receipt table header"
+msgid "Total incl."
+msgstr ""
+
+#. translators: Short receipt table header for taxable amount excluding tax/VAT/GST. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:159
+msgctxt "short receipt table header"
+msgid "Taxable excl."
+msgstr ""
+
+#. translators: Short receipt table header for taxable amount including tax/VAT/GST. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:160
+msgctxt "short receipt table header"
+msgid "Taxable incl."
+msgstr ""
+
+#. translators: Receipt total-row label for the subtotal excluding tax/VAT/GST.
+#: includes/Services/Receipt_I18n_Labels.php:164
+msgid "Subtotal (excl. tax)"
+msgstr ""
+
+#. translators: Receipt total-row label for the total tax/VAT/GST amount.
+#: includes/Services/Receipt_I18n_Labels.php:166
+msgid "Total Tax"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates for tax amounts already included in displayed prices.
+#: includes/Services/Receipt_I18n_Labels.php:167
+msgid "Tax included"
+msgstr ""
+
+#. translators: Receipt total-row label for the grand total including tax/VAT/GST.
+#: includes/Services/Receipt_I18n_Labels.php:169
+msgid "Grand Total (incl. tax)"
+msgstr ""
+
+#. translators: Receipt payment-section heading for amounts already paid by the customer.
+#: includes/Services/Receipt_I18n_Labels.php:171
+#: templates/receipt.php:350
+msgid "Paid"
+msgstr ""
+
+#. translators: Receipt label prefix shown before a payment method, for example "Paid via Cash".
+#: includes/Services/Receipt_I18n_Labels.php:172
+msgid "Paid via"
+msgstr ""
+
+#. translators: Receipt tax summary label for taxable amount excluding tax/VAT/GST.
+#: includes/Services/Receipt_I18n_Labels.php:178
+msgid "Taxable (excl.)"
+msgstr ""
+
+#. translators: Receipt tax summary label for taxable amount including tax/VAT/GST.
+#: includes/Services/Receipt_I18n_Labels.php:180
+msgid "Taxable (incl.)"
+msgstr ""
+
+#. translators: Document title printed at the top of an invoice template.
+#. translators: Receipt template post type or template option label.
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Services/Receipt_I18n_Labels.php:183
+#: includes/Templates.php:1401
+#: includes/Templates/Gallery_Registry.php:55
+msgid "Invoice"
+msgstr ""
+
+#. translators: Document title printed at the top of a tax invoice/VAT invoice template.
+#: includes/Services/Receipt_I18n_Labels.php:184
+msgid "Tax Invoice"
+msgstr ""
+
+#. translators: Document title for a quotation/estimate, not a receipt or completed purchase.
+#: includes/Services/Receipt_I18n_Labels.php:185
+msgid "Quote"
+msgstr ""
+
+#. translators: Document title printed at the top of a completed sale receipt.
+#. translators: Receipt template post type or template option label.
+#: includes/Services/Receipt_I18n_Labels.php:186
+#: includes/Storefront_Receipts.php:138
+#: includes/Templates.php:1400
+#: templates/receipt.php:184
+#: tests/includes/Test_i18n_Storefront.php:95
+#: tests/includes/Test_i18n_Storefront.php:105
+#: tests/includes/Test_i18n_Storefront.php:123
+#: tests/includes/Test_i18n_Storefront.php:174
+#: tests/includes/Test_i18n_Storefront.php:186
+#: tests/includes/Test_i18n_Storefront.php:204
+msgid "Receipt"
+msgstr ""
+
+#. translators: Document title for a gift receipt that usually hides prices.
+#. translators: Receipt template post type or template option label.
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Services/Receipt_I18n_Labels.php:187
+#: includes/Templates.php:1402
+#: includes/Templates/Gallery_Registry.php:42
+msgid "Gift Receipt"
+msgstr ""
+
+#. translators: Document title for a credit note/refund document.
+#. translators: Receipt template post type or template option label.
+#: includes/Services/Receipt_I18n_Labels.php:188
+#: includes/Templates.php:1403
+msgid "Credit Note"
+msgstr ""
+
+#. translators: Document title for a packing slip used to pick/pack shipped items.
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Services/Receipt_I18n_Labels.php:189
+#: includes/Templates/Gallery_Registry.php:93
+msgid "Packing Slip"
+msgstr ""
+
+#. translators: Receipt section heading for products returned/refunded from the order.
+#: includes/Services/Receipt_I18n_Labels.php:192
+#: templates/receipt.php:320
+msgid "Returned Items"
+msgstr ""
+
+#. translators: Receipt label for an amount refunded to the customer.
+#: includes/Services/Receipt_I18n_Labels.php:195
+msgid "Refunded"
+msgstr ""
+
+#. translators: Receipt section heading for sale terms and conditions text.
+#: includes/Services/Receipt_I18n_Labels.php:200
+msgid "Terms & Conditions"
+msgstr ""
+
+#. translators: Receipt section heading for a short merchant message to the customer.
+#: includes/Services/Receipt_I18n_Labels.php:201
+msgid "A message for you"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — column heading for invoice meta (issued date, cashier, currency).
+#: includes/Services/Receipt_I18n_Labels.php:202
+msgid "Details"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — date the invoice was issued.
+#: includes/Services/Receipt_I18n_Labels.php:203
+msgid "Issued"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — large amount-due heading on unpaid invoices.
+#: includes/Services/Receipt_I18n_Labels.php:207
+msgid "Amount due"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — section heading for payment instructions on unpaid invoices.
+#: includes/Services/Receipt_I18n_Labels.php:208
+msgid "How to pay"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — subheading for the bank-transfer column under "How to pay".
+#: includes/Services/Receipt_I18n_Labels.php:209
+msgid "Bank transfer"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — subheading for the online-payment column under "How to pay".
+#: includes/Services/Receipt_I18n_Labels.php:210
+msgid "Pay online"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — instruction shown next to a pay-now QR code, followed by the payment URL.
+#: includes/Services/Receipt_I18n_Labels.php:211
+msgid "Scan the QR code, or visit:"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates — bank-transfer field label for the account name.
+#: includes/Services/Receipt_I18n_Labels.php:212
+msgid "Account"
+msgstr ""
+
+#. translators: Short receipt footer message thanking the customer.
+#: includes/Services/Receipt_I18n_Labels.php:215
+msgid "Thank you!"
+msgstr ""
+
+#. translators: Receipt footer message thanking the customer for shopping at the store.
+#: includes/Services/Receipt_I18n_Labels.php:217
+msgid "Thank you for shopping with us!"
+msgstr ""
+
+#. translators: Receipt footer message thanking the customer for their business.
+#: includes/Services/Receipt_I18n_Labels.php:218
+msgid "Thank you for your business."
+msgstr ""
+
+#. translators: Gift receipt footer explaining the return/exchange period.
+#: includes/Services/Receipt_I18n_Labels.php:219
+msgid "Items may be returned or exchanged within 30 days with this receipt."
+msgstr ""
+
+#. translators: Quote document footer explaining validity period and that the quote is not a receipt.
+#: includes/Services/Receipt_I18n_Labels.php:220
+msgid "This quote is valid for 30 days from the date of issue. Prices are subject to change after the validity period. This is not a receipt or confirmation of purchase."
+msgstr ""
+
+#. translators: Quote document notice clarifying it is not a completed-sale receipt.
+#: includes/Services/Receipt_I18n_Labels.php:221
+msgid "This is a quote, not a receipt"
+msgstr ""
+
+#. translators: Receipt footer asking the customer to keep the receipt for returns/records.
+#: includes/Services/Receipt_I18n_Labels.php:222
+msgid "Please retain this receipt for your records."
+msgstr ""
+
+#. translators: Kitchen ticket document label for food/drink preparation; keep concise and uppercase if natural in the target language.
+#: includes/Services/Receipt_I18n_Labels.php:225
+msgid "KITCHEN"
+msgstr ""
+
+#. translators: Receipt label for a customer or staff signature line.
+#: includes/Services/Receipt_I18n_Labels.php:228
+msgid "Signature"
+msgstr ""
+
+#. translators: Fiscal receipt label for document type/category.
+#: includes/Services/Receipt_I18n_Labels.php:229
+msgid "Document Type"
+msgstr ""
+
+#. translators: Fiscal receipt label for a printed copy of a document.
+#: includes/Services/Receipt_I18n_Labels.php:230
+msgid "Copy"
+msgstr ""
+
+#. translators: Fiscal receipt label for copy number/sequence.
+#: includes/Services/Receipt_I18n_Labels.php:231
+msgid "Copy No."
+msgstr ""
+
+#. translators: Receipt label for order/document status.
+#: includes/Services/Receipt_I18n_Labels.php:234
+msgid "Status"
+msgstr ""
+
+#. translators: Receipt status value meaning the order/document is completed.
+#: includes/Services/Receipt_I18n_Labels.php:235
+msgid "Completed"
+msgstr ""
+
+#. translators: Receipt status value meaning the document has been printed.
+#: includes/Services/Receipt_I18n_Labels.php:236
+msgid "Printed"
+msgstr ""
+
+#. translators: %s: store tax identification number
+#: includes/Services/Receipt_I18n_Labels.php:260
+#, php-format
+msgid "Tax ID: %s"
+msgstr ""
+
+#. translators: %s: store phone number
+#: includes/Services/Receipt_I18n_Labels.php:265
+#, php-format
+msgid "Phone: %s"
+msgstr ""
+
+#. translators: %s: store email address
+#: includes/Services/Receipt_I18n_Labels.php:270
+#, php-format
+msgid "Email: %s"
+msgstr ""
+
+#. translators: %s: payment method name
+#: includes/Services/Receipt_I18n_Labels.php:275
+#, php-format
+msgid "Paid via %s"
+msgstr ""
+
+#. translators: %s: payment method name
+#: includes/Services/Receipt_I18n_Labels.php:280
+#, php-format
+msgid "Refunded via %s"
+msgstr ""
+
+#. translators: %s: cashier name
+#: includes/Services/Receipt_I18n_Labels.php:285
+#, php-format
+msgid "Served by %s"
+msgstr ""
+
+#. translators: %s: customer name
+#: includes/Services/Receipt_I18n_Labels.php:290
+#, php-format
+msgid "Customer: %s"
+msgstr ""
+
+#. translators: %s: customer name
+#: includes/Services/Receipt_I18n_Labels.php:295
+#, php-format
+msgid "Thank you, %s!"
+msgstr ""
+
+#. translators: %s: payment transaction ID
+#. translators: %s: order number with # prefix
+#: includes/Services/Receipt_I18n_Labels.php:300
+#: includes/Services/Receipt_I18n_Labels.php:305
+#, php-format
+msgid "Ref: %s"
+msgstr ""
+
+#. translators: %s: order number with # prefix
+#: includes/Services/Receipt_I18n_Labels.php:310
+#, php-format
+msgid "Order %s"
+msgstr ""
+
+#. translators: %s: product SKU
+#: includes/Services/Receipt_I18n_Labels.php:315
+#, php-format
+msgid "SKU: %s"
+msgstr ""
+
+#. translators: %s: line subtotal amount
+#: includes/Services/Receipt_I18n_Labels.php:320
+#, php-format
+msgid "Subtotal: %s"
+msgstr ""
+
+#. translators: %s: discount amount with minus sign
+#: includes/Services/Receipt_I18n_Labels.php:325
+#, php-format
+msgid "Discount: %s"
+msgstr ""
+
+#. translators: %s: taxable amount
+#: includes/Services/Receipt_I18n_Labels.php:330
+#, php-format
+msgid "Taxable: %s"
+msgstr ""
+
+#. translators: %d: receipt sequence number.
+#: includes/Services/Receipt_Snapshot_Cleanup.php:184
+#, php-format
+msgid "POS fiscal receipt snapshot created (receipt #%d)."
+msgstr ""
+
+#. translators: 1. %s: Settings group id, 2. %s: Settings key.
+#: includes/Services/Settings.php:149
+#, php-format
+msgid "Settings with id %1$s and key %2$s not found"
+msgstr ""
+
+#. translators: %s: Settings group id, ie: 'general' or 'checkout'.
+#: includes/Services/Settings.php:203
+#, php-format
+msgid "Settings with id %s not found"
+msgstr ""
+
+#. translators: %s: Settings group id, ie: 'general' or 'checkout'.
+#: includes/Services/Settings/Abstract_Section.php:253
+#, php-format
+msgid "Can not save settings with id %s"
+msgstr ""
+
+#: includes/Services/Settings/Access_Section.php:225
+msgid "You do not have permission to update access settings."
+msgstr ""
+
+#: includes/Services/Settings/Cloud_Print_Section.php:195
+msgid "Star Online printers need an API key, a valid stario.online CloudPRNT URL, and a device."
+msgstr ""
+
+#: includes/Services/Settings/Cloud_Print_Section.php:204
+msgid "Duplicate printer id."
+msgstr ""
+
+#. translators: Error message shown when invalid arguments are provided.
+#: includes/Services/Settings/Visibility_Section.php:130
+msgid "Invalid arguments provided"
+msgstr ""
+
+#: includes/Services/Settings/Visibility_Section.php:142
+msgid "Invalid visibility option provided"
+msgstr ""
+
+#: includes/Services/Star_Online_Client.php:133
+msgid "Star Online returned an unexpected print job response."
+msgstr ""
+
+#: includes/Services/Star_Online_Client.php:209
+msgid "Star Online authentication failed."
+msgstr ""
+
+#: includes/Services/Star_Online_Client.php:217
+msgid "Star Online rejected the request. Check that the API key has the required permissions."
+msgstr ""
+
+#. translators: %d: HTTP status code.
+#: includes/Services/Star_Online_Client.php:228
+#, php-format
+msgid "Star Online request failed with status %d."
+msgstr ""
+
+#. translators: %d: Number of order line items without enough stock.
+#: includes/Services/Stock_Validator.php:387
+#, php-format
+msgid "Cannot complete order: %d item(s) exceed available stock."
+msgstr ""
+
+#. translators: %s: WP Overnight document type.
+#: includes/Services/Template_Pdf_Service.php:125
+#: includes/Services/Template_Pdf_Service.php:138
+#, php-format
+msgid "WP Overnight %s PDF could not be generated."
+msgstr ""
+
+#: includes/Storefront_Receipts.php:38
+msgid "Download receipt (PDF)"
+msgstr ""
+
+#. translators: %s: order number.
+#: includes/Storefront_Receipts.php:140
+#, php-format
+msgid "Download receipt for order #%s"
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/Sync/Collection_Rules.php:190
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:246
+msgid "Filter orders by POS cashier."
+msgstr ""
+
+#. translators: REST API schema field label or error message.
+#: includes/Sync/Collection_Rules.php:196
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:251
+msgid "Filter orders by POS store."
+msgstr ""
+
+#. translators: %s: the unrecognised Collection Rules hook key.
+#: includes/Sync/Collection_Rules_Plan.php:345
+#, php-format
+msgid "Unknown Collection Rules hook \"%s\"; the value was passed through unchanged."
+msgstr ""
+
+#: includes/Sync/Health.php:77
+msgid "The WCPOS sync store is not installed yet (initialising or a schema install failed). Retry shortly."
+msgstr ""
+
+#: includes/Sync/Order_Write_Payload.php:187
+msgid "date_created_gmt cannot be more than 24 hours in the future."
+msgstr ""
+
+#: includes/Sync/Order_Write_Payload.php:193
+msgid "date_created_gmt must be a valid ISO 8601 UTC date."
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:144
+msgctxt "Post Type General Name"
+msgid "Templates"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:145
+msgctxt "Post Type Singular Name"
+msgid "Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:147
+#: includes/Templates.php:174
+msgid "Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:148
+msgid "Template Archives"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:149
+msgid "Template Attributes"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:150
+msgid "Parent Template:"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:152
+msgid "Add New Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:153
+msgid "Add New"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:154
+msgid "New Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:155
+msgid "Edit Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:156
+msgid "Update Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:157
+msgid "View Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:158
+msgid "View Templates"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:159
+msgid "Search Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:160
+msgid "Not found"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:161
+msgid "Not found in Trash"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:162
+msgid "Featured Image"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:163
+msgid "Set featured image"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:164
+msgid "Remove featured image"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:165
+msgid "Use as featured image"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:166
+msgid "Insert into template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:167
+msgid "Uploaded to this template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:168
+msgid "Templates list"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:169
+msgid "Templates list navigation"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:170
+msgid "Filter templates list"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:175
+msgid "POS Templates"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:215
+msgctxt "Taxonomy General Name"
+msgid "Template Types"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:216
+msgctxt "Taxonomy Singular Name"
+msgid "Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:217
+msgid "Template Types"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:218
+msgid "All Template Types"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:219
+msgid "Parent Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:220
+msgid "Parent Template Type:"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:221
+msgid "New Template Type Name"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:222
+msgid "Add New Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:223
+msgid "Edit Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:224
+msgid "Update Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:225
+msgid "View Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:226
+msgid "Separate template types with commas"
+msgstr ""
+
+#: includes/Templates.php:227
+msgid "Add or remove template types"
+msgstr ""
+
+#: includes/Templates.php:228
+msgid "Choose from the most used"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:229
+msgid "Popular Template Types"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:230
+msgid "Search Template Types"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:231
+msgid "Not Found"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:232
+msgid "No template types"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:233
+msgid "Template types list"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:234
+msgid "Template types list navigation"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:265
+msgctxt "Taxonomy General Name"
+msgid "Template Categories"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:266
+msgctxt "Taxonomy Singular Name"
+msgid "Template Category"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:358
+#, php-format
+msgid "Report Template #%d"
+msgstr ""
+
+#. translators: 1: thermal paper width, 2: template post ID.
+#: includes/Templates.php:364
+#, php-format
+msgid "Thermal Receipt Template (%1$s) #%2$d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:368
+#, php-format
+msgid "Thermal Receipt Template #%d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:373
+#, php-format
+msgid "HTML Receipt Template #%d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:378
+#, php-format
+msgid "PHP Receipt Template #%d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:382
+#, php-format
+msgid "Receipt Template #%d"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:489
+msgid "Theme Receipt Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:494
+msgid "Pro Receipt Template"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:499
+msgid "Legacy PHP Template"
+msgstr ""
+
+#: includes/Templates.php:504
+msgid "Invoice (WP Overnight)"
+msgstr ""
+
+#: includes/Templates.php:505
+msgid "Renders the PDF Invoices & Packing Slips invoice HTML through the WP Overnight document API."
+msgstr ""
+
+#: includes/Templates.php:509
+msgid "Packing Slip (WP Overnight)"
+msgstr ""
+
+#: includes/Templates.php:510
+msgid "Renders the PDF Invoices & Packing Slips packing slip HTML through the WP Overnight document API."
+msgstr ""
+
+#: includes/Templates.php:1238
+msgid "Starter template not found."
+msgstr ""
+
+#: includes/Templates.php:1245
+msgid "Could not read starter template file."
+msgstr ""
+
+#: includes/Templates.php:1274
+#: includes/Templates.php:1355
+msgid "Template was created but raw content could not be saved."
+msgstr ""
+
+#: includes/Templates.php:1301
+msgid "Gallery template not found."
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:1376
+msgid "Receipt templates for printing orders"
+msgstr ""
+
+#: includes/Templates.php:1387
+msgid "Report templates for analytics"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:1404
+msgid "Purchase Order"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates.php:1405
+#: includes/Templates/Gallery_Registry.php:172
+msgid "Kitchen Ticket"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:1406
+msgid "Bar Ticket"
+msgstr ""
+
+#: includes/Templates/Auth.php:113
+msgid "Missing or invalid redirect_uri parameter."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Auth.php:119
+msgid "Missing state parameter."
+msgstr ""
+
+#: includes/Templates/Auth.php:131
+msgid "Too many requests. Please try again later."
+msgstr ""
+
+#: includes/Templates/Auth.php:267
+msgid "Auth session expired. Please try logging in again from the app."
+msgstr ""
+
+#: includes/Templates/Auth.php:273
+msgid "Invalid auth session. Please try logging in again from the app."
+msgstr ""
+
+#: includes/Templates/Auth.php:293
+msgid "Security check failed. Please try again."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Auth.php:303
+msgid "Authentication failed."
+msgstr ""
+
+#: includes/Templates/Auth.php:313
+msgid "This account is temporarily locked due to too many failed login attempts. Please try again later."
+msgstr ""
+
+#: includes/Templates/Auth.php:354
+msgid "Failed to generate authentication tokens."
+msgstr ""
+
+#: includes/Templates/Auth.php:404
+msgid "Please enter both username and password."
+msgstr ""
+
+#: includes/Templates/Auth.php:418
+#: includes/Templates/Auth.php:427
+msgid "Invalid username or password."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:29
+msgid "Detailed Receipt"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:31
+msgid "Extended info with SKU, unit price, full tax breakdown, customer address, and cashier details."
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:44
+msgid "Items listed without prices. Includes gift message from customer note and return reference."
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:57
+msgid "Full-page A4/Letter invoice with bill-to/ship-to addresses, an itemised products table, and an optional \"How to pay\" panel (bank transfer + QR-encoded order-pay URL) shown when the order still needs payment."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:68
+msgid "Minimal / Modern"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:70
+msgid "Compact receipt with a centered store header, bold double-border order band and dense item rows. Same essentials as Standard, less vertical space."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:81
+msgid "Narrow Receipt"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:83
+msgid "Compact monospace receipt sized for narrow paper or HTML-capable thermal printers. Prints cleanly in black and white."
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:95
+msgid "Fulfillment companion with items and quantities only. No pricing. Shipping address prominent."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:106
+msgid "Quote / Estimate"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:108
+msgid "Pre-sale document with items and pricing. No payment section. Includes validity notice and terms."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:119
+msgid "Standard Receipt"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:121
+msgid "Streamlined receipt with logo, store info, itemized lines, totals and payment — covers what most stores need without the kitchen sink."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery. The (RTL) suffix marks right-to-left layout.
+#: includes/Templates/Gallery_Registry.php:132
+msgid "Standard Receipt (RTL)"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:134
+msgid "Right-to-left version of the Standard Receipt for Arabic, Hebrew, Persian and Urdu sites. Mirrors layout and uses an RTL-friendly font stack."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:146
+msgid "Detailed Thermal Receipt (58mm)"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:148
+msgid "Kitchen-sink 58mm receipt: full customer + addresses, tax breakdown, refunds, payments, terms and order barcode."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:159
+msgid "Detailed Thermal Receipt (80mm)"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:161
+msgid "Kitchen-sink 80mm receipt: full customer + addresses, tax breakdown, refunds, payments, terms and order barcode."
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:174
+msgid "Order items only with large font, no pricing. Designed for kitchen display or prep stations."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:185
+msgid "Simple Thermal Receipt (58mm)"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:187
+msgid "Clean, minimal thermal receipt for narrow 58mm paper. Same layout as 80mm, adjusted for 32-character width."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:198
+msgid "Simple Thermal Receipt (80mm)"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery.
+#: includes/Templates/Gallery_Registry.php:200
+msgid "Clean, minimal thermal receipt for standard 80mm paper. Store header, line items, totals, and barcode."
+msgstr ""
+
+#. translators: Gallery template name shown in the admin Template Gallery. The (RTL) suffix marks right-to-left layout.
+#: includes/Templates/Gallery_Registry.php:211
+msgid "Simple Thermal Receipt 80mm (RTL)"
+msgstr ""
+
+#. translators: Gallery template description shown in the admin Template Gallery. CP864 / Windows-1256 are printer codepages; keep them verbatim.
+#: includes/Templates/Gallery_Registry.php:213
+msgid "Right-to-left thermal receipt for 80mm printers. Mirrors column alignments for Arabic, Hebrew, Persian and Urdu. Requires a printer that supports an Arabic codepage (CP864 or Windows-1256) — check your printer's manual before ordering."
+msgstr ""
+
+#: includes/Templates/Payment.php:176
+msgid "Sorry, this order cannot be paid for. The order key is missing or invalid."
+msgstr ""
+
+#: includes/Templates/Payment.php:195
+msgid "This order cannot be paid for. Please contact us if you need assistance."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:202
+msgid "Pay for order"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:237
+msgid "Checkout Settings"
+msgstr ""
+
+#: includes/Templates/Payment.php:243
+msgid "Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts."
+msgstr ""
+
+#: includes/Templates/Payment.php:245
+msgid "Disable All Styles and Scripts"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:248
+msgid "Disable wp_head"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:253
+msgid "Disable wp_footer"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:258
+msgid "Disable Selected Styles"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:269
+msgid "Disable Selected Scripts"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:281
+msgid "Submit"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Payment.php:333
+msgid "Paying as customer"
+msgstr ""
+
+#: includes/Templates/Payment.php:434
+msgid "Sorry, this order is invalid and cannot be paid for."
+msgstr ""
+
+#: includes/Templates/Payment.php:438
+msgid "Sorry, this order has already been paid for."
+msgstr ""
+
+#: includes/Templates/Payment.php:456
+msgid "You do not have permission to modify checkout settings."
+msgstr ""
+
+#: includes/Templates/Receipt.php:87
+msgid "You do not have permission to view this receipt."
+msgstr ""
+
+#: includes/Templates/Receipt.php:184
+msgid "No receipt template is configured."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Receipt.php:334
+msgid "Receipt Error"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Receipt.php:395
+msgid "Receipt Template Error"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Receipt.php:396
+msgid "There was a problem rendering the receipt template. This is usually caused by a syntax error or undefined variable in the template code."
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Receipt.php:402
+msgid "File:"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Receipt.php:403
+msgid "Line:"
+msgstr ""
+
+#. translators: Short WCPOS UI label; keep concise.
+#: includes/Templates/Receipt.php:407
+msgid "Suggestions:"
+msgstr ""
+
+#. translators: Help text shown on the receipt template fatal error page.
+#: includes/Templates/Receipt.php:409
+msgid "Check the template file for syntax errors (missing semicolons, brackets, etc.)"
+msgstr ""
+
+#. translators: Help text shown on the receipt template fatal error page.
+#: includes/Templates/Receipt.php:410
+msgid "Ensure all variables used in the template are defined"
+msgstr ""
+
+#. translators: Help text shown on the receipt template fatal error page.
+#: includes/Templates/Receipt.php:411
+msgid "Verify that any custom functions or classes exist"
+msgstr ""
+
+#: includes/Templates/Receipt.php:412
+msgid "Try resetting to the default receipt template"
+msgstr ""
+
+#: includes/Templates/Receipt.php:416
+msgid "Please contact the site administrator for assistance."
+msgstr ""
+
+#: includes/Templates/Received.php:82
+msgid "Sorry, this order is invalid."
+msgstr ""
+
+#: includes/Templates/Received.php:90
+msgid "Sorry, this order cannot be viewed. The order key is missing or invalid."
+msgstr ""
+
+#: includes/Templates/Renderers/Legacy_Php_Renderer.php:39
+msgid "Failed to create temporary template file."
+msgstr ""
+
+#. translators: Validation error shown when an unsupported template language is provided.
+#: includes/Templates/Validator.php:80
+msgid "Invalid template language."
+msgstr ""
+
+#. translators: %s: pattern that was found.
+#: includes/Templates/Validator.php:208
+#, php-format
+msgid "Template contains potentially dangerous JavaScript code: %s"
+msgstr ""
+
+#. translators: %s: error message.
+#: includes/Templates/Validator.php:252
+#, php-format
+msgid "PHP syntax error: %s"
+msgstr ""
+
+#: includes/Templates/Validator.php:268
+msgid "PHP syntax error: Mismatched PHP tags."
+msgstr ""
+
+#. translators: %s: function name.
+#: includes/Templates/Validator.php:318
+#, php-format
+msgid "Template contains dangerous function: %s(). This function is not allowed for security reasons."
+msgstr ""
+
+#. translators: Document title shown for the POS page.
+#: templates/pos.php:14
+msgid "Point of Sale"
+msgstr ""
+
+#: templates/wp-overnight-invoice.php:17
+msgid "The WP Overnight invoice document is not available."
+msgstr ""
+
+#: templates/wp-overnight-invoice.php:28
+msgid "The WP Overnight invoice document could not be rendered for this order."
+msgstr ""
+
+#: templates/wp-overnight-packing-slip.php:17
+msgid "The WP Overnight packing slip document is not available."
+msgstr ""
+
+#: templates/wp-overnight-packing-slip.php:28
+msgid "The WP Overnight packing slip document could not be rendered for this order."
+msgstr ""
+
+#: woocommerce-pos.php:161
+msgid "The WCPOS plugin failed to load correctly."
+msgstr ""
