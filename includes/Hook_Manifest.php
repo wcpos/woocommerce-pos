@@ -31,6 +31,7 @@ final class Hook_Manifest {
 	 *
 	 * @param array $rows Ordered hook rows.
 	 * @throws \InvalidArgumentException When required metadata is absent or invalid.
+	 * @throws \Error When a callback's class is missing (an update in flight).
 	 */
 	public static function validate( array $rows ): void {
 		foreach ( $rows as $index => $row ) {
@@ -46,6 +47,11 @@ final class Hook_Manifest {
 				if ( ! \is_int( $row[ $field ] ) ) {
 					throw new \InvalidArgumentException( esc_html( 'Hook manifest row ' . $index . ' requires an integer ' . $field . '.' ) );
 				}
+			}
+			// A class an in-place update has moved aside must fail as the class-not-found
+			// it is, so Load_Integrity can recognise it, not as a malformed manifest.
+			if ( \is_array( $row['callback'] ) && \is_string( $row['callback'][0] ?? null ) && ! class_exists( $row['callback'][0] ) ) {
+				throw new \Error( 'Class "' . $row['callback'][0] . '" not found' ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Matched verbatim by Load_Integrity; never printed as HTML.
 			}
 			if ( ! \is_callable( $row['callback'] ) ) {
 				throw new \InvalidArgumentException( esc_html( 'Hook manifest row ' . $index . ' requires a callable callback.' ) );

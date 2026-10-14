@@ -18,6 +18,11 @@ use WCPOS\WooCommercePOS\Services\Star_Online_Client;
  */
 class Star_Online_Adapter implements Push_Provider_Adapter_Interface {
 	/**
+	 * Star Online statuses no retry can clear: bad key, refused key or account, unknown device.
+	 */
+	private const TERMINAL_STATUSES = array( 401, 403, 404 );
+
+	/**
 	 * Return the Star Document Markup content type.
 	 *
 	 * @return string
@@ -127,7 +132,10 @@ class Star_Online_Adapter implements Push_Provider_Adapter_Interface {
 			$payload
 		);
 		if ( is_wp_error( $result ) ) {
-			return $this->failure( $result->get_error_message(), true );
+			$data = $result->get_error_data();
+			$code = \is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+
+			return $this->failure( $result->get_error_message(), ! \in_array( $code, self::TERMINAL_STATUSES, true ) );
 		}
 
 		return array(

@@ -301,6 +301,30 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A side with no rows reports '0', the XOR of nothing, not an empty string.
+	 */
+	public function test_bucket_aggregates_empty_side_reports_zero_digest(): void {
+		// Arrange: a stored digest past every live id, so the current side of its bucket is empty.
+		$this->insert_orphan_stored_digest( 'product', 987654 );
+
+		// Act.
+		$buckets = $this->index->bucket_aggregates(
+			array(
+				'bucket_size' => 1000,
+				'start' => 987000,
+				'end' => 988000,
+			)
+		)['buckets'];
+
+		// Assert.
+		$this->assertCount( 1, $buckets );
+		$this->assertSame( 0, $buckets[0]['current_count'] );
+		$this->assertSame( '0', $buckets[0]['current_digest'] );
+		$this->assertSame( '42', $buckets[0]['stored_digest'] );
+		$this->assertFalse( $buckets[0]['match'] );
+	}
+
+	/**
 	 * The max_id covers the stored side too, so orphan digests past the last live
 	 * post are still inside the walk.
 	 */

@@ -247,6 +247,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// so WCPOS writes after core's rest_send_cors_headers at 10.
 			'rest_pre_serve_request'                                => array( 20 ),
 			'send_headers'                                          => array( 99, 9999 ),
+			'site_status_tests'                                     => array( 10 ),
 			// Pos_Uuid re-proves uuid ownership on restore (#1805); unconditional
 			// like stamp_on_save — identity is core. The sync observers add their
 			// own callbacks on the same two hooks once the latch is set.
@@ -255,10 +256,12 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'update_option_woocommerce_pos_settings_visibility'     => array( 10 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
+			'wcpos_file_integrity_check'                            => array( 10 ),
 			// Font_Pack_Loader (row 3a): the background install needs its callback on
 			// every request, WP-Cron and Action Scheduler runs included.
 			'wcpos_install_font_packs'                              => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
+			'wcpos_receipt_snapshot_cleanup'                        => array( 10 ),
 			// Payments_Sweeper (row 12b): a live payment leg is reconciled even while the
 			// sync schema is down, so the sweep and its interval register unlatched.
 			'wcpos_payments_sweep'                                  => array( 10 ),

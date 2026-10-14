@@ -85,6 +85,9 @@ pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli --
 pnpm run test:unit:php
 ```
 
+The administrator check's network branch (`@group multisite`) runs only under a network install: `pnpm run test:unit:php:multisite` (config `.phpunit.multisite.xml.dist`).
+The default suite skips those cases.
+
 If wp-env fails because of port conflicts or environment initialization, diagnose and fix Docker/wp-env, try an isolated wp-env config or alternate ports when appropriate, or ask for help. Do not switch to local `composer install`, local `vendor/bin/phpunit`, or symlinked vendor directories.
 
 ### PHPUnit Conventions

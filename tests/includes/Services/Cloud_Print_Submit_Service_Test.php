@@ -388,6 +388,65 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A PrintNode 401, 403 or 404 fails the job on the first attempt, with no retry.
+	 *
+	 * @dataProvider terminal_printnode_status_provider
+	 *
+	 * @param int $status PrintNode HTTP status.
+	 */
+	public function test_submit_fails_without_retry_on_terminal_printnode_status( int $status ): void {
+		// Arrange.
+		$this->seed_printnode_printer();
+		add_filter(
+			'pre_http_request',
+			static function ( $pre, $args, $url ) use ( $status ) {
+				return false === strpos( (string) $url, '/printjobs' ) ? $pre : array(
+					'headers'  => array(),
+					'body'     => '{}',
+					'response' => array(
+						'code'    => $status,
+						'message' => '',
+					),
+				);
+			},
+			10,
+			3
+		);
+		$tid    = $this->create_thermal_template();
+		$order  = OrderHelper::create_order();
+		$job_id = $this->jobs->create(
+			array(
+				'printer_id'   => 'pn',
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $tid,
+				'content_type' => 'application/pdf',
+				'pn_kind'      => 'pdf',
+			)
+		);
+
+		// Act.
+		( new Cloud_Print_Submit_Service() )->submit( $job_id );
+
+		// Assert.
+		$this->assertSame( Print_Job_Service::STATUS_FAILED, $this->jobs->get( $job_id )['status'] );
+		$this->assertSame( '', (string) get_post_meta( $job_id, Print_Job_Service::META_SUBMIT_ATTEMPTS, true ) );
+		$this->assertFalse( wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $job_id ) ) );
+	}
+
+	/**
+	 * PrintNode statuses no retry can clear.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public function terminal_printnode_status_provider(): array {
+		return array(
+			'401 bad key'           => array( 401 ),
+			'403 key or account'    => array( 403 ),
+			'404 printer not found' => array( 404 ),
+		);
+	}
+
+	/**
 	 * It marks the job FAILED once MAX_ATTEMPTS is reached, with no further retry.
 	 */
 	public function test_submit_marks_failed_after_max_attempts(): void {

@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 use WCPOS\WooCommercePOS\Admin\Consent;
 use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
+use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Cleanup;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WCPOS\WooCommercePOS\Sync\Health as Sync_Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -64,6 +65,7 @@ class Activator {
 			// Defer permalink check to admin_init so __() calls happen after
 			// after_setup_theme (WordPress 6.7+ triggers a notice otherwise).
 			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) { // @phpstan-ignore-line
+				add_action( 'admin_init', array( Receipt_Snapshot_Cleanup::class, 'arm' ) );
 				add_action(
 					'admin_init',
 					function () {
@@ -144,6 +146,7 @@ class Activator {
 		// woocommerce_init, and a miss there is permanent once bump_versions() ran.
 		self::autoload_request_latches();
 		Admin\Permalink::ensure_default();
+		Receipt_Snapshot_Cleanup::arm();
 
 		// POS Only ⇒ catalog visibility hidden (#1862): re-apply after a
 		// deactivation restored it. Idempotent, one pass over the set.
@@ -751,6 +754,7 @@ class Activator {
 		// idempotent and needs no versioned update file.
 		self::autoload_request_latches();
 		Admin\Permalink::ensure_default();
+		Receipt_Snapshot_Cleanup::arm();
 	}
 
 	/**

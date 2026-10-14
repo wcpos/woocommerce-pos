@@ -641,6 +641,27 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A term past the length or word cap searches as one phrase, as products do.
+	 */
+	public function test_search_over_cap_term_matches_the_whole_phrase(): void {
+		// Arrange.
+		$long_phrase = str_repeat( 'LONGPHRASE ', 30 );
+		$long        = $this->create_variation( trim( $long_phrase ) );
+		$words       = $this->create_variation( 'amber birch cedar dahlia elm fern grove hazel iris juniper kelp' );
+		$this->create_variation( 'kelp juniper iris hazel grove fern elm dahlia cedar birch amber' );
+
+		// Act.
+		$long_response  = $this->variations_request( array( 'search' => trim( $long_phrase ) ) );
+		$words_response = $this->variations_request( array( 'search' => 'amber birch cedar dahlia elm fern grove hazel iris juniper kelp' ) );
+
+		// Assert.
+		$this->assertSame( 200, $long_response->get_status() );
+		$this->assertSame( array( $long->get_id() ), array_column( $long_response->get_data(), 'id' ) );
+		$this->assertSame( 200, $words_response->get_status() );
+		$this->assertSame( array( $words->get_id() ), array_column( $words_response->get_data(), 'id' ) );
+	}
+
+	/**
 	 * Pagination returns a stable descending page and the unpaged total.
 	 */
 	public function test_search_paginates_with_total(): void {
@@ -714,6 +735,16 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 			'search length'     => array( array( 'search' => str_repeat( 'S', 256 ) ) ),
 			'search characters' => array( array( 'search' => str_repeat( 'ს', 256 ) ) ),
 			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 10, 'term' ) ) ) ),
+			'long search'       => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
+			'long characters'   => array( array( 'search' => str_repeat( 'ს', 257 ) ) ),
+			'many search terms' => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
+			'many unicode terms' => array( array( 'search' => implode( "\u{3000}", array_fill( 0, 11, 'term' ) ) ) ),
+			'empty sku long search' => array(
+				array(
+					'sku'    => ', ',
+					'search' => str_repeat( 'S', 257 ),
+				),
+			),
 			'page'              => array(
 				array(
 					'search' => 'boundary',
@@ -733,16 +764,6 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 		return array(
 			'sku length'        => array( array( 'sku' => str_repeat( 'S', 4097 ) ) ),
 			'sku terms'         => array( array( 'sku' => implode( ',', array_fill( 0, 101, 'SKU' ) ) ) ),
-			'search length'     => array( array( 'search' => str_repeat( 'S', 257 ) ) ),
-			'search characters' => array( array( 'search' => str_repeat( 'ს', 257 ) ) ),
-			'search terms'      => array( array( 'search' => implode( ' ', array_fill( 0, 11, 'term' ) ) ) ),
-			'unicode terms'     => array( array( 'search' => implode( "\u{3000}", array_fill( 0, 11, 'term' ) ) ) ),
-			'empty sku search length' => array(
-				array(
-					'sku'    => ', ',
-					'search' => str_repeat( 'S', 257 ),
-				),
-			),
 			'page'              => array(
 				array(
 					'search' => 'boundary',

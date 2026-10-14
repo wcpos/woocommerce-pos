@@ -52,8 +52,9 @@ class Cloud_Print_Submit_Service {
 	 * and double-print.
 	 *
 	 * Transient PrintNode submit errors are retried with linear backoff up to
-	 * MAX_ATTEMPTS, after which the job is terminally FAILED. Misconfigured-printer
-	 * and empty-render failures are terminal immediately (never retried). The API
+	 * MAX_ATTEMPTS, after which the job is terminally FAILED. Misconfigured-printer,
+	 * empty-render and PrintNode 401/403/404 failures are terminal immediately
+	 * (never retried). The API
 	 * key is never logged or stored — PrintNode_Client error messages omit it.
 	 *
 	 * @param int $job_id Print job ID.

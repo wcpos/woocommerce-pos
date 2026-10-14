@@ -130,6 +130,32 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.11.0 - 2026/10/14 =
+
+- **Sync now finishes its check for records deleted on the store.** Tills on some stores rejected that check and never removed orders or customers deleted in WooCommerce.
+- **A guest customer entry no longer stops customer sync.** A change recorded for the Guest customer could stall the customer lane on a till.
+- **Long product searches no longer fail on variable products.** Searches of more than ten words, or a long scanned barcode, now return results instead of an error.
+- **Orders no longer go missing from search.** A background index cleanup could restore an order's older text, so a sale stopped matching its own order number.
+- **Checkout failures show one error, not two.** A failed sale reported the same error twice; it now shows once, with the store's reason when one is given.
+- **Adding a customer whose email already exists now says so.** The store's message, such as "an account is already registered with this email", replaces a generic error.
+- **A cashier who is signed out in another tab now sees why sync is paused.** The till recovers on its own as soon as another tab renews the session.
+- **Stores behind a caching host can connect again.** A host cache that replayed old responses no longer blocks connecting; the app works around it.
+- **Damaged local sync data repairs itself.** A damaged row in a till's record of which orders exist on the store is now dropped and re-checked with the store, instead of being refused on every launch.
+- **The app no longer rebuilds its local storage indexes on every launch.** A storage check mistook normal edits for damage and rebuilt the indexes each time the app reopened.
+- **A payment page that fails to load on Android now offers Retry.** Process Payment no longer spins forever when the store's payment page cannot load.
+- **Typing quickly in Android search no longer logs sync errors.** A search cancelled by the next keystroke is now treated as cancelled.
+- **Opening the POS page no longer signs out a till that is already open.** A page load now reuses the browser's live session instead of revoking it.
+- **The POS survives a plugin update in progress.** A request that lands mid-update retries instead of failing, and Site Health checks the plugin's files against the published checksums.
+- **PrintNode and Star cloud printing stop retrying a bad key or account.** A 401, 403 or 404 fails once with a clear message.
+- **Cloud printing explains that it needs HTTPS.** Sites without HTTPS get a clear message instead of a relay error.
+- **A shop manager can no longer list or end an administrator's POS sessions.** On multisite this includes administrators of archived or deactivated network sites.
+- **The order-pay coupon form requires the order key**, as the pay form already does.
+- **Refunds stay attached to matched orders on HPOS stores.**
+- **POS Only products are hidden from ID-listing queries and related products.**
+- **The old /wcpos-login/ page is retired**, and lookalike paths no longer serve the sign-in form.
+- **Order paid dates follow one rule** for all three payment-complete answers.
+- Developers: storage engine updated to RxDB 17.6.0; clearer error reports for failed pushes and checkout timeouts; Guest (customer id 0) never enters the sync journal; the order-meta receipt snapshot is no longer written and existing rows are cleaned up; a query-string token signs in REST requests only; the scheduled integrity digest rebuild retries on database contention; updated translations template.
+
 = 1.10.27 - 2026/10/12 =
 
 - **The pay window closes a sale on the stored Order Status of whichever gateway the cashier picks on the pay page, not only the gateway the sale opened with.** A bank transfer chosen inside the pay page on a store whose default gateway is something else no longer leaves the till waiting on a checkmark.

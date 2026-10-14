@@ -85,6 +85,7 @@ class API {
 
 		// These filters allow changes to the WC REST API response.
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
+		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_wcpos_callback' ), PHP_INT_MAX, 4 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'clear_third_party_jwt_error' ), 50, 3 );
 		add_filter( 'rest_post_dispatch', array( $this, 'rest_post_dispatch' ), 10, 3 );
@@ -511,6 +512,8 @@ class API {
 	 * @param string          $route           Route matched for the request.
 	 * @param array           $handler         Route handler used for the request.
 	 *
+	 * @throws \Error Any Error other than a WCPOS file missing mid-update, unchanged.
+	 *
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
@@ -538,10 +541,62 @@ class API {
 		@ini_set( 'serialize_precision', '10' );
 
 		if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
-			return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
+			try {
+				return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
+			} catch ( \Error $error ) {
+				return self::unavailable_or_rethrow( $error );
+			}
 		}
 
 		return $dispatch_result;
+	}
+
+	/**
+	 * Run a WCPOS route's callback at the update-window boundary.
+	 *
+	 * Core's respond_to_request() calls the callback with no try/catch, so a WCPOS
+	 * class an in-place update has moved aside fatals the request. Running last on
+	 * rest_dispatch_request, after every other listener has had its chance to
+	 * answer or halt, this calls the callback itself and answers 503 +
+	 * Retry-After for that one failure so the POS retries. Every other Error is
+	 * rethrown untouched; non-WCPOS routes are never touched.
+	 *
+	 * @param mixed           $dispatch_result Dispatch result from earlier listeners.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
+	 *
+	 * @throws \Error Any Error other than a WCPOS file missing mid-update, unchanged.
+	 *
+	 * @return mixed
+	 */
+	public function rest_dispatch_wcpos_callback( $dispatch_result, $request, $route, $handler ) {
+		if ( null !== $dispatch_result || null === $this->registry->controller_for_route( (string) $route ) || ! isset( $handler['callback'] ) || ! \is_callable( $handler['callback'] ) ) {
+			return $dispatch_result;
+		}
+		try {
+			// Never hand null back: core would run the callback a second time.
+			return \call_user_func( $handler['callback'], $request ) ?? new WP_REST_Response( null );
+		} catch ( \Error $error ) {
+			return self::unavailable_or_rethrow( $error );
+		}
+	}
+
+	/**
+	 * The 503 for a WCPOS file missing mid-update, or the error rethrown.
+	 *
+	 * @param \Error $error Error thrown by a WCPOS route.
+	 *
+	 * @throws \Error The same error, when it is anything else.
+	 *
+	 * @return WP_REST_Response
+	 */
+	private static function unavailable_or_rethrow( \Error $error ): WP_REST_Response {
+		$unavailable = Load_Integrity::rest_unavailable( $error );
+		if ( null === $unavailable ) {
+			throw $error;
+		}
+		return $unavailable;
 	}
 
 	/**

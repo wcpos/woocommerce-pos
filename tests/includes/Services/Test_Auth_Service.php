@@ -38,7 +38,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 */
 	public function setUp(): void {
 		parent::setUp();
-		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'] );
+		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'], $_COOKIE['wcpos_web_session_jti'] );
 		$this->auth_service = Auth::instance();
 
 		// Create a test user.
@@ -60,6 +60,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$this->denied_caps = array();
 
 		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['authorization'], $_GET['rest_route'] );
+		unset( $_COOKIE['wcpos_web_session_jti'] );
 		parent::tearDown();
 		unset( $this->auth_service );
 
@@ -1041,6 +1042,90 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$this->assertEquals( $this->test_user->ID, $result['id'] );
 		$this->assertEquals( $this->test_user->user_login, $result['username'] );
 		$this->assertSame( $this->test_user->roles, $result['roles'] );
+	}
+
+	/**
+	 * Direct test: get_user_data with web frontend flag.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::get_user_data
+	 */
+	public function test_direct_get_user_data_web_frontend(): void {
+		$result = $this->auth_service->get_user_data( $this->test_user, true );
+
+		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $result['access_token'] ) );
+		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $result['refresh_token'], 'refresh' ) );
+		$this->assertCount( 1, $this->auth_service->sessions()->entries( $this->test_user->ID ) );
+	}
+
+	/**
+	 * A background page load must not revoke the open tab's session or extend its expiry.
+	 */
+	public function test_web_frontend_page_load_reuses_live_cookie_session(): void {
+		$tokens  = $this->auth_service->generate_token_pair( $this->test_user );
+		$refresh = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		$_COOKIE['wcpos_web_session_jti'] = $refresh->jti;
+
+		$result = $this->auth_service->get_user_data( $this->test_user, true );
+		$reused = $this->auth_service->validate_token( $result['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $reused );
+		$this->assertSame( $refresh->jti, $reused->jti );
+		$this->assertSame( $refresh->exp, $reused->exp );
+		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $result['access_token'] ) );
+		$this->assertNotInstanceOf( WP_Error::class, $this->auth_service->validate_token( $tokens['access_token'] ) );
+		$this->assertCount( 1, $this->auth_service->sessions()->entries( $this->test_user->ID ) );
+	}
+
+	/**
+	 * An unknown cookie must not prevent a fresh login.
+	 */
+	public function test_web_frontend_page_load_mints_when_cookie_session_is_unknown(): void {
+		$jti = wp_generate_uuid4();
+		$_COOKIE['wcpos_web_session_jti'] = $jti;
+
+		$result  = $this->auth_service->get_user_data( $this->test_user, true );
+		$refresh = $this->auth_service->validate_token( $result['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $refresh );
+		$this->assertNotSame( $jti, $refresh->jti );
+		$this->assertCount( 1, $this->auth_service->sessions()->entries( $this->test_user->ID ) );
+	}
+
+	/**
+	 * A cookie from another user cannot reuse or revoke that user's session.
+	 */
+	public function test_web_frontend_page_load_mints_when_cookie_session_belongs_to_another_user(): void {
+		$other   = $this->factory->user->create_and_get( array( 'role' => 'shop_manager' ) );
+		$tokens  = $this->auth_service->generate_token_pair( $other );
+		$refresh = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		$_COOKIE['wcpos_web_session_jti'] = $refresh->jti;
+
+		$result = $this->auth_service->get_user_data( $this->test_user, true );
+		$fresh  = $this->auth_service->validate_token( $result['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $fresh );
+		$this->assertNotSame( $refresh->jti, $fresh->jti );
+		$this->assertTrue( $this->auth_service->sessions()->is_live( $other->ID, $refresh->jti ) );
+		$this->assertCount( 1, $this->auth_service->sessions()->entries( $this->test_user->ID ) );
+	}
+
+	/**
+	 * Replace a nearly expired session without revoking the open tab's session.
+	 */
+	public function test_web_frontend_page_load_replaces_a_nearly_expired_cookie_session(): void {
+		$tokens  = $this->auth_service->generate_token_pair( $this->test_user );
+		$refresh = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		$_COOKIE['wcpos_web_session_jti'] = $refresh->jti;
+		$row = $this->auth_service->sessions()->entries( $this->test_user->ID );
+		$row[ $refresh->jti ]['expires'] = time() + HOUR_IN_SECONDS;
+		update_user_meta( $this->test_user->ID, Session_Registry::META_KEY, $row );
+
+		$result = $this->auth_service->get_user_data( $this->test_user, true );
+		$fresh  = $this->auth_service->validate_token( $result['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $fresh );
+		$this->assertNotSame( $refresh->jti, $fresh->jti );
+		$this->assertTrue( $this->auth_service->sessions()->is_live( $this->test_user->ID, $refresh->jti ) );
 	}
 
 	/**

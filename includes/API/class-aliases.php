@@ -5,10 +5,11 @@
  * WCPOS Pro and third-party extensions subclass these controllers by FQCN.
  * Keep the old names as a permanent public API while implementations live in V1.
  *
- * Loaded via Composer's `files` autoload (so bundled consumers like WCPOS Pro,
- * which load this package through vendor/autoload.php and never execute
- * woocommerce-pos.php, still get the aliases) AND required directly from the
- * plugin bootstrap. The guard makes double-loading a no-op.
+ * Loaded by includes/load-integrity.php, the package's Composer `files` entry (so
+ * bundled consumers like WCPOS Pro, which load this package through
+ * vendor/autoload.php and never execute woocommerce-pos.php, still get the
+ * aliases) AND required directly from the plugin bootstrap. The guard makes
+ * double-loading a no-op.
  *
  * @package WCPOS\WooCommercePOS\API
  */
