@@ -84,7 +84,16 @@ class Payment_Gateways_Section extends Abstract_Section {
 			}
 		}
 		if ( ! isset( $options['default_gateway'] ) || ! \in_array( $options['default_gateway'], self::FREE_TIER_GATEWAYS, true ) ) {
+			// The first free-tier gateway not explicitly disabled, so the pay form always has
+			// a chosen gateway. An absent row is enabled: that is the Section default the
+			// read merges in later. pos_cash when both are stored disabled.
 			$options['default_gateway'] = 'pos_cash';
+			foreach ( self::FREE_TIER_GATEWAYS as $candidate ) {
+				if ( ! isset( $options['gateways'][ $candidate ]['enabled'] ) || $options['gateways'][ $candidate ]['enabled'] ) {
+					$options['default_gateway'] = $candidate;
+					break;
+				}
+			}
 		}
 		return $options;
 	}

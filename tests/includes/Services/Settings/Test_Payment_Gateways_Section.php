@@ -41,6 +41,12 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 		$this->assertFalse( $result['gateways']['bacs']['enabled'] );
 		$this->assertTrue( $result['gateways']['pos_card']['enabled'] );
 		$this->assertSame( 'pos_cash', $result['default_gateway'] );
+		// A stored non-free default with cash disabled falls back to the enabled free gateway, never to a disabled one.
+		$cash_off = $options;
+		$cash_off['gateways']['pos_cash'] = array(
+			'enabled' => false,
+		);
+		$this->assertSame( 'pos_card', Payment_Gateways_Section::free_tier_rule( $cash_off )['default_gateway'] );
 		$this->assertSame( 'not an array', Payment_Gateways_Section::free_tier_rule( 'not an array' ) );
 		$this->assertSame(
 			array(
