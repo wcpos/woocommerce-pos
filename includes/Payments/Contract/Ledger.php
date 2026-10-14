@@ -34,6 +34,18 @@ class Ledger {
 	 * persistence, so Free enforces the cap; newest entries win.
 	 */
 	public const EVENTS_MAX = 100;
+	/**
+	 * Top-level keys `record()` takes from the till. Everything else on a recorded
+	 * row is the server's: money and method are re-derived from the validated
+	 * input, `events` and `void_requested_at` belong to a handler leg, `tip` is
+	 * written only when a provider confirms an on-reader amount, and an unknown
+	 * key is not harmless (`Session_Figures::tender_key()` reads `method` before
+	 * `method_id`). The Payments Contract's device facts stay: when and how the
+	 * till took the money, and what the device handed it.
+	 *
+	 * @var string[]
+	 */
+	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'provider_refs', 'receipt' );
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
@@ -431,7 +443,8 @@ class Ledger {
 	 * @return array|\WP_Error
 	 */
 	public function record( WC_Order $order, array $input, array $context = array() ) {
-		unset( $input['closure_id'] );
+		// The till's row carries server-derived fields too (source, kind, change, refunds…); only these are inputs.
+		$input = array_intersect_key( $input, array_flip( self::RECORD_INPUT_KEYS ) );
 		$validated = $this->validate_input( $order, $input );
 		if ( is_wp_error( $validated ) ) {
 			return $validated;
