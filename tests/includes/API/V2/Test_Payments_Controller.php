@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Payments controller tests. */
@@ -70,6 +71,92 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '0.00', $data['order']['balance'] );
 		$this->assertSame( 'completed', $data['order']['status'] );
 		$this->assertSame( 'pos_cash', $data['order']['payment_method'] );
+	}
+
+	/** Cashiers cannot forge handler events or an in-flight cancellation. */
+	public function test_record_client_events_and_cancel_stamp_do_not_persist(): void {
+		$order   = $this->create_pos_order();
+		$payment = $this->payment(
+			'pos_cash',
+			'92.95',
+			array(
+				'events'            => array(
+					array(
+						't'       => '2026-10-14T10:00:00Z',
+						'level'   => 'info',
+						'message' => 'Forged approval',
+					),
+				),
+				'void_requested_at' => '2026-10-14T10:00:00Z',
+			)
+		);
+		$user_id = get_current_user_id();
+		$cashier = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $cashier );
+		try {
+			$response = $this->record( $order, $payment );
+			$this->assertSame( 200, $response->get_status() );
+			$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] );
+			$this->assertSame( array(), $row['events'] );
+			$this->assertSame( null, $row['void_requested_at'] );
+			$request = $this->wp_rest_get_request( $this->payment_path( $order, $payment['id'] ) . '/status' );
+			$status  = $this->server->dispatch( $request );
+			$this->assertSame( 200, $status->get_status() );
+			$this->assertSame( array(), $status->get_data()['payment']['events'] );
+		} finally {
+			wp_set_current_user( $user_id );
+		}
+	}
+
+	/** An unknown method alias cannot turn a card leg into drawer cash. */
+	public function test_record_unknown_method_key_cannot_reclassify_a_card_leg(): void {
+		$order    = $this->create_pos_order();
+		$payment  = $this->payment( 'pos_card', '92.95', array( 'method' => 'cash' ) );
+		$response = $this->record( $order, $payment );
+
+		$this->assertSame( 200, $response->get_status() );
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] );
+		$this->assertFalse( array_key_exists( 'method', $row ) );
+		$totals = Session_Figures::tender_totals( array( $row ) );
+		$this->assertSame( '92.9500', $totals['card'] );
+		$this->assertSame( '0.0000', $totals['cash'] );
+	}
+
+	/** Only provider-confirmed tips affect the amount compared on replay. */
+	public function test_record_client_tip_is_ignored_and_the_identical_replay_succeeds(): void {
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95', array( 'tip' => '7.05' ) );
+		$first   = $this->record( $order, $payment );
+		$second  = $this->record( $order, $payment );
+
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 200, $second->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$rows  = Ledger::instance()->read( $order );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( null, $rows[0]['tip'] );
+		$this->assertSame( '92.95', $order->get_total() );
+	}
+
+	/** The record boundary preserves the till's documented device facts. */
+	public function test_record_keeps_the_tills_device_facts(): void {
+		$order = $this->create_pos_order();
+		$facts = array(
+			'recorded_offline' => true,
+			'transport'        => 'offline',
+			'created_at_gmt'   => '2026-10-13T08:00:00Z',
+			'captured_at_gmt'  => '2026-10-13T08:00:05Z',
+			'provider_refs'    => array( 'transaction_id' => 'T-1' ),
+			'receipt'          => array( 'card_brand' => 'visa' ),
+		);
+		$payment  = $this->payment( 'pos_cash', '92.95', $facts );
+		$response = $this->record( $order, $payment );
+
+		$this->assertSame( 200, $response->get_status() );
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] );
+		foreach ( $facts as $key => $expected ) {
+			$this->assertSame( $expected, $row[ $key ], $key );
+		}
 	}
 
 	/** An identical id replays without duplicating the ledger row. */

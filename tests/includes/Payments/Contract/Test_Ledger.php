@@ -41,6 +41,59 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** A full till row cannot override server-owned or handler-owned facts. */
+	public function test_record_drops_server_owned_and_unknown_keys(): void {
+		$order = $this->create_pos_order();
+		$input = $this->payment(
+			'pos_cash',
+			'92.95',
+			array(
+				'source'            => 'forged',
+				'order_id'          => $order->get_id(),
+				'provider'          => null,
+				'kind'              => 'cash',
+				'capture_mode'      => 'manual',
+				'transport'         => 'offline',
+				'recorded_offline'  => true,
+				'currency'          => $order->get_currency(),
+				'tendered'          => '100.00',
+				'change'            => '99.00',
+				'tip'               => null,
+				'status'            => 'captured',
+				'failure_reason'    => null,
+				'refunded_amount'   => '50.00',
+				'refunds'           => array( array( 'x' ) ),
+				'provider_refs'     => array(),
+				'receipt'           => array(),
+				'cashier_id'        => 999,
+				'store_id'          => 999,
+				'register_id'       => wp_generate_uuid4(),
+				'session_id'        => wp_generate_uuid4(),
+				'created_at_gmt'    => '2026-10-13T08:00:00Z',
+				'captured_at_gmt'   => '2026-10-13T08:00:05Z',
+				'updated_at_gmt'    => '2000-01-01T00:00:00Z',
+				'seen_events'       => array( 'evt_1' ),
+				'authorized_at_gmt' => '2026-10-13T08:00:00Z',
+				'expires_at'        => '2030-01-01T00:00:00Z',
+			)
+		);
+
+		$row = Ledger::instance()->record( $order, $input );
+
+		$this->assertIsArray( $row );
+		$this->assertSame( 'app', $row['source'] );
+		$this->assertSame( 'cash', $row['kind'] );
+		$this->assertSame( '7.05', $row['change'] );
+		$this->assertSame( '0.00', $row['refunded_amount'] );
+		$this->assertSame( array(), $row['refunds'] );
+		$this->assertSame( get_current_user_id(), $row['cashier_id'] );
+		$this->assertSame( null, $row['store_id'] );
+		$this->assertSame( array(), $row['seen_events'] );
+		$this->assertSame( null, $row['authorized_at_gmt'] );
+		$this->assertSame( null, $row['expires_at'] );
+		$this->assertNotSame( '2000', substr( $row['updated_at_gmt'], 0, 4 ) );
+	}
+
 	/** A client cannot claim that a closure counted a payment. */
 	public function test_record_drops_a_client_closure_id(): void {
 		$order = $this->create_pos_order();
