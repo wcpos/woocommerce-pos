@@ -21,6 +21,51 @@ use WP_UnitTestCase;
  */
 class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 	/**
+	 * Free sites cannot enable other gateways or choose them as the default.
+	 */
+	public function test_free_tier_rule_disables_every_gateway_but_cash_and_card_and_resets_the_default(): void {
+		$options = array(
+			'default_gateway' => 'bacs',
+			'gateways'        => array(
+				'bacs'     => array(
+					'enabled' => true,
+				),
+				'pos_card' => array(
+					'enabled' => true,
+				),
+			),
+		);
+
+		$result = Payment_Gateways_Section::free_tier_rule( $options );
+
+		$this->assertFalse( $result['gateways']['bacs']['enabled'] );
+		$this->assertTrue( $result['gateways']['pos_card']['enabled'] );
+		$this->assertSame( 'pos_cash', $result['default_gateway'] );
+		// A stored non-free default with cash disabled falls back to the enabled free gateway, never to a disabled one.
+		$cash_off = $options;
+		$cash_off['gateways']['pos_cash'] = array(
+			'enabled' => false,
+		);
+		$this->assertSame( 'pos_card', Payment_Gateways_Section::free_tier_rule( $cash_off )['default_gateway'] );
+		$this->assertSame( 'not an array', Payment_Gateways_Section::free_tier_rule( 'not an array' ) );
+		$this->assertSame(
+			array(
+				'default_gateway' => 'pos_cash',
+			),
+			Payment_Gateways_Section::free_tier_rule( array() )
+		);
+	}
+
+	/**
+	 * Boot arms the rule without constructing a REST settings controller.
+	 */
+	public function test_free_tier_rule_is_armed_at_boot(): void {
+		$this->assertNotFalse(
+			has_filter( 'option_woocommerce_pos_settings_payment_gateways', array( Payment_Gateways_Section::class, 'free_tier_rule' ) )
+		);
+	}
+
+	/**
 	 * Clean options between tests.
 	 */
 	public function tearDown(): void {
@@ -48,8 +93,13 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 		// Pure read assertions: neither option mutated.
 		$checkout = get_option( 'woocommerce_pos_settings_checkout' );
 		$this->assertArrayHasKey( 'order_status', $checkout, 'Read must not strip the legacy key' );
-		$gateways = get_option( 'woocommerce_pos_settings_payment_gateways' );
-		$this->assertArrayNotHasKey( 'default_gateway', $gateways, 'Read must not persist merged defaults' );
+		remove_all_filters( 'option_woocommerce_pos_settings_payment_gateways' ); // Inspect storage, not the filtered view.
+		try {
+			$gateways = get_option( 'woocommerce_pos_settings_payment_gateways' );
+			$this->assertArrayNotHasKey( 'default_gateway', $gateways, 'Read must not persist merged defaults' );
+		} finally {
+			Payment_Gateways_Section::register_free_tier_rule();
+		}
 	}
 
 	/**
@@ -174,11 +224,16 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 					)
 				);
 
-				$section  = new Payment_Gateways_Section();
-				$settings = $section->read();
+				remove_all_filters( 'option_woocommerce_pos_settings_payment_gateways' ); // Model Pro's enabled custom gateway.
+				try {
+					$section  = new Payment_Gateways_Section();
+					$settings = $section->read();
 
-				$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_saved_null_gateway']['title'] );
-				$this->assertTrue( $settings['gateways']['wcpos_saved_null_gateway']['enabled'] );
+					$this->assertSame( 'Untitled Method', $settings['gateways']['wcpos_saved_null_gateway']['title'] );
+					$this->assertTrue( $settings['gateways']['wcpos_saved_null_gateway']['enabled'] );
+				} finally {
+					Payment_Gateways_Section::register_free_tier_rule();
+				}
 			}
 		);
 	}

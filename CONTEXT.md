@@ -12,6 +12,7 @@ _Avoid_: options, config, preferences
 
 **Settings Section**:
 The unit that owns one settings group end to end: schema, defaults, sanitization, secret redaction, merge strategy, and (when not option-backed) custom read/write behaviour. Nine exist: general, checkout, tax_ids, payment_gateways, tools, visibility, cloud_print, access (role-backed), license (Pro-injected). Classes are named `{Id}_Section`.
+A tier rule on a group (free sites enable only `pos_cash` and `pos_card` at the till) is part of the Section and applies to every reader, not only the REST projection.
 _Avoid_: settings group, settings schema, settings tab
 
 **Section Registry**:

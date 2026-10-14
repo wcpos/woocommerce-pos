@@ -20,6 +20,7 @@ use WC_Payment_Gateways;
 use WC_Product_Simple;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Orders;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
 /**
@@ -63,6 +64,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		remove_all_filters( 'option_woocommerce_pos_settings_payment_gateways' ); // Model a Pro site: the free-tier rule is lifted the way Pro lifts it.
 
 		// Store original settings
 		$this->original_checkout_settings          = get_option( 'woocommerce_pos_settings_checkout' );
@@ -101,6 +103,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 		// Clean up any POS request state
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
+		Payment_Gateways_Section::register_free_tier_rule();
 		parent::tearDown();
 	}
 

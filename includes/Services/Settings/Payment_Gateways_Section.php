@@ -49,6 +49,56 @@ class Payment_Gateways_Section extends Abstract_Section {
 	}
 
 	/**
+	 * The gateways a free site may enable at the till.
+	 *
+	 * @var string[]
+	 */
+	const FREE_TIER_GATEWAYS = array( 'pos_cash', 'pos_card' );
+
+	/**
+	 * Arm the free-tier rule on the stored option, once, for every lane.
+	 *
+	 * The rule is an `option_` filter so Pro can lift it exactly as it does today
+	 * (`pre_option_` + `remove_all_filters`). It is part of the Section: a tier rule
+	 * on a group applies to every reader, not only the REST projection.
+	 */
+	public static function register_free_tier_rule(): void {
+		add_filter( 'option_' . self::DB_PREFIX . 'payment_gateways', array( __CLASS__, 'free_tier_rule' ) );
+	}
+
+	/**
+	 * Free sites enable only cash and card; the default gateway must be one of them.
+	 *
+	 * @param mixed $options The stored option value.
+	 * @return mixed
+	 */
+	public static function free_tier_rule( $options ) {
+		if ( ! \is_array( $options ) ) {
+			return $options;
+		}
+		if ( isset( $options['gateways'] ) && \is_array( $options['gateways'] ) ) {
+			foreach ( $options['gateways'] as $gateway_id => $gateway_data ) {
+				if ( \is_array( $gateway_data ) && ! \in_array( $gateway_id, self::FREE_TIER_GATEWAYS, true ) ) {
+					$options['gateways'][ $gateway_id ]['enabled'] = false;
+				}
+			}
+		}
+		if ( ! isset( $options['default_gateway'] ) || ! \in_array( $options['default_gateway'], self::FREE_TIER_GATEWAYS, true ) ) {
+			// The first free-tier gateway not explicitly disabled, so the pay form always has
+			// a chosen gateway. An absent row is enabled: that is the Section default the
+			// read merges in later. pos_cash when both are stored disabled.
+			$options['default_gateway'] = 'pos_cash';
+			foreach ( self::FREE_TIER_GATEWAYS as $candidate ) {
+				if ( ! isset( $options['gateways'][ $candidate ]['enabled'] ) || $options['gateways'][ $candidate ]['enabled'] ) {
+					$options['default_gateway'] = $candidate;
+					break;
+				}
+			}
+		}
+		return $options;
+	}
+
+	/**
 	 * REST endpoint args for payment-gateway updates.
 	 */
 	public function endpoint_args(): array {
