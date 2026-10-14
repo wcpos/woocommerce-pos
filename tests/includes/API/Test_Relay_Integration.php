@@ -33,6 +33,19 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		remove_all_actions( 'woocommerce_pos_print_job_created' );
 		remove_all_actions( Cloud_Print_Relay_Service::REREGISTER_HOOK );
 		new Cloud_Print_Relay_Service();
+		// The relay only registers https sites; the test install is http.
+		add_filter( 'home_url', array( $this, 'https_home_url' ) );
+	}
+
+	/**
+	 * Serve the site address over https.
+	 *
+	 * @param string $url Home URL.
+	 *
+	 * @return string
+	 */
+	public function https_home_url( string $url ): string {
+		return set_url_scheme( $url, 'https' );
 	}
 
 	/**
@@ -205,6 +218,59 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$this->assertFalse( get_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT ) );
 		$this->assertStringNotContainsString( 'hint_secret', wp_json_encode( $response->get_data() ) );
 		$this->assertEquals( true, $response->get_data()['enabled'] );
+	}
+
+	/**
+	 * A site that is not served over https gets a clear 400 before the relay is called.
+	 */
+	public function test_register_endpoint_rejects_a_non_https_site_without_calling_the_relay(): void {
+		// Arrange.
+		remove_filter( 'home_url', array( $this, 'https_home_url' ) );
+		$relay_called = false;
+		$this->mock_http(
+			function () use ( &$relay_called ) {
+				$relay_called = true;
+
+				return $this->http_response( 400, array( 'error' => 'site_url must be https' ) );
+			}
+		);
+
+		// Act.
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/relay/register' ) );
+
+		// Assert.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'wcpos_relay_requires_https', $response->as_error()->get_error_code() );
+		$this->assertFalse( $relay_called );
+		$this->assertFalse( get_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT ) );
+	}
+
+	/**
+	 * A filtered (local or staging) relay is still called for a non-https site.
+	 */
+	public function test_register_endpoint_leaves_the_https_rule_to_a_filtered_relay(): void {
+		// Arrange.
+		remove_filter( 'home_url', array( $this, 'https_home_url' ) );
+		add_filter(
+			'woocommerce_pos_cloud_print_relay_url',
+			static function () {
+				return 'http://relay.test';
+			}
+		);
+		$relay_called = false;
+		$this->mock_http(
+			function () use ( &$relay_called ) {
+				$relay_called = true;
+
+				return $this->http_response( 400, array( 'error' => 'rejected' ) );
+			}
+		);
+
+		// Act.
+		rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/relay/register' ) );
+
+		// Assert.
+		$this->assertTrue( $relay_called );
 	}
 
 	/**

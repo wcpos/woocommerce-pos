@@ -600,14 +600,27 @@ final class Integrity_Digest {
 	/** Retry a contended upsert once, including both attempts in the hook timing. */
 	private function query_with_retry( string $sql, string $error_message, float $started ): void {
 		global $wpdb;
-		$result = $wpdb->query( $sql );
-		if ( false === $result && $this->is_transient_contention( $wpdb ) ) {
-			$result = $wpdb->query( $sql );
-		}
+		$result = $this->query_retrying_contention( $sql );
 		self::$request_write_ms += ( microtime( true ) - $started ) * 1000;
 		if ( false === $result ) {
 			throw new RuntimeException( $error_message . $wpdb->last_error );
 		}
+	}
+
+	/**
+	 * Run one statement, and run it once more if it failed on transient contention.
+	 *
+	 * @param string $sql Statement to run.
+	 *
+	 * @return int|bool The wpdb::query() result of the last attempt.
+	 */
+	private function query_retrying_contention( string $sql ) {
+		global $wpdb;
+		$result = $wpdb->query( $sql );
+		if ( false === $result && $this->is_transient_contention( $wpdb ) ) {
+			$result = $wpdb->query( $sql );
+		}
+		return $result;
 	}
 
 	/**
@@ -635,7 +648,9 @@ final class Integrity_Digest {
 	 * Backfill/repair: prune orphans, then digest every live row in one
 	 * INSERT…SELECT pass. Pre-existing catalogs (the 10k seed) become fully
 	 * digestable in one call; measured timing is returned so the lab can
-	 * report the backfill price.
+	 * report the backfill price. Each statement retries once on transient
+	 * contention (MariaDB 1020 "Record has changed since last read", lock
+	 * wait, deadlock), as the per-record upserts do.
 	 *
 	 * @param bool $products_only Whether to stop after rebuilding product digests.
 	 */
@@ -644,7 +659,7 @@ final class Integrity_Digest {
 		$this->index->raise_group_concat_max_len();
 		$started = microtime( true );
 
-		$orphans_deleted = $wpdb->query(
+		$orphans_deleted = $this->query_retrying_contention(
 			'DELETE FROM ' . $this->table_name()
 			. ' WHERE object_type IN ' . self::OBJECT_TYPES_SQL
 			. ' AND NOT ' . $this->index->live_row_exists_sql( 'object_id' )
@@ -661,7 +676,7 @@ final class Integrity_Digest {
 		// Otherwise a repeated rebuild rewrites UTC_TIMESTAMP() into every
 		// row, counts the whole table as writes, and inflates the
 		// hash-checksum baseline cost (codex review).
-		$writes = $wpdb->query(
+		$writes = $this->query_retrying_contention(
 			'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 			. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 			. ' FROM (' . $this->index->row_digest_select_sql() . ') t'
@@ -691,7 +706,7 @@ final class Integrity_Digest {
 		// the same prune-orphans + INSERT…SELECT pass, over the customer predicate + id-space. A stored
 		// customer whose user vanished or lost the customer role is an orphan (a role removal never fires
 		// before_delete_post, so the rebuild is the backstop that reconciles it).
-		$customer_orphans = $wpdb->query(
+		$customer_orphans = $this->query_retrying_contention(
 			'DELETE FROM ' . $this->table_name()
 			. " WHERE object_type = 'customer'"
 			. ' AND NOT ' . $this->index->customer_live_row_exists_sql( 'object_id' )
@@ -699,7 +714,7 @@ final class Integrity_Digest {
 		if ( false === $customer_orphans ) {
 			throw new RuntimeException( 'prune orphan customer digests failed: ' . $wpdb->last_error );
 		}
-		$customer_writes = $wpdb->query(
+		$customer_writes = $this->query_retrying_contention(
 			'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 			. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 			. ' FROM (' . $this->index->customer_digest_select_sql() . ') t'
@@ -714,7 +729,7 @@ final class Integrity_Digest {
 		// Leg-3 phase 7 (ADR 0015): orders share the digest table via their own 'order' rows (HPOS or CPT).
 		// Same prune-orphans + INSERT…SELECT pass; Digest_Index::order_digest_select_sql() emits the storage-correct SQL
 		// (the CPT path GROUP BYs, the HPOS path does not — both valid as an INSERT…SELECT source).
-		$order_orphans = $wpdb->query(
+		$order_orphans = $this->query_retrying_contention(
 			'DELETE FROM ' . $this->table_name()
 			. " WHERE object_type = 'order'"
 			. ' AND NOT ' . $this->index->order_live_row_exists_sql( 'object_id' )
@@ -722,7 +737,7 @@ final class Integrity_Digest {
 		if ( false === $order_orphans ) {
 			throw new RuntimeException( 'prune orphan order digests failed: ' . $wpdb->last_error );
 		}
-		$order_writes = $wpdb->query(
+		$order_writes = $this->query_retrying_contention(
 			'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 			. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
 			. ' FROM (' . $this->index->order_digest_select_sql() . ') t'

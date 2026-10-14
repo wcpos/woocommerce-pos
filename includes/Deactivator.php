@@ -73,6 +73,9 @@ class Deactivator {
 		wp_clear_scheduled_hook( \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge::PURGE_HOOK );
 		wp_clear_scheduled_hook( \WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper::HOOK );
 
+		// stop the file integrity checks (daily and post-update).
+		wp_unschedule_hook( \WCPOS\WooCommercePOS\Services\File_Integrity::CRON_HOOK );
+
 		// remove pos rewrite rule.
 		flush_rewrite_rules( false ); // false will not overwrite .htaccess.
 	}

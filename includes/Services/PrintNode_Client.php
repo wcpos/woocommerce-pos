@@ -202,6 +202,14 @@ class PrintNode_Client {
 			);
 		}
 
+		if ( 403 === $code ) {
+			return new WP_Error(
+				'wcpos_printnode_forbidden',
+				__( 'PrintNode refused the request. Check that the API key is correct and the PrintNode account is active.', 'woocommerce-pos' ),
+				array( 'status' => 403 )
+			);
+		}
+
 		return $this->http_error( $code );
 	}
 

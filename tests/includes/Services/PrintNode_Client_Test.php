@@ -124,6 +124,23 @@ class PrintNode_Client_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test a 403 returns a forbidden WP_Error with its own message.
+	 */
+	public function test_whoami_with_403_returns_forbidden_error(): void {
+		// Arrange.
+		$this->mock_http( $this->fake_response( array(), 403 ) );
+		$client = new PrintNode_Client( 'TESTKEY' );
+
+		// Act.
+		$result = $client->whoami();
+
+		// Assert.
+		$this->assertTrue( is_wp_error( $result ) );
+		$this->assertSame( 'wcpos_printnode_forbidden', $result->get_error_code() );
+		$this->assertSame( array( 'status' => 403 ), $result->get_error_data() );
+	}
+
+	/**
 	 * Test printers() returns the decoded array of printers.
 	 */
 	public function test_printers_with_200_returns_decoded_array(): void {

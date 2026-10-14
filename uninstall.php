@@ -89,6 +89,10 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		// WP-Cron fallback for the receipt font install (Action Scheduler is the
 		// primary queue; its pending actions are cancelled in the sweep below).
 		'wcpos_install_font_packs',
+		'wcpos_file_integrity_check',
+		// Receipt_Snapshot_Cleanup's WP-Cron fallback (its Action Scheduler action is
+		// cancelled in the sweep below).
+		'wcpos_receipt_snapshot_cleanup',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);
@@ -424,6 +428,7 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	// leave the action with no callback, and an active Pro re-queues on demand.
 	if ( \function_exists( 'as_unschedule_all_actions' ) ) {
 		as_unschedule_all_actions( 'wcpos_install_font_packs' );
+		as_unschedule_all_actions( 'wcpos_receipt_snapshot_cleanup', array(), 'wcpos' );
 	}
 
 	// 2. Drop plugin tables. All are derived from WooCommerce data and are
@@ -601,5 +606,6 @@ if ( \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	// Network-wide surfaces, once: user meta is a shared table, and the
 	// object-cache flush is global.
 	woocommerce_pos_uninstall_user_meta();
+	delete_site_option( 'woocommerce_pos_file_integrity' ); // File_Integrity::RESULT_OPTION, stored network-wide.
 	wp_cache_flush();
 }

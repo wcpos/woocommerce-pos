@@ -312,6 +312,22 @@ class Init {
 				'reason'   => 'Default 10; logout ends this browser\'s web POS session, a password reset or change ends every POS session. Auth is built only when one fires.',
 				'phase'    => 'post-latch',
 			),
+			array(
+				'hook'     => null,
+				'callback' => array( Services\Receipt_Snapshot_Cleanup::class, 'register' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Background snapshot cleanup runs independently of the sync schema latch.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => array( Services\File_Integrity::class, 'register' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default 10; checksum check after updates, daily and in Site Health, independent of the sync latch.',
+				'phase'    => 'post-latch',
+			),
 		);
 
 		return array_values(

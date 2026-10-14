@@ -1305,6 +1305,10 @@ msgstr ""
 msgid "WCPOS cannot run alongside the wePOS plugin due to compatibility issues. WCPOS has been deactivated."
 msgstr ""
 
+#: includes/Load_Integrity.php:357
+msgid "WCPOS is being updated on this site. Please try again in a few seconds."
+msgstr ""
+
 #. translators: POS order status label.
 #: includes/Orders.php:107
 #: includes/Orders.php:1204
@@ -1573,8 +1577,8 @@ msgstr ""
 msgid "An identical request is already being processed."
 msgstr ""
 
-#: includes/Services/Auth.php:405
-#: includes/Services/Auth.php:484
+#: includes/Services/Auth.php:410
+#: includes/Services/Auth.php:502
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
@@ -1625,15 +1629,19 @@ msgstr ""
 msgid "WCPOS Cloud Print is disabled on this site."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:91
+#: includes/Services/Cloud_Print_Relay_Service.php:94
+msgid "WCPOS Cloud Print needs your site to use HTTPS. Set the Site Address (URL) in Settings > General to an https:// address, then try again."
+msgstr ""
+
+#: includes/Services/Cloud_Print_Relay_Service.php:101
 msgid "Could not create a relay verification token."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:117
+#: includes/Services/Cloud_Print_Relay_Service.php:127
 msgid "Relay registration failed."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:124
+#: includes/Services/Cloud_Print_Relay_Service.php:134
 msgid "Relay registration returned invalid credentials."
 msgstr ""
 
@@ -1817,13 +1825,17 @@ msgstr ""
 msgid "PrintNode authentication failed."
 msgstr ""
 
+#: includes/Services/PrintNode_Client.php:208
+msgid "PrintNode refused the request. Check that the API key is correct and the PrintNode account is active."
+msgstr ""
+
 #. translators: %d: HTTP status code.
-#: includes/Services/PrintNode_Client.php:222
+#: includes/Services/PrintNode_Client.php:230
 #, php-format
 msgid "PrintNode request failed with status %d."
 msgstr ""
 
-#: includes/Services/PrintNode_Client.php:250
+#: includes/Services/PrintNode_Client.php:258
 msgid "PrintNode returned an unexpected print job response."
 msgstr ""
 
@@ -1875,11 +1887,11 @@ msgstr ""
 msgid "spooler stopped"
 msgstr ""
 
-#: includes/Services/Providers/Printnode_Adapter.php:202
+#: includes/Services/Providers/Printnode_Adapter.php:210
 msgid "This PrintNode printer is missing its API key or printer id."
 msgstr ""
 
-#: includes/Services/Providers/Printnode_Adapter.php:216
+#: includes/Services/Providers/Printnode_Adapter.php:224
 msgid "Could not generate the test print."
 msgstr ""
 
@@ -5200,37 +5212,37 @@ msgstr ""
 msgid "Too many requests. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:256
+#: includes/Templates/Auth.php:267
 msgid "Auth session expired. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:262
+#: includes/Templates/Auth.php:273
 msgid "Invalid auth session. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:282
+#: includes/Templates/Auth.php:293
 msgid "Security check failed. Please try again."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Auth.php:292
+#: includes/Templates/Auth.php:303
 msgid "Authentication failed."
 msgstr ""
 
-#: includes/Templates/Auth.php:302
+#: includes/Templates/Auth.php:313
 msgid "This account is temporarily locked due to too many failed login attempts. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:343
+#: includes/Templates/Auth.php:354
 msgid "Failed to generate authentication tokens."
 msgstr ""
 
-#: includes/Templates/Auth.php:393
+#: includes/Templates/Auth.php:404
 msgid "Please enter both username and password."
 msgstr ""
 
-#: includes/Templates/Auth.php:407
-#: includes/Templates/Auth.php:416
+#: includes/Templates/Auth.php:418
+#: includes/Templates/Auth.php:427
 msgid "Invalid username or password."
 msgstr ""
 
