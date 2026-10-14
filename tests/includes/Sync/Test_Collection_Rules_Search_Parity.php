@@ -222,8 +222,8 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 
 				// Assert.
 				$this->assertSame( 200, $response->get_status() );
-				$rows = '/wcpos/v2/variations' === $route ? $response->get_data()['documents'] : $response->get_data();
-				$this->assertSame( array( $target->get_id() ), wp_list_pluck( $rows, 'id' ) );
+				// On next every lane, v2 included, answers with the document list itself.
+				$this->assertSame( array( $target->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
 			} finally {
 				$GLOBALS['wp_filter'] = $snapshot;
 			}

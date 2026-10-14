@@ -656,9 +656,9 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 
 		// Assert.
 		$this->assertSame( 200, $long_response->get_status() );
-		$this->assertSame( array( $long->get_id() ), array_column( $long_response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $long->get_id() ), array_column( $long_response->get_data(), 'id' ) );
 		$this->assertSame( 200, $words_response->get_status() );
-		$this->assertSame( array( $words->get_id() ), array_column( $words_response->get_data()['documents'], 'id' ) );
+		$this->assertSame( array( $words->get_id() ), array_column( $words_response->get_data(), 'id' ) );
 	}
 
 	/**

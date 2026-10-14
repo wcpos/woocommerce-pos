@@ -247,7 +247,11 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	 * @dataProvider product_visibility_rest_route_provider
 	 */
 	public function test_pos_only_visibility_rest_route_preserves_context_decision( string $route, bool $expected ): void {
-		// Arrange.
+		// Arrange. On next, listing the product as POS Only also forces its WooCommerce catalog
+		// visibility to hidden (Catalog_Visibility), which makes is_visible() false on every
+		// route before the guard under test runs; opt the product out of that force so this
+		// pins only the request-context decision.
+		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
 		$this->enable_pos_only_products();
 		$product = ProductHelper::create_simple_product();
 		$this->set_pos_only_product_ids( array( $product->get_id() ) );
