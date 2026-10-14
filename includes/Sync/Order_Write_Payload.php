@@ -41,8 +41,10 @@ use WP_Error;
  *   wc/v3 drops the readonly field on PUT, so a v1 update never moves date_created_gmt; V2
  *   carries it through Order_Write_Intent for the cart-restart case (Order_Writer::cart_restart_gmt).
  * - Sale provenance and cash on UPDATE: V1 strips the server keys, the provenance tuple and the
- *   cash amounts (Pos_Order_Audit::strip_audit_meta) and fills none of them; V2 fills missing
- *   provenance and cash from the write intent. `main` does not yet protect the provenance tuple.
+ *   cash amounts (Pos_Order_Audit::strip_audit_meta) and fills none of them; V2 takes them from the
+ *   write intent: provenance is replaceable while the order still needs payment (a failed final leg
+ *   re-stamps it) and frozen once paid, cash fills only what is missing. `main` does not yet protect
+ *   the provenance tuple.
  * - Payment assertion marker: V2 stamps `_pos_payment_asserted` on an asserted create or eligible
  *   update (ADR 0035 path 3); V1 strips a client-supplied marker and never generates one.
  *
