@@ -130,7 +130,7 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
-= 1.10.28 - 2026/10/14 =
+= 1.11.0 - 2026/10/14 =
 
 - **Sync now finishes its check for records deleted on the store.** Tills on some stores rejected that check and never removed orders or customers deleted in WooCommerce.
 - **A guest customer entry no longer stops customer sync.** A change recorded for the Guest customer could stall the customer lane on a till.
