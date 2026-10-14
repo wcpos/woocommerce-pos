@@ -6,6 +6,12 @@ name: OPFS Worker Drift
 #
 # The drift is caused by an event in another repo (a wcpos/web-bundle tag), which
 # fires nothing here; hence the schedule as well as the PR trigger.
+#
+# The same job also checks that the worker's RXDB_VERSION has not moved inside a
+# published plugin lane (major.minor): installed sites keep their old worker but load
+# the newest bundle on their lane, and RxDB refuses any version mismatch (RM1). It is a
+# step here, not its own job, because the ruleset already requires this job by name;
+# renaming the job drops both checks from the required set.
 
 on:
   pull_request:
@@ -42,3 +48,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/check-opfs-worker-drift.sh
+
+      # `!cancelled()`: report the RxDB lane check even when the drift check is red.
+      - name: Test the worker RxDB lane script
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/test-check-worker-rxdb-minor.sh
+
+      - name: Check the worker's RxDB version against the plugin's lane
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/check-worker-rxdb-minor.sh
