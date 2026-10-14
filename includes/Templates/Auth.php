@@ -5,8 +5,8 @@
  *
  * Security measures:
  * - Direct credential validation (bypasses wp_authenticate to avoid 2FA/captcha plugins)
- * - Rate limiting by IP address
- * - Account lockout after failed attempts
+ * - Rate limiting by connecting peer address (`REMOTE_ADDR`)
+ * - Account lockout after failed attempts, per account and peer
  * - Honeypot field for bot detection
  * - Auth session expiration
  * - State parameter validation
@@ -38,7 +38,7 @@ class Auth {
 	private const RATE_LIMIT_WINDOW = 900;
 
 	/**
-	 * Account lockout: max failed attempts per username.
+	 * Account lockout: max failed attempts per account and peer.
 	 */
 	private const MAX_FAILED_ATTEMPTS = 5;
 
@@ -474,7 +474,30 @@ class Auth {
 	}
 
 	/**
-	 * Check if username is locked out.
+	 * Lockout bucket for an identifier as typed by this peer.
+	 *
+	 * The bucket is the canonical account (login and email aliases share it)
+	 * joined to the connecting peer, so a stranger's failures never lock the
+	 * cashier out from their own till, and rotating the typed alias does not
+	 * buy a second budget. An identifier that matches no account gets its own
+	 * bucket per peer so guessing unknown names is still counted.
+	 *
+	 * @param string $username The identifier as typed.
+	 *
+	 * @return string Hash used as the transient key suffix.
+	 */
+	private function lockout_key( string $username ): string {
+		$user = get_user_by( 'login', $username );
+		if ( ! $user ) {
+			$user = get_user_by( 'email', $username );
+		}
+		$subject = $user ? 'user:' . $user->ID : 'input:' . strtolower( trim( $username ) );
+
+		return md5( $subject . '|' . $this->get_client_ip() );
+	}
+
+	/**
+	 * Check if login is locked out for an account and peer.
 	 *
 	 * @param string $username The username to check.
 	 *
@@ -485,13 +508,14 @@ class Auth {
 			return false;
 		}
 
-		$transient_key = 'wcpos_auth_lock_' . md5( strtolower( $username ) );
+		$username_key  = $this->lockout_key( $username );
+		$transient_key = 'wcpos_auth_lock_' . $username_key;
 
 		return false !== get_transient( $transient_key );
 	}
 
 	/**
-	 * Record a failed login attempt for a username.
+	 * Record a failed login attempt for an account and peer.
 	 *
 	 * @param string $username The username that failed.
 	 *
@@ -502,7 +526,7 @@ class Auth {
 			return;
 		}
 
-		$username_key = md5( strtolower( $username ) );
+		$username_key = $this->lockout_key( $username );
 		$attempts_key = 'wcpos_auth_fail_' . $username_key;
 		$attempts     = (int) get_transient( $attempts_key );
 		$attempts++;
@@ -527,7 +551,7 @@ class Auth {
 	}
 
 	/**
-	 * Clear failed attempts after successful login.
+	 * Clear failed attempts for an account and peer after successful login.
 	 *
 	 * @param string $username The username to clear.
 	 *
@@ -538,36 +562,27 @@ class Auth {
 			return;
 		}
 
-		$username_key = md5( strtolower( $username ) );
+		$username_key = $this->lockout_key( $username );
 		delete_transient( 'wcpos_auth_fail_' . $username_key );
 		delete_transient( 'wcpos_auth_lock_' . $username_key );
 	}
 
 	/**
-	 * Get client IP address.
+	 * Get the server-established connecting peer address.
+	 *
+	 * Forwarded headers are caller-controlled unless the host rewrites them,
+	 * letting a caller choose its own bucket. A host behind a trusted proxy
+	 * normalises REMOTE_ADDR itself (mod_remoteip / real_ip), which is the only
+	 * trustworthy place for that policy.
 	 *
 	 * @return string
 	 */
 	private function get_client_ip(): string {
-		$headers = array(
-			'HTTP_CF_CONNECTING_IP', // Cloudflare.
-			'HTTP_X_FORWARDED_FOR',
-			'HTTP_X_REAL_IP',
-			'REMOTE_ADDR',
-		);
+		if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
 
-		foreach ( $headers as $header ) {
-			if ( ! empty( $_SERVER[ $header ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
-				// Handle comma-separated IPs.
-				if ( false !== strpos( $ip, ',' ) ) {
-					$parts = explode( ',', $ip );
-					$ip    = trim( $parts[0] );
-				}
-
-				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-					return $ip;
-				}
+			if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+				return $ip;
 			}
 		}
 
