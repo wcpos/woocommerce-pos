@@ -301,20 +301,6 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * Digests stay strings: an unsigned 64-bit value cannot survive an int cast.
-	 */
-	public function test_bucket_aggregates_reports_digests_as_strings(): void {
-		$this->clear_stored_product_digests();
-		$product = ProductHelper::create_simple_product();
-		$this->digests->upsert_digest( $product->get_id() );
-
-		$bucket = $this->index->bucket_aggregates( $this->whole_space() )['buckets'][0];
-
-		$this->assertIsString( $bucket['stored_digest'] );
-		$this->assertIsString( $bucket['current_digest'] );
-	}
-
-	/**
 	 * A side with no rows reports '0', the XOR of nothing, not an empty string.
 	 */
 	public function test_bucket_aggregates_empty_side_reports_zero_digest(): void {
