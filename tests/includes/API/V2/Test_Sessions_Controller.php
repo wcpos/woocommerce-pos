@@ -52,16 +52,26 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	 *
 	 * @param string $route Resource path.
 	 * @param array  $fields Request fields.
+	 * @param array  $query Query parameters.
 	 */
-	private function post( string $route, array $fields ) {
+	private function post( string $route, array $fields, array $query = array() ) {
 		$request = $this->wp_rest_post_request( '/wcpos/v2/' . $route );
 		$request->set_body_params( $fields );
+		$request->set_query_params( $query );
 		return $this->server->dispatch( $request );
 	}
 
-	/** A valid client opening. */
-	private function fields(): array {
-		$register_id = ( new Register_Store() )->create( array( 'name' => 'Front' ) )['id'];
+	/** A valid client opening.
+	 *
+	 * @param int|null $store_id Register's store, or null when unassigned.
+	 */
+	private function fields( ?int $store_id = null ): array {
+		$register_id = ( new Register_Store() )->create(
+			array(
+				'name' => 'Front',
+				'store_id' => $store_id,
+			)
+		)['id'];
 		$this->register_ids[] = $register_id;
 		return array(
 			'id' => wp_generate_uuid4(),
@@ -70,6 +80,122 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			'expected_float' => '95',
 			'counted_float' => '100',
 		);
+	}
+
+	/** The register owns both the returned and persisted session store. */
+	public function test_session_opening_takes_the_store_from_its_register(): void {
+		// Arrange.
+		$fields = $this->fields( 456 );
+		$fields['store_id'] = 999;
+
+		// Act.
+		$response = $this->post( 'sessions', $fields );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 456, $data['store_id'] );
+		$stored = ( new Register_Session_Store() )->get( $data['id'] );
+		$this->assertSame( 456, $stored['store_id'] );
+	}
+
+	/** The client preamble's query store cannot override the register's store. */
+	public function test_session_opening_ignores_the_query_store(): void {
+		// Arrange.
+		$fields = $this->fields( 456 );
+		$query = array(
+			'store_id' => 999,
+		);
+
+		// Act.
+		$response = $this->post( 'sessions', $fields, $query );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 456, $response->get_data()['store_id'] );
+	}
+
+	/** An unassigned register keeps its session unassigned despite the body store. */
+	public function test_session_opening_on_an_unassigned_register_stores_null(): void {
+		// Arrange.
+		$fields = $this->fields();
+		$fields['store_id'] = 999;
+
+		// Act.
+		$response = $this->post( 'sessions', $fields );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( null, $response->get_data()['store_id'] );
+	}
+
+	/** Unreachable registers answer as unknown without persisting an opening. */
+	public function test_session_opening_on_a_register_out_of_reach_is_refused_as_unknown(): void {
+		// Arrange.
+		$fields = $this->fields( 456 );
+		$unknown = $fields;
+		$unknown['register_id'] = wp_generate_uuid4();
+		$allowed = $this->fields( 789 );
+		$filter = static function () {
+			return array(
+				'store_id' => array( 789 ),
+			);
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			// Act.
+			$absent = $this->post( 'sessions', $unknown );
+			$response = $this->post( 'sessions', $fields );
+
+			// Assert.
+			$this->assertSame( 400, $absent->get_status() );
+			$this->assertSame( 'rest_invalid_param', $absent->get_data()['code'] );
+			$this->assertSame( $absent->get_status(), $response->get_status() );
+			$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+			$this->assertSame( null, ( new Register_Session_Store() )->get( $fields['id'] ) );
+			$this->assertSame( 201, $this->post( 'sessions', $allowed )->get_status() );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
+	}
+
+	/** Restricted reach must explicitly admit an unassigned register. */
+	public function test_session_opening_on_an_unassigned_register_follows_the_unassigned_reach(): void {
+		// Arrange.
+		$fields = $this->fields();
+		$unknown = $fields;
+		$unknown['register_id'] = wp_generate_uuid4();
+		foreach ( array( false, true ) as $unassigned ) {
+			$filter = static function () use ( $unassigned ) {
+				$reach = array(
+					'store_id' => array( 789 ),
+				);
+				if ( $unassigned ) {
+					$reach['unassigned'] = true;
+				}
+				return $reach;
+			};
+			add_filter( Store_Reach::FILTER, $filter );
+			try {
+				// Act.
+				$absent = $this->post( 'sessions', $unknown );
+				$response = $this->post( 'sessions', $fields );
+
+				// Assert.
+				$this->assertSame( 400, $absent->get_status() );
+				$this->assertSame( 'rest_invalid_param', $absent->get_data()['code'] );
+				if ( $unassigned ) {
+					$this->assertSame( 201, $response->get_status() );
+					$this->assertSame( null, $response->get_data()['store_id'] );
+				} else {
+					$this->assertSame( $absent->get_status(), $response->get_status() );
+					$this->assertSame( $absent->get_data()['code'], $response->get_data()['code'] );
+					$this->assertSame( null, ( new Register_Session_Store() )->get( $fields['id'] ) );
+				}
+			} finally {
+				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
 	}
 
 	/** Session detail shares its ledger and movement reads across report figures. */
@@ -188,7 +314,6 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			'opened_at' => '2026-02-30T10:00:00Z',
 			'counted_float' => '-1',
 			'expected_float' => '1e2',
-			'store_id' => array(),
 		) as $key => $value ) {
 			$this->assertSame( 400, $this->post( 'sessions', array_merge( $fields, array( $key => $value ) ) )->get_status(), $key );
 		}
@@ -209,7 +334,6 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			'opened_at' => '2026-02-30T10:00:00Z',
 			'counted_float' => '-1',
 			'expected_float' => '1e2',
-			'store_id' => array(),
 		) as $key => $value ) {
 			$response = $this->post( 'sessions', array_merge( $opening, array( $key => $value ) ) );
 			$this->assertSame( 400, $response->get_status(), $key );
@@ -734,14 +858,16 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 	/** Lists are newest first, paginated, validated and extension-scoped. */
 	public function test_list_pagination_and_extension_filters(): void {
-		$scope = static function ( $fields ) {
-			$fields['store_id'] = 765;
-			return $fields;
-		};
-		add_filter( 'woocommerce_pos_session_create_fields', $scope );
-		$a = $this->post( 'sessions', $this->fields() )->get_data();
-		$b = $this->post( 'sessions', array_merge( $this->fields(), array( 'opened_at' => '2026-09-12T10:00:00Z' ) ) )->get_data();
-		remove_filter( 'woocommerce_pos_session_create_fields', $scope );
+		$a = $this->post( 'sessions', $this->fields( 765 ) )->get_data();
+		$b = $this->post(
+			'sessions',
+			array_merge(
+				$this->fields( 765 ),
+				array(
+					'opened_at' => '2026-09-12T10:00:00Z',
+				)
+			)
+		)->get_data();
 		$this->assertSame( 765, $a['store_id'] );
 		$list_scope = static function ( $args ) {
 			$args['store_id'] = 765;

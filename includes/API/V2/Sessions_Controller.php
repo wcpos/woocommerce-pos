@@ -154,13 +154,18 @@ class Sessions_Controller extends \WP_REST_Controller {
 		return new WP_REST_Response( $store->list( Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_sessions_list_args', $args, $request ) ) ) );
 	}
 
-	/** Validate an opening, retaining only the scoped store id from extensions.
+	/** Validate an opening; the session's store is its register's, and the register must be in reach.
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return array|WP_Error
 	 */
 	private function opening_fields( $request ) {
-		if ( ! Pos_Uuid::is_uuid( $request['register_id'] ) || ! ( new Register_Store() )->exists( $request['register_id'] ) ) {
+		$register = Pos_Uuid::is_uuid( $request['register_id'] ) ? ( new Register_Store() )->get( strtolower( $request['register_id'] ) ) : null;
+		if ( null === $register ) {
+			return $this->error( 'rest_invalid_param', 400, 'register_id' );
+		}
+		// Out of reach answers as unknown, so the refusal names nothing about other stores.
+		if ( ! Store_Reach::for_request( $request )->admits( $register['store_id'] ) ) {
 			return $this->error( 'rest_invalid_param', 400, 'register_id' );
 		}
 		if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['opened_at'] ) ) {
@@ -179,17 +184,12 @@ class Sessions_Controller extends \WP_REST_Controller {
 			'id' => $request['id'],
 			'business_day' => $request['business_day'],
 			'register_id' => strtolower( $request['register_id'] ),
-			'store_id' => $request['store_id'],
+			'store_id' => $register['store_id'],
 			'opened_at_gmt' => gmdate( 'Y-m-d H:i:s', strtotime( $request['opened_at'] ) ),
 			'opened_by' => get_current_user_id(),
 			'counted_float' => $this->decimal( $request['counted_float'] ),
 			'expected_float' => $this->decimal( $request['expected_float'] ),
 		);
-		$scoped = apply_filters( 'woocommerce_pos_session_create_fields', $fields, $request );
-		$fields['store_id'] = $scoped['store_id'] ?? null;
-		if ( null !== $fields['store_id'] && ( ! is_scalar( $fields['store_id'] ) || ! preg_match( '/^\d{1,18}$/D', (string) $fields['store_id'] ) ) ) {
-			return $this->error( 'rest_invalid_param', 400, 'store_id' );
-		}
 		return $fields;
 	}
 
