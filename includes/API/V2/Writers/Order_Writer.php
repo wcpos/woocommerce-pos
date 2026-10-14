@@ -184,8 +184,12 @@ class Order_Writer extends Null_Writer {
 	 * carries it — only while the order is still an unpaid open cart with no payment
 	 * rows, and only forward: a second till still holding the old date sends an
 	 * older value, which is ignored, so a stale push cannot undo a restart.
-	 * `needs_payment()` is the wrong gate here: an emptied cart totals 0, and at
-	 * pre-insert wc/v3 has not recalculated the new lines yet.
+	 * `needs_payment()` is the wrong gate here, but not because of the zero total: Free's
+	 * woocommerce_order_needs_payment callback answers true for a 0-total pos-open order
+	 * (Orders.php, pinned in Test_Orders). It is wrong because it does not say "open, unpaid,
+	 * no payment rows" — it also answers true for pos-partial, which must never restart.
+	 * The requested status is deliberately not consulted: wc/v3 applies it after pre-insert,
+	 * so a push that restarts and closes the cart in one request takes the restart date.
 	 *
 	 * Decided twice on purpose: at the pre-read, and again at pre-insert on the order
 	 * wc/v3 is about to write (under the payment lock), so a payment that completed

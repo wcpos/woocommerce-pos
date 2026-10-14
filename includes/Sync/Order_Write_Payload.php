@@ -36,6 +36,18 @@ use WP_Error;
  * - Omitted items: V1 retains WC partial-document semantics; V2 adds deletion markers; not all 1.x clients post full documents.
  * - Incomplete tax IDs: V1 coerces, V2 rejects; parked until Paul's #1724 rework.
  *
+ * Deliberately lane-specific (ruled 2026-10-14, #2250):
+ * - Client date on UPDATE: V1 registers validate_client_created_gmt around create only and
+ *   wc/v3 drops the readonly field on PUT, so a v1 update never moves date_created_gmt; V2
+ *   carries it through Order_Write_Intent for the cart-restart case (Order_Writer::cart_restart_gmt).
+ * - Sale provenance and cash on UPDATE: V1 strips the server keys, the provenance tuple and the
+ *   cash amounts (Pos_Order_Audit::strip_audit_meta) and fills none of them; V2 takes them from the
+ *   write intent: provenance is replaceable while the order still needs payment (a failed final leg
+ *   re-stamps it) and frozen once paid, cash fills only what is missing. `main` does not yet protect
+ *   the provenance tuple.
+ * - Payment assertion marker: V2 stamps `_pos_payment_asserted` on an asserted create or eligible
+ *   update (ADR 0035 path 3); V1 strips a client-supplied marker and never generates one.
+ *
  * v1's schema relaxations in get_item_schema() are the validation-time half of the
  * same tolerance this class expresses at the forward seam. V1 updates retain an
  * explicit empty billing email; V2 drops it here and its writer clears it explicitly.
