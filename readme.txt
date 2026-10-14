@@ -130,10 +130,6 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 = 1.11.0 - 2026/10/14 =
 
-- **Fixes the POS failing to load after updating to 1.10.28.** 1.10.28 needs a newer web app than earlier plugins use, so its changes now ship as 1.11.0 with a web app of their own. Every change listed under 1.10.28 is included.
-
-= 1.10.28 - 2026/10/14 =
-
 - **Sync now finishes its check for records deleted on the store.** Tills on some stores rejected that check and never removed orders or customers deleted in WooCommerce.
 - **A guest customer entry no longer stops customer sync.** A change recorded for the Guest customer could stall the customer lane on a till.
 - **Long product searches no longer fail on variable products.** Searches of more than ten words, or a long scanned barcode, now return results instead of an error.
