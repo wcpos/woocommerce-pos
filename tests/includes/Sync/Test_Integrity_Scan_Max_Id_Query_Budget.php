@@ -307,8 +307,9 @@ class Test_Integrity_Scan_Max_Id_Query_Budget extends Sync_Store_Test_Case {
 			// Rebuild first. The suite's churn (every class inserting, rolling back and
 			// deleting rows) fragments these tables, and InnoDB's ANALYZE samples a
 			// handful of pages: on a fragmented tree it misjudged meta_key selectivity
-			// badly enough to flip the uuid lookup onto the posts-driven plan after ~70
-			// files of a sharded run (4,337 rows examined; alone, 132). A rebuilt table
+			// badly enough to flip Test_Order_Save_Query_Budget's uuid lookup onto the
+			// posts-driven plan after ~70 files of a sharded run (4,337 rows examined;
+			// alone, 132); this gate shares the tables and the sampling. A rebuilt table
 			// gives the same statistics whatever ran before. OPTIMIZE TABLE commits, like
 			// ANALYZE, which is why both live in wpSetUpBeforeClass().
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixture rebuild.
