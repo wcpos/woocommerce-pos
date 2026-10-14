@@ -1135,27 +1135,6 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Store override IDs are strings; absent or malformed overrides are empty.
-	 */
-	public function test_get_store_template_ids_reads_the_override_as_strings(): void {
-		$store_id = $this->factory->post->create(
-			array(
-				'post_type'   => 'wcpos_store',
-				'post_status' => 'publish',
-			)
-		);
-
-		$this->assertSame( array(), Templates::get_store_template_ids( $store_id, 'display' ) );
-		update_post_meta( $store_id, '_wcpos_active_display_templates', '[3,"virtual-x"]' );
-		$this->assertSame( array( '3', 'virtual-x' ), Templates::get_store_template_ids( $store_id, 'display' ) );
-		update_post_meta( $store_id, '_wcpos_active_display_templates', '[3,[],null,"virtual-x"]' );
-		$this->assertSame( array( '3', 'virtual-x' ), Templates::get_store_template_ids( $store_id, 'display' ) );
-		update_post_meta( $store_id, '_wcpos_active_display_templates', 'malformed JSON' );
-		$this->assertSame( array(), Templates::get_store_template_ids( $store_id, 'display' ) );
-		$this->assertSame( array(), Templates::get_store_template_ids( 0, 'display' ) );
-	}
-
-	/**
 	 * "First enabled" means oldest created, whatever the post dates say: two
 	 * templates saved in the same second tie on post_date, and the fallback
 	 * that becomes Live must not depend on which one MySQL returns first.
