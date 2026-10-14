@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\V1;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -92,13 +93,6 @@ class Settings extends WP_REST_Controller {
 	 * @var string
 	 */
 	protected $rest_base = 'settings';
-
-	/**
-	 * Settings constructor.
-	 */
-	public function __construct() {
-		add_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'payment_gateways_settings' ) );
-	}
 
 	/**
 	 * Register routes.
@@ -353,19 +347,12 @@ class Settings extends WP_REST_Controller {
 	/**
 	 * Filter payment gateways settings.
 	 *
+	 * @deprecated 2.0.0 Use Payment_Gateways_Section::free_tier_rule().
+	 *
 	 * @param mixed $options The gateway options.
 	 */
 	public function payment_gateways_settings( $options ) {
-		foreach ( $options['gateways'] as $gateway_id => &$gateway_data ) {
-			if ( ! \in_array( $gateway_id, array( 'pos_cash', 'pos_card' ), true ) ) {
-				$gateway_data['enabled'] = false;
-			}
-		}
-		if ( ! \in_array( $options['default_gateway'], array( 'pos_cash', 'pos_card' ), true ) ) {
-			$options['default_gateway'] = 'pos_cash';
-		}
-
-		return $options;
+		return Payment_Gateways_Section::free_tier_rule( $options );
 	}
 
 
