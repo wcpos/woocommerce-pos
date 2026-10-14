@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- **Breaking (developers): `WCPOS\WooCommercePOS\Interfaces\StoreInterface` is removed.** It was added in December 2025 with `Abstracts\Store` as its only implementation, nothing in WCPOS, WCPOS Pro, the extensions or the client type-hints, `instanceof`-checks or implements it, and the wiki never advertised it as an extension point. `Abstracts\Store` (and Pro's `Store`, which extends it) keep every getter; code that referred to the interface by name should refer to the class. (wcpos/woocommerce-pos-pro#654)
 - Changed: POS sales are recorded once, in the fiscal records table, when payment completes; the duplicate receipt snapshot in order meta is no longer written. Stored sale and refund documents no longer embed the translated label block; labels are added when a document is rendered. The receipts endpoint no longer returns submission_status.
 
 - Fixed (payments contract): a provider confirmation that carries payment references (a webhook) now merges them into the row's existing references instead of replacing them, so a provider's webhook can carry its payment id without erasing the references the till wrote. A reference is never removed by a later confirmation. With the Stripe extension's matching change, a card payment Stripe confirmed before the till's own capture keeps a reference and can be refunded from the POS. (wcpos/roadmap#426)
