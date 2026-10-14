@@ -1027,6 +1027,114 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A store without an override shows the global Live display, not the first enabled one.
+	 */
+	public function test_get_items_store_scoped_display_marks_global_live_active(): void {
+		$first  = $this->create_template( 'Display A', 'display' );
+		$second = $this->create_template( 'Display B', 'display' );
+		Templates::save_template_order( array( $first, $second ), 'display' );
+		Templates::set_active_template_id( $second, 'display' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $second ]['is_active'] );
+		$this->assertFalse( $items[ $first ]['is_active'] );
+	}
+
+	/**
+	 * A store's enabled choice takes precedence over the global Live display.
+	 */
+	public function test_get_items_store_scoped_display_marks_the_stores_own_choice_active(): void {
+		$first  = $this->create_template( 'Display A', 'display' );
+		$second = $this->create_template( 'Display B', 'display' );
+		Templates::save_template_order( array( $first, $second ), 'display' );
+		Templates::set_active_template_id( $second, 'display' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $store_id, '_wcpos_active_display_templates', wp_json_encode( array( $first ) ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $first ]['is_active'] );
+		$this->assertFalse( isset( $items[ $second ] ) );
+	}
+
+	/**
+	 * An unavailable store choice falls back to global Live, not the first enabled display.
+	 */
+	public function test_get_items_store_scoped_display_with_only_disabled_overrides_marks_global_live_active(): void {
+		$first    = $this->create_template( 'Display A', 'display' );
+		$second   = $this->create_template( 'Display B', 'display' );
+		$disabled = $this->create_template( 'Display C', 'display', 'draft' );
+		Templates::save_template_order( array( $first, $second ), 'display' );
+		Templates::set_active_template_id( $second, 'display' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $store_id, '_wcpos_active_display_templates', wp_json_encode( array( $disabled ) ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $second ]['is_active'] );
+		$this->assertFalse( $items[ $first ]['is_active'] );
+		$this->assertFalse( isset( $items[ $disabled ] ) );
+	}
+
+	/**
+	 * Store-scoped receipts still select the first enabled template rather than Live.
+	 */
+	public function test_get_items_store_scoped_receipt_still_marks_first_enabled_active(): void {
+		$first  = $this->create_template( 'Receipt A' );
+		$second = $this->create_template( 'Receipt B' );
+		Templates::save_template_order( array( $first, $second ), 'receipt' );
+		Templates::set_active_template_id( $second, 'receipt' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'receipt' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $first ]['is_active'] );
+		$this->assertFalse( $items[ $second ]['is_active'] );
+	}
+
+	/**
 	 * "First enabled" means oldest created, whatever the post dates say: two
 	 * templates saved in the same second tie on post_date, and the fallback
 	 * that becomes Live must not depend on which one MySQL returns first.

@@ -1010,6 +1010,34 @@ class Templates {
 	}
 
 	/**
+	 * The template ids a store has chosen for a type, in the store's order.
+	 *
+	 * The raw override lives in `_wcpos_active_<type>_templates` post meta as a JSON
+	 * list; an absent or malformed value is no override. Ids come back as strings,
+	 * which is how virtual (filesystem) templates are keyed.
+	 *
+	 * @param int    $store_id Store post ID; 0 means no store.
+	 * @param string $type     Template type.
+	 *
+	 * @return string[]
+	 */
+	public static function get_store_template_ids( int $store_id, string $type = 'receipt' ): array {
+		if ( 0 >= $store_id ) {
+			return array();
+		}
+
+		$meta_key = '_wcpos_active_' . sanitize_key( $type ) . '_templates';
+		$raw      = get_post_meta( $store_id, $meta_key, true );
+		$decoded  = is_string( $raw ) ? json_decode( $raw, true ) : array();
+
+		if ( empty( $decoded ) || ! \is_array( $decoded ) ) {
+			return array();
+		}
+
+		return array_values( array_map( 'strval', array_filter( $decoded, 'is_scalar' ) ) );
+	}
+
+	/**
 	 * Resolve the ordered list of templates for a given store.
 	 *
 	 * If the store has a per-store override (active_receipt_templates meta),
@@ -1023,16 +1051,9 @@ class Templates {
 	 */
 	public static function resolve_templates( int $store_id, string $type = 'receipt' ): array {
 		$global_list = self::get_enabled_templates( $type );
+		$override    = self::get_store_template_ids( $store_id, $type );
 
-		if ( ! $store_id ) {
-			return $global_list;
-		}
-
-		$meta_key = '_wcpos_active_' . sanitize_key( $type ) . '_templates';
-		$raw      = get_post_meta( $store_id, $meta_key, true );
-		$override = is_string( $raw ) ? json_decode( $raw, true ) : array();
-
-		if ( empty( $override ) || ! \is_array( $override ) ) {
+		if ( empty( $override ) ) {
 			return $global_list;
 		}
 

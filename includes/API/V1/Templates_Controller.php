@@ -378,9 +378,19 @@ class Templates_Controller extends WP_REST_Controller {
 		// access_woocommerce_pos do not receive disabled or draft templates.
 		$is_manager = current_user_can( 'manage_woocommerce_pos' );
 		$enabled    = $store_id ? TemplatesManager::resolve_templates( (int) $store_id, $type ) : array();
-		$active_template_id = $store_id
-			? ( ! empty( $enabled ) ? $enabled[0]['id'] : null )
-			: TemplatesManager::get_active_template_id( $type );
+		// A store-scoped receipt list is active at its first enabled entry: the cashier picks
+		// among them. A display shows exactly one template, chosen the way the customer display
+		// resolves it at runtime: the store's first enabled choice when the store's own override
+		// names it, otherwise the global Live. The list must say what the screen shows.
+		if ( ! $store_id ) {
+			$active_template_id = TemplatesManager::get_active_template_id( $type );
+		} elseif ( 'display' === $type ) {
+			$first              = $enabled[0]['id'] ?? null;
+			$chosen             = null !== $first && in_array( (string) $first, TemplatesManager::get_store_template_ids( (int) $store_id, $type ), true );
+			$active_template_id = $chosen ? $first : TemplatesManager::get_active_template_id( $type );
+		} else {
+			$active_template_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		}
 
 		// A display shows exactly one template and the gallery presents it as a "Live" radio, so the
 		// first-enabled fallback is pinned the first time the admin list resolves it; otherwise a
