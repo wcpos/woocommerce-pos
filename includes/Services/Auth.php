@@ -488,13 +488,15 @@ class Auth {
 	/**
 	 * Sign a new refresh token or reissue one for an existing session.
 	 *
-	 * @param WP_User $user   The user object.
-	 * @param string  $jti    Existing session JTI, or empty to create one.
-	 * @param int     $expire Existing session expiry.
+	 * @param WP_User     $user       The user object.
+	 * @param string      $jti        Existing session JTI, or empty to create one.
+	 * @param int         $expire     Existing session expiry.
+	 * @param string|null $issued_jti JTI recorded by this issuance, null when none was.
 	 *
 	 * @return string|WP_Error
 	 */
-	private function issue_refresh_token( WP_User $user, string $jti = '', int $expire = 0 ) {
+	private function issue_refresh_token( WP_User $user, string $jti = '', int $expire = 0, ?string &$issued_jti = null ) {
+		$issued_jti = null;
 		// First thing, check the secret key if not exist return a error.
 		if ( ! $this->get_refresh_secret_key() ) {
 			return new WP_Error(
@@ -549,6 +551,7 @@ class Auth {
 
 		// Store refresh token JTI for potential revocation.
 		$evicted   = $this->sessions->record( $user->ID, $jti, $expire, Session_Context::from_request() );
+		$issued_jti = $jti;
 		$issued_at = time();
 		foreach ( $evicted as $evicted_jti => $token_data ) {
 			/*
@@ -575,25 +578,30 @@ class Auth {
 	 *
 	 * @param WP_User $user The user object.
 	 *
+	 * @throws \Throwable When token validation or access signing fails.
+	 *
 	 * @return array|WP_Error
 	 */
 	public function generate_token_pair( WP_User $user ) {
 		// Generate refresh token first to get its JTI.
-		$refresh_token = $this->generate_refresh_token( $user );
+		$issued_jti    = null;
+		$refresh_token = $this->issue_refresh_token( $user, '', 0, $issued_jti );
 		if ( is_wp_error( $refresh_token ) ) {
 			return $refresh_token;
 		}
 
-		// Decode to get the JTI.
-		$decoded_refresh = $this->validate_token( $refresh_token, 'refresh' );
-		if ( is_wp_error( $decoded_refresh ) ) {
-			return $decoded_refresh;
-		}
-
-		// Generate access token with link to refresh token.
-		$access_token_data = $this->generate_access_token_data( $user, $decoded_refresh->jti ?? '' );
-		if ( is_wp_error( $access_token_data ) ) {
-			return $access_token_data;
+		try {
+			$decoded_refresh = $this->validate_token( $refresh_token, 'refresh' );
+			if ( is_wp_error( $decoded_refresh ) ) {
+				return $this->discard_issued_session( $user, $issued_jti, $decoded_refresh );
+			}
+			$access_token_data = $this->generate_access_token_data( $user, $decoded_refresh->jti ?? '' );
+			if ( is_wp_error( $access_token_data ) ) {
+				return $this->discard_issued_session( $user, $issued_jti, $access_token_data );
+			}
+		} catch ( \Throwable $failure ) {
+			$this->discard_issued_session( $user, $issued_jti, null );
+			throw $failure;
 		}
 
 		return array(
@@ -602,6 +610,30 @@ class Auth {
 			'token_type'    => 'Bearer',
 			'expires_at'    => (int) $access_token_data['expires_at'],
 		);
+	}
+
+	/**
+	 * Drop the session entry a failed pair issuance just recorded.
+	 *
+	 * The refresh token is signed and its session recorded before the access token
+	 * exists, so a failure after that point would otherwise leave a session the
+	 * Sessions screen lists for up to the refresh lifetime with no token behind it.
+	 * Only the entry this call allocated goes; a reused session or another tab's
+	 * grant is never touched. Removal uses the JTI the service generated, not a
+	 * token a filter may have altered.
+	 *
+	 * @param WP_User       $user       The user.
+	 * @param string|null   $issued_jti JTI recorded by this issuance, null when none was.
+	 * @param WP_Error|null $error      The failure to hand back.
+	 *
+	 * @return WP_Error|null
+	 */
+	private function discard_issued_session( WP_User $user, ?string $issued_jti, ?WP_Error $error ): ?WP_Error {
+		if ( null !== $issued_jti && '' !== $issued_jti ) {
+			$this->sessions->revoke( $user->ID, $issued_jti );
+		}
+
+		return $error;
 	}
 
 	/**

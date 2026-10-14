@@ -242,6 +242,95 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Invalid refresh claims must not leave a phantom session.
+	 */
+	public function test_token_pair_with_an_invalid_refresh_claim_records_no_session(): void {
+		$filter = function ( $token ) {
+			$token['type'] = 'x';
+
+			return $token;
+		};
+		add_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+
+		try {
+			$result = $this->auth_service->generate_token_pair( $this->test_user );
+
+			$this->assertWPError( $result );
+			$this->assertSame( 'woocommmerce_pos_auth_invalid_token_type', $result->get_error_code() );
+			$this->assertCount( 0, $this->auth_service->get_user_sessions( $this->test_user->ID ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+		}
+	}
+
+	/**
+	 * An access signing failure propagates without leaving a phantom session.
+	 */
+	public function test_token_pair_with_a_failing_access_sign_records_no_session(): void {
+		$failure = null;
+		add_filter( 'woocommerce_pos_jwt_access_token_before_sign', '__return_null' );
+
+		try {
+			$this->auth_service->generate_token_pair( $this->test_user );
+		} catch ( \TypeError $error ) {
+			$failure = $error;
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_before_sign', '__return_null' );
+		}
+
+		$this->assertInstanceOf( \TypeError::class, $failure );
+		$this->assertCount( 0, $this->auth_service->get_user_sessions( $this->test_user->ID ) );
+	}
+
+	/**
+	 * Failed replacement of a nearly expired web session preserves the original.
+	 */
+	public function test_failed_web_token_pair_keeps_the_existing_session_and_adds_none(): void {
+		$tokens  = $this->auth_service->generate_token_pair( $this->test_user );
+		$this->assertIsArray( $tokens );
+		$refresh = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		$this->assertNotInstanceOf( WP_Error::class, $refresh );
+		$row                             = $this->auth_service->sessions()->entries( $this->test_user->ID );
+		$row[ $refresh->jti ]['expires'] = time() + HOUR_IN_SECONDS;
+		update_user_meta( $this->test_user->ID, Session_Registry::META_KEY, $row );
+		$cookies = $_COOKIE;
+		$filter  = function ( $token ) {
+			$token['type'] = 'x';
+
+			return $token;
+		};
+		add_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+
+		try {
+			$_COOKIE['wcpos_web_session_jti'] = $refresh->jti;
+			$result                           = $this->auth_service->get_user_data( $this->test_user, true );
+
+			$this->assertSame( array(), $result );
+			$this->assertTrue( $this->auth_service->sessions()->is_live( $this->test_user->ID, $refresh->jti ) );
+			$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+			$this->assertCount( 1, $sessions );
+			$this->assertSame( $refresh->jti, $sessions[0]['jti'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+			$_COOKIE = $cookies;
+		}
+	}
+
+	/**
+	 * A successful pair records exactly the session named by its refresh token.
+	 */
+	public function test_successful_token_pair_records_exactly_one_session(): void {
+		$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		$this->assertIsArray( $tokens );
+		$refresh = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+		$this->assertNotInstanceOf( WP_Error::class, $refresh );
+
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+		$this->assertCount( 1, $sessions );
+		$this->assertSame( $refresh->jti, $sessions[0]['jti'] );
+	}
+
+	/**
 	 * Test token pair expiry metadata comes from the issued access token.
 	 */
 	public function test_generate_token_pair_expires_at_matches_access_token_exp_claim(): void {
