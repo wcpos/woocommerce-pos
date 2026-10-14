@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Abstracts;
 
-use WCPOS\WooCommercePOS\Interfaces\StoreInterface;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Store_Defaults;
@@ -21,10 +20,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Abstract Store class.
  *
- * Handles the store data, and provides CRUD methods.
- * Implements StoreInterface to ensure API consistency with Pro version.
+ * Handles the store data, and provides CRUD methods. Pro's Store extends this
+ * class; the getters here are the one definition of the store contract.
  */
-class Store extends \WC_Data implements StoreInterface {
+class Store extends \WC_Data {
 	/**
 	 * This is the name of this object type.
 	 *
