@@ -7,12 +7,19 @@ parameters:
         - includes/updates/*
         - vendor/*
         - vendor_prefixed/*
-    
+
+
     # WordPress and WooCommerce stubs
     bootstrapFiles:
         - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
         - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
         - phpstan-constants.php
+        # Composer's "files" entry registers the plugin's own autoloader in the
+        # PHPStan process, and that autoloader include()s each WCPOS class on
+        # discovery. A class that extends a scoped vendor class (Pdf_Font_Metrics
+        # extends Dompdf's FontMetrics) fatals at include time unless the scoped
+        # autoloader is registered first.
+        - vendor_prefixed/autoload.php
 
     # Ignore errors in third-party code
     ignoreErrors:

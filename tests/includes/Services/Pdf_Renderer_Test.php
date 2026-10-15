@@ -43,7 +43,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 * The scoped Dompdf build calls the global PHP 8.4 HTTP response header
 	 * functions, never prefixed ones.
 	 *
-	 * php-scoper 0.16's bundled symbol list predates PHP 8.4, so without the
+	 * PHP-Scoper 0.16's bundled symbol list predates PHP 8.4, so without the
 	 * exclude-functions entry in php-scoper/scoper.inc.php it rewrites Dompdf's
 	 * http_(get|clear)_last_response_headers() calls into WCPOS\Vendor\ — where
 	 * no such functions exist — fataling on PHP 8.4+ sites.
@@ -433,6 +433,126 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 
 		// Assert.
 		$this->assertStringContainsString( 'charset=utf-8', $html );
+	}
+
+	/**
+	 * Core font weights preserve non-Latin text through Unicode font aliases.
+	 *
+	 * The body opens with an empty paragraph on purpose: Dompdf resolves that
+	 * element's font through the Stylesheet's own FontMetrics before any text
+	 * node is laid out, and FontMetrics::getFont() caches the answer in a
+	 * static keyed by family name. If only Dompdf's reference were replaced,
+	 * that first lookup would pin sans-serif to core Helvetica for the whole
+	 * process and every later line would print "?".
+	 */
+	public function test_render_html_keeps_non_latin_text_at_core_font_weights(): void {
+		// Arrange.
+		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
+			. '<body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif;">'
+			. '<p><br></p>'
+			. '<div style="font-weight: 400;">AAAA Σύνολο ZZZZ</div>'
+			. '<div style="font-weight: 700;">BBBB Σύνολο ZZZZ</div>'
+			. '<div style="font-family: \'Courier New\', Courier, monospace;">CCCC Σύνολο ZZZZ</div>'
+			. '</body></html>';
+
+		// Act.
+		$pdf = $this->renderer->render_html( $html );
+
+		// Assert.
+		// Dompdf emits every word as its own text operator, so a core-font
+		// "Σύνολο" shows up as the literal run (??????) in the content stream.
+		$this->assertDoesNotMatchRegularExpression( '/\(\?{6}\)/', $this->get_pdf_streams( $pdf ) );
+		$fonts = $this->get_base_fonts( $pdf );
+		$this->assertNotContains( 'Helvetica', $fonts );
+		$this->assertNotContains( 'Helvetica-Bold', $fonts );
+		$this->assertNotContains( 'Courier', $fonts );
+		$this->assertMatchesRegularExpression( '/DejaVuSans\b/', implode( ' ', $fonts ) );
+		$this->assertMatchesRegularExpression( '/DejaVuSansMono\b/', implode( ' ', $fonts ) );
+	}
+
+	/**
+	 * An empty inline element ahead of the first text keeps the Unicode font.
+	 *
+	 * Dompdf resolves an element's font-family through the Stylesheet's own
+	 * FontMetrics (for inline box metrics) before any text in that family is
+	 * mapped, and FontMetrics::getFont() caches the answer in a static keyed
+	 * by family and subtype shared across the whole PHP process. If the
+	 * Stylesheet still held Dompdf's stock FontMetrics, that first lookup
+	 * would pin the family to its core font and every later text run in it
+	 * would print "?". The family/weight/style here is one no other test
+	 * renders, so an earlier test cannot have warmed the cache with the right
+	 * answer and made this pass for the wrong reason.
+	 */
+	public function test_render_html_empty_inline_before_text_keeps_unicode_font(): void {
+		// Arrange.
+		$style = 'font-family: fixed; font-weight: 700; font-style: italic;';
+		$html  = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+			. '<div><span style="' . $style . '"></span></div>'
+			. '<div style="' . $style . '">Σύνολο</div>'
+			. '</body></html>';
+
+		// Act.
+		$pdf = $this->renderer->render_html( $html );
+
+		// Assert.
+		$fonts = $this->get_base_fonts( $pdf );
+		$this->assertNotContains( 'Courier-BoldOblique', $fonts );
+		$this->assertMatchesRegularExpression( '/DejaVuSansMono-BoldOblique/', implode( ' ', $fonts ) );
+		$this->assertStringNotContainsString( '(??????)', $this->get_pdf_streams( $pdf ) );
+	}
+
+	/**
+	 * Thermal receipt layout uses Unicode monospace instead of core Courier.
+	 */
+	public function test_render_html_receipt_layout_thermal_uses_unicode_monospace(): void {
+		// Arrange.
+		$html = '<div style="font-family: \'Courier New\', Courier, monospace; '
+			. 'font-size: 13px; line-height: 1.4; background: #fff; color: #000; '
+			. 'padding: 16px 12px; overflow: hidden; white-space: pre-wrap; word-break: break-all;">Σύνολο</div>';
+
+		// Act.
+		$pdf = $this->renderer->render_html(
+			$html,
+			array(
+				'receipt_layout' => true,
+				'default_font'   => 'dejavu sans mono',
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( 'Courier', $this->get_base_fonts( $pdf ) );
+		$this->assertStringNotContainsString( '??????', $this->get_pdf_streams( $pdf ) );
+	}
+
+	/**
+	 * Concatenate decompressed PDF streams, retaining uncompressed streams.
+	 *
+	 * @param string $pdf PDF bytes.
+	 * @return string Stream contents.
+	 */
+	private function get_pdf_streams( string $pdf ): string {
+		preg_match_all( '/\bstream\r?\n(.*?)\r?\nendstream/s', $pdf, $matches );
+		$this->assertNotEmpty( $matches[1] );
+		$streams = '';
+		foreach ( $matches[1] as $stream ) {
+			$decoded  = @gzuncompress( $stream ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Streams may be uncompressed.
+			$streams .= false === $decoded ? $stream : $decoded;
+		}
+
+		return $streams;
+	}
+
+	/**
+	 * List the BaseFont names in PDF bytes.
+	 *
+	 * @param string $pdf PDF bytes.
+	 * @return string[] Font names.
+	 */
+	private function get_base_fonts( string $pdf ): array {
+		preg_match_all( '/\/BaseFont\s+\/([^\s\/]+)/', $pdf, $matches );
+		$this->assertNotEmpty( $matches[1] );
+
+		return $matches[1];
 	}
 
 	/**

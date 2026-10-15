@@ -50,7 +50,8 @@ class Template_Pdf_Service {
 				array(
 					// CSS pixels (96dpi) for the paper width, so the emitter can
 					// scale the monospace character grid to fit the page.
-					'paper_width_px' => $paper_width_pt * 4 / 3,
+					'paper_width_px'       => $paper_width_pt * 4 / 3,
+					'monospace_advance_em' => Pdf_Font_Metrics::MONOSPACE_ADVANCE_EM,
 				)
 			);
 

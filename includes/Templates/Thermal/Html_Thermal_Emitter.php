@@ -44,6 +44,13 @@ class Html_Thermal_Emitter {
 	private const CHAR_WIDTH_EM = 0.6;
 
 	/**
+	 * Monospace advance for the current render, in em.
+	 *
+	 * @var float
+	 */
+	private $monospace_advance_em;
+
+	/**
 	 * Smallest `<size>` rendering, in em.
 	 *
 	 * PDF-only, deliberately: this path renders sizes as CSS em and can express
@@ -94,10 +101,16 @@ class Html_Thermal_Emitter {
 	 * @param array $opts Optional: 'paper_width_px' — the PDF paper width in CSS
 	 *                    px; the base font is scaled so the template's character
 	 *                    grid fills the printable width like a real roll printer.
+	 *                    'monospace_advance_em' — numeric float from 0.3 to 1.0;
+	 *                    defaults to the Courier advance when omitted or invalid.
 	 *
 	 * @return string The receipt HTML.
 	 */
 	public function emit( array $ast, array $opts = array() ): string {
+		$this->monospace_advance_em = self::CHAR_WIDTH_EM;
+		if ( isset( $opts['monospace_advance_em'] ) && is_numeric( $opts['monospace_advance_em'] ) && $opts['monospace_advance_em'] >= 0.3 && $opts['monospace_advance_em'] <= 1.0 ) {
+			$this->monospace_advance_em = (float) $opts['monospace_advance_em'];
+		}
 		$width_chars = $this->clamp_integer( isset( $ast['paper_width'] ) ? $ast['paper_width'] : null, 48, Thermal_Bounds::PAPER_WIDTH_PDF_MIN, Thermal_Bounds::PAPER_WIDTH_MAX );
 
 		// 13px matches the JS preview renderer's base font; with a known paper
@@ -108,9 +121,10 @@ class Html_Thermal_Emitter {
 			if ( $inner_px > 50 ) {
 				// Clamp to a legible range so a malformed paper/column combination
 				// cannot produce microscopic or oversized receipt text.
-				$font_px = max( 6.0, min( 14.0, $inner_px / ( $width_chars * self::CHAR_WIDTH_EM ) ) );
+				$font_px = max( 6.0, min( 14.0, $inner_px / ( $width_chars * $this->monospace_advance_em ) ) );
 			}
 		}
+		$font_px = floor( $font_px * 100 ) / 100;
 
 		$children = isset( $ast['children'] ) && \is_array( $ast['children'] ) ? $ast['children'] : array();
 		$inner    = $this->render_nodes( $children, $width_chars );
@@ -252,7 +266,7 @@ class Html_Thermal_Emitter {
 		$width_style = '';
 		if ( '*' !== $width ) {
 			$chars       = $this->clamp_integer( $width, 12, Thermal_Bounds::COL_WIDTH_MIN, Thermal_Bounds::COL_WIDTH_MAX );
-			$width_style = 'width: ' . $this->format_float( $chars * self::CHAR_WIDTH_EM ) . 'em; ';
+			$width_style = 'width: ' . $this->format_float( $chars * $this->monospace_advance_em ) . 'em; ';
 		}
 
 		$align    = $this->safe_align( isset( $node['align'] ) ? $node['align'] : null );
@@ -285,7 +299,7 @@ class Html_Thermal_Emitter {
 
 		$width_dots = $this->clamp_integer( isset( $node['width'] ) ? $node['width'] : null, 200, Thermal_Bounds::IMAGE_WIDTH_DOTS_MIN, Thermal_Bounds::IMAGE_WIDTH_DOTS_MAX );
 		$dot_budget = $width_chars >= self::NARROW_PAPER_THRESHOLD_CHARS ? self::DOT_BUDGET_WIDE : self::DOT_BUDGET_NARROW;
-		$width_em   = $width_dots * $width_chars / $dot_budget * self::CHAR_WIDTH_EM;
+		$width_em   = $width_dots * $width_chars / $dot_budget * $this->monospace_advance_em;
 
 		return '<div style="text-align: center; padding: 8px 0">'
 			. '<img src="' . $this->escape_html( $src ) . '" alt="" style="width: ' . $this->format_float( $width_em ) . 'em; max-width: 100%; height: auto" />'
