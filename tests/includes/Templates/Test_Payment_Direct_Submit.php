@@ -59,4 +59,15 @@ class Test_Payment_Direct_Submit extends WC_Unit_Test_Case {
 		$this->assertStringContainsString( 'wcpos-payment-blocked', $template );
 		$this->assertStringContainsString( 'window.ReactNativeWebView.postMessage', $template );
 	}
+
+	/**
+	 * A re-created notice with an old text is fresh: the template snapshots notice nodes, not texts.
+	 */
+	public function test_payment_template_detects_fresh_notices_by_instance_not_text(): void {
+		$template = file_get_contents( woocommerce_pos_locate_template( 'payment.php' ) );
+
+		$this->assertStringContainsString( 'new Map(noticeNodes().map((node) => [node, noticeText(node)]))', $template );
+		$this->assertStringContainsString( 'noticesBefore.get(node) !== noticeText(node)', $template );
+		$this->assertStringNotContainsString( 'new Set(noticeTexts())', $template );
+	}
 }
