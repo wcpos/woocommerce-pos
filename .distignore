@@ -25,3 +25,4 @@ AGENTS.md
 codecov.yml
 phpstan.neon
 phpstan-constants.php
+assets/img/template-gallery/previews
