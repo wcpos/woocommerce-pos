@@ -26,12 +26,24 @@ $original = file_get_contents( $map_path );
 $fonts    = json_decode( $original, true, 512, JSON_THROW_ON_ERROR );
 unset( $fonts['dejavu serif'] );
 $fonts['dejavu sans']['bold_italic']      = 'DejaVuSans-Bold';
-$fonts['dejavu sans mono']['italic']     = 'DejaVuSansMono';
+$fonts['dejavu sans mono']['italic']      = 'DejaVuSansMono';
 $fonts['dejavu sans mono']['bold_italic'] = 'DejaVuSansMono-Bold';
+foreach ( $fonts as $family => $variants ) {
+	if ( 0 !== strpos( $family, 'dejavu' ) ) {
+		continue;
+	}
+	foreach ( $variants as $variant => $face ) {
+		if ( ! in_array( $face, KEPT_FACES, true ) ) {
+			fwrite( STDERR, "Font map still references a removed face: {$family}/{$variant} => {$face}\n" );
+			exit( 1 );
+		}
+	}
+}
 foreach ( array( 'ttf', 'ufm' ) as $extension ) {
 	foreach ( glob( $font_dir . '/DejaVu*.' . $extension ) as $file ) {
 		if ( ! in_array( basename( $file, '.' . $extension ), KEPT_FACES, true ) ) {
 			if ( ! unlink( $file ) ) {
+				fwrite( STDERR, 'Could not delete ' . basename( $file ) . "\n" );
 				exit( 1 );
 			}
 			echo 'Deleted ' . basename( $file ) . "\n";
@@ -41,6 +53,7 @@ foreach ( array( 'ttf', 'ufm' ) as $extension ) {
 $json = json_encode( $fonts, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n";
 if ( $json !== $original ) {
 	if ( false === file_put_contents( $map_path, $json ) ) {
+		fwrite( STDERR, "Could not write installed-fonts.dist.json\n" );
 		exit( 1 );
 	}
 	echo "Updated installed-fonts.dist.json\n";

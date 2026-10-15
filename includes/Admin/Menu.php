@@ -589,11 +589,7 @@ JS;
 		if ( Frontend::is_development_mode() ) {
 			return PLUGIN_URL . 'assets/img/template-gallery/previews';
 		}
-		$ref = implode( '.', \array_slice( explode( '.', PLUGIN_VERSION ), 0, 2 ) );
-		if ( 'next' === Frontend::explicit_web_bundle_ref() ) {
-			$ref = 'next';
-		}
-		$url = 'https://cdn.jsdelivr.net/gh/wcpos/woocommerce-pos@' . $ref . '/assets/img/template-gallery/previews';
+		$url = 'https://cdn.jsdelivr.net/gh/wcpos/woocommerce-pos@' . Frontend::cdn_ref() . '/assets/img/template-gallery/previews';
 
 		/**
 		 * Filters the preview base URL so a site can use its own host.

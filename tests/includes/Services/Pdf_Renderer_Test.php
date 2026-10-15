@@ -602,12 +602,31 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function test_build_ships_only_used_dejavu_faces(): void {
 		// Arrange.
-		$dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/lib/fonts/';
+		$dir  = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/lib/fonts/';
+		$kept = array( 'DejaVuSans', 'DejaVuSans-Bold', 'DejaVuSans-Oblique', 'DejaVuSansMono', 'DejaVuSansMono-Bold' );
+		// Act.
+		$shipped = array_map(
+			static function ( string $file ): string {
+				return basename( $file, '.ttf' );
+			},
+			glob( $dir . 'DejaVu*.ttf' )
+		);
+		sort( $shipped );
 		// Assert.
-		foreach ( array( 'DejaVuSans', 'DejaVuSans-Bold', 'DejaVuSans-Oblique', 'DejaVuSansMono', 'DejaVuSansMono-Bold' ) as $face ) {
+		$this->assertSame( $kept, $shipped );
+		foreach ( $kept as $face ) {
 			$this->assertFileExists( $dir . $face . '.ttf' );
 		}
-		foreach ( array( 'DejaVuSerif', 'DejaVuSans-BoldOblique', 'DejaVuSansMono-Oblique' ) as $face ) {
+		$removed = array(
+			'DejaVuSerif',
+			'DejaVuSerif-Bold',
+			'DejaVuSerif-Italic',
+			'DejaVuSerif-BoldItalic',
+			'DejaVuSans-BoldOblique',
+			'DejaVuSansMono-Oblique',
+			'DejaVuSansMono-BoldOblique',
+		);
+		foreach ( $removed as $face ) {
 			$this->assertFileDoesNotExist( $dir . $face . '.ttf' );
 		}
 	}
@@ -640,5 +659,10 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 		$pdf = $this->renderer->render_html( $html );
 		// Assert.
 		$this->assertStringStartsWith( '%PDF', $pdf );
+		$fonts = $this->get_base_fonts( $pdf );
+		// Dompdf prefixes subset names (ABCDEF+DejaVuSans-Oblique), so match by pattern.
+		$this->assertMatchesRegularExpression( '/DejaVuSans-Oblique/', implode( ' ', $fonts ) );
+		$this->assertMatchesRegularExpression( '/DejaVuSans-Bold/', implode( ' ', $fonts ) );
+		$this->assertNotContains( 'Helvetica-Oblique', $fonts );
 	}
 }
