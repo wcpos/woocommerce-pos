@@ -221,6 +221,7 @@ class Payment {
 		global $wp_styles, $wp_scripts;
 		$style_handles  = $wp_styles->queue;
 		$script_handles = $wp_scripts->queue;
+		$defaults       = Settings::instance()->sections()->get( 'checkout' )->defaults();
 
 		$style_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_style_handles',
@@ -263,10 +264,11 @@ class Payment {
 									<h3><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Disable Selected Styles', 'woocommerce-pos' ); ?></h3>
 									<?php
 									foreach ( $merged_style_handles as $handle ) {
-										$checked = ! \in_array( $handle, $style_exclude_list, true ) ? 'checked' : '';
+										$is_default = \in_array( $handle, $defaults['dequeue_style_handles'] ?? array(), true );
+										$checked    = ! $is_default && ! \in_array( $handle, $style_exclude_list, true ) ? 'checked' : '';
 										?>
-										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="styles[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?>>
-										<label for="<?php echo esc_attr( $handle ); ?>"><?php echo esc_html( $handle ); ?></label>
+										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="styles[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?> <?php disabled( $is_default ); ?>>
+										<label for="<?php echo esc_attr( $handle ); ?>"><?php echo esc_html( $handle . ( $is_default ? ' — ' . __( 'always removed on the POS payment page', 'woocommerce-pos' ) : '' ) ); ?></label>
 										<input type="hidden" name="all_styles[]" value="<?php echo esc_attr( $handle ); ?>"><br>
 									<?php } ?>
 								</div>
@@ -274,10 +276,11 @@ class Payment {
 									<h3><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Disable Selected Scripts', 'woocommerce-pos' ); ?></h3>
 									<?php
 									foreach ( $merged_script_handles as $handle ) {
-										$checked = ! \in_array( $handle, $script_exclude_list, true ) ? 'checked' : '';
+										$is_default = \in_array( $handle, $defaults['dequeue_script_handles'] ?? array(), true );
+										$checked    = ! $is_default && ! \in_array( $handle, $script_exclude_list, true ) ? 'checked' : '';
 										?>
-										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="scripts[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?>>
-										<label for="<?php echo esc_html( $handle ); ?>"><?php echo esc_html( $handle ); ?></label>
+										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="scripts[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?> <?php disabled( $is_default ); ?>>
+										<label for="<?php echo esc_html( $handle ); ?>"><?php echo esc_html( $handle . ( $is_default ? ' — ' . __( 'always removed on the POS payment page', 'woocommerce-pos' ) : '' ) ); ?></label>
 										<input type="hidden" name="all_scripts[]" value="<?php echo esc_attr( $handle ); ?>"><br>
 									<?php } ?>
 								</div>
