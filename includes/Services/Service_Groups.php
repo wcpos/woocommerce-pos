@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Products;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Templates;
 
 /**
@@ -169,6 +170,8 @@ final class Service_Groups {
 	private static function construct_always(): void {
 		// init the Services.
 		Settings::instance();
+		// The free-tier gateway rule applies on every lane, not only where the REST controllers load.
+		Payment_Gateways_Section::register_free_tier_rule();
 		Auth::instance();
 
 		new i18n();

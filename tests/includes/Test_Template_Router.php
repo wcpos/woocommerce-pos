@@ -24,13 +24,68 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		global $wp;
-		unset( $wp->query_vars['wcpos'], $wp->query_vars['order-pay'] );
+		unset( $wp->query_vars['wcpos'], $wp->query_vars['order-pay'], $wp->query_vars['order-received'] );
+		$wp->matched_rule = '';
 
 		// The test framework only resets permalinks for core tests, so undo
 		// set_permalink_structure() here or it leaks into later test classes.
 		$this->set_permalink_structure( '' );
 
 		parent::tearDown();
+	}
+
+	/**
+	 * Missing orders must terminate before other plugins inspect checkout gateways.
+	 */
+	public function test_checkout_context_missing_order_dies_with_404(): void {
+		global $wp;
+		$router           = new Template_Router();
+		$wp->matched_rule = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
+		$handler          = static function () {
+			return static function ( $message, $title, $args ) {
+				self::assertSame( 404, $args['response'] );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Capture wp_die output, not rendering.
+				throw new \WPDieException( $message );
+			};
+		};
+		add_filter( 'wp_die_handler', $handler );
+
+		try {
+			foreach ( array( 'order-pay', 'order-received' ) as $endpoint ) {
+				$wp->query_vars[ $endpoint ] = 999999999;
+				try {
+					$router->maybe_set_checkout_context();
+					$this->fail( 'Missing order did not terminate the request.' );
+				} catch ( \WPDieException $exception ) {
+					$this->assertSame( 'Sorry, this order is invalid and cannot be paid for.', $exception->getMessage() );
+				} finally {
+					unset( $wp->query_vars[ $endpoint ] );
+				}
+			}
+		} finally {
+			remove_filter( 'wp_die_handler', $handler );
+		}
+	}
+
+	/**
+	 * Valid orders preserve checkout context only for the order-pay endpoint.
+	 */
+	public function test_checkout_context_valid_order_preserves_checkout_filter(): void {
+		global $wp;
+		$order            = OrderHelper::create_order();
+		$router           = new Template_Router();
+		$wp->matched_rule = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
+		remove_filter( 'woocommerce_is_checkout', '__return_true' );
+		$wp->query_vars['order-received'] = $order->get_id();
+
+		$router->maybe_set_checkout_context();
+		$this->assertFalse( has_filter( 'woocommerce_is_checkout', '__return_true' ) );
+		unset( $wp->query_vars['order-received'] );
+		$wp->query_vars['order-pay'] = $order->get_id();
+
+		$router->maybe_set_checkout_context();
+		$this->assertSame( 10, has_filter( 'woocommerce_is_checkout', '__return_true' ) );
+		$this->assertTrue( is_checkout() );
 	}
 
 	/**
@@ -173,7 +228,8 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		new Template_Router();
 		$wp_rewrite->flush_rules();
 
-		foreach ( array( '/wcpos-checkout/order-pay/123/', '/wcpos-checkout/order-pay/123' ) as $path ) {
+		$order_id = OrderHelper::create_order()->get_id();
+		foreach ( array( "/wcpos-checkout/order-pay/{$order_id}/", "/wcpos-checkout/order-pay/{$order_id}" ) as $path ) {
 			// Act.
 			$this->go_to( $path );
 
@@ -184,7 +240,7 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 				"URL {$path} did not match the POS checkout rewrite rule."
 			);
 			$this->assertEquals(
-				'123',
+				(string) $order_id,
 				$GLOBALS['wp']->query_vars['order-pay'],
 				"URL {$path} did not resolve the order-pay query var."
 			);
