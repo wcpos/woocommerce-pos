@@ -203,7 +203,7 @@ class Pdf_Renderer {
 		$options->set( 'chroot', array( $temp_dir ) );
 
 		$dompdf = new Dompdf( $options );
-		$dompdf->setFontMetrics( new Pdf_Font_Metrics( $dompdf->getCanvas(), $options ) );
+		Pdf_Font_Metrics::install( $dompdf, $options );
 		$dompdf->loadHtml( $html );
 
 		$paper       = isset( $opts['paper'] ) ? $opts['paper'] : 'A4';

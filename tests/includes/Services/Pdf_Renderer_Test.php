@@ -437,11 +437,19 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 
 	/**
 	 * Core font weights preserve non-Latin text through Unicode font aliases.
+	 *
+	 * The body opens with an empty paragraph on purpose: Dompdf resolves that
+	 * element's font through the Stylesheet's own FontMetrics before any text
+	 * node is laid out, and FontMetrics::getFont() caches the answer in a
+	 * static keyed by family name. If only Dompdf's reference were replaced,
+	 * that first lookup would pin sans-serif to core Helvetica for the whole
+	 * process and every later line would print "?".
 	 */
 	public function test_render_html_keeps_non_latin_text_at_core_font_weights(): void {
 		// Arrange.
 		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
 			. '<body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif;">'
+			. '<p><br></p>'
 			. '<div style="font-weight: 400;">AAAA Σύνολο ZZZZ</div>'
 			. '<div style="font-weight: 700;">BBBB Σύνολο ZZZZ</div>'
 			. '<div style="font-family: \'Courier New\', Courier, monospace;">CCCC Σύνολο ZZZZ</div>'
@@ -451,12 +459,46 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 		$pdf = $this->renderer->render_html( $html );
 
 		// Assert.
-		$this->assertDoesNotMatchRegularExpression( '/\(\s*[A-Z]{4} \?{6}/', $this->get_pdf_streams( $pdf ) );
+		// Dompdf emits every word as its own text operator, so a core-font
+		// "Σύνολο" shows up as the literal run (??????) in the content stream.
+		$this->assertDoesNotMatchRegularExpression( '/\(\?{6}\)/', $this->get_pdf_streams( $pdf ) );
 		$fonts = $this->get_base_fonts( $pdf );
 		$this->assertNotContains( 'Helvetica', $fonts );
 		$this->assertNotContains( 'Helvetica-Bold', $fonts );
 		$this->assertNotContains( 'Courier', $fonts );
-		$this->assertMatchesRegularExpression( '/DejaVuSans/', implode( ' ', $fonts ) );
+		$this->assertMatchesRegularExpression( '/DejaVuSans\b/', implode( ' ', $fonts ) );
+		$this->assertMatchesRegularExpression( '/DejaVuSansMono\b/', implode( ' ', $fonts ) );
+	}
+
+	/**
+	 * An empty inline element ahead of the first text keeps the Unicode font.
+	 *
+	 * Dompdf resolves an element's font-family through the Stylesheet's own
+	 * FontMetrics (for inline box metrics) before any text in that family is
+	 * mapped, and FontMetrics::getFont() caches the answer in a static keyed
+	 * by family and subtype shared across the whole PHP process. If the
+	 * Stylesheet still held Dompdf's stock FontMetrics, that first lookup
+	 * would pin the family to its core font and every later text run in it
+	 * would print "?". The family/weight/style here is one no other test
+	 * renders, so an earlier test cannot have warmed the cache with the right
+	 * answer and made this pass for the wrong reason.
+	 */
+	public function test_render_html_empty_inline_before_text_keeps_unicode_font(): void {
+		// Arrange.
+		$style = 'font-family: fixed; font-weight: 700; font-style: italic;';
+		$html  = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+			. '<div><span style="' . $style . '"></span></div>'
+			. '<div style="' . $style . '">Σύνολο</div>'
+			. '</body></html>';
+
+		// Act.
+		$pdf = $this->renderer->render_html( $html );
+
+		// Assert.
+		$fonts = $this->get_base_fonts( $pdf );
+		$this->assertNotContains( 'Courier-BoldOblique', $fonts );
+		$this->assertMatchesRegularExpression( '/DejaVuSansMono-BoldOblique/', implode( ' ', $fonts ) );
+		$this->assertStringNotContainsString( '(??????)', $this->get_pdf_streams( $pdf ) );
 	}
 
 	/**

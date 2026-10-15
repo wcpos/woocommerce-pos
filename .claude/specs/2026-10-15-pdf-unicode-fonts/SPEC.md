@@ -70,11 +70,17 @@ Alias map (lower-case family → bundled family whose variants to reuse):
    map is a class constant with a comment explaining why (cp1252 core fonts).
    Nothing is written to disk — do **not** use `setFontFamily()`, which
    persists `installed-fonts.json` into the font cache dir.
-2. In `Pdf_Renderer::build()`, right after `new Dompdf( $options )`, install it:
-   `$dompdf->setFontMetrics( new Pdf_Font_Metrics( $dompdf->getCanvas(), $options ) );`
-   `Dompdf::setPaper()` already re-points the metrics at the new canvas, so the
-   order relative to `setPaper()` does not matter, but keep it before
-   `loadHtml()`.
+2. In `Pdf_Renderer::build()`, right after `new Dompdf( $options )`, install it
+   on **both** holders: `Dompdf::setFontMetrics()` and
+   `$dompdf->getCss()->setFontMetrics()`. The constructor hands its stock
+   FontMetrics to the Stylesheet, every `Style` resolves `font-family` through
+   that copy, and `FontMetrics::getFont()` caches by family name in a static
+   shared across the process — so a half install lets the first empty inline
+   element pin a family to its core font for the whole document (found in
+   review, 2026-10-15). Wrap the two calls in `Pdf_Font_Metrics::install()`.
+   `Dompdf::setPaper()` swaps the canvas without re-pointing the metrics; both
+   the stock and the replacement instance stay bound to the constructor
+   canvas, which is unchanged behaviour. Keep the install before `loadHtml()`.
 3. Keep the existing `defaultFont` handling untouched.
 
 ### Tests (wp-env PHPUnit, `tests/includes/Services/Pdf_Renderer_Test.php`)
