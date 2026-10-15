@@ -45,8 +45,10 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 			$decoded = @gzuncompress( $stream );
 			$output .= false === $decoded ? $stream : $decoded;
 		}
-		$this->assertStringContainsString( 'FROZEN-QR-243', $output );
-		$this->assertStringContainsString( 'ID:' . $number, $output );
+		// Pdf_Font_Metrics aliases Helvetica to DejaVu Sans, a Unicode TrueType
+		// face, so Dompdf writes the text as UTF-16BE rather than cp1252.
+		$this->assertStringContainsString( mb_convert_encoding( 'FROZEN-QR-243', 'UTF-16BE', 'UTF-8' ), $output );
+		$this->assertStringContainsString( mb_convert_encoding( 'ID:' . $number, 'UTF-16BE', 'UTF-8' ), $output );
 	}
 
 	/**
@@ -229,19 +231,32 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 
 		$native_pdf = "%PDF-1.4\n% native wp overnight invoice\n";
 		$calls      = array();
-		$callback   = static function ( $document, string $document_type, $order ) use ( &$calls, $native_pdf ) {
+		$callback   = function ( $document, string $document_type, $order ) use ( &$calls, $native_pdf ) {
 			$calls[] = array(
 				'document_type' => $document_type,
 				'order_id'       => $order->get_id(),
 			);
 
 			return new class( $native_pdf ) {
+				/**
+				 * PDF bytes.
+				 *
+				 * @var string
+				 */
 				private $pdf;
 
+				/**
+				 * Store the PDF bytes.
+				 *
+				 * @param string $pdf PDF bytes.
+				 */
 				public function __construct( string $pdf ) {
 					$this->pdf = $pdf;
 				}
 
+				/**
+				 * Return the PDF bytes.
+				 */
 				public function get_pdf(): string {
 					return $this->pdf;
 				}
@@ -273,19 +288,32 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 
 		$native_pdf = "%PDF-1.4\n% native wp overnight packing slip\n";
 		$calls      = array();
-		$callback   = static function ( $document, string $document_type, $order ) use ( &$calls, $native_pdf ) {
+		$callback   = function ( $document, string $document_type, $order ) use ( &$calls, $native_pdf ) {
 			$calls[] = array(
 				'document_type' => $document_type,
 				'order_id'       => $order->get_id(),
 			);
 
 			return new class( $native_pdf ) {
+				/**
+				 * PDF bytes.
+				 *
+				 * @var string
+				 */
 				private $pdf;
 
+				/**
+				 * Store the PDF bytes.
+				 *
+				 * @param string $pdf PDF bytes.
+				 */
 				public function __construct( string $pdf ) {
 					$this->pdf = $pdf;
 				}
 
+				/**
+				 * Return the PDF bytes.
+				 */
 				public function get_pdf(): string {
 					return $this->pdf;
 				}
@@ -317,6 +345,9 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 
 		$callback = static function () {
 			return new class() {
+				/**
+				 * Return invalid PDF bytes.
+				 */
 				public function get_pdf(): string {
 					return '<html>not a pdf</html>';
 				}

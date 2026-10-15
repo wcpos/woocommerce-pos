@@ -289,20 +289,64 @@
 		}
 	</style>
 	<script>
-		window.addEventListener("message", ({data}) => {
-			if (data.action && data.action === "wcpos-process-payment") {
-				// submit checkout form
-				const button = document.getElementById('place_order');
-				if (button) {
-					const event = new MouseEvent('click', {
-						bubbles: true,
-						cancelable: true,
-						view: window
-					});
+		const directSubmitGateways = <?php echo wp_json_encode( array_values( $direct_submit_gateway_ids ) ); ?>;
+		// One sale per Process Payment: a second message before the first POST navigates is a retry, not a sale.
+		let wcposSubmitInFlight = false;
+		window.addEventListener('pageshow', () => { wcposSubmitInFlight = false; });
+		window.addEventListener("message", ({ data }) => {
+			if (!data || data.action !== "wcpos-process-payment") return;
+			if (wcposSubmitInFlight) return;
+			const form = document.getElementById('order_review');
+			const button = document.getElementById('place_order');
+			if (!form || !button) return;
+			const checked = form.querySelector('input[name="payment_method"]:checked');
+			const method = checked ? checked.value : '';
+			// One text per notice: a list's items, or the notice itself. No :has(), which older engines reject.
+			const noticeTexts = () => Array.from(document.querySelectorAll('.woocommerce-error')).flatMap((box) => {
+				const items = Array.from(box.querySelectorAll('li'));
+				return (items.length ? items : [box]).map((n) => n.textContent.trim());
+			}).filter(Boolean);
 
-					button.dispatchEvent(event);
-				}
+			wcposSubmitInFlight = true;
+			let navigating = false;
+			window.addEventListener('beforeunload', () => { navigating = true; }, { once: true });
+			// A POST either navigates or fails; either way a later Process Payment must work again.
+			setTimeout(() => { if (!navigating) wcposSubmitInFlight = false; }, 10000);
+
+			if (directSubmitGateways.includes(method)) {
+				// A POS tender carries no gateway script. Submit without firing the submit event,
+				// so no third-party handler bound to it can veto the sale.
+				HTMLFormElement.prototype.submit.call(form);
+				return;
 			}
+
+			// A third-party tender goes through the button, so a gateway's handlers on the button's
+			// click and on the form's submit both run exactly as on any WooCommerce pay page.
+			const noticesBefore = new Set(noticeTexts());
+			button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+			// A gateway flow navigates or shows its own UI; a block leaves a NEW error notice and goes nowhere.
+			setTimeout(() => {
+				if (navigating) return;
+				const fresh = Array.from(new Set(noticeTexts())).filter((text) => !noticesBefore.has(text));
+				if (!fresh.length) return;
+				const message = {
+					action: 'wcpos-payment-blocked',
+					payload: {
+						message: fresh[0],
+						data: {
+							notices: fresh,
+							payment_method: method,
+							scripts: Array.from(document.scripts).map((s) => s.id || s.src).filter(Boolean),
+						},
+					},
+				};
+				if (window.top && typeof window.top.postMessage === 'function') {
+					window.top.postMessage(message, '*');
+				}
+				if (typeof window.ReactNativeWebView !== 'undefined' && typeof window.ReactNativeWebView.postMessage === 'function') {
+					window.ReactNativeWebView.postMessage(JSON.stringify(message));
+				}
+			}, 2500);
 		}, false);
 	</script>
 </head>
