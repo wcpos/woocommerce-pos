@@ -149,9 +149,35 @@ class Frontend {
 	}
 
 	/**
-	 * Output the footer scripts.
+	 * Resolve the explicit web-bundle override, or null when unset.
 	 */
-	public function footer(): void {
+	public static function explicit_web_bundle_ref(): ?string {
+		$explicit_bundle_ref = null;
+		$env_bundle_ref      = getenv( 'WCPOS_WEB_BUNDLE_REF' );
+		if ( \defined( 'WCPOS_WEB_BUNDLE_REF' ) &amp;&amp; WCPOS_WEB_BUNDLE_REF ) {
+			$explicit_bundle_ref = WCPOS_WEB_BUNDLE_REF;
+		} elseif ( ! empty( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) );
+		} elseif ( false !== $env_bundle_ref &amp;&amp; '' !== $env_bundle_ref ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $env_bundle_ref ) );
+		} elseif ( ! empty( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) );
+		}
+		return $explicit_bundle_ref;
+	}
+
+	/**
+	 * CDN lane shared by plugin assets and font packs.
+	 */
+	public static function cdn_ref(): string {
+		$ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
+		return 'next' === self::explicit_web_bundle_ref() ? 'next' : $ref;
+	}
+
+	/**
+	 * Whether the site runs the POS in development mode (local bundles and assets).
+	 */
+	public static function is_development_mode(): bool {
 		/**
 		 * Filters whether the POS is in development mode.
 		 *
@@ -166,25 +192,21 @@ class Frontend {
 		 *
 		 * @hook woocommerce_pos_development_mode
 		 */
-		$development = apply_filters(
+		return (bool) apply_filters(
 			'woocommerce_pos_development_mode',
 			( \defined( 'WCPOS_DEVELOPMENT' ) &amp;&amp; WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) &amp;&amp; wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) ) )
 		);
+	}
+
+	/**
+	 * Output the footer scripts.
+	 */
+	public function footer(): void {
+		$development = self::is_development_mode();
 
 		$user                 = wp_get_current_user();
 
-		// Explicit web-bundle override (constant or env). Null when unset.
-		$explicit_bundle_ref = null;
-		$env_bundle_ref      = getenv( 'WCPOS_WEB_BUNDLE_REF' );
-		if ( \defined( 'WCPOS_WEB_BUNDLE_REF' ) &amp;&amp; WCPOS_WEB_BUNDLE_REF ) {
-			$explicit_bundle_ref = WCPOS_WEB_BUNDLE_REF;
-		} elseif ( ! empty( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) ) {
-			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) );
-		} elseif ( false !== $env_bundle_ref &amp;&amp; '' !== $env_bundle_ref ) {
-			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $env_bundle_ref ) );
-		} elseif ( ! empty( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) ) {
-			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) );
-		}
+		$explicit_bundle_ref = self::explicit_web_bundle_ref();
 
 		// Default to the plugin's own major.minor so the stable lane tracks the
 		// version automatically: a 1.9.x plugin loads `@1.9`, a 1.10.x plugin loads
@@ -451,7 +473,7 @@ class Frontend {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_content_security_policy.html">woocommerce_pos_content_security_policy</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_license_settings.html">woocommerce_pos_license_settings</a></li><li><a href="woocommerce_pos_payment_gateways_settings.html">woocommerce_pos_payment_gateways_settings</a></li><li><a href="woocommerce_pos_pre_save_%257B$id%257D_settings.html">woocommerce_pos_pre_save_{$id}_settings</a></li><li><a href="woocommerce_pos_receipt_data.html">woocommerce_pos_receipt_data</a></li><li><a href="woocommerce_pos_register_settings_sections.html">woocommerce_pos_register_settings_sections</a></li><li><a href="woocommerce_pos_saved_%257B$id%257D_settings.html">woocommerce_pos_saved_{$id}_settings</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li><li><a href="woocommerce_pos_web_bundle_ref.html">woocommerce_pos_web_bundle_ref</a></li><li><a href="woocommerce_pos_%257B$id%257D_settings.html">woocommerce_pos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li><li><a href="woocommerce_pos_wp_overnight_pdf_templates_enabled.html">woocommerce_pos_wp_overnight_pdf_templates_enabled</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_content_security_policy.html">woocommerce_pos_content_security_policy</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_license_settings.html">woocommerce_pos_license_settings</a></li><li><a href="woocommerce_pos_payment_gateways_settings.html">woocommerce_pos_payment_gateways_settings</a></li><li><a href="woocommerce_pos_pre_save_%257B$id%257D_settings.html">woocommerce_pos_pre_save_{$id}_settings</a></li><li><a href="woocommerce_pos_receipt_data.html">woocommerce_pos_receipt_data</a></li><li><a href="woocommerce_pos_register_settings_sections.html">woocommerce_pos_register_settings_sections</a></li><li><a href="woocommerce_pos_saved_%257B$id%257D_settings.html">woocommerce_pos_saved_{$id}_settings</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li><li><a href="woocommerce_pos_template_gallery_preview_base_url.html">woocommerce_pos_template_gallery_preview_base_url</a></li><li><a href="woocommerce_pos_web_bundle_ref.html">woocommerce_pos_web_bundle_ref</a></li><li><a href="woocommerce_pos_%257B$id%257D_settings.html">woocommerce_pos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li><li><a href="woocommerce_pos_wp_overnight_pdf_templates_enabled.html">woocommerce_pos_wp_overnight_pdf_templates_enabled</a></li></ul>
 </nav>
 
 <br class="clear">
