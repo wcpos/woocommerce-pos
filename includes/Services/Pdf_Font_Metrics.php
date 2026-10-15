@@ -67,7 +67,10 @@ class Pdf_Font_Metrics extends FontMetrics {
 	/**
 	 * Build the font lookup table and apply aliases in memory only.
 	 *
-	 * @return void
+	 * Dompdf's own method documents `@return array` and returns nothing; the
+	 * table is returned here so the override matches the declared contract.
+	 *
+	 * @return array
 	 */
 	public function setFontFamilies() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Overrides Dompdf's method.
 		parent::setFontFamilies();
@@ -77,5 +80,7 @@ class Pdf_Font_Metrics extends FontMetrics {
 				$this->fontFamilies[ $alias ] = $this->fontFamilies[ $target ]; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
 			}
 		}
+
+		return $this->fontFamilies; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
 	}
 }
