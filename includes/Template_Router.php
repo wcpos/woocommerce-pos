@@ -117,6 +117,17 @@ class Template_Router {
 		 */
 		global $wp;
 
+		if ( $wp->matched_rule === $this->pos_checkout_regex && ( isset( $wp->query_vars['order-pay'] ) || isset( $wp->query_vars['order-received'] ) ) ) {
+			$order_id = $wp->query_vars['order-pay'] ?? $wp->query_vars['order-received'];
+			if ( ! wc_get_order( absint( $order_id ) ) ) {
+				wp_die(
+					esc_html__( 'Sorry, this order is invalid and cannot be paid for.', 'woocommerce-pos' ),
+					'',
+					array( 'response' => 404 )
+				);
+			}
+		}
+
 		if ( isset( $wp->query_vars['order-pay'] ) && $wp->matched_rule === $this->pos_checkout_regex ) {
 			add_filter( 'woocommerce_is_checkout', '__return_true' );
 		}
