@@ -35,18 +35,23 @@ class Pdf_Font_Metrics extends FontMetrics {
 	public const MONOSPACE_ADVANCE_EM = 0.602;
 
 	/**
-	 * Core font families (lower-case) and the bundled Unicode family that
-	 * replaces each. Symbol and ZapfDingbats are left alone.
+	 * Core font families (lower-case) and the Unicode families that replace
+	 * each, in order of preference: the first one present in the lookup table
+	 * wins. A build with a reduced font set (a pack with only sans and mono
+	 * faces) still gets a Unicode face rather than cp1252 Times. Monospace
+	 * has no proportional fallback on purpose: the thermal grid is sized for a
+	 * fixed advance, so a proportional face would silently break its columns.
+	 * Symbol and ZapfDingbats are left alone.
 	 */
 	private const FONT_ALIASES = array(
-		'sans-serif'  => 'dejavu sans',
-		'helvetica'   => 'dejavu sans',
-		'serif'       => 'dejavu serif',
-		'times'       => 'dejavu serif',
-		'times-roman' => 'dejavu serif',
-		'monospace'   => 'dejavu sans mono',
-		'courier'     => 'dejavu sans mono',
-		'fixed'       => 'dejavu sans mono',
+		'sans-serif'  => array( 'dejavu sans' ),
+		'helvetica'   => array( 'dejavu sans' ),
+		'serif'       => array( 'dejavu serif', 'dejavu sans' ),
+		'times'       => array( 'dejavu serif', 'dejavu sans' ),
+		'times-roman' => array( 'dejavu serif', 'dejavu sans' ),
+		'monospace'   => array( 'dejavu sans mono' ),
+		'courier'     => array( 'dejavu sans mono' ),
+		'fixed'       => array( 'dejavu sans mono' ),
 	);
 
 	/**
@@ -107,13 +112,16 @@ class Pdf_Font_Metrics extends FontMetrics {
 	public function setFontFamilies() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Overrides Dompdf's method.
 		parent::setFontFamilies();
 
-		foreach ( self::FONT_ALIASES as $alias => $target ) {
+		foreach ( self::FONT_ALIASES as $alias => $targets ) {
 			// A merchant's own font registration takes precedence over aliases.
 			if ( isset( $this->userFonts[ $alias ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
 				continue;
 			}
-			if ( isset( $this->fontFamilies[ $target ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
-				$this->fontFamilies[ $alias ] = $this->fontFamilies[ $target ]; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
+			foreach ( $targets as $target ) {
+				if ( isset( $this->fontFamilies[ $target ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
+					$this->fontFamilies[ $alias ] = $this->fontFamilies[ $target ]; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
+					break;
+				}
 			}
 		}
 
