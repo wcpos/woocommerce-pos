@@ -40,7 +40,12 @@ foreach ( $fonts as $family => $variants ) {
 	}
 }
 foreach ( array( 'ttf', 'ufm' ) as $extension ) {
-	foreach ( glob( $font_dir . '/DejaVu*.' . $extension ) as $file ) {
+	$files = glob( $font_dir . '/DejaVu*.' . $extension );
+	if ( false === $files ) {
+		fwrite( STDERR, "Could not list DejaVu .{$extension} files in {$font_dir}\n" );
+		exit( 1 );
+	}
+	foreach ( $files as $file ) {
 		if ( ! in_array( basename( $file, '.' . $extension ), KEPT_FACES, true ) ) {
 			if ( ! unlink( $file ) ) {
 				fwrite( STDERR, 'Could not delete ' . basename( $file ) . "\n" );
