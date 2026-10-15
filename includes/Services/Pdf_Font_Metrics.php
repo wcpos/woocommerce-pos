@@ -71,6 +71,32 @@ class Pdf_Font_Metrics extends FontMetrics {
 	}
 
 	/**
+	 * Resolve a family, answering merchant-registered families from the live table.
+	 *
+	 * Dompdf's getFont() memoises every answer in a process-wide static keyed by
+	 * family name, so a receipt rendered earlier in the same request pins
+	 * "helvetica" to the alias before a later template's @font-face registers
+	 * it. A family present in userFonts is therefore looked up directly.
+	 *
+	 * @param string|null $family_raw  Font family name as written in CSS.
+	 * @param string|null $subtype_raw Dompdf subtype ("normal", "bold", "italic", "bold_italic").
+	 *
+	 * @return string|null Font file path without extension, or null.
+	 */
+	public function getFont( $family_raw, $subtype_raw = 'normal' ) { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Overrides Dompdf's method.
+		if ( $family_raw ) {
+			$family = str_replace( array( "'", '"' ), '', strtolower( (string) $family_raw ) );
+			if ( isset( $this->userFonts[ $family ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
+				$subtype = strtolower( (string) ( $subtype_raw ? $subtype_raw : 'normal' ) );
+
+				return $this->getFontFamilies()[ $family ][ $subtype ] ?? null;
+			}
+		}
+
+		return parent::getFont( $family_raw, $subtype_raw );
+	}
+
+	/**
 	 * Build the font lookup table and apply aliases in memory only.
 	 *
 	 * Dompdf's own method documents `@return array` and returns nothing; the

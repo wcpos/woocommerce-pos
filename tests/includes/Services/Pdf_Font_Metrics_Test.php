@@ -35,7 +35,11 @@ class Pdf_Font_Metrics_Test extends \WP_UnitTestCase {
 	/**
 	 * Merchant fonts override aliases, while unregistered families stay Unicode.
 	 *
-	 * Isolate Dompdf's static getFont() cache from other renderer tests.
+	 * The family is resolved once before the merchant registers it, which is
+	 * what an earlier receipt in the same request does: Dompdf memoises that
+	 * answer in a process-wide static, and without the getFont() override the
+	 * registration would never be seen. Runs in its own process so the cache
+	 * state is exactly what this test creates.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -54,6 +58,7 @@ class Pdf_Font_Metrics_Test extends \WP_UnitTestCase {
 		);
 		$dompdf  = new Dompdf( $options );
 		$metrics = new Pdf_Font_Metrics( $dompdf->getCanvas(), $options );
+		$this->assertStringEndsWith( '/DejaVuSans', $metrics->getFont( 'helvetica', 'normal' ) ); // Warms Dompdf's static cache with the alias.
 
 		// Act.
 		$metrics->setFontFamily(
