@@ -656,17 +656,25 @@ class Settings {
 	}
 
 	/**
-	 * Script handles dequeued on the POS checkout pages.
+	 * Shipped defaults are a floor merchants can add to but cannot remove because they protect the pay form
+	 * from breaking assets (such as Stripe's classic checkout script since Stripe 11.1.0).
 	 */
 	public function dequeue_script_handles(): array {
-		return (array) $this->section_value( 'checkout', 'dequeue_script_handles' );
+		$section  = $this->sections()->get( 'checkout' );
+		$defaults = $section instanceof Settings_Section_Interface ? ( $section->defaults()['dequeue_script_handles'] ?? array() ) : array();
+
+		return array_values( array_unique( array_merge( $defaults, (array) $this->section_value( 'checkout', 'dequeue_script_handles' ) ) ) );
 	}
 
 	/**
-	 * Style handles dequeued on the POS checkout pages.
+	 * Shipped defaults are a floor merchants can add to but cannot remove because they protect the pay form
+	 * from breaking assets (such as Stripe's classic checkout script since Stripe 11.1.0).
 	 */
 	public function dequeue_style_handles(): array {
-		return (array) $this->section_value( 'checkout', 'dequeue_style_handles' );
+		$section  = $this->sections()->get( 'checkout' );
+		$defaults = $section instanceof Settings_Section_Interface ? ( $section->defaults()['dequeue_style_handles'] ?? array() ) : array();
+
+		return array_values( array_unique( array_merge( $defaults, (array) $this->section_value( 'checkout', 'dequeue_style_handles' ) ) ) );
 	}
 
 	/**

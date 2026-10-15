@@ -19,6 +19,14 @@ use WP_UnitTestCase;
  */
 class Test_Typed_Accessors extends WP_UnitTestCase {
 	/**
+	 * Start with no saved checkout section.
+	 */
+	public function setUp(): void {
+		parent::setUp();
+		delete_option( 'woocommerce_pos_settings_checkout' );
+	}
+
+	/**
 	 * Clean options between tests.
 	 */
 	public function tearDown(): void {
@@ -71,6 +79,53 @@ class Test_Typed_Accessors extends WP_UnitTestCase {
 		$this->assertTrue( $settings->admin_emails()['enabled'] );
 		$this->assertIsArray( $settings->dequeue_script_handles() );
 		$this->assertIsArray( $settings->tax_id_write_map() );
+	}
+
+	/**
+	 * Saved script handles add to the shipped floor, in defaults-first order.
+	 */
+	public function test_dequeue_scripts_saved_list_keeps_defaults(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_script_handles' => array( 'theme-script' ) ) );
+
+		$this->assertSame(
+			array( 'admin-bar', 'wc-add-to-cart', 'wc-stripe-upe-classic', 'theme-script' ),
+			Settings::instance()->dequeue_script_handles()
+		);
+	}
+
+	/**
+	 * Saved style handles add to the shipped floor, in defaults-first order.
+	 */
+	public function test_dequeue_styles_saved_list_keeps_defaults(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_style_handles' => array( 'theme-style' ) ) );
+		$defaults = Settings::instance()->sections()->get( 'checkout' )->defaults();
+
+		$this->assertContains( 'admin-bar', Settings::instance()->dequeue_style_handles() );
+		$this->assertSame( array_merge( $defaults['dequeue_style_handles'], array( 'theme-style' ) ), Settings::instance()->dequeue_style_handles() );
+	}
+
+	/**
+	 * An unsaved checkout section returns exactly the shipped lists.
+	 */
+	public function test_dequeue_handles_no_saved_section_returns_defaults(): void {
+		$settings = Settings::instance();
+		$defaults = $settings->sections()->get( 'checkout' )->defaults();
+
+		$this->assertSame( $defaults['dequeue_script_handles'], $settings->dequeue_script_handles() );
+		$this->assertSame( $defaults['dequeue_style_handles'], $settings->dequeue_style_handles() );
+	}
+
+	/**
+	 * Overlapping defaults and repeated merchant handles appear only once.
+	 */
+	public function test_dequeue_handles_saved_duplicates_return_unique_lists(): void {
+		$settings = Settings::instance();
+		$defaults = $settings->sections()->get( 'checkout' )->defaults();
+		foreach ( array( 'dequeue_script_handles', 'dequeue_style_handles' ) as $key ) {
+			update_option( 'woocommerce_pos_settings_checkout', array( $key => array( 'theme-handle', 'admin-bar', 'theme-handle' ) ) );
+
+			$this->assertSame( array_merge( $defaults[ $key ], array( 'theme-handle' ) ), $settings->$key() );
+		}
 	}
 
 	/**
