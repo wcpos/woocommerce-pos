@@ -48,7 +48,6 @@ class Checkout_Section extends Abstract_Section {
 			'dequeue_script_handles' => array(
 				'admin-bar',
 				'wc-add-to-cart',
-				'wc-stripe-upe-classic',
 			),
 			'dequeue_style_handles' => array(
 				'admin-bar',
@@ -78,6 +77,18 @@ class Checkout_Section extends Abstract_Section {
 				$migrated['enabled'] = $raw[ $key ];
 				$raw[ $key ]         = $migrated;
 			}
+		}
+
+		// Drop the former default only when it was stored unchanged. A customized
+		// list remains the merchant's explicit choice; the default must not disable
+		// Stripe UPE's payment-fields script on the hosted POS pay page.
+		$legacy_default_script_handles = array( 'admin-bar', 'wc-add-to-cart', 'wc-stripe-upe-classic' );
+		if (
+			isset( $raw['dequeue_script_handles'] )
+			&& \is_array( $raw['dequeue_script_handles'] )
+			&& $legacy_default_script_handles === $raw['dequeue_script_handles']
+		) {
+			$raw['dequeue_script_handles'] = array( 'admin-bar', 'wc-add-to-cart' );
 		}
 
 		return $raw;
