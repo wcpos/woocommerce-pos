@@ -10,6 +10,8 @@
  *
  * These are array-in / array-out functions, so no REST dispatch or WooCommerce
  * bootstrapping is required.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Tests;
@@ -30,7 +32,7 @@ class Test_Gateways extends WC_Unit_Test_Case {
 	/**
 	 * Build a minimal gateway stand-in.
 	 *
-	 * order_gateways() only touches the id/title/icon/enabled/chosen properties,
+	 * The order_gateways() method only touches the id/title/icon/enabled/chosen properties,
 	 * so a plain object is a faithful stand-in for WC_Payment_Gateway here and
 	 * keeps the test free of WooCommerce state.
 	 *
@@ -234,8 +236,83 @@ class Test_Gateways extends WC_Unit_Test_Case {
 		$result = Gateways::order_gateways( $gateways, $settings );
 
 		// Assert.
+		$this->assertSame( array( 'pos_cash', 'pos_card' ), array_keys( $result ) );
 		$this->assertTrue( $result['pos_card']->chosen );
 		$this->assertFalse( $result['pos_cash']->chosen );
+	}
+
+	/**
+	 * A disabled or unknown default selects exactly the first enabled gateway.
+	 *
+	 * @dataProvider unavailable_default_gateway_provider
+	 *
+	 * @param string $default_gateway Unavailable default gateway id.
+	 */
+	public function test_order_gateways_unavailable_default_chooses_first_enabled( string $default_gateway ): void {
+		// Arrange.
+		$gateways = array(
+			$this->make_gateway( 'pos_cash' ),
+			$this->make_gateway( 'pos_card' ),
+			$this->make_gateway( 'bacs' ),
+		);
+		$settings = $this->make_settings(
+			array(
+				'pos_cash' => array(
+					'enabled' => false,
+					'order'   => 0,
+				),
+				'pos_card' => array(
+					'enabled' => true,
+					'order'   => 2,
+				),
+				'bacs'     => array(
+					'enabled' => true,
+					'order'   => 1,
+				),
+			),
+			$default_gateway
+		);
+
+		// Act.
+		$result = Gateways::order_gateways( $gateways, $settings );
+
+		// Assert.
+		$this->assertSame( array( 'bacs', 'pos_card' ), array_keys( $result ) );
+		$this->assertSame( array( true, false ), array_column( $result, 'chosen' ) );
+	}
+
+	/**
+	 * Defaults that cannot be selected from the enabled gateway list.
+	 *
+	 * @return array
+	 */
+	public static function unavailable_default_gateway_provider(): array {
+		return array(
+			'disabled default' => array( 'pos_cash' ),
+			'unknown default'  => array( 'unknown' ),
+		);
+	}
+
+	/**
+	 * No enabled gateways means no selection and no error.
+	 */
+	public function test_order_gateways_all_disabled_returns_empty_array(): void {
+		// Arrange.
+		$gateways = array( $this->make_gateway( 'pos_cash' ) );
+		$settings = $this->make_settings(
+			array(
+				'pos_cash' => array(
+					'enabled' => false,
+					'order'   => 0,
+				),
+			)
+		);
+
+		// Act.
+		$result = Gateways::order_gateways( $gateways, $settings );
+
+		// Assert.
+		$this->assertSame( array(), $result );
 	}
 
 	/**

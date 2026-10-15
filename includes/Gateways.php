@@ -109,6 +109,8 @@ class Gateways {
 	 * overrides each one's title, blanks its icon, forces it enabled and marks the
 	 * configured `default_gateway` as chosen, then sorts the result by the
 	 * per-gateway `order` setting.
+	 * A disabled or unknown default yields the first enabled gateway as chosen,
+	 * so a pay form with enabled gateways never renders without a selection.
 	 *
 	 * Free of ambient state - it makes no WordPress calls and reads no globals, so
 	 * it can be exercised directly in unit tests. It is NOT side-effect free: the
@@ -164,6 +166,10 @@ class Gateways {
 				return ( $settings['gateways'][ $a ]['order'] ?? PHP_INT_MAX ) <=> ( $settings['gateways'][ $b ]['order'] ?? PHP_INT_MAX );
 			}
 		);
+
+		if ( $_available_gateways && ! in_array( true, array_column( $_available_gateways, 'chosen' ), true ) ) {
+			$_available_gateways[ array_key_first( $_available_gateways ) ]->chosen = true;
+		}
 
 		return $_available_gateways;
 	}
