@@ -233,7 +233,12 @@ class Test_File_Integrity extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertSame( 'files_missing', $result['status'] );
-		$this->assertSame( $result, File_Integrity::stored( $this->target( 'woocommerce-pos' ) ) );
+		// The second run stores its own `checked` timestamp, which crosses a
+		// second boundary often enough on CI to differ from the first run's.
+		$stored = File_Integrity::stored( $this->target( 'woocommerce-pos' ) );
+		$this->assertGreaterThanOrEqual( $result['checked'], $stored['checked'] );
+		unset( $result['checked'], $stored['checked'] );
+		$this->assertSame( $result, $stored );
 		$this->assertCount( 1, $transport->events );
 		$event = $transport->events[0];
 		$this->assertSame( 'error', (string) $event->getLevel() );

@@ -7,6 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
+use WCPOS\Vendor\Dompdf\Dompdf;
+use WCPOS\Vendor\Dompdf\Options;
+use WCPOS\WooCommercePOS\Services\Pdf_Font_Metrics;
 use WCPOS\WooCommercePOS\Templates\Thermal\Html_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 use WP_UnitTestCase;
@@ -86,7 +89,103 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$html = $this->emitter->emit( $ast, array( 'paper_width_px' => 302.36 ) );
 
 		// Assert.
-		$this->assertStringContainsString( 'font-size: 9.67px', $html );
+		$this->assertStringContainsString( 'font-size: 9.66px', $html );
+	}
+
+	/**
+	 * Font sizing and fixed columns use the caller's monospace advance.
+	 *
+	 * @return void
+	 */
+	public function test_font_size_and_columns_use_given_monospace_advance(): void {
+		// Arrange.
+		$ast = $this->receipt(
+			array(
+				array(
+					'type'     => 'row',
+					'children' => array(
+						array(
+							'type'     => 'col',
+							'width'    => 12,
+							'align'    => 'left',
+							'children' => array(
+								array(
+									'type'  => 'raw-text',
+									'value' => 'L',
+								),
+							),
+						),
+					),
+				),
+			),
+			48
+		);
+
+		// Act.
+		$html          = $this->emitter->emit(
+			$ast,
+			array(
+				'paper_width_px'       => 302.36,
+				'monospace_advance_em' => 0.602,
+			)
+		);
+		$fallback_html = $this->emitter->emit(
+			$ast,
+			array(
+				'paper_width_px'       => 302.36,
+				'monospace_advance_em' => 5,
+			)
+		);
+
+		// Assert.
+		$this->assertStringContainsString( 'font-size: 9.63px', $html );
+		$this->assertStringContainsString( 'width: 7.22em', $html );
+		$this->assertStringContainsString( 'font-size: 9.66px', $fallback_html );
+	}
+
+	/**
+	 * The PDF character grid fits the printable width in the font the PDF renders.
+	 *
+	 * Dompdf lays the thermal receipt out in DejaVu Sans Mono (Pdf_Font_Metrics
+	 * aliases every monospace stack to it), whose glyphs advance 0.602em rather
+	 * than Courier's 0.6em. The emitter fills the printable width exactly, so a
+	 * grid sized from the wrong advance puts a full-width line 0.33% past the
+	 * edge. Dompdf cannot break a run of letters, so the last glyph is clipped
+	 * rather than wrapped and page geometry never changes — which is why this
+	 * measures with Dompdf's own metrics instead of rendering. The Courier-sized
+	 * grid is measured too and must not fit, proving the check is sensitive.
+	 *
+	 * @return void
+	 */
+	public function test_pdf_grid_fits_printable_width_in_dejavu_sans_mono(): void {
+		// Arrange.
+		$paper_px = 302.36; // 80mm.
+		$inner_pt = ( $paper_px - 2 * 12 ) * 0.75; // Minus the wrapper's side padding, in PDF points.
+		$ast      = $this->receipt( array(), 42 );
+		$line     = str_repeat( 'X', 42 );
+		$options  = new Options();
+		$options->set( 'fontCache', get_temp_dir() );
+		$options->set( 'tempDir', get_temp_dir() );
+		$metrics  = ( new Dompdf( $options ) )->getFontMetrics();
+		$font     = $metrics->getFont( 'dejavu sans mono', 'normal' );
+
+		// Act.
+		$dejavu_html  = $this->emitter->emit(
+			$ast,
+			array(
+				'paper_width_px'       => $paper_px,
+				'monospace_advance_em' => Pdf_Font_Metrics::MONOSPACE_ADVANCE_EM,
+			)
+		);
+		$courier_html = $this->emitter->emit( $ast, array( 'paper_width_px' => $paper_px ) );
+		$this->assertSame( 1, preg_match( '/font-size: ([0-9.]+)px/', $dejavu_html, $dejavu ) );
+		$this->assertSame( 1, preg_match( '/font-size: ([0-9.]+)px/', $courier_html, $courier ) );
+		$dejavu_width_pt  = $metrics->getTextWidth( $line, $font, (float) $dejavu[1] * 0.75 );
+		$courier_width_pt = $metrics->getTextWidth( $line, $font, (float) $courier[1] * 0.75 );
+
+		// Assert.
+		$this->assertLessThanOrEqual( $inner_pt, $dejavu_width_pt );
+		$this->assertGreaterThan( $inner_pt, $courier_width_pt );
 	}
 
 	/**
