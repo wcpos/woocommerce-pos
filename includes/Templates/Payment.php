@@ -91,6 +91,7 @@ class Payment {
 		remove_action( 'wp_head', 'adjacent_posts_rel_link_wp_head', 10, 0 );
 
 		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts_and_styles' ), 100 );
+		add_action( 'wp_print_footer_scripts', array( $this, 'remove_scripts_and_styles' ), 1 );
 	}
 
 	/**
@@ -106,6 +107,10 @@ class Payment {
 	 * This function dequeues all scripts and styles that are not specified in the WCPOS settings,
 	 * unless they are specifically included by the 'woocommerce_pos_payment_template_dequeue_script_handles'
 	 * and 'woocommerce_pos_payment_template_dequeue_style_handles' filters.
+	 *
+	 * It runs twice, at wp_enqueue_scripts and again just before the footer scripts print, so the
+	 * list binds the whole page: some gateways enqueue from wp_footer (WooCommerce Stripe's
+	 * classic checkout script, which blocks every non-Stripe submit since Stripe 11.1.0).
 	 *
 	 * @since 1.3.0
 	 */
