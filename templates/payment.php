@@ -289,20 +289,59 @@
 		}
 	</style>
 	<script>
-		window.addEventListener("message", ({data}) => {
-			if (data.action && data.action === "wcpos-process-payment") {
-				// submit checkout form
-				const button = document.getElementById('place_order');
-				if (button) {
-					const event = new MouseEvent('click', {
-						bubbles: true,
-						cancelable: true,
-						view: window
-					});
+		const directSubmitGateways = <?php echo wp_json_encode( array_values( $direct_submit_gateway_ids ) ); ?>;
+		window.addEventListener("message", ({ data }) => {
+			if (!data || data.action !== "wcpos-process-payment") return;
+			const form = document.getElementById('order_review');
+			const button = document.getElementById('place_order');
+			if (!form || !button) return;
+			const checked = form.querySelector('input[name="payment_method"]:checked');
+			const method = checked ? checked.value : '';
 
-					button.dispatchEvent(event);
-				}
+			if (directSubmitGateways.includes(method)) {
+				// POS tenders carry no gateway script; bypass submit handlers so third parties cannot veto the sale.
+				HTMLFormElement.prototype.submit.call(form);
+				return;
 			}
+			let navigating = false;
+			window.addEventListener('beforeunload', () => { navigating = true; }, { once: true });
+			// Older WebViews have no SubmitEvent; a plain cancelable Event still reaches every submit handler.
+			const submitEvent = typeof SubmitEvent === 'function'
+				? new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: button })
+				: new Event('submit', { bubbles: true, cancelable: true });
+			const accepted = form.dispatchEvent(submitEvent);
+			if (accepted) {
+				HTMLFormElement.prototype.submit.call(form);
+				return;
+			}
+			// Gateway flows navigate or show their own UI; a block leaves an error notice and goes nowhere.
+			setTimeout(() => {
+				if (navigating) return;
+				// One text per notice: a list's items, or the notice itself. No :has(), which older engines reject.
+				const notices = Array.from(document.querySelectorAll('.woocommerce-error')).flatMap((box) => {
+					const items = Array.from(box.querySelectorAll('li'));
+					return (items.length ? items : [box]).map((n) => n.textContent.trim());
+				}).filter(Boolean);
+				const unique = Array.from(new Set(notices));
+				if (!unique.length) return;
+				const message = {
+					action: 'wcpos-payment-blocked',
+					payload: {
+						message: unique[0],
+						data: {
+							notices: unique,
+							payment_method: method,
+							scripts: Array.from(document.scripts).map((s) => s.id || s.src).filter(Boolean),
+						},
+					},
+				};
+				if (window.top && typeof window.top.postMessage === 'function') {
+					window.top.postMessage(message, '*');
+				}
+				if (typeof window.ReactNativeWebView !== 'undefined' && typeof window.ReactNativeWebView.postMessage === 'function') {
+					window.ReactNativeWebView.postMessage(JSON.stringify(message));
+				}
+			}, 2500);
 		}, false);
 	</script>
 </head>

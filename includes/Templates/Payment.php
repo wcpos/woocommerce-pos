@@ -158,6 +158,22 @@ class Payment {
 
 
 	/**
+	 * Return the IDs of gateways that can bypass submit handlers.
+	 *
+	 * @param array $available_gateways Available payment gateways.
+	 * @return string[]
+	 */
+	public function direct_submit_gateway_ids( array $available_gateways ): array {
+		$ids = array();
+		foreach ( $available_gateways as $gateway ) {
+			if ( $gateway instanceof \WCPOS\WooCommercePOS\Payments\Abstract_POS_Gateway ) {
+				$ids[] = $gateway->id;
+			}
+		}
+		return $ids;
+	}
+
+	/**
 	 * Render the payment template.
 	 *
 	 * @return void
@@ -202,7 +218,8 @@ class Payment {
 
 			// We need to reload the gateways here to use the current customer details.
 			WC()->payment_gateways()->init();
-			$available_gateways = WC()->payment_gateways->get_available_payment_gateways();
+			$available_gateways        = WC()->payment_gateways->get_available_payment_gateways();
+			$direct_submit_gateway_ids = $this->direct_submit_gateway_ids( $available_gateways );
 
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', /* translators: Short WCPOS UI label; keep concise. */ __( 'Pay for order', 'woocommerce-pos' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 
