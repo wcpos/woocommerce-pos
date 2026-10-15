@@ -301,11 +301,12 @@
 			if (!form || !button) return;
 			const checked = form.querySelector('input[name="payment_method"]:checked');
 			const method = checked ? checked.value : '';
-			// One text per notice: a list's items, or the notice itself. No :has(), which older engines reject.
-			const noticeTexts = () => Array.from(document.querySelectorAll('.woocommerce-error')).flatMap((box) => {
+			// One node per notice: a list's items, or the notice itself. No :has(), which older engines reject.
+			const noticeNodes = () => Array.from(document.querySelectorAll('.woocommerce-error')).flatMap((box) => {
 				const items = Array.from(box.querySelectorAll('li'));
-				return (items.length ? items : [box]).map((n) => n.textContent.trim());
-			}).filter(Boolean);
+				return items.length ? items : [box];
+			});
+			const noticeText = (node) => node.textContent.trim();
 
 			wcposSubmitInFlight = true;
 			let navigating = false;
@@ -322,12 +323,16 @@
 
 			// A third-party tender goes through the button, so a gateway's handlers on the button's
 			// click and on the form's submit both run exactly as on any WooCommerce pay page.
-			const noticesBefore = new Set(noticeTexts());
+			// Instances, not text: a gateway re-creates the same error text on a retry, and that is a fresh block.
+			const noticesBefore = new Map(noticeNodes().map((node) => [node, noticeText(node)]));
 			button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
 			// A gateway flow navigates or shows its own UI; a block leaves a NEW error notice and goes nowhere.
 			setTimeout(() => {
 				if (navigating) return;
-				const fresh = Array.from(new Set(noticeTexts())).filter((text) => !noticesBefore.has(text));
+				const fresh = Array.from(new Set(noticeNodes()
+					.filter((node) => noticesBefore.get(node) !== noticeText(node))
+					.map(noticeText)
+					.filter(Boolean)));
 				if (!fresh.length) return;
 				const message = {
 					action: 'wcpos-payment-blocked',
