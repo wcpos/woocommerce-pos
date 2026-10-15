@@ -107,8 +107,45 @@ class Test_Checkout_Section extends WP_UnitTestCase {
 
 		$this->assertEquals( 'fiscal', $settings['receipt_default_mode'] );
 		$this->assertContains( 'admin-bar', $settings['dequeue_script_handles'] );
+		$this->assertNotContains( 'wc-stripe-upe-classic', $settings['dequeue_script_handles'] );
 		$this->assertFalse( $settings['prevent_overselling'] );
 		$this->assertFalse( $settings['disable_wp_head'] );
+	}
+
+	/**
+	 * Migrate the exact old script-exclusion default in memory, without writing
+	 * to the database or overriding a customized list.
+	 */
+	public function test_migrate_legacy_default_does_not_dequeue_stripe_upe(): void {
+		$legacy_handles = array( 'admin-bar', 'wc-add-to-cart', 'wc-stripe-upe-classic' );
+		update_option(
+			'woocommerce_pos_settings_checkout',
+			array( 'dequeue_script_handles' => $legacy_handles )
+		);
+
+		$settings = ( new Checkout_Section() )->read();
+
+		$this->assertSame( array( 'admin-bar', 'wc-add-to-cart' ), $settings['dequeue_script_handles'] );
+		$this->assertSame(
+			$legacy_handles,
+			get_option( 'woocommerce_pos_settings_checkout' )['dequeue_script_handles'],
+			'Reads must not persist the migrated settings.'
+		);
+	}
+
+	/**
+	 * Preserve a deliberately customized script-exclusion list.
+	 */
+	public function test_migrate_custom_script_exclusions_preserves_merchant_choice(): void {
+		$custom_handles = array( 'admin-bar', 'wc-add-to-cart', 'wc-stripe-upe-classic', 'custom-script' );
+		update_option(
+			'woocommerce_pos_settings_checkout',
+			array( 'dequeue_script_handles' => $custom_handles )
+		);
+
+		$settings = ( new Checkout_Section() )->read();
+
+		$this->assertSame( $custom_handles, $settings['dequeue_script_handles'] );
 	}
 
 	/**
