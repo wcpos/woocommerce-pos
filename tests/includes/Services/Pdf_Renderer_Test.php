@@ -43,7 +43,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 * The scoped Dompdf build calls the global PHP 8.4 HTTP response header
 	 * functions, never prefixed ones.
 	 *
-	 * php-scoper 0.16's bundled symbol list predates PHP 8.4, so without the
+	 * PHP-Scoper 0.16's bundled symbol list predates PHP 8.4, so without the
 	 * exclude-functions entry in php-scoper/scoper.inc.php it rewrites Dompdf's
 	 * http_(get|clear)_last_response_headers() calls into WCPOS\Vendor\ — where
 	 * no such functions exist — fataling on PHP 8.4+ sites.
@@ -433,6 +433,84 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 
 		// Assert.
 		$this->assertStringContainsString( 'charset=utf-8', $html );
+	}
+
+	/**
+	 * Core font weights preserve non-Latin text through Unicode font aliases.
+	 */
+	public function test_render_html_keeps_non_latin_text_at_core_font_weights(): void {
+		// Arrange.
+		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
+			. '<body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif;">'
+			. '<div style="font-weight: 400;">AAAA Σύνολο ZZZZ</div>'
+			. '<div style="font-weight: 700;">BBBB Σύνολο ZZZZ</div>'
+			. '<div style="font-family: \'Courier New\', Courier, monospace;">CCCC Σύνολο ZZZZ</div>'
+			. '</body></html>';
+
+		// Act.
+		$pdf = $this->renderer->render_html( $html );
+
+		// Assert.
+		$this->assertDoesNotMatchRegularExpression( '/\(\s*[A-Z]{4} \?{6}/', $this->get_pdf_streams( $pdf ) );
+		$fonts = $this->get_base_fonts( $pdf );
+		$this->assertNotContains( 'Helvetica', $fonts );
+		$this->assertNotContains( 'Helvetica-Bold', $fonts );
+		$this->assertNotContains( 'Courier', $fonts );
+		$this->assertMatchesRegularExpression( '/DejaVuSans/', implode( ' ', $fonts ) );
+	}
+
+	/**
+	 * Thermal receipt layout uses Unicode monospace instead of core Courier.
+	 */
+	public function test_render_html_receipt_layout_thermal_uses_unicode_monospace(): void {
+		// Arrange.
+		$html = '<div style="font-family: \'Courier New\', Courier, monospace; '
+			. 'font-size: 13px; line-height: 1.4; background: #fff; color: #000; '
+			. 'padding: 16px 12px; overflow: hidden; white-space: pre-wrap; word-break: break-all;">Σύνολο</div>';
+
+		// Act.
+		$pdf = $this->renderer->render_html(
+			$html,
+			array(
+				'receipt_layout' => true,
+				'default_font'   => 'dejavu sans mono',
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( 'Courier', $this->get_base_fonts( $pdf ) );
+		$this->assertStringNotContainsString( '??????', $this->get_pdf_streams( $pdf ) );
+	}
+
+	/**
+	 * Concatenate decompressed PDF streams, retaining uncompressed streams.
+	 *
+	 * @param string $pdf PDF bytes.
+	 * @return string Stream contents.
+	 */
+	private function get_pdf_streams( string $pdf ): string {
+		preg_match_all( '/\bstream\r?\n(.*?)\r?\nendstream/s', $pdf, $matches );
+		$this->assertNotEmpty( $matches[1] );
+		$streams = '';
+		foreach ( $matches[1] as $stream ) {
+			$decoded  = @gzuncompress( $stream ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Streams may be uncompressed.
+			$streams .= false === $decoded ? $stream : $decoded;
+		}
+
+		return $streams;
+	}
+
+	/**
+	 * List the BaseFont names in PDF bytes.
+	 *
+	 * @param string $pdf PDF bytes.
+	 * @return string[] Font names.
+	 */
+	private function get_base_fonts( string $pdf ): array {
+		preg_match_all( '/\/BaseFont\s+\/([^\s\/]+)/', $pdf, $matches );
+		$this->assertNotEmpty( $matches[1] );
+
+		return $matches[1];
 	}
 
 	/**
