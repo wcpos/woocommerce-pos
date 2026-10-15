@@ -29,6 +29,12 @@ use WCPOS\Vendor\Dompdf\Options;
  */
 class Pdf_Font_Metrics extends FontMetrics {
 	/**
+	 * DejaVu Sans Mono advance per Dompdf's .ufm metrics, guaranteed by this
+	 * class's aliases for every monospace stack the PDF renderer sees.
+	 */
+	public const MONOSPACE_ADVANCE_EM = 0.602;
+
+	/**
 	 * Core font families (lower-case) and the bundled Unicode family that
 	 * replaces each. Symbol and ZapfDingbats are left alone.
 	 */
@@ -76,6 +82,10 @@ class Pdf_Font_Metrics extends FontMetrics {
 		parent::setFontFamilies();
 
 		foreach ( self::FONT_ALIASES as $alias => $target ) {
+			// A merchant's own font registration takes precedence over aliases.
+			if ( isset( $this->userFonts[ $alias ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
+				continue;
+			}
 			if ( isset( $this->fontFamilies[ $target ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
 				$this->fontFamilies[ $alias ] = $this->fontFamilies[ $target ]; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Inherited Dompdf property.
 			}
