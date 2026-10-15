@@ -37,8 +37,8 @@ class Pdf_Font_Metrics extends FontMetrics {
 	/**
 	 * Core font families (lower-case) and the Unicode families that replace
 	 * each, in order of preference: the first one present in the lookup table
-	 * wins. A build that ships a reduced font set (the `next` font pack has no
-	 * serif face) still gets a Unicode face rather than cp1252 Times. Monospace
+	 * wins. A build with a reduced font set (a pack with only sans and mono
+	 * faces) still gets a Unicode face rather than cp1252 Times. Monospace
 	 * has no proportional fallback on purpose: the thermal grid is sized for a
 	 * fixed advance, so a proportional face would silently break its columns.
 	 * Symbol and ZapfDingbats are left alone.
