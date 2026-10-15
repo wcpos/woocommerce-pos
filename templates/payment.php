@@ -290,46 +290,51 @@
 	</style>
 	<script>
 		const directSubmitGateways = <?php echo wp_json_encode( array_values( $direct_submit_gateway_ids ) ); ?>;
+		// One sale per Process Payment: a second message before the first POST navigates is a retry, not a sale.
+		let wcposSubmitInFlight = false;
+		window.addEventListener('pageshow', () => { wcposSubmitInFlight = false; });
 		window.addEventListener("message", ({ data }) => {
 			if (!data || data.action !== "wcpos-process-payment") return;
+			if (wcposSubmitInFlight) return;
 			const form = document.getElementById('order_review');
 			const button = document.getElementById('place_order');
 			if (!form || !button) return;
 			const checked = form.querySelector('input[name="payment_method"]:checked');
 			const method = checked ? checked.value : '';
+			// One text per notice: a list's items, or the notice itself. No :has(), which older engines reject.
+			const noticeTexts = () => Array.from(document.querySelectorAll('.woocommerce-error')).flatMap((box) => {
+				const items = Array.from(box.querySelectorAll('li'));
+				return (items.length ? items : [box]).map((n) => n.textContent.trim());
+			}).filter(Boolean);
 
-			if (directSubmitGateways.includes(method)) {
-				// POS tenders carry no gateway script; bypass submit handlers so third parties cannot veto the sale.
-				HTMLFormElement.prototype.submit.call(form);
-				return;
-			}
+			wcposSubmitInFlight = true;
 			let navigating = false;
 			window.addEventListener('beforeunload', () => { navigating = true; }, { once: true });
-			// Older WebViews have no SubmitEvent; a plain cancelable Event still reaches every submit handler.
-			const submitEvent = typeof SubmitEvent === 'function'
-				? new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: button })
-				: new Event('submit', { bubbles: true, cancelable: true });
-			const accepted = form.dispatchEvent(submitEvent);
-			if (accepted) {
+			// A POST either navigates or fails; either way a later Process Payment must work again.
+			setTimeout(() => { if (!navigating) wcposSubmitInFlight = false; }, 10000);
+
+			if (directSubmitGateways.includes(method)) {
+				// A POS tender carries no gateway script. Submit without firing the submit event,
+				// so no third-party handler bound to it can veto the sale.
 				HTMLFormElement.prototype.submit.call(form);
 				return;
 			}
-			// Gateway flows navigate or show their own UI; a block leaves an error notice and goes nowhere.
+
+			// A third-party tender goes through the button, so a gateway's handlers on the button's
+			// click and on the form's submit both run exactly as on any WooCommerce pay page.
+			const noticesBefore = new Set(noticeTexts());
+			button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+			// A gateway flow navigates or shows its own UI; a block leaves a NEW error notice and goes nowhere.
 			setTimeout(() => {
 				if (navigating) return;
-				// One text per notice: a list's items, or the notice itself. No :has(), which older engines reject.
-				const notices = Array.from(document.querySelectorAll('.woocommerce-error')).flatMap((box) => {
-					const items = Array.from(box.querySelectorAll('li'));
-					return (items.length ? items : [box]).map((n) => n.textContent.trim());
-				}).filter(Boolean);
-				const unique = Array.from(new Set(notices));
-				if (!unique.length) return;
+				const fresh = Array.from(new Set(noticeTexts())).filter((text) => !noticesBefore.has(text));
+				if (!fresh.length) return;
 				const message = {
 					action: 'wcpos-payment-blocked',
 					payload: {
-						message: unique[0],
+						message: fresh[0],
 						data: {
-							notices: unique,
+							notices: fresh,
 							payment_method: method,
 							scripts: Array.from(document.scripts).map((s) => s.id || s.src).filter(Boolean),
 						},
