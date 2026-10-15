@@ -649,11 +649,15 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Italic and bold italic receipt text still produces a PDF.
+	 * Italic and bold italic sans text embeds the kept oblique and bold faces.
+	 *
+	 * The family is named explicitly: Dompdf memoises default-font lookups in a
+	 * process-wide static, so a family-less document inherits whatever default
+	 * an earlier test in the same process pinned (mono on one CI shard).
 	 */
 	public function test_render_html_renders_italic_and_bold_italic_text(): void {
 		// Arrange.
-		$html = '<html><body><span style="font-style: italic">Note</span>'
+		$html = '<html><body style="font-family: \'dejavu sans\'"><span style="font-style: italic">Note</span>'
 			. '<span style="font-weight: bold; font-style: italic">Total</span></body></html>';
 		// Act.
 		$pdf = $this->renderer->render_html( $html );
