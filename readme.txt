@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.0
+Stable tag: 1.11.1
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,16 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.11.1 - 2026/10/15 =
+
+- **Cash and card payments work again on stores running WooCommerce Stripe 11.1.0.** Stripe's checkout script now stays off the POS payment page, where since Stripe 11.1.0 it blocked every other payment method with "Payment failed. Please try again."
+- **A payment page for an order that no longer exists answers "not found"** instead of crashing inside another gateway's code.
+- **Free sites offer Cash and Card at the till consistently.** The free-tier gateway rule applied only to the settings screen; it now applies wherever the POS reads its gateways, and falls back to an enabled gateway rather than a disabled default.
+- **POS login lockouts are keyed by account and connecting device.** Forwarded address headers are no longer trusted, and five wrong passwords from one place no longer lock the cashier out everywhere.
+- **The POS login page only redirects to known origins.** A sign-in link can no longer hand the cashier's tokens to another site.
+- **A failed sign-in no longer leaves a phantom session** in the Sessions list.
+- Developers: the uninstall cleanup definitions load on their own so Pro can reuse them; CI fails when the vendored worker's RxDB moves inside a published plugin lane.
 
 = 1.11.0 - 2026/10/14 =
 
