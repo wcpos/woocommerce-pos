@@ -64,8 +64,9 @@ class Checkout_Section extends Abstract_Section {
 	}
 
 	/**
-	 * Migrate legacy boolean email settings to array format, in memory only.
-	 * The stored boolean becomes the `enabled` flag over the default subkeys.
+	 * Migrate legacy checkout settings in memory only.
+	 * This normalizes old email settings and replaces the exact former default
+	 * script-exclusion list without persisting a read-time change.
 	 *
 	 * @param array $raw Raw option value.
 	 */
