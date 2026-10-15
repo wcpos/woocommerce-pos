@@ -198,6 +198,55 @@ class Test_Uninstall extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Shared definitions and a repeated entrypoint load must not run cleanup.
+	 */
+	public function test_uninstall_functions_file_defines_the_cleanup_without_side_effects(): void {
+		$this->assertTrue( Health::is_healthy(), 'Precondition: sync tables installed' );
+
+		require_once \dirname( __DIR__, 2 ) . '/uninstall-functions.php';
+		$this->assertTrue( \function_exists( 'woocommerce_pos_uninstall_network' ) );
+
+		require \dirname( __DIR__, 2 ) . '/uninstall.php';
+		$this->assertTrue( Health::is_healthy(), 'Loading definitions again must not drop sync tables' );
+	}
+
+	/**
+	 * Network cleanup removes shared POS user meta and the integrity result.
+	 */
+	public function test_uninstall_network_removes_user_meta_and_the_integrity_result_once(): void {
+		$user_id = $this->factory()->user->create();
+		add_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', array( 'token' ) );
+		update_site_option( 'woocommerce_pos_file_integrity', array( 'x' ) );
+
+		woocommerce_pos_uninstall_network();
+		wp_cache_flush();
+
+		$this->assertSame( '', get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true ) );
+		$this->assertFalse( get_site_option( 'woocommerce_pos_file_integrity' ) );
+	}
+
+	/**
+	 * Pro must retain the shared wipe choice until it removes Free's data.
+	 */
+	public function test_uninstall_preserves_the_wipe_choice_while_pro_is_installed(): void {
+		update_option( 'wcpos_remove_all_data', 'yes' );
+
+		try {
+			$this->pin_pro_installed( true );
+			woocommerce_pos_uninstall_site();
+			wp_cache_flush();
+			$this->assertSame( 'yes', get_option( 'wcpos_remove_all_data' ) );
+
+			$this->pin_pro_installed( false );
+			woocommerce_pos_uninstall_site();
+			wp_cache_flush();
+			$this->assertFalse( get_option( 'wcpos_remove_all_data' ) );
+		} finally {
+			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
 	 * A plugin-named symlink must never be traversed into external storage.
 	 */
 	public function test_uninstall_rmdir_refuses_top_level_symlink(): void {

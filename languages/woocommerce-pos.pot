@@ -1578,7 +1578,7 @@ msgid "An identical request is already being processed."
 msgstr ""
 
 #: includes/Services/Auth.php:410
-#: includes/Services/Auth.php:502
+#: includes/Services/Auth.php:504
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
@@ -5256,45 +5256,45 @@ msgid "Missing or invalid redirect_uri parameter."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Auth.php:119
+#: includes/Templates/Auth.php:133
 msgid "Missing state parameter."
 msgstr ""
 
-#: includes/Templates/Auth.php:131
+#: includes/Templates/Auth.php:145
 msgid "Too many requests. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:267
+#: includes/Templates/Auth.php:361
 msgid "Auth session expired. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:273
+#: includes/Templates/Auth.php:367
 msgid "Invalid auth session. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:293
+#: includes/Templates/Auth.php:387
 msgid "Security check failed. Please try again."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Auth.php:303
+#: includes/Templates/Auth.php:397
 msgid "Authentication failed."
 msgstr ""
 
-#: includes/Templates/Auth.php:313
+#: includes/Templates/Auth.php:407
 msgid "This account is temporarily locked due to too many failed login attempts. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:354
+#: includes/Templates/Auth.php:448
 msgid "Failed to generate authentication tokens."
 msgstr ""
 
-#: includes/Templates/Auth.php:404
+#: includes/Templates/Auth.php:498
 msgid "Please enter both username and password."
 msgstr ""
 
-#: includes/Templates/Auth.php:418
-#: includes/Templates/Auth.php:427
+#: includes/Templates/Auth.php:512
+#: includes/Templates/Auth.php:521
 msgid "Invalid username or password."
 msgstr ""
 

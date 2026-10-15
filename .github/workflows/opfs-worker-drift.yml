@@ -89,3 +89,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUNDLE_REF: next
         run: bash .github/scripts/check-opfs-worker-drift.sh
+
+      # `!cancelled()`: report the RxDB lane check even when the drift check is red.
+      - name: Test the worker RxDB lane script
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/test-check-worker-rxdb-minor.sh
+
+      - name: Check the worker's RxDB version against the plugin's lane
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/check-worker-rxdb-minor.sh

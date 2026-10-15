@@ -17,6 +17,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 use stdClass;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Gateways;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 
 /**
  * Test_Gateways class.
@@ -434,5 +435,96 @@ class Test_Gateways extends WC_Unit_Test_Case {
 			),
 			$result
 		);
+	}
+
+	/**
+	 * Free checkout excludes stored BACS and chooses cash without constructing the API.
+	 */
+	public function test_available_payment_gateways_free_site_stored_bacs_enabled_is_excluded(): void {
+		$original_server   = $_SERVER;
+		$instance          = new Gateways();
+		$registry          = WC()->payment_gateways();
+		$original_gateways = $registry->payment_gateways;
+
+		try {
+			$_SERVER['HTTP_X_WCPOS'] = '1';
+			$registry->payment_gateways = array(
+				new \WC_Gateway_BACS(),
+				new \WCPOS\WooCommercePOS\Gateways\Cash(),
+			);
+			update_option(
+				'woocommerce_pos_settings_payment_gateways',
+				array(
+					'default_gateway' => 'bacs',
+					'gateways'        => array(
+						'bacs'     => array(
+							'enabled' => true,
+							'order'   => 0,
+						),
+						'pos_cash' => array(
+							'enabled' => true,
+							'order'   => 1,
+						),
+					),
+				)
+			);
+
+			$result = $instance->available_payment_gateways( $registry->payment_gateways );
+
+			$this->assertArrayNotHasKey( 'bacs', $result );
+			$this->assertArrayHasKey( 'pos_cash', $result );
+			$this->assertTrue( $result['pos_cash']->chosen );
+		} finally {
+			$_SERVER                    = $original_server;
+			$registry->payment_gateways = $original_gateways;
+			remove_filter( 'woocommerce_payment_gateways', array( $instance, 'payment_gateways' ) );
+			remove_filter( 'woocommerce_available_payment_gateways', array( $instance, 'available_payment_gateways' ), 99 );
+		}
+	}
+
+	/**
+	 * Pro keeps the stored BACS gateway available and chosen.
+	 */
+	public function test_available_payment_gateways_pro_lift_keeps_stored_bacs(): void {
+		$original_server   = $_SERVER;
+		$instance          = new Gateways();
+		$registry          = WC()->payment_gateways();
+		$original_gateways = $registry->payment_gateways;
+		remove_all_filters( 'option_woocommerce_pos_settings_payment_gateways' );
+
+		try {
+			$_SERVER['HTTP_X_WCPOS'] = '1';
+			$registry->payment_gateways = array(
+				new \WC_Gateway_BACS(),
+				new \WCPOS\WooCommercePOS\Gateways\Cash(),
+			);
+			update_option(
+				'woocommerce_pos_settings_payment_gateways',
+				array(
+					'default_gateway' => 'bacs',
+					'gateways'        => array(
+						'bacs'     => array(
+							'enabled' => true,
+							'order'   => 0,
+						),
+						'pos_cash' => array(
+							'enabled' => true,
+							'order'   => 1,
+						),
+					),
+				)
+			);
+
+			$result = $instance->available_payment_gateways( $registry->payment_gateways );
+
+			$this->assertArrayHasKey( 'bacs', $result );
+			$this->assertTrue( $result['bacs']->chosen );
+		} finally {
+			$_SERVER                    = $original_server;
+			$registry->payment_gateways = $original_gateways;
+			remove_filter( 'woocommerce_payment_gateways', array( $instance, 'payment_gateways' ) );
+			remove_filter( 'woocommerce_available_payment_gateways', array( $instance, 'available_payment_gateways' ), 99 );
+			Payment_Gateways_Section::register_free_tier_rule();
+		}
 	}
 }
