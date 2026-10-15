@@ -45,8 +45,10 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 			$decoded = @gzuncompress( $stream );
 			$output .= false === $decoded ? $stream : $decoded;
 		}
-		$this->assertStringContainsString( 'FROZEN-QR-243', $output );
-		$this->assertStringContainsString( 'ID:' . $number, $output );
+		// Pdf_Font_Metrics aliases Helvetica to DejaVu Sans, a Unicode TrueType
+		// face, so Dompdf writes the text as UTF-16BE rather than cp1252.
+		$this->assertStringContainsString( mb_convert_encoding( 'FROZEN-QR-243', 'UTF-16BE', 'UTF-8' ), $output );
+		$this->assertStringContainsString( mb_convert_encoding( 'ID:' . $number, 'UTF-16BE', 'UTF-8' ), $output );
 	}
 
 	/**

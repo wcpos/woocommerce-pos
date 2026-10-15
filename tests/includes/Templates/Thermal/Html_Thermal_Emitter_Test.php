@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
 use WCPOS\Vendor\Dompdf\Dompdf;
 use WCPOS\Vendor\Dompdf\Options;
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Pdf_Font_Metrics;
 use WCPOS\WooCommercePOS\Templates\Thermal\Html_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
@@ -163,7 +164,11 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$inner_pt = ( $paper_px - 2 * 12 ) * 0.75; // Minus the wrapper's side padding, in PDF points.
 		$ast      = $this->receipt( array(), 42 );
 		$line     = str_repeat( 'X', 42 );
-		$options  = new Options();
+		$loader   = new Font_Pack_Loader();
+		$this->assertTrue( $loader->ensure_all() );
+		$options = new Options();
+		// DejaVu Sans Mono ships in the font pack, not Dompdf's bundled font dir.
+		$options->set( 'fontDir', $loader->dir() );
 		$options->set( 'fontCache', get_temp_dir() );
 		$options->set( 'tempDir', get_temp_dir() );
 		$metrics  = ( new Dompdf( $options ) )->getFontMetrics();
