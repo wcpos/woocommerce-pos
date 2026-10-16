@@ -1409,8 +1409,17 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$order_a->set_payment_method( 'pos_cash' );
 		$order_b->set_payment_method( 'stripe' );
 		$order_c->set_payment_method( 'pos_cash' );
-		$order_c->add_meta_data( '_wcpos_payment_method', 'pos_cash', false );
-		$order_c->add_meta_data( '_wcpos_payment_method', 'stripe', false );
+		// A split: the index rows are derived from the ledger by the save hook, never hand-written.
+		$order_c->update_meta_data(
+			'_wcpos_payments',
+			array(
+				'schema'   => 1,
+				'payments' => array(
+					array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '5.00', 'status' => 'captured' ),
+					array( 'id' => wp_generate_uuid4(), 'method_id' => 'stripe', 'amount' => '5.00', 'status' => 'captured' ),
+				),
+			)
+		);
 		$order_a->save();
 		$order_b->save();
 		$order_c->save();

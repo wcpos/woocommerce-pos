@@ -222,6 +222,32 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $value, $stored->get_meta( Ledger::META_KEY ) );
 	}
 
+	/** A re-push of an unchanged ledger beside id-less index rows must not collapse the stored index. */
+	public function test_order_save_with_unchanged_ledger_and_collapsed_index_rows_rederives_the_index(): void {
+		// Arrange: a stored two-leg split (written through the save hook, as an order push is).
+		$order = $this->create_pos_order();
+		$value = array(
+			'schema'   => Ledger::SCHEMA,
+			'payments' => array(
+				$this->payment( 'pos_cash', '5.00', array( 'status' => 'captured' ) ),
+				$this->payment( 'stripe', '5.00', array( 'status' => 'captured' ) ),
+			),
+		);
+		$order->update_meta_data( Ledger::META_KEY, $value );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertEqualsCanonicalizing( array( 'pos_cash', 'stripe' ), $this->index_values( $order ) );
+
+		// Act: the client re-sends the ledger unchanged with ONE id-less index row, which
+		// WooCommerce's REST meta loop turns into "update the first match, delete the rest".
+		$order->update_meta_data( Ledger::META_KEY, $order->get_meta( Ledger::META_KEY ) );
+		$order->update_meta_data( Ledger::INDEX_META_KEY, 'pos_cash', '' );
+		$order->save();
+
+		// Assert.
+		$this->assertEqualsCanonicalizing( array( 'pos_cash', 'stripe' ), $this->index_values( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Deleting an unstamped ledger removes its payment-method index too. */
 	public function test_order_save_deleting_an_unstamped_ledger_removes_the_payment_method_index(): void {
 		// Arrange.

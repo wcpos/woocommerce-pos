@@ -268,9 +268,12 @@ class Ledger {
 			$this->reindex( $order, $value['payments'] );
 			return;
 		}
+		// An index row pending on its own (a client re-pushed the ledger unchanged beside id-less
+		// `_wcpos_payment_method` rows, which WooCommerce's REST meta loop collapses to one) must
+		// also re-derive, or the collapsed index would be persisted as-is.
 		$pending = false;
 		foreach ( $order->get_meta_data() as $meta ) {
-			if ( self::META_KEY === $meta->key && ( null === $meta->id || $meta->get_changes() ) ) {
+			if ( in_array( $meta->key, array( self::META_KEY, self::INDEX_META_KEY ), true ) && ( null === $meta->id || $meta->get_changes() ) ) {
 				$pending = true;
 				break;
 			}
@@ -283,6 +286,10 @@ class Ledger {
 				if ( self::META_KEY === $meta->key && null === $meta->value ) {
 					$deleting = true;
 					break;
+				}
+				if ( self::INDEX_META_KEY === $meta->key && null === $meta->value ) {
+					// A collapsed or removed index row: re-derive from the ledger being saved.
+					$pending = true;
 				}
 			}
 		} catch ( \Throwable $error ) {
