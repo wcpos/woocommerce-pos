@@ -248,6 +248,21 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( 'pos_cash', 'stripe' ), $this->index_values( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** A new order carrying index rows but no readable ledger is saved with no index at all. */
+	public function test_order_create_with_index_rows_and_no_ledger_drops_the_rows(): void {
+		// Arrange: a client-minted order that claims a method it never recorded.
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->add_meta_data( Ledger::INDEX_META_KEY, 'stripe', false );
+
+		// Act.
+		$order->save();
+
+		// Assert.
+		$this->assertSame( array(), $this->index_values( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Deleting an unstamped ledger removes its payment-method index too. */
 	public function test_order_save_deleting_an_unstamped_ledger_removes_the_payment_method_index(): void {
 		// Arrange.

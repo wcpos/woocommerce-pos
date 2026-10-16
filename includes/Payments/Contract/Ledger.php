@@ -251,6 +251,8 @@ class Ledger {
 			$raw   = $order->get_meta( self::META_KEY, true );
 			$value = $this->decode( $raw );
 			if ( null === $value ) {
+				// Its index rows are the client's claim too: no readable ledger, no index.
+				$this->reindex( $order, array() );
 				return;
 			}
 			$before = $value;
