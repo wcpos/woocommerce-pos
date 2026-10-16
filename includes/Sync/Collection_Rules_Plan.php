@@ -517,7 +517,7 @@ final class Collection_Rules_Plan {
 			$bindings[] = array( 'posts_orderby', $orderby_callback, 10 );
 		}
 
-		if ( $this->claims_id_sets() || '' !== $this->search ) {
+		if ( $this->claims_id_sets() || '' !== $this->search || $this->claims_unmatchable() ) {
 			/*
 			 * `posts_where` fires for EVERY WP_Query, so the binding is scoped to this read
 			 * AND guarded to `shop_order`: no unrelated query inside the read — a refund
@@ -752,6 +752,24 @@ final class Collection_Rules_Plan {
 	}
 
 	/**
+	 * Whether a claimed any-of filter must match no orders on legacy storage.
+	 *
+	 * @return bool
+	 */
+	private function claims_unmatchable(): bool {
+		if ( Collection_Rules::STORAGE_POSTS !== $this->storage ) {
+			return false;
+		}
+		foreach ( $this->rules['filters'] ?? array() as $canonical => $rule ) {
+			if ( isset( $rule['any_of'], $this->claims[ $canonical ] ) && '' === $this->claims[ $canonical ] ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * The claimed meta filter rules that apply to this plan's storage, in declaration order.
 	 *
 	 * @return array<string, array> Canonical name => filter row.
@@ -801,7 +819,6 @@ final class Collection_Rules_Plan {
 			if ( isset( $rule['any_of']['posts'] ) ) {
 				$value = $this->claims[ $canonical ];
 				if ( '' === $value ) {
-					$args['post__in'] = array( 0 );
 					continue;
 				}
 				$group = array( 'relation' => 'OR' );
@@ -866,6 +883,9 @@ final class Collection_Rules_Plan {
 			$ids_format  = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
 			$operator    = $rule['id_set']['operator'];
 			$where      .= $wpdb->prepare( " AND {$wpdb->posts}.ID {$operator} ($ids_format) ", $ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $operator comes from the declaration table and $ids_format is generated from array_fill with %d placeholders.
+		}
+		if ( $this->claims_unmatchable() ) {
+			$where .= ' AND 1=0';
 		}
 
 		return $where;

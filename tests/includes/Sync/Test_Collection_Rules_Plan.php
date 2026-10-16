@@ -258,11 +258,6 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 					'type'        => 'string',
 					'required'    => false,
 				),
-				'payment_method' => array(
-					'description' => __( 'Filter orders by payment method (gateway id). A split sale matches on any of its payments.', 'woocommerce-pos' ),
-					'type'        => 'string',
-					'required'    => false,
-				),
 			),
 			Collection_Rules::collection_params( 'orders' )
 		);
@@ -468,7 +463,8 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 				$this->assertSame( array( 'payment_method' => '' ), $plan->claims() );
 				$this->assertSame( array(), $plan->forwarded_params( $params ) );
 				if ( Collection_Rules::STORAGE_POSTS === $storage ) {
-					$this->assertSame( array( 'post__in' => array( 0 ) ), $plan->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() ) );
+					$this->assertSame( array(), $plan->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() ) );
+					$this->assertSame( '1=1 AND 1=0', $plan->filter( Collection_Rules_Plan::HOOK_POSTS_WHERE, '1=1' ) );
 				} else {
 					$this->assertSame( array(), $plan->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() ) );
 					$this->assertSame( array( 'where' => '1=1 AND 1=0' ), $plan->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, array( 'where' => '1=1' ), $query ) );

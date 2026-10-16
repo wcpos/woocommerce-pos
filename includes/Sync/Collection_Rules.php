@@ -203,11 +203,6 @@ final class Collection_Rules {
 				'type'        => 'string',
 				'required'    => false,
 			);
-			$params['payment_method'] = array(
-				'description' => /* translators: REST API schema field label or error message. */ __( 'Filter orders by payment method (gateway id). A split sale matches on any of its payments.', 'woocommerce-pos' ),
-				'type'        => 'string',
-				'required'    => false,
-			);
 		}
 
 		return $params;
@@ -338,6 +333,7 @@ final class Collection_Rules {
 						'meta'     => array( 'key' => '_wcpos_register' ),
 						'sanitize' => 'key',
 					),
+					// v2-only row, like created_via; the frozen v1 map and schema omit it.
 					'payment_method' => array(
 						'any_of'   => array(
 							'hpos'  => array(
