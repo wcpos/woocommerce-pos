@@ -208,7 +208,7 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 	public function test_drift_global_cap_refuses_new_keys_but_existing_progress_rebuilds(): void {
 		$streaks = array_fill_keys( array_map( fn ( $client ) => $this->streak_option( 'till-' . $client, $this->product_id ), range( 0, 1023 ) ), 1 );
 		foreach ( $streaks as $option => $count ) {
-			add_option( $option, $count, '', false );
+			add_option( $option, $count . '|' . time(), '', false );
 		}
 		ksort( $streaks );
 		$this->drill( 'new-client' );
@@ -219,5 +219,48 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 		$this->drill( 'till-0' );
 		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+	}
+
+	public static function cap_scopes(): array {
+		return array(
+			'client' => array( false, 64 ),
+			'global' => array( true, 1024 ),
+		);
+	}
+
+	/** @dataProvider cap_scopes */
+	public function test_drift_expired_counters_at_cap_admit_new_bucket( bool $global, int $cap ): void {
+		for ( $i = 0; $i < $cap; ++$i ) {
+			add_option( $this->streak_option( $global ? 'old-' . $i : 'till-A', -$i ), '1|' . ( time() - DAY_IN_SECONDS - 60 ), '', false );
+		}
+		$this->drill( 'till-A' );
+		$this->assertSame( array( $this->streak_option( 'till-A', $this->product_id ) => 1 ), $this->streaks() );
+	}
+
+	/** @dataProvider cap_scopes */
+	public function test_drift_near_cap_interleaved_admissions_admit_only_one( bool $global, int $cap ): void {
+		for ( $i = 0; $i < $cap - 1; ++$i ) {
+			add_option( $this->streak_option( $global ? 'old-' . $i : 'till-A', -$i ), '1|' . time(), '', false );
+		}
+		$ids = $this->stale_products( 2 );
+		// B inserts after A's last read but before A's admission statement executes.
+		$interleave = function ( $sql ) use ( &$interleave, $ids ) {
+			if ( 0 === strpos( $sql, 'INSERT' ) && false !== strpos( $sql, 'wcpos_drift_' ) ) {
+				remove_filter( 'query', $interleave );
+				$this->product_id = $ids[0];
+				$this->drill( 'till-A' );
+				$this->product_id = $ids[1];
+			}
+			return $sql;
+		};
+		add_filter( 'query', $interleave );
+		try {
+			$this->drill( 'till-A' );
+		} finally {
+			remove_filter( 'query', $interleave );
+		}
+		$this->assertCount( $cap, $this->streaks() );
+		$this->assertArrayHasKey( $this->streak_option( 'till-A', $ids[0] ), $this->streaks() );
+		$this->assertArrayNotHasKey( $this->streak_option( 'till-A', $ids[1] ), $this->streaks() );
 	}
 }

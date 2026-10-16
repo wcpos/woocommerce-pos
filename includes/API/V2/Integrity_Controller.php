@@ -62,6 +62,9 @@ final class Integrity_Controller extends WP_REST_Controller {
 	/** 64 buckets per client leaves room for sixteen tills at the global cap. */
 	public const DRIFT_STREAK_MAX_CLIENT_BUCKETS = 64;
 
+	/** Reclaim abandoned counters after a day so inactive tills cannot monopolize capacity. */
+	public const DRIFT_STREAK_TTL = DAY_IN_SECONDS;
+
 	private Integrity_Digest $digests;
 
 	private Digest_Index $index;
@@ -490,21 +493,37 @@ final class Integrity_Controller extends WP_REST_Controller {
 			return;
 		}
 
-		// Counters bypass the options cache: each write increments only its own row atomically.
+		// Values are count|unix-touched; reads bypass the options cache and increments are atomic.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery -- Atomic counters cannot use update_option.
 		$streak = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $streak_key ) );
-		// Refuse new keys at capacity: never rotate existing progress away.
+		$now    = time();
+		// Reclaim only at capacity; admission checks the caps again inside its INSERT.
 		if ( null === $streak ) {
-			$total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'wcpos_drift_' ) . '%' ) );
-			$owned = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( $prefix ) . '%' ) );
-			if ( null === $total || null === $owned || (int) $total >= self::DRIFT_STREAK_MAX_BUCKETS || (int) $owned >= self::DRIFT_STREAK_MAX_CLIENT_BUCKETS ) {
+			$all   = $wpdb->esc_like( 'wcpos_drift_' ) . '%';
+			$own   = $wpdb->esc_like( $prefix ) . '%';
+			$total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $all ) );
+			$owned = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $own ) );
+			if ( null === $total || null === $owned ) {
 				return;
 			}
+			if ( (int) $total >= self::DRIFT_STREAK_MAX_BUCKETS || (int) $owned >= self::DRIFT_STREAK_MAX_CLIENT_BUCKETS ) {
+				$scope = (int) $total >= self::DRIFT_STREAK_MAX_BUCKETS ? $all : $own;
+				if ( false === $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d", $scope, $now - self::DRIFT_STREAK_TTL ) ) ) {
+					Logger::error( 'WCPOS sync: failed to reclaim expired integrity drift streaks.' );
+					return;
+				}
+			}
+			// Aggregate directly: MySQL disallows reading the INSERT target in a subquery.
+			$result = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) SELECT %s, %s, 'no' FROM {$wpdb->options} WHERE option_name LIKE %s HAVING COUNT(*) < %d AND COALESCE(SUM(option_name LIKE %s), 0) < %d ON DUPLICATE KEY UPDATE option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', %d)", $streak_key, '1|' . $now, $all, self::DRIFT_STREAK_MAX_BUCKETS, $own, self::DRIFT_STREAK_MAX_CLIENT_BUCKETS, $now ) );
+		} else {
+			$result = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', %d) WHERE option_name = %s", $now, $streak_key ) );
 		}
 
-		$result = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, 1, 'no') ON DUPLICATE KEY UPDATE option_value = option_value + 1", $streak_key ) );
 		if ( false === $result ) {
 			Logger::error( 'WCPOS sync: failed to increment integrity drift streak.' );
+			return;
+		}
+		if ( 0 === $result ) {
 			return;
 		}
 		wp_cache_delete( $streak_key, 'options' );
