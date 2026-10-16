@@ -1343,4 +1343,41 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array(), $response->get_data() );
 	}
+
+	/** Both scalar-only orders and every tender of a split match on the v2 read route. */
+	public function test_v2_payment_method_filter_matches_scalar_and_split_orders(): void {
+		// Arrange.
+		$order_a = OrderHelper::create_order();
+		$order_b = OrderHelper::create_order();
+		$order_c = OrderHelper::create_order();
+		$order_a->set_payment_method( 'pos_cash' );
+		$order_b->set_payment_method( 'stripe' );
+		$order_c->set_payment_method( 'pos_cash' );
+		$order_c->add_meta_data( '_wcpos_payment_method', 'pos_cash', false );
+		$order_c->add_meta_data( '_wcpos_payment_method', 'stripe', false );
+		$order_a->save();
+		$order_b->save();
+		$order_c->save();
+
+		$cases = array(
+			'stripe'     => array( $order_b->get_id(), $order_c->get_id() ),
+			'pos_cash'   => array( $order_a->get_id(), $order_c->get_id() ),
+			'cod'        => array(),
+			'pos%3Acash' => array(),
+			''           => array(),
+		);
+		foreach ( $cases as $gateway => $expected ) {
+			// Act: REST receives the decoded query parameter, as with ?payment_method=pos%3Acash.
+			$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+			$request->set_param( 'payment_method', rawurldecode( $gateway ) );
+			$response = $this->server->dispatch( $request );
+
+			// Assert exact membership, independent of the default ordering.
+			$this->assertSame( 200, $response->get_status() );
+			$ids = wp_list_pluck( $response->get_data(), 'id' );
+			sort( $ids );
+			sort( $expected );
+			$this->assertSame( $expected, $ids, 'Gateway: ' . $gateway );
+		}
+	}
 }

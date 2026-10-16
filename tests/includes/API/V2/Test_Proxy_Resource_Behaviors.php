@@ -308,4 +308,44 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 			$filtered['meta_query']
 		);
 	}
+
+	/** The proxy claims the gateway and installs the legacy OR group only during the read. */
+	public function test_order_behavior_payment_method_claims_param_and_adds_or_meta_query(): void {
+		// Arrange.
+		update_option( 'woocommerce_custom_orders_table_enabled', 'no' );
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
+		$input    = array( 'payment_method' => 'stripe' );
+		$request->set_query_params( $input );
+
+		// Act.
+		$forwarded = $behavior->forwarded_params( $input, $request );
+		$filtered  = $behavior->around(
+			static function () use ( $request ): array {
+				return apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request );
+			}
+		);
+
+		// Assert.
+		$this->assertArrayNotHasKey( 'payment_method', $forwarded );
+		$this->assertSame(
+			array(
+				'meta_query' => array(
+					array(
+						'relation' => 'OR',
+						array(
+							'key'   => '_payment_method',
+							'value' => 'stripe',
+						),
+						array(
+							'key'   => '_wcpos_payment_method',
+							'value' => 'stripe',
+						),
+					),
+				),
+			),
+			$filtered
+		);
+		$this->assertSame( array(), apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request ) );
+	}
 }
