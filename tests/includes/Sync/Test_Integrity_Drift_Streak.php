@@ -18,7 +18,9 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 
 	public function setUp(): void {
 		parent::setUp();
-		delete_option( Integrity_Controller::DRIFT_STREAK_OPTION );
+		foreach ( array_keys( $this->streaks() ) as $option ) {
+			delete_option( $option );
+		}
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
 		$this->product_id = ProductHelper::create_simple_product()->get_id();
@@ -27,10 +29,45 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 	}
 
 	public function tearDown(): void {
-		delete_option( Integrity_Controller::DRIFT_STREAK_OPTION );
+		foreach ( array_keys( $this->streaks() ) as $option ) {
+			delete_option( $option );
+		}
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
 		parent::tearDown();
+	}
+
+	private function streaks(): array {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name", $wpdb->esc_like( 'wcpos_drift_' ) . '%' ), ARRAY_A );
+		return array_map( 'intval', array_column( $rows, 'option_value', 'option_name' ) );
+	}
+
+	private function streak_option( string $instance, int $bucket ): string {
+		return 'wcpos_drift_' . sha1( 'instance:' . $instance ) . '_' . sha1( 'instance:' . $instance . ':1:' . $bucket );
+	}
+
+	public function test_drift_interleaved_clients_preserve_both_increments(): void {
+		// Pause A immediately before its write; B writes without A re-reading state.
+		$interleave = function ( $sql ) use ( &$interleave ) {
+			if ( preg_match( '/^(INSERT|UPDATE)/i', $sql ) && ( false !== strpos( $sql, 'wcpos_drift_' ) || false !== strpos( $sql, Integrity_Controller::DRIFT_STREAK_OPTION ) ) ) {
+				remove_filter( 'query', $interleave );
+				$this->drill( 'till-B' );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $interleave );
+		try {
+			$this->drill( 'till-A' );
+		} finally {
+			remove_filter( 'query', $interleave );
+		}
+		$this->assertSame( array( 1, 1 ), array_values( $this->streaks() ) );
+		$this->drill( 'till-B' );
+		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+		$this->drill( 'till-B' );
+		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+		$this->assertSame( array(), $this->streaks() );
 	}
 
 	private function make_stale( string $title = 'Hookless edit' ): void {
@@ -39,12 +76,13 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		clean_post_cache( $this->product_id );
 	}
 
-	private function drill( string $instance = '', bool $stale = true ): void {
+	private function drill( string $instance = '', bool $stale = true, ?int $store_id = null ): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/integrity/scan' );
 		$request->set_query_params(
 			array(
 				'bucket_size' => 1,
 				'bucket'      => $this->product_id,
+				'store_id'    => $store_id,
 			)
 		);
 		if ( '' !== $instance ) {
@@ -103,7 +141,7 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		$this->drill( 'till-A' );
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 		$this->drill( 'till-A' );
-		$this->assertSame( array( 2 ), array_values( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) ) );
+		$this->assertSame( array( 2 ), array_values( $this->streaks() ) );
 		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 	}
 
@@ -134,35 +172,50 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 	}
 
-	public function test_drift_client_cap_evicts_lowest_oldest_without_affecting_others(): void {
+	public function test_drift_client_cap_preserves_progress_over_three_sweeps(): void {
 		$this->drill( 'other' );
-		$expected = get_option( Integrity_Controller::DRIFT_STREAK_OPTION );
-		$ids      = $this->stale_products( 100 );
+		$expected = $this->streaks();
+		$ids      = $this->stale_products( 70 );
 		foreach ( $ids as $id ) {
 			$this->product_id = $id;
 			$this->drill( 'noisy' );
 		}
-		foreach ( array_slice( $ids, -64 ) as $id ) {
-			$expected[ 'instance:noisy:1:' . $id ] = 1;
+		foreach ( array_slice( $ids, 0, 64 ) as $id ) {
+			$expected[ $this->streak_option( 'noisy', $id ) ] = 1;
 		}
-		$this->assertSame( $expected, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
-		$expected[ 'instance:noisy:1:' . $ids[36] ] = 2; // Oldest entry has more progress.
-		update_option( Integrity_Controller::DRIFT_STREAK_OPTION, $expected, false );
-		$this->product_id = $ids[0];
-		$this->drill( 'noisy' );
-		unset( $expected[ 'instance:noisy:1:' . $ids[37] ] );
-		$expected[ 'instance:noisy:1:' . $ids[0] ] = 1;
-		$this->assertSame( $expected, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		ksort( $expected );
+		$this->assertSame( $expected, $this->streaks() );
+		for ( $sweep = 1; $sweep < 3; ++$sweep ) {
+			$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+			foreach ( $ids as $id ) {
+				$this->product_id = $id;
+				$this->drill( 'noisy' );
+			}
+		}
+		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+	}
+
+	public function test_drift_without_headers_different_query_stores_do_not_share_streak(): void {
+		$this->drill( '', true, 7 );
+		$this->drill( '', true, 9 );
+		$this->assertSame( array( 1, 1 ), array_values( $this->streaks() ) );
+		$this->drill( '', true, 7 );
+		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+		$this->drill( '', true, 7 );
+		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 	}
 
 	public function test_drift_global_cap_refuses_new_keys_but_existing_progress_rebuilds(): void {
-		$streaks = array_fill_keys( array_map( fn ( $client ) => 'instance:till-' . $client . ':1:' . $this->product_id, range( 0, 1023 ) ), 1 );
-		update_option( Integrity_Controller::DRIFT_STREAK_OPTION, $streaks, false );
+		$streaks = array_fill_keys( array_map( fn ( $client ) => $this->streak_option( 'till-' . $client, $this->product_id ), range( 0, 1023 ) ), 1 );
+		foreach ( $streaks as $option => $count ) {
+			add_option( $option, $count, '', false );
+		}
+		ksort( $streaks );
 		$this->drill( 'new-client' );
-		$this->assertSame( $streaks, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertSame( $streaks, $this->streaks() );
 		$this->drill( 'till-0' );
-		$this->assertSame( 2, get_option( Integrity_Controller::DRIFT_STREAK_OPTION )[ 'instance:till-0:1:' . $this->product_id ] );
-		$this->assertCount( 1024, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertSame( 2, $this->streaks()[ $this->streak_option( 'till-0', $this->product_id ) ] );
+		$this->assertCount( 1024, $this->streaks() );
 		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 		$this->drill( 'till-0' );
 		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
