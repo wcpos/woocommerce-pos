@@ -192,6 +192,53 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Order pushes replace stale or collapsed client indexes with distinct live methods. */
+	public function test_order_save_carrying_the_ledger_rebuilds_the_payment_method_index(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->add_meta_data( Ledger::INDEX_META_KEY, 'old', false );
+		$order->save();
+		$value = array(
+			'schema'   => Ledger::SCHEMA,
+			'payments' => array(
+				$this->payment( 'pos_cash', '5.00', array( 'status' => 'pending' ) ),
+				$this->payment( 'pos_cash', '5.00', array( 'status' => 'authorized' ) ),
+				$this->payment( 'stripe', '5.00', array( 'status' => 'captured' ) ),
+				$this->payment( 'gift', '5.00', array( 'status' => 'voided' ) ),
+			),
+		);
+		$order->update_meta_data( Ledger::META_KEY, $value );
+		$order->update_meta_data( Ledger::INDEX_META_KEY, 'pos_cash', '' );
+		$order->update_meta_data( Ledger::INDEX_META_KEY, 'stripe', '' );
+
+		// Act.
+		$order->save();
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$index = $this->index_values( $stored );
+		sort( $index );
+		$this->assertSame( array( 'pos_cash', 'stripe' ), $index );
+		$this->assertSame( $value, $stored->get_meta( Ledger::META_KEY ) );
+	}
+
+	/** Deleting an unstamped ledger removes its payment-method index too. */
+	public function test_order_save_deleting_an_unstamped_ledger_removes_the_payment_method_index(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$this->assertSame( array( 'pos_cash' ), $this->index_values( wc_get_order( $order->get_id() ) ) );
+
+		// Act.
+		$order->delete_meta_data( Ledger::META_KEY );
+		$order->save();
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( array(), $this->index_values( $stored ) );
+		$this->assertFalse( $stored->meta_exists( Ledger::META_KEY ) );
+	}
+
 	/** A new order has no storage to inherit from, so every stamp it carries is forged. */
 	public function test_order_create_carrying_a_forged_stamp_drops_it(): void {
 		foreach ( array( true, false ) as $typed ) {
