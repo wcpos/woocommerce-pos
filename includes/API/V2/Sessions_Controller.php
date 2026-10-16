@@ -125,6 +125,10 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$detail = array(
 				'movements' => $figures->movements(),
 				'sales_count' => $figures->sales_count(),
+				// Server-clock boundary of this snapshot: the client keeps the server's expected
+				// figure as a baseline and adds only local rows newer than this instant, so the
+				// comparison must not involve the device clock.
+				'as_of_gmt' => gmdate( 'Y-m-d H:i:s' ),
 			);
 			// The expected figure is a report: a cashier counting blind never receives it.
 			if ( current_user_can( 'view_woocommerce_pos_reports' ) ) {

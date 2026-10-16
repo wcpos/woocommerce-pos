@@ -302,6 +302,8 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data = $response->get_data();
 		$this->assertArrayNotHasKey( 'expected', $data );
 		$this->assertArrayHasKey( 'sales_count', $data );
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $data['as_of_gmt'] );
+		$this->assertLessThanOrEqual( time() + 1, strtotime( $data['as_of_gmt'] . ' UTC' ) );
 		$this->assertArrayHasKey( 'movements', $data );
 	}
 
