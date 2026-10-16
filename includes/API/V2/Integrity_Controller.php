@@ -55,8 +55,11 @@ final class Integrity_Controller extends WP_REST_Controller {
 	/** Per-client/bucket drift streaks; never autoloaded, read only on the drill-down path. */
 	public const DRIFT_STREAK_OPTION = 'wcpos_integrity_drift_streaks';
 
-	/** Global cap across all clients and buckets so the option cannot grow unbounded. */
-	public const DRIFT_STREAK_MAX_BUCKETS = 256;
+	/** 1024 keys at ~60 bytes each is ~60 KiB, not autoloaded; fits ten tills x 26 buckets. */
+	public const DRIFT_STREAK_MAX_BUCKETS = 1024;
+
+	/** 64 buckets per client leaves room for sixteen tills at the global cap. */
+	public const DRIFT_STREAK_MAX_CLIENT_BUCKETS = 64;
 
 	private Integrity_Digest $digests;
 
@@ -490,11 +493,21 @@ final class Integrity_Controller extends WP_REST_Controller {
 			return;
 		}
 
+		// Refuse new keys at capacity: never rotate existing progress away.
+		if ( ! isset( $streaks[ $streak_key ] ) && \count( $streaks ) >= self::DRIFT_STREAK_MAX_BUCKETS ) {
+			return;
+		}
+
 		$streak = ( (int) ( $streaks[ $streak_key ] ?? 0 ) ) + 1;
 
 		if ( $streak < self::DRIFT_REBUILD_THRESHOLD ) {
-			unset( $streaks[ $streak_key ] ); // Reinsert last: evict least recently touched first.
+			unset( $streaks[ $streak_key ] ); // Reinsert last: age breaks ties within this client.
 			$streaks[ $streak_key ] = $streak;
+			$client_streaks        = array_filter( $streaks, static fn ( $key ) => 0 === strpos( $key, $client . ':' ), ARRAY_FILTER_USE_KEY );
+			for ( $excess = \count( $client_streaks ) - self::DRIFT_STREAK_MAX_CLIENT_BUCKETS; 0 < $excess; --$excess ) {
+				$oldest = array_search( min( $client_streaks ), $client_streaks, true );
+				unset( $streaks[ $oldest ], $client_streaks[ $oldest ] );
+			}
 			$this->save_drift_streaks( $streaks );
 
 			return;
@@ -524,10 +537,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * @param array $streaks Client:bucket-size:bucket => consecutive drifted drill-downs.
 	 */
 	private function save_drift_streaks( array $streaks ): void {
-		if ( \count( $streaks ) > self::DRIFT_STREAK_MAX_BUCKETS ) {
-			$streaks = \array_slice( $streaks, -self::DRIFT_STREAK_MAX_BUCKETS, null, true );
-		}
-
 		if ( array() === $streaks ) {
 			delete_option( self::DRIFT_STREAK_OPTION );
 

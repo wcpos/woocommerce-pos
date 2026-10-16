@@ -106,4 +106,65 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array( 2 ), array_values( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) ) );
 		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 	}
+
+	private function stale_products( int $count ): array {
+		$ids = array();
+		for ( $i = 0; $i < $count; ++$i ) {
+			$this->product_id = ProductHelper::create_simple_product()->get_id();
+			( new Integrity_Digest() )->upsert_digest( $this->product_id );
+			$this->make_stale();
+			$ids[] = $this->product_id;
+		}
+		return $ids;
+	}
+
+	public function test_drift_ten_clients_three_sweeps_schedule_rebuild(): void {
+		$ids = $this->stale_products( 26 );
+		for ( $sweep = 0; $sweep < 3; ++$sweep ) {
+			for ( $client = 0; $client < 10; ++$client ) {
+				foreach ( $ids as $id ) {
+					$this->product_id = $id;
+					$this->drill( 'till-' . $client );
+				}
+			}
+			if ( 2 > $sweep ) {
+				$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+			}
+		}
+		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+	}
+
+	public function test_drift_client_cap_evicts_lowest_oldest_without_affecting_others(): void {
+		$this->drill( 'other' );
+		$expected = get_option( Integrity_Controller::DRIFT_STREAK_OPTION );
+		$ids      = $this->stale_products( 100 );
+		foreach ( $ids as $id ) {
+			$this->product_id = $id;
+			$this->drill( 'noisy' );
+		}
+		foreach ( array_slice( $ids, -64 ) as $id ) {
+			$expected[ 'instance:noisy:1:' . $id ] = 1;
+		}
+		$this->assertSame( $expected, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$expected[ 'instance:noisy:1:' . $ids[36] ] = 2; // Oldest entry has more progress.
+		update_option( Integrity_Controller::DRIFT_STREAK_OPTION, $expected, false );
+		$this->product_id = $ids[0];
+		$this->drill( 'noisy' );
+		unset( $expected[ 'instance:noisy:1:' . $ids[37] ] );
+		$expected[ 'instance:noisy:1:' . $ids[0] ] = 1;
+		$this->assertSame( $expected, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+	}
+
+	public function test_drift_global_cap_refuses_new_keys_but_existing_progress_rebuilds(): void {
+		$streaks = array_fill_keys( array_map( fn ( $client ) => 'instance:till-' . $client . ':1:' . $this->product_id, range( 0, 1023 ) ), 1 );
+		update_option( Integrity_Controller::DRIFT_STREAK_OPTION, $streaks, false );
+		$this->drill( 'new-client' );
+		$this->assertSame( $streaks, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->drill( 'till-0' );
+		$this->assertSame( 2, get_option( Integrity_Controller::DRIFT_STREAK_OPTION )[ 'instance:till-0:1:' . $this->product_id ] );
+		$this->assertCount( 1024, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+		$this->drill( 'till-0' );
+		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
+	}
 }
