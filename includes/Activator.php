@@ -233,6 +233,8 @@ class Activator {
 
 	/**
 	 * Install the sync store and latch its aggregate schema version after verification.
+	 *
+	 * @throws \RuntimeException On fiscal carry schema upgrade failure.
 	 */
 	public function install_sync_schema(): void {
 		$previous_schema = get_option( Sync_Api::SCHEMA_OPTION, null );
@@ -245,6 +247,20 @@ class Activator {
 
 		if ( null === $previous_schema || version_compare( (string) $previous_schema, '7', '<' ) ) {
 			$this->upgrade_business_days();
+		}
+
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '8', '<' ) ) {
+			global $wpdb;
+			$table = ( new Fiscal_Record_Store() )->table_name();
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed column.
+			$column = $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE 'carried_by_closure_id'" );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Fiscal carry column read failed.' );
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed definition; DDL runs outside closure transactions.
+			if ( null === $column && false === $wpdb->query( "ALTER TABLE {$table} ADD carried_by_closure_id CHAR(36) NULL" ) ) {
+				throw new \RuntimeException( 'Fiscal carry column upgrade failed.' );
+			}
 		}
 
 		if ( ! Sync_Health::is_healthy() ) {

@@ -45,6 +45,7 @@ final class Fiscal_Record_Store {
 			refund_id BIGINT UNSIGNED NULL,
 			payment_id CHAR(36) NULL,
 			closure_id CHAR(36) NULL,
+			carried_by_closure_id CHAR(36) NULL,
 			source_id CHAR(36) NULL,
 			corrects_record_id BIGINT UNSIGNED NULL,
 			register_id CHAR(36) NULL,

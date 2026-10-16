@@ -40,6 +40,92 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '12.0000', $closure['period_refunds_total'] );
 	}
 
+	/** Late sales and refunds must enter perpetual totals once, never period totals.
+	 *
+	 * @dataProvider late_correction_types
+	 * @param string $type Correction type.
+	 * @param string $kind Counter kind.
+	 * @param string $amount Signed tender amount.
+	 */
+	public function test_perpetual_totals_carry_late_corrections_once( string $type, string $kind, string $amount ): void {
+		$store = new Closure_Store();
+		$session = $this->closure_session();
+		$first = $store->create( $this->closure_fields( $session ) );
+		$correction_order = new \WC_Order();
+		$correction_order->save();
+		$record = ( new Fiscal_Record_Store() )->record(
+			array(
+				'type' => $type,
+				'order_id' => $correction_order->get_id(),
+				'source_id' => wp_generate_uuid4(),
+				'closure_id' => $first['id'],
+				'register_id' => $session['register_id'],
+				'payload' => array(
+					'tender_rows' => array(
+						array(
+							'method_id' => 'pos_cash',
+							'kind' => 'cash',
+							'amount' => $amount,
+						),
+					),
+				),
+			)
+		);
+		$this->assertIsArray( $record );
+		$corrections = $store->corrections_for( $first['id'] );
+		$other = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$this->assertSame( '0.0000', $other[ 'perpetual_' . $kind . '_total' ] );
+		$second_session = $this->closure_session( $session['register_id'] );
+		$order = $this->closure_ledger( $second_session );
+		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
+		$rows = $ledger->read( $order );
+		$rows[0]['amount'] = 'sales' === $kind ? '5.0000' : '-5.0000';
+		$ledger->save( $order, array( $rows[0] ), false );
+		$second = $store->create( $this->closure_fields( $second_session, 2 ) );
+		// Before the fix this is 5.0000: the late 10.0000 is omitted.
+		$this->assertSame( '15.0000', $second[ 'perpetual_' . $kind . '_total' ] );
+		$this->assertSame( '5.0000', $second[ 'period_' . $kind . '_total' ] );
+		$this->assertSame( $first, $store->get( $first['id'] ) );
+		$this->assertSame( $corrections, $store->corrections_for( $first['id'] ) );
+		$this->assertSame( $second, $store->create( array( 'id' => $second['id'] ) ) );
+		$third = $store->create( $this->closure_fields( $this->closure_session( $session['register_id'] ), 3 ) );
+		$this->assertSame( '15.0000', $third[ 'perpetual_' . $kind . '_total' ] );
+		$this->assertSame( '0.0000', $third[ 'period_' . $kind . '_total' ] );
+		$record['order_id'] = $order->get_id();
+		$record['source_id'] = wp_generate_uuid4();
+		$record = ( new Fiscal_Record_Store() )->record( $record );
+		$this->assertIsArray( $record );
+		$fourth_session = $this->closure_session( $session['register_id'] );
+		global $wpdb;
+		$fail = static function ( $sql ) use ( $store ) {
+			return 0 === strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' ) ? 'INVALID CLOSURE INSERT' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		try {
+			$store->create( $this->closure_fields( $fourth_session, 4 ) );
+			$this->fail( 'Expected closure failure after carrying corrections.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure write failed.', $error->getMessage() );
+			$this->assertNull( ( new Fiscal_Record_Store() )->get( $record['id'] )['carried_by_closure_id'] );
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+		$fourth = $store->create( $this->closure_fields( $fourth_session, 4 ) );
+		$this->assertSame( '25.0000', $fourth[ 'perpetual_' . $kind . '_total' ] );
+		$correction_order->delete( true );
+		$order->delete( true );
+	}
+
+	/** Correction tender signs match fiscal writer payloads. */
+	public static function late_correction_types(): array {
+		return array(
+			'late sale' => array( 'late_sale', 'sales', '10.0000' ),
+			'late refund' => array( 'late_refund', 'refunds', '-10.0000' ),
+		);
+	}
+
 	/** The aggregate upgrade adds missing columns and backfills only unstamped rows. */
 	public function test_business_day_upgrade_adds_columns_and_preserves_stamps(): void {
 		global $wpdb;
@@ -57,9 +143,12 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 				$wpdb->update( $table, array( 'opened_at_gmt' => '2026-09-11 02:00:00' ), array( 'id' => $store instanceof Closure_Store ? $closure['id'] : $session['id'] ) );
 				$wpdb->query( "ALTER TABLE {$table} DROP COLUMN business_day" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
 			}
+			$fiscal_table = ( new Fiscal_Record_Store() )->table_name();
+			$wpdb->query( "ALTER TABLE {$fiscal_table} DROP COLUMN carried_by_closure_id" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '6' );
 			$activator->install_sync_schema();
 			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( 'carried_by_closure_id', $wpdb->get_var( "SHOW COLUMNS FROM {$fiscal_table} LIKE 'carried_by_closure_id'" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
 			foreach ( $stores as $store ) {
 				$id = $store instanceof Closure_Store ? $closure['id'] : $session['id'];
 				$this->assertSame( '2026-09-10', $store->get( $id )['business_day'] );
