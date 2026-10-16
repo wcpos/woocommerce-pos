@@ -52,10 +52,10 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 */
 	public const DRIFT_REBUILD_THRESHOLD = 3;
 
-	/** Per-bucket drift streaks; never autoloaded, read only on the drill-down path. */
+	/** Per-client/bucket drift streaks; never autoloaded, read only on the drill-down path. */
 	public const DRIFT_STREAK_OPTION = 'wcpos_integrity_drift_streaks';
 
-	/** Hard cap on tracked buckets so the option cannot grow unbounded. */
+	/** Global cap across all clients and buckets so the option cannot grow unbounded. */
 	public const DRIFT_STREAK_MAX_BUCKETS = 256;
 
 	private Integrity_Digest $digests;
@@ -283,7 +283,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 				);
 			}
 
-			return $this->drill_down( $bucket, $bucket_size, $started );
+			return $this->drill_down( $bucket, $bucket_size, $started, $request );
 		}
 
 		$after_id      = max( 0, (int) ( $request->get_param( 'after_id' ) ?? 0 ) );
@@ -358,7 +358,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * (live row never digested — created without hooks or pre-backfill),
 	 * deleted (stored digest whose row is gone — hook-bypassing delete).
 	 */
-	private function drill_down( int $bucket, int $bucket_size, float $started ) {
+	private function drill_down( int $bucket, int $bucket_size, float $started, WP_REST_Request $request ) {
 		$range_start = $bucket * $bucket_size;
 		$range_end   = $range_start + $bucket_size;
 
@@ -395,7 +395,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$this->maybe_schedule_stale_digest_rebuild( $bucket, $bucket_size, $changes );
+		$this->maybe_schedule_stale_digest_rebuild( $bucket, $bucket_size, $changes, $request );
 
 		return rest_ensure_response(
 			$this->envelope(
@@ -452,15 +452,17 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * telling clients to re-pull. The client drills a mismatched bucket every
 	 * sweep and issues targeted pulls each time; it escalates at 2 consecutive
 	 * post-pull mismatches (DEFAULT_HYBRID_POLICY.escalateToRevisionHashAfter).
-	 * Rebuilding at 3 therefore only ever fires AFTER the client has pulled and
-	 * still sees the mismatch — the point at which the drift is provably the
-	 * stored side's problem, not a delivery problem.
+	 * Count per X-WCPOS-Instance, never across tills: any one client's third
+	 * mismatch schedules the rebuild, assuming its intervening pulls completed.
+	 * Until the app sends this header, user+store is the fallback; tills sharing
+	 * that identity still share a streak. Drill-downs are not pull acknowledgements.
 	 *
 	 * @param int   $bucket      Bucket just drilled down.
 	 * @param int   $bucket_size Number of ids covered by the bucket.
 	 * @param array $changes     Rows the drill-down is returning.
+	 * @param WP_REST_Request $request Request carrying the client identity.
 	 */
-	private function maybe_schedule_stale_digest_rebuild( int $bucket, int $bucket_size, array $changes ): void {
+	private function maybe_schedule_stale_digest_rebuild( int $bucket, int $bucket_size, array $changes, WP_REST_Request $request ): void {
 		$stale = 0;
 		foreach ( $changes as $change ) {
 			if ( \in_array( $change['status'] ?? '', array( 'changed', 'missing_stored' ), true ) ) {
@@ -473,10 +475,13 @@ final class Integrity_Controller extends WP_REST_Controller {
 			$streaks = array();
 		}
 
-		$streak_key = $bucket_size . ':' . $bucket;
+		$instance   = substr( (string) preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $request->get_header( 'X-WCPOS-Instance' ) ), 0, 64 );
+		$store      = substr( (string) preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $request->get_header( 'X-WCPOS-Store' ) ), 0, 64 );
+		$client     = '' !== $instance ? 'instance:' . $instance : 'user:' . get_current_user_id() . ':store:' . ( '' !== $store ? $store : 'default' );
+		$streak_key = $client . ':' . $bucket_size . ':' . $bucket;
 
 		if ( 0 === $stale ) {
-			// Reconciled (or only deletions left) — forget it.
+			// Reconciled (or only deletions left) — forget only this client's bucket.
 			if ( isset( $streaks[ $streak_key ] ) ) {
 				unset( $streaks[ $streak_key ] );
 				$this->save_drift_streaks( $streaks );
@@ -488,6 +493,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$streak = ( (int) ( $streaks[ $streak_key ] ?? 0 ) ) + 1;
 
 		if ( $streak < self::DRIFT_REBUILD_THRESHOLD ) {
+			unset( $streaks[ $streak_key ] ); // Reinsert last: evict least recently touched first.
 			$streaks[ $streak_key ] = $streak;
 			$this->save_drift_streaks( $streaks );
 
@@ -511,16 +517,15 @@ final class Integrity_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Persist the per-bucket streak map, bounded so a pathological catalogue
+	 * Persist the per-client/bucket streak map, bounded so clients and catalogues
 	 * cannot grow an unbounded option. Never autoloaded — it is read only on
 	 * the drill-down path.
 	 *
-	 * @param array $streaks Bucket-size:bucket => consecutive drifted drill-downs.
+	 * @param array $streaks Client:bucket-size:bucket => consecutive drifted drill-downs.
 	 */
 	private function save_drift_streaks( array $streaks ): void {
 		if ( \count( $streaks ) > self::DRIFT_STREAK_MAX_BUCKETS ) {
-			arsort( $streaks );
-			$streaks = \array_slice( $streaks, 0, self::DRIFT_STREAK_MAX_BUCKETS, true );
+			$streaks = \array_slice( $streaks, -self::DRIFT_STREAK_MAX_BUCKETS, null, true );
 		}
 
 		if ( array() === $streaks ) {
