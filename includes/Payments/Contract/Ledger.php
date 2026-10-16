@@ -251,6 +251,8 @@ class Ledger {
 			$raw   = $order->get_meta( self::META_KEY, true );
 			$value = $this->decode( $raw );
 			if ( null === $value ) {
+				// Its index rows are the client's claim too: no readable ledger, no index.
+				$this->reindex( $order, array() );
 				return;
 			}
 			$before = $value;
@@ -265,11 +267,15 @@ class Ledger {
 				);
 				$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $wire ) );
 			}
+			$this->reindex( $order, $value['payments'] );
 			return;
 		}
+		// An index row pending on its own (a client re-pushed the ledger unchanged beside id-less
+		// `_wcpos_payment_method` rows, which WooCommerce's REST meta loop collapses to one) must
+		// also re-derive, or the collapsed index would be persisted as-is.
 		$pending = false;
 		foreach ( $order->get_meta_data() as $meta ) {
-			if ( self::META_KEY === $meta->key && ( null === $meta->id || $meta->get_changes() ) ) {
+			if ( in_array( $meta->key, array( self::META_KEY, self::INDEX_META_KEY ), true ) && ( null === $meta->id || $meta->get_changes() ) ) {
 				$pending = true;
 				break;
 			}
@@ -282,6 +288,10 @@ class Ledger {
 				if ( self::META_KEY === $meta->key && null === $meta->value ) {
 					$deleting = true;
 					break;
+				}
+				if ( self::INDEX_META_KEY === $meta->key && null === $meta->value ) {
+					// A collapsed or removed index row: re-derive from the ledger being saved.
+					$pending = true;
 				}
 			}
 		} catch ( \Throwable $error ) {
@@ -314,6 +324,7 @@ class Ledger {
 				);
 				$order->update_meta_data( self::META_KEY, wp_json_encode( $value ) );
 			}
+			$this->reindex( $order, $stamps ? $stored['payments'] : array() );
 			return;
 		}
 		$before = $value;
@@ -339,6 +350,7 @@ class Ledger {
 			}
 			$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $value ) );
 		}
+		$this->reindex( $order, $value['payments'] );
 	}
 
 	/** Release a keeper acquisition after saving, or all remaining acquisitions on shutdown.
@@ -1378,24 +1390,42 @@ class Ledger {
 				)
 			)
 		);
-		$order->delete_meta_data( self::INDEX_META_KEY );
+		$this->reindex( $order, $normalized );
 		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
 		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
-		$indexed = array();
 		foreach ( $normalized as $row ) {
 			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
 			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
 				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
 			}
-			if ( in_array( $row['status'], self::LIVE_STATUSES, true ) && ! in_array( $row['method_id'], $indexed, true ) ) {
-				$indexed[] = $row['method_id'];
-				$order->add_meta_data( self::INDEX_META_KEY, $row['method_id'], false );
-			}
 		}
 		if ( $derive ) {
 			$this->derive( $order, $normalized );
 		}
+		// The before-save keeper rebuilds this index again from the final ledger; that is intentional.
 		$order->save();
+	}
+
+	/**
+	 * Rebuild the distinct live payment-method index from the ledger being persisted.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows Payment rows.
+	 */
+	private function reindex( WC_Order $order, array $rows ): void {
+		$order->delete_meta_data( self::INDEX_META_KEY );
+		$indexed = array();
+		foreach ( $rows as $row ) {
+			// A pushed row is client input: no method id, no index row — never a notice on the save hook.
+			$method = is_array( $row ) ? ( $row['method_id'] ?? null ) : null;
+			if ( ! is_string( $method ) || '' === $method || ! in_array( $row['status'] ?? '', self::LIVE_STATUSES, true ) ) {
+				continue;
+			}
+			if ( ! in_array( $method, $indexed, true ) ) {
+				$indexed[] = $method;
+				$order->add_meta_data( self::INDEX_META_KEY, $method, false );
+			}
+		}
 	}
 
 	/**

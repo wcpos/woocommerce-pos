@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Added: `payment_method` filtering on `/wcpos/v2/orders` for HPOS and legacy storage; a split sale matches every one of its payment methods. (wcpos/roadmap#80)
 - **Breaking (developers): `WCPOS\WooCommercePOS\Interfaces\StoreInterface` is removed.** It was added in December 2025 with `Abstracts\Store` as its only implementation, nothing in WCPOS, WCPOS Pro, the extensions or the client type-hints, `instanceof`-checks or implements it, and the wiki never advertised it as an extension point. `Abstracts\Store` (and Pro's `Store`, which extends it) keep every getter; code that referred to the interface by name should refer to the class. (wcpos/woocommerce-pos-pro#654)
 - Changed: POS sales are recorded once, in the fiscal records table, when payment completes; the duplicate receipt snapshot in order meta is no longer written. Stored sale and refund documents no longer embed the translated label block; labels are added when a document is rendered. The receipts endpoint no longer returns submission_status.
 

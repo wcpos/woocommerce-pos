@@ -25,6 +25,7 @@ final class Orders_Proxy_Behavior extends Scoped_Proxy_Behavior {
 		'pos_cashier' => 'pos_cashier',
 		'pos_store'   => 'pos_store',
 		'pos_register' => 'pos_register',
+		'payment_method' => 'payment_method', // v2 only; v1's filter map is frozen.
 		'created_via' => 'created_via',
 		'include'     => array(
 			'key' => 'include',

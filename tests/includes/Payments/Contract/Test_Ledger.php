@@ -192,6 +192,94 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Order pushes replace stale or collapsed client indexes with distinct live methods. */
+	public function test_order_save_carrying_the_ledger_rebuilds_the_payment_method_index(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->add_meta_data( Ledger::INDEX_META_KEY, 'old', false );
+		$order->save();
+		$value = array(
+			'schema'   => Ledger::SCHEMA,
+			'payments' => array(
+				$this->payment( 'pos_cash', '5.00', array( 'status' => 'pending' ) ),
+				$this->payment( 'pos_cash', '5.00', array( 'status' => 'authorized' ) ),
+				$this->payment( 'stripe', '5.00', array( 'status' => 'captured' ) ),
+				$this->payment( 'gift', '5.00', array( 'status' => 'voided' ) ),
+			),
+		);
+		$order->update_meta_data( Ledger::META_KEY, $value );
+		$order->update_meta_data( Ledger::INDEX_META_KEY, 'pos_cash', '' );
+		$order->update_meta_data( Ledger::INDEX_META_KEY, 'stripe', '' );
+
+		// Act.
+		$order->save();
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$index = $this->index_values( $stored );
+		sort( $index );
+		$this->assertSame( array( 'pos_cash', 'stripe' ), $index );
+		$this->assertSame( $value, $stored->get_meta( Ledger::META_KEY ) );
+	}
+
+	/** A re-push of an unchanged ledger beside id-less index rows must not collapse the stored index. */
+	public function test_order_save_with_unchanged_ledger_and_collapsed_index_rows_rederives_the_index(): void {
+		// Arrange: a stored two-leg split (written through the save hook, as an order push is).
+		$order = $this->create_pos_order();
+		$value = array(
+			'schema'   => Ledger::SCHEMA,
+			'payments' => array(
+				$this->payment( 'pos_cash', '5.00', array( 'status' => 'captured' ) ),
+				$this->payment( 'stripe', '5.00', array( 'status' => 'captured' ) ),
+			),
+		);
+		$order->update_meta_data( Ledger::META_KEY, $value );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertEqualsCanonicalizing( array( 'pos_cash', 'stripe' ), $this->index_values( $order ) );
+
+		// Act: the client re-sends the ledger unchanged with ONE id-less index row, which
+		// WooCommerce's REST meta loop turns into "update the first match, delete the rest".
+		$order->update_meta_data( Ledger::META_KEY, $order->get_meta( Ledger::META_KEY ) );
+		$order->update_meta_data( Ledger::INDEX_META_KEY, 'pos_cash', '' );
+		$order->save();
+
+		// Assert.
+		$this->assertEqualsCanonicalizing( array( 'pos_cash', 'stripe' ), $this->index_values( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** A new order carrying index rows but no readable ledger is saved with no index at all. */
+	public function test_order_create_with_index_rows_and_no_ledger_drops_the_rows(): void {
+		// Arrange: a client-minted order that claims a method it never recorded.
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->add_meta_data( Ledger::INDEX_META_KEY, 'stripe', false );
+
+		// Act.
+		$order->save();
+
+		// Assert.
+		$this->assertSame( array(), $this->index_values( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** Deleting an unstamped ledger removes its payment-method index too. */
+	public function test_order_save_deleting_an_unstamped_ledger_removes_the_payment_method_index(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$this->assertSame( array( 'pos_cash' ), $this->index_values( wc_get_order( $order->get_id() ) ) );
+
+		// Act.
+		$order->delete_meta_data( Ledger::META_KEY );
+		$order->save();
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( array(), $this->index_values( $stored ) );
+		$this->assertFalse( $stored->meta_exists( Ledger::META_KEY ) );
+	}
+
 	/** A new order has no storage to inherit from, so every stamp it carries is forged. */
 	public function test_order_create_carrying_a_forged_stamp_drops_it(): void {
 		foreach ( array( true, false ) as $typed ) {

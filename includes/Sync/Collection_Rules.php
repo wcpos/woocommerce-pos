@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WP_REST_Request;
 
@@ -237,7 +238,9 @@ final class Collection_Rules {
 	 *                    and postmeta under legacy.
 	 *   - `id_set`    => `array( 'operator' => 'IN'|'NOT IN' )` a raw id set the rule owns
 	 *                    outright (see the `when => search` note in the class docblock).
-	 *   - `sanitize`  => optional `'key'`, applied to each claimed value.
+	 *   - `any_of`    => per-storage column/meta carriers, for a value matching either the
+	 *                    HPOS column or an index meta row (multiple meta keys on posts).
+	 *   - `sanitize`  => optional `'key'` or `'gateway_id'`, applied to each claimed value.
 	 *
 	 * @internal
 	 *
@@ -329,6 +332,17 @@ final class Collection_Rules {
 					'pos_register' => array(
 						'meta'     => array( 'key' => '_wcpos_register' ),
 						'sanitize' => 'key',
+					),
+					// v2-only row, like created_via; the frozen v1 map and schema omit it.
+					'payment_method' => array(
+						'any_of'   => array(
+							'hpos'  => array(
+								'column'   => 'payment_method',
+								'meta_key' => Ledger::INDEX_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Declaration row, not a live query arg.
+							),
+							'posts' => array( 'meta_keys' => array( '_payment_method', Ledger::INDEX_META_KEY ) ),
+						),
+						'sanitize' => 'gateway_id',
 					),
 
 					/*

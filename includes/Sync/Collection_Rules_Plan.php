@@ -475,8 +475,8 @@ final class Collection_Rules_Plan {
 			return $bindings;
 		}
 
-		// `meta_query` rows are storage-neutral (`wc_get_orders()` honours them on both),
-		// and the legacy sort args are a no-op under HPOS, so one binding covers both.
+		// Include the posts-only any_of meta groups; HPOS handles those in SQL.
+		// The legacy sort args are a no-op under HPOS, so one binding covers both.
 		if ( array() !== $this->claimed_meta_filters() || $this->has_legacy_meta_sort() ) {
 			$args_callback = function ( $args ) {
 				$args = $this->filter( self::HOOK_QUERY_ARGS, $args );
@@ -517,7 +517,7 @@ final class Collection_Rules_Plan {
 			$bindings[] = array( 'posts_orderby', $orderby_callback, 10 );
 		}
 
-		if ( $this->claims_id_sets() || '' !== $this->search ) {
+		if ( $this->claims_id_sets() || '' !== $this->search || $this->claims_unmatchable() ) {
 			/*
 			 * `posts_where` fires for EVERY WP_Query, so the binding is scoped to this read
 			 * AND guarded to `shop_order`: no unrelated query inside the read — a refund
@@ -695,6 +695,12 @@ final class Collection_Rules_Plan {
 			return empty( $value ) ? array() : array_map( 'intval', (array) $value );
 		}
 
+		if ( 'gateway_id' === ( $rule['sanitize'] ?? null ) ) {
+			$value = \is_scalar( $value ) ? trim( (string) $value ) : '';
+
+			return preg_match( '/^[A-Za-z0-9_.-]{1,64}$/', $value ) ? $value : '';
+		}
+
 		if ( 'key' === ( $rule['sanitize'] ?? null ) ) {
 			if ( \is_array( $value ) ) {
 				return array_map( 'sanitize_key', array_values( $value ) );
@@ -746,6 +752,24 @@ final class Collection_Rules_Plan {
 	}
 
 	/**
+	 * Whether a claimed any-of filter must match no orders on legacy storage.
+	 *
+	 * @return bool
+	 */
+	private function claims_unmatchable(): bool {
+		if ( Collection_Rules::STORAGE_POSTS !== $this->storage ) {
+			return false;
+		}
+		foreach ( $this->rules['filters'] ?? array() as $canonical => $rule ) {
+			if ( isset( $rule['any_of'], $this->claims[ $canonical ] ) && '' === $this->claims[ $canonical ] ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * The claimed meta filter rules that apply to this plan's storage, in declaration order.
 	 *
 	 * @return array<string, array> Canonical name => filter row.
@@ -753,7 +777,9 @@ final class Collection_Rules_Plan {
 	private function claimed_meta_filters(): array {
 		$metas = array();
 		foreach ( $this->rules['filters'] ?? array() as $canonical => $rule ) {
-			if ( ! isset( $rule['meta'], $this->claims[ $canonical ] ) ) {
+			// The posts dialect of any_of is a meta group; HPOS uses column/subquery SQL.
+			$has_meta = isset( $rule['meta'] ) || ( Collection_Rules::STORAGE_POSTS === $this->storage && isset( $rule['any_of']['posts'] ) );
+			if ( ! $has_meta || ! isset( $this->claims[ $canonical ] ) ) {
 				continue;
 			}
 			if ( isset( $rule['meta']['storage'] ) && $rule['meta']['storage'] !== $this->storage ) {
@@ -790,6 +816,22 @@ final class Collection_Rules_Plan {
 	 */
 	private function apply_meta_filters( array $args ): array {
 		foreach ( $this->claimed_meta_filters() as $canonical => $rule ) {
+			if ( isset( $rule['any_of']['posts'] ) ) {
+				$value = $this->claims[ $canonical ];
+				if ( '' === $value ) {
+					continue;
+				}
+				$group = array( 'relation' => 'OR' );
+				foreach ( $rule['any_of']['posts']['meta_keys'] as $key ) {
+					$group[] = array(
+						'key'   => $key,
+						'value' => $value,
+					);
+				}
+				$args['meta_query'][] = $group; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Match the scalar gateway or any ledger tender.
+				continue;
+			}
+
 			$args['meta_query'][] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- The POS cashier/store/channel filters are meta-backed by design.
 				'key'   => $rule['meta']['key'],
 				'value' => $this->claims[ $canonical ],
@@ -841,6 +883,9 @@ final class Collection_Rules_Plan {
 			$ids_format  = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
 			$operator    = $rule['id_set']['operator'];
 			$where      .= $wpdb->prepare( " AND {$wpdb->posts}.ID {$operator} ($ids_format) ", $ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $operator comes from the declaration table and $ids_format is generated from array_fill with %d placeholders.
+		}
+		if ( $this->claims_unmatchable() ) {
+			$where .= ' AND 1=0';
 		}
 
 		return $where;
@@ -975,6 +1020,22 @@ final class Collection_Rules_Plan {
 				continue;
 			}
 			$value = $this->claims[ $canonical ];
+
+			if ( isset( $rule['any_of']['hpos'] ) ) {
+				if ( '' === $value ) {
+					$clauses['where'] .= ' AND 1=0';
+					continue;
+				}
+				$meta   = $query->get_table_name( 'meta' );
+				$column = $rule['any_of']['hpos']['column'];
+				$clauses['where'] .= $wpdb->prepare(
+					" AND ( {$orders}.{$column} = %s OR {$orders}.id IN ( SELECT order_id FROM {$meta} WHERE meta_key = %s AND meta_value = %s ) )",
+					$value,
+					$rule['any_of']['hpos']['meta_key'],
+					$value
+				);
+				continue;
+			}
 
 			if ( isset( $rule['hpos_data'] ) ) {
 				$values = array_values( (array) $value );

@@ -44,6 +44,7 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 		'pos_cashier' => 'pos_cashier',
 		'pos_store'   => 'pos_store',
 		'created_via' => 'created_via',
+		'payment_method' => 'payment_method',
 		'include'     => array(
 			'key'   => 'include',
 			'when'  => 'search',
@@ -361,6 +362,114 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 			$this->assertArrayNotHasKey( 'meta_query', $args );
 			$this->assertSame( array(), Collection_Rules::search_terms( "probe\xC3\x28" ) );
 			$this->assertSame( array(), Collection_Rules::search_terms( "probe\xC3\x28", PREG_SPLIT_NO_EMPTY | PREG_SPLIT_OFFSET_CAPTURE ) );
+		}
+	}
+
+	/** Payment filtering declares both WooCommerce's scalar and the ledger index. */
+	public function test_payment_method_rules_expose_any_of_filter(): void {
+		$this->assertSame(
+			array(
+				'any_of'   => array(
+					'hpos'  => array(
+						'column'   => 'payment_method',
+						'meta_key' => '_wcpos_payment_method',
+					),
+					'posts' => array( 'meta_keys' => array( '_payment_method', '_wcpos_payment_method' ) ),
+				),
+				'sanitize' => 'gateway_id',
+			),
+			Collection_Rules::rules( 'orders' )['filters']['payment_method']
+		);
+	}
+
+	/** A claimed gateway is trimmed, not lowercased, and matches either storage carrier. */
+	public function test_payment_method_claims_param_and_matches_either_carrier(): void {
+		$query = new class() {
+			/**
+			 * Stand in for OrdersTableQuery::get_table_name().
+			 *
+			 * @param string $name Table role.
+			 * @return string
+			 */
+			public function get_table_name( $name ) {
+				return 'orders' === $name ? 'wp_wc_orders' : 'wp_wc_orders_meta';
+			}
+		};
+		foreach ( array( Collection_Rules::STORAGE_POSTS, Collection_Rules::STORAGE_HPOS ) as $storage ) {
+			foreach ( array( 'stripe', ' MyGateway ', 'a.b-c_1', str_repeat( 'a', 64 ) ) as $input ) {
+				// Arrange / Act.
+				$params = array( 'payment_method' => $input );
+				$plan   = $this->plan_for( $params, self::V2_MAP, $storage );
+				$value  = trim( $input );
+
+				// Assert.
+				$this->assertSame( array( 'payment_method' => $value ), $plan->claims() );
+				$this->assertSame( array(), $plan->forwarded_params( $params ) );
+				$args = $plan->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() );
+				if ( Collection_Rules::STORAGE_POSTS === $storage ) {
+					$this->assertSame(
+						array(
+							'meta_query' => array(
+								array(
+									'relation' => 'OR',
+									array(
+										'key'   => '_payment_method',
+										'value' => $value,
+									),
+									array(
+										'key'   => '_wcpos_payment_method',
+										'value' => $value,
+									),
+								),
+							),
+						),
+						$args
+					);
+					$installed_args = $plan->around(
+						static function () {
+							return apply_filters( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() );
+						}
+					);
+					$this->assertSame( $args, $installed_args );
+				} else {
+					$this->assertSame( array(), $args );
+					$clauses = $plan->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, array( 'where' => '1=1' ), $query );
+					$this->assertSame(
+						"1=1 AND ( wp_wc_orders.payment_method = '$value' OR wp_wc_orders.id IN ( SELECT order_id FROM wp_wc_orders_meta WHERE meta_key = '_wcpos_payment_method' AND meta_value = '$value' ) )",
+						$clauses['where']
+					);
+				}
+			}
+		}
+	}
+
+	/** Invalid or empty gateways remain claimed and cannot broaden to unpaid/all orders. */
+	public function test_payment_method_invalid_value_matches_nothing(): void {
+		$query = new class() {
+			/**
+			 * Stand in for OrdersTableQuery::get_table_name().
+			 *
+			 * @param string $name Table role.
+			 * @return string
+			 */
+			public function get_table_name( $name ) {
+				return 'wp_wc_orders';
+			}
+		};
+		foreach ( array( Collection_Rules::STORAGE_POSTS, Collection_Rules::STORAGE_HPOS ) as $storage ) {
+			foreach ( array( 'pos:cash', '', '   ', str_repeat( 'a', 65 ), array( 'stripe' ) ) as $input ) {
+				$params = array( 'payment_method' => $input );
+				$plan   = $this->plan_for( $params, self::V2_MAP, $storage );
+				$this->assertSame( array( 'payment_method' => '' ), $plan->claims() );
+				$this->assertSame( array(), $plan->forwarded_params( $params ) );
+				if ( Collection_Rules::STORAGE_POSTS === $storage ) {
+					$this->assertSame( array(), $plan->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() ) );
+					$this->assertSame( '1=1 AND 1=0', $plan->filter( Collection_Rules_Plan::HOOK_POSTS_WHERE, '1=1' ) );
+				} else {
+					$this->assertSame( array(), $plan->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() ) );
+					$this->assertSame( array( 'where' => '1=1 AND 1=0' ), $plan->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, array( 'where' => '1=1' ), $query ) );
+				}
+			}
 		}
 	}
 }
