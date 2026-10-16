@@ -232,6 +232,72 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** Snapshot membership includes split tenders and remains available when counting blind. */
+	public function test_session_detail_returns_counted_ids_including_when_blind(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$order_ids = array();
+		$ledger_row_ids = array();
+		foreach ( array( array( 'pos_cash', 'pos_card' ), array( 'pos_cash' ) ) as $methods ) {
+			$order = new \WC_Order();
+			$order->save();
+			$order_ids[] = $order->get_id();
+			$rows = array();
+			foreach ( $methods as $method ) {
+				$row_id = wp_generate_uuid4();
+				$ledger_row_ids[] = $row_id;
+				$rows[] = array(
+					'id' => $row_id,
+					'method_id' => $method,
+					'kind' => 'pos_cash' === $method ? 'cash' : 'card',
+					'amount' => '10',
+					'status' => 'captured',
+					'session_id' => $id,
+				);
+			}
+			Ledger::instance()->save( $order, $rows, false );
+		}
+		$movement_id = wp_generate_uuid4();
+		$movement = $this->post(
+			'movements',
+			array(
+				'id' => $movement_id,
+				'session_id' => $id,
+				'type' => 'paid_in',
+				'amount' => '5',
+				'reason' => 'Change',
+				'created_at' => '2026-09-11T10:00:00Z',
+			)
+		);
+		$this->assertSame( 201, $movement->get_status() );
+		$reader = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$reader->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $reader->ID );
+		foreach ( array( false, true ) as $can_report ) {
+			wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports', $can_report );
+			// Act.
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id ) );
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data();
+			$this->assertEqualsCanonicalizing( $order_ids, $data['order_ids'] );
+			$this->assertEqualsCanonicalizing( $ledger_row_ids, $data['ledger_row_ids'] );
+			$this->assertSame( array( $movement_id ), array_column( $data['movements'], 'id' ) );
+			$this->assertSame( 2, $data['sales_count'] );
+			if ( $can_report ) {
+				$this->assertSame(
+					array(
+						'cash' => '125.0000',
+						'card' => '10.0000',
+					),
+					$data['expected']
+				);
+			} else {
+				$this->assertArrayNotHasKey( 'expected', $data );
+			}
+		}
+	}
+
 	/** The device's business day is optional, but supplied values must be date strings. */
 	public function test_session_business_day_validates_and_preserves_stamp(): void {
 		$fields = $this->fields();
@@ -302,6 +368,8 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data = $response->get_data();
 		$this->assertArrayNotHasKey( 'expected', $data );
 		$this->assertArrayHasKey( 'sales_count', $data );
+		$this->assertSame( array(), $data['order_ids'] );
+		$this->assertSame( array(), $data['ledger_row_ids'] );
 		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $data['as_of_gmt'] );
 		$this->assertLessThanOrEqual( time() + 1, strtotime( $data['as_of_gmt'] . ' UTC' ) );
 		$this->assertArrayHasKey( 'movements', $data );

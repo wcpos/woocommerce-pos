@@ -118,10 +118,9 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
-			// Captured BEFORE the figure reads: every row the snapshot can contain is at or before
-			// this instant, so a client adding local rows newer than it never drops a row the
-			// snapshot missed (a row committed between this instant and the reads may be counted
-			// twice until the next refresh, which is the harmless side of that window).
+			// Capture before the reads as a fallback for clients without explicit membership.
+			// Second-resolution timestamps cannot distinguish rows committed in the same second;
+			// use the returned IDs, not this clock boundary, to decide snapshot membership.
 			$as_of_gmt = gmdate( 'Y-m-d H:i:s' );
 			$figures   = Session_Figures::for_session( $row );
 			if ( substr( rtrim( $request->get_route(), '/' ), -10 ) === '/movements' ) {
@@ -130,6 +129,8 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$detail = array(
 				'movements' => $figures->movements(),
 				'sales_count' => $figures->sales_count(),
+				'order_ids' => $figures->order_ids(),
+				'ledger_row_ids' => $figures->ledger_row_ids(),
 				// Server-clock boundary of this snapshot (see above); never the device clock.
 				'as_of_gmt' => $as_of_gmt,
 			);

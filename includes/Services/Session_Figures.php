@@ -77,6 +77,16 @@ final class Session_Figures {
 		return count( $this->legs() );
 	}
 
+	/** Order membership of the same captured-leg snapshot used by the figures. */
+	public function order_ids(): array {
+		return array_keys( $this->legs() );
+	}
+
+	/** Ledger row membership, including each tender of a split payment. */
+	public function ledger_row_ids(): array {
+		return array_column( array_merge( array(), ...array_values( $this->legs() ) ), 'id' );
+	}
+
 	/** Split unsigned amounts for closure period and perpetual totals. */
 	public function period_amounts(): array {
 		$totals = array(
