@@ -118,17 +118,20 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
-			$figures = Session_Figures::for_session( $row );
+			// Captured BEFORE the figure reads: every row the snapshot can contain is at or before
+			// this instant, so a client adding local rows newer than it never drops a row the
+			// snapshot missed (a row committed between this instant and the reads may be counted
+			// twice until the next refresh, which is the harmless side of that window).
+			$as_of_gmt = gmdate( 'Y-m-d H:i:s' );
+			$figures   = Session_Figures::for_session( $row );
 			if ( substr( rtrim( $request->get_route(), '/' ), -10 ) === '/movements' ) {
 				return new WP_REST_Response( $figures->movements() );
 			}
 			$detail = array(
 				'movements' => $figures->movements(),
 				'sales_count' => $figures->sales_count(),
-				// Server-clock boundary of this snapshot: the client keeps the server's expected
-				// figure as a baseline and adds only local rows newer than this instant, so the
-				// comparison must not involve the device clock.
-				'as_of_gmt' => gmdate( 'Y-m-d H:i:s' ),
+				// Server-clock boundary of this snapshot (see above); never the device clock.
+				'as_of_gmt' => $as_of_gmt,
 			);
 			// The expected figure is a report: a cashier counting blind never receives it.
 			if ( current_user_can( 'view_woocommerce_pos_reports' ) ) {
