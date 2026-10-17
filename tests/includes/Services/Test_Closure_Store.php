@@ -371,12 +371,13 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	public function test_closed_session_status_fields_are_preserved(): void {
 		$session = $this->closure_session( null, 'closed' );
 		$fields = $this->closure_fields( $session );
+		$fields['counted'] = array( 'cash' => '100.0000' );
 		$fields['closed_at_gmt'] = '2026-09-11 13:00:00';
 		$row = ( new Closure_Store() )->create( $fields );
 		$this->assertIsArray( $row );
 		$session['closure_id'] = $row['id'];
 		$this->assertSame( $session, ( new Register_Session_Store() )->get( $session['id'] ) );
-		$this->assertSame( array( 'cash' => '1.0000' ), $row['variance'] );
+		$this->assertSame( array( 'cash' => '0.0000' ), $row['variance'] );
 	}
 
 	/** A forward jump to four stays four, and its missing three is listed. */
@@ -470,7 +471,12 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	public function test_closure_holds_the_register_lock_across_its_transaction(): void {
 		$session = $this->closure_session();
 		$queries = array();
-		$trace = static function ( $sql ) use ( &$queries ) {
+		$held_at_commit = null;
+		$trace = static function ( $sql ) use ( &$queries, &$held_at_commit, $session ) {
+			global $wpdb;
+			if ( 'COMMIT' === $sql ) {
+				$held_at_commit = $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK(%s)', 'wcpos_register_' . $session['register_id'] ) );
+			}
 			$queries[] = $sql;
 			return $sql;
 		};
@@ -482,7 +488,8 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 		$sql = implode( "\n", $queries );
 		$lock = strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] );
-		$release = strpos( $sql, "RELEASE_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$release = strrpos( $sql, "RELEASE_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$this->assertSame( '0', $held_at_commit );
 		$this->assertNotFalse( $lock );
 		$this->assertNotFalse( $release );
 		$this->assertLessThan( strpos( $sql, 'START TRANSACTION' ), $lock );

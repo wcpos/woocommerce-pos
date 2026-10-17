@@ -90,7 +90,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
 		try {
-			foreach ( array( 'same', 'cash', 'card', 'missing', 'missing_expected', 'sale', 'under' ) as $case ) {
+			foreach ( array( 'same', 'cash', 'card', 'missing', 'missing_expected', 'sale', 'under', 'stale_under' ) as $case ) {
 				$session = $this->closure_session();
 				$body = $this->body( $session );
 				$body['counted'] = array(
@@ -120,15 +120,21 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 					$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'approved_counted' => null ), array( 'id' => $session['id'] ) );
 				} elseif ( 'cash' === $case || 'card' === $case ) {
 					$body['counted'][ $case ] = '70';
-				} elseif ( 'under' === $case ) {
+				} elseif ( 'under' === $case || 'stale_under' === $case ) {
 					$body['counted']['cash'] = '100';
 				}
 				$body['till_expected']['cash'] = '80';
 				$response = $this->post( 'closures', $body );
 				$stored = ( new Register_Session_Store() )->get( $session['id'] );
-				if ( 'same' === $case || 'under' === $case ) {
+				if ( 'same' === $case || 'under' === $case || 'stale_under' === $case ) {
 					$this->assertSame( 201, $response->get_status(), $case );
 					$this->assertSame( '100.0000', $response->get_data()['expected']['cash'] );
+					if ( 'stale_under' === $case ) {
+						$this->assertNull( $response->get_data()['approved_by'] );
+						foreach ( array( 'approved_by', 'approved_counted', 'approved_expected' ) as $key ) {
+							$this->assertNull( $stored[ $key ], $key );
+						}
+					}
 				} else {
 					$this->assertSame( 403, $response->get_status(), $case );
 					$this->assertSame( 'wcpos_override_refused', $response->get_data()['code'] );
@@ -162,6 +168,105 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 							$this->assertSame( '150.0000', ( new Register_Session_Store() )->get( $session['id'] )['approved_expected']['cash'] );
 						}
 					}
+				}
+			}
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		}
+	}
+
+	/** A stale snapshot must not close after any approval field changes. */
+	public function test_closing_refuses_a_changed_approval_snapshot(): void {
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$manager = self::factory()->user->create();
+		foreach ( array(
+			'approved_by' => $manager + 1,
+			'approved_counted' => '{"cash":"70"}',
+			'approved_expected' => '{"cash":"90"}',
+		) as $key => $value ) {
+			$session = $store->approve( $this->closure_session(), $manager, array( 'cash' => '80' ) );
+			$wpdb->update( $store->table_name(), array( $key => $value ), array( 'id' => $session['id'] ) );
+			$result = $store->transition(
+				$session,
+				array(
+					'status' => 'closed',
+					'counted' => array( 'cash' => '80' ),
+				)
+			);
+			$this->assertWPError( $result, $key );
+			$this->assertSame( 'wcpos_override_refused', $result->get_error_code() );
+			$this->assertSame( 403, $result->get_error_data()['status'] );
+			$this->assertSame( 'counting', $store->get( $session['id'] )['status'] );
+		}
+	}
+
+	/** Both session writes must wait for a competing register owner. */
+	public function test_approval_and_status_respect_the_register_lock(): void {
+		$session = $this->closure_session();
+		$manager = self::factory()->user->create_and_get( array( 'user_pass' => 'approval-fixture' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$other = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$lock = 'wcpos_register_' . $session['register_id'];
+		$this->assertSame( '1', $other->get_var( $other->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) );
+		try {
+			foreach ( array( 'approve', 'status' ) as $route ) {
+				$response = $this->post(
+					'sessions/' . $session['id'] . '/' . $route,
+					array(
+						'username' => $manager->user_login,
+						'password' => 'approval-fixture',
+						'counted' => array( 'cash' => '80' ),
+						'status' => 'closed',
+						'at' => '2026-09-11T12:00:00Z',
+					)
+				);
+				$this->assertSame( 500, $response->get_status(), $route );
+				$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $session['id'] )['status'] );
+			}
+		} finally {
+			$other->get_var( $other->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+			$other->close();
+		}
+	}
+
+	/** Deferred documents must preserve the closed count and its expected snapshot. */
+	public function test_deferred_closure_enforces_count_and_approval(): void {
+		$store = new Register_Session_Store();
+		$manager = self::factory()->user->create();
+		$threshold = static function () {
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		try {
+			foreach ( array( 'counted', 'expected' ) as $case ) {
+				$session = $store->approve( $this->closure_session(), $manager, array( 'cash' => '80' ) );
+				$body = $this->body( $session );
+				$body['counted'] = array( 'cash' => '80' );
+				$this->assertSame(
+					200,
+					$this->post(
+						'sessions/' . $session['id'] . '/status',
+						array(
+							'status' => 'closed',
+							'at' => $body['closed_at'],
+							'counted' => $body['counted'],
+						)
+					)->get_status()
+				);
+				if ( 'expected' === $case ) {
+					$this->closure_ledger( $session );
+				} else {
+					$body['counted']['cash'] = '70';
+				}
+				$response = $this->post( 'closures', $body );
+				$this->assertSame( 'counted' === $case ? 409 : 403, $response->get_status(), $case );
+				$this->assertSame( 'counted' === $case ? 'wcpos_closure_counted_mismatch' : 'wcpos_override_refused', $response->get_data()['code'] );
+				$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
+				$this->assertSame( $manager, $store->get( $session['id'] )['approved_by'] );
+				if ( 'counted' === $case ) {
+					$body['counted']['cash'] = '080.0000';
+					$this->assertSame( 201, $this->post( 'closures', $body )->get_status() );
 				}
 			}
 		} finally {

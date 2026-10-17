@@ -630,10 +630,10 @@ final class Closure_Store {
 					array(
 						'status' => 'closed',
 						'closure_id' => $fields['id'],
+						'counted' => $fields['counted'],
 					) + ( 'counting' === $session['status'] ? array(
 						'closed_at_gmt' => $fields['closed_at_gmt'],
 						'closed_by' => $fields['closed_by'],
-						'counted' => $fields['counted'],
 					) : array() )
 				);
 			} catch ( \RuntimeException $error ) {
@@ -661,6 +661,8 @@ final class Closure_Store {
 				);
 				return $result;
 			}
+			$fields['approved_by'] = $result['approved_by'];
+			$fields['breakdowns']['labels']['approved_by_name'] = get_userdata( (int) ( $result['approved_by'] ?? 0 ) )->display_name ?? '';
 			foreach ( array( 'expected', 'till_expected', 'counted', 'variance', 'breakdowns', 'findings' ) as $key ) {
 				$fields[ $key ] = null === $fields[ $key ] ? null : wp_json_encode( $fields[ $key ] );
 				if ( false === $fields[ $key ] ) {
