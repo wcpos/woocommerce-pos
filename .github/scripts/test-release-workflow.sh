@@ -104,8 +104,16 @@ check_structure() {
   fi
 }
 check_structure 'push checkout pins github.sha'            "ref: \${{ inputs.version && format('v{0}', inputs.version) || github.sha }}"
-check_structure 'tooling checkout is the workflow revision' 'path: release-tooling'
-check_structure 'release notes run from the tooling checkout' 'release-tooling/.github/scripts/readme-changelog-section.sh'
-check_structure 'release-note test runs from the tooling checkout' 'release-tooling/.github/scripts/test-readme-changelog-section.sh'
+check_structure 'tooling checkout is the workflow revision' 'path: .release-tooling'
+# The tooling checkout must follow the release checkout: a root checkout into a directory
+# that is not yet a repository deletes its contents, nested checkout included.
+if [[ "$WORKFLOW_TEXT" == *'name: 🏗 Checkout code'*'name: 🧰 Checkout release tooling'* ]]; then
+  echo 'ok: tooling checkout follows the release checkout'
+else
+  echo 'FAIL: tooling checkout follows the release checkout'
+  FAILURES=$((FAILURES + 1))
+fi
+check_structure 'release notes run from the tooling checkout' '.release-tooling/.github/scripts/readme-changelog-section.sh'
+check_structure 'release-note test runs from the tooling checkout' '.release-tooling/.github/scripts/test-readme-changelog-section.sh'
 [[ "$FAILURES" == 0 ]] || exit 1
 echo 'PASS: release workflow decisions'
