@@ -36,6 +36,7 @@ final class Register_Session_Store {
 			closed_at_gmt DATETIME NULL,
 			closed_by BIGINT NULL,
 			approved_by BIGINT NULL,
+			approved_counted LONGTEXT NULL,
 			counted LONGTEXT NULL,
 			closure_id CHAR(36) NULL,
 			created_at_gmt DATETIME NOT NULL,
@@ -83,7 +84,9 @@ final class Register_Session_Store {
 			foreach ( array( 'store_id', 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
 			}
-			$row['counted'] = null === $row['counted'] ? null : json_decode( $row['counted'], true );
+			foreach ( array( 'counted', 'approved_counted' ) as $key ) {
+				$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
+			}
 		}
 		return $rows;
 	}
@@ -196,12 +199,13 @@ final class Register_Session_Store {
 
 	/** Stamp a manager approval only while the session is counting.
 	 *
-	 * @param array $session Current row.
-	 * @param int   $user_id Approving manager.
+	 * @param array      $session Current row.
+	 * @param int        $user_id Approving manager.
+	 * @param array|null $counted Approved tender counts.
 	 * @return array|\WP_Error
 	 * @throws \RuntimeException On database failure.
 	 */
-	public function approve( array $session, int $user_id ) {
+	public function approve( array $session, int $user_id, ?array $counted = null ) {
 		global $wpdb;
 		$refused = $this->refuse_own_approval( $session, $user_id );
 		if ( $refused ) {
@@ -209,7 +213,10 @@ final class Register_Session_Store {
 		}
 		$updated = $wpdb->update(
 			$this->table_name(),
-			array( 'approved_by' => $user_id ),
+			array(
+				'approved_by' => $user_id,
+				'approved_counted' => null === $counted ? null : wp_json_encode( $counted ),
+			),
 			array(
 				'id' => $session['id'],
 				'status' => 'counting',
@@ -265,7 +272,14 @@ final class Register_Session_Store {
 		if ( 'counting' === $session['status'] && 'closed' === $fields['status'] ) {
 			$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
 			$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
-			if ( null === $session['approved_by'] && ! isset( $fields['approved_by'] ) && is_string( $threshold ) && preg_match( '/^\d+(?:\.\d+)?$/D', $threshold ) ) {
+			$approved = Closure_Store::tenders( $session['approved_counted'] ?? null );
+			$counted = Closure_Store::tenders( $fields['counted'] );
+			if ( null !== $approved && null !== $counted ) {
+				ksort( $approved );
+				ksort( $counted );
+			}
+			$bound = null !== $session['approved_by'] && null !== $approved && $approved === $counted;
+			if ( ! $bound && ! isset( $fields['approved_by'] ) && is_string( $threshold ) && preg_match( '/^\d+(?:\.\d+)?$/D', $threshold ) ) {
 				// Truncate, not round: a four-decimal variance above the threshold must still require approval.
 				$comparison_threshold = preg_replace( '/(\.\d{4})\d+$/D', '$1', $threshold );
 				$variance = $wpdb->get_row(

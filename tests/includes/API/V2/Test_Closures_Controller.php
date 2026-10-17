@@ -80,6 +80,84 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		return $rows;
 	}
 
+	/** A manager authorizes the whole count, not later edits or client expectations. */
+	public function test_closure_approval_is_bound_to_counted_totals(): void {
+		global $wpdb;
+		$manager = self::factory()->user->create_and_get( array( 'user_pass' => 'approval-fixture' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$threshold = static function () {
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		try {
+			foreach ( array( 'same', 'cash', 'card', 'missing', 'under' ) as $case ) {
+				$session = $this->closure_session();
+				$body = $this->body( $session );
+				$body['counted'] = array(
+					'card' => '20.0000',
+					'cash' => '80.0000',
+				);
+				if ( 'under' !== $case ) {
+					$approved = $this->post(
+						'sessions/' . $session['id'] . '/approve',
+						array(
+							'username' => $manager->user_login,
+							'password' => 'approval-fixture',
+							'counted' => array(
+								'cash' => '080',
+								'card' => '20',
+							),
+						)
+					);
+					$this->assertSame( 200, $approved->get_status() );
+				}
+				if ( 'missing' === $case ) {
+					$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'approved_counted' => null ), array( 'id' => $session['id'] ) );
+				} elseif ( 'cash' === $case || 'card' === $case ) {
+					$body['counted'][ $case ] = '70';
+				} elseif ( 'under' === $case ) {
+					$body['counted']['cash'] = '100';
+				}
+				$body['till_expected']['cash'] = '80';
+				$response = $this->post( 'closures', $body );
+				$stored = ( new Register_Session_Store() )->get( $session['id'] );
+				if ( 'same' === $case || 'under' === $case ) {
+					$this->assertSame( 201, $response->get_status(), $case );
+					$this->assertSame( '100.0000', $response->get_data()['expected']['cash'] );
+				} else {
+					$this->assertSame( 403, $response->get_status(), $case );
+					$this->assertSame( 'wcpos_override_refused', $response->get_data()['code'] );
+					$this->assertSame( 'counting', $stored['status'] );
+					$this->assertSame( $manager->ID, $stored['approved_by'] );
+					$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
+					if ( 'cash' === $case ) {
+						$this->assertSame(
+							array(
+								'cash' => '80.0000',
+								'card' => '20.0000',
+							),
+							$stored['approved_counted']
+						);
+						$this->assertSame(
+							200,
+							$this->post(
+								'sessions/' . $session['id'] . '/approve',
+								array(
+									'username' => $manager->user_login,
+									'password' => 'approval-fixture',
+									'counted' => $body['counted'],
+								)
+							)->get_status()
+						);
+						$this->assertSame( 201, $this->post( 'closures', $body )->get_status() );
+					}
+				}
+			}
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		}
+	}
+
 	/** An empty store still supplies the fixed schema, not a document lookup. */
 	public function test_export_empty_store_returns_header_only(): void {
 		// Arrange: no closure fixtures.

@@ -211,7 +211,11 @@ class Sessions_Controller extends \WP_REST_Controller {
 		if ( is_wp_error( $user ) || get_current_user_id() === $user->ID || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
 			return $this->error( 'wcpos_override_refused', 403 );
 		}
-		$result = $store->approve( $row, $user->ID );
+		$counted = Closure_Store::tenders( $request['counted'] );
+		if ( null === $counted ) {
+			return $this->error( 'rest_invalid_param', 400, 'counted' );
+		}
+		$result = $store->approve( $row, $user->ID, $counted );
 		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result );
 	}
 

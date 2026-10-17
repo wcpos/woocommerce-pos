@@ -345,6 +345,27 @@ final class Closure_Store {
 		return '' !== $wpdb->last_error;
 	}
 
+	/** Validate and normalize tender maps, allowing negative expectations.
+	 *
+	 * @param mixed $value Input map.
+	 * @param bool  $signed Allow negative balances.
+	 */
+	public static function tenders( $value, bool $signed = false ): ?array {
+		if ( ! is_array( $value ) || ! isset( $value['cash'] ) ) {
+			return null;
+		}
+		foreach ( $value as $key => &$amount ) {
+			if ( ! is_string( $key ) || ! preg_match( '/^[a-zA-Z0-9_-]{1,191}$/D', $key ) ) {
+				return null;
+			}
+			if ( ! is_string( $amount ) || ! preg_match( $signed ? '/^-?\d{1,15}(?:\.\d{1,4})?$/D' : '/^\d{1,15}(?:\.\d{1,4})?$/D', $amount ) ) {
+				return null;
+			}
+			$amount = self::sum( array( $amount ) );
+		}
+		return $value;
+	}
+
 	/** Normalize a validated scalar without SQL, floats or integer overflow.
 	 *
 	 * @param string $amount Signed decimal string with at most four fractional places.

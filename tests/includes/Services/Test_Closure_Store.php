@@ -360,7 +360,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'wcpos_override_refused', $error->get_error_code() );
 			$this->assertNull( $store->get( $fields['id'] ) );
 			$manager = self::factory()->user->create();
-			( new Register_Session_Store() )->approve( $session, $manager );
+			( new Register_Session_Store() )->approve( $session, $manager, $fields['counted'] );
 			$this->assertSame( $manager, $store->create( $fields )['approved_by'] );
 		} finally {
 			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );

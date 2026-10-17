@@ -548,10 +548,13 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
 			$this->assertNull( ( new Register_Session_Store() )->get( $id )['approved_by'] );
 		}
+		$this->assertSame( 400, $this->post( $route, $credentials )->get_status() );
+		$credentials['counted'] = array( 'cash' => '100' );
 		$response = $this->post( $route, $credentials );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
 		$this->assertSame( $manager->ID, ( new Register_Session_Store() )->get( $id )['approved_by'] );
+		$this->assertSame( array( 'cash' => '100.0000' ), $response->get_data()['approved_counted'] );
 		$this->assertSame( $cashier->ID, get_current_user_id() );
 		$this->assertArrayNotHasKey( 'password', $response->get_data() );
 		$unchanged = $this->post( $route, $credentials );
@@ -586,6 +589,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			array(
 				'username' => $opener->user_login,
 				'password' => 'opener-fixture',
+				'counted' => array( 'cash' => '100' ),
 			)
 		);
 		$this->assertSame( 403, $refused->get_status() );
@@ -710,6 +714,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 					array(
 						'username' => $manager->user_login,
 						'password' => 'approval-fixture',
+						'counted' => $close['counted'],
 					)
 				)->get_status()
 			);
