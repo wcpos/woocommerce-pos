@@ -100,6 +100,10 @@ final class Session_Figures {
 					'id' => $row['id'],
 					'updated_at_gmt' => $row['updated_at_gmt'] ?? null,
 					'status' => $row['status'],
+					'amount' => $row['amount'] ?? null,
+					'refunded_amount' => $row['refunded_amount'] ?? null,
+					'method_id' => $row['method_id'] ?? null,
+					'kind' => $row['kind'] ?? null,
 				);
 			},
 			array_merge( array(), ...array_values( $this->legs() ) )

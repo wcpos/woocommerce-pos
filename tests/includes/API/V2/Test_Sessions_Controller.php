@@ -270,6 +270,10 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 					'id' => $row['id'],
 					'updated_at_gmt' => '2026-09-11 09:30:00',
 					'status' => 'captured',
+					'amount' => '10.00',
+					'refunded_amount' => '0.00',
+					'method_id' => $row['method_id'],
+					'kind' => $row['kind'],
 				);
 			}
 			unset( $row );
