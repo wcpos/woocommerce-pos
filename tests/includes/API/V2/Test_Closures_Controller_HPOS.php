@@ -25,12 +25,15 @@ class Test_Closures_Controller_HPOS extends Test_Closures_Controller {
 	/**
 	 * Restore posts storage.
 	 *
-	 * Orders written while compatibility sync was off are "out of sync"; the next test in the
-	 * shard that flips the orders-storage option is refused by WooCommerce until they are
-	 * synchronised (Test_Proxy_Resource_Behaviors, PHP Tests shard 1 on #2298), so drain the
-	 * synchroniser before handing storage back.
+	 * The closure fixture COMMITs, so the orders this class wrote with compatibility sync off
+	 * (and the `yes` HPOS flag) outlive the parent rollback; an earlier cleanup ran inside the
+	 * transaction and was rolled back with it, leaving seven orders "out of sync" and making the
+	 * next shard-mate's storage toggle throw (Test_Proxy_Resource_Behaviors, PHP Tests shard 1 on
+	 * #2298). Tear the fixture down first, then drain the synchroniser and hand storage back in
+	 * autocommit so the restore is durable.
 	 */
 	public function tearDown(): void {
+		parent::tearDown();
 		$this->enable_cot_sync();
 		$sync = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer::class );
 		for ( $i = 0; $i < 10 && $sync->get_current_orders_pending_sync_count() > 0; $i++ ) {
@@ -38,6 +41,5 @@ class Test_Closures_Controller_HPOS extends Test_Closures_Controller {
 		}
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
-		parent::tearDown();
 	}
 }
