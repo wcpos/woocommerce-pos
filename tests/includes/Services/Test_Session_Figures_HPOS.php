@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 
 require_once __DIR__ . '/Test_Session_Figures.php';
@@ -14,6 +15,21 @@ require_once __DIR__ . '/Test_Session_Figures.php';
 /** Run the session snapshot contracts against order-table storage. */
 class Test_Session_Figures_HPOS extends Test_Session_Figures {
 	use HPOSToggleTrait;
+
+	/** Teardown must discard committed HPOS fixtures, not copy them into posts. */
+	public function test_teardown_discards_committed_orders_without_sync(): void {
+		global $wpdb;
+		$order = new \WC_Order();
+		$order->save();
+		$wpdb->query( 'COMMIT' );
+		$this->tearDown();
+		try {
+			$this->assertSame( array(), wc_get_orders( array( 'include' => array( $order->get_id() ) ) ) );
+			$this->assertSame( 0, wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer::class )->get_current_orders_pending_sync_count() );
+		} finally {
+			$this->setUp();
+		}
+	}
 
 	/** Enable HPOS before creating fixture orders. */
 	public function setUp(): void {
@@ -28,16 +44,20 @@ class Test_Session_Figures_HPOS extends Test_Session_Figures {
 	 *
 	 * The session fixture COMMITs, so orders written with compatibility sync off outlive the
 	 * parent rollback while an in-transaction cleanup does not (woocommerce-pos#2298, PHP Tests
-	 * shard 1): tear the fixture down first, then drain the synchroniser and hand storage back
+	 * shard 1): tear the fixture down first, then delete committed orders and hand storage back
 	 * in autocommit so the restore is durable.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
+		global $wpdb;
 		try {
-			$this->enable_cot_sync();
-			$sync = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer::class );
-			for ( $i = 0; $i < 10 && $sync->get_current_orders_pending_sync_count() > 0; $i++ ) {
-				$sync->process_batch( $sync->get_next_batch_to_process( 1000 ) );
+			foreach ( array(
+				OrdersTableDataStore::get_orders_table_name(),
+				OrdersTableDataStore::get_addresses_table_name(),
+				OrdersTableDataStore::get_operational_data_table_name(),
+				OrdersTableDataStore::get_meta_table_name(),
+			) as $table ) {
+				$wpdb->query( "DELETE FROM {$table}" );
 			}
 		} finally {
 			// The parent already restored the hook snapshot; drop the sync-option filter the

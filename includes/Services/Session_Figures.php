@@ -101,7 +101,8 @@ final class Session_Figures {
 					'updated_at_gmt' => $row['updated_at_gmt'] ?? null,
 					'status' => $row['status'],
 					// Detect financial edits without exposing tender amounts to blind counters.
-					'version' => sha1(
+					'version' => hash_hmac(
+						'sha256',
 						wp_json_encode(
 							array(
 								$row['id'],
@@ -111,7 +112,8 @@ final class Session_Figures {
 								self::tender_key( $row ),
 								$row['updated_at_gmt'] ?? null,
 							)
-						)
+						),
+						wp_salt( 'auth' )
 					),
 				);
 			},
@@ -134,7 +136,7 @@ final class Session_Figures {
 					return array(
 						'id' => $refund->get_id(),
 						'updated_at_gmt' => $modified ? gmdate( 'Y-m-d H:i:s', $modified->getTimestamp() ) : null,
-						'allocation_version' => null === $allocation ? null : substr( md5( wp_json_encode( $allocation ) ), 0, 12 ),
+						'allocation_version' => null === $allocation ? null : hash_hmac( 'sha256', wp_json_encode( $allocation ), wp_salt( 'auth' ) ),
 					);
 				},
 				$this->refund_records()

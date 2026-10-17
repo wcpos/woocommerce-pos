@@ -321,7 +321,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 				foreach ( array( 'amount', 'refunded_amount', 'method_id', 'kind' ) as $field ) {
 					$this->assertArrayNotHasKey( $field, $row );
 				}
-				$this->assertMatchesRegularExpression( '/^[a-f0-9]{40}$/', $row['version'] );
+				$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $row['version'] );
 				unset( $row['version'] );
 			}
 			unset( $row );
