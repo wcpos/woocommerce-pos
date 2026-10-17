@@ -1,0 +1,26 @@
+name: Review gate publisher
+on:
+  workflow_run:
+    workflows: ["Review gate"]
+    types: [completed]
+permissions:
+  actions: read
+  statuses: write
+  pull-requests: write
+  contents: read
+jobs:
+  resolve:
+    if: github.event.workflow_run.event != 'workflow_run'
+    uses: wcpos/.github/.github/workflows/review-gate.yml@ce3ab7e40907cb8a410057deac595675f3260403 # wcpos/.github main, 2026-10-17 (#14)
+    with:
+      resolve_only: true
+      publish: false
+      sha: ${{ github.event.workflow_run.head_sha }}
+      head_owner: ${{ github.event.workflow_run.head_repository.owner.login }}
+      head_branch: ${{ github.event.workflow_run.head_branch }}
+  publish:
+    needs: resolve
+    if: needs.resolve.outputs.sha != ''
+    uses: wcpos/.github/.github/workflows/review-gate.yml@ce3ab7e40907cb8a410057deac595675f3260403 # wcpos/.github main, 2026-10-17 (#14)
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}

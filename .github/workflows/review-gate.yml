@@ -1,0 +1,26 @@
+name: Review gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  issue_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to evaluate
+        required: true
+        type: number
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  gate:
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    uses: wcpos/.github/.github/workflows/review-gate.yml@ce3ab7e40907cb8a410057deac595675f3260403 # wcpos/.github main, 2026-10-17 (#14)
+    with:
+      publish: false
+      pr: ${{ inputs.pr || 0 }}
