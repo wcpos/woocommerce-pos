@@ -15,12 +15,11 @@ on:
         required: true
         type: number
 permissions:
-  statuses: write
   contents: read
-  pull-requests: write
 jobs:
   gate:
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
-    uses: wcpos/.github/.github/workflows/review-gate.yml@07653d19695225dcbbe20c424baf95ee38a84080 # wcpos/.github main, 2026-10-17
+    uses: wcpos/.github/.github/workflows/review-gate.yml@6c94f94a768cbcc437c73a82b497bf7435fba18a # wcpos/.github main, 2026-10-17 (#12)
     with:
+      publish: false
       pr: ${{ inputs.pr || 0 }}
