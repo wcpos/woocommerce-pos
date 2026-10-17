@@ -288,6 +288,7 @@ final class Register_Session_Store {
 					return $refused;
 				}
 			}
+			$bound = false;
 			if ( 'closed' === $fields['status'] ) {
 				$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
 				$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
