@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Closure_Csv;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
 use WP_REST_Response;
@@ -199,12 +200,19 @@ class Closures_Controller extends \WP_REST_Controller {
 			$id = strtolower( $request['id'] );
 			$row = $store->get( $id );
 			if ( $row ) {
+				if ( ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+					return $this->error( 'wcpos_closure_not_found', 404 );
+				}
 				$store->log_replay( $row );
 				return new WP_REST_Response( $this->visible( $row ) );
 			}
 			$fields = $this->fields( $request );
 			if ( is_wp_error( $fields ) ) {
 				return $fields;
+			}
+			$session = apply_filters( 'woocommerce_pos_session_row', ( new Register_Session_Store() )->get( $fields['session_id'] ), $request );
+			if ( ! $session || ! Store_Reach::for_request( $request )->admits( $session['store_id'] ) ) {
+				return $this->error( 'wcpos_session_not_found', 404 );
 			}
 			$created = false;
 			$row = $store->create( $fields, $created );
