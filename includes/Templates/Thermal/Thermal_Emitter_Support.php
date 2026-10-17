@@ -84,6 +84,29 @@ trait Thermal_Emitter_Support {
 	}
 
 	/**
+	 * Whether a node list contains a size node at any depth.
+	 *
+	 * @param array $nodes AST nodes.
+	 *
+	 * @return bool
+	 */
+	private function nodes_contain_size( array $nodes ): bool {
+		foreach ( $nodes as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+			if ( 'size' === ( $node['type'] ?? '' ) ) {
+				return true;
+			}
+			if ( ! empty( $node['children'] ) && is_array( $node['children'] ) && $this->nodes_contain_size( $node['children'] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Format a value as centered plain text.
 	 *
 	 * Mirrors the rescue in Html_Thermal_Emitter::render_barcode_fallback(): when
