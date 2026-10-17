@@ -33,12 +33,18 @@ class Test_Sessions_Controller_HPOS extends Test_Sessions_Controller {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		$this->enable_cot_sync();
-		$sync = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer::class );
-		for ( $i = 0; $i < 10 && $sync->get_current_orders_pending_sync_count() > 0; $i++ ) {
-			$sync->process_batch( $sync->get_next_batch_to_process( 1000 ) );
+		try {
+			$this->enable_cot_sync();
+			$sync = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer::class );
+			for ( $i = 0; $i < 10 && $sync->get_current_orders_pending_sync_count() > 0; $i++ ) {
+				$sync->process_batch( $sync->get_next_batch_to_process( 1000 ) );
+			}
+		} finally {
+			// The parent already restored the hook snapshot; drop the sync-option filter the
+			// helpers installed after it so later non-HPOS tests read the real option.
+			remove_all_filters( 'pre_option_' . \Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer::ORDERS_DATA_SYNC_ENABLED_OPTION );
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 		}
-		$this->clean_up_cot_setup();
-		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 	}
 }
