@@ -295,6 +295,50 @@ final class Closure_Store {
 		return $rows;
 	}
 
+	/** Carry only the selected corrections under create()'s register lock and transaction.
+	 *
+	 * @param string $register_id Register UUID.
+	 * @param string $closure_id New closure UUID.
+	 * @throws \RuntimeException On read or stamp failure; create() rolls everything back.
+	 */
+	private function carry_corrections( string $register_id, string $closure_id ): array {
+		global $wpdb;
+		$fiscal = ( new Fiscal_Record_Store() )->table_name();
+		$closures = $this->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned tables; all earlier closures of this register, without pagination.
+		$pending = $wpdb->get_results( $wpdb->prepare( "SELECT f.id, f.closure_id FROM {$fiscal} f INNER JOIN {$closures} c ON c.id = f.closure_id WHERE c.register_id = %s AND f.type IN ('late_sale', 'late_refund') AND f.carried_by_closure_id IS NULL", $register_id ), ARRAY_A );
+		if ( self::read_failed() ) {
+			throw new \RuntimeException( 'Closure carry read failed.' );
+		}
+		$ids = array_fill_keys( array_column( $pending, 'id' ), true );
+		$totals = array(
+			'sales' => array(),
+			'refunds' => array(),
+		);
+		foreach ( array_unique( array_column( $pending, 'closure_id' ) ) as $previous_id ) {
+			foreach ( $this->corrections_for( $previous_id ) as $correction ) {
+				// A correction arriving after the pending read belongs to the next closure.
+				if ( ! isset( $ids[ $correction['id'] ] ) ) {
+					continue;
+				}
+				foreach ( $totals as $kind => $_amounts ) {
+					$totals[ $kind ][] = $correction['figures'][ $kind . '_delta' ] ?? '0';
+				}
+				if ( 1 !== $wpdb->update(
+					$fiscal,
+					array( 'carried_by_closure_id' => $closure_id ),
+					array(
+						'id' => $correction['id'],
+						'carried_by_closure_id' => null,
+					)
+				) ) {
+					throw new \RuntimeException( 'Closure carry stamp failed.' );
+				}
+			}
+		}
+		return array_map( array( self::class, 'sum' ), $totals );
+	}
+
 	/** Whether the last database query failed (read fresh, after any earlier check). */
 	private static function read_failed(): bool {
 		global $wpdb;
@@ -498,12 +542,13 @@ final class Closure_Store {
 			$fields['variance'] = $this->variance( $fields['counted'], $fields['expected'] );
 			$totals = $figures->period_amounts();
 			$figures->stamp( $fields['id'] );
+			$carried = $this->carry_corrections( $session['register_id'], $fields['id'] );
 			$findings = array();
 			foreach ( $totals as $kind => $amounts ) {
 				$period = self::sum( $amounts );
 				foreach ( array(
 					'period' => $period,
-					'perpetual' => self::sum( array( $previous[ 'perpetual_' . $kind . '_total' ] ?? '0', $period ) ),
+					'perpetual' => self::sum( array( $previous[ 'perpetual_' . $kind . '_total' ] ?? '0', $period, $carried[ $kind ] ) ),
 				) as $scope => $derived ) {
 					$key = $scope . '_' . $kind . '_total';
 					if ( ! preg_match( '/^\d{1,15}\.\d{4}$/D', $derived ) ) {
