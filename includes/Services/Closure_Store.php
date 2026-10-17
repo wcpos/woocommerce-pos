@@ -345,6 +345,27 @@ final class Closure_Store {
 		return '' !== $wpdb->last_error;
 	}
 
+	/** Validate and normalize tender maps, allowing negative expectations.
+	 *
+	 * @param mixed $value Input map.
+	 * @param bool  $signed Allow negative balances.
+	 */
+	public static function tenders( $value, bool $signed = false ): ?array {
+		if ( ! is_array( $value ) || ! isset( $value['cash'] ) ) {
+			return null;
+		}
+		foreach ( $value as $key => &$amount ) {
+			if ( ! is_string( $key ) || ! preg_match( '/^[a-zA-Z0-9_-]{1,191}$/D', $key ) ) {
+				return null;
+			}
+			if ( ! is_string( $amount ) || ! preg_match( $signed ? '/^-?\d{1,15}(?:\.\d{1,4})?$/D' : '/^\d{1,15}(?:\.\d{1,4})?$/D', $amount ) ) {
+				return null;
+			}
+			$amount = self::sum( array( $amount ) );
+		}
+		return $value;
+	}
+
 	/** Normalize a validated scalar without SQL, floats or integer overflow.
 	 *
 	 * @param string $amount Signed decimal string with at most four fractional places.
@@ -603,17 +624,22 @@ final class Closure_Store {
 				throw new \RuntimeException( 'Closure receipt read failed.' );
 			}
 			$fields += $receipts;
+			$approval_missing = null;
 			try {
 				$result = $sessions->transition(
 					$session,
 					array(
 						'status' => 'closed',
 						'closure_id' => $fields['id'],
+						'counted' => $fields['counted'],
+						'expected' => $fields['expected'],
 					) + ( 'counting' === $session['status'] ? array(
 						'closed_at_gmt' => $fields['closed_at_gmt'],
 						'closed_by' => $fields['closed_by'],
-						'counted' => $fields['counted'],
-					) : array() )
+					) : array() ),
+					null !== $fields['printed_at_gmt'],
+					$approval_missing,
+					true
 				);
 			} catch ( \RuntimeException $error ) {
 				// The session store stays silent on a closure-driven write (see its
@@ -640,6 +666,11 @@ final class Closure_Store {
 				);
 				return $result;
 			}
+			if ( null !== $approval_missing ) {
+				$fields['findings']['approval_missing'] = $approval_missing;
+			}
+			$fields['approved_by'] = $result['approved_by'];
+			$fields['breakdowns']['labels']['approved_by_name'] = get_userdata( (int) ( $result['approved_by'] ?? 0 ) )->display_name ?? '';
 			foreach ( array( 'expected', 'till_expected', 'counted', 'variance', 'breakdowns', 'findings' ) as $key ) {
 				$fields[ $key ] = null === $fields[ $key ] ? null : wp_json_encode( $fields[ $key ] );
 				if ( false === $fields[ $key ] ) {
@@ -683,7 +714,7 @@ final class Closure_Store {
 				$wpdb->query( 'ROLLBACK' );
 			}
 			if ( $figures ) {
-				$figures->release();
+				$figures->release( ! $created );
 			}
 			( new Register_Store() )->unlock( $session['register_id'] );
 			if ( $deferred ) {

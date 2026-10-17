@@ -36,6 +36,8 @@ final class Register_Session_Store {
 			closed_at_gmt DATETIME NULL,
 			closed_by BIGINT NULL,
 			approved_by BIGINT NULL,
+			approved_counted LONGTEXT NULL,
+			approved_expected LONGTEXT NULL,
 			counted LONGTEXT NULL,
 			closure_id CHAR(36) NULL,
 			created_at_gmt DATETIME NOT NULL,
@@ -83,7 +85,9 @@ final class Register_Session_Store {
 			foreach ( array( 'store_id', 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
 			}
-			$row['counted'] = null === $row['counted'] ? null : json_decode( $row['counted'], true );
+			foreach ( array( 'counted', 'approved_counted', 'approved_expected' ) as $key ) {
+				$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
+			}
 		}
 		return $rows;
 	}
@@ -196,128 +200,36 @@ final class Register_Session_Store {
 
 	/** Stamp a manager approval only while the session is counting.
 	 *
-	 * @param array $session Current row.
-	 * @param int   $user_id Approving manager.
+	 * @param array      $session Current row.
+	 * @param int        $user_id Approving manager.
+	 * @param array|null $counted Approved tender counts.
 	 * @return array|\WP_Error
 	 * @throws \RuntimeException On database failure.
 	 */
-	public function approve( array $session, int $user_id ) {
-		global $wpdb;
-		$refused = $this->refuse_own_approval( $session, $user_id );
-		if ( $refused ) {
-			return $refused;
+	public function approve( array $session, int $user_id, ?array $counted = null ) {
+		$registers = new Register_Store();
+		if ( ! $registers->lock( $session['register_id'] ) ) {
+			throw new \RuntimeException( 'Session register lock failed.' );
 		}
-		$updated = $wpdb->update(
-			$this->table_name(),
-			array( 'approved_by' => $user_id ),
-			array(
-				'id' => $session['id'],
-				'status' => 'counting',
-			)
-		);
-		if ( false === $updated ) {
-			Logger::warning(
-				'Register session write refused: storage operation failed',
-				array(
-					'session_id' => $session['id'],
-					'user_id' => get_current_user_id(),
-				)
-			);
-			throw new \RuntimeException( 'Session write failed.' );
-		}
-		if ( 0 === $updated ) {
-			Logger::warning(
-				'Register session approval refused: status changed or approval already recorded',
-				array(
-					'session_id' => $session['id'],
-					'user_id' => $user_id,
-					'status' => $this->get( $session['id'] )['status'] ?? null,
-				)
-			);
-			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
-		}
-		Logger::log(
-			'Register session approved',
-			array(
-				'session_id' => $session['id'],
-				'user_id' => $user_id,
-			)
-		);
-		return $this->get( $session['id'] );
-	}
-
-	/** Apply a validated transition, conditional on the observed state.
-	 *
-	 * @return array|\WP_Error
-	 *
-	 * @param array $session Current row.
-	 * @param array $fields Transition fields.
-	 * @throws \RuntimeException On database failure.
-	 */
-	public function transition( array $session, array $fields ) {
-		global $wpdb;
-		if ( isset( $fields['approved_by'] ) ) {
-			$refused = $this->refuse_own_approval( $session, (int) $fields['approved_by'] );
+		try {
+			global $wpdb;
+			$refused = $this->refuse_own_approval( $session, $user_id );
 			if ( $refused ) {
 				return $refused;
 			}
-		}
-		if ( 'counting' === $session['status'] && 'closed' === $fields['status'] ) {
-			$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
-			$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
-			if ( null === $session['approved_by'] && ! isset( $fields['approved_by'] ) && is_string( $threshold ) && preg_match( '/^\d+(?:\.\d+)?$/D', $threshold ) ) {
-				// Truncate, not round: a four-decimal variance above the threshold must still require approval.
-				$comparison_threshold = preg_replace( '/(\.\d{4})\d+$/D', '$1', $threshold );
-				$variance = $wpdb->get_row(
-					$wpdb->prepare(
-						'SELECT variance, ABS(variance) > CAST(%s AS DECIMAL(65,4)) AS exceeds_threshold FROM (SELECT CAST(%s AS DECIMAL(65,4)) - CAST(%s AS DECIMAL(65,4)) AS variance) AS amounts',
-						$comparison_threshold,
-						$fields['counted']['cash'],
-						Session_Figures::for_session( $session )->expected()['cash']
-					),
-					ARRAY_A
-				);
-				if ( null === $variance ) {
-					Logger::warning( 'Register session closing refused: variance calculation failed', array( 'session_id' => $session['id'] ) );
-					throw new \RuntimeException( 'Session variance calculation failed.' );
-				}
-				if ( '1' === $variance['exceeds_threshold'] ) {
-					Logger::warning(
-						'Register session closing refused: variance requires manager approval',
-						array(
-							'session_id' => $session['id'],
-							'variance' => $variance['variance'],
-							'threshold' => $threshold,
-							'user_id' => get_current_user_id(),
-						)
-					);
-					return new \WP_Error(
-						'wcpos_override_refused',
-						__( 'Manager approval is required to close this session.', 'woocommerce-pos' ),
-						array(
-							'status' => 403,
-							'variance' => $variance['variance'],
-							'threshold' => $threshold,
-						)
-					);
-				}
-			}
-		}
-		if ( isset( $fields['counted'] ) ) {
-			$fields['counted'] = wp_json_encode( $fields['counted'] );
-		}
-		$updated = $wpdb->update(
-			$this->table_name(),
-			$fields,
-			array(
-				'id' => $session['id'],
-				'status' => $session['status'],
-			)
-		);
-		if ( false === $updated ) {
-			// Closure_Store runs this inside its transaction and restates the failure
-			// after the rollback, where a warning survives database logging.
-			if ( ! isset( $fields['closure_id'] ) ) {
+			$updated = $wpdb->update(
+				$this->table_name(),
+				array(
+					'approved_by' => $user_id,
+					'approved_counted' => null === $counted ? null : wp_json_encode( $counted ),
+					'approved_expected' => wp_json_encode( Session_Figures::for_session( $session )->expected() ),
+				),
+				array(
+					'id' => $session['id'],
+					'status' => 'counting',
+				)
+			);
+			if ( false === $updated ) {
 				Logger::warning(
 					'Register session write refused: storage operation failed',
 					array(
@@ -325,36 +237,206 @@ final class Register_Session_Store {
 						'user_id' => get_current_user_id(),
 					)
 				);
+				throw new \RuntimeException( 'Session write failed.' );
 			}
-			throw new \RuntimeException( 'Session write failed.' );
-		}
-		$row = $this->get( $session['id'] );
-		if ( 0 === $updated && ( $row['status'] ?? null ) !== $fields['status'] ) {
-			Logger::warning(
-				'Register session transition refused: status changed',
-				array(
-					'session_id' => $session['id'],
-					'from' => $session['status'],
-					'to' => $fields['status'],
-					'status' => $row['status'] ?? null,
-					'user_id' => get_current_user_id(),
-				)
-			);
-			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
-		}
-		// Closure_Store logs its transition after commit, not before a possible rollback.
-		if ( $updated > 0 && $session['status'] !== $fields['status'] && ! isset( $fields['closure_id'] ) ) {
+			if ( 0 === $updated ) {
+				Logger::warning(
+					'Register session approval refused: status changed or approval already recorded',
+					array(
+						'session_id' => $session['id'],
+						'user_id' => $user_id,
+						'status' => $this->get( $session['id'] )['status'] ?? null,
+					)
+				);
+				return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
 			Logger::log(
-				'Register session state changed',
+				'Register session approved',
 				array(
 					'session_id' => $session['id'],
-					'from' => $session['status'],
-					'to' => $fields['status'],
-					'user_id' => get_current_user_id(),
-					'approved_by' => $row['approved_by'],
+					'user_id' => $user_id,
 				)
 			);
+			return $this->get( $session['id'] );
+		} finally {
+			$registers->unlock( $session['register_id'] );
 		}
-		return $row;
+	}
+
+	/** Apply a validated transition, conditional on the observed state.
+	 *
+	 * @return array|\WP_Error
+	 *
+	 * @param array      $session Current row.
+	 * @param array      $fields Transition fields.
+	 * @param bool       $printed Closure already printed; record missing approval instead of refusing.
+	 * @param array|null $approval_missing Server variance and threshold finding, if any.
+	 * @param bool       $locked_by_caller Caller owns the register lock through commit/rollback.
+	 * @throws \RuntimeException On database failure.
+	 */
+	public function transition( array $session, array $fields, bool $printed = false, ?array &$approval_missing = null, bool $locked_by_caller = false ) {
+		$approval_missing = null;
+		$registers = new Register_Store();
+		if ( ! $locked_by_caller && ! $registers->lock( $session['register_id'] ) ) {
+			throw new \RuntimeException( 'Session register lock failed.' );
+		}
+		try {
+			global $wpdb;
+			if ( isset( $fields['approved_by'] ) ) {
+				$refused = $this->refuse_own_approval( $session, (int) $fields['approved_by'] );
+				if ( $refused ) {
+					return $refused;
+				}
+			}
+			$bound = false;
+			if ( 'closed' === $fields['status'] ) {
+				$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
+				$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
+				$approved = Closure_Store::tenders( $session['approved_counted'] ?? null );
+				$counted = Closure_Store::tenders( $fields['counted'] );
+				if ( 'closed' === $session['status'] && Closure_Store::tenders( $session['counted'] ) != $counted ) {
+					return new \WP_Error( 'wcpos_closure_counted_mismatch', __( 'The closure count differs from the closed session.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+				}
+				$expected = $fields['expected'] ?? Session_Figures::for_session( $session )->expected();
+				unset( $fields['expected'] ); // Closure snapshot, not a session column.
+				$approved_expected = Closure_Store::tenders( $session['approved_expected'] ?? null, true );
+				$current_expected = Closure_Store::tenders( $expected, true );
+				if ( null !== $approved && null !== $counted ) {
+					ksort( $approved );
+					ksort( $counted );
+				}
+				if ( null !== $approved_expected && null !== $current_expected ) {
+					ksort( $approved_expected );
+					ksort( $current_expected );
+				}
+				$bound = null !== $session['approved_by'] && null !== $approved && $approved === $counted
+					&& null !== $approved_expected && $approved_expected === $current_expected;
+				if ( ! $bound && ! isset( $fields['approved_by'] ) && is_string( $threshold ) && preg_match( '/^\d+(?:\.\d+)?$/D', $threshold ) ) {
+					// Truncate, not round: a four-decimal variance above the threshold must still require approval.
+					$comparison_threshold = preg_replace( '/(\.\d{4})\d+$/D', '$1', $threshold );
+					$variance = $wpdb->get_row(
+						$wpdb->prepare(
+							'SELECT variance, ABS(variance) > CAST(%s AS DECIMAL(65,4)) AS exceeds_threshold FROM (SELECT CAST(%s AS DECIMAL(65,4)) - CAST(%s AS DECIMAL(65,4)) AS variance) AS amounts',
+							$comparison_threshold,
+							$fields['counted']['cash'],
+							$expected['cash']
+						),
+						ARRAY_A
+					);
+					if ( null === $variance ) {
+						Logger::warning( 'Register session closing refused: variance calculation failed', array( 'session_id' => $session['id'] ) );
+						throw new \RuntimeException( 'Session variance calculation failed.' );
+					}
+					if ( '1' === $variance['exceeds_threshold'] && $printed ) {
+						$approval_missing = array(
+							'variance' => $variance['variance'],
+							'threshold' => $threshold,
+						);
+					}
+					if ( '1' === $variance['exceeds_threshold'] && ! $printed ) {
+						Logger::warning(
+							'Register session closing refused: variance requires manager approval',
+							array(
+								'session_id' => $session['id'],
+								'variance' => $variance['variance'],
+								'threshold' => $threshold,
+								'user_id' => get_current_user_id(),
+							)
+						);
+						return new \WP_Error(
+							'wcpos_override_refused',
+							__( 'Manager approval is required to close this session.', 'woocommerce-pos' ),
+							array(
+								'status' => 403,
+								'variance' => $variance['variance'],
+								'threshold' => $threshold,
+							)
+						);
+					}
+				}
+			}
+			if ( 'closed' === $fields['status'] ) {
+				if ( isset( $fields['approved_by'] ) ) {
+					$fields['approved_counted'] = wp_json_encode( $counted );
+					$fields['approved_expected'] = wp_json_encode( $expected );
+				} elseif ( ! $bound ) {
+					$fields += array(
+						'approved_by' => null,
+						'approved_counted' => null,
+						'approved_expected' => null,
+					);
+				}
+			}
+			$where = array(
+				'id' => $session['id'],
+				'status' => $session['status'],
+			);
+			if ( 'closed' === $fields['status'] ) {
+				foreach ( array( 'approved_by', 'approved_counted', 'approved_expected' ) as $key ) {
+					$where[ $key ] = is_array( $session[ $key ] ) ? wp_json_encode( $session[ $key ] ) : $session[ $key ];
+				}
+			}
+			if ( 'closed' === $session['status'] ) {
+				unset( $fields['counted'] );
+			}
+			if ( isset( $fields['counted'] ) ) {
+				$fields['counted'] = wp_json_encode( $fields['counted'] );
+			}
+			$updated = $wpdb->update(
+				$this->table_name(),
+				$fields,
+				$where
+			);
+			if ( false === $updated ) {
+				// Closure_Store runs this inside its transaction and restates the failure
+				// after the rollback, where a warning survives database logging.
+				if ( ! isset( $fields['closure_id'] ) ) {
+					Logger::warning(
+						'Register session write refused: storage operation failed',
+						array(
+							'session_id' => $session['id'],
+							'user_id' => get_current_user_id(),
+						)
+					);
+				}
+				throw new \RuntimeException( 'Session write failed.' );
+			}
+			$row = $this->get( $session['id'] );
+			$observed_status = 'closed' === $fields['status'] ? $session['status'] : $fields['status'];
+			if ( 0 === $updated && ( $row['status'] ?? null ) !== $observed_status ) {
+				Logger::warning(
+					'Register session transition refused: status changed',
+					array(
+						'session_id' => $session['id'],
+						'from' => $session['status'],
+						'to' => $fields['status'],
+						'status' => $row['status'] ?? null,
+						'user_id' => get_current_user_id(),
+					)
+				);
+				return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
+			if ( 0 === $updated && 'closed' === $fields['status'] ) {
+				return new \WP_Error( 'wcpos_override_refused', __( 'The session approval has changed.', 'woocommerce-pos' ), array( 'status' => 403 ) );
+			}
+			// Closure_Store logs its transition after commit, not before a possible rollback.
+			if ( $updated > 0 && $session['status'] !== $fields['status'] && ! isset( $fields['closure_id'] ) ) {
+				Logger::log(
+					'Register session state changed',
+					array(
+						'session_id' => $session['id'],
+						'from' => $session['status'],
+						'to' => $fields['status'],
+						'user_id' => get_current_user_id(),
+						'approved_by' => $row['approved_by'],
+					)
+				);
+			}
+			return $row;
+		} finally {
+			if ( ! $locked_by_caller ) {
+				$registers->unlock( $session['register_id'] );
+			}
+		}
 	}
 }

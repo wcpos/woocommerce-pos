@@ -80,6 +80,319 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		return $rows;
 	}
 
+	/** A manager authorizes the count and server expectations, not later edits or sales. */
+	public function test_closure_approval_is_bound_to_counted_totals(): void {
+		global $wpdb;
+		$manager = self::factory()->user->create_and_get( array( 'user_pass' => 'approval-fixture' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$threshold = static function () {
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		try {
+			foreach ( array( 'same', 'cash', 'card', 'missing', 'missing_expected', 'sale', 'under', 'stale_under' ) as $case ) {
+				$session = $this->closure_session();
+				$body = $this->body( $session );
+				$body['counted'] = array(
+					'card' => '20.0000',
+					'cash' => '80.0000',
+				);
+				if ( 'under' !== $case ) {
+					$approved = $this->post(
+						'sessions/' . $session['id'] . '/approve',
+						array(
+							'username' => $manager->user_login,
+							'password' => 'approval-fixture',
+							'counted' => array(
+								'cash' => '080',
+								'card' => '20',
+							),
+						)
+					);
+					$this->assertSame( 200, $approved->get_status() );
+				}
+				if ( 'sale' === $case ) {
+					$this->closure_ledger( $session );
+				} elseif ( 'missing_expected' === $case ) {
+					$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'approved_expected' => null ), array( 'id' => $session['id'] ) );
+				}
+				if ( 'missing' === $case ) {
+					$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'approved_counted' => null ), array( 'id' => $session['id'] ) );
+				} elseif ( 'cash' === $case || 'card' === $case ) {
+					$body['counted'][ $case ] = '70';
+				} elseif ( 'under' === $case || 'stale_under' === $case ) {
+					$body['counted']['cash'] = '100';
+				}
+				$body['till_expected']['cash'] = '80';
+				$response = $this->post( 'closures', $body );
+				$stored = ( new Register_Session_Store() )->get( $session['id'] );
+				if ( 'same' === $case || 'under' === $case || 'stale_under' === $case ) {
+					$this->assertSame( 201, $response->get_status(), $case );
+					$this->assertSame( '100.0000', $response->get_data()['expected']['cash'] );
+					if ( 'stale_under' === $case ) {
+						$this->assertNull( $response->get_data()['approved_by'] );
+						foreach ( array( 'approved_by', 'approved_counted', 'approved_expected' ) as $key ) {
+							$this->assertNull( $stored[ $key ], $key );
+						}
+					}
+				} else {
+					$this->assertSame( 403, $response->get_status(), $case );
+					$this->assertSame( 'wcpos_override_refused', $response->get_data()['code'] );
+					$this->assertSame( 'counting', $stored['status'] );
+					$this->assertSame( $manager->ID, $stored['approved_by'] );
+					$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
+					if ( 'cash' === $case || 'sale' === $case ) {
+						$this->assertSame( array( 'cash' => '100.0000' ), $stored['approved_expected'] );
+						$this->assertSame(
+							array(
+								'cash' => '80.0000',
+								'card' => '20.0000',
+							),
+							$stored['approved_counted']
+						);
+						$this->assertSame(
+							200,
+							$this->post(
+								'sessions/' . $session['id'] . '/approve',
+								array(
+									'username' => $manager->user_login,
+									'password' => 'approval-fixture',
+									'counted' => $body['counted'],
+								)
+							)->get_status()
+						);
+						$closed = $this->post( 'closures', $body );
+						$this->assertSame( 201, $closed->get_status() );
+						if ( 'sale' === $case ) {
+							$this->assertSame( '150.0000', $closed->get_data()['expected']['cash'] );
+							$this->assertSame( '150.0000', ( new Register_Session_Store() )->get( $session['id'] )['approved_expected']['cash'] );
+						}
+					}
+				}
+			}
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		}
+	}
+
+	/** A printed Z is retained with a finding; the same unprinted close is refused. */
+	public function test_printed_closure_records_missing_approval_instead_of_refusing(): void {
+		$threshold = static function () {
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		try {
+			foreach ( array( 'counting', 'closed' ) as $status ) {
+				$session = $this->closure_session( null, $status );
+				$this->closure_ledger( $session );
+				$body = $this->body( $session );
+				$body['counted'] = array( 'cash' => '100' );
+				$refused = $this->post( 'closures', $body );
+				$this->assertSame( 403, $refused->get_status(), $status );
+				$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+				$this->assertSame( $status, ( new Register_Session_Store() )->get( $session['id'] )['status'] );
+				$body['printed_at'] = $body['closed_at'];
+				$response = $this->post( 'closures', $body );
+				$this->assertSame( 201, $response->get_status(), $status );
+				$row = $response->get_data();
+				$this->assertSame(
+					array(
+						'variance' => '-50.0000',
+						'threshold' => '5',
+					),
+					$row['findings']['approval_missing']
+				);
+				$this->assertArrayHasKey( 'total_mismatch', $row['findings'] );
+				$this->assertSame( '100.0000', $row['counted']['cash'] );
+				$this->assertSame( '150.0000', $row['expected']['cash'] );
+				$this->assertNull( $row['approved_by'] );
+				$this->assertSame( 'closed', ( new Register_Session_Store() )->get( $session['id'] )['status'] );
+				$this->assertSame( $row['findings'], ( new Closure_Store() )->get( $row['id'] )['findings'] );
+			}
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		}
+	}
+
+	/** A late sale must not change the already-derived closure approval snapshot. */
+	public function test_closure_late_sale_preserves_snapshot_and_approver(): void {
+		$manager = self::factory()->user->create();
+		$session = ( new Register_Session_Store() )->approve( $this->closure_session(), $manager, array( 'cash' => '80' ) );
+		$late_sale = function () use ( $session ) {
+			$this->closure_ledger( $session );
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $late_sale );
+		try {
+			$response = $this->post( 'closures', array( 'counted' => array( 'cash' => '80' ) ) + $this->body( $session ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $late_sale );
+		}
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( array( 'cash' => '100.0000' ), $response->get_data()['expected'] );
+		$this->assertSame( $manager, $response->get_data()['approved_by'] );
+	}
+
+	/** Only the closure owner acquires/releases its register lock, not its transition. */
+	public function test_closure_transition_reuses_caller_register_lock(): void {
+		$session = $this->closure_session();
+		$locks = array();
+		$observe = static function ( $sql ) use ( $session, &$locks ) {
+			if ( false !== strpos( $sql, 'wcpos_register_' . $session['register_id'] ) ) {
+				$locks[] = strstr( $sql, 'GET_LOCK' ) ? 'acquire' : 'release';
+			}
+			return $sql;
+		};
+		add_filter( 'query', $observe );
+		try {
+			$response = $this->post( 'closures', $this->body( $session ) );
+		} finally {
+			remove_filter( 'query', $observe );
+		}
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( array( 'acquire', 'release' ), $locks );
+	}
+
+	/** A stale snapshot must not close after approval or status changes. */
+	public function test_closing_refuses_a_changed_approval_snapshot(): void {
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$manager = self::factory()->user->create();
+		foreach ( array(
+			'approved_by' => $manager + 1,
+			'approved_counted' => '{"cash":"70"}',
+			'approved_expected' => '{"cash":"90"}',
+			'status' => 'closed',
+		) as $key => $value ) {
+			$session = $store->approve( $this->closure_session(), $manager, array( 'cash' => '80' ) );
+			if ( 'status' === $key ) {
+				$fields = array( 'status' => 'closed' );
+				$fields['counted'] = array( 'cash' => '80' );
+				$this->assertSame( 'closed', $store->transition( $session, $fields )['status'] );
+			} else {
+				$wpdb->update( $store->table_name(), array( $key => $value ), array( 'id' => $session['id'] ) );
+			}
+			$result = $store->transition(
+				$session,
+				array(
+					'status' => 'closed',
+					'counted' => array( 'cash' => '80' ),
+				)
+			);
+			$this->assertWPError( $result, $key );
+			$this->assertSame( 'status' === $key ? 'wcpos_session_transition_refused' : 'wcpos_override_refused', $result->get_error_code() );
+			$this->assertSame( 'status' === $key ? 409 : 403, $result->get_error_data()['status'] );
+			$this->assertSame( 'status' === $key ? 'closed' : 'counting', $store->get( $session['id'] )['status'] );
+		}
+	}
+
+	/** Both session writes must wait for a competing register owner. */
+	public function test_approval_and_status_respect_the_register_lock(): void {
+		$session = $this->closure_session();
+		$manager = self::factory()->user->create_and_get( array( 'user_pass' => 'approval-fixture' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$other = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$lock = 'wcpos_register_' . $session['register_id'];
+		$this->assertSame( '1', $other->get_var( $other->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) );
+		try {
+			foreach ( array( 'approve', 'status' ) as $route ) {
+				$response = $this->post(
+					'sessions/' . $session['id'] . '/' . $route,
+					array(
+						'username' => $manager->user_login,
+						'password' => 'approval-fixture',
+						'counted' => array( 'cash' => '80' ),
+						'status' => 'closed',
+						'at' => '2026-09-11T12:00:00Z',
+					)
+				);
+				$this->assertSame( 500, $response->get_status(), $route );
+				$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $session['id'] )['status'] );
+			}
+		} finally {
+			$other->get_var( $other->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+			$other->close();
+		}
+	}
+
+	/** Deferred documents must preserve the closed count and its expected snapshot. */
+	public function test_deferred_closure_enforces_count_and_approval(): void {
+		$store = new Register_Session_Store();
+		$manager = self::factory()->user->create();
+		$threshold = static function () {
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		try {
+			foreach ( array( 'counted', 'expected' ) as $case ) {
+				$session = $store->approve( $this->closure_session(), $manager, array( 'cash' => '80' ) );
+				$body = $this->body( $session );
+				$body['counted'] = array( 'cash' => '80' );
+				$this->assertSame(
+					200,
+					$this->post(
+						'sessions/' . $session['id'] . '/status',
+						array(
+							'status' => 'closed',
+							'at' => $body['closed_at'],
+							'counted' => $body['counted'],
+						)
+					)->get_status()
+				);
+				if ( 'expected' === $case ) {
+					$this->closure_ledger( $session );
+				} else {
+					$body['counted']['cash'] = '70';
+					$body['printed_at'] = $body['closed_at'];
+				}
+				$response = $this->post( 'closures', $body );
+				$this->assertSame( 'counted' === $case ? 409 : 403, $response->get_status(), $case );
+				$this->assertSame( 'counted' === $case ? 'wcpos_closure_counted_mismatch' : 'wcpos_override_refused', $response->get_data()['code'] );
+				$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
+				$this->assertSame( $manager, $store->get( $session['id'] )['approved_by'] );
+				if ( 'counted' === $case ) {
+					$body['counted']['cash'] = '080.0000';
+					$this->assertSame( 201, $this->post( 'closures', $body )->get_status() );
+				}
+			}
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		}
+	}
+
+	/** A refused close must not leave a cached stamp that suppresses the approved retry. */
+	public function test_closure_refused_before_approval_can_be_retried(): void {
+		$session = $this->closure_session();
+		$this->closure_ledger( $session );
+		$body = $this->body( $session );
+		$body['counted'] = array( 'cash' => '80' );
+		$manager = self::factory()->user->create_and_get( array( 'user_pass' => 'approval-fixture' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$threshold = static function () {
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		try {
+			$refused = $this->post( 'closures', $body );
+			$this->assertSame( 403, $refused->get_status() );
+			$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+			$approved = $this->post(
+				'sessions/' . $session['id'] . '/approve',
+				array(
+					'username' => $manager->user_login,
+					'password' => 'approval-fixture',
+					'counted' => $body['counted'],
+				)
+			);
+			$this->assertSame( 200, $approved->get_status() );
+			$closed = $this->post( 'closures', $body );
+			$this->assertSame( 201, $closed->get_status() );
+			$this->assertSame( '150.0000', $closed->get_data()['expected']['cash'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		}
+	}
+
 	/** An empty store still supplies the fixed schema, not a document lookup. */
 	public function test_export_empty_store_returns_header_only(): void {
 		// Arrange: no closure fixtures.
