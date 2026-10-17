@@ -260,15 +260,94 @@ class Escpos_Thermal_Emitter {
 	 * @return void
 	 */
 	private function emit_text_line( array $children ): void {
-		if ( 'left' !== $this->align ) {
-			$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
-			$pad   = $this->layout->measure_padding( $this->align, $plain );
-			if ( $pad > 0 ) {
-				$this->raw_string( str_repeat( ' ', $pad ) );
-			}
+		$plain = Thermal_Text_Layout::normalize_text( Thermal_Text_Layout::extract_text( $children ) );
+		if ( ! $this->fits_padded_line( $children, $plain ) ) {
+			// Left text, or text the padding cannot place: the block's hardware
+			// alignment positions each printed line on its own.
+			$this->walk_nodes( $children );
+			$this->newline();
+
+			return;
+		}
+
+		$this->open_padded_line();
+		$pad = $this->layout->measure_padding( $this->align, $plain );
+		if ( $pad > 0 ) {
+			$this->raw_string( str_repeat( ' ', $pad ) );
 		}
 		$this->walk_nodes( $children );
+		$this->close_padded_line();
+	}
+
+	/**
+	 * Whether space padding can place a text line inside a centre/right block.
+	 *
+	 * Padding positions exactly one printed line measured at the enclosing
+	 * scale. It cannot place text wider than the paper (the printer wraps it),
+	 * text with an embedded line break (padding covers the first line only),
+	 * an inner `<size>` (the padding would be measured at the outer scale), or
+	 * a line that unterminated raw text already holds open. Those fall back to
+	 * the block's hardware alignment, which centres each printed line on its
+	 * own. Same gate as the app renderer's writeAlignedStandaloneTextLine().
+	 *
+	 * @param array  $children The child nodes of the text node.
+	 * @param string $plain    The normalized plain text of the line.
+	 *
+	 * @return bool True when the padded, hardware-left path applies.
+	 */
+	private function fits_padded_line( array $children, string $plain ): bool {
+		if ( 'left' === $this->align || $this->line_open ) {
+			return false;
+		}
+		if ( false !== strpos( $plain, "\n" ) || $this->nodes_contain_size( $children ) ) {
+			return false;
+		}
+
+		return $this->fits_paper_width( $plain );
+	}
+
+	/**
+	 * Whether text fits on one printed line at the applied width scale.
+	 *
+	 * @param string $plain The plain text.
+	 *
+	 * @return bool True when the text fits the paper width.
+	 */
+	private function fits_paper_width( string $plain ): bool {
+		return Thermal_Text_Layout::display_width( $plain ) * $this->layout->applied_scale()['width'] <= $this->layout->columns();
+	}
+
+	/**
+	 * Start a space-padded line under hardware LEFT alignment.
+	 *
+	 * Inside a centre or right block the line's leading spaces already place
+	 * it. Printed under the block's ESC a mode, the printer would centre (or
+	 * right-align) the padded line a second time, landing the text right of
+	 * where the preview shows it, or off the right edge. The left byte goes out
+	 * before the spaces so the padding is measured from the true left margin.
+	 * Parity with the app renderer's fix for the same bug (monorepo#424).
+	 *
+	 * @return void
+	 */
+	private function open_padded_line(): void {
+		if ( 'left' !== $this->align ) {
+			$this->raw( array( 0x1b, 0x61, $this->align_byte( 'left' ) ) );
+		}
+	}
+
+	/**
+	 * End a space-padded line and restore the block's hardware alignment.
+	 *
+	 * The block's ESC a mode is re-emitted after the newline so a later
+	 * image, barcode or QR code in the block keeps its hardware alignment.
+	 *
+	 * @return void
+	 */
+	private function close_padded_line(): void {
 		$this->newline();
+		if ( 'left' !== $this->align ) {
+			$this->raw( array( 0x1b, 0x61, $this->align_byte( $this->align ) ) );
+		}
 	}
 
 	/**
@@ -477,8 +556,18 @@ class Escpos_Thermal_Emitter {
 		$height = max( Thermal_Bounds::BARCODE_HEIGHT_MIN, min( Thermal_Bounds::BARCODE_HEIGHT_MAX, $height ) );
 
 		if ( ! Barcode_Symbology::is_valid_value( $type, $value, Barcode_Symbology::LANE_ESCPOS ) ) {
+			$plain = Thermal_Text_Layout::normalize_text( $this->strip_control_bytes( $value ) );
+			if ( 'left' !== $this->align && ! $this->fits_paper_width( $plain ) ) {
+				// Too wide to pad: let the block's hardware alignment place each wrapped line.
+				$this->raw_string( $plain );
+				$this->newline();
+
+				return;
+			}
+
+			$this->open_padded_line();
 			$this->raw_string( $this->centered_text( $value, $this->layout->columns() ) );
-			$this->newline();
+			$this->close_padded_line();
 
 			return;
 		}
