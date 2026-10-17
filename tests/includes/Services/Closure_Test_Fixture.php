@@ -36,6 +36,12 @@ trait Closure_Test_Fixture {
 			$wpdb->delete( ( new Register_Store() )->table_name(), array( 'id' => $id ) );
 		}
 		$wpdb->query( 'COMMIT' );
+		// The fixtures COMMIT mid-test, which also commits whatever a test did to the site clock
+		// (several users set `timezone_string` in setUp); the parent rollback cannot undo it and
+		// America/New_York leaked into later shard-mates (the coupon `modified_after` polls, PHP
+		// Tests shard 4 on #2294). Restore the clock after the commit so the restore is durable.
+		update_option( 'timezone_string', '' );
+		update_option( 'gmt_offset', 0 );
 	}
 
 	/** Create a session.

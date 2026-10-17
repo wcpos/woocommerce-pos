@@ -118,20 +118,10 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
-	/**
-	 * Clear the request cache as well as committed fixture rows.
-	 *
-	 * The session fixtures COMMIT mid-test, which also commits the `timezone_string` set in
-	 * setUp; the rollback in the parent teardown cannot undo it, and America/New_York then leaked
-	 * into whichever test ran next in the shard (the coupon `modified_after` polls, PHP Tests
-	 * shard 4 on #2294). Restore the site clock after the fixture teardown has rolled back and
-	 * committed, so the restore itself is committed.
-	 */
+	/** Clear the request cache as well as committed fixture rows. */
 	public function tearDown(): void {
 		$this->reset_registry();
 		$this->tear_down_closures();
-		update_option( 'timezone_string', '' );
-		update_option( 'gmt_offset', 0 );
 	}
 
 	/** Simulate a fresh request without a test-only production method. */
