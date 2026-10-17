@@ -186,21 +186,29 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 	/**
 	 * Simulate the printed text lines from ESC/POS bytes.
 	 *
+	 * Honours the hardware alignment set by `ESC a n`: a printer positions each
+	 * line by the mode in force when the line starts, on top of any leading
+	 * spaces in it. Skipping those bytes is what hid the double-centring of
+	 * padded lines from expect_visually_centered().
+	 *
 	 * @param string $bytes   The byte string.
 	 * @param int    $columns The paper width in columns.
 	 *
 	 * @return array List of line descriptors.
 	 */
 	private function simulate_escpos_lines( string $bytes, int $columns ): array {
-		$lines    = array();
-		$raw_text = '';
-		$length   = \strlen( $bytes );
+		$lines      = array();
+		$raw_text   = '';
+		$length     = \strlen( $bytes );
+		$align      = 0;
+		$line_align = 0;
 
 		for ( $index = 0; $index < $length; $index++ ) {
 			$byte = \ord( $bytes[ $index ] );
 			if ( 0x1b === $byte ) {
 				$command = isset( $bytes[ $index + 1 ] ) ? \ord( $bytes[ $index + 1 ] ) : 0;
 				if ( 0x61 === $command ) {
+					$align  = isset( $bytes[ $index + 2 ] ) ? \ord( $bytes[ $index + 2 ] ) : 0;
 					$index += 2;
 					continue;
 				}
@@ -216,18 +224,21 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 			}
 			if ( 0x0a === $byte ) {
 				if ( '' !== $raw_text ) {
-					$lines[]  = $this->describe_line( $raw_text );
+					$lines[]  = $this->describe_line( $raw_text, $columns, $line_align );
 					$raw_text = '';
 				}
 				continue;
 			}
 			if ( $byte >= 0x20 && $byte <= 0x7e ) {
+				if ( '' === $raw_text ) {
+					$line_align = $align;
+				}
 				$raw_text .= \chr( $byte );
 			}
 		}
 
 		if ( '' !== $raw_text ) {
-			$lines[] = $this->describe_line( $raw_text );
+			$lines[] = $this->describe_line( $raw_text, $columns, $line_align );
 		}
 
 		return $lines;
@@ -236,21 +247,34 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 	/**
 	 * Build a line descriptor from a raw text line.
 	 *
+	 * `xStart` is the visual start column: the leading spaces plus the offset
+	 * the printer adds for the hardware alignment the line printed under.
+	 *
 	 * @param string $raw_text The raw accumulated line text.
+	 * @param int    $columns  The paper width in columns.
+	 * @param int    $align    The ESC a mode in force (0 left, 1 centre, 2 right).
 	 *
 	 * @return array The line descriptor.
 	 */
-	private function describe_line( string $raw_text ): array {
+	private function describe_line( string $raw_text, int $columns, int $align ): array {
 		$trimmed         = trim( $raw_text );
 		$leading_matches = array();
 		preg_match( '/^ */', $raw_text, $leading_matches );
 
+		$line_width = \strlen( $raw_text );
+		$offset     = 0;
+		if ( 0x01 === $align ) {
+			$offset = (int) floor( ( $columns - $line_width ) / 2 );
+		} elseif ( 0x02 === $align ) {
+			$offset = $columns - $line_width;
+		}
+
 		return array(
 			'rawText'    => $raw_text,
 			'text'       => $trimmed,
-			'xStart'     => \strlen( $leading_matches[0] ),
+			'xStart'     => \strlen( $leading_matches[0] ) + max( 0, $offset ),
 			'textWidth'  => \strlen( $trimmed ),
-			'lineWidth'  => \strlen( $raw_text ),
+			'lineWidth'  => $line_width,
 		);
 	}
 
@@ -309,6 +333,223 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1b, 0x61, 0x01 ) ) );
 		$this->expect_visually_centered( $lines, 'Store Name', 48 );
 		$this->assertTrue( $this->includes_sequence( $bytes, array( 0x1b, 0x61, 0x00 ) ) );
+	}
+
+	/**
+	 * The ESC a parameter byte in force at a byte offset.
+	 *
+	 * Reads the nearest `ESC a n` before the offset, so a test can ask which
+	 * hardware alignment the printer applies to whatever starts there.
+	 *
+	 * @param string $bytes  The emitted byte string.
+	 * @param int    $offset The offset to look back from.
+	 *
+	 * @return int The alignment byte n, or -1 when no ESC a precedes the offset.
+	 */
+	private function hardware_align_before( string $bytes, int $offset ): int {
+		$found = -1;
+		$from  = 0;
+		while ( true ) {
+			$index = $this->sequence_index( $bytes, array( 0x1b, 0x61 ), $from );
+			if ( -1 === $index || $index >= $offset ) {
+				break;
+			}
+			$found = \ord( $bytes[ $index + 2 ] );
+			$from  = $index + 1;
+		}
+
+		return $found;
+	}
+
+	/**
+	 * Centred text prints its padding under hardware LEFT alignment.
+	 *
+	 * The space padding already centres the line. Printing it under ESC a 1
+	 * made the printer centre the padded line a second time, pushing it right
+	 * of centre. The enclosing centre mode comes back after the line so a
+	 * barcode later in the block is still centred by the printer. Parity with
+	 * the app renderer's monorepo#424 fix.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_text_pads_under_hardware_left_and_restores_center_for_barcode(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><align mode="center"><text>Store Name</text><barcode type="code128">12345</barcode></align></receipt>';
+
+		// Act.
+		$bytes   = $this->render( $markup );
+		$padding = $this->sequence_index( $bytes, $this->ascii_bytes( str_repeat( ' ', 19 ) . 'Store Name' ) );
+		$barcode = $this->sequence_index( $bytes, array( 0x1d, 0x68 ) );
+		$last    = strrpos( $bytes, "\x1b\x61" );
+
+		// Assert.
+		$this->assertGreaterThan( -1, $padding );
+		$this->assertGreaterThan( $padding, $barcode );
+		$this->assertSame( 0x00, $this->hardware_align_before( $bytes, $padding ) );
+		$this->assertSame( 0x01, $this->hardware_align_before( $bytes, $barcode ) );
+		$this->assertGreaterThan( $barcode, $last );
+		$this->assertSame( 0x00, \ord( $bytes[ $last + 2 ] ) );
+	}
+
+	/**
+	 * Right-aligned text prints its padding under hardware LEFT alignment.
+	 *
+	 * Under ESC a 2 the printer right-aligned a line that was already padded
+	 * out to the full width, pushing the text off the right edge.
+	 *
+	 * @return void
+	 */
+	public function test_right_align_text_pads_under_hardware_left_and_restores_right(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><align mode="right"><text>Total</text></align></receipt>';
+
+		// Act.
+		$bytes = $this->render( $markup );
+
+		// Assert: left, 43 spaces, the text, newline, right restored, then the block closes to left.
+		$expected = array_merge(
+			array( 0x1b, 0x61, 0x02, 0x1b, 0x61, 0x00 ),
+			$this->ascii_bytes( str_repeat( ' ', 43 ) . 'Total' ),
+			array( 0x0a, 0x1b, 0x61, 0x02, 0x1b, 0x61, 0x00 )
+		);
+		$this->assertTrue( $this->includes_sequence( $bytes, $expected ) );
+	}
+
+	/**
+	 * The unencodable-barcode rescue inside a centred block prints under hardware LEFT.
+	 *
+	 * The rescue pads its text from column zero, so the same double-centring
+	 * applied to it under ESC a 1.
+	 *
+	 * @return void
+	 */
+	public function test_invalid_barcode_rescue_in_center_block_pads_under_hardware_left(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><align mode="center"><barcode type="ean13">not-digits</barcode></align></receipt>';
+
+		// Act.
+		$bytes = $this->render( $markup );
+		$lines = $this->simulate_escpos_lines( $bytes, 48 );
+
+		// Assert: centre opens the block, left for the padded line, centre restored, then left closes.
+		$expected = array_merge(
+			array( 0x1b, 0x61, 0x01, 0x1b, 0x61, 0x00 ),
+			$this->ascii_bytes( str_repeat( ' ', 19 ) . 'not-digits' ),
+			array( 0x0a, 0x1b, 0x61, 0x01, 0x1b, 0x61, 0x00 )
+		);
+		$this->assertFalse( $this->includes_sequence( $bytes, array( 0x1d, 0x6b ) ) );
+		$this->assertTrue( $this->includes_sequence( $bytes, $expected ) );
+		$this->expect_visually_centered( $lines, 'not-digits', 48 );
+	}
+
+	/**
+	 * An unencodable barcode value wider than the paper keeps the hardware centre.
+	 *
+	 * The rescue cannot pad a value the printer will wrap, so it prints the
+	 * value under the block's centre mode, which centres each wrapped line.
+	 *
+	 * @return void
+	 */
+	public function test_invalid_barcode_rescue_wider_than_paper_stays_under_hardware_center(): void {
+		// Arrange.
+		$value  = str_repeat( 'N', 40 );
+		$markup = '<receipt paper-width="32"><align mode="center"><barcode type="ean13">' . $value . '</barcode></align></receipt>';
+
+		// Act.
+		$bytes = $this->render( $markup );
+
+		// Assert.
+		$this->assertTrue( $this->includes_sequence( $bytes, array_merge( array( 0x1b, 0x61, 0x01 ), $this->ascii_bytes( $value . "\n" ) ) ) );
+		$this->assertSame( 0, $this->longest_space_run( $bytes ) );
+	}
+
+	/**
+	 * Centred text wider than the paper keeps the block's hardware centre and no padding.
+	 *
+	 * Padding cannot place a line the printer will wrap. Forcing hardware left
+	 * for it printed every wrapped line flush left; under the block's centre
+	 * mode the printer centres each wrapped line instead.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_text_wider_than_paper_stays_under_hardware_center(): void {
+		// Arrange.
+		$text   = str_repeat( 'A', 45 );
+		$markup = '<receipt paper-width="32"><align mode="center"><text>' . $text . '</text></align></receipt>';
+
+		// Act.
+		$bytes = $this->render( $markup );
+		$start = $this->sequence_index( $bytes, $this->ascii_bytes( $text ) );
+
+		// Assert.
+		$this->assertTrue( $this->includes_sequence( $bytes, array_merge( array( 0x1b, 0x61, 0x01 ), $this->ascii_bytes( $text ) ) ) );
+		$this->assertSame( 0x01, $this->hardware_align_before( $bytes, $start ) );
+		$this->assertSame( 0, $this->longest_space_run( $bytes ) );
+	}
+
+	/**
+	 * Centred text with an embedded line break keeps the hardware centre and no padding.
+	 *
+	 * Padding measured over the whole string misplaces the first line, and the
+	 * second line would print flush left under a forced hardware left.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_text_with_line_break_stays_under_hardware_center(): void {
+		// Arrange.
+		$markup = "<receipt paper-width=\"48\"><align mode=\"center\"><text>First\nSecond</text></align></receipt>";
+
+		// Act.
+		$bytes = $this->render( $markup );
+		$start = $this->sequence_index( $bytes, $this->ascii_bytes( "First\nSecond" ) );
+
+		// Assert.
+		$this->assertTrue( $this->includes_sequence( $bytes, array_merge( array( 0x1b, 0x61, 0x01 ), $this->ascii_bytes( "First\nSecond\n" ) ) ) );
+		$this->assertSame( 0x01, $this->hardware_align_before( $bytes, $start ) );
+		$this->assertSame( 0, $this->longest_space_run( $bytes ) );
+	}
+
+	/**
+	 * Centred text with an inner size keeps the hardware centre and no padding.
+	 *
+	 * The padding would be measured at the outer scale while the glyphs print
+	 * at the inner one, so the printer's own centring is the accurate choice.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_text_with_inner_size_stays_under_hardware_center(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><align mode="center"><text><size width="2" height="1">AB</size></text></align></receipt>';
+
+		// Act.
+		$bytes = $this->render( $markup );
+		$start = $this->sequence_index( $bytes, $this->ascii_bytes( 'AB' ) );
+
+		// Assert.
+		$this->assertGreaterThan( -1, $start );
+		$this->assertSame( 0x01, $this->hardware_align_before( $bytes, $start ) );
+		$this->assertSame( 0, $this->longest_space_run( $bytes ) );
+	}
+
+	/**
+	 * A text line that raw text already holds open keeps the hardware centre and no padding.
+	 *
+	 * The padding would land mid-line after the raw text, and a hardware left
+	 * there cannot take effect until the next line anyway.
+	 *
+	 * @return void
+	 */
+	public function test_center_align_text_after_open_raw_text_stays_under_hardware_center(): void {
+		// Arrange.
+		$markup = '<receipt paper-width="48"><align mode="center">Thanks <text>X</text></align></receipt>';
+
+		// Act.
+		$bytes = $this->render( $markup );
+		$start = $this->sequence_index( $bytes, $this->ascii_bytes( "Thanks X\n" ) );
+
+		// Assert.
+		$this->assertGreaterThan( -1, $start );
+		$this->assertSame( 0x01, $this->hardware_align_before( $bytes, $start + 7 ) );
 	}
 
 	/**

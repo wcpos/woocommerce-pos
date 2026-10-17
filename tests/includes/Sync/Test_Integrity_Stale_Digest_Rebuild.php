@@ -32,7 +32,9 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		parent::setUp();
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
-		delete_option( Integrity_Controller::DRIFT_STREAK_OPTION );
+		foreach ( array_keys( $this->streaks() ) as $option ) {
+			delete_option( $option );
+		}
 	}
 
 	/**
@@ -41,8 +43,17 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
-		delete_option( Integrity_Controller::DRIFT_STREAK_OPTION );
+		foreach ( array_keys( $this->streaks() ) as $option ) {
+			delete_option( $option );
+		}
 		parent::tearDown();
+	}
+
+	/** Read persisted counters directly, as the controller does. */
+	private function streaks(): array {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name", $wpdb->esc_like( 'wcpos_drift_' ) . '%' ), ARRAY_A );
+		return array_map( 'intval', array_column( $rows, 'option_value', 'option_name' ) );
 	}
 
 	/**
@@ -138,7 +149,7 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 			);
 		}
 
-		$streaks = get_option( Integrity_Controller::DRIFT_STREAK_OPTION );
+		$streaks = $this->streaks();
 		$this->assertIsArray( $streaks );
 		$this->assertSame(
 			Integrity_Controller::DRIFT_REBUILD_THRESHOLD - 1,
@@ -172,7 +183,7 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		$this->dispatch_drill_down( $product_id, $first_size );
 
 		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
-		$this->assertCount( 2, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertCount( 2, $this->streaks() );
 	}
 
 	/**
@@ -196,7 +207,7 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		$this->dispatch_drill_down( $first_id, 1 );
 
 		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
-		$this->assertCount( 2, get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertCount( 2, $this->streaks() );
 	}
 
 	/**
@@ -212,11 +223,11 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 			'DELETE FROM ' . $digest->table_name() . ' WHERE object_type IN ' . Integrity_Digest::OBJECT_TYPES_SQL
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
-		update_option( Integrity_Controller::DRIFT_STREAK_OPTION, array( '1000:0' => 2 ), false );
+		add_option( 'wcpos_drift_test', 2, '', false );
 
 		$this->dispatch_drill_down( $product->get_id() );
 
-		$this->assertFalse( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertSame( array(), $this->streaks() );
 		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 	}
 
@@ -232,7 +243,7 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		}
 
 		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
-		$this->assertFalse( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertSame( array(), $this->streaks() );
 	}
 
 	/**
@@ -269,7 +280,7 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		}
 
 		$this->assertNotFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
-		$this->assertFalse( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertSame( array(), $this->streaks() );
 
 		do_action( Integrity_Digest::REBUILD_HOOK );
 		$this->assertSame( array(), $this->dispatch_drill_down( $product_id, 1 )['changes'] );
@@ -353,14 +364,14 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 	public function test_a_clean_drill_down_resets_the_streak(): void {
 		$product_id = $this->create_product_with_stale_stored_digest();
 		$this->dispatch_drill_down( $product_id );
-		$this->assertIsArray( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertCount( 1, $this->streaks() );
 
 		// The bucket reconciles — the stored side catches up with the row.
 		( new Integrity_Digest() )->rebuild();
 
 		$this->dispatch_drill_down( $product_id );
 
-		$this->assertFalse( get_option( Integrity_Controller::DRIFT_STREAK_OPTION ) );
+		$this->assertSame( array(), $this->streaks() );
 		$this->assertFalse( wp_next_scheduled( Integrity_Digest::REBUILD_HOOK ) );
 	}
 }

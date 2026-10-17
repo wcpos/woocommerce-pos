@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
+use WCPOS\WooCommercePOS\Sync\Store_Scope;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -35,7 +36,7 @@ use WP_REST_Server;
  *
  * Every one of those questions is asked through {@see Digest_Index}: this
  * controller validates the request, shapes the envelope and owns the
- * rebuild-scheduling policy — it knows no table, column or JOIN.
+ * rebuild-scheduling policy — it knows no digest table, column or JOIN.
  */
 final class Integrity_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
@@ -52,11 +53,17 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 */
 	public const DRIFT_REBUILD_THRESHOLD = 3;
 
-	/** Per-bucket drift streaks; never autoloaded, read only on the drill-down path. */
+	/** Legacy array option name; retained for callers, no longer read or written. */
 	public const DRIFT_STREAK_OPTION = 'wcpos_integrity_drift_streaks';
 
-	/** Hard cap on tracked buckets so the option cannot grow unbounded. */
-	public const DRIFT_STREAK_MAX_BUCKETS = 256;
+	/** 1024 non-autoloaded rows fit ten tills x 26 buckets without rotating progress. */
+	public const DRIFT_STREAK_MAX_BUCKETS = 1024;
+
+	/** 64 buckets per client leaves room for sixteen tills at the global cap. */
+	public const DRIFT_STREAK_MAX_CLIENT_BUCKETS = 64;
+
+	/** Reclaim abandoned counters after a day so inactive tills cannot monopolize capacity. */
+	public const DRIFT_STREAK_TTL = DAY_IN_SECONDS;
 
 	private Integrity_Digest $digests;
 
@@ -283,7 +290,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 				);
 			}
 
-			return $this->drill_down( $bucket, $bucket_size, $started );
+			return $this->drill_down( $bucket, $bucket_size, $started, $request );
 		}
 
 		$after_id      = max( 0, (int) ( $request->get_param( 'after_id' ) ?? 0 ) );
@@ -358,7 +365,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * (live row never digested — created without hooks or pre-backfill),
 	 * deleted (stored digest whose row is gone — hook-bypassing delete).
 	 */
-	private function drill_down( int $bucket, int $bucket_size, float $started ) {
+	private function drill_down( int $bucket, int $bucket_size, float $started, WP_REST_Request $request ) {
 		$range_start = $bucket * $bucket_size;
 		$range_end   = $range_start + $bucket_size;
 
@@ -395,7 +402,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$this->maybe_schedule_stale_digest_rebuild( $bucket, $bucket_size, $changes );
+		$this->maybe_schedule_stale_digest_rebuild( $bucket, $bucket_size, $changes, $request );
 
 		return rest_ensure_response(
 			$this->envelope(
@@ -426,7 +433,7 @@ final class Integrity_Controller extends WP_REST_Controller {
 			return false;
 		}
 
-		$this->save_drift_streaks( array() );
+		$this->clear_drift_streaks();
 		$this->schedule_guarded_rebuild();
 
 		return true;
@@ -452,15 +459,19 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * telling clients to re-pull. The client drills a mismatched bucket every
 	 * sweep and issues targeted pulls each time; it escalates at 2 consecutive
 	 * post-pull mismatches (DEFAULT_HYBRID_POLICY.escalateToRevisionHashAfter).
-	 * Rebuilding at 3 therefore only ever fires AFTER the client has pulled and
-	 * still sees the mismatch — the point at which the drift is provably the
-	 * stored side's problem, not a delivery problem.
+	 * Count per X-WCPOS-Instance, never across tills: any one client's third
+	 * mismatch schedules the rebuild, assuming its intervening pulls completed.
+	 * Until the app sends this header, user+store is the fallback; tills sharing
+	 * that identity still share a streak. Drill-downs are not pull acknowledgements.
 	 *
 	 * @param int   $bucket      Bucket just drilled down.
 	 * @param int   $bucket_size Number of ids covered by the bucket.
 	 * @param array $changes     Rows the drill-down is returning.
+	 * @param WP_REST_Request $request Request carrying the client identity.
 	 */
-	private function maybe_schedule_stale_digest_rebuild( int $bucket, int $bucket_size, array $changes ): void {
+	private function maybe_schedule_stale_digest_rebuild( int $bucket, int $bucket_size, array $changes, WP_REST_Request $request ): void {
+		global $wpdb;
+
 		$stale = 0;
 		foreach ( $changes as $change ) {
 			if ( \in_array( $change['status'] ?? '', array( 'changed', 'missing_stored' ), true ) ) {
@@ -468,29 +479,58 @@ final class Integrity_Controller extends WP_REST_Controller {
 			}
 		}
 
-		$streaks = get_option( self::DRIFT_STREAK_OPTION, array() );
-		if ( ! \is_array( $streaks ) ) {
-			$streaks = array();
-		}
-
-		$streak_key = $bucket_size . ':' . $bucket;
+		$instance   = substr( (string) preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $request->get_header( 'X-WCPOS-Instance' ) ), 0, 64 );
+		$store      = Store_Scope::resolve( $request );
+		$client     = '' !== $instance ? 'instance:' . $instance : 'user:' . get_current_user_id() . ':store:' . ( $store ?? 'default' );
+		// A client hash prefix makes the per-client cap countable without storing identities.
+		$prefix     = 'wcpos_drift_' . sha1( $client ) . '_';
+		$streak_key = $prefix . sha1( $client . ':' . $bucket_size . ':' . $bucket );
 
 		if ( 0 === $stale ) {
-			// Reconciled (or only deletions left) — forget it.
-			if ( isset( $streaks[ $streak_key ] ) ) {
-				unset( $streaks[ $streak_key ] );
-				$this->save_drift_streaks( $streaks );
-			}
+			// Reconciled (or only deletions left) — forget only this client's bucket.
+			delete_option( $streak_key );
 
 			return;
 		}
 
-		$streak = ( (int) ( $streaks[ $streak_key ] ?? 0 ) ) + 1;
+		// Values are count|unix-touched; reads bypass the options cache and increments are atomic.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery -- Atomic counters cannot use update_option.
+		$streak = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $streak_key ) );
+		$now    = time();
+		// Reclaim only at capacity; admission checks the caps again inside its INSERT.
+		if ( null === $streak ) {
+			$all   = $wpdb->esc_like( 'wcpos_drift_' ) . '%';
+			$own   = $wpdb->esc_like( $prefix ) . '%';
+			$total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $all ) );
+			$owned = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $own ) );
+			if ( null === $total || null === $owned ) {
+				return;
+			}
+			if ( (int) $total >= self::DRIFT_STREAK_MAX_BUCKETS || (int) $owned >= self::DRIFT_STREAK_MAX_CLIENT_BUCKETS ) {
+				$scope = (int) $total >= self::DRIFT_STREAK_MAX_BUCKETS ? $all : $own;
+				if ( false === $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d", $scope, $now - self::DRIFT_STREAK_TTL ) ) ) {
+					Logger::error( 'WCPOS sync: failed to reclaim expired integrity drift streaks.' );
+					return;
+				}
+			}
+			// Aggregate directly: MySQL disallows reading the INSERT target in a subquery.
+			$result = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) SELECT %s, %s, 'no' FROM {$wpdb->options} WHERE option_name LIKE %s HAVING COUNT(*) < %d AND COALESCE(SUM(option_name LIKE %s), 0) < %d ON DUPLICATE KEY UPDATE option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', %d)", $streak_key, '1|' . $now, $all, self::DRIFT_STREAK_MAX_BUCKETS, $own, self::DRIFT_STREAK_MAX_CLIENT_BUCKETS, $now ) );
+		} else {
+			$result = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', %d) WHERE option_name = %s", $now, $streak_key ) );
+		}
 
+		if ( false === $result ) {
+			Logger::error( 'WCPOS sync: failed to increment integrity drift streak.' );
+			return;
+		}
+		if ( 0 === $result ) {
+			return;
+		}
+		wp_cache_delete( $streak_key, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		$streak = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $streak_key ) );
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery
 		if ( $streak < self::DRIFT_REBUILD_THRESHOLD ) {
-			$streaks[ $streak_key ] = $streak;
-			$this->save_drift_streaks( $streaks );
-
 			return;
 		}
 
@@ -506,30 +546,17 @@ final class Integrity_Controller extends WP_REST_Controller {
 
 		// The rebuild re-digests the whole product space, so every bucket's
 		// streak is moot once it is queued.
-		$this->save_drift_streaks( array() );
+		$this->clear_drift_streaks();
 		$this->schedule_guarded_rebuild();
 	}
 
-	/**
-	 * Persist the per-bucket streak map, bounded so a pathological catalogue
-	 * cannot grow an unbounded option. Never autoloaded — it is read only on
-	 * the drill-down path.
-	 *
-	 * @param array $streaks Bucket-size:bucket => consecutive drifted drill-downs.
-	 */
-	private function save_drift_streaks( array $streaks ): void {
-		if ( \count( $streaks ) > self::DRIFT_STREAK_MAX_BUCKETS ) {
-			arsort( $streaks );
-			$streaks = \array_slice( $streaks, 0, self::DRIFT_STREAK_MAX_BUCKETS, true );
+	/** Clear all per-key counters; reads bypass the options cache. */
+	private function clear_drift_streaks(): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Clear the complete counter store in one statement.
+		if ( false === $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'wcpos_drift_' ) . '%' ) ) ) {
+			Logger::error( 'WCPOS sync: failed to clear integrity drift streaks.' );
 		}
-
-		if ( array() === $streaks ) {
-			delete_option( self::DRIFT_STREAK_OPTION );
-
-			return;
-		}
-
-		update_option( self::DRIFT_STREAK_OPTION, $streaks, false );
 	}
 
 	/**
