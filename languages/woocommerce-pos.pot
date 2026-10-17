@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-15T19:13:24+00:00\n"
+"POT-Creation-Date: 2026-10-17T12:13:25+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -35,24 +35,24 @@ msgid "http://wcpos.com"
 msgstr ""
 
 #. translators: 1: Minimum PHP version, 2: Update URL.
-#: includes/Activator.php:369
+#: includes/Activator.php:401
 #, php-format
 msgid "<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
 msgstr ""
 
 #. translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
-#: includes/Activator.php:393
+#: includes/Activator.php:425
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:415
+#: includes/Activator.php:447
 msgid "<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:416
+#: includes/Activator.php:448
 msgid "Enable permalinks"
 msgstr ""
 
@@ -60,7 +60,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the POS cashier/operator who served the customer.
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Activator.php:667
+#: includes/Activator.php:699
 #: includes/Services/Receipt_Data_Schema.php:342
 #: includes/Services/Receipt_I18n_Labels.php:90
 #: includes/Services/Reports_Registry.php:187
@@ -70,7 +70,7 @@ msgid "Cashier"
 msgstr ""
 
 #. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-#: includes/Activator.php:864
+#: includes/Activator.php:896
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -840,7 +840,7 @@ msgid "Another print of this order is in progress; try again."
 msgstr ""
 
 #: includes/API/V1/Receipts_Controller.php:395
-#: includes/API/V2/Closures_Controller.php:371
+#: includes/API/V2/Closures_Controller.php:374
 #: includes/Templates/Receipt.php:528
 msgid "The closure request could not be completed."
 msgstr ""
@@ -1090,7 +1090,7 @@ msgstr ""
 #: includes/API/V2/Payment_Methods_Controller.php:110
 #: includes/Payments/Contract/Gateway_Handler.php:59
 #: includes/Payments/Contract/Gateway_Submission.php:99
-#: includes/Payments/Contract/Ledger.php:1098
+#: includes/Payments/Contract/Ledger.php:1110
 msgid "Payment method not found."
 msgstr ""
 
@@ -1116,7 +1116,7 @@ msgstr ""
 
 #: includes/API/V2/Payment_Methods_Controller.php:114
 #: includes/Payments/Contract/Gateway_Submission.php:52
-#: includes/Payments/Contract/Ledger.php:1761
+#: includes/Payments/Contract/Ledger.php:1791
 msgid "Payment capture mode is unsupported."
 msgstr ""
 
@@ -1197,12 +1197,12 @@ msgid "Report \"%1$s\" failed: %2$s"
 msgstr ""
 
 #. translators: %s: name of the request field that was rejected.
-#: includes/API/V2/Sessions_Controller.php:369
+#: includes/API/V2/Sessions_Controller.php:390
 #, php-format
 msgid "Invalid parameter: %s"
 msgstr ""
 
-#: includes/API/V2/Sessions_Controller.php:371
+#: includes/API/V2/Sessions_Controller.php:392
 msgid "The session request could not be completed."
 msgstr ""
 
@@ -1446,103 +1446,103 @@ msgstr ""
 msgid "Check the payment fields."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:478
+#: includes/Payments/Contract/Ledger.php:490
 msgid "This payment method cannot be recorded; it has to run its own payment leg."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:484
+#: includes/Payments/Contract/Ledger.php:496
 msgid "Recorded payments must be captured or authorized."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:489
-#: includes/Payments/Contract/Ledger.php:493
+#: includes/Payments/Contract/Ledger.php:501
+#: includes/Payments/Contract/Ledger.php:505
 msgid "Tendered amount is invalid for this payment method."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:597
+#: includes/Payments/Contract/Ledger.php:609
 msgid "Payment method is disabled."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:648
-#: includes/Payments/Contract/Ledger.php:1158
+#: includes/Payments/Contract/Ledger.php:660
+#: includes/Payments/Contract/Ledger.php:1170
 msgid "The order is already paid."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:648
-#: includes/Payments/Contract/Ledger.php:1159
+#: includes/Payments/Contract/Ledger.php:660
+#: includes/Payments/Contract/Ledger.php:1171
 msgid "Payment amount exceeds the order balance."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:660
-#: includes/Payments/Contract/Ledger.php:1161
+#: includes/Payments/Contract/Ledger.php:672
+#: includes/Payments/Contract/Ledger.php:1173
 msgid "Another payment is already in progress on this order."
 msgstr ""
 
 #. translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency.
-#: includes/Payments/Contract/Ledger.php:814
+#: includes/Payments/Contract/Ledger.php:826
 #, php-format
 msgid "WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:819
+#: includes/Payments/Contract/Ledger.php:831
 msgid "Tip"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:882
+#: includes/Payments/Contract/Ledger.php:894
 msgid "Refund must belong to this order."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:885
-#: includes/Payments/Contract/Ledger.php:900
-#: includes/Payments/Contract/Ledger.php:921
+#: includes/Payments/Contract/Ledger.php:897
+#: includes/Payments/Contract/Ledger.php:912
+#: includes/Payments/Contract/Ledger.php:933
 msgid "Refund amount cannot be allocated to this payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:957
-#: includes/Payments/Contract/Ledger.php:1073
+#: includes/Payments/Contract/Ledger.php:969
+#: includes/Payments/Contract/Ledger.php:1085
 #: includes/Payments/Contract/Settlement.php:51
 msgid "Payment id must be a UUID."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:964
-#: includes/Payments/Contract/Ledger.php:1137
+#: includes/Payments/Contract/Ledger.php:976
+#: includes/Payments/Contract/Ledger.php:1149
 msgid "Payment id conflicts with an existing payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:995
+#: includes/Payments/Contract/Ledger.php:1007
 msgid "Refund status is invalid."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1076
-#: includes/Payments/Contract/Ledger.php:1080
+#: includes/Payments/Contract/Ledger.php:1088
+#: includes/Payments/Contract/Ledger.php:1092
 msgid "Payment amount must be positive."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1085
+#: includes/Payments/Contract/Ledger.php:1097
 msgid "Payment currency must match the order."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1160
+#: includes/Payments/Contract/Ledger.php:1172
 msgid "Provider-confirmed amount or currency does not match the payment."
 msgstr ""
 
 #. translators: %s: payment row uuid.
-#: includes/Payments/Contract/Ledger.php:1265
+#: includes/Payments/Contract/Ledger.php:1277
 #, php-format
 msgid "WCPOS payment %s voided."
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: void reason given by the cashier.
-#: includes/Payments/Contract/Ledger.php:1267
+#: includes/Payments/Contract/Ledger.php:1279
 #, php-format
 msgid "WCPOS payment %1$s voided: %2$s"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1756
+#: includes/Payments/Contract/Ledger.php:1786
 msgid "Payment not found."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1766
+#: includes/Payments/Contract/Ledger.php:1796
 msgid "Payment transition is invalid."
 msgstr ""
 
@@ -1599,29 +1599,29 @@ msgstr ""
 msgid "Grant them under WCPOS Settings, Access, or assign a role that has them."
 msgstr ""
 
-#: includes/Services/Cash_Movement_Store.php:95
+#: includes/Services/Cash_Movement_Store.php:96
 msgid "This movement was recorded after counting began."
 msgstr ""
 
-#: includes/Services/Cash_Movement_Store.php:153
+#: includes/Services/Cash_Movement_Store.php:160
 msgid "The movement has already been voided or is unavailable."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:377
+#: includes/Services/Closure_Store.php:442
 msgid "The session cannot be closed."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:451
+#: includes/Services/Closure_Store.php:516
 msgid "This session already has a closure; the count was recorded as a recount."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:468
-#: includes/Services/Register_Session_Store.php:237
-#: includes/Services/Register_Session_Store.php:343
+#: includes/Services/Closure_Store.php:533
+#: includes/Services/Register_Session_Store.php:251
+#: includes/Services/Register_Session_Store.php:417
 msgid "The session state has changed."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:494
+#: includes/Services/Closure_Store.php:559
 msgid "The closure number precedes the register sequence."
 msgstr ""
 
@@ -1695,16 +1695,16 @@ msgstr ""
 msgid "Reinstall the plugin to restore its files."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Store.php:298
+#: includes/Services/Fiscal_Record_Store.php:322
 msgid "Sorry, you are not allowed to read register documents."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Store.php:303
-#: includes/Services/Fiscal_Record_Store.php:311
+#: includes/Services/Fiscal_Record_Store.php:327
+#: includes/Services/Fiscal_Record_Store.php:335
 msgid "Receipt document not found."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Store.php:308
+#: includes/Services/Fiscal_Record_Store.php:332
 msgid "Invalid receipt document."
 msgstr ""
 
@@ -4657,16 +4657,24 @@ msgstr ""
 msgid "POS fiscal receipt snapshot created (receipt #%d)."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:126
+#: includes/Services/Register_Session_Store.php:130
 msgid "This register already has an open session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:192
+#: includes/Services/Register_Session_Store.php:196
 msgid "The cashier who opened this session cannot approve it."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:296
+#: includes/Services/Register_Session_Store.php:298
+msgid "The closure count differs from the closed session."
+msgstr ""
+
+#: includes/Services/Register_Session_Store.php:348
 msgid "Manager approval is required to close this session."
+msgstr ""
+
+#: includes/Services/Register_Session_Store.php:420
+msgid "The session approval has changed."
 msgstr ""
 
 #: includes/Services/Reports_Registry.php:191
@@ -4829,20 +4837,20 @@ msgid "Download receipt for order #%s"
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/Sync/Collection_Rules.php:190
-#: tests/includes/Sync/Test_Collection_Rules_Plan.php:246
+#: includes/Sync/Collection_Rules.php:191
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:247
 msgid "Filter orders by POS cashier."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/Sync/Collection_Rules.php:196
-#: tests/includes/Sync/Test_Collection_Rules_Plan.php:251
+#: includes/Sync/Collection_Rules.php:197
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:252
 msgid "Filter orders by POS store."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/Sync/Collection_Rules.php:201
-#: tests/includes/Sync/Test_Collection_Rules_Plan.php:256
+#: includes/Sync/Collection_Rules.php:202
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:257
 msgid "Filter orders by POS register."
 msgstr ""
 
