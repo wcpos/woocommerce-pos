@@ -555,6 +555,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
 		$this->assertSame( $manager->ID, ( new Register_Session_Store() )->get( $id )['approved_by'] );
 		$this->assertSame( array( 'cash' => '100.0000' ), $response->get_data()['approved_counted'] );
+		$this->assertSame( array( 'cash' => '100.0000' ), $response->get_data()['approved_expected'] );
 		$this->assertSame( $cashier->ID, get_current_user_id() );
 		$this->assertArrayNotHasKey( 'password', $response->get_data() );
 		$unchanged = $this->post( $route, $credentials );

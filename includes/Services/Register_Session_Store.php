@@ -37,6 +37,7 @@ final class Register_Session_Store {
 			closed_by BIGINT NULL,
 			approved_by BIGINT NULL,
 			approved_counted LONGTEXT NULL,
+			approved_expected LONGTEXT NULL,
 			counted LONGTEXT NULL,
 			closure_id CHAR(36) NULL,
 			created_at_gmt DATETIME NOT NULL,
@@ -84,7 +85,7 @@ final class Register_Session_Store {
 			foreach ( array( 'store_id', 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
 			}
-			foreach ( array( 'counted', 'approved_counted' ) as $key ) {
+			foreach ( array( 'counted', 'approved_counted', 'approved_expected' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
 			}
 		}
@@ -216,6 +217,7 @@ final class Register_Session_Store {
 			array(
 				'approved_by' => $user_id,
 				'approved_counted' => null === $counted ? null : wp_json_encode( $counted ),
+				'approved_expected' => wp_json_encode( Session_Figures::for_session( $session )->expected() ),
 			),
 			array(
 				'id' => $session['id'],
@@ -274,11 +276,19 @@ final class Register_Session_Store {
 			$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
 			$approved = Closure_Store::tenders( $session['approved_counted'] ?? null );
 			$counted = Closure_Store::tenders( $fields['counted'] );
+			$expected = Session_Figures::for_session( $session )->expected();
+			$approved_expected = Closure_Store::tenders( $session['approved_expected'] ?? null, true );
+			$current_expected = Closure_Store::tenders( $expected, true );
 			if ( null !== $approved && null !== $counted ) {
 				ksort( $approved );
 				ksort( $counted );
 			}
-			$bound = null !== $session['approved_by'] && null !== $approved && $approved === $counted;
+			if ( null !== $approved_expected && null !== $current_expected ) {
+				ksort( $approved_expected );
+				ksort( $current_expected );
+			}
+			$bound = null !== $session['approved_by'] && null !== $approved && $approved === $counted
+				&& null !== $approved_expected && $approved_expected === $current_expected;
 			if ( ! $bound && ! isset( $fields['approved_by'] ) && is_string( $threshold ) && preg_match( '/^\d+(?:\.\d+)?$/D', $threshold ) ) {
 				// Truncate, not round: a four-decimal variance above the threshold must still require approval.
 				$comparison_threshold = preg_replace( '/(\.\d{4})\d+$/D', '$1', $threshold );
@@ -287,7 +297,7 @@ final class Register_Session_Store {
 						'SELECT variance, ABS(variance) > CAST(%s AS DECIMAL(65,4)) AS exceeds_threshold FROM (SELECT CAST(%s AS DECIMAL(65,4)) - CAST(%s AS DECIMAL(65,4)) AS variance) AS amounts',
 						$comparison_threshold,
 						$fields['counted']['cash'],
-						Session_Figures::for_session( $session )->expected()['cash']
+						$expected['cash']
 					),
 					ARRAY_A
 				);

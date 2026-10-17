@@ -144,12 +144,55 @@ final class Session_Figures {
 		}
 	}
 
-	/** Release only after the caller has committed or rolled back; safe to repeat. */
-	public function release(): void {
+	/** Release only after the caller has committed or rolled back; safe to repeat.
+	 *
+	 * @param bool $rolled_back Whether the caller rolled the stamp back. The database forgets
+	 *                          a rolled-back stamp but WooCommerce's order cache does not: a
+	 *                          later closure would then read the stamped copy, write nothing
+	 *                          and fail its own verification, so the stamped orders and refunds
+	 *                          are evicted here.
+	 */
+	public function release( bool $rolled_back = false ): void {
+		if ( $rolled_back ) {
+			$ids = $this->locked_orders;
+			foreach ( $this->memo['refunds'] ?? array() as $entry ) {
+				if ( isset( $entry['refund'] ) && $entry['refund'] instanceof \WC_Order_Refund ) {
+					$ids[] = $entry['refund']->get_id();
+				}
+			}
+			foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+				self::forget_order( $id );
+			}
+		}
 		foreach ( $this->locked_orders as $order_id ) {
 			Order_Lock::instance()->release( $order_id );
 		}
 		$this->locked_orders = array();
+	}
+
+	/** Evict one order or refund from every WooCommerce cache so the next read hits storage.
+	 *
+	 * @param int $id Order or refund id.
+	 */
+	private static function forget_order( int $id ): void {
+		// WC_Data caches raw metadata separately from posts and OrderCache, even on CPT.
+		wp_cache_delete( \WC_Order::generate_meta_cache_key( $id, 'orders' ), 'orders' );
+		clean_post_cache( $id );
+		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Caches\OrderCache::class ) ) {
+			wc_get_container()->get( \Automattic\WooCommerce\Caches\OrderCache::class )->remove( $id );
+		}
+		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class ) ) {
+			$data_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class );
+			if ( method_exists( $data_store, 'clear_cached_data' ) ) {
+				$data_store->clear_cached_data( array( $id ) );
+			}
+			if ( class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class ) ) {
+				$meta_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class );
+				if ( method_exists( $meta_store, 'clear_cached_data' ) ) {
+					$meta_store->clear_cached_data( array( $id ) );
+				}
+			}
+		}
 	}
 
 	/** Whether this closure counted the row, never inferred from clocks.

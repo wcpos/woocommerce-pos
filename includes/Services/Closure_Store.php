@@ -704,7 +704,7 @@ final class Closure_Store {
 				$wpdb->query( 'ROLLBACK' );
 			}
 			if ( $figures ) {
-				$figures->release();
+				$figures->release( ! $created );
 			}
 			( new Register_Store() )->unlock( $session['register_id'] );
 			if ( $deferred ) {

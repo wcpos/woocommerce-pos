@@ -80,7 +80,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		return $rows;
 	}
 
-	/** A manager authorizes the whole count, not later edits or client expectations. */
+	/** A manager authorizes the count and server expectations, not later edits or sales. */
 	public function test_closure_approval_is_bound_to_counted_totals(): void {
 		global $wpdb;
 		$manager = self::factory()->user->create_and_get( array( 'user_pass' => 'approval-fixture' ) );
@@ -90,7 +90,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
 		try {
-			foreach ( array( 'same', 'cash', 'card', 'missing', 'under' ) as $case ) {
+			foreach ( array( 'same', 'cash', 'card', 'missing', 'missing_expected', 'sale', 'under' ) as $case ) {
 				$session = $this->closure_session();
 				$body = $this->body( $session );
 				$body['counted'] = array(
@@ -111,6 +111,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 					);
 					$this->assertSame( 200, $approved->get_status() );
 				}
+				if ( 'sale' === $case ) {
+					$this->closure_ledger( $session );
+				} elseif ( 'missing_expected' === $case ) {
+					$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'approved_expected' => null ), array( 'id' => $session['id'] ) );
+				}
 				if ( 'missing' === $case ) {
 					$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'approved_counted' => null ), array( 'id' => $session['id'] ) );
 				} elseif ( 'cash' === $case || 'card' === $case ) {
@@ -130,7 +135,8 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 					$this->assertSame( 'counting', $stored['status'] );
 					$this->assertSame( $manager->ID, $stored['approved_by'] );
 					$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
-					if ( 'cash' === $case ) {
+					if ( 'cash' === $case || 'sale' === $case ) {
+						$this->assertSame( array( 'cash' => '100.0000' ), $stored['approved_expected'] );
 						$this->assertSame(
 							array(
 								'cash' => '80.0000',
@@ -149,10 +155,48 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 								)
 							)->get_status()
 						);
-						$this->assertSame( 201, $this->post( 'closures', $body )->get_status() );
+						$closed = $this->post( 'closures', $body );
+						$this->assertSame( 201, $closed->get_status() );
+						if ( 'sale' === $case ) {
+							$this->assertSame( '150.0000', $closed->get_data()['expected']['cash'] );
+							$this->assertSame( '150.0000', ( new Register_Session_Store() )->get( $session['id'] )['approved_expected']['cash'] );
+						}
 					}
 				}
 			}
+		} finally {
+			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		}
+	}
+
+	/** A refused close must not leave a cached stamp that suppresses the approved retry. */
+	public function test_closure_refused_before_approval_can_be_retried(): void {
+		$session = $this->closure_session();
+		$this->closure_ledger( $session );
+		$body = $this->body( $session );
+		$body['counted'] = array( 'cash' => '80' );
+		$manager = self::factory()->user->create_and_get( array( 'user_pass' => 'approval-fixture' ) );
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$threshold = static function () {
+			return '5';
+		};
+		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		try {
+			$refused = $this->post( 'closures', $body );
+			$this->assertSame( 403, $refused->get_status() );
+			$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+			$approved = $this->post(
+				'sessions/' . $session['id'] . '/approve',
+				array(
+					'username' => $manager->user_login,
+					'password' => 'approval-fixture',
+					'counted' => $body['counted'],
+				)
+			);
+			$this->assertSame( 200, $approved->get_status() );
+			$closed = $this->post( 'closures', $body );
+			$this->assertSame( 201, $closed->get_status() );
+			$this->assertSame( '150.0000', $closed->get_data()['expected']['cash'] );
 		} finally {
 			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
 		}
