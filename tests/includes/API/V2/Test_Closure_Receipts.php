@@ -916,16 +916,15 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 				'display_name' => 'Approving manager',
 			)
 		);
-		$session = ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->transition(
-			$session,
-			array(
-				'status' => 'counting',
-				'approved_by' => $manager->ID,
-			)
-		);
+		$sessions = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$session = $sessions->transition( $session, array( 'status' => 'counting' ) );
 		$this->assertIsArray( $session );
 		$this->closure_ledger( $session );
 		$fields = $this->closure_fields( $session );
+		// An approval is bound to the count and expected the manager saw; one that does not match
+		// the closed count is dropped from the closure, so approve exactly what will be closed.
+		$session = $sessions->approve( $session, $manager->ID, $fields['counted'] );
+		$this->assertIsArray( $session );
 		$fields['breakdowns']['labels'] = array( 'register_name' => 'Untrusted client label' );
 		$row = ( new Closure_Store() )->create( $fields );
 		$this->assertSame( 'Closure fixture', $row['breakdowns']['labels']['register_name'] );

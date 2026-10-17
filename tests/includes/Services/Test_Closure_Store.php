@@ -170,6 +170,49 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Existing sessions gain both approval snapshots without repeating DDL. */
+	public function test_approval_schema_upgrade_adds_columns_once(): void {
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$store->install();
+		$table = $store->table_name();
+		$schema = get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION );
+		$activator = new \WCPOS\WooCommercePOS\Activator();
+		$alterations = 0;
+		$observe = static function ( $sql ) use ( $table, &$alterations ) {
+			if ( 0 === strpos( $sql, "ALTER TABLE {$table}" ) ) {
+				++$alterations;
+			}
+			return $sql;
+		};
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed columns.
+			$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$table} DROP COLUMN approved_counted, DROP COLUMN approved_expected" ) );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '8' );
+			$activator->install_sync_schema();
+			foreach ( array( 'approved_counted', 'approved_expected' ) as $column ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed columns.
+				$definition = $wpdb->get_row( "SHOW COLUMNS FROM {$table} LIKE '{$column}'", ARRAY_A );
+				$this->assertNotNull( $definition );
+				$this->assertSame( 'longtext', $definition['Type'] );
+				$this->assertSame( 'YES', $definition['Null'] );
+			}
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			add_filter( 'query', $observe );
+			$activator->install_sync_schema();
+			$this->assertSame( 0, $alterations );
+		} finally {
+			remove_filter( 'query', $observe );
+			foreach ( array( 'approved_counted', 'approved_expected' ) as $column ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Restore schema even when testing the unfixed installer.
+				if ( null === $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE '{$column}'" ) ) {
+					$wpdb->query( "ALTER TABLE {$table} ADD {$column} LONGTEXT NULL" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed columns.
+				}
+			}
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, $schema );
+		}
+	}
+
 	/** The projection must not inherit either fiscal list page limit. */
 	public function test_corrections_reads_more_than_one_maximum_page(): void {
 		global $wpdb;
@@ -360,7 +403,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'wcpos_override_refused', $error->get_error_code() );
 			$this->assertNull( $store->get( $fields['id'] ) );
 			$manager = self::factory()->user->create();
-			( new Register_Session_Store() )->approve( $session, $manager );
+			( new Register_Session_Store() )->approve( $session, $manager, $fields['counted'] );
 			$this->assertSame( $manager, $store->create( $fields )['approved_by'] );
 		} finally {
 			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
@@ -371,12 +414,13 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	public function test_closed_session_status_fields_are_preserved(): void {
 		$session = $this->closure_session( null, 'closed' );
 		$fields = $this->closure_fields( $session );
+		$fields['counted'] = array( 'cash' => '100.0000' );
 		$fields['closed_at_gmt'] = '2026-09-11 13:00:00';
 		$row = ( new Closure_Store() )->create( $fields );
 		$this->assertIsArray( $row );
 		$session['closure_id'] = $row['id'];
 		$this->assertSame( $session, ( new Register_Session_Store() )->get( $session['id'] ) );
-		$this->assertSame( array( 'cash' => '1.0000' ), $row['variance'] );
+		$this->assertSame( array( 'cash' => '0.0000' ), $row['variance'] );
 	}
 
 	/** A forward jump to four stays four, and its missing three is listed. */
@@ -470,7 +514,12 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	public function test_closure_holds_the_register_lock_across_its_transaction(): void {
 		$session = $this->closure_session();
 		$queries = array();
-		$trace = static function ( $sql ) use ( &$queries ) {
+		$held_at_commit = null;
+		$trace = static function ( $sql ) use ( &$queries, &$held_at_commit, $session ) {
+			global $wpdb;
+			if ( 'COMMIT' === $sql ) {
+				$held_at_commit = $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK(%s)', 'wcpos_register_' . $session['register_id'] ) );
+			}
 			$queries[] = $sql;
 			return $sql;
 		};
@@ -482,7 +531,8 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 		$sql = implode( "\n", $queries );
 		$lock = strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] );
-		$release = strpos( $sql, "RELEASE_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$release = strrpos( $sql, "RELEASE_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$this->assertSame( '0', $held_at_commit );
 		$this->assertNotFalse( $lock );
 		$this->assertNotFalse( $release );
 		$this->assertLessThan( strpos( $sql, 'START TRANSACTION' ), $lock );

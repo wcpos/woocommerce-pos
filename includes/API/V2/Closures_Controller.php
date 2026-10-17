@@ -319,19 +319,7 @@ class Closures_Controller extends \WP_REST_Controller {
 	 * @param bool  $signed Allow negative balances.
 	 */
 	private function tenders( $value, bool $signed = false ): ?array {
-		if ( ! is_array( $value ) || ! isset( $value['cash'] ) ) {
-			return null;
-		}
-		foreach ( $value as $key => &$amount ) {
-			if ( ! is_string( $key ) || ! preg_match( '/^[a-zA-Z0-9_-]{1,191}$/D', $key ) ) {
-				return null;
-			}
-			$amount = $this->decimal( $amount, $signed );
-			if ( null === $amount ) {
-				return null;
-			}
-		}
-		return $value;
+		return Closure_Store::tenders( $value, $signed );
 	}
 
 	/** Preserve decimal precision and reject values outside storage range.
