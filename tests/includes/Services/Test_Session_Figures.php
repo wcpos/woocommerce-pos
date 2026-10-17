@@ -15,6 +15,40 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/** Legacy rows need not carry a timestamp; only captured rows enter the snapshot. */
+	public function test_ledger_rows_missing_version_returns_null_without_warning(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$rows = Ledger::instance()->read( $order );
+		unset( $rows[0]['updated_at_gmt'], $rows[1]['status'] );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save_meta_data();
+
+		// Act. PHPUnit converts warnings to exceptions.
+		$versions = Session_Figures::for_session( $session )->ledger_rows();
+
+		// Assert.
+		$this->assertSame(
+			array(
+				array(
+					'id' => $rows[0]['id'],
+					'updated_at_gmt' => null,
+					'status' => 'captured',
+				),
+			),
+			$versions
+		);
+	}
+
 	/** All cash-kind gateways map to cash; method takes precedence over method_id. */
 	public function test_tender_key_maps_every_cash_kind_to_the_drawer(): void {
 		foreach ( array( 'pos_cash', 'cod', 'extension_cash' ) as $method ) {
