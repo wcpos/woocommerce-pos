@@ -77,6 +77,73 @@ final class Session_Figures {
 		return count( $this->legs() );
 	}
 
+	/** Order membership of the same captured-leg snapshot used by the figures. */
+	public function order_ids(): array {
+		return array_keys( $this->legs() );
+	}
+
+	/** Ledger row membership, including each tender of a split payment. */
+	public function ledger_row_ids(): array {
+		return array_column( array_merge( array(), ...array_values( $this->legs() ) ), 'id' );
+	}
+
+	/** Refund membership of the same memoised snapshot used by expected balances. */
+	public function refund_ids(): array {
+		return array_keys( $this->refund_records() );
+	}
+
+	/** Versions of the captured ledger rows used by the shared snapshot. */
+	public function ledger_rows(): array {
+		return array_map(
+			static function ( $row ) {
+				return array(
+					'id' => $row['id'],
+					'updated_at_gmt' => $row['updated_at_gmt'] ?? null,
+					'status' => $row['status'],
+					// Detect financial edits without exposing tender amounts to blind counters.
+					'version' => hash_hmac(
+						'sha256',
+						wp_json_encode(
+							array(
+								$row['id'],
+								$row['status'],
+								$row['amount'] ?? null,
+								$row['refunded_amount'] ?? null,
+								self::tender_key( $row ),
+								$row['updated_at_gmt'] ?? null,
+							)
+						),
+						wp_salt( 'auth' )
+					),
+				);
+			},
+			array_merge( array(), ...array_values( $this->legs() ) )
+		);
+	}
+
+	/** Refund versions from the same memoised objects used by expected balances. */
+	public function refund_versions(): array {
+		return array_values(
+			array_map(
+				function ( $refund ) {
+					$modified = $refund->get_date_modified( 'edit' );
+					$rows = $this->refund_parent_rows( $refund );
+					// Version only this refund's split; unrelated parent-ledger edits must not invalidate it.
+					$allocation = null === $rows ? null : array(
+						'amount' => $refund->get_amount(),
+						'rows' => self::refund_tender_rows( $refund, $rows ),
+					);
+					return array(
+						'id' => $refund->get_id(),
+						'updated_at_gmt' => $modified ? gmdate( 'Y-m-d H:i:s', $modified->getTimestamp() ) : null,
+						'allocation_version' => null === $allocation ? null : hash_hmac( 'sha256', wp_json_encode( $allocation ), wp_salt( 'auth' ) ),
+					);
+				},
+				$this->refund_records()
+			)
+		);
+	}
+
 	/** Split unsigned amounts for closure period and perpetual totals. */
 	public function period_amounts(): array {
 		$totals = array(
@@ -265,18 +332,22 @@ final class Session_Figures {
 	/** Attribute a refund to succeeded ledger allocations, with the remainder in cash.
 	 *
 	 * @param \WC_Order_Refund $refund Refund to attribute.
+	 * @param array|null       $ledger_rows Already-read parent ledger, or null to read it here.
 	 * @throws \RuntimeException When the parent order cannot be read.
 	 */
-	public static function refund_tender_rows( \WC_Order_Refund $refund ): array {
-		$order = wc_get_order( $refund->get_parent_id() );
-		if ( ! $order ) {
-			// Silently attributing nothing would let a closure count a zero refund and stamp it.
-			throw new \RuntimeException( 'Refund parent order could not be read.' );
+	public static function refund_tender_rows( \WC_Order_Refund $refund, ?array $ledger_rows = null ): array {
+		if ( null === $ledger_rows ) {
+			$order = wc_get_order( $refund->get_parent_id() );
+			if ( ! $order ) {
+				// Silently attributing nothing would let a closure count a zero refund and stamp it.
+				throw new \RuntimeException( 'Refund parent order could not be read.' );
+			}
+			$ledger_rows = Ledger::instance()->read( $order );
 		}
 		$rows = array();
 		$remaining = Money::minor( $refund->get_amount() );
 		// A succeeded allocation is a fact about the refund, kept even if its row was voided later.
-		foreach ( Ledger::instance()->read( $order ) as $row ) {
+		foreach ( $ledger_rows as $row ) {
 			foreach ( $row['refunds'] ?? array() as $allocation ) {
 				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() && $remaining > 0 && Money::minor( $allocation['amount'] ) > 0 ) {
 					// Rows written before the handler-result checks may over- or mis-allocate: attribute at most the refund, never a negative.
@@ -302,13 +373,49 @@ final class Session_Figures {
 		return $rows;
 	}
 
-	/** Read refunds by their own session stamp in either order storage mode.
+	/** Resolve tenders only for callers consuming financial figures.
 	 *
 	 * @throws \RuntimeException On read failure.
 	 */
 	public function refunds(): array {
 		if ( isset( $this->memo['refunds'] ) ) {
 			return $this->memo['refunds'];
+		}
+		$result = array();
+		foreach ( $this->refund_records() as $id => $refund ) {
+			$rows = $this->refund_parent_rows( $refund );
+			if ( null === $rows ) {
+				throw new \RuntimeException( 'Refund parent order could not be read.' );
+			}
+			$result[ $id ] = array(
+				'refund' => $refund,
+				'rows' => self::refund_tender_rows( $refund, $rows ),
+			);
+		}
+		$this->memo['refunds'] = $result;
+		return $result;
+	}
+
+	/** Freeze the parent ledger shared by allocation versions and tender attribution.
+	 *
+	 * @param \WC_Order_Refund $refund Refund whose parent supplies the allocations.
+	 */
+	private function refund_parent_rows( \WC_Order_Refund $refund ): ?array {
+		$id = $refund->get_parent_id();
+		if ( ! array_key_exists( $id, $this->memo['refund_parents'] ?? array() ) ) {
+			$order = wc_get_order( $id );
+			$this->memo['refund_parents'][ $id ] = $order instanceof \WC_Order ? Ledger::instance()->read( $order ) : null;
+		}
+		return $this->memo['refund_parents'][ $id ];
+	}
+
+	/** Read refund identities and versions without resolving their tenders.
+	 *
+	 * @throws \RuntimeException On read failure.
+	 */
+	private function refund_records(): array {
+		if ( isset( $this->memo['refund_records'] ) ) {
+			return $this->memo['refund_records'];
 		}
 		$session = $this->session;
 		global $wpdb;
@@ -328,13 +435,10 @@ final class Session_Figures {
 			if ( ! $refund instanceof \WC_Order_Refund ) {
 				throw new \RuntimeException( 'Session refund could not be read.' );
 			}
-			$result[ $id ] = array(
-				'refund' => $refund,
-				'rows' => self::refund_tender_rows( $refund ),
-			);
+			$result[ $id ] = $refund;
 		}
-		$this->memo['refunds'] = $result;
-		return $this->memo['refunds'];
+		$this->memo['refund_records'] = $result;
+		return $result;
 	}
 
 	/** Read all captured session rows in either storage mode; fiscal totals cannot truncate.

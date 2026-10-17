@@ -15,6 +15,110 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/**
+	 * A snapshot digest must not be enumerable without this site's secret.
+	 *
+	 * @testWith ["ledger_rows", "version"]
+	 *           ["refund_versions", "allocation_version"]
+	 */
+	public function test_snapshot_versions_differ_between_site_salts( string $method, string $key ): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '3' );
+		$refund->update_meta_data( '_wcpos_session', $session['id'] );
+		$refund->save();
+		$salt = 'first-site-secret';
+		$filter = static function () use ( &$salt ) {
+			return $salt;
+		};
+		add_filter( 'salt', $filter );
+		try {
+			$before = Session_Figures::for_session( $session )->$method();
+			$this->assertSame( $before, Session_Figures::for_session( $session )->$method() );
+			$salt = 'second-site-secret';
+			$after = Session_Figures::for_session( $session )->$method();
+			$this->assertNotSame( $before[0][ $key ], $after[0][ $key ] );
+			unset( $before[0][ $key ], $after[0][ $key ] );
+			$this->assertSame( $before[0], $after[0] );
+		} finally {
+			remove_filter( 'salt', $filter );
+		}
+	}
+
+	/**
+	 * Same-second financial edits must change the opaque snapshot version.
+	 *
+	 * @testWith [0, "amount", "55.0000"]
+	 *           [1, "method", "voucher"]
+	 *           [0, "refunded_amount", "15.0000"]
+	 */
+	public function test_ledger_rows_same_second_financial_change_changes_version( int $index, string $field, string $value ): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$before = Session_Figures::for_session( $session )->ledger_rows();
+		$rows = Ledger::instance()->read( $order );
+
+		// Act. Preserve the timestamp and status while changing a financial input.
+		$rows[ $index ][ $field ] = $value;
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save_meta_data();
+		$after = Session_Figures::for_session( $session )->ledger_rows();
+
+		// Assert.
+		$this->assertSame( $before[ $index ]['updated_at_gmt'], $after[ $index ]['updated_at_gmt'] );
+		$this->assertSame( 'captured', $after[ $index ]['status'] );
+		$this->assertNotSame( $before[ $index ], $after[ $index ] );
+		$this->assertArrayHasKey( 'version', $before[ $index ] );
+		$this->assertNotSame( $before[ $index ]['version'], $after[ $index ]['version'] );
+	}
+
+	/** Legacy rows need not carry a timestamp; only captured rows enter the snapshot. */
+	public function test_ledger_rows_missing_version_returns_null_without_warning(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$rows = Ledger::instance()->read( $order );
+		unset( $rows[0]['updated_at_gmt'], $rows[1]['status'] );
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save_meta_data();
+
+		// Act. PHPUnit converts warnings to exceptions.
+		$versions = Session_Figures::for_session( $session )->ledger_rows();
+
+		// Assert.
+		$this->assertNotEmpty( $versions[0]['version'] );
+		unset( $versions[0]['version'] );
+		$this->assertSame(
+			array(
+				array(
+					'id' => $rows[0]['id'],
+					'updated_at_gmt' => null,
+					'status' => 'captured',
+				),
+			),
+			$versions
+		);
+	}
+
 	/** All cash-kind gateways map to cash; method takes precedence over method_id. */
 	public function test_tender_key_maps_every_cash_kind_to_the_drawer(): void {
 		foreach ( array( 'pos_cash', 'cod', 'extension_cash' ) as $method ) {

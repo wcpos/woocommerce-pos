@@ -118,13 +118,25 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
-			$figures = Session_Figures::for_session( $row );
+			// Capture before the reads as a fallback for clients without explicit membership.
+			// Second-resolution timestamps cannot distinguish rows committed in the same second;
+			// use the returned IDs, not this clock boundary, to decide snapshot membership.
+			$as_of_gmt = gmdate( 'Y-m-d H:i:s' );
+			$figures   = Session_Figures::for_session( $row );
 			if ( substr( rtrim( $request->get_route(), '/' ), -10 ) === '/movements' ) {
 				return new WP_REST_Response( $figures->movements() );
 			}
 			$detail = array(
 				'movements' => $figures->movements(),
 				'sales_count' => $figures->sales_count(),
+				'order_ids' => $figures->order_ids(),
+				// Keep the plain ID list for one release alongside the versioned rows.
+				'ledger_row_ids' => $figures->ledger_row_ids(),
+				'ledger_rows' => $figures->ledger_rows(),
+				'refund_ids' => $figures->refund_ids(),
+				'refunds' => $figures->refund_versions(),
+				// Server-clock boundary of this snapshot (see above); never the device clock.
+				'as_of_gmt' => $as_of_gmt,
 			);
 			// The expected figure is a report: a cashier counting blind never receives it.
 			if ( current_user_can( 'view_woocommerce_pos_reports' ) ) {

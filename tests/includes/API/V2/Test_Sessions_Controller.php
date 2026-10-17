@@ -198,17 +198,21 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Session detail shares its ledger and movement reads across report figures. */
+	/** Session detail shares its ledger, refund and movement reads across report figures. */
 	public function test_session_detail_reads_ledger_and_movements_once(): void {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$id = $this->counting_session_with_cash_sale();
 		$reads = array(
 			'orders' => 0,
+			'refunds' => 0,
 			'movements' => 0,
 		);
 		$observe = static function ( $sql ) use ( &$reads ) {
 			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::META_KEY ) ) {
 				++$reads['orders'];
+			}
+			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, 'shop_order_refund' ) ) {
+				++$reads['refunds'];
 			}
 			if ( 0 === strpos( $sql, 'SELECT * FROM' ) && false !== strpos( $sql, 'wcpos_cash_movements' ) ) {
 				++$reads['movements'];
@@ -226,10 +230,275 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame(
 			array(
 				'orders' => 1,
+				'refunds' => 1,
 				'movements' => 1,
 			),
 			$reads
 		);
+	}
+
+	/** Snapshot membership includes split tenders and remains available when counting blind. */
+	public function test_session_detail_returns_counted_ids_including_when_blind(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$order_ids = array();
+		$ledger_row_ids = array();
+		$ledger_rows = array();
+		foreach ( array( array( 'pos_cash', 'pos_card' ), array( 'pos_cash' ) ) as $methods ) {
+			$order = new \WC_Order();
+			$order->save();
+			$order_ids[] = $order->get_id();
+			$rows = array();
+			foreach ( $methods as $method ) {
+				$row_id = wp_generate_uuid4();
+				$ledger_row_ids[] = $row_id;
+				$rows[] = array(
+					'id' => $row_id,
+					'method_id' => $method,
+					'kind' => 'pos_cash' === $method ? 'cash' : 'card',
+					'amount' => '10',
+					'status' => 'captured',
+					'session_id' => $id,
+				);
+			}
+			Ledger::instance()->save( $order, $rows, false );
+			// Seed an older stored version without the ledger writer restamping it.
+			$stored = Ledger::instance()->read( $order );
+			foreach ( $stored as &$row ) {
+				$row['updated_at_gmt'] = '2026-09-11 09:30:00';
+				$ledger_rows[] = array(
+					'id' => $row['id'],
+					'updated_at_gmt' => '2026-09-11 09:30:00',
+					'status' => 'captured',
+				);
+			}
+			unset( $row );
+			$order->update_meta_data(
+				Ledger::META_KEY,
+				wp_json_encode(
+					array(
+						'schema' => Ledger::SCHEMA,
+						'payments' => $stored,
+					)
+				)
+			);
+			$order->save_meta_data();
+		}
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order_ids[0] );
+		$refund->set_amount( '2' );
+		$refund->update_meta_data( '_wcpos_session', $id );
+		$refund->save();
+		// WooCommerce restamps date_modified on every save; the version reported must be the stored one.
+		$refund_modified = gmdate( 'Y-m-d H:i:s', wc_get_order( $refund->get_id() )->get_date_modified( 'edit' )->getTimestamp() );
+		$movement_id = wp_generate_uuid4();
+		$movement = $this->post(
+			'movements',
+			array(
+				'id' => $movement_id,
+				'session_id' => $id,
+				'type' => 'paid_in',
+				'amount' => '5',
+				'reason' => 'Change',
+				'created_at' => '2026-09-11T10:00:00Z',
+			)
+		);
+		$this->assertSame( 201, $movement->get_status() );
+		$reader = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$reader->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $reader->ID );
+		foreach ( array( false, true ) as $can_report ) {
+			wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports', $can_report );
+			// Act.
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id ) );
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data();
+			$this->assertEqualsCanonicalizing( $order_ids, $data['order_ids'] );
+			$this->assertEqualsCanonicalizing( $ledger_row_ids, $data['ledger_row_ids'] );
+			$this->assertSame( array( $refund->get_id() ), $data['refund_ids'] );
+			foreach ( $data['ledger_rows'] as &$row ) {
+				foreach ( array( 'amount', 'refunded_amount', 'method_id', 'kind' ) as $field ) {
+					$this->assertArrayNotHasKey( $field, $row );
+				}
+				$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $row['version'] );
+				unset( $row['version'] );
+			}
+			unset( $row );
+			$this->assertEqualsCanonicalizing( $ledger_rows, $data['ledger_rows'] );
+			$this->assertCount( 1, $data['refunds'] );
+			$this->assertSame( $refund->get_id(), $data['refunds'][0]['id'] );
+			$this->assertSame( $refund_modified, $data['refunds'][0]['updated_at_gmt'] );
+			$this->assertNotEmpty( $data['refunds'][0]['allocation_version'] );
+			$this->assertSame( array( $movement_id ), array_column( $data['movements'], 'id' ) );
+			$this->assertSame( 2, $data['sales_count'] );
+			if ( $can_report ) {
+				$this->assertSame(
+					array(
+						'cash' => '123.0000',
+						'card' => '10.0000',
+					),
+					$data['expected']
+				);
+			} else {
+				$this->assertArrayNotHasKey( 'expected', $data );
+			}
+		}
+	}
+
+	/** Only this refund's tender split changes its allocation version, not unrelated ledger edits. */
+	public function test_refund_allocation_version_ignores_unrelated_changes_but_tracks_settlement(): void {
+		// Arrange.
+		$session = $this->post( 'sessions', $this->fields() )->get_data();
+		$order = new \WC_Order();
+		$order->save();
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '5' );
+		$refund->update_meta_data( '_wcpos_session', $session['id'] );
+		$refund->save();
+		$rows = array(
+			array(
+				'id' => wp_generate_uuid4(),
+				'method_id' => 'pos_card',
+				'kind' => 'card',
+				'amount' => '5',
+				'status' => 'captured',
+				'session_id' => wp_generate_uuid4(),
+				'updated_at_gmt' => '2026-09-11 09:30:00',
+				'refunds' => array(
+					array(
+						'id' => $refund->get_id(),
+						'amount' => '5',
+						'status' => 'pending',
+					),
+				),
+			),
+		);
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save_meta_data();
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		$before = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );
+		$this->assertSame( 200, $before->get_status() );
+		$before = $before->get_data();
+		$figures = Session_Figures::for_session( $session );
+		$memoised = $figures->refund_versions();
+
+		// Act. Add an unrelated payment and settle another refund on the same parent.
+		$other_refund = new \WC_Order_Refund();
+		$other_refund->set_parent_id( $order->get_id() );
+		$other_refund->set_amount( '1' );
+		$other_refund->save();
+		$rows[] = array(
+			'id' => wp_generate_uuid4(),
+			'method_id' => 'pos_cash',
+			'kind' => 'cash',
+			'amount' => '10',
+			'status' => 'captured',
+			'session_id' => $rows[0]['session_id'],
+		);
+		$rows[0]['updated_at_gmt'] = '2026-09-11 09:31:00';
+		$rows[0]['refunds'][] = array(
+			'id' => $other_refund->get_id(),
+			'amount' => '1',
+			'status' => 'succeeded',
+		);
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save_meta_data();
+		$unrelated = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );
+
+		// Assert. Neither this refund's version nor its expected balance changed.
+		$this->assertSame( 200, $unrelated->get_status() );
+		$this->assertSame( $before['refunds'], $unrelated->get_data()['refunds'] );
+		$this->assertSame( $before['expected'], $unrelated->get_data()['expected'] );
+
+		// Act. Settle within the same clock second; neither timestamp changes.
+		$rows[0]['refunds'][0]['status'] = 'succeeded';
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save_meta_data();
+		$after = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );
+
+		// Assert. The old instance still attributes using the inputs it versioned.
+		$this->assertSame( 200, $after->get_status() );
+		$after = $after->get_data();
+		$this->assertSame( array(), $after['ledger_rows'] );
+		$this->assertSame( $before['refunds'][0]['updated_at_gmt'], $after['refunds'][0]['updated_at_gmt'] );
+		$this->assertNotEmpty( $before['refunds'][0]['allocation_version'] );
+		$this->assertNotEmpty( $after['refunds'][0]['allocation_version'] );
+		$this->assertNotSame( $before['refunds'][0]['allocation_version'], $after['refunds'][0]['allocation_version'] );
+		$this->assertSame( $memoised, $figures->refund_versions() );
+		$this->assertSame( array( 'cash' => '95.0000' ), $figures->expected() );
+		$this->assertSame( array( 'cash' => '95.0000' ), $before['expected'] );
+		$this->assertSame(
+			array(
+				'cash' => '100.0000',
+				'card' => '-5.0000',
+			),
+			$after['expected']
+		);
+	}
+
+	/** Missing parents must not prevent blind counts, but reports must not silently lose refunds. */
+	public function test_blind_detail_deleted_refund_parent_returns_membership(): void {
+		// Arrange. WooCommerce refuses a refund whose parent is already gone and cascades a
+		// parent delete onto its refunds, so orphan the refund at the storage level, under
+		// both storages (one of the two deletes is a no-op).
+		global $wpdb;
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$order = new \WC_Order();
+		$parent_id = $order->save();
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $parent_id );
+		$refund->set_amount( '5' );
+		$refund->update_meta_data( '_wcpos_session', $id );
+		$refund->save();
+		$wpdb->delete( $wpdb->posts, array( 'ID' => $parent_id ) );
+		$wpdb->delete( $wpdb->prefix . 'wc_orders', array( 'id' => $parent_id ) );
+		clean_post_cache( $parent_id );
+		wp_cache_flush();
+		$this->assertFalse( wc_get_order( $parent_id ) );
+		$reader = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$reader->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $reader->ID );
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( array( $refund->get_id() ), $data['refund_ids'] );
+		$this->assertSame( $refund->get_id(), $data['refunds'][0]['id'] );
+		$this->assertNull( $data['refunds'][0]['allocation_version'] );
+		$this->assertArrayNotHasKey( 'expected', $data );
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id ) );
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 'wcpos_session_write_failed', $response->get_data()['code'] );
 	}
 
 	/** The device's business day is optional, but supplied values must be date strings. */
@@ -294,6 +563,9 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$sighted = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
 		$this->assertArrayHasKey( 'expected', $sighted );
+		$this->assertSame( array(), $sighted['refund_ids'] );
+		$this->assertSame( array(), $sighted['ledger_rows'] );
+		$this->assertSame( array(), $sighted['refunds'] );
 		$blind = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		get_user_by( 'id', $blind )->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $blind );
@@ -302,6 +574,13 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data = $response->get_data();
 		$this->assertArrayNotHasKey( 'expected', $data );
 		$this->assertArrayHasKey( 'sales_count', $data );
+		$this->assertSame( array(), $data['order_ids'] );
+		$this->assertSame( array(), $data['ledger_row_ids'] );
+		$this->assertSame( array(), $data['refund_ids'] );
+		$this->assertSame( array(), $data['ledger_rows'] );
+		$this->assertSame( array(), $data['refunds'] );
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $data['as_of_gmt'] );
+		$this->assertLessThanOrEqual( time() + 1, strtotime( $data['as_of_gmt'] . ' UTC' ) );
 		$this->assertArrayHasKey( 'movements', $data );
 	}
 
