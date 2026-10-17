@@ -154,7 +154,12 @@
             deps.fetch(config.manifest_url, { cache: 'no-store', signal: controller.signal }).then(function (response) {
                 if (response.status !== 200) throw 'manifest_' + response.status;
                 return response.json();
-            }).then(resolve, function (error) { reject(typeof error === 'string' ? error : 'manifest_error'); });
+            }).then(resolve, function (error) {
+                // The browser aborts an in-flight fetch when the page navigates or reloads; that
+                // is not a CDN failure and must not fall back or beacon. Our own timeout rejects first.
+                if (error && error.name === 'AbortError') return reject('navigation_abort');
+                reject(typeof error === 'string' ? error : 'manifest_error');
+            });
         });
         return request.then(function (manifest) {
             clearTimeout(timer);
@@ -175,7 +180,11 @@
                 if (reason === 'asset_js_partial') return fail(reason);
                 return loadFromFallback(typeof reason === 'string' ? reason : 'manifest_error');
             });
-        }, function (reason) { clearTimeout(timer); return loadFromFallback(reason); });
+        }, function (reason) {
+            clearTimeout(timer);
+            if (reason === 'navigation_abort') return;
+            return loadFromFallback(reason);
+        });
     }
     var WCPOSLoader = { base64ToBytes: base64ToBytes, utf8Bytes: utf8Bytes,
         checkDescriptor: checkDescriptor, verifyDescriptor: verifyDescriptor, boot: boot };
