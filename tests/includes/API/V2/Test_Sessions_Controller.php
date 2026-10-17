@@ -198,17 +198,21 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Session detail shares its ledger and movement reads across report figures. */
+	/** Session detail shares its ledger, refund and movement reads across report figures. */
 	public function test_session_detail_reads_ledger_and_movements_once(): void {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$id = $this->counting_session_with_cash_sale();
 		$reads = array(
 			'orders' => 0,
+			'refunds' => 0,
 			'movements' => 0,
 		);
 		$observe = static function ( $sql ) use ( &$reads ) {
 			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::META_KEY ) ) {
 				++$reads['orders'];
+			}
+			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, 'shop_order_refund' ) ) {
+				++$reads['refunds'];
 			}
 			if ( 0 === strpos( $sql, 'SELECT * FROM' ) && false !== strpos( $sql, 'wcpos_cash_movements' ) ) {
 				++$reads['movements'];
@@ -226,6 +230,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame(
 			array(
 				'orders' => 1,
+				'refunds' => 1,
 				'movements' => 1,
 			),
 			$reads
@@ -238,6 +243,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
 		$order_ids = array();
 		$ledger_row_ids = array();
+		$ledger_rows = array();
 		foreach ( array( array( 'pos_cash', 'pos_card' ), array( 'pos_cash' ) ) as $methods ) {
 			$order = new \WC_Order();
 			$order->save();
@@ -256,7 +262,35 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 				);
 			}
 			Ledger::instance()->save( $order, $rows, false );
+			// Seed an older stored version without the ledger writer restamping it.
+			$stored = Ledger::instance()->read( $order );
+			foreach ( $stored as &$row ) {
+				$row['updated_at_gmt'] = '2026-09-11 09:30:00';
+				$ledger_rows[] = array(
+					'id' => $row['id'],
+					'updated_at_gmt' => '2026-09-11 09:30:00',
+					'status' => 'captured',
+				);
+			}
+			unset( $row );
+			$order->update_meta_data(
+				Ledger::META_KEY,
+				wp_json_encode(
+					array(
+						'schema' => Ledger::SCHEMA,
+						'payments' => $stored,
+					)
+				)
+			);
+			$order->save_meta_data();
 		}
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order_ids[0] );
+		$refund->set_amount( '2' );
+		$refund->update_meta_data( '_wcpos_session', $id );
+		$refund->save();
+		// WooCommerce restamps date_modified on every save; the version reported must be the stored one.
+		$refund_modified = gmdate( 'Y-m-d H:i:s', wc_get_order( $refund->get_id() )->get_date_modified( 'edit' )->getTimestamp() );
 		$movement_id = wp_generate_uuid4();
 		$movement = $this->post(
 			'movements',
@@ -282,12 +316,23 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$data = $response->get_data();
 			$this->assertEqualsCanonicalizing( $order_ids, $data['order_ids'] );
 			$this->assertEqualsCanonicalizing( $ledger_row_ids, $data['ledger_row_ids'] );
+			$this->assertSame( array( $refund->get_id() ), $data['refund_ids'] );
+			$this->assertEqualsCanonicalizing( $ledger_rows, $data['ledger_rows'] );
+			$this->assertSame(
+				array(
+					array(
+						'id' => $refund->get_id(),
+						'updated_at_gmt' => $refund_modified,
+					),
+				),
+				$data['refunds']
+			);
 			$this->assertSame( array( $movement_id ), array_column( $data['movements'], 'id' ) );
 			$this->assertSame( 2, $data['sales_count'] );
 			if ( $can_report ) {
 				$this->assertSame(
 					array(
-						'cash' => '125.0000',
+						'cash' => '123.0000',
 						'card' => '10.0000',
 					),
 					$data['expected']
@@ -360,6 +405,9 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$sighted = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
 		$this->assertArrayHasKey( 'expected', $sighted );
+		$this->assertSame( array(), $sighted['refund_ids'] );
+		$this->assertSame( array(), $sighted['ledger_rows'] );
+		$this->assertSame( array(), $sighted['refunds'] );
 		$blind = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		get_user_by( 'id', $blind )->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $blind );
@@ -370,6 +418,9 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'sales_count', $data );
 		$this->assertSame( array(), $data['order_ids'] );
 		$this->assertSame( array(), $data['ledger_row_ids'] );
+		$this->assertSame( array(), $data['refund_ids'] );
+		$this->assertSame( array(), $data['ledger_rows'] );
+		$this->assertSame( array(), $data['refunds'] );
 		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $data['as_of_gmt'] );
 		$this->assertLessThanOrEqual( time() + 1, strtotime( $data['as_of_gmt'] . ' UTC' ) );
 		$this->assertArrayHasKey( 'movements', $data );

@@ -87,6 +87,42 @@ final class Session_Figures {
 		return array_column( array_merge( array(), ...array_values( $this->legs() ) ), 'id' );
 	}
 
+	/** Refund membership of the same memoised snapshot used by expected balances. */
+	public function refund_ids(): array {
+		return array_keys( $this->refunds() );
+	}
+
+	/** Versions of the captured ledger rows used by the shared snapshot. */
+	public function ledger_rows(): array {
+		return array_map(
+			static function ( $row ) {
+				return array(
+					'id' => $row['id'],
+					'updated_at_gmt' => $row['updated_at_gmt'],
+					'status' => $row['status'],
+				);
+			},
+			array_merge( array(), ...array_values( $this->legs() ) )
+		);
+	}
+
+	/** Refund versions from the same memoised objects used by expected balances. */
+	public function refund_versions(): array {
+		return array_values(
+			array_map(
+				static function ( $entry ) {
+					$refund = $entry['refund'];
+					$modified = $refund->get_date_modified( 'edit' );
+					return array(
+						'id' => $refund->get_id(),
+						'updated_at_gmt' => $modified ? gmdate( 'Y-m-d H:i:s', $modified->getTimestamp() ) : null,
+					);
+				},
+				$this->refunds()
+			)
+		);
+	}
+
 	/** Split unsigned amounts for closure period and perpetual totals. */
 	public function period_amounts(): array {
 		$totals = array(

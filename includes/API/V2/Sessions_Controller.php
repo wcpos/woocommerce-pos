@@ -130,7 +130,11 @@ class Sessions_Controller extends \WP_REST_Controller {
 				'movements' => $figures->movements(),
 				'sales_count' => $figures->sales_count(),
 				'order_ids' => $figures->order_ids(),
+				// Keep the plain ID list for one release alongside the versioned rows.
 				'ledger_row_ids' => $figures->ledger_row_ids(),
+				'ledger_rows' => $figures->ledger_rows(),
+				'refund_ids' => $figures->refund_ids(),
+				'refunds' => $figures->refund_versions(),
 				// Server-clock boundary of this snapshot (see above); never the device clock.
 				'as_of_gmt' => $as_of_gmt,
 			);
