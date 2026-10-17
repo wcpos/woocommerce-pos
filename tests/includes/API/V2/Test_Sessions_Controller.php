@@ -338,8 +338,8 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** A settlement in another session changes the allocation version, not the refund version. */
-	public function test_refund_allocation_settles_between_details_changes_version(): void {
+	/** Only this refund's tender split changes its allocation version, not unrelated ledger edits. */
+	public function test_refund_allocation_version_ignores_unrelated_changes_but_tracks_settlement(): void {
 		// Arrange.
 		$session = $this->post( 'sessions', $this->fields() )->get_data();
 		$order = new \WC_Order();
@@ -383,6 +383,42 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$before = $before->get_data();
 		$figures = Session_Figures::for_session( $session );
 		$memoised = $figures->refund_versions();
+
+		// Act. Add an unrelated payment and settle another refund on the same parent.
+		$other_refund = new \WC_Order_Refund();
+		$other_refund->set_parent_id( $order->get_id() );
+		$other_refund->set_amount( '1' );
+		$other_refund->save();
+		$rows[] = array(
+			'id' => wp_generate_uuid4(),
+			'method_id' => 'pos_cash',
+			'kind' => 'cash',
+			'amount' => '10',
+			'status' => 'captured',
+			'session_id' => $rows[0]['session_id'],
+		);
+		$rows[0]['updated_at_gmt'] = '2026-09-11 09:31:00';
+		$rows[0]['refunds'][] = array(
+			'id' => $other_refund->get_id(),
+			'amount' => '1',
+			'status' => 'succeeded',
+		);
+		$order->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => Ledger::SCHEMA,
+					'payments' => $rows,
+				)
+			)
+		);
+		$order->save_meta_data();
+		$unrelated = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );
+
+		// Assert. Neither this refund's version nor its expected balance changed.
+		$this->assertSame( 200, $unrelated->get_status() );
+		$this->assertSame( $before['refunds'], $unrelated->get_data()['refunds'] );
+		$this->assertSame( $before['expected'], $unrelated->get_data()['expected'] );
 
 		// Act. Settle within the same clock second; neither timestamp changes.
 		$rows[0]['refunds'][0]['status'] = 'succeeded';

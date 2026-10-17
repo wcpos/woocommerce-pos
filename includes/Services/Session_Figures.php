@@ -113,11 +113,15 @@ final class Session_Figures {
 				function ( $refund ) {
 					$modified = $refund->get_date_modified( 'edit' );
 					$rows = $this->refund_parent_rows( $refund );
+					// Version only this refund's split; unrelated parent-ledger edits must not invalidate it.
+					$allocation = null === $rows ? null : array(
+						'amount' => $refund->get_amount(),
+						'rows' => self::refund_tender_rows( $refund, $rows ),
+					);
 					return array(
 						'id' => $refund->get_id(),
 						'updated_at_gmt' => $modified ? gmdate( 'Y-m-d H:i:s', $modified->getTimestamp() ) : null,
-						// Hash the inputs, not the resolved tenders: blind reads never attribute amounts.
-						'allocation_version' => null === $rows ? null : substr( md5( wp_json_encode( $rows ) ), 0, 12 ),
+						'allocation_version' => null === $allocation ? null : substr( md5( wp_json_encode( $allocation ) ), 0, 12 ),
 					);
 				},
 				$this->refund_records()
