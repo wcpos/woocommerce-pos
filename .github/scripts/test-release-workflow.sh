@@ -88,5 +88,32 @@ check_decision 'older tag recovers past the newest tag'  1.10.12 1.10.12 v1.10.1
 check_decision 'published release with zip is refused'   1.10.13 1.10.13 v1.10.13 0 false 'woocommerce-pos.zip' fail
 check_decision 'missing release is never created'        1.10.13 1.10.13 v1.10.13 1 '' '' fail
 check_decision 'header mismatch is refused'              1.10.12 1.10.13 v1.10.13 0 false '' fail
+# Structure: the push checkout pins the triggering commit (main can advance before the
+# checkout runs, and the draft's --target must name the built commit), and the release-note
+# scripts are read from a separate checkout of the workflow revision so a recovery of an older
+# tag whose tree predates them still works.
+WORKFLOW_TEXT=$(cat "$SCRIPT_DIR/../workflows/release.yml")
+check_structure() {
+  local name=$1 pattern=$2
+  # Bash substring match: grep is stubbed on PATH above.
+  if [[ "$WORKFLOW_TEXT" == *"$pattern"* ]]; then
+    echo "ok: $name"
+  else
+    echo "FAIL: $name (missing: $pattern)"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+check_structure 'push checkout pins github.sha'            "ref: \${{ inputs.version && format('v{0}', inputs.version) || github.sha }}"
+check_structure 'tooling checkout is the workflow revision' 'path: .release-tooling'
+# The tooling checkout must follow the release checkout: a root checkout into a directory
+# that is not yet a repository deletes its contents, nested checkout included.
+if [[ "$WORKFLOW_TEXT" == *'name: 🏗 Checkout code'*'name: 🧰 Checkout release tooling'* ]]; then
+  echo 'ok: tooling checkout follows the release checkout'
+else
+  echo 'FAIL: tooling checkout follows the release checkout'
+  FAILURES=$((FAILURES + 1))
+fi
+check_structure 'release notes run from the tooling checkout' '.release-tooling/.github/scripts/readme-changelog-section.sh'
+check_structure 'release-note test runs from the tooling checkout' '.release-tooling/.github/scripts/test-readme-changelog-section.sh'
 [[ "$FAILURES" == 0 ]] || exit 1
 echo 'PASS: release workflow decisions'
