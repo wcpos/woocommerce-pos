@@ -95,11 +95,11 @@ class Sessions_Controller extends \WP_REST_Controller {
 			}
 			if ( $row ) {
 				$store->log_replay( $row );
-				return new WP_REST_Response( $row );
+				return new WP_REST_Response( $this->visible_row( $row ) );
 			}
 			$fields = $movement ? $this->movement_fields( $request ) : $this->opening_fields( $request );
 			$result = is_wp_error( $fields ) ? $fields : $store->create( $fields );
-			return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 201 );
+			return is_wp_error( $result ) ? $result : new WP_REST_Response( $this->visible_row( $result ), 201 );
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_session_write_failed', 500 );
 		}
@@ -130,7 +130,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( current_user_can( 'view_woocommerce_pos_reports' ) ) {
 				$detail['expected'] = $figures->expected();
 			}
-			return new WP_REST_Response( $row + $detail );
+			return new WP_REST_Response( $this->visible_row( $row + $detail ) );
 		}
 		$args = array(
 			'status' => $request['status'] ?? 'all',
@@ -151,7 +151,18 @@ class Sessions_Controller extends \WP_REST_Controller {
 			}
 			$args['register_id'] = strtolower( $request['register_id'] );
 		}
-		return new WP_REST_Response( $store->list( Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_sessions_list_args', $args, $request ) ) ) );
+		return new WP_REST_Response( array_map( array( $this, 'visible_row' ), $store->list( Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_sessions_list_args', $args, $request ) ) ) ) );
+	}
+
+	/** Keep approval figures blind even when a manager authenticated for the caller.
+	 *
+	 * @param array $row Response row.
+	 */
+	private function visible_row( array $row ): array {
+		if ( ! current_user_can( 'view_woocommerce_pos_reports' ) ) {
+			unset( $row['approved_expected'] );
+		}
+		return $row;
 	}
 
 	/** Validate an opening; the session's store is its register's, and the register must be in reach.
@@ -216,7 +227,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			return $this->error( 'rest_invalid_param', 400, 'counted' );
 		}
 		$result = $store->approve( $row, $user->ID, $counted );
-		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $this->visible_row( $result ) );
 	}
 
 	/** Validate a state transition and optional second-user authorization.
@@ -229,7 +240,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 	private function change_status( $request, array $row, Register_Session_Store $store ) {
 		$status = $request['status'];
 		if ( $status === $row['status'] ) {
-			return new WP_REST_Response( $row );
+			return new WP_REST_Response( $this->visible_row( $row ) );
 		}
 		$allowed = array(
 			'open' => array( 'counting' ),
@@ -272,7 +283,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$fields['approved_by'] = $user;
 		}
 		$result = $store->transition( $row, $fields );
-		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $this->visible_row( $result ) );
 	}
 
 	/** Validate a movement and its same-session void target.
