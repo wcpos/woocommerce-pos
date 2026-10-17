@@ -224,6 +224,7 @@ class Frontend {
 
 		$site_uuid        = wcpos_get_site_uuid();
 		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/sqlite.worker.js' );
+		$worker_version   = false === $opfs_worker_hash ? null : Web_Bundle_Loader_Config::worker_rxdb_version( PLUGIN_PATH . 'assets/js/sqlite.worker.js', $opfs_worker_hash );
 		$sqlite_wasm_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/sqlite3.wasm' );
 		// Hash the concatenated worker and WASM SHA-256 digests so either asset busts
 		// the manifest and worker caches together (wcpos/monorepo#2242).
@@ -235,7 +236,24 @@ class Frontend {
 		// must match what /cashier and /customers serve, or the client forks identities.
 		$user_uuid = Pos_Uuid::ensure_user_uuid( $user );
 
+		$pro_version  = \defined( '\WCPOS\WooCommercePOSPro\VERSION' ) ? (string) \constant( '\WCPOS\WooCommercePOSPro\VERSION' ) : null;
+		$manifest_url = Web_Bundle_Loader_Config::uses_manifest( $bundle_ref, $development, $bundle_overridden )
+			? Web_Bundle_Loader_Config::manifest_url( $bundle_ref, VERSION, $pro_version, $worker_version, null !== $pro_version || Web_Bundle_Loader_Config::is_prerelease( VERSION ) ? $site_uuid : null )
+			: null;
+
 		$vars = array(
+			'loader'         => array(
+				'manifest_url'      => $manifest_url,
+				'fallback_manifest' => $cdn_base_url . '/metadata.json?v=' . $opfs_worker_hash,
+				'fallback_base'     => $cdn_base_url,
+				'beacon_url'        => Web_Bundle_Loader_Config::BEACON_URL,
+				'timeout_ms'        => Web_Bundle_Loader_Config::MANIFEST_TIMEOUT_MS,
+				'lane'              => 'next' === $bundle_ref ? 'next' : ( preg_match( '/^[0-9]+\.[0-9]+$/', $bundle_ref ) ? $bundle_ref : null ),
+				'worker_version'    => $worker_version,
+				'plugin_version'    => VERSION,
+				'pro_version'       => $pro_version,
+				'signing_keys'      => Web_Bundle_Loader_Config::SIGNING_PUBLIC_KEYS_JWK,
+			),
 			'version'        => VERSION,
 			'manifest'       => $cdn_base_url . '/metadata.json?v=' . $opfs_worker_hash,
 			'homepage'       => woocommerce_pos_url(),
@@ -288,40 +306,9 @@ class Frontend {
 			PLUGIN_URL . 'assets/js/sqlite.worker.js'
 		);
 
-		// getScript helper and initialProps.
+		// Frontend globals and initialProps.
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
 		echo "<script>
-    function getScript(source, callback, onError) {
-        var script = document.createElement('script');
-        script.async = true;
-        script.onload = script.onreadystatechange = function(_, isAbort) {
-            if (isAbort || !script.readyState || /loaded|complete/.test(script.readyState)) {
-                script.onload = script.onreadystatechange = null;
-                script = undefined;
-                if (!isAbort && callback) setTimeout(callback, 0);
-            }
-        };
-        script.onerror = function() {
-            script.onload = script.onreadystatechange = null;
-            if (onError) onError(new Error('Failed to load script: ' + source));
-        };
-        script.src = source;
-        document.head.appendChild(script);
-    }
-
-    function loadCSS(source, callback) {
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = source;
-        link.onload = function() {
-            if (callback) callback();
-        };
-        link.onerror = function() {
-            console.error('Failed to load CSS file:', source);
-        };
-        document.head.appendChild(link);
-    }
-
     var idbWorker = '{$idb_worker}';
     var opfsWorker = '{$opfs_worker}';
     var initialProps = {$initial_props};
@@ -329,49 +316,8 @@ class Frontend {
 	var baseUrl = '{$wcpos_base_path}';
     </script>" . "\n";
 
-		echo "<script>
-		// no-cache: revalidate the manifest with the CDN (ETag/304) on every boot.
-		// jsDelivr serves it with max-age=604800 and the ?v= buster only changes on
-		// plugin deploys, so a default fetch pins users to a stale bundle for up to
-		// 7 days after a web-bundle publish.
-		var request = new Request(initialProps.manifest, { cache: 'no-cache' });
-
-		window.fetch(request)
-				.then(function(response) { return response.json(); })
-				.then(function(data) {
-						// v1 metadata uses 'bundles' array (metro runtime, common, entry)
-						// v0 fallback uses single 'bundle' string
-						var webMeta = (data && data.fileMetadata && data.fileMetadata.web) || {};
-						var bundles = Array.isArray(webMeta.bundles)
-								? webMeta.bundles.filter(Boolean)
-								: (webMeta.bundle ? [webMeta.bundle] : []);
-
-						if (!bundles.length) {
-								throw new Error('No JavaScript bundles declared in metadata.json');
-						}
-
-						function loadBundles(index) {
-								if (index >= bundles.length) return;
-								var source = cdnBaseUrl + '/' + bundles[index];
-								getScript(source, function() {
-										loadBundles(index + 1);
-								}, function(error) {
-										console.error(error.message);
-								});
-						}
-
-						if (data.fileMetadata.web.css) {
-								loadCSS(cdnBaseUrl + '/' + data.fileMetadata.web.css, function() {
-										loadBundles(0);
-								});
-						} else {
-								loadBundles(0);
-						}
-				})
-				.catch(function(error) {
-						console.error('Error fetching manifest:', error);
-				});
-		</script>" . "\n";
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Trusted, bundled loader printed inline.
+		echo '<script>' . file_get_contents( PLUGIN_PATH . 'assets/js/pos-loader.js' ) . "</script>\n";
 	}
 
 	/**
