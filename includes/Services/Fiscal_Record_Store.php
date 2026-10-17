@@ -29,6 +29,30 @@ final class Fiscal_Record_Store {
 	/** Match the receipt sequence's bounded lock wait. */
 	private const LOCK_WAIT_SECONDS = 5;
 
+	/** Nested owners on this store release only after the outer transaction ends.
+	 *
+	 * @var int
+	 */
+	private $sequence_lock_depth = 0;
+
+	/** Acquire before starting a transaction; pair with unlock_sequence() in finally. */
+	public function lock_sequence(): bool {
+		global $wpdb;
+		if ( 0 === $this->sequence_lock_depth && 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::SEQUENCE_LOCK, self::LOCK_WAIT_SECONDS ) ) ) {
+			return false;
+		}
+		++$this->sequence_lock_depth;
+		return true;
+	}
+
+	/** Release after commit/rollback; record() releases only its nested ownership. */
+	public function unlock_sequence(): void {
+		global $wpdb;
+		if ( $this->sequence_lock_depth > 0 && 0 === --$this->sequence_lock_depth ) {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::SEQUENCE_LOCK ) );
+		}
+	}
+
 	/**
 	 * Build the portable schema.
 	 *
@@ -115,7 +139,7 @@ final class Fiscal_Record_Store {
 			return null;
 		}
 		$this->ensure_installed();
-		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::SEQUENCE_LOCK, self::LOCK_WAIT_SECONDS ) ) ) {
+		if ( ! $this->lock_sequence() ) {
 			Logger::log( 'Unable to acquire fiscal record sequence lock.' );
 			return null;
 		}
@@ -168,7 +192,7 @@ final class Fiscal_Record_Store {
 			Logger::log( $e->getMessage() );
 			return null;
 		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::SEQUENCE_LOCK ) );
+			$this->unlock_sequence();
 		}
 	}
 
@@ -187,15 +211,14 @@ final class Fiscal_Record_Store {
 	 * @throws \RuntimeException When the lock or seed cannot be obtained.
 	 */
 	public function seed_sale_sequence(): int {
-		global $wpdb;
 		$this->ensure_installed();
-		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::SEQUENCE_LOCK, self::LOCK_WAIT_SECONDS ) ) ) {
+		if ( ! $this->lock_sequence() ) {
 			throw new \RuntimeException( 'Unable to acquire fiscal record sequence lock.' );
 		}
 		try {
 			return $this->seed_sale_sequence_locked();
 		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::SEQUENCE_LOCK ) );
+			$this->unlock_sequence();
 		}
 	}
 

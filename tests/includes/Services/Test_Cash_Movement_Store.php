@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WP_UnitTestCase;
 
 /** Tests write-once movements and atomic void refusal. */
@@ -145,6 +146,82 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 					'closure_id' => $closure['id'],
 				)
 			)
+		);
+	}
+
+	/**
+	 * A competing connection cannot allocate until the movement commits or rolls back.
+	 *
+	 * @dataProvider sequence_transaction_outcomes
+	 * @param bool $fail_commit Whether to force a rollback after the fiscal write.
+	 */
+	public function test_late_movements_hold_sequence_until_transaction_ends( bool $fail_commit ): void {
+		global $wpdb;
+		$sessions = array( $this->closure_session(), $this->closure_session() );
+		foreach ( $sessions as $session ) {
+			( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		}
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $sessions[0]['id'],
+			'type' => 'paid_in',
+			'amount' => '7',
+			'reason' => 'Late arrival',
+			'actor' => 1,
+			'created_at_gmt' => '2026-09-11 10:00:00',
+		);
+		$store = new Cash_Movement_Store();
+		$fiscal = new Fiscal_Record_Store();
+		$before = (int) get_option( 'wcpos_fiscal_sequence_late_movement', 0 );
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$attempts = array();
+		$probe = static function ( $sql ) use ( $contender, &$attempts, $fail_commit ) {
+			if ( in_array( $sql, array( 'COMMIT', 'ROLLBACK' ), true ) ) {
+				// Interleave the second writer's first step before the outer transaction ends.
+				$attempts[] = (int) $contender->get_var( "SELECT GET_LOCK( 'wcpos_fiscal_sequence_lock', 0 )" );
+				$contender->get_var( "SELECT RELEASE_LOCK( 'wcpos_fiscal_sequence_lock' )" );
+			}
+			return $fail_commit && 'COMMIT' === $sql ? 'INVALID MOVEMENT COMMIT' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $probe );
+		try {
+			try {
+				$this->assertIsArray( $store->create( $fields ) );
+				$this->assertFalse( $fail_commit, 'Expected commit failure.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertTrue( $fail_commit );
+				$this->assertSame( 'Movement commit failed.', $error->getMessage() );
+			}
+		} finally {
+			remove_filter( 'query', $probe );
+			$wpdb->suppress_errors( $previous );
+			$available = (int) $contender->get_var( "SELECT GET_LOCK( 'wcpos_fiscal_sequence_lock', 0 )" );
+			$contender->get_var( "SELECT RELEASE_LOCK( 'wcpos_fiscal_sequence_lock' )" );
+			$contender->close();
+		}
+		$this->assertSame( $fail_commit ? array( 0, 0 ) : array( 0 ), $attempts );
+		$this->assertSame( 1, $available );
+		$first = $fiscal->find_by_source( 'late_movement', $fields['id'] );
+		if ( $fail_commit ) {
+			$this->assertNull( $store->get( $fields['id'] ) );
+			$this->assertNull( $first );
+		} else {
+			$this->assertSame( $before + 1, $first['number'] );
+		}
+		// Resume the other register's writer after the first has released serialization.
+		$fields['id'] = wp_generate_uuid4();
+		$fields['session_id'] = $sessions[1]['id'];
+		$this->assertIsArray( $store->create( $fields ) );
+		$second = $fiscal->find_by_source( 'late_movement', $fields['id'] );
+		$this->assertSame( $before + ( $fail_commit ? 1 : 2 ), $second['number'] );
+	}
+
+	/** Transaction exits that must retain sequence ownership. */
+	public function sequence_transaction_outcomes(): array {
+		return array(
+			'commit' => array( false ),
+			'rollback' => array( true ),
 		);
 	}
 }
