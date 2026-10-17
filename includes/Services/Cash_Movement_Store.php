@@ -78,6 +78,7 @@ final class Cash_Movement_Store {
 	 * @param array $fields Movement fields.
 	 * @return array|\WP_Error
 	 * @throws \RuntimeException On database failure.
+	 * @throws \Throwable On unexpected failure, after rolling back the transaction.
 	 */
 	public function create( array $fields ) {
 		global $wpdb;
@@ -107,11 +108,17 @@ final class Cash_Movement_Store {
 			);
 			throw new \RuntimeException( 'Movement register lock failed.' );
 		}
+		$fiscal = new Fiscal_Record_Store();
+		$sequence_locked = false;
 		$transaction = false;
 		try {
 			$closure = ( new Closure_Store() )->for_session( $fields['session_id'] );
 			if ( $closure ) {
-				( new Fiscal_Record_Store() )->ensure_installed();
+				$fiscal->ensure_installed();
+				$sequence_locked = $fiscal->lock_sequence();
+				if ( ! $sequence_locked ) {
+					throw new \RuntimeException( 'Unable to acquire fiscal record sequence lock.' );
+				}
 			}
 			$void = 'void' === $fields['type'];
 			if ( $void || null !== $closure ) {
@@ -153,7 +160,7 @@ final class Cash_Movement_Store {
 					return new \WP_Error( 'wcpos_movement_void_refused', __( 'The movement has already been voided or is unavailable.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 				}
 			}
-			if ( $closure && null === ( new Fiscal_Record_Store() )->record(
+			if ( $closure && null === $fiscal->record(
 				array(
 					'type' => 'late_movement',
 					'source_id' => $fields['id'],
@@ -172,7 +179,7 @@ final class Cash_Movement_Store {
 					throw new \RuntimeException( 'Movement commit failed.' );
 				}
 			}
-		} catch ( \RuntimeException $error ) {
+		} catch ( \Throwable $error ) {
 			if ( $transaction ) {
 				$wpdb->query( 'ROLLBACK' );
 			}
@@ -190,6 +197,9 @@ final class Cash_Movement_Store {
 			);
 			throw $error;
 		} finally {
+			if ( $sequence_locked ) {
+				$fiscal->unlock_sequence();
+			}
 			if ( $locked ) {
 				( new Register_Store() )->unlock( $register );
 			}
