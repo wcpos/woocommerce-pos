@@ -63,6 +63,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		'If-None-Match',
 		'X-WCPOS-Protocol',
 		'X-WCPOS-Client',
+		'X-WCPOS-Instance',
 	);
 
 	/**
@@ -98,6 +99,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		'X-WCPOS-Store',
 		'X-WCPOS-Protocol',
 		'X-WCPOS-Client',
+		'X-WCPOS-Instance',
 	);
 
 	/**

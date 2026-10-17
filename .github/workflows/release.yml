@@ -27,9 +27,24 @@ jobs:
       - name: 🏗 Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # On a manual run, build the tag the release points at, not the
-          # branch this workflow definition came from.
-          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.ref }}
+          # On a manual run, build the tag the release points at, not the branch this
+          # workflow definition came from. On a push, pin the triggering commit: `main`
+          # can advance between the event and this checkout, and the draft's --target
+          # below must name the commit the ZIP was actually built from.
+          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.sha }}
+
+      # The release-note scripts come from the WORKFLOW revision, checked out on their own
+      # AFTER the release tree (a root checkout into a non-repository directory wipes it),
+      # because a manual recovery of an older release checks out a tag whose tree predates
+      # them (dropped Codex finding on #2003: 1.10.13's tag has no .github/scripts). The
+      # nested directory starts with a dot so .distignore keeps it out of the ZIP.
+      - name: 🧰 Checkout release tooling (workflow revision)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tooling
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
 
       - name: 🔖 Check if version has changed
         id: check_version
@@ -99,7 +114,7 @@ jobs:
 
       - name: 🧪 Test the release-notes script
         if: steps.check_version.outputs.release == 'true'
-        run: bash .github/scripts/test-readme-changelog-section.sh
+        run: bash "$GITHUB_WORKSPACE/.release-tooling/.github/scripts/test-readme-changelog-section.sh"
 
       # The release body is the readme.txt changelog entry for this version, written on EVERY
       # run (create, reuse, manual recovery) so a release can never go out with empty notes —
@@ -115,7 +130,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          bash .github/scripts/readme-changelog-section.sh "$VERSION" readme.txt > "$RUNNER_TEMP/release-notes.md"
+          bash "$GITHUB_WORKSPACE/.release-tooling/.github/scripts/readme-changelog-section.sh" "$VERSION" readme.txt > "$RUNNER_TEMP/release-notes.md"
           if [[ "${{ github.event_name }}" == "push" ]]; then
             gh release edit "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --target "$GITHUB_SHA"
           else

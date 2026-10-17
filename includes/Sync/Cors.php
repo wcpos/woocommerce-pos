@@ -41,7 +41,7 @@ final class Cors {
 	 * new client headers through preflight reflection, so adding a name only
 	 * masks a reflection bug, while removing one narrows the degradation floor
 	 * used when announcements are stripped and by old preflight caches.
-	 * `X-WCPOS-Protocol` and `X-WCPOS-Client` (free#1760) are the last additions.
+	 * Exception: X-WCPOS-Instance is explicitly registered for per-client integrity streaks.
 	 *
 	 * - `Idempotency-Key` / `If-Match` — the v2 write path's standard-header
 	 *   mirror ({@see Header_Mirror::HEADERS}).
@@ -64,6 +64,7 @@ final class Cors {
 				Store_Scope::HEADER,
 				'X-WCPOS-Protocol',
 				'X-WCPOS-Client',
+				'X-WCPOS-Instance',
 			)
 		);
 	}
