@@ -29,7 +29,8 @@ final class Api {
 	// 6: order journal rows carry no revision value (#1757); the upgrade blanks pre-#1746 stored hashes and 'deleted' markers.
 	// 7: device business-day stamps on sessions and closures, with a site-timezone backfill.
 	// 8: fiscal corrections track the closure carrying their perpetual deltas.
-	public const SCHEMA_VERSION  = '8';
+	// 9: sessions bind manager approval to counted and expected snapshots.
+	public const SCHEMA_VERSION  = '9';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

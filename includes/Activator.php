@@ -234,7 +234,7 @@ class Activator {
 	/**
 	 * Install the sync store and latch its aggregate schema version after verification.
 	 *
-	 * @throws \RuntimeException On fiscal carry schema upgrade failure.
+	 * @throws \RuntimeException On fiscal carry or approval snapshot schema upgrade failure.
 	 */
 	public function install_sync_schema(): void {
 		$previous_schema = get_option( Sync_Api::SCHEMA_OPTION, null );
@@ -260,6 +260,22 @@ class Activator {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed definition; DDL runs outside closure transactions.
 			if ( null === $column && false === $wpdb->query( "ALTER TABLE {$table} ADD carried_by_closure_id CHAR(36) NULL" ) ) {
 				throw new \RuntimeException( 'Fiscal carry column upgrade failed.' );
+			}
+		}
+
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '9', '<' ) ) {
+			global $wpdb;
+			$table = ( new Register_Session_Store() )->table_name();
+			foreach ( array( 'approved_counted', 'approved_expected' ) as $name ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed column names.
+				$column = $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE '{$name}'" );
+				if ( '' !== $wpdb->last_error ) {
+					throw new \RuntimeException( 'Approval snapshot column read failed.' );
+				}
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed definitions; DDL runs outside closure transactions.
+				if ( null === $column && false === $wpdb->query( "ALTER TABLE {$table} ADD {$name} LONGTEXT NULL" ) ) {
+					throw new \RuntimeException( 'Approval snapshot column upgrade failed.' );
+				}
 			}
 		}
 

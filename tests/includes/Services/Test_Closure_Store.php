@@ -170,6 +170,49 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Existing sessions gain both approval snapshots without repeating DDL. */
+	public function test_approval_schema_upgrade_adds_columns_once(): void {
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$store->install();
+		$table = $store->table_name();
+		$schema = get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION );
+		$activator = new \WCPOS\WooCommercePOS\Activator();
+		$alterations = 0;
+		$observe = static function ( $sql ) use ( $table, &$alterations ) {
+			if ( 0 === strpos( $sql, "ALTER TABLE {$table}" ) ) {
+				++$alterations;
+			}
+			return $sql;
+		};
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed columns.
+			$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$table} DROP COLUMN approved_counted, DROP COLUMN approved_expected" ) );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '8' );
+			$activator->install_sync_schema();
+			foreach ( array( 'approved_counted', 'approved_expected' ) as $column ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed columns.
+				$definition = $wpdb->get_row( "SHOW COLUMNS FROM {$table} LIKE '{$column}'", ARRAY_A );
+				$this->assertNotNull( $definition );
+				$this->assertSame( 'longtext', $definition['Type'] );
+				$this->assertSame( 'YES', $definition['Null'] );
+			}
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			add_filter( 'query', $observe );
+			$activator->install_sync_schema();
+			$this->assertSame( 0, $alterations );
+		} finally {
+			remove_filter( 'query', $observe );
+			foreach ( array( 'approved_counted', 'approved_expected' ) as $column ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Restore schema even when testing the unfixed installer.
+				if ( null === $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE '{$column}'" ) ) {
+					$wpdb->query( "ALTER TABLE {$table} ADD {$column} LONGTEXT NULL" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed columns.
+				}
+			}
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, $schema );
+		}
+	}
+
 	/** The projection must not inherit either fiscal list page limit. */
 	public function test_corrections_reads_more_than_one_maximum_page(): void {
 		global $wpdb;
