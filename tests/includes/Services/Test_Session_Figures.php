@@ -15,16 +15,22 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
-	/** Same-second financial edits must change the captured leg's snapshot version. */
-	public function test_ledger_rows_same_second_amount_change_changes_version(): void {
+	/**
+	 * Same-second financial edits must change the opaque snapshot version.
+	 *
+	 * @testWith [0, "amount", "55.0000"]
+	 *           [1, "method", "voucher"]
+	 *           [0, "refunded_amount", "15.0000"]
+	 */
+	public function test_ledger_rows_same_second_financial_change_changes_version( int $index, string $field, string $value ): void {
 		// Arrange.
 		$session = $this->closure_session();
 		$order = $this->closure_ledger( $session );
 		$before = Session_Figures::for_session( $session )->ledger_rows();
 		$rows = Ledger::instance()->read( $order );
 
-		// Act. Preserve the timestamp and status while increasing the captured amount.
-		$rows[0]['amount'] = '55.0000';
+		// Act. Preserve the timestamp and status while changing a financial input.
+		$rows[ $index ][ $field ] = $value;
 		$order->update_meta_data(
 			Ledger::META_KEY,
 			wp_json_encode(
@@ -38,14 +44,11 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$after = Session_Figures::for_session( $session )->ledger_rows();
 
 		// Assert.
-		$this->assertSame( $before[0]['updated_at_gmt'], $after[0]['updated_at_gmt'] );
-		$this->assertSame( 'captured', $after[0]['status'] );
-		$this->assertNotSame( $before[0], $after[0] );
-		$this->assertSame( '50.00', $before[0]['amount'] );
-		$this->assertSame( '55.0000', $after[0]['amount'] );
-		$this->assertSame( '10', $after[0]['refunded_amount'] );
-		$this->assertSame( 'pos_cash', $after[0]['method_id'] );
-		$this->assertSame( 'cash', $after[0]['kind'] );
+		$this->assertSame( $before[ $index ]['updated_at_gmt'], $after[ $index ]['updated_at_gmt'] );
+		$this->assertSame( 'captured', $after[ $index ]['status'] );
+		$this->assertNotSame( $before[ $index ], $after[ $index ] );
+		$this->assertArrayHasKey( 'version', $before[ $index ] );
+		$this->assertNotSame( $before[ $index ]['version'], $after[ $index ]['version'] );
 	}
 
 	/** Legacy rows need not carry a timestamp; only captured rows enter the snapshot. */
@@ -70,16 +73,14 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$versions = Session_Figures::for_session( $session )->ledger_rows();
 
 		// Assert.
+		$this->assertNotEmpty( $versions[0]['version'] );
+		unset( $versions[0]['version'] );
 		$this->assertSame(
 			array(
 				array(
 					'id' => $rows[0]['id'],
 					'updated_at_gmt' => null,
 					'status' => 'captured',
-					'amount' => '50.00',
-					'refunded_amount' => '10',
-					'method_id' => 'pos_cash',
-					'kind' => 'cash',
 				),
 			),
 			$versions

@@ -100,10 +100,19 @@ final class Session_Figures {
 					'id' => $row['id'],
 					'updated_at_gmt' => $row['updated_at_gmt'] ?? null,
 					'status' => $row['status'],
-					'amount' => $row['amount'] ?? null,
-					'refunded_amount' => $row['refunded_amount'] ?? null,
-					'method_id' => $row['method_id'] ?? null,
-					'kind' => $row['kind'] ?? null,
+					// Detect financial edits without exposing tender amounts to blind counters.
+					'version' => sha1(
+						wp_json_encode(
+							array(
+								$row['id'],
+								$row['status'],
+								$row['amount'] ?? null,
+								$row['refunded_amount'] ?? null,
+								self::tender_key( $row ),
+								$row['updated_at_gmt'] ?? null,
+							)
+						)
+					),
 				);
 			},
 			array_merge( array(), ...array_values( $this->legs() ) )

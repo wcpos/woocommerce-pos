@@ -270,10 +270,6 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 					'id' => $row['id'],
 					'updated_at_gmt' => '2026-09-11 09:30:00',
 					'status' => 'captured',
-					'amount' => '10.00',
-					'refunded_amount' => '0.00',
-					'method_id' => $row['method_id'],
-					'kind' => $row['kind'],
 				);
 			}
 			unset( $row );
@@ -321,6 +317,14 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertEqualsCanonicalizing( $order_ids, $data['order_ids'] );
 			$this->assertEqualsCanonicalizing( $ledger_row_ids, $data['ledger_row_ids'] );
 			$this->assertSame( array( $refund->get_id() ), $data['refund_ids'] );
+			foreach ( $data['ledger_rows'] as &$row ) {
+				foreach ( array( 'amount', 'refunded_amount', 'method_id', 'kind' ) as $field ) {
+					$this->assertArrayNotHasKey( $field, $row );
+				}
+				$this->assertMatchesRegularExpression( '/^[a-f0-9]{40}$/', $row['version'] );
+				unset( $row['version'] );
+			}
+			unset( $row );
 			$this->assertEqualsCanonicalizing( $ledger_rows, $data['ledger_rows'] );
 			$this->assertCount( 1, $data['refunds'] );
 			$this->assertSame( $refund->get_id(), $data['refunds'][0]['id'] );
