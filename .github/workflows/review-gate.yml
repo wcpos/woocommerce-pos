@@ -20,7 +20,7 @@ permissions:
 jobs:
   gate:
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
-    uses: wcpos/.github/.github/workflows/review-gate.yml@189027fa9321e55b31c8b2552b4002c562b15b2c # wcpos/.github main, 2026-10-17 (#13)
+    uses: wcpos/.github/.github/workflows/review-gate.yml@ce3ab7e40907cb8a410057deac595675f3260403 # wcpos/.github main, 2026-10-17 (#14)
     with:
       publish: false
       pr: ${{ inputs.pr || 0 }}
