@@ -666,12 +666,14 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '30.0000', $second['tax_vat_2_net'] );
 	}
 
-	/** A session hidden by the write filter cannot be closed. */
+	/** Uppercase UUIDs cannot bypass the write filter's normalized identity checks. */
 	public function test_closure_create_filtered_session_returns_404_without_write(): void {
 		$session = $this->closure_session();
 		$body = $this->body( $session );
-		$filter = static function ( $row, $request ) use ( $session ) {
-			return $row && $session['id'] === $row['id'] && $session['id'] === $request['session_id'] ? null : $row;
+		$body['id'] = strtoupper( $body['id'] );
+		$body['session_id'] = strtoupper( $body['session_id'] );
+		$filter = static function ( $row, $request ) use ( $session, $body ) {
+			return $row && $session['id'] === $row['id'] && $session['id'] === $request['session_id'] && strtolower( $body['id'] ) === $request['id'] ? null : $row;
 		};
 		add_filter( 'woocommerce_pos_session_row', $filter, 10, 2 );
 		try {
@@ -730,6 +732,47 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'wcpos_closure_not_found', $response->get_data()['code'] );
 		$this->assertSame( $row, ( new Closure_Store() )->get( $row['id'] ) );
+	}
+
+	/** A closure arriving after the first lookup must not bypass store reach. */
+	public function test_closure_create_concurrent_replay_outside_store_reach_returns_404(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$body = $this->body( $session );
+		$other = $this->closure_session();
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'store_id' => 789 ), array( 'id' => $other['id'] ) );
+		$fields = $this->closure_fields( $other );
+		$fields['id'] = $body['id'];
+		$insert = static function ( $row ) use ( $fields ) {
+			( new Closure_Store() )->create( $fields );
+			return $row;
+		};
+		$scope = static function () {
+			return array( 'store_id' => array( 456 ) );
+		};
+		add_filter( 'woocommerce_pos_session_row', $insert );
+		add_filter( Store_Reach::FILTER, $scope );
+		try {
+			$response = $this->post( 'closures', $body );
+		} finally {
+			remove_filter( 'woocommerce_pos_session_row', $insert );
+			remove_filter( Store_Reach::FILTER, $scope );
+		}
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_closure_not_found', $response->get_data()['code'] );
+		$this->assertSame( 789, ( new Closure_Store() )->get( $body['id'] )['store_id'] );
+		$this->assertSame( $session, ( new Register_Session_Store() )->get( $session['id'] ) );
+		$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
+	}
+
+	/** An absent id-only replay is indistinguishable from an out-of-reach one. */
+	public function test_closure_replay_unknown_id_returns_404_but_full_body_creates(): void {
+		$body = $this->body( $this->closure_session() );
+		$response = $this->post( 'closures', array( 'id' => $body['id'] ) );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_closure_not_found', $response->get_data()['code'] );
+		$this->assertNull( ( new Closure_Store() )->get( $body['id'] ) );
+		$this->assertSame( 201, $this->post( 'closures', $body )->get_status() );
 	}
 
 	/** Create replay print and recount. */

@@ -198,6 +198,7 @@ class Closures_Controller extends \WP_REST_Controller {
 				return $this->error( 'rest_invalid_param', 400 );
 			}
 			$id = strtolower( $request['id'] );
+			$request->set_param( 'id', $id );
 			$row = $store->get( $id );
 			if ( $row ) {
 				if ( ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
@@ -206,16 +207,24 @@ class Closures_Controller extends \WP_REST_Controller {
 				$store->log_replay( $row );
 				return new WP_REST_Response( $this->visible( $row ) );
 			}
+			// An id-only replay of a closure that is absent (or hidden) answers like a hidden one.
+			if ( null === $request->get_param( 'session_id' ) ) {
+				return $this->error( 'wcpos_closure_not_found', 404 );
+			}
 			$fields = $this->fields( $request );
 			if ( is_wp_error( $fields ) ) {
 				return $fields;
 			}
+			$request->set_param( 'session_id', $fields['session_id'] );
 			$session = apply_filters( 'woocommerce_pos_session_row', ( new Register_Session_Store() )->get( $fields['session_id'] ), $request );
 			if ( ! $session || ! Store_Reach::for_request( $request )->admits( $session['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
 			$created = false;
 			$row = $store->create( $fields, $created );
+			if ( ! is_wp_error( $row ) && ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+				return $this->error( 'wcpos_closure_not_found', 404 );
+			}
 			return is_wp_error( $row ) ? $row : new WP_REST_Response( $this->visible( $row ), $created ? 201 : 200 );
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_closure_write_failed', 500 );
