@@ -4,20 +4,26 @@ on:
     workflows: ["Review gate"]
     types: [completed]
 permissions:
+  actions: read
   statuses: write
   pull-requests: write
   contents: read
-concurrency:
-  group: review-gate-publish-${{ github.event.workflow_run.head_sha }}
-  cancel-in-progress: true
 jobs:
-  publish:
+  resolve:
     if: github.event.workflow_run.event != 'workflow_run'
-    strategy:
-      fail-fast: false
-      matrix:
-        pr: ${{ github.event.workflow_run.pull_requests[0].number && github.event.workflow_run.pull_requests.*.number || fromJSON('[0]') }}
-    uses: wcpos/.github/.github/workflows/review-gate.yml@07653d19695225dcbbe20c424baf95ee38a84080 # wcpos/.github main, 2026-10-17
+    uses: wcpos/.github/.github/workflows/review-gate.yml@6c94f94a768cbcc437c73a82b497bf7435fba18a # wcpos/.github main, 2026-10-17 (#12)
     with:
-      pr: ${{ matrix.pr }}
-      sha: ${{ !matrix.pr && github.event.workflow_run.head_sha || '' }}
+      resolve_only: true
+      publish: false
+      sha: ${{ github.event.workflow_run.head_sha }}
+      head_owner: ${{ github.event.workflow_run.head_repository.owner.login }}
+      head_branch: ${{ github.event.workflow_run.head_branch }}
+  publish:
+    needs: resolve
+    if: needs.resolve.outputs.sha != ''
+    concurrency:
+      group: review-gate-publish-${{ needs.resolve.outputs.sha }}
+      cancel-in-progress: true
+    uses: wcpos/.github/.github/workflows/review-gate.yml@6c94f94a768cbcc437c73a82b497bf7435fba18a # wcpos/.github main, 2026-10-17 (#12)
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}
