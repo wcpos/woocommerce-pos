@@ -1,114 +1,116 @@
 /** @vitest-environment jsdom */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-import { renderThermalPreview } from './thermal-renderer';
+import { renderThermalPreview } from "./thermal-renderer";
 
 function root(html: string): HTMLElement {
-	const div = document.createElement('div');
+	const div = document.createElement("div");
 	div.innerHTML = html;
 	const first = div.firstElementChild;
 	if (!first) {
-		throw new Error('renderThermalPreview returned no root element');
+		throw new Error("renderThermalPreview returned no root element");
 	}
 	return first as HTMLElement;
 }
 
-describe('renderThermalPreview canonical parity', () => {
-	it('renders the receipt paper width in ch and keeps star columns aligned', () => {
+describe("renderThermalPreview canonical parity", () => {
+	it("renders the receipt paper width in ch and keeps star columns aligned", () => {
 		const html = renderThermalPreview(
 			'<receipt paper-width="48"><row><col width="*">Subtotal</col><col width="14" align="right">$12.34</col></row></receipt>',
 			{},
 		);
 
-		expect(root(html).style.width).toBe('48ch');
-		expect(html).toContain('flex: 0 0 34ch');
-		expect(html).toContain('flex: 0 0 14ch');
+		expect(root(html).style.width).toBe("48ch");
+		expect(html).toContain("flex: 0 0 34ch");
+		expect(html).toContain("flex: 0 0 14ch");
 	});
 
-
-	it('falls back when numeric attributes are empty or whitespace', () => {
+	it("falls back when numeric attributes are empty or whitespace", () => {
 		const html = renderThermalPreview(
 			'<receipt paper-width=""><image src="https://example.test/logo.png" width=" "/></receipt>',
 			{},
 		);
 
-		expect(root(html).style.width).toBe('48ch');
-		expect(html).toContain('16.67ch');
+		expect(root(html).style.width).toBe("48ch");
+		expect(html).toContain("16.67ch");
 
 		const htmlWhitespacePaperWidth = renderThermalPreview(
 			'<receipt paper-width=" "><image src="https://example.test/logo.png" width=" "/></receipt>',
 			{},
 		);
 
-		expect(root(htmlWhitespacePaperWidth).style.width).toBe('48ch');
+		expect(root(htmlWhitespacePaperWidth).style.width).toBe("48ch");
 	});
 
 	// The four tests below are paired one-for-one with the PHP side. Same markup,
 	// same expected numbers: tests/includes/Templates/Thermal/Thermal_Markup_Parser_Test.php
 	// (attribute resolution) and Html_Thermal_Emitter_Test.php (render bounds).
-	it('clamps below-range numeric attributes up to the minimum', () => {
+	it("clamps below-range numeric attributes up to the minimum", () => {
 		const html = renderThermalPreview(
 			'<receipt><size width="-2">Small</size><feed lines="-3"/><feed lines="0"/></receipt>',
 			{},
 		);
 		const receipt = root(html);
-		const size = receipt.querySelector('span') as HTMLSpanElement;
-		const feeds = receipt.querySelectorAll('div');
+		const size = receipt.querySelector("span") as HTMLSpanElement;
+		const feeds = receipt.querySelectorAll("div");
 
-		expect(size.style.fontSize).toBe('1em');
-		expect((feeds[0] as HTMLDivElement).style.height).toBe('1.4em');
-		expect((feeds[1] as HTMLDivElement).style.height).toBe('1.4em');
+		expect(size.style.fontSize).toBe("1em");
+		expect((feeds[0] as HTMLDivElement).style.height).toBe("1.4em");
+		expect((feeds[1] as HTMLDivElement).style.height).toBe("1.4em");
 	});
 
-	it('clamps above-range numeric attributes down to the maximum', () => {
+	it("clamps above-range numeric attributes down to the maximum", () => {
 		const html = renderThermalPreview(
-			'<receipt paper-width="48"><size width="12">Huge</size>'
-				+ '<image src="https://example.test/logo.png" width="5000"/><feed lines="500"/></receipt>',
+			'<receipt paper-width="48"><size width="12">Huge</size>' +
+				'<image src="https://example.test/logo.png" width="5000"/><feed lines="500"/></receipt>',
 			{},
 		);
 
-		expect(html).toContain('font-size: 8em');
+		expect(html).toContain("font-size: 8em");
 		// 2000 dots of the 576-dot wide budget across 48 columns.
-		expect(html).toContain('166.67ch');
-		expect(html).toContain('height: 70em');
+		expect(html).toContain("166.67ch");
+		expect(html).toContain("height: 70em");
 	});
 
-	it('truncates fractional numeric attributes toward zero', () => {
+	it("truncates fractional numeric attributes toward zero", () => {
 		const html = renderThermalPreview(
 			'<receipt><size width="2.5">Big</size><feed lines="3.5"/></receipt>',
 			{},
 		);
 
-		expect(html).toContain('font-size: 2em');
-		expect(html).toContain('height: 4.2em');
+		expect(html).toContain("font-size: 2em");
+		expect(html).toContain("height: 4.2em");
 	});
 
-	it('falls back for numeric literals PHP is_numeric rejects', () => {
+	it("falls back for numeric literals PHP is_numeric rejects", () => {
 		const html = renderThermalPreview(
 			'<receipt><feed lines="0x2"/><size width="1e1">Exp</size></receipt>',
 			{},
 		);
 
 		// 0x2 is not a decimal numeral, so the default of 1 line applies.
-		expect(html).toContain('height: 1.4em');
+		expect(html).toContain("height: 1.4em");
 		// 1e1 is, so it resolves to 10 and then clamps to the 8x printer ceiling.
-		expect(html).toContain('font-size: 8em');
+		expect(html).toContain("font-size: 8em");
 	});
 
-	it('bounds an exponent-form feed to the same 50 lines the printer feeds', () => {
+	it("bounds an exponent-form feed to the same 50 lines the printer feeds", () => {
 		// 1e15 is a legal decimal numeral, so it survives is_numeric()/DECIMAL_NUMERAL
 		// and reaches the AST as a number. This side already bounded it at render;
 		// the PHP twin is where it was unbounded, and the wire emitters turn `lines`
 		// straight into a loop or a str_repeat(). Asserted here so the two sides are
 		// pinned to one number and cannot drift apart again.
-		const html = renderThermalPreview('<receipt><feed lines="1e15"/></receipt>', {});
+		const html = renderThermalPreview(
+			'<receipt><feed lines="1e15"/></receipt>',
+			{},
+		);
 
 		// 50 lines * 1.4em. Paired with
 		// Escpos_Thermal_Emitter_Test::test_feed_exponent_notation_lines_emits_the_bounded_maximum.
-		expect(html).toContain('height: 70em');
+		expect(html).toContain("height: 70em");
 	});
 
-	it('bounds a fixed column to the same 120 characters the row emitter pads to', () => {
+	it("bounds a fixed column to the same 120 characters the row emitter pads to", () => {
 		const html = renderThermalPreview(
 			'<receipt paper-width="120"><row><col width="121">Over</col></row></receipt>',
 			{},
@@ -116,29 +118,47 @@ describe('renderThermalPreview canonical parity', () => {
 
 		// As with feed, the preview already held here and the row emitters did not.
 		// Paired with Escpos_Thermal_Emitter_Test::test_row_fixed_column_wider_than_the_paper_pads_to_the_bounded_maximum.
-		expect(html).toContain('flex: 0 0 120ch');
-		expect(html).not.toContain('flex: 0 0 121ch');
+		expect(html).toContain("flex: 0 0 120ch");
+		expect(html).not.toContain("flex: 0 0 121ch");
 	});
 
-	it('bounds paper width and qr scale to the ranges every path can render', () => {
-		const narrow = renderThermalPreview('<receipt paper-width="0"></receipt>', {});
-		const wide = renderThermalPreview('<receipt paper-width="900"></receipt>', {});
+	it("bounds paper width and qr scale to the ranges every path can render", () => {
+		const narrow = renderThermalPreview(
+			'<receipt paper-width="0"></receipt>',
+			{},
+		);
+		const wide = renderThermalPreview(
+			'<receipt paper-width="900"></receipt>',
+			{},
+		);
 
 		// Paired with Thermal_Markup_Parser_Test::test_parse_out_of_range_paper_width_clamps_to_the_printable_range.
-		expect(root(narrow).style.width).toBe('1ch');
-		expect(root(wide).style.width).toBe('120ch');
+		expect(root(narrow).style.width).toBe("1ch");
+		expect(root(wide).style.width).toBe("120ch");
 
 		// The shared floor is 1, not the PDF page's 16. This bound is applied when
 		// parsing, so every path inherits it, and the plain-text lane renders widths
 		// in the single and low double digits — a floor of 16 silently re-centred
 		// that output. Paired with
 		// Thermal_Markup_Parser_Test::test_parse_narrow_paper_width_is_not_clamped_to_the_pdf_minimum.
-		const tenColumns = renderThermalPreview('<receipt paper-width="10"></receipt>', {});
-		expect(root(tenColumns).style.width).toBe('10ch');
+		const tenColumns = renderThermalPreview(
+			'<receipt paper-width="10"></receipt>',
+			{},
+		);
+		expect(root(tenColumns).style.width).toBe("10ch");
 
-		const oversized = renderThermalPreview('<receipt><qrcode size="99">WCPOS</qrcode></receipt>', {});
-		const ceiling = renderThermalPreview('<receipt><qrcode size="16">WCPOS</qrcode></receipt>', {});
-		const ordinary = renderThermalPreview('<receipt><qrcode size="4">WCPOS</qrcode></receipt>', {});
+		const oversized = renderThermalPreview(
+			'<receipt><qrcode size="99">WCPOS</qrcode></receipt>',
+			{},
+		);
+		const ceiling = renderThermalPreview(
+			'<receipt><qrcode size="16">WCPOS</qrcode></receipt>',
+			{},
+		);
+		const ordinary = renderThermalPreview(
+			'<receipt><qrcode size="4">WCPOS</qrcode></receipt>',
+			{},
+		);
 
 		// 16 is the ESC/POS module-size ceiling; an unbounded scale would render a
 		// preview no printer can reproduce. Paired with
@@ -147,19 +167,19 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(oversized).not.toBe(ordinary);
 	});
 
-	it('renders single, dashed, dotted, and double divider styles', () => {
+	it("renders single, dashed, dotted, and double divider styles", () => {
 		const html = renderThermalPreview(
 			'<receipt><line/><line style="dashed"/><line style="dotted"/><line style="double"/></receipt>',
 			{},
 		);
 
-		expect(html).toContain('border-top: 1px solid #000');
-		expect(html).toContain('border-top: 1px dashed #000');
-		expect(html).toContain('border-top: 1px dotted #000');
-		expect(html).toContain('border-top: 3px double #000');
+		expect(html).toContain("border-top: 1px solid #000");
+		expect(html).toContain("border-top: 1px dashed #000");
+		expect(html).toContain("border-top: 1px dotted #000");
+		expect(html).toContain("border-top: 3px double #000");
 	});
 
-	it('constrains barcode, qrcode, and image previews by active paper width', () => {
+	it("constrains barcode, qrcode, and image previews by active paper width", () => {
 		const html = renderThermalPreview(
 			'<receipt paper-width="32"><barcode type="code128" height="40">123456</barcode><qrcode size="4">https://example.test</qrcode><image src="https://example.test/logo.png" width="200"/></receipt>',
 			{},
@@ -168,79 +188,87 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(html).toContain('data-barcode-kind="barcode"');
 		expect(html).toContain('data-barcode-value="123456"');
 		expect(html).toContain('data-barcode-kind="qrcode"');
-		expect(html).toContain('width: min(100%,');
-		expect(html).toContain('ch); height: auto');
-		expect(html).not.toContain('max-width: 200px');
+		expect(html).toContain("width: min(100%,");
+		expect(html).toContain("ch); height: auto");
+		expect(html).not.toContain("max-width: 200px");
 	});
 
-	it('allows relative, http, https, and data image URLs', () => {
+	it("allows relative, http, https, and data image URLs", () => {
 		const html = renderThermalPreview(
 			'<receipt><image src="/logo.png" width="200"/><image src="http://example.test/logo.png" width="200"/><image src="https://example.test/logo.png" width="200"/><image src="data:image/png;base64,aaaa" width="200"/></receipt>',
 			{},
 		);
-		const images = root(html).querySelectorAll('img');
+		const images = root(html).querySelectorAll("img");
 
-		expect(Array.from(images).map((image) => image.getAttribute('src'))).toEqual([
-			'/logo.png',
-			'http://example.test/logo.png',
-			'https://example.test/logo.png',
-			'data:image/png;base64,aaaa',
+		expect(
+			Array.from(images).map((image) => image.getAttribute("src")),
+		).toEqual([
+			"/logo.png",
+			"http://example.test/logo.png",
+			"https://example.test/logo.png",
+			"data:image/png;base64,aaaa",
 		]);
 	});
 
-	it('drops unsafe image URLs instead of rendering image elements', () => {
+	it("drops unsafe image URLs instead of rendering image elements", () => {
 		const html = renderThermalPreview(
 			'<receipt><image src="javascript:alert(1)" width="200"/><image src="data:text/html,evil" width="200"/><image src="vbscript:msgbox(1)" width="200"/><image src="ftp://example.test/logo.png" width="200"/><image src="//example.test/logo.png" width="200"/></receipt>',
 			{},
 		);
 
-		expect(root(html).querySelectorAll('img')).toHaveLength(0);
+		expect(root(html).querySelectorAll("img")).toHaveLength(0);
 	});
 
-	it('renders barcode errors with diagnostic text rather than console warnings', () => {
+	it("renders barcode errors with diagnostic text rather than console warnings", () => {
 		const html = renderThermalPreview(
 			'<receipt><barcode type="ean13">not-an-ean</barcode></receipt>',
 			{},
 		);
 
 		expect(html).toContain('data-barcode-error="true"');
-		expect(html).toContain('Barcode error');
-		expect(html).toContain('not-an-ean');
+		expect(html).toContain("Barcode error");
+		expect(html).toContain("not-an-ean");
 	});
 
-	it('does not render private line item meta entries', () => {
+	it("does not render private line item meta entries", () => {
 		const html = renderThermalPreview(
-			'<receipt>{{#lines}}<text>{{name}}</text>{{#meta}}<text>{{key}}: {{value}}</text>{{/meta}}{{/lines}}</receipt>',
+			"<receipt>{{#lines}}<text>{{name}}</text>{{#meta}}<text>{{key}}: {{value}}</text>{{/meta}}{{/lines}}</receipt>",
 			{
 				lines: [
 					{
-						name: 'Hoodie with Pocket',
+						name: "Hoodie with Pocket",
 						meta: [
-							{ key: '_woocommerce_pos_data', value: '{"price":"35"}' },
-							{ key: '_woocommerce_pos_uuid', value: 'ee59a549-7d74-492d-80d7-b9735d539a5b' },
-							{ key: 'Gift wrap', value: 'Yes' },
+							{
+								key: "_woocommerce_pos_data",
+								value: '{"price":"35"}',
+							},
+							{
+								key: "_woocommerce_pos_uuid",
+								value: "ee59a549-7d74-492d-80d7-b9735d539a5b",
+							},
+							{ key: "Gift wrap", value: "Yes" },
 						],
 					},
 				],
 			},
 		);
 
-		expect(html).toContain('Hoodie with Pocket');
-		expect(html).toContain('Gift wrap');
-		expect(html).not.toContain('_woocommerce_pos_data');
-		expect(html).not.toContain('_woocommerce_pos_uuid');
+		expect(html).toContain("Hoodie with Pocket");
+		expect(html).toContain("Gift wrap");
+		expect(html).not.toContain("_woocommerce_pos_data");
+		expect(html).not.toContain("_woocommerce_pos_uuid");
 	});
 
 	it('sizes and labels a <barcode type="qr"> exactly like the <qrcode> it prints as', () => {
-		const value = 'https://example.test';
+		const value = "https://example.test";
 
 		const asBarcodeElement = renderThermalPreview(
 			`<receipt paper-width="48"><barcode type="qr" height="40">${value}</barcode></receipt>`,
-			{}
+			{},
 		);
 		const asQrcodeElement = renderThermalPreview(
 			`<receipt paper-width="48"><qrcode size="4">${value}</qrcode></receipt>`,
-			{}
+			{},
 		);
 
 		// The printer sizes both at module scale 4 (Thermal_Markup_Parser folds
@@ -251,23 +279,23 @@ describe('renderThermalPreview canonical parity', () => {
 	});
 
 	it('folds a <barcode type="qrcode"> height into the printed module scale', () => {
-		const value = 'https://example.test';
+		const value = "https://example.test";
 
 		const tall = renderThermalPreview(
 			`<receipt paper-width="48"><barcode type="qrcode" height="60">${value}</barcode></receipt>`,
-			{}
+			{},
 		);
 		const equivalent = renderThermalPreview(
 			`<receipt paper-width="48"><qrcode size="6">${value}</qrcode></receipt>`,
-			{}
+			{},
 		);
 		const huge = renderThermalPreview(
 			`<receipt paper-width="48"><barcode type="qrcode" height="900">${value}</barcode></receipt>`,
-			{}
+			{},
 		);
 		const starMaximum = renderThermalPreview(
 			`<receipt paper-width="48"><qrcode size="8">${value}</qrcode></receipt>`,
-			{}
+			{},
 		);
 
 		expect(tall).toBe(equivalent);
