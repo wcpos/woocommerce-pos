@@ -194,16 +194,14 @@ class Closures_Controller extends \WP_REST_Controller {
 				}
 				return new WP_REST_Response( array_map( array( $this, 'visible' ), $store->with_correction_counts( $store->list( $args ) ) ) );
 			}
+			$reach = Store_Reach::for_request( $request );
 			if ( ! Pos_Uuid::is_uuid( $request['id'] ) ) {
 				return $this->error( 'rest_invalid_param', 400 );
 			}
 			$id = strtolower( $request['id'] );
 			$request->set_param( 'id', $id );
 			$row = $store->get( $id );
-			if ( $row ) {
-				if ( ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
-					return $this->error( 'wcpos_closure_not_found', 404 );
-				}
+			if ( $row && $reach->admits( $row['store_id'] ) ) {
 				$store->log_replay( $row );
 				return new WP_REST_Response( $this->visible( $row ) );
 			}
@@ -217,12 +215,12 @@ class Closures_Controller extends \WP_REST_Controller {
 			}
 			$request->set_param( 'session_id', $fields['session_id'] );
 			$session = apply_filters( 'woocommerce_pos_session_row', ( new Register_Session_Store() )->get( $fields['session_id'] ), $request );
-			if ( ! $session || ! Store_Reach::for_request( $request )->admits( $session['store_id'] ) ) {
+			if ( ! $session || ! $reach->admits( $session['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}
 			$created = false;
 			$row = $store->create( $fields, $created );
-			if ( ! is_wp_error( $row ) && ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+			if ( ! is_wp_error( $row ) && ! $reach->admits( $row['store_id'] ) ) {
 				return $this->error( 'wcpos_closure_not_found', 404 );
 			}
 			return is_wp_error( $row ) ? $row : new WP_REST_Response( $this->visible( $row ), $created ? 201 : 200 );

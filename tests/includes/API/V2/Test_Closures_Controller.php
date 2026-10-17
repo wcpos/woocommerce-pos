@@ -716,6 +716,46 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( ( new Closure_Store() )->get( $body['id'] ) );
 	}
 
+	/** Creation uses one authorization decision for the session and returned row. */
+	public function test_closure_create_resolves_store_reach_once(): void {
+		$body = $this->body( $this->closure_session() );
+		$calls = 0;
+		$filter = static function () use ( &$calls ) {
+			++$calls;
+			return array( 'store_id' => array( 456 ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			$response = $this->post( 'closures', $body );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 1, $calls );
+	}
+
+	/** Incomplete bodies cannot distinguish hidden closure IDs from absent ones. */
+	public function test_closure_replay_incomplete_body_hidden_and_absent_match(): void {
+		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$body = $this->body( $this->closure_session() );
+		unset( $body['software_version'] );
+		$filter = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $filter );
+		try {
+			$absent = $this->post( 'closures', $body );
+			$body['id'] = $row['id'];
+			$hidden = $this->post( 'closures', $body );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $filter );
+		}
+		$this->assertSame( 400, $absent->get_status() );
+		$this->assertSame( 'rest_invalid_param', $absent->get_data()['code'] );
+		$this->assertSame( $absent->get_status(), $hidden->get_status() );
+		$this->assertSame( $absent->get_data()['code'], $hidden->get_data()['code'] );
+	}
+
 	/** Id-only replay checks the stored closure, not a caller-supplied session. */
 	public function test_closure_replay_outside_store_reach_returns_404(): void {
 		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
