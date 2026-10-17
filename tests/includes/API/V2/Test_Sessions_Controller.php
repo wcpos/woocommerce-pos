@@ -474,6 +474,35 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Status closes must accept only counts that a later closure can store.
+	 *
+	 * @dataProvider invalid_closing_counts
+	 * @param string $method Tender name.
+	 * @param string $amount Tender amount.
+	 */
+	public function test_status_close_rejects_invalid_tenders( string $method, string $amount ): void {
+		$id = $this->counting_session_with_cash_sale();
+		$response = $this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'closed',
+				'at' => '2026-09-11T12:00:00Z',
+				'counted' => array( $method => $amount ) + array( 'cash' => '100' ),
+			)
+		);
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+	}
+
+	/** Invalid names and precision previously accepted by the status route. */
+	public function invalid_closing_counts(): array {
+		return array(
+			'key' => array( 'gift.card', '1' ),
+			'precision' => array( 'cash', '100.00001' ),
+		);
+	}
+
 	/** Approval requires a different user with closure management. */
 	public function test_approver_requires_another_closure_manager(): void {
 		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];

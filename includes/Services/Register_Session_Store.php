@@ -267,13 +267,17 @@ final class Register_Session_Store {
 	 *
 	 * @return array|\WP_Error
 	 *
-	 * @param array $session Current row.
-	 * @param array $fields Transition fields.
+	 * @param array      $session Current row.
+	 * @param array      $fields Transition fields.
+	 * @param bool       $printed Closure already printed; record missing approval instead of refusing.
+	 * @param array|null $approval_missing Server variance and threshold finding, if any.
+	 * @param bool       $locked_by_caller Caller owns the register lock through commit/rollback.
 	 * @throws \RuntimeException On database failure.
 	 */
-	public function transition( array $session, array $fields ) {
+	public function transition( array $session, array $fields, bool $printed = false, ?array &$approval_missing = null, bool $locked_by_caller = false ) {
+		$approval_missing = null;
 		$registers = new Register_Store();
-		if ( ! $registers->lock( $session['register_id'] ) ) {
+		if ( ! $locked_by_caller && ! $registers->lock( $session['register_id'] ) ) {
 			throw new \RuntimeException( 'Session register lock failed.' );
 		}
 		try {
@@ -292,7 +296,8 @@ final class Register_Session_Store {
 				if ( 'closed' === $session['status'] && Closure_Store::tenders( $session['counted'] ) != $counted ) {
 					return new \WP_Error( 'wcpos_closure_counted_mismatch', __( 'The closure count differs from the closed session.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 				}
-				$expected = Session_Figures::for_session( $session )->expected();
+				$expected = $fields['expected'] ?? Session_Figures::for_session( $session )->expected();
+				unset( $fields['expected'] ); // Closure snapshot, not a session column.
 				$approved_expected = Closure_Store::tenders( $session['approved_expected'] ?? null, true );
 				$current_expected = Closure_Store::tenders( $expected, true );
 				if ( null !== $approved && null !== $counted ) {
@@ -321,7 +326,13 @@ final class Register_Session_Store {
 						Logger::warning( 'Register session closing refused: variance calculation failed', array( 'session_id' => $session['id'] ) );
 						throw new \RuntimeException( 'Session variance calculation failed.' );
 					}
-					if ( '1' === $variance['exceeds_threshold'] ) {
+					if ( '1' === $variance['exceeds_threshold'] && $printed ) {
+						$approval_missing = array(
+							'variance' => $variance['variance'],
+							'threshold' => $threshold,
+						);
+					}
+					if ( '1' === $variance['exceeds_threshold'] && ! $printed ) {
 						Logger::warning(
 							'Register session closing refused: variance requires manager approval',
 							array(
@@ -389,11 +400,9 @@ final class Register_Session_Store {
 				}
 				throw new \RuntimeException( 'Session write failed.' );
 			}
-			if ( 0 === $updated && 'closed' === $fields['status'] ) {
-				return new \WP_Error( 'wcpos_override_refused', __( 'The session approval has changed.', 'woocommerce-pos' ), array( 'status' => 403 ) );
-			}
 			$row = $this->get( $session['id'] );
-			if ( 0 === $updated && ( $row['status'] ?? null ) !== $fields['status'] ) {
+			$observed_status = 'closed' === $fields['status'] ? $session['status'] : $fields['status'];
+			if ( 0 === $updated && ( $row['status'] ?? null ) !== $observed_status ) {
 				Logger::warning(
 					'Register session transition refused: status changed',
 					array(
@@ -405,6 +414,9 @@ final class Register_Session_Store {
 					)
 				);
 				return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
+			if ( 0 === $updated && 'closed' === $fields['status'] ) {
+				return new \WP_Error( 'wcpos_override_refused', __( 'The session approval has changed.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 			}
 			// Closure_Store logs its transition after commit, not before a possible rollback.
 			if ( $updated > 0 && $session['status'] !== $fields['status'] && ! isset( $fields['closure_id'] ) ) {
@@ -421,7 +433,9 @@ final class Register_Session_Store {
 			}
 			return $row;
 		} finally {
-			$registers->unlock( $session['register_id'] );
+			if ( ! $locked_by_caller ) {
+				$registers->unlock( $session['register_id'] );
+			}
 		}
 	}
 }

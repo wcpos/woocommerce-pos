@@ -256,15 +256,9 @@ class Sessions_Controller extends \WP_REST_Controller {
 		$at = gmdate( 'Y-m-d H:i:s', strtotime( $request['at'] ) );
 		$fields = array( 'status' => $status );
 		if ( 'closed' === $status ) {
-			$counted = $request['counted'];
-			if ( ! is_array( $counted ) || ! isset( $counted['cash'] ) ) {
+			$counted = Closure_Store::tenders( $request['counted'] );
+			if ( null === $counted ) {
 				return $this->error( 'rest_invalid_param', 400, 'counted' );
-			}
-			foreach ( $counted as &$amount ) {
-				$amount = $this->decimal( $amount );
-				if ( null === $amount ) {
-					return $this->error( 'rest_invalid_param', 400, 'counted' );
-				}
 			}
 			$fields += array(
 				'counted' => $counted,

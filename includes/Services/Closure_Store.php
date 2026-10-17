@@ -624,6 +624,7 @@ final class Closure_Store {
 				throw new \RuntimeException( 'Closure receipt read failed.' );
 			}
 			$fields += $receipts;
+			$approval_missing = null;
 			try {
 				$result = $sessions->transition(
 					$session,
@@ -631,10 +632,14 @@ final class Closure_Store {
 						'status' => 'closed',
 						'closure_id' => $fields['id'],
 						'counted' => $fields['counted'],
+						'expected' => $fields['expected'],
 					) + ( 'counting' === $session['status'] ? array(
 						'closed_at_gmt' => $fields['closed_at_gmt'],
 						'closed_by' => $fields['closed_by'],
-					) : array() )
+					) : array() ),
+					null !== $fields['printed_at_gmt'],
+					$approval_missing,
+					true
 				);
 			} catch ( \RuntimeException $error ) {
 				// The session store stays silent on a closure-driven write (see its
@@ -660,6 +665,9 @@ final class Closure_Store {
 					) + array_diff_key( (array) $result->get_error_data(), array( 'status' => true ) ),
 				);
 				return $result;
+			}
+			if ( null !== $approval_missing ) {
+				$fields['findings']['approval_missing'] = $approval_missing;
 			}
 			$fields['approved_by'] = $result['approved_by'];
 			$fields['breakdowns']['labels']['approved_by_name'] = get_userdata( (int) ( $result['approved_by'] ?? 0 ) )->display_name ?? '';
