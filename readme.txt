@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.2
+Stable tag: 1.11.3
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,17 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.11.3 - 2026/10/17 =
+
+- **Couponed sales no longer come back as "different totals" on stores with tax-inclusive prices or compound tax rates.** Each discount and its tax are now rounded the way WooCommerce rounds them.
+- **Sync no longer stalls silently when the store never answers a request.** A request left unanswered for a minute is given up and retried instead of holding its sync lane until the app is restarted.
+- **The 1.11.1 memory fix now covers large catalogues and idle tills.** The sync's stock-existence checks kept every page of the product list in memory, and background re-syncs rewrote rows that had not changed.
+- **Enter Demo Store works on web when the browser blocks popups.** The demo signed in through the fallback redirect, but the result was never picked up, so nothing opened.
+- **iOS: the cart quantity no longer shows the previous value after a quick run of taps.** The order was right; only the field lagged.
+- **Centred and right-aligned receipt text prints in the right place on Star CloudPRNT and ESC/POS cloud printers.** Text was aligned twice and landed right of the logo; the preview was already correct.
+- **Retrying a payment after a declined attempt no longer leaves Process Payment spinning.** A gateway that showed the same error again was read as nothing new, so the button stayed busy for ten seconds.
+- Developers: the native and desktop apps send an `X-WCPOS-Instance` header identifying the installation on every store request, web sends it once a per-site probe confirms the header passes, and the integrity drift-rebuild counter is kept per till by it (falling back to user and store), so several tills can no longer trigger a rebuild together; `X-WCPOS-Instance` joins the CORS allow list; translations updated to 2026.10.3.
 
 = 1.11.2 - 2026/10/15 =
 
