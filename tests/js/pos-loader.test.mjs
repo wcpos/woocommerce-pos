@@ -107,6 +107,14 @@ test('timeout aborts manifest and loads fallback', async () => {
   assert.equal(h.assets.length, 3);
 });
 
+test('a navigation abort of the manifest fetch loads nothing and beacons nothing', async () => {
+  const h = harness();
+  h.routes.set('manifest', () => Promise.reject(Object.assign(new Error('The user aborted a request.'), { name: 'AbortError' })));
+  await h.run();
+  assert.equal(h.beacons.length, 0);
+  assert.equal(h.assets.length, 0);
+});
+
 test('kill message is text, loads nothing and beacons killed', async t => {
   const h = harness(), children = [];
   const previous = globalThis.document;
