@@ -378,8 +378,21 @@ class Gateway_Submission {
 			'woocommerce_order_status_changed',
 			static function ( $id, $from, $to, $order ): void {
 				if ( self::read_stamp( $order ) && in_array( $to, array_merge( wc_get_is_paid_statuses(), array( 'cancelled', 'refunded', 'trash' ) ), true ) ) {
-					self::clear_stamp( $order );
-					Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
+					$lock = Order_Lock::instance();
+					if ( ! $lock->acquire( (int) $id ) ) {
+						Logger::warning( sprintf( 'WCPOS awaiting-customer cleanup locked on order #%d; keeping the stamp.', $id ) );
+						return;
+					}
+					try {
+						$fresh = wc_get_order( $id );
+						// A delayed terminal notification cannot clear a newer submission.
+						if ( $fresh && $fresh->get_status() === $to && self::read_stamp( $fresh ) === self::read_stamp( $order ) ) {
+							self::clear_stamp( $fresh );
+							Money_Meta_Guard::authorised( (int) $id, fn() => $fresh->save() );
+						}
+					} finally {
+						$lock->release( (int) $id );
+					}
 				}
 			},
 			10,

@@ -3,6 +3,13 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Settlement_Change;
 
 class Test_Settlement_Change extends \WP_UnitTestCase {
+	public function test_malformed_ledger_wrappers_are_settlement_changes(): void {
+		$order = new \WC_Order();
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		foreach ( array( array( 'schema' => 2, 'payments' => array() ), array( 'schema' => 1, 'payments' => 'invalid' ), null, '{}' ) as $value ) {
+			$this->assertSame( array( '_wcpos_payments' ), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_wcpos_payments', 'value' => $value ) ) ), $order ) );
+		}
+	}
 	/** @dataProvider shipping_identity_fields */
 	public function test_shipping_identity_changes_are_detected( string $field, $value ): void {
 		$order = new \WC_Order();

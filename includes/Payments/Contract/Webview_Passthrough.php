@@ -93,7 +93,12 @@ class Webview_Passthrough {
 			}
 		}
 
-		self::mint( $order );
+		try {
+			self::mint( $order );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			// Leave reconciliation to a later sweep/submission without interrupting WooCommerce.
+			Logger::error( sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: %s', $order->get_id(), $error->getMessage() ) );
+		}
 	}
 
 	/**
@@ -123,7 +128,12 @@ class Webview_Passthrough {
 			return;
 		}
 
-		self::mint( $order );
+		try {
+			self::mint( $order );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			// Only hook callers swallow this; direct submissions must still receive their 409.
+			Logger::error( sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: %s', $order->get_id(), $error->getMessage() ) );
+		}
 	}
 
 	/**

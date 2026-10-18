@@ -68,7 +68,11 @@ class Payments_Controller extends WC_REST_Controller {
 											return $error;
 										}
 									}
-									return $this->{$definition[1]}( $request );
+									try {
+										return $this->{$definition[1]}( $request );
+									} catch ( \WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception $error ) {
+										return new WP_Error( 'woo_rxdb_sync_record_locked', $error->getMessage(), array( 'status' => 409 ) );
+									}
 								}
 							);
 						},

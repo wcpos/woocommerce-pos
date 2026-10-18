@@ -70,6 +70,18 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	public function test_reopen_discards_replayed_set_paid_without_payment_side_effects(): void {
+		$order = $this->order( array( '_wcpos_completed_at' => self::AT, '_wcpos_completed_epoch' => 0 ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		$called = did_action( 'woocommerce_payment_complete' );
+		$this->ack_meta( $this->push( $order, $this->reopen() + array( 'set_paid' => true ), array( 'expectedEpoch' => 0 ) ) );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-open', $saved->get_status() );
+		$this->assertFalse( $saved->is_paid() );
+		$this->assertSame( $called, did_action( 'woocommerce_payment_complete' ) );
+	}
+
 	public function test_born_twice_completion_waits_for_order_lock(): void {
 		$order = $this->order( array( '_wcpos_payments' => $this->cash() ) );
 		$payload = array( 'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ) );

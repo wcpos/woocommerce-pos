@@ -118,7 +118,7 @@ final class Settlement_Change {
 		if ( array_key_exists( Ledger::META_KEY, $meta ) ) {
 			$copy = new WC_Order();
 			$copy->update_meta_data( Ledger::META_KEY, $meta[ Ledger::META_KEY ] );
-			$invalid = false;
+			$invalid = null === Ledger::instance()->decode( $meta[ Ledger::META_KEY ] );
 			$project = static function ( array $rows ) use ( &$invalid ): array {
 				$values = array();
 				foreach ( $rows as $row ) {

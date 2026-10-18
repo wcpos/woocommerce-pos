@@ -7,6 +7,31 @@ use WP_UnitTestCase;
 
 /** Pins server-authoritative order shaping. */
 class Test_Order_Writer extends WP_UnitTestCase {
+	public function test_create_transition_locks_then_reads_the_new_orders_money(): void {
+		$order = wc_create_order( array( 'status' => 'pos-open' ) );
+		$order->set_total( 10 );
+		$order->save();
+		$writer = new class( new \stdClass() ) extends Order_Writer {
+			public function lock( int $id ): bool {
+				$result = parent::lock( $id );
+				$order = wc_get_order( $id );
+				$order->update_meta_data( '_wcpos_payments', array( 'schema' => 1, 'payments' => array( array( 'id' => 'arrived', 'amount' => '10', 'status' => 'captured' ) ) ) );
+				$order->save();
+				return $result;
+			}
+		};
+		$prepared = $writer->prepare_create( array( 'route' => '/wc/v3/orders' ), array( 'meta_data' => array( array( 'key' => '_wcpos_completed_at', 'value' => '2026-10-18T12:00:00Z' ) ) ), static fn() => null );
+		$writer->forward( $prepared, static fn() => new \WP_REST_Response( array( 'id' => $order->get_id() ), 201 ) );
+		$this->assertSame( '2026-10-18T12:00:00Z', wc_get_order( $order->get_id() )->get_meta( '_wcpos_completed_at' ) );
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$response = ( new Order_Writer( new \stdClass() ) )->forward( $prepared, static fn() => new \WP_REST_Response( array( 'id' => $order->get_id() ), 201 ) );
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
+		} finally { $lock->release( $order->get_id() ); }
+	}
+
 	/** Strip client-owned copies of server fields. */
 	public function test_prepare_create_shapes_order_audit_fields(): void {
 		$prepared = ( new Order_Writer( new \stdClass() ) )->prepare_create(

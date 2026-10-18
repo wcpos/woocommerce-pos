@@ -198,6 +198,7 @@ class Order_Writer extends Null_Writer {
 			$declared = $late['context'];
 			$this->update_context = $declared;
 			if ( $declared['reopen'] ) {
+				unset( $prepared['payload']['set_paid'] ); // Reopening is not another payment completion.
 				$error = Money_Epoch::reopen_refusal( $declared['money_before'] );
 				if ( $error ) {
 					return $error;
@@ -215,10 +216,24 @@ class Order_Writer extends Null_Writer {
 			}
 		);
 		if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 && ( 'update' === $declared['operation'] || 201 === $response->get_status() ) ) {
-			$saved = wc_get_order( $response->get_data()['id'] ?? 0 );
-			if ( $saved ) {
-				Money_Owner::stamp( $declared['pushed_payload'], $declared['money']['tillAggregate'] ?? null, $saved );
-				$this->complete_money_transition( $saved, $declared );
+			$id = (int) ( $response->get_data()['id'] ?? 0 );
+			if ( ! $this->lock( $id ) ) {
+				return new WP_REST_Response(
+					array(
+						'code' => 'woo_rxdb_sync_record_locked',
+						'message' => 'Record is being written; retry shortly.',
+					),
+					409
+				);
+			}
+			try {
+				$saved = wc_get_order( $id );
+				if ( $saved ) {
+					Money_Owner::stamp( $declared['pushed_payload'], $declared['money']['tillAggregate'] ?? null, $saved );
+					$this->complete_money_transition( $saved, $declared );
+				}
+			} finally {
+				$this->unlock( $id );
 			}
 		}
 		return $response;

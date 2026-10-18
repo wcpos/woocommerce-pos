@@ -136,7 +136,7 @@ class Ledger {
 	 *
 	 * @param mixed $raw Ledger value.
 	 */
-	private function decode( $raw ): ?array {
+	public function decode( $raw ): ?array {
 		$value = is_array( $raw ) ? $raw : ( is_string( $raw ) ? json_decode( $raw, true ) : null );
 		return is_array( $value ) && self::SCHEMA === ( $value['schema'] ?? null ) && isset( $value['payments'] ) && is_array( $value['payments'] ) ? $value : null;
 	}
@@ -348,11 +348,12 @@ class Ledger {
 		$before = $value;
 		$value['payments'] = $this->unique_rows( $value['payments'], $order_id, $warned );
 		$present = array();
+		$fresh = wc_get_order( $order_id );
 		foreach ( $value['payments'] as &$row ) {
 			$id = strtolower( $row['id'] );
 			$present[ $id ] = true;
 			$previous = $stored_rows[ $id ] ?? null;
-			$row['epoch'] = $previous ? (int) ( $previous['epoch'] ?? 0 ) : Money_Epoch::current( $order );
+			$row['epoch'] = $previous ? (int) ( $previous['epoch'] ?? 0 ) : Money_Epoch::current( $fresh instanceof WC_Order ? $fresh : $order );
 			if ( ! Money_Meta_Guard::is_authorised( $order_id ) ) {
 				foreach ( array( 'seen_events', 'events' ) as $field ) {
 					if ( array_key_exists( $field, $row ) || isset( $previous[ $field ] ) ) {
@@ -1428,71 +1429,86 @@ class Ledger {
 	 * @param WC_Order $order Order object.
 	 * @param array    $rows  Payment rows.
 	 * @param bool     $derive Whether to project payment state (deferred during offline arrival).
+	 * @throws Ledger_Persistence_Exception When the ledger cannot be locked or persisted.
 	 */
 	public function save( WC_Order $order, array $rows, bool $derive = true ): void {
-		// updated_at_gmt is when a leg last changed. normalize_row() stamps now, so a row whose
-		// content is what is already stored keeps its stored stamp: a write to one leg must not
-		// make every other leg on the order look fresh to Payments_Sweeper.
-		$stored = array();
-		foreach ( $this->read( $order ) as $existing ) {
-			if ( is_array( $existing ) && isset( $existing['id'] ) ) {
-				$stored[ strtolower( (string) $existing['id'] ) ] = $existing;
-			}
+		$lock = Order_Lock::instance();
+		if ( ! $lock->acquire( $order->get_id() ) ) {
+			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
 		}
-		$normalized = array();
-		foreach ( $rows as $row ) {
-			$row      = $this->normalize_row( $order, $row );
-			$previous = $stored[ $row['id'] ] ?? null;
-			$row['epoch'] = null === $previous ? Money_Epoch::current( $order ) : (int) ( $previous['epoch'] ?? 0 );
-			$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
-			if ( null !== $stamp && $this->same_content( $this->normalize_row( $order, $previous ), $row ) ) {
-				$row['updated_at_gmt'] = $stamp;
+		try {
+			// updated_at_gmt is when a leg last changed. normalize_row() stamps now, so a row whose
+			// content is what is already stored keeps its stored stamp: a write to one leg must not
+			// make every other leg on the order look fresh to Payments_Sweeper.
+			$fresh = wc_get_order( $order->get_id() );
+			$epoch = Money_Epoch::current( $fresh instanceof WC_Order ? $fresh : $order );
+			$stored = array();
+			foreach ( $this->read( $order ) as $existing ) {
+				if ( is_array( $existing ) && isset( $existing['id'] ) ) {
+					$stored[ strtolower( (string) $existing['id'] ) ] = $existing;
+				}
 			}
-			$normalized[] = $row;
-		}
-		$wire = array_map( array( __CLASS__, 'to_wire' ), $normalized );
-		$order->update_meta_data(
-			self::META_KEY,
-			wp_json_encode(
-				array(
-					'schema' => self::SCHEMA,
-					'payments' => $wire,
+			$normalized = array();
+			foreach ( $rows as $row ) {
+				$row      = $this->normalize_row( $order, $row );
+				$previous = $stored[ $row['id'] ] ?? null;
+				$row['epoch'] = null === $previous ? $epoch : (int) ( $previous['epoch'] ?? 0 );
+				$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
+				if ( null !== $stamp && $this->same_content( $this->normalize_row( $order, $previous ), $row ) ) {
+					$row['updated_at_gmt'] = $stamp;
+				}
+				$normalized[] = $row;
+			}
+			$wire = array_map( array( __CLASS__, 'to_wire' ), $normalized );
+			$order->update_meta_data(
+				self::META_KEY,
+				wp_json_encode(
+					array(
+						'schema' => self::SCHEMA,
+						'payments' => $wire,
+					)
 				)
-			)
-		);
-		$this->reindex( $order, $normalized );
-		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
-		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
-		foreach ( $normalized as $row ) {
-			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
-			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
-				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
+			);
+			$this->reindex( $order, $normalized );
+			$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
+			$order->delete_meta_data( self::LIVE_LEG_META_KEY );
+			foreach ( $normalized as $row ) {
+				$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
+				if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
+					$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
+				}
 			}
-		}
-		// Authorise server rollups through derive() too: payment_complete() can save the order.
-		Money_Meta_Guard::authorised(
-			$order->get_id(),
-			function () use ( $order, $normalized, $derive ): void {
-				$paid = Money_Epoch::net_paid( $normalized );
-				if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
-					$history = Gateway_Submission::read_attempts( $order );
-					$updated = $history;
-					foreach ( $updated as &$attempt ) {
-						if ( 'sent' === $attempt['state'] ) {
-							$attempt['state'] = 'paid';
+			// Authorise server rollups through derive() too: payment_complete() can save the order.
+			Money_Meta_Guard::authorised(
+				$order->get_id(),
+				function () use ( $order, $normalized, $derive ): void {
+					$paid = Money_Epoch::net_paid( $normalized );
+					if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
+						$history = Gateway_Submission::read_attempts( $order );
+						$updated = $history;
+						foreach ( $updated as &$attempt ) {
+							if ( 'sent' === $attempt['state'] ) {
+								$attempt['state'] = 'paid';
+							}
+						}
+						unset( $attempt );
+						if ( $updated !== $history ) {
+							$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $updated );
 						}
 					}
-					unset( $attempt );
-					if ( $updated !== $history ) {
-						$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $updated );
+					if ( $derive ) {
+						$this->derive( $order, $normalized );
 					}
+					$order->save();
 				}
-				if ( $derive ) {
-					$this->derive( $order, $normalized );
-				}
-				$order->save();
+			);
+			// The keeper may legitimately restore closure stamps during save.
+			if ( ( $this->stored( $order->get_id(), false )['payments'] ?? null ) !== $this->read( $order ) ) {
+				throw new Ledger_Persistence_Exception( 'WCPOS payment ledger was not persisted.' );
 			}
-		);
+		} finally {
+			$lock->release( $order->get_id() );
+		}
 	}
 
 	/**

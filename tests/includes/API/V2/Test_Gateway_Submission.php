@@ -640,6 +640,26 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'Enter a valid email', $refused->get_data()['data']['errors']['invoice_email'] );
 	}
 
+	public function test_stale_terminal_hook_preserves_a_newer_submission(): void {
+		$order = $this->create_pos_order();
+		$this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+		$stale = wc_get_order( $order->get_id() );
+		$next = wp_generate_uuid4();
+		$this->submit( $order, $next, array( 'invoice_email' => 'buyer@example.com' ) );
+		do_action( 'woocommerce_order_status_changed', $order->get_id(), 'pending', 'completed', $stale );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( $next, Gateway_Submission::read_stamp( $fresh )['attempt_id'] ?? null );
+		$this->assertSame( 'sent', Gateway_Submission::read_attempts( $fresh )[ $next ]['state'] );
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$fresh->update_status( 'completed' );
+			$this->assertSame( $next, Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) )['attempt_id'] ?? null );
+		} finally { $lock->release( $order->get_id() ); }
+		do_action( 'woocommerce_order_status_changed', $order->get_id(), 'pending', 'completed', wc_get_order( $order->get_id() ) );
+		$this->assertNull( Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Terminal status edits remove a stale awaiting-customer stamp. */
 	public function test_stamp_terminal_status_clears_meta(): void {
 		foreach ( array( 'processing', 'completed', 'cancelled', 'refunded', 'trash' ) as $status ) {

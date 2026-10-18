@@ -8,11 +8,62 @@
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Webview payment passthrough tests. */
 class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
+	/**
+	 * A contended mint must not interrupt WooCommerce's payment hooks.
+	 *
+	 * @dataProvider payment_hooks
+	 */
+	public function test_payment_hook_locked_ledger_logs_error_without_throwing( string $hook ): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$before = $order->get_meta( Ledger::META_KEY, true );
+		$logs = array();
+		$log_filter = static function ( $enabled, $message ) use ( &$logs ) {
+			$logs[] = array( Logger::$log_level, $message );
+			return false;
+		};
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		add_filter( 'woocommerce_pos_logging', $log_filter, 10, 2 );
+		try {
+			// Act: fire the hook directly so WooCommerce cannot swallow an escaped exception.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order );
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order );
+				}
+			);
+
+			// Assert.
+			$this->assertSame( $before, wc_get_order( $order->get_id() )->get_meta( Ledger::META_KEY, true ) );
+			$this->assertContains(
+				array( 'error', sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: WCPOS payment ledger is locked.', $order->get_id() ) ),
+				$logs
+			);
+		} finally {
+			$lock->release( $order->get_id() );
+			remove_filter( 'woocommerce_pos_logging', $log_filter, 10 );
+			do_action( 'woocommerce_before_pay_action', null );
+		}
+	}
+
+	/** Hook entry points that must contain ledger persistence errors. */
+	public function payment_hooks(): array {
+		return array(
+			'payment complete' => array( 'woocommerce_payment_complete' ),
+			'status changed' => array( 'woocommerce_order_status_changed' ),
+		);
+	}
+
 	/** Payment completion mints a captured webview row. */
 	public function test_payment_complete_on_pos_order_mints_webview_row(): void {
 		// Arrange.
