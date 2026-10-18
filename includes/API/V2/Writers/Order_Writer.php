@@ -214,7 +214,7 @@ class Order_Writer extends Null_Writer {
 			Money_Meta_Guard::authorised(
 				$saved->get_id(),
 				static function () use ( $saved, $context, $meta ): void {
-					$saved->update_meta_data( '_wcpos_money_epoch', Money_Epoch::current( $context['money_before'] ) + 1 );
+					$saved->update_meta_data( '_wcpos_money_epoch', (string) ( Money_Epoch::current( $context['money_before'] ) + 1 ) );
 					foreach ( array( '_wcpos_completed_at', '_wcpos_completed_epoch', '_wcpos_completed_session', Money_Owner::META_KEY ) as $key ) {
 						$saved->delete_meta_data( $key );
 					}
@@ -245,7 +245,7 @@ class Order_Writer extends Null_Writer {
 			$saved->get_id(),
 			static function () use ( $saved, $meta, $epoch ): void {
 				$saved->update_meta_data( '_wcpos_completed_at', $meta['_wcpos_completed_at'] );
-				$saved->update_meta_data( '_wcpos_completed_epoch', $epoch );
+				$saved->update_meta_data( '_wcpos_completed_epoch', (string) $epoch );
 				if ( is_string( $meta['_wcpos_completed_session'] ?? null ) ) {
 					$saved->update_meta_data( '_wcpos_completed_session', $meta['_wcpos_completed_session'] );
 				}
