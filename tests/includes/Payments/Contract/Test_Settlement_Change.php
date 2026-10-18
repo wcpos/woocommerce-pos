@@ -103,4 +103,23 @@ class Test_Settlement_Change extends \WP_UnitTestCase {
 		$this->assertSame( array( 'set_paid' ), Settlement_Change::changes( array( 'set_paid' => 'true' ), $order ) );
 		$this->assertSame( array( 'set_paid' ), Settlement_Change::changes( array( 'set_paid' => true ), $order ) );
 	}
+	public function test_malformed_line_entries_are_settlement_changes(): void {
+		foreach ( array_keys( Settlement_Change::TYPES ) as $key ) {
+			$this->assertSame( array( $key ), Settlement_Change::changes( array( $key => array( 'x' ) ), new \WC_Order() ) );
+		}
+	}
+	public function test_ledger_projection_compares_extras_and_canonical_money(): void {
+		$order = new \WC_Order();
+		$row = array( 'id' => 'cash', 'amount' => '50', 'tendered' => '60', 'provider_refs' => array( 'a' => 1, 'b' => 2 ) );
+		$order->update_meta_data( '_wcpos_payments', array( 'schema' => 1, 'payments' => array( $row ) ) );
+		foreach ( array( 'method_id', 'currency', 'capture_mode', 'kind', 'transport', 'receipt', 'register_id', 'session_id', 'created_at_gmt', 'captured_at_gmt', 'recorded_offline', 'source', 'tendered' ) as $field ) {
+			$changed = array_merge( $row, array( $field => 'different' ) );
+			$this->assertSame( array( '_wcpos_payments' ), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_wcpos_payments', 'value' => array( 'schema' => 1, 'payments' => array( $changed ) ) ) ) ), $order ), $field );
+		}
+		$row['tendered'] = '60.000000';
+		$row['provider_refs'] = array( 'b' => 2, 'a' => 1 );
+		$row['closure_id'] = 'ignored';
+		$this->assertSame( array(), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_wcpos_payments', 'value' => array( 'schema' => 1, 'payments' => array( $row ) ) ) ) ), $order ) );
+	}
+
 }

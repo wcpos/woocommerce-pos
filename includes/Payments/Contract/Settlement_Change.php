@@ -54,6 +54,10 @@ final class Settlement_Change {
 			$items = $stored->get_items( $type );
 			$seen = array();
 			foreach ( $payload[ $key ] as $line ) {
+				if ( ! is_array( $line ) ) {
+					$changed[ $key ] = true;
+					continue;
+				}
 				$item = self::item( $line, $items );
 				if ( ! $item ) {
 					$changed[ $key ] = true;
@@ -108,10 +112,20 @@ final class Settlement_Change {
 			$project = static function ( array $rows ) use ( &$invalid ): array {
 				$values = array();
 				foreach ( $rows as $row ) {
-					$amount = Money_Compare::micro( (string) ( $row['amount'] ?? '' ) );
-					$refund = Money_Compare::micro( (string) ( $row['refunded_amount'] ?? '0' ) );
-					$invalid = $invalid || null === $amount || null === $refund;
-					$values[] = array( $row['id'], $row['status'] ?? null, $amount, $refund, $row['epoch'] ?? 0 );
+					$row = array_diff_key( $row, array_flip( array( 'closure_id', 'updated_at_gmt', 'seen_events', 'events', 'refunds' ) ) );
+					$row += array(
+						'epoch' => 0,
+						'refunded_amount' => '0',
+					);
+					foreach ( array( 'amount', 'refunded_amount', 'tendered', 'change', 'tip' ) as $field ) {
+						if ( ! isset( $row[ $field ] ) && ! in_array( $field, array( 'amount', 'refunded_amount' ), true ) ) {
+							continue;
+						}
+						$value = $row[ $field ] ?? '';
+						$row[ $field ] = Money_Compare::micro( is_scalar( $value ) ? (string) $value : $value );
+						$invalid = $invalid || null === $row[ $field ];
+					}
+					$values[] = self::canonical( $row );
 				}
 				sort( $values );
 				return $values;

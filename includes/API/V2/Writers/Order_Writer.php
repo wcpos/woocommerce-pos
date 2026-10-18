@@ -555,6 +555,9 @@ class Order_Writer extends Null_Writer {
 			// The legacy till never learned the ownership rule: keep intent, not its rejected aggregate.
 			foreach ( array( 'line_items', 'fee_lines', 'shipping_lines' ) as $key ) {
 				foreach ( $payload[ $key ] ?? array() as $index => $line ) {
+					if ( ! is_array( $line ) ) {
+						continue; // Let wc/v3 reject malformed items.
+					}
 					$payload[ $key ][ $index ] = array_diff_key( $line, array_flip( array( 'subtotal', 'subtotal_tax', 'total', 'total_tax', 'taxes' ) ) );
 				}
 			}

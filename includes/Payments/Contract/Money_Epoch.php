@@ -106,7 +106,7 @@ final class Money_Epoch {
 	public static function is_reopen( array $payload, WC_Order $stored ): bool {
 		$meta = Settlement_Change::meta( $payload );
 		return 'pos-open' === ( $payload['status'] ?? null ) && ( self::current( $stored ) + 1 ) === ( $meta['_wcpos_money_epoch'] ?? null )
-			&& null === ( $meta['_wcpos_completed_at'] ?? null ) && is_string( $meta['_wcpos_reopened_at'] ?? null ) && '' !== $meta['_wcpos_reopened_at'];
+			&& array_key_exists( '_wcpos_completed_at', $meta ) && null === $meta['_wcpos_completed_at'] && is_string( $meta['_wcpos_reopened_at'] ?? null ) && '' !== $meta['_wcpos_reopened_at'];
 	}
 
 	public static function reopen_refusal( WC_Order $stored ): ?\WP_Error {

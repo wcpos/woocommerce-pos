@@ -34,14 +34,22 @@ final class Money_Owner {
 				$compare( $field, $aggregate[ $field ], $saved->$getter() );
 			}
 		}
-		foreach ( array( 'line_items', 'fee_lines', 'shipping_lines' ) as $key ) {
+		foreach ( array_keys( Settlement_Change::TYPES ) as $key ) {
 			$items = $saved->get_items( Settlement_Change::TYPES[ $key ] );
 			foreach ( $payload[ $key ] ?? array() as $index => $line ) {
+				if ( ! is_array( $line ) ) {
+					continue;
+				}
 				$item = Settlement_Change::item( $line, $items );
+				if ( ! $item && 'coupon_lines' === $key && isset( $line['code'] ) ) {
+					$matches = array_filter( $items, static fn( $coupon ) => $line['code'] === $coupon->get_code() );
+					$item = 1 === count( $matches ) ? reset( $matches ) : null;
+				}
 				if ( ! $item ) {
 					continue;
 				}
-				foreach ( 'line_items' === $key ? array( 'subtotal', 'subtotal_tax', 'total', 'total_tax' ) : array( 'total', 'total_tax' ) as $field ) {
+				$fields = 'line_items' === $key ? array( 'subtotal', 'subtotal_tax', 'total', 'total_tax' ) : array( 'total', 'total_tax' );
+				foreach ( 'coupon_lines' === $key ? array( 'discount', 'discount_tax' ) : $fields as $field ) {
 					if ( isset( $line[ $field ] ) ) {
 						$getter = 'get_' . $field;
 						$compare( $key . '[' . $index . '].' . $field, $line[ $field ], $item->$getter() );

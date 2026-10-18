@@ -475,4 +475,27 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array( array( '_wcpos_money_owner', true ), array( 'ordinary', false ), array( '', false ) );
 	}
 
+	public function test_legacy_ledger_method_edit_on_reopened_sale_is_refused(): void {
+		$cash = $this->cash();
+		$order = $this->order( array( '_wcpos_money_epoch' => '1', '_wcpos_payments' => $cash ) );
+		$cash['payments'][0]['method_id'] = 'pos_card';
+		$response = $this->push( $order, array( 'meta_data' => $this->meta( array( '_wcpos_payments' => $cash ) ) ), array(), false );
+		$this->assertSame( 426, $response->get_status() );
+		$this->assertSame( 'money_epoch', $response->get_data()['data']['reason'] );
+	}
+	public function test_reopen_without_explicit_completion_tombstone_keeps_epoch(): void {
+		$order = $this->order( array( '_wcpos_payments' => $this->cash(), '_wcpos_completed_at' => self::AT ) );
+		$payload = array( 'status' => 'pos-open', 'meta_data' => $this->meta( array( '_wcpos_money_epoch' => 1, '_wcpos_reopened_at' => self::AT ) ) );
+		$meta = $this->ack_meta( $this->push( $order, $payload, array( 'expectedEpoch' => 0 ) ) );
+		$this->assertArrayNotHasKey( '_wcpos_money_epoch', $meta );
+		$this->assertArrayNotHasKey( '_wcpos_reopened_at', $meta );
+		$this->assertSame( self::AT, $meta['_wcpos_completed_at'] );
+	}
+	public function test_malformed_line_push_returns_wc_validation_error(): void {
+		$order = $this->order( array( '_wcpos_money_owner' => 'server' ) );
+		$response = $this->push( $order, array( 'line_items' => array( 'x' ) ), array(), false );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
 }
