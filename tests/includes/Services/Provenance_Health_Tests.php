@@ -86,8 +86,9 @@ trait Provenance_Health_Tests {
 	public function test_health_duplicate_counter_reports_true_count_beside_capped_sample(): void {
 		// Arrange.
 		$id = wp_generate_uuid4();
+		$created = array();
 		for ( $i = 0; $i < 25; ++$i ) {
-			$this->provenance_order( $id, '7' );
+			$created[] = $this->provenance_order( $id, '7' );
 		}
 		$registers = array(
 			array(
@@ -95,14 +96,27 @@ trait Provenance_Health_Tests {
 				'name' => 'Front',
 			),
 		);
+		$number = static function ( $number, $order ) {
+			return 'SALE-' . $order->get_id();
+		};
+		add_filter( 'woocommerce_order_number', $number, 10, 2 );
 		// Act.
-		$row = ( new Provenance_Health() )->report( $registers, array( $id ) )['registers'][0];
+		try {
+			$row = ( new Provenance_Health() )->report( $registers, array( $id ) )['registers'][0];
+		} finally {
+			remove_filter( 'woocommerce_order_number', $number );
+		}
 		// Assert.
 		$this->assertCount( 1, $row['duplicates'] );
-		$this->assertSame( 7, $row['duplicates'][0]['counter'] );
-		$this->assertSame( 25, $row['duplicates'][0]['orders'] );
-		$this->assertCount( 20, $row['duplicates'][0]['order_ids'] );
-		$this->assertCount( 20, $row['duplicates'][0]['order_numbers'] );
+		$duplicate = $row['duplicates'][0];
+		$this->assertSame( 7, $duplicate['counter'] );
+		$this->assertSame( 25, $duplicate['orders'] );
+		$this->assertCount( 20, $duplicate['order_ids'] );
+		$this->assertEmpty( array_diff( $duplicate['order_ids'], $created ) );
+		$this->assertCount( 20, $duplicate['order_numbers'] );
+		foreach ( $duplicate['order_ids'] as $i => $order_id ) {
+			$this->assertSame( 'SALE-' . $order_id, $duplicate['order_numbers'][ $i ] );
+		}
 	}
 
 	/** Skew is sampled and counted per direction, so many late syncs cannot hide an ahead clock. */
@@ -148,7 +162,7 @@ trait Provenance_Health_Tests {
 		$this->assertSame( array_map( 'strval', array_column( $expected, 0 ) ), array_column( $row['skew'], 'order_number' ) );
 	}
 
-	public function test_health_skew_uses_offsets_and_orders_by_magnitude(): void {
+	public function test_health_skew_uses_offsets_lists_ahead_first_each_direction_by_magnitude_and_counts_both(): void {
 		$id = wp_generate_uuid4();
 		$received = '2026-09-10T22:42:10Z';
 		$ahead = $this->provenance_order( $id, '1', '2026-09-11T00:57:10+02:00', $received );
