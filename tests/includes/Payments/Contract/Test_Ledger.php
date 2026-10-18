@@ -42,6 +42,26 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	public function test_dirty_ledger_save_is_refused_while_another_owner_holds_lock(): void {
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$before = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array() ) );
+			$order->set_customer_note( 'Must wait' );
+			$order->save();
+			$this->assertSame( $before, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+		$order->save();
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( 'Must wait', wc_get_order( $order->get_id() )->get_customer_note() );
+	}
+
 	/** @dataProvider duplicate_order_lanes */
 	public function test_order_save_drops_duplicate_payment_ids( bool $existing ): void {
 		$order = $existing ? wc_create_order() : new \WC_Order();

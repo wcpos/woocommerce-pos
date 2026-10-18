@@ -3,6 +3,20 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Settlement_Change;
 
 class Test_Settlement_Change extends \WP_UnitTestCase {
+	/** @dataProvider shipping_identity_fields */
+	public function test_shipping_identity_changes_are_detected( string $field, $value ): void {
+		$order = new \WC_Order();
+		$item = new \WC_Order_Item_Shipping();
+		$item->set_id( 42 );
+		$order->add_item( $item );
+		$this->assertSame( array( 'shipping_lines' ), Settlement_Change::changes( array( 'shipping_lines' => array( array( 'id' => 42, $field => $value ) ) ), $order ) );
+	}
+	public function shipping_identity_fields(): array {
+		return array( array( 'method_title', 'Express' ), array( 'instance_id', 9 ) );
+	}
+	public function test_stale_read_only_paid_dates_beside_note_are_not_settlement_changes(): void {
+		$this->assertSame( array(), Settlement_Change::changes( array( 'customer_note' => 'Note', 'date_paid' => '2026-10-18T12:00:00', 'date_paid_gmt' => '2026-10-18T12:00:00' ), new \WC_Order() ) );
+	}
 	public function test_sparse_payload_only_detects_changed_settlement_intent(): void {
 		$this->assertTrue( class_exists( Settlement_Change::class ) );
 		$order = new \WC_Order();

@@ -64,7 +64,7 @@ final class Settlement_Change {
 					continue;
 				}
 				$seen[] = $item->get_id();
-				foreach ( array( 'quantity', 'product_id', 'variation_id', 'subtotal', 'total', 'subtotal_tax', 'total_tax', 'discount', 'discount_tax', 'name', 'code', 'tax_class', 'tax_status', 'method_id' ) as $field ) {
+				foreach ( array( 'quantity', 'product_id', 'variation_id', 'subtotal', 'total', 'subtotal_tax', 'total_tax', 'discount', 'discount_tax', 'name', 'code', 'tax_class', 'tax_status', 'method_id', 'method_title', 'instance_id' ) as $field ) {
 					$getter = 'get_' . $field;
 					if ( array_key_exists( $field, $line ) && is_callable( array( $item, $getter ) ) ) {
 						$equal = in_array( $field, array( 'quantity', 'subtotal', 'total', 'subtotal_tax', 'total_tax', 'discount', 'discount_tax' ), true )
@@ -91,15 +91,12 @@ final class Settlement_Change {
 				$changed[ $key ] = true;
 			}
 		}
-		foreach ( array( 'currency', 'payment_method', 'payment_method_title', 'transaction_id', 'date_paid', 'date_paid_gmt', 'status' ) as $field ) {
+		foreach ( array( 'currency', 'payment_method', 'payment_method_title', 'transaction_id', 'status' ) as $field ) {
 			if ( ! array_key_exists( $field, $payload ) || ( 'status' === $field && in_array( $payload[ $field ], Ledger::IN_PROGRESS_STATUSES, true ) ) ) {
 				continue;
 			}
-			$getter = 'get_' . ( 'date_paid_gmt' === $field ? 'date_paid' : $field );
+			$getter = 'get_' . $field;
 			$value = $stored->$getter();
-			if ( in_array( $field, array( 'date_paid', 'date_paid_gmt' ), true ) ) {
-				$value = wc_rest_prepare_date_response( $value, 'date_paid_gmt' === $field );
-			}
 			if ( $payload[ $field ] !== $value ) {
 				$changed[ $field ] = true;
 			}

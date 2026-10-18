@@ -240,6 +240,7 @@ class Ledger {
 	 * Keep every stored stamped leg, even when the writer omits it or sends an undecodable ledger.
 	 *
 	 * @param mixed $order Order about to be saved.
+	 * @throws \RuntimeException When the order lock cannot be acquired.
 	 */
 	public function keep_closure_stamps( $order ): void {
 		if ( ! $order instanceof WC_Order ) {
@@ -315,7 +316,9 @@ class Ledger {
 		if ( Order_Lock::instance()->acquire( $order_id ) ) {
 			$this->closure_locks[ $order_id ] = ( $this->closure_locks[ $order_id ] ?? 0 ) + 1;
 		} else {
-			Logger::warning( 'Closure stamps unguarded on an order save.', array( 'order_id' => $order_id ) );
+			$message = sprintf( 'WCPOS payment ledger locked on order #%d; the save was refused', $order_id );
+			Logger::error( $message, array( 'order_id' => $order_id ) );
+			throw new \RuntimeException( esc_html( $message ) );
 		}
 		$stored = $this->stored( $order->get_id(), false );
 		if ( $stored ) {

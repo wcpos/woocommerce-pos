@@ -103,6 +103,27 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** @dataProvider paid_replay_epochs */
+	public function test_paid_attempt_replay_never_dispatches_gateway( int $epoch, bool $row ): void {
+		$order = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		if ( $row ) { Ledger::instance()->save( $order, array( array( 'id' => $attempt, 'method_id' => 'wcpos_sent_test', 'amount' => '92.95', 'status' => 'failed' ) ) ); }
+		$order->update_meta_data( '_wcpos_money_epoch', (string) $epoch );
+		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => array( 'state' => 'paid', 'epoch' => 0 ) ) );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/wcpos_sent_test/submit' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params( array( 'attempt_id' => $attempt, 'values' => array( 'invoice_email' => 'buyer@example.com' ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( $epoch ? 409 : 200, $response->get_status() );
+		$this->assertSame( $epoch ? 'wcpos_payment_conflict' : 'paid', $response->get_data()[ $epoch ? 'code' : 'outcome' ] );
+		if ( ! $epoch ) { $this->assertSame( Ledger::instance()->summary( wc_get_order( $order->get_id() ) ), $response->get_data()['order'] ); }
+		$this->assertSame( 0, Sent_Test_Gateway::$calls );
+	}
+	public function paid_replay_epochs(): array {
+		return array( array( 0, false ), array( 0, true ), array( 1, false ), array( 1, true ) );
+	}
+
 	public function test_settled_attempt_is_stamped_with_current_epoch(): void {
 		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
 		$order = $this->create_pos_order();

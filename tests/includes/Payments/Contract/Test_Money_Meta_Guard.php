@@ -70,6 +70,37 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	public function test_born_twice_completion_waits_for_order_lock(): void {
+		$order = $this->order( array( '_wcpos_payments' => $this->cash() ) );
+		$payload = array( 'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ) );
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$response = $this->push( null, $payload );
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_completed_at' ) );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+		$observed = false;
+		$probe = static function ( $saving ) use ( $order, $lock, &$observed ) {
+			if ( $saving->get_id() === $order->get_id() && self::AT === $saving->get_meta( '_wcpos_completed_at' ) ) {
+				$observed = ! $lock->acquire( $order->get_id() );
+				if ( ! $observed ) { $lock->release( $order->get_id() ); }
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $probe, 1 );
+		try {
+			$this->assertSame( self::AT, $this->ack_meta( $this->push( null, $payload ) )['_wcpos_completed_at'] );
+			$this->assertTrue( $observed );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $probe, 1 );
+		}
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		$lock->release( $order->get_id() );
+	}
+
 	public function test_rowless_settled_attempt_blocks_reopen_despite_covering_cash(): void {
 		$order = $this->order( array( '_wcpos_payments' => $this->cash(), '_wcpos_gateway_attempts' => array( wp_generate_uuid4() => 'settled' ) ) );
 		$response = $this->push( $order, $this->reopen(), array( 'expectedEpoch' => 0 ) );
@@ -609,7 +640,7 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'money_epoch', $response->get_data()['data']['reason'] );
 	}
 	public function payment_identity_edits(): array {
-		return array( array( 'currency', 'EUR' ), array( 'payment_method', 'pos_cash' ), array( 'payment_method_title', 'Cash' ), array( 'transaction_id', 'txn' ), array( 'date_paid', '2026-10-18T12:00:00' ), array( 'date_paid_gmt', '2026-10-18T12:00:00' ), array( 'status', 'completed' ) );
+		return array( array( 'currency', 'EUR' ), array( 'payment_method', 'pos_cash' ), array( 'payment_method_title', 'Cash' ), array( 'transaction_id', 'txn' ), array( 'status', 'completed' ) );
 	}
 	public function test_sent_attempt_blocks_reopen_until_cancel_route_resolves_it(): void {
 		$attempt = wp_generate_uuid4();

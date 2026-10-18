@@ -61,16 +61,19 @@ class Gateway_Submission {
 		$ledger     = Ledger::instance();
 		$rows       = $ledger->read( $order );
 		// A recorded attempt is the row itself: the attempt id is the client-minted row id.
+		$history = self::read_attempts( $order );
 		$recorded = $ledger->find( $order, $attempt_id );
-		if ( $recorded ) {
+		if ( $recorded && 'paid' !== ( $history[ $attempt_id ]['state'] ?? null ) ) {
 			return array(
 				'outcome' => 'recorded',
 				'payment' => $recorded,
 				'order' => $ledger->summary( $order ),
 			);
 		}
-		$history = self::read_attempts( $order );
-		if ( in_array( $history[ $attempt_id ]['state'] ?? null, array( 'sent', 'settled' ), true ) ) {
+		if ( in_array( $history[ $attempt_id ]['state'] ?? null, array( 'sent', 'settled', 'paid' ), true ) ) {
+			if ( Money_Epoch::current( $order ) !== $history[ $attempt_id ]['epoch'] ) {
+				return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt belongs to a different money epoch.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
 			return array(
 				'outcome' => $history[ $attempt_id ]['state'],
 				'payment' => null,

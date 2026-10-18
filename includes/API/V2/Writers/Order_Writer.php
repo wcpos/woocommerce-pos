@@ -142,21 +142,34 @@ class Order_Writer extends Null_Writer {
 
 	/** Repair an existing born-twice order without inventing a version stamp. */
 	public function validate_existing_create( int $id, array $payload, array $prepared ) {
-		// The repair runs against an EXISTING order: if a gateway paid it between
-		// the two create arrivals, the replayed set_paid no longer describes this
-		// order's payment — same needs_payment() guard as the update path. The
-		// recovery phases keep stamping unconditionally: there the order was paid
-		// by this very push.
-		$order = wc_get_order( $id );
-		if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
-			unset( $payload['set_paid'] );
+		if ( ! $this->lock( $id ) ) {
+			return new WP_REST_Response(
+				array(
+					'code' => 'woo_rxdb_sync_record_locked',
+					'message' => 'Record is being written; retry shortly.',
+				),
+				409
+			);
 		}
-		$this->stamp_order_audit( $id, $payload, false );
-		$order = wc_get_order( $id );
-		if ( $order ) {
-			$this->complete_money_transition( $order, $prepared['context'] );
+		try {
+			// The repair runs against an EXISTING order: if a gateway paid it between
+			// the two create arrivals, the replayed set_paid no longer describes this
+			// order's payment — same needs_payment() guard as the update path. The
+			// recovery phases keep stamping unconditionally: there the order was paid
+			// by this very push.
+			$order = wc_get_order( $id );
+			if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
+				unset( $payload['set_paid'] );
+			}
+			$this->stamp_order_audit( $id, $payload, false );
+			$order = wc_get_order( $id );
+			if ( $order ) {
+				$this->complete_money_transition( $order, $prepared['context'] );
+			}
+			return null;
+		} finally {
+			$this->unlock( $id );
 		}
-		return null;
 	}
 
 	/** Acquire the payment lock before the controller reads the revision. */
