@@ -43,6 +43,9 @@ final class Settlement_Change {
 
 	public static function changes( array $payload, WC_Order $stored ): array {
 		$changed = array();
+		if ( ! empty( $payload['set_paid'] ) ) {
+			$changed['set_paid'] = true;
+		}
 		foreach ( self::TYPES as $key => $type ) {
 			if ( ! isset( $payload[ $key ] ) || ! is_array( $payload[ $key ] ) ) {
 				continue;
@@ -56,16 +59,19 @@ final class Settlement_Change {
 					continue;
 				}
 				$seen[] = $item->get_id();
-				foreach ( array( 'quantity', 'product_id', 'variation_id', 'subtotal', 'total', 'name', 'code', 'tax_class', 'tax_status', 'method_id' ) as $field ) {
+				foreach ( array( 'quantity', 'product_id', 'variation_id', 'subtotal', 'total', 'subtotal_tax', 'total_tax', 'discount', 'discount_tax', 'name', 'code', 'tax_class', 'tax_status', 'method_id' ) as $field ) {
 					$getter = 'get_' . $field;
 					if ( array_key_exists( $field, $line ) && is_callable( array( $item, $getter ) ) ) {
-						$equal = in_array( $field, array( 'quantity', 'subtotal', 'total' ), true )
+						$equal = in_array( $field, array( 'quantity', 'subtotal', 'total', 'subtotal_tax', 'total_tax', 'discount', 'discount_tax' ), true )
 							? Money_Compare::equal( $line[ $field ], $item->$getter() )
 							: ( null !== $line[ $field ] && (string) $line[ $field ] === (string) $item->$getter() );
 						if ( ! $equal ) {
 							$changed[ $key ] = true;
 						}
 					}
+				}
+				if ( array_key_exists( 'taxes', $line ) && is_callable( array( $item, 'get_taxes' ) ) && self::canonical( $line['taxes'] ) !== self::canonical( $item->get_taxes() ) ) {
+					$changed[ $key ] = true;
 				}
 				$meta = self::meta( $line );
 				// Stored as JSON text on older orders and as a typed array on newer ones, with no key order promised either way.
@@ -104,9 +110,9 @@ final class Settlement_Change {
 					$amount = Money_Compare::micro( (string) ( $row['amount'] ?? '' ) );
 					$refund = Money_Compare::micro( (string) ( $row['refunded_amount'] ?? '0' ) );
 					$invalid = $invalid || null === $amount || null === $refund;
-					$values[ $row['id'] ] = array( $row['status'] ?? null, $amount, $refund, $row['epoch'] ?? 0 );
+					$values[] = array( $row['id'], $row['status'] ?? null, $amount, $refund, $row['epoch'] ?? 0 );
 				}
-				ksort( $values );
+				sort( $values );
 				return $values;
 			};
 			if ( $project( Ledger::instance()->read( $copy ) ) !== $project( Ledger::instance()->read( $stored ) ) || $invalid ) {

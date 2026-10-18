@@ -36,11 +36,11 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$order->set_status( 'pos-open' );
 		$order->update_meta_data( '_woocommerce_pos_uuid', self::REC );
 		$order->save();
-		// Seed server history directly; this fixture must not exercise the client guard.
+		// HPOS may nest an order save here when date_modified crosses a second boundary.
 		foreach ( $meta as $key => $value ) {
 			$order->update_meta_data( $key, $value );
 		}
-		$order->save_meta_data();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save_meta_data() );
 		return $order;
 	}
 	private function push( ?\WC_Order $order, array $payload, array $envelope = array(), bool $modern = true ) {
@@ -76,6 +76,27 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$meta = $this->ack_meta( $this->push( $order, array( 'meta_data' => $this->meta( array_fill_keys( array_keys( $stored ), '' ) ) ) ) );
 		foreach ( $stored as $key => $value ) {
 			$this->assertEquals( $value, $meta[ $key ] );
+		}
+	}
+	public function test_fixture_seed_survives_hpos_modified_timestamp_refresh(): void {
+		$age = static function ( $order ) use ( &$age ): void {
+			if ( $order->get_meta( '_woocommerce_pos_uuid' ) ) {
+				remove_action( 'woocommerce_after_order_object_save', $age );
+				$order->set_date_modified( time() - 2 );
+				$order->apply_changes(); // Force HPOS's nested save during the fixture's meta seed.
+			}
+		};
+		add_action( 'woocommerce_after_order_object_save', $age );
+		try {
+			$order = $this->order( array( '_wcpos_completed_at' => self::AT, '_wcpos_money_owner' => 'server' ) );
+			$this->assertSame( 'server', wc_get_order( $order->get_id() )->get_meta( '_wcpos_money_owner' ) );
+			$payload = $this->reopen();
+			$payload['meta_data'][0]['value'] = 2;
+			$meta = $this->ack_meta( $this->push( $order, $payload ) );
+			$this->assertSame( 'server', $meta['_wcpos_money_owner'] );
+			$this->assertSame( self::AT, $meta['_wcpos_completed_at'] );
+		} finally {
+			remove_action( 'woocommerce_after_order_object_save', $age );
 		}
 	}
 	public function test_update_prepares_once_and_preserves_post_update_context(): void {
@@ -391,6 +412,67 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 	}
 	public function stamp_epochs(): array {
 		return array( array( 0 ), array( 1 ) );
+	}
+
+	/** @dataProvider set_paid_clients */
+	public function test_set_paid_on_reopened_order_requires_matching_epoch( bool $modern, int $status, string $code ): void {
+		$order = $this->order( array( '_wcpos_money_epoch' => '1' ) );
+		$response = $this->push( $order, array( 'set_paid' => true ), array( 'expectedEpoch' => 0 ), $modern );
+		$this->assertSame( $status, $response->get_status() );
+		$this->assertSame( $code, $response->get_data()['code'] );
+		$this->assertNull( wc_get_order( $order->get_id() )->get_date_paid() );
+	}
+	public function set_paid_clients(): array {
+		return array( array( false, 426, 'wcpos_update_required' ), array( true, 422, 'wcpos_money_epoch_stale' ) );
+	}
+	public function test_epoch_provenance_validates_register_and_fills_only_null_fields(): void {
+		$order = $this->order( array( '_wcpos_money_epoch' => '1' ) );
+		$payload = array( 'meta_data' => $this->meta( array( '_wcpos_payments' => $this->cash(), '_wcpos_completed_at' => self::AT, '_wcpos_register' => 'malformed' ) ) );
+		$meta = $this->ack_meta( $this->push( $order, $payload, array( 'expectedEpoch' => 1 ) ) );
+		$this->assertNull( $meta['_wcpos_epoch_provenance'][1]['register_id'] );
+		$payload = array( 'meta_data' => $this->meta( array( '_wcpos_completed_at' => '2026-10-19T12:00:00Z', '_wcpos_register' => self::REC ) ) );
+		$meta = $this->ack_meta( $this->push( $order, $payload, array( 'expectedEpoch' => 1 ) ) );
+		$this->assertSame( self::REC, $meta['_wcpos_epoch_provenance'][1]['register_id'] );
+		$this->assertSame( self::AT, $meta['_wcpos_epoch_provenance'][1]['completed_at'] );
+		$payload['meta_data'] = $this->meta( array( '_wcpos_completed_at' => self::AT, '_wcpos_register' => wp_generate_uuid4() ) );
+		$meta = $this->ack_meta( $this->push( $order, $payload, array( 'expectedEpoch' => 1 ) ) );
+		$this->assertSame( self::REC, $meta['_wcpos_epoch_provenance'][1]['register_id'] );
+	}
+	public function test_epoch_provenance_uses_saved_register_not_refused_client_value(): void {
+		$cash = $this->cash();
+		$cash['payments'][0]['epoch'] = 1;
+		$order = $this->order( array( '_wcpos_money_epoch' => '1', '_wcpos_payments' => $cash, '_wcpos_register' => self::REC ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		$meta = $this->ack_meta( $this->push( $order, array( 'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT, '_wcpos_register' => wp_generate_uuid4() ) ) ), array( 'expectedEpoch' => 1 ) ) );
+		$this->assertSame( self::REC, $meta['_wcpos_epoch_provenance'][1]['register_id'] );
+	}
+
+	/** @dataProvider guard_lock_changes */
+	public function test_money_guard_holds_lock_only_for_protected_changes( string $key, bool $locked ): void {
+		$order = $this->order( array( '_wcpos_money_owner' => 'server', 'ordinary' => 'old' ) );
+		if ( $key ) {
+			$order->delete_meta_data( $key );
+		}
+		$observed = null;
+		$probe = new Order_Lock();
+		$check = static function ( $saving ) use ( $probe, &$observed ) {
+			$observed = ! $probe->acquire( $saving->get_id() );
+			$probe->release( $saving->get_id() );
+		};
+		add_action( 'woocommerce_before_order_object_save', $check, 11 );
+		try {
+			$order->save();
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $check, 11 );
+		}
+		$this->assertSame( $locked, $observed );
+		$this->assertTrue( $probe->acquire( $order->get_id() ) );
+		$probe->release( $order->get_id() );
+		$this->assertSame( 'server', wc_get_order( $order->get_id() )->get_meta( '_wcpos_money_owner' ) );
+	}
+	public function guard_lock_changes(): array {
+		return array( array( '_wcpos_money_owner', true ), array( 'ordinary', false ), array( '', false ) );
 	}
 
 }

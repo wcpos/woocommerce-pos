@@ -230,9 +230,7 @@ class Order_Writer extends Null_Writer {
 		$before = $context['money_before'] ?? null;
 		$epoch = Money_Epoch::current( $saved );
 		$stamp = Money_Epoch::completion_stamp( $saved );
-		if ( $stamp && $stamp['epoch'] >= $epoch ) {
-			return;
-		}
+		$keep_stamp = $stamp && $stamp['epoch'] >= $epoch;
 		$reduced = $before && Money_Epoch::current( $before ) > 0
 			&& ( array_intersect( array_keys( Settlement_Change::TYPES ), $context['settlement_changes'] ) || Money::minor( $saved->get_total() ) < Money::minor( $before->get_total() ) )
 			&& Money::minor( $saved->get_total() ) <= Money_Epoch::net_paid( Ledger::instance()->read( $saved ) );
@@ -243,16 +241,18 @@ class Order_Writer extends Null_Writer {
 		}
 		Money_Meta_Guard::authorised(
 			$saved->get_id(),
-			static function () use ( $saved, $meta, $epoch ): void {
-				$saved->update_meta_data( '_wcpos_completed_at', $meta['_wcpos_completed_at'] );
-				$saved->update_meta_data( '_wcpos_completed_epoch', (string) $epoch );
-				if ( is_string( $meta['_wcpos_completed_session'] ?? null ) ) {
-					$saved->update_meta_data( '_wcpos_completed_session', $meta['_wcpos_completed_session'] );
+			static function () use ( $saved, $meta, $epoch, $keep_stamp, $context ): void {
+				if ( ! $keep_stamp ) {
+					$saved->update_meta_data( '_wcpos_completed_at', $meta['_wcpos_completed_at'] );
+					$saved->update_meta_data( '_wcpos_completed_epoch', (string) $epoch );
+					if ( is_string( $meta['_wcpos_completed_session'] ?? null ) ) {
+						$saved->update_meta_data( '_wcpos_completed_session', $meta['_wcpos_completed_session'] );
+					}
 				}
+				$till = Pos_Order_Audit::till_meta_from_payload( $context['pushed_payload']['meta_data'] ?? array() );
 				$provenance = $saved->get_meta( '_wcpos_epoch_provenance' );
 				$provenance = is_array( $provenance ) ? $provenance : array();
-				if ( $epoch > 0 && ! array_key_exists( $epoch, $provenance ) ) {
-					$provenance[ $epoch ] = array();
+				if ( $epoch > 0 ) {
 					foreach ( array(
 						'register_id' => '_wcpos_register',
 						'session_id' => '_wcpos_session',
@@ -261,7 +261,11 @@ class Order_Writer extends Null_Writer {
 						'sale_counter' => '_wcpos_sale_counter',
 						'completed_at' => '_wcpos_completed_at',
 					) as $field => $key ) {
-						$provenance[ $epoch ][ $field ] = $meta[ $key ] ?? null;
+						$stored = $saved->get_meta( $key );
+						$validation_key = 'completed_at' === $field ? '_wcpos_sale_time' : $key;
+						$value = Pos_Order_Audit::is_valid_till_value( $validation_key, $stored ) ? $stored : ( $till[ $key ] ?? null );
+						// Existing non-null provenance stands; a later valid completion may fill a gap.
+						$provenance[ $epoch ][ $field ] = $provenance[ $epoch ][ $field ] ?? ( 'sale_counter' === $field && null !== $value ? (int) $value : $value );
 					}
 					$saved->update_meta_data( '_wcpos_epoch_provenance', $provenance );
 				}

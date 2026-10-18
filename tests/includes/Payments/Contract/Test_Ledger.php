@@ -41,6 +41,64 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** @dataProvider duplicate_order_lanes */
+	public function test_order_save_drops_duplicate_payment_ids( bool $existing ): void {
+		$order = $existing ? wc_create_order() : new \WC_Order();
+		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'status' => 'captured', 'amount' => '50' );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row, array_merge( $row, array( 'amount' => '99' ) ) ) ) );
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( '50', $rows[0]['amount'] );
+		$this->assertSame( '50.00', Ledger::instance()->paid( $rows ) );
+	}
+	public function duplicate_order_lanes(): array {
+		return array( array( false ), array( true ) );
+	}
+	/** @dataProvider duplicate_order_lanes */
+	public function test_order_save_keeps_only_server_refund_allocations( bool $existing ): void {
+		$order = $existing ? wc_create_order() : new \WC_Order();
+		$allocation = array( 'id' => 123, 'amount' => '5.00', 'status' => 'succeeded', 'provider_ref' => null );
+		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'status' => 'captured', 'amount' => '50', 'refunded_amount' => '5.00', 'refunds' => array( $allocation ) );
+		if ( $existing ) {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row ) ) );
+			$order->save_meta_data();
+		}
+		$forged = $row;
+		$forged['refunds'][] = array_merge( $allocation, array( 'id' => 456 ) );
+		$forged['refunded_amount'] = '10.00';
+		$new = $forged;
+		$new['id'] = wp_generate_uuid4();
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $forged, $new ) ) );
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( $existing ? array( $allocation ) : array(), $rows[0]['refunds'] );
+		$this->assertSame( $existing ? '5.00' : '0', $rows[0]['refunded_amount'] );
+		$this->assertSame( array(), $rows[1]['refunds'] );
+		$this->assertSame( '0', $rows[1]['refunded_amount'] );
+	}
+
+	/** @dataProvider duplicate_restore_paths */
+	public function test_order_save_restores_closed_duplicate_rows_only_once( bool $delete ): void {
+		$order = wc_create_order();
+		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'status' => 'captured', 'amount' => '50', 'closure_id' => wp_generate_uuid4() );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row, $row ) ) );
+		$order->save_meta_data(); // Historical duplicates, before the keeper enforced uniqueness.
+		if ( $delete ) {
+			$order->delete_meta_data( Ledger::META_KEY );
+		} else {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array() ) );
+		}
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $row['closure_id'], $rows[0]['closure_id'] );
+		$this->assertSame( '50.00', Ledger::instance()->paid( $rows ) );
+	}
+	public function duplicate_restore_paths(): array {
+		return array( array( false ), array( true ) );
+	}
+
 	/** A full till row cannot override server-owned or handler-owned facts. */
 	public function test_record_drops_server_owned_and_unknown_keys(): void {
 		$order = $this->create_pos_order();

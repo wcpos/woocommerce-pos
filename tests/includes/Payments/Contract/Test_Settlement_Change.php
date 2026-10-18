@@ -66,4 +66,32 @@ class Test_Settlement_Change extends \WP_UnitTestCase {
 		$this->assertSame( array( '_woocommerce_pos_tax_based_on' ), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_woocommerce_pos_tax_based_on', 'value' => 'billing' ) ) ), new \WC_Order() ) );
 	}
 
+	/** @dataProvider writable_money_fields */
+	public function test_remaining_item_money_fields_are_settlement_changes( string $type, string $class, string $field, $value ): void {
+		$order = new \WC_Order();
+		$item = new $class();
+		$item->set_id( 42 );
+		$order->add_item( $item );
+		$this->assertSame( array( $type ), Settlement_Change::changes( array( $type => array( array( 'id' => 42, $field => $value ) ) ), $order ) );
+	}
+	public function writable_money_fields(): array {
+		$cases = array();
+		foreach ( array( 'line_items' => 'WC_Order_Item_Product', 'fee_lines' => 'WC_Order_Item_Fee', 'shipping_lines' => 'WC_Order_Item_Shipping', 'coupon_lines' => 'WC_Order_Item_Coupon' ) as $type => $class ) {
+			$fields = 'coupon_lines' === $type ? array( 'discount', 'discount_tax' ) : array( 'total_tax', 'taxes' );
+			if ( 'line_items' === $type ) { $fields[] = 'subtotal_tax'; }
+			foreach ( $fields as $field ) {
+				foreach ( 'taxes' === $field ? array( array( 'total' => array( 1 => '1' ) ) ) : array( '1', '0e1' ) as $value ) {
+					$cases[] = array( $type, $class, $field, $value );
+				}
+			}
+		}
+		return $cases;
+	}
+	public function test_duplicate_ledger_rows_are_a_settlement_change(): void {
+		$order = new \WC_Order();
+		$row = array( 'id' => 'cash', 'status' => 'captured', 'amount' => '50' );
+		$order->update_meta_data( '_wcpos_payments', array( 'schema' => 1, 'payments' => array( $row ) ) );
+		$this->assertSame( array( '_wcpos_payments' ), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_wcpos_payments', 'value' => array( 'schema' => 1, 'payments' => array( $row, $row ) ) ) ) ), $order ) );
+	}
+
 }

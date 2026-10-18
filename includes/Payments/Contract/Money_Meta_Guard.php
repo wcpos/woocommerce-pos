@@ -9,9 +9,11 @@
 namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
+use WCPOS\WooCommercePOS\Logger;
 
 final class Money_Meta_Guard {
 	private static $instance;
+	private array $locks = array();
 	private static array $authorised = array();
 	private const KEYS = array( '_wcpos_money_owner', '_wcpos_money_epoch', '_wcpos_completed_at', '_wcpos_completed_epoch', '_wcpos_completed_session', '_wcpos_epoch_provenance', '_wcpos_reopened_at', '_wcpos_awaiting_customer', '_wcpos_gateway_attempts', '_wcpos_money_hold' );
 
@@ -27,6 +29,8 @@ final class Money_Meta_Guard {
 	public static function register_hooks(): void {
 		// Restore the stored epoch before the ledger keeper stamps new rows with it.
 		add_action( 'woocommerce_before_order_object_save', array( self::instance(), 'keep_stored' ), 9 );
+		add_action( 'woocommerce_after_order_object_save', array( self::instance(), 'release_lock' ) );
+		add_action( 'shutdown', array( self::instance(), 'release_lock' ), 10, 0 );
 	}
 
 	public static function is_authorised( int $order_id ): bool {
@@ -61,6 +65,16 @@ final class Money_Meta_Guard {
 		if ( ! $raw ) {
 			return;
 		}
+		// A renamed persisted row may have been a protected key: lock before resolving its id.
+		$pending = array_filter( $raw, static fn( $meta ) => in_array( $meta->key, self::KEYS, true ) || ( $meta->id && isset( $meta->get_changes()['key'] ) ) );
+		$id = $order->get_id();
+		if ( $id && $pending ) {
+			if ( Order_Lock::instance()->acquire( $id ) ) {
+				$this->locks[ $id ] = ( $this->locks[ $id ] ?? 0 ) + 1;
+			} else {
+				Logger::warning( 'Money meta unguarded on an order save.', array( 'order_id' => $id ) );
+			}
+		}
 		$stored = $order->get_id() ? $order->get_data_store()->read_meta( $order ) : array();
 		$protected = array();
 		foreach ( $stored as $meta ) {
@@ -85,6 +99,23 @@ final class Money_Meta_Guard {
 			foreach ( $protected as $meta ) {
 				if ( $key === $meta->meta_key ) {
 					$order->update_meta_data( $key, maybe_unserialize( $meta->meta_value ), $meta->meta_id );
+				}
+			}
+		}
+	}
+	/** Release this guard's acquisition after save, or outstanding acquisitions at shutdown. */
+	public function release_lock( $order = null ): void {
+		if ( null !== $order && ! $order instanceof WC_Order ) {
+			return;
+		}
+		foreach ( null === $order ? $this->locks : array( $order->get_id() => 1 ) as $id => $count ) {
+			if ( ! isset( $this->locks[ $id ] ) ) {
+				continue;
+			}
+			for ( $i = 0; $i < $count; ++$i ) {
+				Order_Lock::instance()->release( $id );
+				if ( 0 === --$this->locks[ $id ] ) {
+					unset( $this->locks[ $id ] );
 				}
 			}
 		}

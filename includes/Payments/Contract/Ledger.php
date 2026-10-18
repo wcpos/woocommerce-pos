@@ -256,10 +256,14 @@ class Ledger {
 				return;
 			}
 			$before = $value;
+			$value['payments'] = $this->unique_rows( $value['payments'], 0 );
 			foreach ( $value['payments'] as &$row ) {
 				unset( $row['closure_id'] );
 				$row['epoch'] = 0;
 				$row['refunded_amount'] = '0';
+				if ( array_key_exists( 'refunds', $row ) ) {
+					$row['refunds'] = array();
+				}
 			}
 			unset( $row );
 			if ( $value !== $before ) {
@@ -308,6 +312,9 @@ class Ledger {
 			Logger::warning( 'Closure stamps unguarded on an order save.', array( 'order_id' => $order_id ) );
 		}
 		$stored = $this->stored( $order->get_id(), false );
+		if ( $stored ) {
+			$stored['payments'] = $this->unique_rows( $stored['payments'], $order_id );
+		}
 		$stamps = array();
 		$stored_rows = array();
 		foreach ( $stored['payments'] ?? array() as $row ) {
@@ -330,6 +337,7 @@ class Ledger {
 			return;
 		}
 		$before = $value;
+		$value['payments'] = $this->unique_rows( $value['payments'], $order_id );
 		$present = array();
 		foreach ( $value['payments'] as &$row ) {
 			$id = strtolower( $row['id'] );
@@ -337,8 +345,11 @@ class Ledger {
 			$previous = $stored_rows[ $id ] ?? null;
 			$row['epoch'] = $previous ? (int) ( $previous['epoch'] ?? 0 ) : Money_Epoch::current( $order );
 			if ( ! Money_Meta_Guard::is_authorised( $order_id ) ) {
-				// Refund totals are server rollups, not order-write intent.
+				// Refund allocations and their totals are server-owned, not order-write intent.
 				$row['refunded_amount'] = $previous['refunded_amount'] ?? '0';
+				if ( array_key_exists( 'refunds', $row ) || isset( $previous['refunds'] ) ) {
+					$row['refunds'] = $previous['refunds'] ?? array();
+				}
 			}
 			if ( isset( $stamps[ $id ] ) ) {
 				$row['closure_id'] = $stamps[ $id ];
@@ -359,6 +370,30 @@ class Ledger {
 			$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $value ) );
 		}
 		$this->reindex( $order, $value['payments'] );
+	}
+
+	/** Keep the first occurrence of each row id on the order-write lane.
+	 *
+	 * @param array $rows     Pushed rows.
+	 * @param int   $order_id Order ID (zero on create).
+	 */
+	private function unique_rows( array $rows, int $order_id ): array {
+		$unique = array();
+		foreach ( $rows as $row ) {
+			$id = strtolower( $row['id'] );
+			if ( isset( $unique[ $id ] ) ) {
+				Logger::warning(
+					'Duplicate payment row dropped on an order save.',
+					array(
+						'order_id' => $order_id,
+						'payment_id' => $id,
+					)
+				);
+				continue;
+			}
+			$unique[ $id ] = $row;
+		}
+		return array_values( $unique );
 	}
 
 	/** Release a keeper acquisition after saving, or all remaining acquisitions on shutdown.
