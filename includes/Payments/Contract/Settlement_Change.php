@@ -75,7 +75,7 @@ final class Settlement_Change {
 						}
 					}
 				}
-				if ( array_key_exists( 'taxes', $line ) && is_callable( array( $item, 'get_taxes' ) ) && self::canonical( $line['taxes'] ) !== self::canonical( $item->get_taxes() ) ) {
+				if ( array_key_exists( 'taxes', $line ) && is_callable( array( $item, 'get_taxes' ) ) && ! self::taxes_equal( $line['taxes'], $item->get_taxes() ) ) {
 					$changed[ $key ] = true;
 				}
 				$meta = self::meta( $line );
@@ -149,6 +149,33 @@ final class Settlement_Change {
 			}
 		}
 		return array_keys( $changed );
+	}
+
+	/** REST taxes are rate rows; WC stores amount maps, with subtotal only on products. */
+	private static function taxes_equal( $taxes, array $stored ): bool {
+		if ( ! is_array( $taxes ) ) {
+			return false;
+		}
+		$maps = array_fill_keys( array_keys( $stored ), array() );
+		foreach ( $taxes as $tax ) {
+			if ( ! is_array( $tax ) || ! isset( $tax['id'] ) || ! is_numeric( $tax['id'] ) ) {
+				return false;
+			}
+			foreach ( $maps as $field => $_ ) {
+				$maps[ $field ][ (int) $tax['id'] ] = $tax[ $field ] ?? '0';
+			}
+		}
+		foreach ( $stored as $field => $amounts ) {
+			if ( count( $amounts ) !== count( $maps[ $field ] ) ) {
+				return false;
+			}
+			foreach ( $amounts as $id => $amount ) {
+				if ( ! array_key_exists( $id, $maps[ $field ] ) || ! Money_Compare::equal( $maps[ $field ][ $id ], $amount ) ) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/** JSON with recursively sorted keys, so two spellings of one value compare equal. */

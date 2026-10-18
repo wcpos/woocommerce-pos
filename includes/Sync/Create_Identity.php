@@ -84,7 +84,7 @@ final class Create_Identity {
 	}
 
 	/** Persist the UUID and prove it resolves back to this exact record. */
-	private function prove( array $meta, int $id, string $record_uuid ): ?WP_Error {
+	public function prove( array $meta, int $id, string $record_uuid ): ?WP_Error {
 		if ( ! $this->store->persist_uuid( $meta['id_type'], $id, $record_uuid ) ) {
 			return $this->persistence_error();
 		}

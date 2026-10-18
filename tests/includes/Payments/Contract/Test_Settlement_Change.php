@@ -3,6 +3,26 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Settlement_Change;
 
 class Test_Settlement_Change extends \WP_UnitTestCase {
+	/** @dataProvider taxed_item_types */
+	public function test_rest_tax_rows_compare_by_rate_and_money( string $type, string $class ): void {
+		$order = new \WC_Order();
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$item = new $class();
+		$item->set_id( 42 );
+		$item->set_taxes( array( 'total' => array( 7 => '2', 3 => '1' ), 'subtotal' => array( 7 => '2', 3 => '1' ) ) );
+		$order->add_item( $item );
+		$line = array( 'id' => 42, 'taxes' => array( array( 'id' => 3, 'total' => '1.00', 'subtotal' => '1.00' ), array( 'id' => 7, 'total' => '2.00', 'subtotal' => '2.00' ) ) );
+		$this->assertSame( array(), Settlement_Change::changes( array( $type => array( $line ) ), $order ) );
+		$line['taxes'][0]['total'] = '1.50';
+		$this->assertSame( array( $type ), Settlement_Change::changes( array( $type => array( $line ) ), $order ) );
+		$line['taxes'] = array();
+		$this->assertSame( array( $type ), Settlement_Change::changes( array( $type => array( $line ) ), $order ) );
+		$item->set_taxes( array() );
+		$this->assertSame( array(), Settlement_Change::changes( array( $type => array( $line ) ), $order ) );
+	}
+	public function taxed_item_types(): array {
+		return array( array( 'line_items', 'WC_Order_Item_Product' ), array( 'fee_lines', 'WC_Order_Item_Fee' ), array( 'shipping_lines', 'WC_Order_Item_Shipping' ) );
+	}
 	public function test_malformed_ledger_wrappers_are_settlement_changes(): void {
 		$order = new \WC_Order();
 		$order->update_meta_data( '_wcpos_money_epoch', 1 );

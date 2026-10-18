@@ -4,6 +4,19 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\{Money_Epoch, Ledger};
 
 class Test_Money_Epoch extends \WP_UnitTestCase {
+	public function test_reopen_malformed_legacy_row_id_is_not_attempt_representation(): void {
+		$order = new \WC_Order();
+		$order->set_total( '50' );
+		$order->update_meta_data( '_wcpos_gateway_attempts', array( '123' => 'settled' ) );
+		foreach ( array( array( '123' ), 123, null, false ) as $id ) {
+			$order->update_meta_data( '_wcpos_payments', array( 'schema' => 1, 'payments' => array( array( 'id' => $id, 'status' => 'captured', 'amount' => '50' ) ) ) );
+			$refusal = Money_Epoch::reopen_refusal( $order );
+			$this->assertInstanceOf( \WP_Error::class, $refusal );
+			$this->assertSame( 'settled_without_row', $refusal->get_error_data()['reason'] );
+		}
+		$order->update_meta_data( '_wcpos_payments', array( 'schema' => 1, 'payments' => array( array( 'id' => '123', 'status' => 'captured', 'amount' => '50' ) ) ) );
+		$this->assertNull( Money_Epoch::reopen_refusal( $order ) );
+	}
 	public function test_completion_proofs_are_epoch_scoped(): void {
 		$this->assertTrue( class_exists( Money_Epoch::class ) );
 		$order = new \WC_Order();

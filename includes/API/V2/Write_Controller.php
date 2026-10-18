@@ -416,6 +416,8 @@ class Write_Controller extends WP_REST_Controller {
 			return $this->envelope_document( $this->document_for( $meta, $existing ), $m['recordId'], $meta, $existing, null, $writer );
 		}
 
+		// A committed create must retain identity even when its money transition must retry.
+		$prepared['context']['preserve_create_identity'] = fn( int $id ) => $this->identity->prove( $meta, $id, $m['recordId'] );
 		$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
 		if ( is_wp_error( $response ) ) {
 			return $response;

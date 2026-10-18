@@ -82,6 +82,37 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $called, did_action( 'woocommerce_payment_complete' ) );
 	}
 
+	public function test_create_post_save_lock_refusal_preserves_identity_for_retry(): void {
+		$lock = new Order_Lock();
+		$created = array();
+		$hold = function ( $order, $request, $creating ) use ( $lock, &$created ): void {
+			if ( $creating ) {
+				$created[] = $order->get_id();
+				$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			}
+		};
+		$payload = array( 'status' => 'pos-open', 'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ) );
+		$envelope = array( 'mutationId' => wp_generate_uuid4() );
+		add_action( 'woocommerce_rest_insert_shop_order_object', $hold, 10, 3 );
+		try {
+			$result = $this->push( null, $payload, $envelope );
+			$this->assertSame( 409, $result->get_status() );
+			$this->assertSame( 'woo_rxdb_sync_record_locked', $result->get_data()['code'] );
+			$this->assertCount( 1, $created );
+			$this->assertSame( self::REC, wc_get_order( $created[0] )->get_meta( '_woocommerce_pos_uuid' ) );
+			$this->assertSame( '', wc_get_order( $created[0] )->get_meta( '_wcpos_completed_at' ) );
+		} finally {
+			remove_action( 'woocommerce_rest_insert_shop_order_object', $hold, 10 );
+			foreach ( $created as $id ) { $lock->release( $id ); }
+		}
+		$before = did_action( 'woocommerce_new_order' );
+		$retried = $this->push( null, $payload, $envelope );
+		$this->assertSame( 200, $retried->get_status() );
+		$this->assertSame( $created[0], $retried->get_data()['document']['id'] );
+		$this->assertSame( self::AT, wc_get_order( $created[0] )->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( $before, did_action( 'woocommerce_new_order' ) );
+	}
+
 	public function test_born_twice_completion_waits_for_order_lock(): void {
 		$order = $this->order( array( '_wcpos_payments' => $this->cash() ) );
 		$payload = array( 'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ) );
