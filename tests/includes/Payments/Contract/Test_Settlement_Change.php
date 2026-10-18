@@ -122,4 +122,16 @@ class Test_Settlement_Change extends \WP_UnitTestCase {
 		$this->assertSame( array(), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_wcpos_payments', 'value' => array( 'schema' => 1, 'payments' => array( $row ) ) ) ) ), $order ) );
 	}
 
+	public function test_malformed_ledger_entry_is_a_settlement_change(): void {
+		$ledger = array( 'schema' => 1, 'payments' => array( 'x' ) );
+		$this->assertSame( array( '_wcpos_payments' ), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_wcpos_payments', 'value' => $ledger ) ) ), new \WC_Order() ) );
+	}
+	public function test_matching_payment_identity_and_in_progress_status_are_unchanged(): void {
+		$order = new \WC_Order();
+		$order->set_status( 'pos-open' );
+		$order->set_date_paid( '2026-10-18T12:00:00Z' );
+		$payload = array( 'status' => 'pos-open', 'currency' => $order->get_currency(), 'payment_method' => '', 'payment_method_title' => '', 'transaction_id' => '', 'date_paid' => wc_rest_prepare_date_response( $order->get_date_paid(), false ), 'date_paid_gmt' => wc_rest_prepare_date_response( $order->get_date_paid() ) );
+		$this->assertSame( array(), Settlement_Change::changes( $payload, $order ) );
+	}
+
 }

@@ -245,6 +245,7 @@ class Ledger {
 		if ( ! $order instanceof WC_Order ) {
 			return;
 		}
+		$warned = false;
 		if ( 0 >= $order->get_id() ) {
 			// A new order has nothing in storage, so no stamp can be kept and every stamp it
 			// carries is the client's claim: drop them all before the first save.
@@ -256,7 +257,7 @@ class Ledger {
 				return;
 			}
 			$before = $value;
-			$value['payments'] = $this->unique_rows( $value['payments'], 0 );
+			$value['payments'] = $this->unique_rows( $value['payments'], 0, $warned );
 			foreach ( $value['payments'] as &$row ) {
 				unset( $row['closure_id'] );
 				$row['epoch'] = 0;
@@ -313,7 +314,7 @@ class Ledger {
 		}
 		$stored = $this->stored( $order->get_id(), false );
 		if ( $stored ) {
-			$stored['payments'] = $this->unique_rows( $stored['payments'], $order_id );
+			$stored['payments'] = $this->unique_rows( $stored['payments'], $order_id, $warned );
 		}
 		$stamps = array();
 		$stored_rows = array();
@@ -337,7 +338,7 @@ class Ledger {
 			return;
 		}
 		$before = $value;
-		$value['payments'] = $this->unique_rows( $value['payments'], $order_id );
+		$value['payments'] = $this->unique_rows( $value['payments'], $order_id, $warned );
 		$present = array();
 		foreach ( $value['payments'] as &$row ) {
 			$id = strtolower( $row['id'] );
@@ -376,10 +377,18 @@ class Ledger {
 	 *
 	 * @param array $rows     Pushed rows.
 	 * @param int   $order_id Order ID (zero on create).
+	 * @param bool  $warned   Whether malformed rows were already logged for this save.
 	 */
-	private function unique_rows( array $rows, int $order_id ): array {
+	private function unique_rows( array $rows, int $order_id, bool &$warned ): array {
 		$unique = array();
 		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) || ! is_string( $row['id'] ?? null ) || '' === trim( $row['id'] ) ) {
+				if ( ! $warned ) {
+					Logger::warning( 'Malformed payment rows dropped on an order save.', array( 'order_id' => $order_id ) );
+					$warned = true;
+				}
+				continue;
+			}
 			$id = strtolower( $row['id'] );
 			if ( isset( $unique[ $id ] ) ) {
 				Logger::warning(

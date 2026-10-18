@@ -130,7 +130,7 @@ final class Money_Epoch {
 				}
 			}
 			foreach ( self::attempt_entries( $stored ) as $attempt ) {
-				if ( in_array( $attempt['state'], array( 'in-flight', 'indeterminate' ), true ) ) {
+				if ( in_array( $attempt['state'], array( 'in-flight', 'indeterminate', 'sent' ), true ) ) {
 					$reason = $reason ?? 'attempt_unresolved';
 				}
 			}

@@ -91,6 +91,19 @@ final class Settlement_Change {
 				$changed[ $key ] = true;
 			}
 		}
+		foreach ( array( 'currency', 'payment_method', 'payment_method_title', 'transaction_id', 'date_paid', 'date_paid_gmt', 'status' ) as $field ) {
+			if ( ! array_key_exists( $field, $payload ) || ( 'status' === $field && in_array( $payload[ $field ], Ledger::IN_PROGRESS_STATUSES, true ) ) ) {
+				continue;
+			}
+			$getter = 'get_' . ( 'date_paid_gmt' === $field ? 'date_paid' : $field );
+			$value = $stored->$getter();
+			if ( in_array( $field, array( 'date_paid', 'date_paid_gmt' ), true ) ) {
+				$value = wc_rest_prepare_date_response( $value, 'date_paid_gmt' === $field );
+			}
+			if ( $payload[ $field ] !== $value ) {
+				$changed[ $field ] = true;
+			}
+		}
 		if ( isset( $payload['customer_id'] ) && (int) $payload['customer_id'] !== $stored->get_customer_id() ) {
 			$changed['customer_id'] = true;
 		}
@@ -112,6 +125,10 @@ final class Settlement_Change {
 			$project = static function ( array $rows ) use ( &$invalid ): array {
 				$values = array();
 				foreach ( $rows as $row ) {
+					if ( ! is_array( $row ) || ! is_string( $row['id'] ?? null ) || '' === trim( $row['id'] ) ) {
+						$invalid = true;
+						continue;
+					}
 					$row = array_diff_key( $row, array_flip( array( 'closure_id', 'updated_at_gmt', 'seen_events', 'events', 'refunds' ) ) );
 					$row += array(
 						'epoch' => 0,

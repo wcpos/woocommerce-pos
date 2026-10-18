@@ -498,4 +498,43 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
 	}
 
+	/** @dataProvider malformed_ledger_operations */
+	public function test_malformed_ledger_push_keeps_only_valid_rows( bool $create ): void {
+		$order = $create ? null : $this->order();
+		$cash = $this->cash();
+		$id = $cash['payments'][0]['id'];
+		$cash['payments'] = array_merge( array( 'x', null, array(), array( 'id' => array() ), array( 'id' => '  ' ) ), $cash['payments'] );
+		$response = $this->push( $order, array( 'meta_data' => $this->meta( array( '_wcpos_payments' => $cash ) ) ) );
+		$meta = $this->ack_meta( $response );
+		$this->assertSame( $create ? 201 : 200, $response->get_status() );
+		$this->assertSame( array( $id ), array_column( $meta['_wcpos_payments']['payments'], 'id' ) );
+	}
+	public function malformed_ledger_operations(): array {
+		return array( array( true ), array( false ) );
+	}
+	/** @dataProvider payment_identity_edits */
+	public function test_legacy_payment_identity_edit_on_reopened_sale_is_refused( string $field, string $value ): void {
+		$order = $this->order( array( '_wcpos_money_epoch' => '1' ) );
+		$response = $this->push( $order, array( $field => $value ), array(), false );
+		$this->assertSame( 426, $response->get_status() );
+		$this->assertSame( 'money_epoch', $response->get_data()['data']['reason'] );
+	}
+	public function payment_identity_edits(): array {
+		return array( array( 'currency', 'EUR' ), array( 'payment_method', 'pos_cash' ), array( 'payment_method_title', 'Cash' ), array( 'transaction_id', 'txn' ), array( 'date_paid', '2026-10-18T12:00:00' ), array( 'date_paid_gmt', '2026-10-18T12:00:00' ), array( 'status', 'completed' ) );
+	}
+	public function test_sent_attempt_blocks_reopen_until_cancel_route_resolves_it(): void {
+		$attempt = wp_generate_uuid4();
+		$order = $this->order( array( '_wcpos_completed_at' => self::AT, '_wcpos_gateway_attempts' => array( $attempt => 'sent' ), '_wcpos_awaiting_customer' => array( 'method_id' => 'pos_cash', 'attempt_id' => $attempt ) ) );
+		$response = $this->push( $order, $this->reopen(), array( 'expectedEpoch' => 0 ) );
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertSame( 'attempt_unresolved', $response->get_data()['data']['reason'] );
+		$cancel = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/pos_cash/cancel' );
+		$cancel->set_body_params( array( 'attempt_id' => $attempt ) );
+		$this->assertSame( 200, $this->server->dispatch( $cancel )->get_status() );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'cancelled', $stored->get_meta( '_wcpos_gateway_attempts' )[ $attempt ]['state'] );
+		$meta = $this->ack_meta( $this->push( $stored, $this->reopen(), array( 'expectedEpoch' => 0 ) ) );
+		$this->assertSame( 1, (int) $meta['_wcpos_money_epoch'] );
+	}
+
 }
