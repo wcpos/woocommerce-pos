@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -563,6 +564,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$sighted = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
 		$this->assertArrayHasKey( 'expected', $sighted );
+		$this->assertSame( Session_Figures::for_session( $sighted )->terms(), $sighted['terms'] );
 		$this->assertSame( array(), $sighted['refund_ids'] );
 		$this->assertSame( array(), $sighted['ledger_rows'] );
 		$this->assertSame( array(), $sighted['refunds'] );
@@ -573,6 +575,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
 		$this->assertArrayNotHasKey( 'expected', $data );
+		$this->assertArrayNotHasKey( 'terms', $data );
 		$this->assertArrayHasKey( 'sales_count', $data );
 		$this->assertSame( array(), $data['order_ids'] );
 		$this->assertSame( array(), $data['ledger_row_ids'] );
@@ -582,6 +585,173 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $data['as_of_gmt'] );
 		$this->assertLessThanOrEqual( time() + 1, strtotime( $data['as_of_gmt'] . ' UTC' ) );
 		$this->assertArrayHasKey( 'movements', $data );
+	}
+
+	/** Post one movement on a session and return its id.
+	 *
+	 * @param string      $session_id Session UUID.
+	 * @param string      $type Movement type.
+	 * @param string      $amount Amount.
+	 * @param string      $reason Reason.
+	 * @param string|null $voids Voided movement, for a void.
+	 */
+	private function movement( string $session_id, string $type, string $amount, string $reason, ?string $voids = null ): string {
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $session_id,
+			'type' => $type,
+			'amount' => $amount,
+			'reason' => $reason,
+			'created_at' => '2026-09-11T10:00:00Z',
+		);
+		if ( null !== $voids ) {
+			$fields['voids'] = $voids;
+		}
+		$this->assertSame( 201, $this->post( 'movements', $fields )->get_status() );
+		return $fields['id'];
+	}
+
+	/** The drawer terms add up exactly to expected cash, from the snapshot expected() reads. */
+	public function test_session_detail_terms_sum_to_expected_cash(): void {
+		// Arrange. Movements first: the void's transaction commits the test transaction.
+		$session = $this->post( 'sessions', $this->fields() )->get_data();
+		$this->movement( $session['id'], 'paid_in', '20', 'Float top-up' );
+		$this->movement( $session['id'], 'paid_out', '5', 'Bank run' );
+		$voided = $this->movement( $session['id'], 'paid_in', '7', 'Mistake' );
+		$this->movement( $session['id'], 'void', '0', '', $voided );
+		$this->start_transaction();
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		$leg = static function ( array $fields ) use ( $session ) {
+			return array_merge(
+				array(
+					'id' => wp_generate_uuid4(),
+					'method_id' => 'pos_cash',
+					'kind' => 'cash',
+					'status' => 'captured',
+					'session_id' => $session['id'],
+				),
+				$fields
+			);
+		};
+		$first = new \WC_Order();
+		$first->set_total( '1000' );
+		$first->save();
+		// A raw negative cash leg is a refund tender: expected() debits it from cash.
+		$pending = $leg(
+			array(
+				'amount' => '999',
+				'status' => 'pending',
+			)
+		);
+		Ledger::instance()->save( $first, array( $leg( array( 'amount' => '50' ) ), $leg( array( 'amount' => '-4' ) ), $pending ), false );
+		$second = new \WC_Order();
+		$second->set_total( '1000' );
+		$second->save();
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $second->get_id() );
+		$refund->set_amount( '40' );
+		$refund->update_meta_data( '_wcpos_session', $session['id'] );
+		$refund->save();
+		// 30 of the refund settles on the card; the 10 remainder is attributed to cash.
+		$card = $leg(
+			array(
+				'method_id' => 'pos_card',
+				'kind' => 'card',
+				'amount' => '30',
+				'refunds' => array(
+					array(
+						'id' => $refund->get_id(),
+						'amount' => '30',
+						'status' => 'succeeded',
+					),
+				),
+			)
+		);
+		$cod = $leg(
+			array(
+				'method_id' => 'cod',
+				'amount' => '25',
+			)
+		);
+		Ledger::instance()->save( $second, array( $cod, $card ), false );
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame(
+			array(
+				'cash' => '176.0000',
+				'card' => '0.0000',
+			),
+			$data['expected']
+		);
+		$this->assertSame(
+			array(
+				'float' => '100.0000',
+				'cash_sales' => array(
+					'amount' => '75.0000',
+					'count' => 2,
+				),
+				'paid_in' => array(
+					array(
+						'amount' => '20.0000',
+						'reason' => 'Float top-up',
+					),
+				),
+				'paid_out' => array(
+					'amount' => '5.0000',
+					'count' => 1,
+					'note' => 'Bank run',
+				),
+				'cash_refunds' => array(
+					'amount' => '14.0000',
+					'count' => 2,
+				),
+				'no_sales' => 0,
+				'voids' => 1,
+			),
+			$data['terms']
+		);
+		$terms = $data['terms'];
+		$this->assertSame(
+			$data['expected']['cash'],
+			Closure_Store::sum(
+				array_merge(
+					array( $terms['float'], $terms['cash_sales']['amount'] ),
+					array_column( $terms['paid_in'], 'amount' ),
+					array( '-' . $terms['paid_out']['amount'], '-' . $terms['cash_refunds']['amount'] )
+				)
+			)
+		);
+		$this->assertSame( Session_Figures::for_session( $session )->terms(), $terms );
+	}
+
+	/** A no-sale counts until voided; every void marker counts. */
+	public function test_session_terms_count_no_sales_and_voids(): void {
+		$session = $this->post( 'sessions', $this->fields() )->get_data();
+		$this->movement( $session['id'], 'no_sale', '0', 'Change for the float' );
+		$voided = $this->movement( $session['id'], 'no_sale', '0', 'Opened by mistake' );
+		$this->movement( $session['id'], 'void', '0', '', $voided );
+		$paid_out = $this->movement( $session['id'], 'paid_out', '3', 'Milk' );
+		$this->movement( $session['id'], 'void', '0', '', $paid_out );
+		$this->start_transaction();
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+
+		$terms = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) )->get_data()['terms'];
+
+		$this->assertSame( 1, $terms['no_sales'] );
+		$this->assertSame( 2, $terms['voids'] );
+		$this->assertSame(
+			array(
+				'amount' => '0.0000',
+				'count' => 0,
+				'note' => null,
+			),
+			$terms['paid_out']
+		);
 	}
 
 	/** Malformed opening fields are refused and an unknown float has no variance. */
