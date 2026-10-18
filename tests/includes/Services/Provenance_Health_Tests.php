@@ -72,7 +72,80 @@ trait Provenance_Health_Tests {
 			$this->assertSame( array(), $row['gaps'] );
 			$this->assertSame( array(), $row['duplicates'] );
 			$this->assertSame( array(), $row['skew'] );
+			$this->assertSame(
+				array(
+					'ahead' => 0,
+					'behind' => 0,
+				),
+				$row['skew_counts']
+			);
 		}
+	}
+
+	/** A duplicate counter carries the true order count beside its capped id sample. */
+	public function test_health_duplicate_counter_reports_true_count_beside_capped_sample(): void {
+		// Arrange.
+		$id = wp_generate_uuid4();
+		for ( $i = 0; $i < 25; ++$i ) {
+			$this->provenance_order( $id, '7' );
+		}
+		$registers = array(
+			array(
+				'id' => $id,
+				'name' => 'Front',
+			),
+		);
+		// Act.
+		$row = ( new Provenance_Health() )->report( $registers, array( $id ) )['registers'][0];
+		// Assert.
+		$this->assertCount( 1, $row['duplicates'] );
+		$this->assertSame( 7, $row['duplicates'][0]['counter'] );
+		$this->assertSame( 25, $row['duplicates'][0]['orders'] );
+		$this->assertCount( 20, $row['duplicates'][0]['order_ids'] );
+		$this->assertCount( 20, $row['duplicates'][0]['order_numbers'] );
+	}
+
+	/** Skew is sampled and counted per direction, so many late syncs cannot hide an ahead clock. */
+	public function test_health_skew_samples_each_direction_so_late_syncs_cannot_hide_ahead_clocks(): void {
+		// Arrange: 25 offline sales synced an hour or more late, and 2 sales from a clock running ahead.
+		$id = wp_generate_uuid4();
+		$received = '2026-09-10T12:00:00Z';
+		$base = strtotime( $received );
+		$behind = array();
+		for ( $i = 0; $i < 25; ++$i ) {
+			$seconds = -( 3600 + $i * 60 );
+			$behind[ $this->provenance_order( $id, (string) ( $i + 1 ), gmdate( 'Y-m-d\TH:i:s\Z', $base + $seconds ), $received ) ] = $seconds;
+		}
+		$ahead = array(
+			$this->provenance_order( $id, '26', gmdate( 'Y-m-d\TH:i:s\Z', $base + 900 ), $received ) => 900,
+			$this->provenance_order( $id, '27', gmdate( 'Y-m-d\TH:i:s\Z', $base + 1200 ), $received ) => 1200,
+		);
+		$registers = array(
+			array(
+				'id' => $id,
+				'name' => 'Front',
+			),
+		);
+		// Act.
+		$row = ( new Provenance_Health() )->report( $registers, array( $id ) )['registers'][0];
+		// Assert.
+		arsort( $ahead );
+		asort( $behind );
+		$expected = array_merge(
+			array_map( null, array_keys( $ahead ), array_values( $ahead ) ),
+			array_slice( array_map( null, array_keys( $behind ), array_values( $behind ) ), 0, 20 )
+		);
+		$this->assertSame(
+			array(
+				'ahead' => 2,
+				'behind' => 25,
+			),
+			$row['skew_counts']
+		);
+		$this->assertSame( array_merge( array( 'ahead', 'ahead' ), array_fill( 0, 20, 'behind' ) ), array_column( $row['skew'], 'direction' ) );
+		$this->assertSame( array_column( $expected, 0 ), array_column( $row['skew'], 'order_id' ) );
+		$this->assertSame( array_column( $expected, 1 ), array_column( $row['skew'], 'skew_seconds' ) );
+		$this->assertSame( array_map( 'strval', array_column( $expected, 0 ) ), array_column( $row['skew'], 'order_number' ) );
 	}
 
 	public function test_health_skew_uses_offsets_and_orders_by_magnitude(): void {
@@ -87,9 +160,16 @@ trait Provenance_Health_Tests {
 		$this->provenance_order( $id, '7', '2026-09-11T00:42:10+02:00', '' );
 		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) );
 		$this->assertSame( array(
-			array( 'order_id' => $behind, 'order_number' => (string) $behind, 'sale_time' => '2026-09-10T22:42:10+02:00', 'received_gmt' => $received, 'skew_seconds' => -7200, 'direction' => 'behind' ),
 			array( 'order_id' => $ahead, 'order_number' => (string) $ahead, 'sale_time' => '2026-09-11T00:57:10+02:00', 'received_gmt' => $received, 'skew_seconds' => 900, 'direction' => 'ahead' ),
+			array( 'order_id' => $behind, 'order_number' => (string) $behind, 'sale_time' => '2026-09-10T22:42:10+02:00', 'received_gmt' => $received, 'skew_seconds' => -7200, 'direction' => 'behind' ),
 		), $report['registers'][0]['skew'] );
+		$this->assertSame(
+			array(
+				'ahead' => 1,
+				'behind' => 1,
+			),
+			$report['registers'][0]['skew_counts']
+		);
 	}
 
 	public function test_health_unknown_register_lists_sampled_orders(): void {

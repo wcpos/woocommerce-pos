@@ -174,10 +174,12 @@ final class Provenance_Health {
 					);
 				}
 				if ( count( $ids ) > 1 ) {
+					$orders_on_counter = count( $ids );
 					$ids = array_slice( $ids, 0, self::SAMPLE_LIMIT );
 					$result['duplicates'][] = array(
 						'till' => $till,
 						'counter' => $counter,
+						'orders' => $orders_on_counter,
 						'order_ids' => $ids,
 						'order_numbers' => array_map( array( $this, 'order_number' ), $ids ),
 					);
@@ -186,15 +188,28 @@ final class Provenance_Health {
 				$previous = $counter;
 			}
 		}
-		usort(
-			$result['skew'],
-			static function ( $a, $b ) {
-				return abs( $b['skew_seconds'] ) <=> abs( $a['skew_seconds'] );
-			}
+		// Sample each direction on its own, so many late offline syncs cannot hide an ahead clock.
+		$by_direction = array(
+			'ahead' => array(),
+			'behind' => array(),
 		);
-		$result['skew'] = array_slice( $result['skew'], 0, self::SAMPLE_LIMIT );
-		foreach ( $result['skew'] as &$skew ) {
-			$skew['order_number'] = $this->order_number( $skew['order_id'] );
+		foreach ( $result['skew'] as $skew ) {
+			$by_direction[ $skew['direction'] ][] = $skew;
+		}
+		$result['skew'] = array();
+		$result['skew_counts'] = array();
+		foreach ( $by_direction as $direction => $rows ) {
+			$result['skew_counts'][ $direction ] = count( $rows );
+			usort(
+				$rows,
+				static function ( $a, $b ) {
+					return abs( $b['skew_seconds'] ) <=> abs( $a['skew_seconds'] );
+				}
+			);
+			foreach ( array_slice( $rows, 0, self::SAMPLE_LIMIT ) as $skew ) {
+				$skew['order_number'] = $this->order_number( $skew['order_id'] );
+				$result['skew'][] = $skew;
+			}
 		}
 		return $result;
 	}
