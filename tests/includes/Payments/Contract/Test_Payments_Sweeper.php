@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 
@@ -38,7 +39,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$row['updated_at_gmt'] = gmdate( 'c', time() - 600 );
 		$order = wc_get_order( $order->get_id() );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => array( $row ) ) ) );
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		( new Payments_Sweeper() )->run();
 		$this->assertCount( 1, Sweep_Test_Handler::$intents );
 		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
@@ -209,7 +210,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$rows = Ledger::instance()->read( $order );
 		unset( $rows[0]['updated_at_gmt'] );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => $rows ) ) );
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		( new Payments_Sweeper() )->run();
 		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
 	}
@@ -268,7 +269,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		foreach ( $rows as &$row ) { $row['updated_at_gmt'] = gmdate( 'c', time() - 600 ); }
 		unset( $row );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => $rows ) ) );
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		Sweep_Test_Handler::$patch = array( 'status' => 'captured' );
 		Sweep_Test_Handler::$preserve_authorized = true;
 		( new Payments_Sweeper() )->run();
@@ -428,7 +429,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$rows[0]['updated_at_gmt'] = gmdate( 'c', time() - $age );
 		$rows[0]['created_at_gmt'] = gmdate( 'c', time() - $age );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => $rows ) ) );
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		return array( $order, $row['id'] );
 	}
 }

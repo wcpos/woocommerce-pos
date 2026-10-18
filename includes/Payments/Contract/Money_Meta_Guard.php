@@ -72,7 +72,9 @@ final class Money_Meta_Guard {
 			if ( Order_Lock::instance()->acquire( $id ) ) {
 				$this->locks[ $id ] = ( $this->locks[ $id ] ?? 0 ) + 1;
 			} else {
-				Logger::warning( 'Money meta unguarded on an order save.', array( 'order_id' => $id ) );
+				$message = sprintf( 'WCPOS money meta locked on order #%d; the save was refused', $id );
+				Logger::error( $message, array( 'order_id' => $id ) );
+				throw new \RuntimeException( esc_html( $message ) );
 			}
 		}
 		$stored = $order->get_id() ? $order->get_data_store()->read_meta( $order ) : array();

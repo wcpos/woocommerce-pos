@@ -19,6 +19,17 @@ class Test_Order_Writer extends WP_UnitTestCase {
 		$this->assertSame( array( array( 'key' => 'public', 'value' => 'kept' ) ), $prepared['payload']['meta_data'] );
 	}
 
+	public function test_legacy_owner_strips_coupon_aggregate_but_keeps_intent(): void {
+		$order = wc_create_order();
+		$order->update_meta_data( '_wcpos_money_owner', 'server' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$writer = new Order_Writer( new \stdClass() );
+		$prepared = $writer->prepare_update( array( 'route' => '/wc/v3/orders' ), $order->get_id(), array( 'coupon_lines' => array( array( 'code' => 'discount', 'discount' => '10', 'discount_tax' => '2' ) ) ), static fn() => null );
+		$forwarded = array();
+		$writer->forward( $prepared, static function ( $method, $route, $payload ) use ( &$forwarded ) { $forwarded = $payload; return null; } );
+		$this->assertSame( array( array( 'code' => 'discount' ) ), $forwarded['coupon_lines'] );
+	}
+
 	/** Require a non-null mutation store dependency (pinned in review, 0ae23b11). */
 	public function test_constructor_requires_mutation_store(): void {
 		$constructor = new \ReflectionMethod( Order_Writer::class, '__construct' );

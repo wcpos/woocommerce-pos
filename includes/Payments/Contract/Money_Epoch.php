@@ -117,10 +117,9 @@ final class Money_Epoch {
 		} else {
 			$rows = $ledger->read( $stored );
 			// A settled gateway with no represented amount cannot become an unpaid cart.
-			$other_proof = self::legacy_completed( $stored ) || self::ledger_completed( $stored, $ledger );
 			foreach ( self::attempt_entries( $stored ) as $id => $attempt ) {
 				$represented = array_filter( $rows, static fn( $row ) => strtolower( $row['id'] ?? '' ) === strtolower( (string) $id ) && in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) );
-				if ( 'settled' === $attempt['state'] && self::current( $stored ) === $attempt['epoch'] && ! $represented && ! $other_proof ) {
+				if ( 'settled' === $attempt['state'] && self::current( $stored ) === $attempt['epoch'] && ! $represented ) {
 					$reason = 'settled_without_row';
 				}
 			}

@@ -70,6 +70,95 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	public function test_rowless_settled_attempt_blocks_reopen_despite_covering_cash(): void {
+		$order = $this->order( array( '_wcpos_payments' => $this->cash(), '_wcpos_gateway_attempts' => array( wp_generate_uuid4() => 'settled' ) ) );
+		$response = $this->push( $order, $this->reopen(), array( 'expectedEpoch' => 0 ) );
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertSame( 'settled_without_row', $response->get_data()['data']['reason'] );
+	}
+	public function test_money_guard_refuses_save_when_another_owner_holds_lock(): void {
+		$order = $this->order( array( '_wcpos_money_owner' => 'server' ) );
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		$errors = array();
+		$log = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === \WCPOS\WooCommercePOS\Logger::$log_level ) { $errors[] = $message; }
+			return false;
+		};
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		try {
+			$order->delete_meta_data( '_wcpos_money_owner' );
+			$order->set_customer_note( 'Must not persist' );
+			$order->save(); // WC catches the hook exception and skips the entire write.
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+			$this->assertSame( 'server', wc_get_order( $order->get_id() )->get_meta( '_wcpos_money_owner' ) );
+			$this->assertNotEmpty( $errors );
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			$lock->release( $order->get_id() );
+		}
+		$order->save();
+		$this->assertSame( 'Must not persist', wc_get_order( $order->get_id() )->get_customer_note() );
+		$this->assertSame( 'server', wc_get_order( $order->get_id() )->get_meta( '_wcpos_money_owner' ) );
+	}
+	/** @dataProvider malformed_ledger_operations */
+	public function test_post_forward_failure_retry_completes_money_transition( bool $create ): void {
+		$order = $create ? null : $this->order();
+		$fee = array( 'name' => 'Sale', 'total' => '40', 'tax_status' => 'none' );
+		if ( $order ) { $fee['id'] = array_key_first( $order->get_items( 'fee' ) ); }
+		$payload = array( 'fee_lines' => array( $fee ), 'meta_data' => $this->meta( array( '_woocommerce_pos_uuid' => self::REC, '_wcpos_completed_at' => self::AT, '_wcpos_payments' => $this->cash( '40' ) ) ) );
+		$id = 0;
+		$crash = static function ( $total, $saved ) use ( &$id ) {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) ) {
+					$id = $saved->get_id();
+					throw new \RuntimeException( 'Post-forward failure' );
+				}
+			}
+			return $total;
+		};
+		add_filter( 'woocommerce_order_get_total', $crash, 10, 2 );
+		try {
+			$this->push( $order, $payload, array( 'tillAggregate' => array( 'total' => '99' ) ) );
+			$this->fail( 'Expected post-forward failure' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'Post-forward failure', $e->getMessage() );
+		} finally {
+			remove_filter( 'woocommerce_order_get_total', $crash, 10 );
+		}
+		$saved = wc_get_order( $id );
+		$this->assertSame( '40.00', $saved->get_total() );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_completed_at' ) );
+		// New mutation, fresh CAS for update; create resolves the already-saved UUID.
+		$meta = $this->ack_meta( $this->push( $create ? null : $saved, $payload ) );
+		$this->assertSame( self::AT, $meta['_wcpos_completed_at'] ?? null );
+	}
+	/** @dataProvider paid_attempt_paths */
+	public function test_counting_payment_resolves_sent_attempt_and_allows_reopen( bool $online ): void {
+		$attempt = wp_generate_uuid4();
+		$order = $this->order( array( '_wcpos_gateway_attempts' => array( $attempt => 'sent' ) ) );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
+		if ( $online ) {
+			$order->payment_complete(); // Passthrough mints after WC has already completed the order.
+		} else {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
+			$request->set_body_params( array( 'payment' => array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '20' ) ) );
+			$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+			$this->assertSame( 'sent', \WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) )[ $attempt ]['state'] );
+			$request->set_body_params( array( 'payment' => array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '30' ) ) );
+			$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+		}
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( array( 'state' => 'paid', 'epoch' => 0 ), $saved->get_meta( '_wcpos_gateway_attempts' )[ $attempt ] );
+		$meta = $this->ack_meta( $this->push( $saved, $this->reopen(), array( 'expectedEpoch' => 0 ) ) );
+		$this->assertSame( 1, (int) $meta['_wcpos_money_epoch'] );
+	}
+	public function paid_attempt_paths(): array {
+		return array( array( true ), array( false ) );
+	}
+
 	public function test_forged_update_preserves_stored_money_meta(): void {
 		$stored = array( '_wcpos_money_owner' => 'server', '_wcpos_money_epoch' => 0, '_wcpos_completed_at' => self::AT, '_wcpos_gateway_attempts' => array( 'old' => 'sent' ) );
 		$order = $this->order( $stored );

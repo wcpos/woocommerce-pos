@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
@@ -76,6 +77,28 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $existing ? '5.00' : '0', $rows[0]['refunded_amount'] );
 		$this->assertSame( array(), $rows[1]['refunds'] );
 		$this->assertSame( '0', $rows[1]['refunded_amount'] );
+	}
+
+	/** @dataProvider duplicate_order_lanes */
+	public function test_order_save_preserves_server_event_history( bool $existing ): void {
+		$order = $existing ? wc_create_order() : new \WC_Order();
+		$row = array( 'id' => wp_generate_uuid4(), 'status' => 'captured', 'amount' => '50', 'seen_events' => array( 'evt_1' ), 'events' => array( array( 'message' => 'Captured' ) ), 'updated_at_gmt' => '2026-10-18T12:00:00Z' );
+		if ( $existing ) {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row ) ) );
+			$order->save_meta_data();
+		}
+		$pushed = array_merge( $row, array( 'seen_events' => array(), 'events' => array(), 'updated_at_gmt' => '2000-01-01T00:00:00Z' ) );
+		$new = $row;
+		$new['id'] = wp_generate_uuid4();
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $pushed, $new ) ) );
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( $existing ? $row['seen_events'] : array(), $rows[0]['seen_events'] );
+		$this->assertSame( $existing ? $row['events'] : array(), $rows[0]['events'] );
+		$this->assertSame( $existing ? $row['updated_at_gmt'] : null, $rows[0]['updated_at_gmt'] ?? null );
+		$this->assertSame( array(), $rows[1]['seen_events'] );
+		$this->assertSame( array(), $rows[1]['events'] );
+		$this->assertArrayNotHasKey( 'updated_at_gmt', $rows[1] );
 	}
 
 	/** @dataProvider duplicate_restore_paths */
@@ -180,7 +203,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		$closure_id = wp_generate_uuid4();
 		for ( $i = 0; $i < 2; ++$i ) {
 			$ledger->stamp_closure( $order, array( $before[0]['id'] ), $closure_id );
@@ -577,7 +600,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 
 		$rows               = $ledger->read( $order );
 		$rows[1]['receipt'] = array(
@@ -2048,7 +2071,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		$events = array();
 		for ( $i = 0; $i < Ledger::EVENTS_MAX + 5; ++$i ) {
 			$events[] = array( 'message' => 'e' . $i );

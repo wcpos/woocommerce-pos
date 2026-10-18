@@ -259,7 +259,12 @@ class Ledger {
 			$before = $value;
 			$value['payments'] = $this->unique_rows( $value['payments'], 0, $warned );
 			foreach ( $value['payments'] as &$row ) {
-				unset( $row['closure_id'] );
+				unset( $row['closure_id'], $row['updated_at_gmt'] );
+				foreach ( array( 'seen_events', 'events' ) as $field ) {
+					if ( array_key_exists( $field, $row ) ) {
+						$row[ $field ] = array();
+					}
+				}
 				$row['epoch'] = 0;
 				$row['refunded_amount'] = '0';
 				if ( array_key_exists( 'refunds', $row ) ) {
@@ -346,6 +351,15 @@ class Ledger {
 			$previous = $stored_rows[ $id ] ?? null;
 			$row['epoch'] = $previous ? (int) ( $previous['epoch'] ?? 0 ) : Money_Epoch::current( $order );
 			if ( ! Money_Meta_Guard::is_authorised( $order_id ) ) {
+				foreach ( array( 'seen_events', 'events' ) as $field ) {
+					if ( array_key_exists( $field, $row ) || isset( $previous[ $field ] ) ) {
+						$row[ $field ] = $previous[ $field ] ?? array();
+					}
+				}
+				unset( $row['updated_at_gmt'] );
+				if ( isset( $previous['updated_at_gmt'] ) ) {
+					$row['updated_at_gmt'] = $previous['updated_at_gmt'];
+				}
 				// Refund allocations and their totals are server-owned, not order-write intent.
 				$row['refunded_amount'] = $previous['refunded_amount'] ?? '0';
 				if ( array_key_exists( 'refunds', $row ) || isset( $previous['refunds'] ) ) {
@@ -1456,6 +1470,20 @@ class Ledger {
 		Money_Meta_Guard::authorised(
 			$order->get_id(),
 			function () use ( $order, $normalized, $derive ): void {
+				$paid = Money_Epoch::net_paid( $normalized );
+				if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
+					$history = Gateway_Submission::read_attempts( $order );
+					$updated = $history;
+					foreach ( $updated as &$attempt ) {
+						if ( 'sent' === $attempt['state'] ) {
+							$attempt['state'] = 'paid';
+						}
+					}
+					unset( $attempt );
+					if ( $updated !== $history ) {
+						$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $updated );
+					}
+				}
 				if ( $derive ) {
 					$this->derive( $order, $normalized );
 				}
