@@ -80,7 +80,8 @@ final class Session_Figures {
 	 *
 	 * - float: the counted opening float.
 	 * - cash_sales: captured cash-kind session legs that are not refund tenders; count is their distinct orders.
-	 * - paid_in: each non-voided paid-in, in movement order; an empty reason reads as null.
+	 * - paid_in: each non-voided paid-in, in movement order, with the movement id the detail's
+	 *   movements list carries; an empty reason reads as null.
 	 * - paid_out: the non-voided paid-outs; note is the reason only when there is exactly one.
 	 * - cash_refunds: whatever expected() debits from cash for refunds, as a positive amount:
 	 *   cash-kind refund-tender legs plus each bound refund's cash rows. A refund's cash rows are
@@ -136,6 +137,7 @@ final class Session_Figures {
 			$reason = '' === trim( (string) $row['reason'] ) ? null : $row['reason'];
 			if ( 'paid_in' === $row['type'] ) {
 				$paid_in[] = array(
+					'id' => $row['id'],
 					'amount' => Closure_Store::sum( array( $row['amount'] ) ),
 					'reason' => $reason,
 				);

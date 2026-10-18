@@ -615,7 +615,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_session_detail_terms_sum_to_expected_cash(): void {
 		// Arrange. Movements first: the void's transaction commits the test transaction.
 		$session = $this->post( 'sessions', $this->fields() )->get_data();
-		$this->movement( $session['id'], 'paid_in', '20', 'Float top-up' );
+		$paid_in = $this->movement( $session['id'], 'paid_in', '20', 'Float top-up' );
 		$this->movement( $session['id'], 'paid_out', '5', 'Bank run' );
 		$voided = $this->movement( $session['id'], 'paid_in', '7', 'Mistake' );
 		$this->movement( $session['id'], 'void', '0', '', $voided );
@@ -697,6 +697,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 				),
 				'paid_in' => array(
 					array(
+						'id' => $paid_in,
 						'amount' => '20.0000',
 						'reason' => 'Float top-up',
 					),
