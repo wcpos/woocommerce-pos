@@ -72,6 +72,111 @@ final class Session_Figures {
 		return $this->memo['expected'];
 	}
 
+	/**
+	 * Break expected cash into the drawer equation's terms, from the same snapshot as expected().
+	 *
+	 * Identity, exact in DECIMAL(65,4): float + cash_sales.amount + Σ paid_in.amount
+	 * − paid_out.amount − cash_refunds.amount === expected()['cash'].
+	 *
+	 * - float: the counted opening float.
+	 * - cash_sales: captured cash-kind session legs that are not refund tenders; count is their distinct orders.
+	 * - paid_in: each non-voided paid-in, in movement order, with the movement id the detail's
+	 *   movements list carries; an empty reason reads as null.
+	 * - paid_out: the non-voided paid-outs; note is the reason only when there is exactly one.
+	 * - cash_refunds: whatever expected() debits from cash for refunds, as a positive amount:
+	 *   cash-kind refund-tender legs plus each bound refund's cash rows. A refund's cash rows are
+	 *   its succeeded allocations on cash-kind parent rows and its unallocated remainder, which
+	 *   refund_tender_rows() attributes to cash; its allocations on card or other rows stay out,
+	 *   as they stay out of expected cash. count is the refund-tender legs plus the refunds with
+	 *   at least one cash row, each refund once however its cash is split.
+	 * - no_sales: non-voided no-sale movements; voids: void movements.
+	 */
+	public function terms(): array {
+		if ( isset( $this->memo['terms'] ) ) {
+			return $this->memo['terms'];
+		}
+		$sales = array();
+		$sale_orders = array();
+		$refunds = array();
+		$refund_count = 0;
+		foreach ( $this->legs() as $order_id => $rows ) {
+			foreach ( $rows as $row ) {
+				if ( 'cash' !== self::tender_key( $row ) ) {
+					continue;
+				}
+				if ( self::is_refund_tender( $row ) ) {
+					$refunds[] = self::negate( $row['amount'] );
+					++$refund_count;
+				} else {
+					$sales[] = $row['amount'];
+					$sale_orders[ $order_id ] = true;
+				}
+			}
+		}
+		foreach ( $this->refunds() as $refund ) {
+			$cash = false;
+			foreach ( $refund['rows'] as $row ) {
+				if ( 'cash' === self::tender_key( $row ) ) {
+					$refunds[] = self::negate( $row['amount'] );
+					$cash = true;
+				}
+			}
+			$refund_count += $cash ? 1 : 0;
+		}
+		$paid_in = array();
+		$paid_out = array();
+		$no_sales = 0;
+		$voids = 0;
+		foreach ( $this->movements() as $row ) {
+			if ( 'void' === $row['type'] ) {
+				++$voids;
+			}
+			if ( null !== $row['voided_by'] ) {
+				continue;
+			}
+			$reason = '' === trim( (string) $row['reason'] ) ? null : $row['reason'];
+			if ( 'paid_in' === $row['type'] ) {
+				$paid_in[] = array(
+					'id' => $row['id'],
+					'amount' => Closure_Store::sum( array( $row['amount'] ) ),
+					'reason' => $reason,
+				);
+			} elseif ( 'paid_out' === $row['type'] ) {
+				$paid_out[] = array( $row['amount'], $reason );
+			} elseif ( 'no_sale' === $row['type'] ) {
+				++$no_sales;
+			}
+		}
+		$this->memo['terms'] = array(
+			'float' => Closure_Store::sum( array( $this->session['counted_float'] ) ),
+			'cash_sales' => array(
+				'amount' => Closure_Store::sum( $sales ),
+				'count' => count( $sale_orders ),
+			),
+			'paid_in' => $paid_in,
+			'paid_out' => array(
+				'amount' => Closure_Store::sum( array_column( $paid_out, 0 ) ),
+				'count' => count( $paid_out ),
+				'note' => 1 === count( $paid_out ) ? $paid_out[0][1] : null,
+			),
+			'cash_refunds' => array(
+				'amount' => Closure_Store::sum( $refunds ),
+				'count' => $refund_count,
+			),
+			'no_sales' => $no_sales,
+			'voids' => $voids,
+		);
+		return $this->memo['terms'];
+	}
+
+	/** Flip a decimal string's sign without float arithmetic.
+	 *
+	 * @param string $amount Decimal string.
+	 */
+	private static function negate( string $amount ): string {
+		return '-' === substr( $amount, 0, 1 ) ? substr( $amount, 1 ) : '-' . $amount;
+	}
+
 	/** Count distinct orders with captured session legs. */
 	public function sales_count(): int {
 		return count( $this->legs() );

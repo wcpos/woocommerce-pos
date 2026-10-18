@@ -138,9 +138,11 @@ class Sessions_Controller extends \WP_REST_Controller {
 				// Server-clock boundary of this snapshot (see above); never the device clock.
 				'as_of_gmt' => $as_of_gmt,
 			);
-			// The expected figure is a report: a cashier counting blind never receives it.
+			// The expected figure and its terms are a report: a cashier counting blind never receives them.
 			if ( current_user_can( 'view_woocommerce_pos_reports' ) ) {
 				$detail['expected'] = $figures->expected();
+				// The drawer equation's terms, from the snapshot expected() summed, so they add up to its cash.
+				$detail['terms'] = $figures->terms();
 			}
 			return new WP_REST_Response( $this->visible_row( $row + $detail ) );
 		}
