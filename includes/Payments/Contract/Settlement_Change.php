@@ -43,7 +43,8 @@ final class Settlement_Change {
 
 	public static function changes( array $payload, WC_Order $stored ): array {
 		$changed = array();
-		if ( ! empty( $payload['set_paid'] ) ) {
+		// The writer reads the flag with rest_sanitize_boolean(); a "false" string is not a paid assertion.
+		if ( isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] ) ) {
 			$changed['set_paid'] = true;
 		}
 		foreach ( self::TYPES as $key => $type ) {

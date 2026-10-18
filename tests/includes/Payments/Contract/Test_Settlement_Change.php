@@ -94,4 +94,13 @@ class Test_Settlement_Change extends \WP_UnitTestCase {
 		$this->assertSame( array( '_wcpos_payments' ), Settlement_Change::changes( array( 'meta_data' => array( array( 'key' => '_wcpos_payments', 'value' => array( 'schema' => 1, 'payments' => array( $row, $row ) ) ) ) ), $order ) );
 	}
 
+
+	/** A string "false" set_paid is the same non-assertion the writer sees; only a true flag is settlement intent. */
+	public function test_set_paid_reads_the_boolean_value(): void {
+		$order = new \WC_Order();
+		$this->assertSame( array(), Settlement_Change::changes( array( 'set_paid' => 'false' ), $order ) );
+		$this->assertSame( array(), Settlement_Change::changes( array( 'set_paid' => false ), $order ) );
+		$this->assertSame( array( 'set_paid' ), Settlement_Change::changes( array( 'set_paid' => 'true' ), $order ) );
+		$this->assertSame( array( 'set_paid' ), Settlement_Change::changes( array( 'set_paid' => true ), $order ) );
+	}
 }
