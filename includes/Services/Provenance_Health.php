@@ -66,13 +66,7 @@ final class Provenance_Health {
 			$report['registers'][] = $this->register_report( $register, $groups[ $register['id'] ] ?? array() ) + ( new Closure_Store() )->health( $register['id'] );
 		}
 		foreach ( array_diff_key( $groups, array_flip( $known_ids ) ) as $register => $group ) {
-			$ids = array_slice( array_keys( $group ), 0, self::SAMPLE_LIMIT );
-			$report['unregistered'][] = array(
-				'register_id' => $register,
-				'orders' => count( $group ),
-				'order_ids' => $ids,
-				'order_numbers' => array_map( array( $this, 'order_number' ), $ids ),
-			);
+			$report['unregistered'][] = array( 'register_id' => $register ) + $this->sampled( array_keys( $group ) );
 		}
 		$session_store = new Register_Session_Store();
 		foreach ( $sessions as $id => $order_ids ) {
@@ -141,9 +135,12 @@ final class Provenance_Health {
 			'last_counter' => null,
 			'gaps' => array(),
 			'duplicates' => array(),
-			'skew' => array(),
 		);
 		$tills = array();
+		$skews = array(
+			'ahead' => array(),
+			'behind' => array(),
+		);
 		foreach ( $orders as $id => $meta ) {
 			$value = $meta['_wcpos_sale_counter'] ?? '';
 			$counter = filter_var( $value, FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) );
@@ -156,7 +153,7 @@ final class Provenance_Health {
 			}
 			$skew = $this->order_skew( $id, $meta );
 			if ( null !== $skew ) {
-				$result['skew'][] = $skew;
+				$skews[ $skew['direction'] ][] = $skew;
 			}
 		}
 		foreach ( $tills as $till => $counters ) {
@@ -174,29 +171,58 @@ final class Provenance_Health {
 					);
 				}
 				if ( count( $ids ) > 1 ) {
-					$ids = array_slice( $ids, 0, self::SAMPLE_LIMIT );
 					$result['duplicates'][] = array(
 						'till' => $till,
 						'counter' => $counter,
-						'order_ids' => $ids,
-						'order_numbers' => array_map( array( $this, 'order_number' ), $ids ),
-					);
+					) + $this->sampled( $ids );
 				}
 				$result['last_counter'] = max( $result['last_counter'] ?? 0, $counter );
 				$previous = $counter;
 			}
 		}
-		usort(
-			$result['skew'],
-			static function ( $a, $b ) {
-				return abs( $b['skew_seconds'] ) <=> abs( $a['skew_seconds'] );
-			}
+		return $result + $this->skew_sample( $skews );
+	}
+
+	/**
+	 * Count a finding's orders and sample the first ids, resolving numbers for the sample only.
+	 *
+	 * @param array $ids Every order id behind the finding.
+	 * @return array
+	 */
+	private function sampled( array $ids ): array {
+		$sample = array_slice( $ids, 0, self::SAMPLE_LIMIT );
+		return array(
+			'orders' => count( $ids ),
+			'order_ids' => $sample,
+			'order_numbers' => array_map( array( $this, 'order_number' ), $sample ),
 		);
-		$result['skew'] = array_slice( $result['skew'], 0, self::SAMPLE_LIMIT );
-		foreach ( $result['skew'] as &$skew ) {
-			$skew['order_number'] = $this->order_number( $skew['order_id'] );
+	}
+
+	/**
+	 * Sample each skew direction on its own, so many late offline syncs cannot hide an ahead clock.
+	 *
+	 * @param array $by_direction Skew rows keyed by direction, ahead first.
+	 * @return array
+	 */
+	private function skew_sample( array $by_direction ): array {
+		$sample = array(
+			'skew' => array(),
+			'skew_counts' => array(),
+		);
+		foreach ( $by_direction as $direction => $rows ) {
+			$sample['skew_counts'][ $direction ] = count( $rows );
+			usort(
+				$rows,
+				static function ( $a, $b ) {
+					return abs( $b['skew_seconds'] ) <=> abs( $a['skew_seconds'] );
+				}
+			);
+			foreach ( array_slice( $rows, 0, self::SAMPLE_LIMIT ) as $skew ) {
+				$skew['order_number'] = $this->order_number( $skew['order_id'] );
+				$sample['skew'][] = $skew;
+			}
 		}
-		return $result;
+		return $sample;
 	}
 
 	/**

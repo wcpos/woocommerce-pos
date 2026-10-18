@@ -302,6 +302,7 @@ class Registers_Controller extends WP_REST_Controller {
 									'properties' => array(
 										'till' => array( 'type' => 'string' ),
 										'counter' => array( 'type' => 'integer' ),
+										'orders' => array( 'type' => 'integer' ),
 									) + $samples,
 								),
 							),
@@ -326,6 +327,13 @@ class Registers_Controller extends WP_REST_Controller {
 											'enum' => array( 'ahead', 'behind' ),
 										),
 									),
+								),
+							),
+							'skew_counts' => array(
+								'type' => 'object',
+								'properties' => array(
+									'ahead' => array( 'type' => 'integer' ),
+									'behind' => array( 'type' => 'integer' ),
 								),
 							),
 						),
