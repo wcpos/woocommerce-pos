@@ -219,6 +219,11 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$index = $this->index_values( $stored );
 		sort( $index );
 		$this->assertSame( array( 'pos_cash', 'stripe' ), $index );
+		foreach ( $value['payments'] as &$row ) {
+			$row['epoch'] = 0;
+			$row['refunded_amount'] = '0';
+		}
+		unset( $row );
 		$this->assertSame( $value, $stored->get_meta( Ledger::META_KEY ) );
 	}
 

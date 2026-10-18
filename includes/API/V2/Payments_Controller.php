@@ -58,7 +58,19 @@ class Payments_Controller extends WC_REST_Controller {
 						'methods'             => $definition[0],
 						'callback'            => function ( $request ) use ( $definition ) {
 							// Each body fetches its order only after acquiring the lock, including GET status.
-							return Order_Lock::instance()->with_lock( (int) $request['id'], fn() => $this->{$definition[1]}( $request ) );
+							return Order_Lock::instance()->with_lock(
+								(int) $request['id'],
+								function () use ( $request, $definition ) {
+									$order = wc_get_order( (int) $request['id'] );
+									if ( $order && WP_REST_Server::CREATABLE === $definition[0] ) {
+										$error = \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::gate( $order, $request, null, false );
+										if ( $error ) {
+											return $error;
+										}
+									}
+									return $this->{$definition[1]}( $request );
+								}
+							);
 						},
 						'permission_callback' => array( $this, 'payments_permissions_check' ),
 					),

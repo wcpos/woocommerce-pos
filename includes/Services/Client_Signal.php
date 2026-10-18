@@ -15,7 +15,7 @@ final class Client_Signal {
 	 * Read a sanitized client signal from its header or query transport.
 	 *
 	 * @param WP_REST_Request $request Request to inspect.
-	 * @return array{protocol: ?string, platform: ?string, app_version: ?string, channel: 'header'|'query'|'none'}
+	 * @return array{protocol: ?string, platform: ?string, app_version: ?string, payments: ?string, channel: 'header'|'query'|'none'}
 	 */
 	public static function read( WP_REST_Request $request ): array {
 		$params          = $request->get_query_params();
@@ -26,14 +26,33 @@ final class Client_Signal {
 
 		$protocol_raw = null !== $protocol_header ? $protocol_header : ( $params['wcpos_protocol'] ?? null );
 		$client_raw   = null !== $client_header ? $client_header : ( $params['wcpos_client'] ?? null );
-		$client       = self::sanitize_client( $client_raw );
+		$payments    = null;
+		if ( is_string( $client_raw ) && preg_match( '/\bpayments=(\d{1,3})\.(\d{1,3})\b/i', $client_raw, $match ) ) {
+			$payments  = (int) $match[1] . '.' . (int) $match[2];
+			$client_raw = trim( str_replace( $match[0], '', $client_raw ), " \t\n\r;" );
+		}
+		$client = self::sanitize_client( $client_raw );
 
 		return array(
 			'protocol'    => self::sanitize_protocol( $protocol_raw ),
 			'platform'    => $client[0],
 			'app_version' => $client[1],
+			'payments'    => $payments,
 			'channel'     => $has_header ? 'header' : ( $has_query ? 'query' : 'none' ),
 		);
+	}
+
+	/**
+	 * Compare the caller's numeric payments major/minor version.
+	 *
+	 * @param array  $signal Parsed client signal.
+	 * @param string $version Required major.minor.
+	 */
+	public static function payments_at_least( array $signal, string $version ): bool {
+		if ( null === ( $signal['payments'] ?? null ) ) {
+			return false;
+		}
+		return array_map( 'intval', explode( '.', $signal['payments'] ) ) >= array_map( 'intval', explode( '.', $version ) );
 	}
 
 	/**
@@ -43,6 +62,7 @@ final class Client_Signal {
 	 */
 	public static function record( WP_REST_Request $request ): void {
 		$properties = self::read( $request );
+		unset( $properties['payments'] ); // Keep the existing telemetry tuple unchanged.
 		$dedup_key  = 'pos_client_signal:' . md5( wp_json_encode( $properties ) );
 		Analytics::instance()->capture_once( 'pos_client_signal', $properties, $dedup_key );
 	}

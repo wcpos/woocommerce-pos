@@ -308,8 +308,8 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
 	}
 
-	/** The payment lock held elsewhere means a payment operation is running: the push succeeds without the restart. */
-	public function test_a_held_payment_lock_forwards_the_update_without_the_restart(): void {
+	/** The shared money lock refuses the whole update while a payment operation is running. */
+	public function test_a_held_payment_lock_refuses_the_update_until_released(): void {
 		$product  = ProductHelper::create_simple_product();
 		$order_id = $this->make_order( 'pos-open' );
 		$lock     = new Order_Lock();
@@ -320,9 +320,10 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 			$lock->release( $order_id );
 		}
 
-		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 409, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
 		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
-		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
+		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
 		// Released: the same restart now goes through.
 		$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );

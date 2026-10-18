@@ -70,14 +70,14 @@ class Gateway_Submission {
 			);
 		}
 		$history = self::read_attempts( $order );
-		if ( in_array( $history[ $attempt_id ] ?? null, array( 'sent', 'settled' ), true ) ) {
+		if ( in_array( $history[ $attempt_id ]['state'] ?? null, array( 'sent', 'settled' ), true ) ) {
 			return array(
-				'outcome' => $history[ $attempt_id ],
+				'outcome' => $history[ $attempt_id ]['state'],
 				'payment' => null,
 				'order' => $ledger->summary( $order ),
 			);
 		}
-		if ( 'cancelled' === ( $history[ $attempt_id ] ?? null ) ) {
+		if ( 'cancelled' === ( $history[ $attempt_id ]['state'] ?? null ) ) {
 			// The till undid this send; a late retry of it must not send again.
 			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
@@ -196,7 +196,7 @@ class Gateway_Submission {
 			}
 			$order->set_payment_method( $gateway->id );
 			$order->set_payment_method_title( (string) $descriptor['title'] );
-			$order->save();
+			Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 			add_action( 'woocommerce_payment_complete', $complete );
 			add_action( 'woocommerce_order_status_changed', $status_changed, 10, 3 );
 			self::$submitting_order_id = $order->get_id();
@@ -285,7 +285,7 @@ class Gateway_Submission {
 			self::remember_attempt( $order, $history, $attempt_id, 'settled' );
 			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the order status the merchant stored for this gateway. */
 			$order->add_order_note( sprintf( __( 'Settled via POS: %1$s on %2$s', 'woocommerce-pos' ), $verb['label'], wc_get_order_status_name( $settled_status ) ) );
-			$order->save();
+			Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 		} else {
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
 			$order->update_meta_data(
@@ -301,7 +301,7 @@ class Gateway_Submission {
 			self::remember_attempt( $order, $history, $attempt_id, 'sent' );
 			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the destination the cashier entered. */
 			$order->add_order_note( sprintf( __( 'Sent via POS: %1$s (%2$s)', 'woocommerce-pos' ), $verb['label'], (string) $destination ) );
-			$order->save();
+			Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 		}
 		$outcome = $paid ? 'recorded' : ( $settled ? 'settled' : 'sent' );
 		Logger::log( sprintf( 'WCPOS gateway attempt %s on order #%d: %s via %s by cashier #%d (verb %s)', $attempt_id, $order->get_id(), $outcome, $descriptor['id'], get_current_user_id(), $verb['kind'] ) );
@@ -338,7 +338,7 @@ class Gateway_Submission {
 		// The history outlives the stamp: a late retry of this send must never send again.
 		self::remember_attempt( $order, self::read_attempts( $order ), strtolower( $attempt_id ), 'cancelled' );
 		/* translators: 1: the payment method title, 2: the cashier's reason. */
-		$order->update_status( 'pos-open', trim( sprintf( __( 'Cancelled via POS: %1$s. %2$s', 'woocommerce-pos' ), $descriptor['title'], $reason ) ) );
+		Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->update_status( 'pos-open', trim( sprintf( __( 'Cancelled via POS: %1$s. %2$s', 'woocommerce-pos' ), $descriptor['title'], $reason ) ) ) );
 		return array( 'order' => Ledger::instance()->summary( $order ) );
 	}
 
@@ -376,7 +376,7 @@ class Gateway_Submission {
 			static function ( $id, $from, $to, $order ): void {
 				if ( self::read_stamp( $order ) && in_array( $to, array_merge( wc_get_is_paid_statuses(), array( 'cancelled', 'refunded', 'trash' ) ), true ) ) {
 					self::clear_stamp( $order );
-					$order->save();
+					Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 				}
 			},
 			10,
@@ -427,14 +427,29 @@ class Gateway_Submission {
 	}
 
 	/**
-	 * The order's attempt history: attempt id → `sent` | `settled` | `cancelled`. Never cleared with the stamp.
+	 * The order's epoch-bearing attempt history. Legacy strings belong to epoch zero.
 	 *
 	 * @param WC_Order $order Order object.
-	 * @return array<string, string>
+	 * @return array<string, array{state:string, epoch:int}>
 	 */
 	public static function read_attempts( WC_Order $order ): array {
 		$history = $order->get_meta( self::ATTEMPTS_META_KEY );
-		return is_array( $history ) ? array_filter( $history, 'is_string' ) : array();
+		$entries = array();
+		foreach ( is_array( $history ) ? $history : array() as $id => $entry ) {
+			if ( is_string( $entry ) ) {
+				$entry = array(
+					'state' => $entry,
+					'epoch' => 0,
+				);
+			}
+			if ( is_array( $entry ) && is_string( $entry['state'] ?? null ) && is_int( $entry['epoch'] ?? null ) && $entry['epoch'] >= 0 ) {
+				$entries[ $id ] = array(
+					'state' => $entry['state'],
+					'epoch' => $entry['epoch'],
+				);
+			}
+		}
+		return $entries;
 	}
 
 	/**
@@ -447,7 +462,10 @@ class Gateway_Submission {
 	 */
 	private static function remember_attempt( WC_Order $order, array $history, string $attempt_id, string $fate ): void {
 		unset( $history[ $attempt_id ] );
-		$history[ $attempt_id ] = $fate;
+		$history[ $attempt_id ] = array(
+			'state' => $fate,
+			'epoch' => Money_Epoch::current( $order ),
+		);
 		$order->update_meta_data( self::ATTEMPTS_META_KEY, array_slice( $history, - self::ATTEMPTS_CAP, null, true ) );
 	}
 

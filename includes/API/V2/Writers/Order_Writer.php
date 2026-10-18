@@ -10,6 +10,13 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Owner;
+use WCPOS\WooCommercePOS\Payments\Contract\Settlement_Change;
+use WCPOS\WooCommercePOS\Services\Client_Signal;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
@@ -49,6 +56,9 @@ class Order_Writer extends Null_Writer {
 	 * @var string[]
 	 */
 	private array $late_provenance_refusals = array();
+
+	/** @var array Context prepared under the lock, consumed by after_update. */
+	private array $update_context = array();
 
 	/** Construct the order writer. */
 	public function __construct( object $store, ?Order_Write_Payload $order_payload = null ) {
@@ -90,6 +100,8 @@ class Order_Writer extends Null_Writer {
 			'payload' => $this->order_payload->for_create( $forward ),
 			'context' => array(
 				'operation' => 'create',
+				'money' => $meta['money'] ?? array(),
+				'pushed_payload' => $payload,
 				'created_gmt' => $created_gmt,
 				'fill_meta' => $till_meta,
 			),
@@ -112,10 +124,14 @@ class Order_Writer extends Null_Writer {
 			'method' => 'PUT',
 			'route' => $meta['route'] . '/' . $id,
 			'payload' => $payload,
-			'context' => array(),
-			'context_factory' => function () use ( $id, $payload, $created_gmt ) {
-				return $this->prepare_order_update_after_read( $id, $payload, $created_gmt );
-			},
+			'context' => array(
+				'operation' => 'update',
+				'prepare_under_lock' => true,
+				'id' => $id,
+				'pushed_payload' => $payload,
+				'requested_created_gmt' => $created_gmt,
+				'money' => $meta['money'] ?? array(),
+			),
 		);
 	}
 
@@ -139,40 +155,119 @@ class Order_Writer extends Null_Writer {
 		return null;
 	}
 
+	/** Acquire the payment lock before the controller reads the revision. */
+	public function lock( int $id ): bool {
+		return Order_Lock::instance()->acquire( $id );
+	}
+
+	/** Release the controller's acquisition, including conflict and error paths. */
+	public function unlock( int $id ): void {
+		Order_Lock::instance()->release( $id );
+	}
+
 	/** Forward within the named order hook lifecycle. */
 	public function forward( array $prepared, callable $forward ) {
 		$declared = $prepared['context'];
 		if ( ! in_array( $declared['operation'] ?? '', array( 'create', 'update' ), true ) ) {
 			return $this->forward_with_reserved_stock( $prepared, $forward );
 		}
+		if ( ! empty( $declared['prepare_under_lock'] ) ) {
+			// Prepare once under the payment lock: no payment can land between proof and save.
+			$late = $this->prepare_order_update_after_read( $declared['id'], $declared['pushed_payload'], $declared['requested_created_gmt'], $declared['money'] );
+			if ( ! is_array( $late ) ) {
+				return $late;
+			}
+			$prepared['payload'] = $late['payload'];
+			$declared = $late['context'];
+			$this->update_context = $declared;
+			if ( $declared['reopen'] ) {
+				$error = Money_Epoch::reopen_refusal( $declared['money_before'] );
+				if ( $error ) {
+					return $error;
+				}
+			}
+		}
 		$payload = $prepared['payload'];
 		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
 		$declared['set_paid'] = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
-		// A cart restart and the payment routes contend for the same order: hold the
-		// payment lock from wc/v3's fresh load through its save, so no payment row can
-		// land between the pre-insert re-check and the write. Held by someone else
-		// means a payment operation is running on this order — then it is not a
-		// restartable cart, and the push goes ahead without the restart (never a 409:
-		// the till's other edits are still good). The Mutation_Store record lock is
-		// already held on this connection; Order_Lock falls back to its option lease
-		// on servers that cannot nest named locks, so that lock is never dropped.
-		$locked = isset( $declared['restart_gmt'] ) && Order_Lock::instance()->acquire( (int) $declared['id'] );
-		if ( isset( $declared['restart_gmt'] ) && ! $locked ) {
-			unset( $declared['restart_gmt'] );
-		}
 		$prepared['context'] = $declared;
-		try {
-			return Order_Write_Intent::open(
-				$declared,
-				function () use ( $prepared, $forward ) {
-					return $this->forward_with_reserved_stock( $prepared, $forward );
-				}
-			);
-		} finally {
-			if ( $locked ) {
-				Order_Lock::instance()->release( (int) $declared['id'] );
+		$response = Order_Write_Intent::open(
+			$declared,
+			function () use ( $prepared, $forward ) {
+				return $this->forward_with_reserved_stock( $prepared, $forward );
+			}
+		);
+		if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 && ( 'update' === $declared['operation'] || 201 === $response->get_status() ) ) {
+			$saved = wc_get_order( $response->get_data()['id'] ?? 0 );
+			if ( $saved ) {
+				Money_Owner::stamp( $declared['pushed_payload'], $declared['money']['tillAggregate'] ?? null, $saved );
+				$this->complete_money_transition( $saved, $declared );
 			}
 		}
+		return $response;
+	}
+
+	/** Persist only server-proven completion/reopen intents; forged meta was already stripped. */
+	private function complete_money_transition( \WC_Order $saved, array $context ): void {
+		$meta = Settlement_Change::meta( $context['pushed_payload'] );
+		if ( ! empty( $context['reopen'] ) ) {
+			Money_Meta_Guard::authorised(
+				$saved->get_id(),
+				static function () use ( $saved, $context, $meta ): void {
+					$saved->update_meta_data( '_wcpos_money_epoch', Money_Epoch::current( $context['money_before'] ) + 1 );
+					foreach ( array( '_wcpos_completed_at', '_wcpos_completed_epoch', '_wcpos_completed_session', Money_Owner::META_KEY ) as $key ) {
+						$saved->delete_meta_data( $key );
+					}
+					$saved->update_meta_data( '_wcpos_reopened_at', $meta['_wcpos_reopened_at'] );
+					$saved->save();
+				}
+			);
+			return;
+		}
+		if ( ! is_string( $meta['_wcpos_completed_at'] ?? null ) || '' === $meta['_wcpos_completed_at'] ) {
+			return;
+		}
+		$before = $context['money_before'] ?? null;
+		$epoch = Money_Epoch::current( $saved );
+		$stamp = Money_Epoch::completion_stamp( $saved );
+		if ( $stamp && $stamp['epoch'] >= $epoch ) {
+			return;
+		}
+		$reduced = $before && Money_Epoch::current( $before ) > 0
+			&& ( array_intersect( array_keys( Settlement_Change::TYPES ), $context['settlement_changes'] ) || Money::minor( $saved->get_total() ) < Money::minor( $before->get_total() ) )
+			&& Money::minor( $saved->get_total() ) <= Money_Epoch::net_paid( Ledger::instance()->read( $saved ) );
+		$free_create = 'create' === $context['operation'] && 0 === $epoch && 0 === Money::minor( $saved->get_total() );
+		if ( ! Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) && ! $reduced && ! $free_create ) {
+			Logger::warning( sprintf( 'WCPOS completion stamp refused on order #%d: no completion proof in the current epoch', $saved->get_id() ) );
+			return;
+		}
+		Money_Meta_Guard::authorised(
+			$saved->get_id(),
+			static function () use ( $saved, $meta, $epoch ): void {
+				$saved->update_meta_data( '_wcpos_completed_at', $meta['_wcpos_completed_at'] );
+				$saved->update_meta_data( '_wcpos_completed_epoch', $epoch );
+				if ( is_string( $meta['_wcpos_completed_session'] ?? null ) ) {
+					$saved->update_meta_data( '_wcpos_completed_session', $meta['_wcpos_completed_session'] );
+				}
+				$provenance = $saved->get_meta( '_wcpos_epoch_provenance' );
+				$provenance = is_array( $provenance ) ? $provenance : array();
+				if ( $epoch > 0 && ! array_key_exists( $epoch, $provenance ) ) {
+					$provenance[ $epoch ] = array();
+					foreach ( array(
+						'register_id' => '_wcpos_register',
+						'session_id' => '_wcpos_session',
+						'sale_time' => '_wcpos_sale_time',
+						'sale_zone' => '_wcpos_sale_tz',
+						'sale_counter' => '_wcpos_sale_counter',
+						'completed_at' => '_wcpos_completed_at',
+					) as $field => $key ) {
+						$provenance[ $epoch ][ $field ] = $meta[ $key ] ?? null;
+					}
+					$saved->update_meta_data( '_wcpos_epoch_provenance', $provenance );
+				}
+				$saved->save();
+			}
+		);
 	}
 
 	/**
@@ -285,6 +380,10 @@ class Order_Writer extends Null_Writer {
 
 	/** Persist till metadata, tax IDs, reassignment, and email changes after update. */
 	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void {
+		if ( ! empty( $context['prepare_under_lock'] ) ) {
+			$context = $this->update_context;
+			$this->update_context = array();
+		}
 		$this->stamp_order_till_meta( $id, $payload );
 		$this->order_payload->persist_tax_ids( $id, $payload, false );
 		$this->persist_cashier_store_reassignment( $id, $current, $response_data, $context );
@@ -436,7 +535,26 @@ class Order_Writer extends Null_Writer {
 	 * @param array    $payload     Client order document.
 	 * @param int|null $created_gmt Validated client date_created_gmt (UTC timestamp), or null when absent.
 	 */
-	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null ): array {
+	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null, array $money = array() ) {
+		$before = wc_get_order( $id );
+		$changes = $before ? Settlement_Change::changes( $payload, $before ) : array();
+		$reopen = $before && Money_Epoch::is_reopen( $payload, $before );
+		$request = $money['request'] ?? new \WP_REST_Request();
+		if ( $before && ( $changes || $reopen || array_key_exists( '_wcpos_completed_at', Settlement_Change::meta( $payload ) ) ) ) {
+			$error = Money_Epoch::gate( $before, $request, $money['expectedEpoch'] ?? null );
+			if ( $error ) {
+				return $error;
+			}
+		}
+		$pushed_payload = $payload;
+		if ( $before && 0 === Money_Epoch::current( $before ) && Money_Owner::VALUE_SERVER === $before->get_meta( Money_Owner::META_KEY ) && ! Client_Signal::payments_at_least( Client_Signal::read( $request ), '1.3' ) ) {
+			// The legacy till never learned the ownership rule: keep intent, not its rejected aggregate.
+			foreach ( array( 'line_items', 'fee_lines', 'shipping_lines' ) as $key ) {
+				foreach ( $payload[ $key ] ?? array() as $index => $line ) {
+					$payload[ $key ][ $index ] = array_diff_key( $line, array_flip( array( 'subtotal', 'subtotal_tax', 'total', 'total_tax', 'taxes' ) ) );
+				}
+			}
+		}
 		$reassignment = array();
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
 			$key = Meta_Entry::key( $entry );
@@ -513,6 +631,12 @@ class Order_Writer extends Null_Writer {
 		}
 		$context = array(
 			'operation' => 'update',
+			'money' => $money,
+			'pushed_payload' => $pushed_payload,
+			'money_before' => $before,
+			'settlement_changes' => $changes,
+			'reopen' => $reopen,
+			'requested_created_gmt' => $created_gmt,
 			'id' => $id,
 			'clear_email' => $clear_email,
 			'reassignment' => $reassignment,

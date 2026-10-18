@@ -48,4 +48,14 @@ class Test_Order_Writer extends WP_UnitTestCase {
 
 		$this->assertNull( $result );
 	}
+	/** @dataProvider unsuccessful_forwards */
+	public function test_money_transition_ignores_non_successful_forward( $response ): void {
+		$writer = new Order_Writer( new \stdClass() );
+		$prepared = $writer->prepare_create( array( 'route' => '/wc/v3/orders' ), array(), static fn() => null );
+		$this->assertSame( $response, $writer->forward( $prepared, static fn() => $response ) );
+	}
+	public function unsuccessful_forwards(): array {
+		return array( array( null ), array( new \WP_Error( 'test' ) ), array( new \WP_REST_Response( array(), 199 ) ), array( new \WP_REST_Response( array(), 400 ) ) );
+	}
+
 }

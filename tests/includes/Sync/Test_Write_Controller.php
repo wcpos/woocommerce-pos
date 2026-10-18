@@ -428,6 +428,20 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->reserved );
 	}
 
+	public function test_money_envelope_types_and_unknown_keys(): void {
+		$controller = new Write_Controller( new Fake_Mutation_Store() );
+		$validate = new \ReflectionMethod( $controller, 'validate_envelope' );
+		$validate->setAccessible( true );
+		foreach ( array( array( 'expectedEpoch' => 0, 'tillAggregate' => array( 'total' => '50', 'tax_lines' => array() ) ), array( 'expectedEpoch' => null, 'tillAggregate' => null ) ) as $valid ) {
+			$this->assertNull( $validate->invoke( $controller, $this->envelope( $valid ), 'customers' ) );
+		}
+		foreach ( array( array( 'expectedEpoch' => -1 ), array( 'expectedEpoch' => '1' ), array( 'expectedEpoch' => 1.5 ), array( 'tillAggregate' => '50' ), array( 'tillAggregate' => array( '50' ) ), array( 'unknown' => true ) ) as $invalid ) {
+			$error = $validate->invoke( $controller, $this->envelope( $invalid ), 'customers' );
+			$this->assertSame( 'woo_rxdb_sync_bad_envelope', $error->get_error_code() );
+			$this->assertSame( 400, $error->get_error_data()['status'] );
+		}
+	}
+
 	public function test_validate_rejects_bad_envelope_before_reserving(): void {
 		$store = new Fake_Mutation_Store();
 		$c     = new Write_Controller( $store );

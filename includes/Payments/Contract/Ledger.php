@@ -258,6 +258,8 @@ class Ledger {
 			$before = $value;
 			foreach ( $value['payments'] as &$row ) {
 				unset( $row['closure_id'] );
+				$row['epoch'] = 0;
+				$row['refunded_amount'] = '0';
 			}
 			unset( $row );
 			if ( $value !== $before ) {
@@ -282,9 +284,7 @@ class Ledger {
 		}
 		$deleting = false;
 		try {
-			$property = new \ReflectionProperty( \WC_Data::class, 'meta_data' );
-			$property->setAccessible( true );
-			foreach ( $property->getValue( $order ) as $meta ) {
+			foreach ( Money_Meta_Guard::raw_meta( $order ) as $meta ) {
 				if ( self::META_KEY === $meta->key && null === $meta->value ) {
 					$deleting = true;
 					break;
@@ -309,7 +309,9 @@ class Ledger {
 		}
 		$stored = $this->stored( $order->get_id(), false );
 		$stamps = array();
+		$stored_rows = array();
 		foreach ( $stored['payments'] ?? array() as $row ) {
+			$stored_rows[ strtolower( $row['id'] ) ] = $row;
 			if ( ! empty( $row['closure_id'] ) ) {
 				$stamps[ strtolower( $row['id'] ) ] = $row['closure_id'];
 			}
@@ -332,6 +334,12 @@ class Ledger {
 		foreach ( $value['payments'] as &$row ) {
 			$id = strtolower( $row['id'] );
 			$present[ $id ] = true;
+			$previous = $stored_rows[ $id ] ?? null;
+			$row['epoch'] = $previous ? (int) ( $previous['epoch'] ?? 0 ) : Money_Epoch::current( $order );
+			if ( ! Money_Meta_Guard::is_authorised( $order_id ) ) {
+				// Refund totals are server rollups, not order-write intent.
+				$row['refunded_amount'] = $previous['refunded_amount'] ?? '0';
+			}
 			if ( isset( $stamps[ $id ] ) ) {
 				$row['closure_id'] = $stamps[ $id ];
 			} else {
@@ -475,7 +483,7 @@ class Ledger {
 			}
 			$this->derive( $order, $this->read( $order ) );
 			if ( $order->get_changes() ) {
-				$order->save();
+				Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 			}
 			return $this->find( $order, $stored['id'] );
 		}
@@ -570,7 +578,7 @@ class Ledger {
 			return $settled;
 		}
 		$this->derive( $order, $this->read( $order ) );
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 		$row = $this->find( $order, $row['id'] );
 		Logger::log( sprintf( 'WCPOS payment %s recorded on order #%d: %s %s via %s (%s) by cashier #%d', $row['id'], $order->get_id(), $row['amount'], $row['currency'], $row['method_id'], $row['status'], $row['cashier_id'] ) );
 		/**
@@ -712,7 +720,7 @@ class Ledger {
 				);
 				$this->replace_and_save( $order, $rows, $row, false );
 				$this->derive( $order, $this->read( $order ) );
-				$order->save();
+				Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 			} else {
 				$rows = array_filter( $rows, static fn( $saved ) => $saved['id'] !== $row['id'] );
 				// save() rebuilds payment-id and live-leg indexes from the remaining rows.
@@ -732,7 +740,7 @@ class Ledger {
 			return $settled;
 		}
 		$this->derive( $order, $this->read( $order ) );
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 		return array(
 			'payment' => $this->find( $order, $row['id'] ),
 			'handoff' => $handoff,
@@ -1374,6 +1382,7 @@ class Ledger {
 		foreach ( $rows as $row ) {
 			$row      = $this->normalize_row( $order, $row );
 			$previous = $stored[ $row['id'] ] ?? null;
+			$row['epoch'] = null === $previous ? Money_Epoch::current( $order ) : (int) ( $previous['epoch'] ?? 0 );
 			$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
 			if ( null !== $stamp && $this->same_content( $this->normalize_row( $order, $previous ), $row ) ) {
 				$row['updated_at_gmt'] = $stamp;
@@ -1399,11 +1408,16 @@ class Ledger {
 				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
 			}
 		}
-		if ( $derive ) {
-			$this->derive( $order, $normalized );
-		}
-		// The before-save keeper rebuilds this index again from the final ledger; that is intentional.
-		$order->save();
+		// Authorise server rollups through derive() too: payment_complete() can save the order.
+		Money_Meta_Guard::authorised(
+			$order->get_id(),
+			function () use ( $order, $normalized, $derive ): void {
+				if ( $derive ) {
+					$this->derive( $order, $normalized );
+				}
+				$order->save();
+			}
+		);
 	}
 
 	/**
@@ -1494,7 +1508,7 @@ class Ledger {
 					// Woo sets date_paid, reduces stock and fires woocommerce_payment_complete;
 					// Orders::payment_complete_order_status() lands the per-gateway status
 					// because payment_method was set above.
-					$order->payment_complete();
+					Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->payment_complete() );
 				} finally {
 					self::$deriving = false;
 				}
@@ -1521,6 +1535,7 @@ class Ledger {
 	 * @return array
 	 */
 	public static function to_wire( array $row ): array {
+		$row['epoch'] = (int) ( $row['epoch'] ?? 0 );
 		foreach ( array( 'provider_refs', 'receipt' ) as $field ) {
 			if ( empty( $row[ $field ] ) ) {
 				$row[ $field ] = new \stdClass();
