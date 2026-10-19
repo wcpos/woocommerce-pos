@@ -8,11 +8,350 @@
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Webview payment passthrough tests. */
 class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
+	use \Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
+
+	/**
+	 * A contended mint must not interrupt WooCommerce's payment hooks.
+	 *
+	 * @dataProvider payment_hooks
+	 */
+	public function test_payment_hook_locked_ledger_logs_error_without_throwing( string $hook ): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$before = $order->get_meta( Ledger::META_KEY, true );
+		$logs = array();
+		$log_filter = static function ( $enabled, $message ) use ( &$logs ) {
+			$logs[] = array( Logger::$log_level, $message );
+			return false;
+		};
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		add_filter( 'woocommerce_pos_logging', $log_filter, 10, 2 );
+		try {
+			// Act: fire the hook directly so WooCommerce cannot swallow an escaped exception.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order );
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order );
+				}
+			);
+
+			// Assert.
+			$this->assertSame( $before, wc_get_order( $order->get_id() )->get_meta( Ledger::META_KEY, true ) );
+			$errors = array_column( array_filter( $logs, static fn( $log ) => 'error' === $log[0] ), 1 );
+			$this->assertCount( 1, $errors ); // mint() names the payment once; the hook adds nothing for a known refusal.
+			$this->assertMatchesRegularExpression(
+				sprintf( '/^WCPOS payment [0-9a-f-]{36} \\(92\\.95 [A-Z]{3}\\) captured but not recorded in the ledger on order #%d; reconcile manually: WCPOS payment ledger is locked\\. \\| Context: \\{"order_id":%d\\}$/', $order->get_id(), $order->get_id() ),
+				$errors[0]
+			);
+		} finally {
+			$lock->release( $order->get_id() );
+			remove_filter( 'woocommerce_pos_logging', $log_filter, 10 );
+			do_action( 'woocommerce_before_pay_action', null );
+		}
+	}
+
+	/**
+	 * A mint refused after WooCommerce took the money is loud: an error log and an order
+	 * note name the payment, nothing is deferred, and the gateway hook is not interrupted.
+	 *
+	 * @dataProvider payment_hooks
+	 *
+	 * @param string $hook Payment hook.
+	 */
+	public function test_payment_hook_contended_mint_leaves_note_and_logs_without_throwing( string $hook ): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->set_transaction_id( 'hook_lost_charge' );
+		$order->save();
+		$before      = $order->get_meta( Ledger::META_KEY, true );
+		$before_keys = array_column( array_map( static fn( $meta ) => $meta->get_data(), wc_get_order( $order->get_id() )->get_meta_data() ), 'key' );
+		$errors      = array();
+		$log_filter  = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		add_filter( 'woocommerce_pos_logging', $log_filter, 10, 2 );
+		try {
+			// Act: fire the hook directly so WooCommerce cannot swallow an escaped exception.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+				}
+			);
+		} finally {
+			$lock->release( $order->get_id() );
+			remove_filter( 'woocommerce_pos_logging', $log_filter, 10 );
+			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+		}
+
+		// Assert.
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( $before, $saved->get_meta( Ledger::META_KEY, true ) );
+		$this->assertSame( array(), Ledger::instance()->read( $saved ) );
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'hook_lost_charge' ) ) );
+		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'hook_lost_charge', $notes );
+		$this->assertStringContainsString( '92.95', $notes );
+		$after_keys = array_column( array_map( static fn( $meta ) => $meta->get_data(), $saved->get_meta_data() ), 'key' );
+		$this->assertSame( array(), array_values( array_diff( $after_keys, $before_keys ) ) );
+	}
+
+	/**
+	 * A ledger storage read error during a hook mint is loud and never escapes the hook.
+	 *
+	 * @dataProvider payment_hooks
+	 *
+	 * @param string $hook Payment hook.
+	 */
+	public function test_payment_hook_ledger_read_error_is_loud_without_throwing( string $hook ): void {
+		global $wpdb;
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->set_transaction_id( 'read_error_charge' );
+		$order->save();
+		$errors = array();
+		$log    = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		$break    = static fn( $sql ) => false !== strpos( $sql, 'AS meta_id, meta_value FROM' ) && false !== strpos( $sql, Ledger::META_KEY ) ? 'SELECT missing_column FROM wcpos_missing_table' : $sql;
+		$suppress = $wpdb->suppress_errors( true );
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'query', $break );
+		try {
+			// Act.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+				}
+			);
+		} finally {
+			remove_filter( 'query', $break );
+			$wpdb->suppress_errors( $suppress );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+		}
+
+		// Assert.
+		$this->assertNotEmpty( array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'read_error_charge' ) && false !== strpos( $message, 'Ledger storage read failed.' ) ) );
+		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'read_error_charge', $notes );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/**
+	 * A failing note hook never replaces the original persistence failure, and the hook does not throw.
+	 *
+	 * @dataProvider payment_hooks
+	 *
+	 * @param string $hook Payment hook.
+	 */
+	public function test_payment_hook_failing_note_keeps_original_error_without_throwing( string $hook ): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->set_transaction_id( 'note_error_charge' );
+		$order->save();
+		$errors = array();
+		$log    = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		$note = static function ( $comment_id, $comment ) {
+			if ( 'order_note' === $comment->comment_type ) {
+				throw new \RuntimeException( 'note hook failed' );
+			}
+		};
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_action( 'wp_insert_comment', $note, 10, 2 );
+		try {
+			// Act.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+				}
+			);
+		} finally {
+			remove_action( 'wp_insert_comment', $note, 10 );
+			$lock->release( $order->get_id() );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+		}
+
+		// Assert: the persistence failure is recorded once as itself, the note failure once as itself,
+		// and the hook adds no line of its own for a known refusal.
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'note_error_charge' ) && false !== strpos( $message, 'WCPOS payment ledger is locked.' ) ) );
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'could not add the unrecorded-payment note' ) && false !== strpos( $message, 'note hook failed' ) ) );
+		$this->assertSame( array(), array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'webview payment hook failed' ) ) );
+	}
+
+	/**
+	 * An unexpected error before the ledger write is logged, and the gateway hook still does not throw.
+	 *
+	 * @dataProvider payment_hooks
+	 *
+	 * @param string $hook Payment hook.
+	 */
+	public function test_payment_hook_unexpected_error_is_logged_without_throwing( string $hook ): void {
+		// Arrange: the order total read inside mint() fails before any ledger write.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$errors = array();
+		$log    = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		$crash = static function ( $total ) {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( 'mint' === ( $frame['function'] ?? '' ) ) {
+					throw new \Error( 'simulated total failure' );
+				}
+			}
+			return $total;
+		};
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'woocommerce_order_get_total', $crash );
+		try {
+			// Act.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+				}
+			);
+		} finally {
+			remove_filter( 'woocommerce_order_get_total', $crash );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+		}
+
+		// Assert.
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'webview payment hook failed' ) && false !== strpos( $message, 'simulated total failure' ) ) );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/**
+	 * A failure while building the row after the money was taken is recorded loudly, and the hook does not throw.
+	 *
+	 * @dataProvider payment_hooks
+	 *
+	 * @param string $hook Payment hook.
+	 */
+	public function test_payment_hook_row_build_error_is_recorded_loudly_without_throwing( string $hook ): void {
+		// Arrange: the second total read in mint() (the row amount) fails for the paying order.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$errors = array();
+		$log    = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		$reads = 0;
+		$crash = static function ( $total, $paying ) use ( $order, &$reads ) {
+			if ( $paying->get_id() !== $order->get_id() ) {
+				return $total;
+			}
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( 'mint' === ( $frame['function'] ?? '' ) && 2 === ++$reads ) {
+					throw new \RuntimeException( 'total unavailable' );
+				}
+			}
+			return $total;
+		};
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'woocommerce_order_get_total', $crash, 10, 2 );
+		try {
+			// Act.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+				}
+			);
+		} finally {
+			remove_filter( 'woocommerce_order_get_total', $crash, 10 );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+		}
+
+		// Assert.
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'WCPOS payment pos_card' ) && false !== strpos( $message, 'captured but not recorded' ) && false !== strpos( $message, 'total unavailable' ) ) );
+		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'WCPOS: payment pos_card', $notes );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** Hook entry points that must contain ledger persistence errors. */
+	public function payment_hooks(): array {
+		return array(
+			'payment complete' => array( 'woocommerce_payment_complete' ),
+			'status changed' => array( 'woocommerce_order_status_changed' ),
+		);
+	}
+
+	/** @dataProvider duplicate_payment_references */
+	public function test_stale_callbacks_mint_one_payment( string $reference, bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+		try {
+			$order = $this->create_order( true );
+			$order->set_payment_method( 'pos_card' );
+			$order->set_transaction_id( $reference );
+			$order->save();
+			$stale = wc_get_order( $order->get_id() );
+			$this->assertSame( array(), Ledger::instance()->read( $stale ) );
+			$first = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $order );
+			$second = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $stale );
+			$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			$this->assertSame( $first['id'], $second['id'] );
+		} finally {
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
+	public function duplicate_payment_references(): array {
+		return array( array( 'ch_duplicate', false ), array( '', false ), array( 'ch_duplicate', true ), array( '', true ) );
+	}
+
 	/** Payment completion mints a captured webview row. */
 	public function test_payment_complete_on_pos_order_mints_webview_row(): void {
 		// Arrange.

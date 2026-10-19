@@ -38,7 +38,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$row['updated_at_gmt'] = gmdate( 'c', time() - 600 );
 		$order = wc_get_order( $order->get_id() );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => array( $row ) ) ) );
-		$order->save();
+		$order->save_meta_data(); // Seed server-owned stamps directly; an order save keeps the stored ones.
 		( new Payments_Sweeper() )->run();
 		$this->assertCount( 1, Sweep_Test_Handler::$intents );
 		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
@@ -209,7 +209,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$rows = Ledger::instance()->read( $order );
 		unset( $rows[0]['updated_at_gmt'] );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => $rows ) ) );
-		$order->save();
+		$order->save_meta_data(); // Seed server-owned stamps directly; an order save keeps the stored ones.
 		( new Payments_Sweeper() )->run();
 		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
 	}
@@ -263,12 +263,13 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$rows = Ledger::instance()->read( $order );
 		$expired = array_merge( $rows[0], array( 'id' => wp_generate_uuid4(), 'amount' => '80.00', 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() - 60 ) ) );
 		$order->set_total( '100.00' );
+		$order->save(); // The ledger save reads core totals from storage.
 		Ledger::instance()->save( $order, array( $rows[0], $expired ) );
 		$rows = Ledger::instance()->read( $order );
 		foreach ( $rows as &$row ) { $row['updated_at_gmt'] = gmdate( 'c', time() - 600 ); }
 		unset( $row );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => $rows ) ) );
-		$order->save();
+		$order->save_meta_data(); // Seed server-owned stamps directly; an order save keeps the stored ones.
 		Sweep_Test_Handler::$patch = array( 'status' => 'captured' );
 		Sweep_Test_Handler::$preserve_authorized = true;
 		( new Payments_Sweeper() )->run();
@@ -422,13 +423,14 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->set_status( 'pos-open' );
 		$order->set_total( '92.95' );
+		$order->save(); // The ledger save reads core totals from storage.
 		$row = array_merge( array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_card', 'capture_mode' => 'sweep_test', 'amount' => '20.00', 'status' => 'pending' ), $extra );
 		Ledger::instance()->save( $order, array( $row ) );
 		$rows = Ledger::instance()->read( $order );
 		$rows[0]['updated_at_gmt'] = gmdate( 'c', time() - $age );
 		$rows[0]['created_at_gmt'] = gmdate( 'c', time() - $age );
 		$order->update_meta_data( Ledger::META_KEY, wp_json_encode( array( 'schema' => 1, 'payments' => $rows ) ) );
-		$order->save();
+		$order->save_meta_data(); // Seed server-owned stamps directly; an order save keeps the stored ones.
 		return array( $order, $row['id'] );
 	}
 }

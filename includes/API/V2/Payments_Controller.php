@@ -14,6 +14,7 @@ use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WP_Error;
 use WP_REST_Request;
@@ -58,7 +59,17 @@ class Payments_Controller extends WC_REST_Controller {
 						'methods'             => $definition[0],
 						'callback'            => function ( $request ) use ( $definition ) {
 							// Each body fetches its order only after acquiring the lock, including GET status.
-							return Order_Lock::instance()->with_lock( (int) $request['id'], fn() => $this->{$definition[1]}( $request ) );
+							return Order_Lock::instance()->with_lock(
+								(int) $request['id'],
+								function () use ( $request, $definition ) {
+									try {
+										return $this->{$definition[1]}( $request );
+									} catch ( Ledger_Persistence_Exception $error ) {
+										// The payment was not stored: a retryable conflict, never an acknowledgement.
+										return new WP_Error( 'woo_rxdb_sync_record_locked', $error->getMessage(), array( 'status' => 409 ) );
+									}
+								}
+							);
 						},
 						'permission_callback' => array( $this, 'payments_permissions_check' ),
 					),

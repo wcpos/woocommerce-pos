@@ -80,7 +80,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
 		$rows = $ledger->read( $order );
 		$rows[0]['amount'] = 'sales' === $kind ? '5.0000' : '-5.0000';
-		$ledger->save( $order, array( $rows[0] ), false );
+		$ledger->save( $order, array( $rows[0] ), false, array_column( array_slice( $rows, 1 ), 'id' ) );
 		$second = $store->create( $this->closure_fields( $second_session, 2 ) );
 		// Before the fix this is 5.0000: the late 10.0000 is omitted.
 		$this->assertSame( '15.0000', $second[ 'perpetual_' . $kind . '_total' ] );

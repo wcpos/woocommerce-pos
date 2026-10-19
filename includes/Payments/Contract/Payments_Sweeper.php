@@ -158,7 +158,7 @@ final class Payments_Sweeper {
 					// Reconcile every leg before counting authorizations that may expire this run.
 					$ledger->derive( $order, $ledger->read( $order ) );
 					if ( $order->get_changes() ) {
-						$order->save();
+						Ledger::saving( $order->get_id(), fn() => $order->save() );
 					}
 				}
 			);
