@@ -254,6 +254,88 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '', $order->get_meta( 'harmless' ) );
 	}
 
+	public function test_create_with_a_paid_status_is_refused_422_and_creates_nothing(): void {
+		// Arrange.
+		$payload = array(
+			'status'     => 'processing',
+			'line_items' => array(
+				array(
+					'product_id' => $this->product()->get_id(),
+					'quantity'   => 1,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'create', $payload );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertSame( 'wcpos_status_not_pushable', $response->get_data()['code'] );
+		$this->assertSame( 'processing', $response->get_data()['data']['requested'] );
+		$this->assertSame( 0, $this->order_id_for_uuid() );
+		$this->assertNull( ( new Mutation_Store() )->lookup( 'orders', $this->last_mutation_id ) );
+	}
+
+	/**
+	 * @dataProvider server_owned_statuses
+	 * @param string $status A status the server alone may set.
+	 */
+	public function test_update_to_processing_on_an_uncovered_order_is_refused_and_sets_no_date_paid( string $status ): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', array( 'status' => $status ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_status_not_pushable', $response->get_data()['code'] );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'pos-open', $order->get_status() );
+		$this->assertNull( $order->get_date_paid( 'edit' ) );
+		$this->assertNull( ( new Mutation_Store() )->lookup( 'orders', $this->last_mutation_id ) );
+	}
+
+	/** Paid, derived and failed statuses, in both spellings; `wc-completed` is also the default per-gateway POS status. */
+	public static function server_owned_statuses(): array {
+		return array(
+			'processing'   => array( 'processing' ),
+			'completed'    => array( 'completed' ),
+			'wc-completed' => array( 'wc-completed' ),
+			'refunded'     => array( 'refunded' ),
+			'pos-partial'  => array( 'pos-partial' ),
+			'failed'       => array( 'failed' ),
+		);
+	}
+
+	/**
+	 * @dataProvider pushable_statuses
+	 * @param string $status A pushable status (D4).
+	 */
+	public function test_update_to_each_pushable_status_is_accepted( string $status ): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', array( 'status' => $status ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( $status, wc_get_order( $order_id )->get_status() );
+	}
+
+	/** D4's set: the open statuses a till may push, and cancel. */
+	public static function pushable_statuses(): array {
+		return array(
+			'pos-open'  => array( 'pos-open' ),
+			'pending'   => array( 'pending' ),
+			'on-hold'   => array( 'on-hold' ),
+			'cancelled' => array( 'cancelled' ),
+		);
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(

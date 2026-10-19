@@ -1103,7 +1103,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			array(
 				'collection' => 'orders',
 				'payload'    => array(
-					'status'     => 'processing',
+					'status'     => 'pending',
 					'line_items' => array(
 						array(
 							'product_id' => $product->get_id(),
@@ -1393,7 +1393,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			new Fake_Mutation_Store(),
 			array(
 				'collection' => 'orders',
-				'payload'    => array( 'status' => 'processing' ),
+				'payload'    => array( 'status' => 'pending' ),
 			)
 		);
 
@@ -1525,7 +1525,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'operation'    => 'update',
 				'mutationId'   => '00000000-0000-4000-8000-00000000f002',
 				'baseRevision' => $updated->get_data()['currentRevision'],
-				'payload'      => array( 'status' => 'completed' ),
+				'payload'      => array( 'status' => 'on-hold' ),
 			)
 		);
 
@@ -2127,7 +2127,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$result = $this->updateOrder(
 			$order,
 			array(
-				'status'      => 'completed',
+				'status'      => 'on-hold',
 				'created_via' => 'online',
 				'meta_data'   => array(
 					array(
@@ -2528,7 +2528,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'collection'   => 'orders',
 				'operation'    => 'update',
 				'baseRevision' => $previous_revision,
-				'payload'      => array( 'status' => 'completed' ),
+				'payload'      => array( 'status' => 'on-hold' ),
 			)
 		);
 
@@ -2553,7 +2553,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'collection' => 'orders',
 				'operation' => 'update',
 				'baseRevision' => '2026-07-01T10:00:00',
-				'payload' => array( 'status' => 'completed' ),
+				'payload' => array( 'status' => 'on-hold' ),
 			)
 		);
 		$this->assertSame( 409, $result->get_status() );
@@ -2578,7 +2578,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'collection' => 'orders',
 				'operation' => 'update',
 				'baseRevision' => $revision,
-				'payload' => array( 'status' => 'completed' ),
+				'payload' => array( 'status' => 'on-hold' ),
 			)
 		);
 

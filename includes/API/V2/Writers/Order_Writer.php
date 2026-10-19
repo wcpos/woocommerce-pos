@@ -27,6 +27,12 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 /** Owns order audit, tax, reassignment, hook, note, email, and stock behavior. */
 class Order_Writer extends Null_Writer {
+	/**
+	 * The statuses a till may push (ADR 0040 D4): the open statuses and cancel. `pos-partial`
+	 * is derived from the ledger, and `failed` and every paid status are the server's.
+	 */
+	public const PUSHABLE_STATUSES = array( 'pos-open', 'pending', 'on-hold', 'cancelled' );
+
 	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
 
@@ -57,6 +63,10 @@ class Order_Writer extends Null_Writer {
 		$error = $validate_tax_ids( $payload );
 		if ( is_wp_error( $error ) ) {
 			return $error;
+		}
+		$payload = self::with_pushable_status( $payload );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
 		}
 		$forward                = self::without_money( $payload );
 		$forward['created_via'] = 'woocommerce-pos';
@@ -94,6 +104,10 @@ class Order_Writer extends Null_Writer {
 		$error = $validate_tax_ids( $payload );
 		if ( is_wp_error( $error ) ) {
 			return $error;
+		}
+		$payload = self::with_pushable_status( $payload );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
 		}
 		return array(
 			'method' => 'PUT',
@@ -569,6 +583,33 @@ class Order_Writer extends Null_Writer {
 		if ( $meta ) {
 			$this->store->persist_order_audit_meta( $id, $meta );
 		}
+	}
+
+	/**
+	 * The payload with its `status` normalised (no `wc-` prefix), or a 422 when the till may not push it.
+	 * An absent or empty status is untouched (wc/v3 defaults a create to `pending`).
+	 *
+	 * @return array|WP_Error
+	 */
+	private static function with_pushable_status( array $payload ) {
+		if ( ! isset( $payload['status'] ) || '' === $payload['status'] ) {
+			return $payload;
+		}
+		$status = is_scalar( $payload['status'] ) ? (string) $payload['status'] : '';
+		$status = 0 === strpos( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
+		if ( ! in_array( $status, self::PUSHABLE_STATUSES, true ) ) {
+			return new WP_Error(
+				'wcpos_status_not_pushable',
+				'This order status is set by the server, not pushed by the till.',
+				array(
+					'status'    => 422,
+					'requested' => $status,
+					'pushable'  => self::PUSHABLE_STATUSES,
+				)
+			);
+		}
+		$payload['status'] = $status;
+		return $payload;
 	}
 
 	/** Drop every top-level money field: the push lane carries no money (ADR 0040 rule 2). */

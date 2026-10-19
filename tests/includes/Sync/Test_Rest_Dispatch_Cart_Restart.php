@@ -328,13 +328,16 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$this->assertSame( self::RESTART_GMT, $this->stored_date_gmt( $order_id ) );
 	}
 
+	/** A paid order is not a cart: a newer date on its push is ignored (the push may not set a paid status or change its lines either, ADR 0040). */
 	public function test_update_of_a_paid_order_keeps_the_stored_date(): void {
 		$product  = ProductHelper::create_simple_product();
 		$order_id = $this->make_order( 'processing', array( array( $product, 1 ) ) );
-		$payload  = $this->restart_payload( $product->get_id() );
+		$payload  = array(
+			'date_created_gmt' => self::RESTART_GMT,
+			'meta_data'        => $this->uuid_meta(),
+		);
 
-		$payload['status'] = 'processing';
-		$response          = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
 
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );

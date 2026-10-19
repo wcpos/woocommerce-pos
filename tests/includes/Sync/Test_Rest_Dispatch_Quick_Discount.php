@@ -307,7 +307,7 @@ class Test_Rest_Dispatch_Quick_Discount extends Sync_REST_Store_Test_Case {
 		$real->set_amount( '10' );
 		$real->save();
 		$payload = $this->payload( array( array( 'code' => 'real-percent' ), $this->quick_line() ), '100' );
-		$payload['status'] = 'processing';
+		$payload['status'] = 'on-hold';
 		$order = $this->created_order( $lane, $payload );
 		$this->assertCount( 2, $order->get_coupons() );
 		$this->assertSame( '96.00', $order->get_total() );
@@ -420,7 +420,7 @@ class Test_Rest_Dispatch_Quick_Discount extends Sync_REST_Store_Test_Case {
 			$line = $this->quick_line( 'fixed_cart', '10', 'CASHIER-CHOICE' );
 			foreach ( array( 0, $order->get_id() ) as $id ) {
 				$payload = $id ? array( 'coupon_lines' => array( $line ) ) : $this->payload( array( $line ) );
-				$payload['status'] = 'processing';
+				$payload['status'] = 'on-hold';
 				$response = $this->write_order( $lane, $payload, $id );
 				$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
 				$this->assertSame( 'woocommerce_pos_rest_quick_discount_code_taken', $response->get_data()['code'] );
