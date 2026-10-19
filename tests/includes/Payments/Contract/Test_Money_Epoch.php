@@ -4,6 +4,46 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\{Money_Epoch, Ledger};
 
 class Test_Money_Epoch extends \WP_UnitTestCase {
+	/** @dataProvider offline_completion_cases */
+	public function test_legacy_offline_completion_requires_epoch_zero_paid_evidence( string $assertion, bool $paid, string $status, int $epoch, bool $completed ): void {
+		$order = new \WC_Order();
+		$order->set_total( '50' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->set_status( $status );
+		$order->set_date_paid( $paid ? time() : null );
+		$order->update_meta_data( '_pos_payment_asserted', $assertion );
+		if ( $epoch > 0 ) {
+			$order->update_meta_data( '_wcpos_money_epoch', $epoch );
+		}
+		$this->assertSame( '', $order->get_transaction_id() );
+		$this->assertSame( array(), Ledger::instance()->read( $order ) );
+
+		$this->assertSame( $completed, Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+		$refusal = Money_Epoch::reopen_refusal( $order );
+		if ( $completed ) {
+			$this->assertNull( $refusal );
+		} else {
+			$this->assertInstanceOf( \WP_Error::class, $refusal );
+			$this->assertSame( 'not_completed', $refusal->get_error_data()['reason'] );
+		}
+	}
+
+	public function offline_completion_cases(): array {
+		return array(
+			'completed offline sale' => array( 'offline', true, 'completed', 0, true ),
+			'processing offline sale' => array( 'offline', true, 'processing', 0, true ),
+			'no assertion' => array( '', true, 'completed', 0, false ),
+			'wrong assertion' => array( 'online', true, 'completed', 0, false ),
+			'no paid date' => array( 'offline', false, 'completed', 0, false ),
+			'open sale' => array( 'offline', true, 'pos-open', 0, false ),
+			'partial sale' => array( 'offline', true, 'pos-partial', 0, false ),
+			'pending sale' => array( 'offline', true, 'pending', 0, false ),
+			'failed sale' => array( 'offline', true, 'failed', 0, false ),
+			'reopened sale' => array( 'offline', true, 'completed', 1, false ),
+			'later epoch' => array( 'offline', true, 'completed', 2, false ),
+		);
+	}
+
 	/** @dataProvider paid_attempt_checks */
 	public function test_paid_attempt_without_current_counting_row_is_refused( bool $reopen ): void {
 		$order = new \WC_Order();

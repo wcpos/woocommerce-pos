@@ -94,7 +94,9 @@ final class Money_Epoch {
 	}
 
 	private static function legacy_completed( WC_Order $order ): bool {
-		return 0 === self::current( $order ) && $order->get_date_paid( 'edit' ) && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) && '' !== $order->get_transaction_id();
+		// Ledgerless offline pushes have a server-owned assertion instead of a transaction id.
+		return 0 === self::current( $order ) && $order->get_date_paid( 'edit' ) && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true )
+			&& ( '' !== $order->get_transaction_id() || 'offline' === $order->get_meta( '_pos_payment_asserted' ) );
 	}
 
 	/** Shared reverse gate; payment routes do not acquire an expectedEpoch parameter in this PR. */
