@@ -258,6 +258,60 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/**
+	 * A failure while building the row after the money was taken is recorded loudly, and the hook does not throw.
+	 *
+	 * @dataProvider payment_hooks
+	 *
+	 * @param string $hook Payment hook.
+	 */
+	public function test_payment_hook_row_build_error_is_recorded_loudly_without_throwing( string $hook ): void {
+		// Arrange: the second total read in mint() (the row amount) fails for the paying order.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$errors = array();
+		$log    = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		$reads = 0;
+		$crash = static function ( $total, $paying ) use ( $order, &$reads ) {
+			if ( $paying->get_id() !== $order->get_id() ) {
+				return $total;
+			}
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( 'mint' === ( $frame['function'] ?? '' ) && 2 === ++$reads ) {
+					throw new \RuntimeException( 'total unavailable' );
+				}
+			}
+			return $total;
+		};
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'woocommerce_order_get_total', $crash, 10, 2 );
+		try {
+			// Act.
+			$this->in_pos_request(
+				static function () use ( $hook, $order ): void {
+					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+				}
+			);
+		} finally {
+			remove_filter( 'woocommerce_order_get_total', $crash, 10 );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+		}
+
+		// Assert.
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'WCPOS payment pos_card' ) && false !== strpos( $message, 'captured but not recorded' ) && false !== strpos( $message, 'total unavailable' ) ) );
+		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'WCPOS: payment pos_card', $notes );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Hook entry points that must contain ledger persistence errors. */
 	public function payment_hooks(): array {
 		return array(

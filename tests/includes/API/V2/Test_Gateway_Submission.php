@@ -548,6 +548,42 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( $attempt, Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** A failure building the paid row after the gateway took the money answers 409, loudly, and never redispatches. */
+	public function test_paid_row_build_error_is_loud_conflict(): void {
+		// Arrange: the row-amount total read in mint() fails for this order.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$reads   = 0;
+		$crash   = static function ( $total, $paying ) use ( $order, &$reads ) {
+			if ( $paying->get_id() !== $order->get_id() ) {
+				return $total;
+			}
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( 'mint' === ( $frame['function'] ?? '' ) && 2 === ++$reads ) {
+					throw new \RuntimeException( 'total unavailable' );
+				}
+			}
+			return $total;
+		};
+		add_filter( 'woocommerce_order_get_total', $crash, 10, 2 );
+
+		// Act.
+		try {
+			$response = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
+		} finally {
+			remove_filter( 'woocommerce_order_get_total', $crash, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'sent', Gateway_Submission::read_attempts( $saved )[ $attempt ] ?? null );
+		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'WCPOS: payment gateway-transaction', $notes );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+	}
+
 	/** A paid gateway yields exactly one client-minted row, keyed by the attempt. */
 	public function test_submit_paid_gateway_records_once_and_replays(): void {
 		// Arrange.
