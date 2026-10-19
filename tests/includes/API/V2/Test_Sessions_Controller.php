@@ -32,9 +32,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		parent::tearDown();
 		global $wpdb;
 		foreach ( $this->register_ids as $id ) {
-			foreach ( ( new Register_Session_Store() )->list( array( 'register_id' => $id ) ) as $session ) {
-				$wpdb->delete( ( new Cash_Movement_Store() )->table_name(), array( 'session_id' => $session['id'] ) );
-			}
+			// Movements live on the session rows, so they go with them.
 			$wpdb->delete( ( new Register_Session_Store() )->table_name(), array( 'register_id' => $id ) );
 			$wpdb->delete( ( new Register_Store() )->table_name(), array( 'id' => $id ) );
 		}
@@ -45,7 +43,6 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 		( new Register_Session_Store() )->install();
-		( new Cash_Movement_Store() )->install();
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos_cash' );
 	}
 
@@ -238,7 +235,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, 'shop_order_refund' ) ) {
 				++$reads['refunds'];
 			}
-			if ( 0 === strpos( $sql, 'SELECT * FROM' ) && false !== strpos( $sql, 'wcpos_cash_movements' ) ) {
+			if ( 0 === strpos( $sql, 'SELECT movements FROM ' . ( new Register_Session_Store() )->table_name() ) ) {
 				++$reads['movements'];
 			}
 			return $sql;
@@ -579,14 +576,14 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Closure columns on the session row never reach a session route, list or detail. */
+	/** Closure columns and the raw movements array on the session row never reach a session route, list or detail. */
 	public function test_session_routes_after_closure_write_return_only_session_keys(): void {
 		// Arrange: give the session row a closure document the way a closure write does.
 		global $wpdb;
 		$fields = $this->fields();
 		$this->post( 'sessions', $fields );
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
-		$closure = array( 'number', 'printed_number', 'print_count', 'last_printed_at_gmt', 'closure' );
+		$closure = array( 'number', 'printed_number', 'print_count', 'last_printed_at_gmt', 'closure', 'movements' );
 		// Every session column a read returned before closures folded into the session row.
 		$session_keys = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
 		$this->assertSame(
@@ -600,6 +597,20 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 					'print_count' => 2,
 					'last_printed_at_gmt' => '2026-09-11 13:00:00',
 					'closure' => wp_json_encode( array( 'expected' => array( 'cash' => '150.0000' ) ) ),
+					'movements' => wp_json_encode(
+						array(
+							Cash_Movement_Store::entry(
+								array(
+									'id' => wp_generate_uuid4(),
+									'type' => 'paid_in',
+									'amount' => '5.0000',
+									'reason' => 'Float top-up',
+									'actor' => get_current_user_id(),
+									'created_at_gmt' => '2026-09-11 10:00:00',
+								)
+							),
+						)
+					),
 				),
 				array( 'id' => $fields['id'] )
 			)
@@ -620,8 +631,10 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertCount( 1, $listed );
 		$this->assertSame( $session_keys, array_keys( $listed[0] ) );
-		$this->assertSame( array(), array_intersect( $closure, array_keys( $detail ) ) );
+		$this->assertSame( array( 'movements' ), array_values( array_intersect( $closure, array_keys( $detail ) ) ) );
 		$this->assertSame( $session_keys, array_slice( array_keys( $detail ), 0, count( $session_keys ) ) );
+		// The detail's movements key is the decoded log the movement route serves, never the stored column.
+		$this->assertSame( ( new Cash_Movement_Store() )->list( $fields['id'] ), $detail['movements'] );
 	}
 
 	/** The expected figure is a report: a cashier counting blind never receives it. */
@@ -697,7 +710,13 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			'open' => $this->post( 'sessions', $opening ),
 			'open replay' => $this->post( 'sessions', array( 'id' => $opening['id'] ) ),
 			'movement' => $this->post( 'movements', $movement ),
-			'movement replay' => $this->post( 'movements', array( 'id' => $movement['id'] ) ),
+			'movement replay' => $this->post(
+				'movements',
+				array(
+					'id' => $movement['id'],
+					'session_id' => $session_id,
+				)
+			),
 			'list' => $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions' ) ),
 			'detail' => $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session_id ) ),
 			'movements' => $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session_id . '/movements' ) ),
@@ -776,7 +795,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 		foreach ( $seen['movements'] as $row ) {
 			$this->assert_keys( self::MOVEMENT_KEYS, $row );
-			$this->assertSame( ( new Cash_Movement_Store() )->get( $row['id'] ), $row );
+			$this->assertSame( ( new Cash_Movement_Store() )->get( $row['session_id'], $row['id'] ), $row );
 		}
 		$this->assert_keys( array_merge( self::SESSION_KEYS, self::DETAIL_KEYS, array( 'expected', 'terms' ) ), $seen['detail'] );
 		$opened = $seen['sessions'][0];
@@ -1487,7 +1506,14 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$result = $this->post( 'movements', $fields );
 			$this->assertSame( 201, $result->get_status() );
 			$this->assertSame( get_current_user_id(), $result->get_data()['actor'] );
-			$replay = $this->post( 'movements', array( 'id' => $fields['id'] ) );
+			// A till's retry carries the same body, so the (session, uuid) key is always present.
+			$replay = $this->post(
+				'movements',
+				array(
+					'id' => $fields['id'],
+					'session_id' => $fields['session_id'],
+				)
+			);
 			$this->assertSame( 200, $replay->get_status() );
 			$this->assertSame( $result->get_data(), $replay->get_data() );
 			if ( 'paid_in' === $type ) {
@@ -1529,7 +1555,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertSame( 201, $this->post( 'movements', $fields )->get_status() );
-		$this->assertSame( $fields['id'], ( new Cash_Movement_Store() )->get( $target )['voided_by'] );
+		$this->assertSame( $fields['id'], ( new Cash_Movement_Store() )->get( $id, $target )['voided_by'] );
 		$this->assertSame( 200, $this->post( 'movements', $fields )->get_status() );
 		$void = $fields['id'];
 		$fields['id'] = wp_generate_uuid4();
@@ -1606,7 +1632,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Refusal at the conditional stamp is a conflict, not a persisted orphan or 500. */
+	/** A target voided while the void waited for the register lock is a conflict, not a persisted orphan or 500. */
 	public function test_void_stamp_zero_rows_rolls_back_and_returns_409(): void {
 		$session = $this->post( 'sessions', $this->fields() )->get_data();
 		$fields = array(
@@ -1628,19 +1654,28 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$store = new Cash_Movement_Store();
-		$refuse = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'UPDATE `' . $store->table_name() . '`' ) ? $sql . ' AND 1=0' : $sql;
+		$stamped = array_merge( $store->get( $session['id'], $target['id'] ), array( 'voided_by' => wp_generate_uuid4() ) );
+		$sessions = ( new Register_Session_Store() )->table_name();
+		$raced = false;
+		$refuse = static function ( $sql ) use ( $sessions, $session, $stamped, &$raced ) {
+			if ( ! $raced && false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] ) ) {
+				$raced = true;
+				$GLOBALS['wpdb']->update( $sessions, array( 'movements' => wp_json_encode( array( Cash_Movement_Store::entry( $stamped ) ) ) ), array( 'id' => $session['id'] ) );
+			}
+			return $sql;
 		};
 		add_filter( 'query', $refuse );
 		try {
 			$response = $this->post( 'movements', $fields );
-			$this->assertSame( 409, $response->get_status() );
-			$this->assertSame( 'wcpos_movement_void_refused', $response->get_data()['code'] );
-			$this->assertNull( $store->get( $fields['id'] ) );
-			$this->assertSame( $target, $store->get( $target['id'] ) );
 		} finally {
 			remove_filter( 'query', $refuse );
 		}
+		$this->assertTrue( $raced );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_movement_void_refused', $response->get_data()['code'] );
+		$this->assertNull( $store->get( $session['id'], $fields['id'] ) );
+		$this->assertSame( $stamped, $store->get( $session['id'], $target['id'] ) );
+		$this->assertCount( 1, $store->list( $session['id'] ) );
 	}
 
 	/** A revoked session's access token cannot approve a close once its cached revocation is gone. */

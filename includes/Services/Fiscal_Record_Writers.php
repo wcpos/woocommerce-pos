@@ -420,8 +420,7 @@ final class Fiscal_Record_Writers {
 		$delta = Session_Figures::tender_totals( array( $tender, $cash ) );
 		$provenance['type'] = 'late_refund';
 		// The column is CHAR(36): a deterministic UUID-shaped digest of the allocation identity.
-		$digest = md5( 'refund:' . $refund->get_id() . ':' . $row['id'] );
-		$provenance['source_id'] = substr( $digest, 0, 8 ) . '-' . substr( $digest, 8, 4 ) . '-' . substr( $digest, 12, 4 ) . '-' . substr( $digest, 16, 4 ) . '-' . substr( $digest, 20, 12 );
+		$provenance['source_id'] = Fiscal_Record_Store::digest_source_id( 'refund:' . $refund->get_id() . ':' . $row['id'] );
 		$provenance['order_id'] = $order->get_id();
 		$provenance['refund_id'] = $refund->get_id();
 		$provenance['closure_id'] = $closure['id'];

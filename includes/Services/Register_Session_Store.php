@@ -18,7 +18,8 @@ final class Register_Session_Store {
 	/**
 	 * Columns a session read returns. The closure columns (number, printed_number,
 	 * print_count, last_printed_at_gmt, closure) are report-only figures served by
-	 * Closure_Store, so a session route never selects them.
+	 * Closure_Store, and the movements array is read only through Cash_Movement_Store,
+	 * so a session route never selects them.
 	 */
 	private const COLUMNS = 'id, register_id, store_id, status, opened_at_gmt, business_day, opened_by, expected_float, counted_float, opening_variance, counting_started_at_gmt, closed_at_gmt, closed_by, approved_by, approved_counted, approved_expected, counted, closure_id, created_at_gmt';
 
@@ -53,6 +54,7 @@ final class Register_Session_Store {
 			print_count INT NOT NULL DEFAULT 0,
 			last_printed_at_gmt DATETIME NULL,
 			closure LONGTEXT NULL,
+			movements LONGTEXT NULL,
 			PRIMARY KEY  (id),
 			KEY register_status (register_id, status),
 			KEY store_status (store_id, status),

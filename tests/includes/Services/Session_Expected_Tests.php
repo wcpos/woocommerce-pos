@@ -92,8 +92,6 @@ trait Session_Expected_Tests {
 				'voids' => $movement['id'],
 			)
 		);
-		// Resume the test transaction after the production void transaction commits.
-		$this->start_transaction();
 		$ledger = Ledger::instance();
 		$enable_card = static function ( $settings ) {
 			$settings['gateways']['pos_card']['enabled'] = true;
@@ -161,7 +159,6 @@ trait Session_Expected_Tests {
 			remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable_card );
 			global $wpdb;
 			$wpdb->query( 'ROLLBACK' );
-			$wpdb->delete( $movements->table_name(), array( 'session_id' => $session['id'] ) );
 			$wpdb->delete( $store->table_name(), array( 'id' => $session['id'] ) );
 			$wpdb->delete( ( new Register_Store() )->table_name(), array( 'id' => $register['id'] ) );
 			$this->start_transaction();
