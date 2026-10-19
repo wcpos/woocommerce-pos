@@ -185,6 +185,10 @@ final class Order_Write_Payload {
 						return true;
 					}
 				}
+				// wc/v3 removes any stored line posted with an integer 0 quantity, whatever it stores.
+				if ( isset( $line['quantity'] ) && 0 === $line['quantity'] ) {
+					return true;
+				}
 				foreach ( $fields as $field ) {
 					if ( ! isset( $line[ $field ] ) || ! is_scalar( $line[ $field ] ) ) {
 						continue;

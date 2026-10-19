@@ -1251,6 +1251,56 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '0', wc_format_decimal( $this->first_item( $order_id )->get_total_tax( 'edit' ), 0 ) );
 	}
 
+	/** A paid processing order with two lines, the first stored at quantity 0; returns its id and that line's id. */
+	protected function paid_order_with_a_zero_quantity_line(): array {
+		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 1 ), array( $this->product(), 1 ) ) );
+		$item     = $this->first_item( $order_id );
+		$item->set_quantity( 0 );
+		$item->save();
+
+		return array( $order_id, $item->get_id() );
+	}
+
+	/** The order's full document with the zero-quantity line posted as wc/v3's integer removal marker. */
+	protected function document_with_zero_quantity( int $order_id, int $item_id ): array {
+		$document = $this->order_document( $order_id );
+		foreach ( $document['line_items'] as $i => $line ) {
+			if ( $item_id === (int) $line['id'] ) {
+				$document['line_items'][ $i ]['quantity'] = 0;
+			}
+		}
+
+		return $document;
+	}
+
+	public function test_zero_quantity_removal_marker_on_a_paid_order_is_refused_reopen_required(): void {
+		// Arrange.
+		list( $order_id, $item_id ) = $this->paid_order_with_a_zero_quantity_line();
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_zero_quantity( $order_id, $item_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'reopen_required', $response->get_data()['code'] );
+		$this->assertNotFalse( wc_get_order( $order_id )->get_item( $item_id ) );
+	}
+
+	public function test_zero_quantity_removal_marker_with_a_reopen_removes_the_line(): void {
+		// Arrange.
+		list( $order_id, $item_id ) = $this->paid_order_with_a_zero_quantity_line();
+		$document                   = $this->document_with_zero_quantity( $order_id, $item_id );
+		$document['status']         = 'pos-open';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertFalse( wc_get_order( $order_id )->get_item( $item_id ) );
+		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(
