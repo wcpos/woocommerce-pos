@@ -427,6 +427,47 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'ESB12345678', $reader->read_for_order( wc_get_order( $created[0] ) )[0]['value'] );
 	}
 
+	public function test_create_lock_retry_persists_explicit_tax_ids_over_fallback_vat(): void {
+		$lock = new Order_Lock();
+		$created = array();
+		$hold = function ( $order, $request, $creating ) use ( $lock, &$created ): void {
+			if ( $creating ) {
+				$order->update_meta_data( '_billing_vat_number', 'ESB99999999' );
+				$order->save();
+				$created[] = $order->get_id();
+				$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			}
+		};
+		$payload = array(
+			'status' => 'pos-open',
+			'tax_ids' => array( array( 'type' => 'eu_vat', 'value' => 'ESB12345678', 'country' => 'ES' ) ),
+		);
+		$envelope = array( 'mutationId' => wp_generate_uuid4() );
+		$reader = new \WCPOS\WooCommercePOS\Services\Tax_Id_Reader();
+		add_action( 'woocommerce_rest_insert_shop_order_object', $hold, 10, 3 );
+		try {
+			$result = $this->push( null, $payload, $envelope );
+			$this->assertSame( 409, $result->get_status() );
+			$this->assertSame( 'woo_rxdb_sync_record_locked', $result->get_data()['code'] );
+			$this->assertCount( 1, $created );
+			$this->assertSame( 'ESB99999999', $reader->read_for_order( wc_get_order( $created[0] ) )[0]['value'] );
+		} finally {
+			remove_action( 'woocommerce_rest_insert_shop_order_object', $hold, 10 );
+			foreach ( $created as $id ) { $lock->release( $id ); }
+		}
+		$before = did_action( 'woocommerce_new_order' );
+		$retried = $this->push( null, $payload, $envelope );
+		$this->assertSame( 200, $retried->get_status() );
+		$this->assertSame( $created[0], $retried->get_data()['document']['id'] );
+		$this->assertSame( $before, did_action( 'woocommerce_new_order' ) );
+		$order = wc_get_order( $created[0] );
+		$this->assertSame( 'ESB12345678', $reader->read_for_order( $order )[0]['value'] );
+		$canonical = $order->get_meta( $reader::CANONICAL_META_KEY );
+		$this->assertSame( 'ESB12345678', json_decode( $canonical, true )[0]['value'] );
+		$this->assertSame( 200, $this->push( null, $payload )->get_status() );
+		$this->assertSame( $canonical, wc_get_order( $created[0] )->get_meta( $reader::CANONICAL_META_KEY ) );
+	}
+
 	public function test_create_post_save_lock_refusal_preserves_identity_for_retry(): void {
 		$lock = new Order_Lock();
 		$created = array();

@@ -163,8 +163,9 @@ class Order_Writer extends Null_Writer {
 			if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
 				unset( $payload['set_paid'] );
 			}
-			// A post-create lock refusal precedes after_create(); repair only missing tax identity.
-			if ( $order && ! ( new Tax_Id_Reader() )->read_for_order( $order ) ) {
+			// A post-create lock refusal precedes after_create(); fallback VAT is not proof of persistence.
+			// The tax-ID writer stores explicit IDs canonically; keep that original set on duplicate creates.
+			if ( $order && ! $order->meta_exists( Tax_Id_Reader::CANONICAL_META_KEY ) ) {
 				$this->order_payload->persist_tax_ids( $id, $payload, true );
 			}
 			$this->stamp_order_audit( $id, $payload, false );
