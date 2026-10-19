@@ -152,6 +152,25 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	public function test_reopened_payment_reusing_transaction_id_mints_current_epoch_row(): void {
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$order->payment_complete( 'reused_transaction' );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( 0, Ledger::instance()->read( $order )[0]['epoch'] );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static function () use ( $order ): void {
+			$order->update_meta_data( '_wcpos_money_epoch', 1 );
+			$order->set_status( 'pos-open' );
+			$order->save();
+		} );
+		$order->payment_complete( 'reused_transaction' );
+		$saved = wc_get_order( $order->get_id() );
+		$rows = Ledger::instance()->read( $saved );
+		$this->assertSame( array( 0, 1 ), array_column( $rows, 'epoch' ) );
+		$this->assertTrue( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) );
+	}
+
 	/** Payment completion mints a captured webview row. */
 	public function test_payment_complete_on_pos_order_mints_webview_row(): void {
 		// Arrange.

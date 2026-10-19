@@ -209,7 +209,7 @@ class Webview_Passthrough {
 			static function ( $stored, int $epoch ) use ( $row ): bool {
 				$refs = array_filter( $row['provider_refs'] );
 				if ( $refs ) {
-					return ( $stored['method_id'] ?? null ) === $row['method_id'] && (bool) array_intersect_assoc( $refs, $stored['provider_refs'] ?? array() );
+					return (int) ( $stored['epoch'] ?? 0 ) === $epoch && ( $stored['method_id'] ?? null ) === $row['method_id'] && (bool) array_intersect_assoc( $refs, $stored['provider_refs'] ?? array() );
 				}
 				// A reference-less payment is represented only by a row in the locked epoch.
 				return (int) ( $stored['epoch'] ?? 0 ) === $epoch && 'webview' === ( $stored['source'] ?? null ) && in_array( $stored['status'] ?? '', Ledger::LIVE_STATUSES, true );

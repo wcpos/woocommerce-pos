@@ -74,7 +74,11 @@ final class Create_Identity {
 		if ( $identity_error ) {
 			return $identity_error;
 		}
-		$writer->after_recovery( $remote_id, $m['payload'] );
+		// The fingerprint-checked retry carries the original aggregate, even after early proof failed.
+		$recovery_error = $writer->after_recovery( $remote_id, $m['payload'], $meta['money'] ?? array() );
+		if ( is_wp_error( $recovery_error ) ) {
+			return $recovery_error;
+		}
 		if ( ! $this->store->finalize_poison( $m['mutationId'], $remote_id ) ) {
 			return $this->finalize_error();
 		}

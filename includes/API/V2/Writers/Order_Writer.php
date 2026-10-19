@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Owner;
 use WCPOS\WooCommercePOS\Payments\Contract\Settlement_Change;
 use WCPOS\WooCommercePOS\Services\Client_Signal;
+use WCPOS\WooCommercePOS\Services\Protocol_Gate;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
@@ -419,10 +420,31 @@ class Order_Writer extends Null_Writer {
 		}
 	}
 
-	/** Restore audit metadata and tax IDs after recovery. */
-	public function after_recovery( int $id, array $payload ): void {
-		$this->stamp_order_audit( $id, $payload, false );
-		$this->order_payload->persist_tax_ids( $id, $payload, true );
+	/** Restore create side effects before a poisoned mutation can be finalized. */
+	public function after_recovery( int $id, array $payload, array $money = array() ) {
+		if ( ! $this->lock( $id ) ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+		}
+		try {
+			$this->stamp_order_audit( $id, $payload, false );
+			$this->order_payload->persist_tax_ids( $id, $payload, true );
+			$order = wc_get_order( $id );
+			if ( $order ) {
+				if ( '' === $order->get_meta( Money_Owner::META_KEY ) ) {
+					Money_Owner::stamp( $payload, $money['tillAggregate'] ?? null, $order );
+				}
+				$this->complete_money_transition(
+					$order,
+					array(
+						'operation' => 'create',
+						'pushed_payload' => $payload,
+					)
+				);
+			}
+			return null;
+		} finally {
+			$this->unlock( $id );
+		}
 	}
 
 	/** Persist till metadata, tax IDs, reassignment, and email changes after update. */
@@ -587,6 +609,27 @@ class Order_Writer extends Null_Writer {
 		$changes = $before ? Settlement_Change::changes( $payload, $before ) : array();
 		$reopen = $before && Money_Epoch::is_reopen( $payload, $before );
 		$request = $money['request'] ?? new \WP_REST_Request();
+		// A completed sale becomes payable only through the epoch-advancing reopen command.
+		if ( $before && ! $reopen && isset( $payload['status'] ) && $payload['status'] !== $before->get_status()
+			&& in_array( $payload['status'], Ledger::IN_PROGRESS_STATUSES, true ) && Money_Epoch::is_completed_in_current_epoch( $before, Ledger::instance() ) ) {
+			if ( ! Client_Signal::payments_at_least( Client_Signal::read( $request ), '1.3' ) ) {
+				return Protocol_Gate::refusal(
+					$request,
+					array(
+						'reason' => 'money_epoch',
+						'epoch' => Money_Epoch::current( $before ),
+					)
+				);
+			}
+			return new WP_Error(
+				'wcpos_invalid_transition',
+				__( 'This sale requires a reopen command.', 'woocommerce-pos' ),
+				array(
+					'status' => 422,
+					'reason' => 'reopen_required',
+				)
+			);
+		}
 		if ( $before && ( $changes || $reopen || array_key_exists( '_wcpos_completed_at', Settlement_Change::meta( $payload ) ) ) ) {
 			$error = Money_Epoch::gate( $before, $request, $money['expectedEpoch'] ?? null );
 			if ( $error ) {

@@ -70,6 +70,30 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	/** @dataProvider completed_status_downgrades */
+	public function test_completed_status_downgrade_requires_reopen_command( string $status, bool $modern, int $epoch ): void {
+		$order = $this->order( array( '_wcpos_money_epoch' => $epoch, '_wcpos_completed_at' => self::AT, '_wcpos_completed_epoch' => $epoch ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		$response = $this->push( $order, array( 'status' => $status ), array( 'expectedEpoch' => $epoch ), $modern );
+		$this->assertSame( $modern ? 422 : 426, $response->get_status() );
+		$this->assertSame( $modern ? 'wcpos_invalid_transition' : 'wcpos_update_required', $response->get_data()['code'] );
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertSame( $epoch, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( wc_get_order( $order->get_id() ) ) );
+	}
+
+	public function completed_status_downgrades(): array {
+		$cases = array();
+		foreach ( \WCPOS\WooCommercePOS\Payments\Contract\Ledger::IN_PROGRESS_STATUSES as $status ) {
+			foreach ( array( true, false ) as $modern ) {
+				foreach ( array( 0, 1 ) as $epoch ) {
+					$cases[] = array( $status, $modern, $epoch );
+				}
+			}
+		}
+		return $cases;
+	}
+
 	public function test_reopen_discards_replayed_set_paid_without_payment_side_effects(): void {
 		$order = $this->order( array( '_wcpos_completed_at' => self::AT, '_wcpos_completed_epoch' => 0 ) );
 		$order->set_status( 'completed' );
