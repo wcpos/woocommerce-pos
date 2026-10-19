@@ -8,8 +8,6 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Sync;
-use WCPOS\WooCommercePOS\Sync\Health;
 
 /**
  * Append-only movements, except for the target's one-time void stamp.
@@ -113,6 +111,22 @@ final class Cash_Movement_Store {
 				$existing = self::row( $fields['session_id'], $existing );
 				$this->log_replay( $existing );
 				return $existing;
+			}
+			// A late_movement record's identity is (type, source_id) with the raw uuid, so a uuid another
+			// session already holds as a late movement would have its correction absorbed: refuse it,
+			// and the till mints a new uuid. A replay into the same session was answered above.
+			$claimed = $fiscal->find_by_source( 'late_movement', $fields['id'] );
+			if ( $claimed && 0 !== strcasecmp( (string) $claimed['session_id'], $fields['session_id'] ) ) {
+				Logger::warning(
+					'Cash movement refused: movement id already names a late movement of another session',
+					array(
+						'movement_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+						'owning_session_id' => $claimed['session_id'],
+						'user_id' => $fields['actor'],
+					)
+				);
+				return new \WP_Error( 'wcpos_movement_id_reused', __( 'This movement id is already used by another session.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			}
 			$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
 			if ( ! $session || ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
@@ -251,14 +265,19 @@ final class Cash_Movement_Store {
 	/** Build one stored array entry with the casts a movement row has always had.
 	 *
 	 * Amounts are four-place decimal strings, as the DECIMAL(19,4) column returned them;
-	 * an amount not already in that shape is cast by the database, never by a float.
+	 * an amount not already in that shape is cast by the database, never by a float. The
+	 * cast clamps out-of-range values and reads text as zero where the strict column refused
+	 * them, so anything but a decimal of at most fifteen integer digits is refused first.
 	 *
 	 * @param array $fields Movement fields or a legacy row.
-	 * @throws \RuntimeException When the amount cannot be cast.
+	 * @throws \RuntimeException When the amount is not a decimal the column could hold, or the cast fails.
 	 */
 	public static function entry( array $fields ): array {
 		global $wpdb;
 		$amount = (string) $fields['amount'];
+		if ( ! preg_match( '/^-?\d{1,15}(\.\d+)?$/D', $amount ) ) {
+			throw new \RuntimeException( 'Movement amount cast failed.' );
+		}
 		if ( ! preg_match( '/^-?\d+\.\d{4}$/D', $amount ) ) {
 			$amount = $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(%s AS DECIMAL(19,4))', $amount ) );
 			if ( '' !== $wpdb->last_error || ! is_string( $amount ) ) {
@@ -356,31 +375,11 @@ final class Cash_Movement_Store {
 		return null;
 	}
 
-	/** Every legacy movements table still to be folded, or none once the schema-11 latch is set.
-	 *
-	 * The fold renames the table before its drop, and a pre-fold request can recreate the
-	 * old name beside an interrupted rename, so both names are probed. The latch is
-	 * autoloaded: a folded site never probes.
+	/** Every legacy movements table still to be folded, or none once the latch reaches schema 11.
 	 *
 	 * @throws \RuntimeException When a probe fails; a caller must not assume absence.
 	 */
 	private static function migrating_tables(): array {
-		global $wpdb;
-		$latch = get_option( Sync\Api::SCHEMA_OPTION, null );
-		if ( null !== $latch && version_compare( (string) $latch, self::FOLDED_SCHEMA, '>=' ) ) {
-			return array();
-		}
-		$tables = array();
-		foreach ( array( self::LEGACY_TABLE, self::LEGACY_TABLE . '_folded' ) as $suffix ) {
-			$exists = Health::table_exists( $wpdb->prefix . $suffix );
-			if ( '' !== $wpdb->last_error ) {
-				Logger::warning( 'Cash movement read refused: movement storage probe failed' );
-				throw new \RuntimeException( 'Movement storage probe failed.' );
-			}
-			if ( $exists ) {
-				$tables[] = $wpdb->prefix . $suffix;
-			}
-		}
-		return $tables;
+		return Legacy_Tables::pending( self::LEGACY_TABLE, self::FOLDED_SCHEMA, 'Cash movement read refused: movement storage probe failed', 'Movement storage probe failed.' );
 	}
 }

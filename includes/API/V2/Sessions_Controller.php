@@ -358,7 +358,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			}
 			$voids = strtolower( $request['voids'] );
 			$target = ( new Cash_Movement_Store() )->get( $session['id'], $voids );
-			if ( ! $target || $target['session_id'] !== $session['id'] || null !== $target['voided_by'] || 'void' === $target['type'] ) {
+			if ( ! $target || null !== $target['voided_by'] || 'void' === $target['type'] ) {
 				// The store's own refusal covers only the race after this check; an ordinary
 				// refused reversal is decided here and must be recorded here.
 				Logger::warning(

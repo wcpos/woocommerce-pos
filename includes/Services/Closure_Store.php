@@ -8,8 +8,6 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Sync;
-use WCPOS\WooCommercePOS\Sync\Health;
 
 /**
  * Owns closure documents; only print bookkeeping can change.
@@ -446,31 +444,12 @@ final class Closure_Store {
 		return array_map( array( self::class, 'sum' ), $totals );
 	}
 
-	/** Every legacy closures table still to be folded, or none once the schema-10 latch is set.
-	 *
-	 * The fold renames the table before its drop, and a pre-fold request can recreate the
-	 * old name beside an interrupted rename, so both names are probed. The latch is
-	 * autoloaded: a folded site never probes.
+	/** Every legacy closures table still to be folded, or none once the latch reaches schema 10.
 	 *
 	 * @throws \RuntimeException When a probe fails; a caller must not assume absence.
 	 */
 	private static function migrating_tables(): array {
-		global $wpdb;
-		if ( Sync\Api::SCHEMA_VERSION === get_option( Sync\Api::SCHEMA_OPTION, null ) ) {
-			return array();
-		}
-		$tables = array();
-		foreach ( array( self::LEGACY_TABLE, self::LEGACY_TABLE . '_folded' ) as $suffix ) {
-			$exists = Health::table_exists( $wpdb->prefix . $suffix );
-			if ( self::read_failed() ) {
-				Logger::warning( 'Register closure refused: closure storage probe failed' );
-				throw new \RuntimeException( 'Closure storage probe failed.' );
-			}
-			if ( $exists ) {
-				$tables[] = $wpdb->prefix . $suffix;
-			}
-		}
-		return $tables;
+		return Legacy_Tables::pending( self::LEGACY_TABLE, '10', 'Register closure refused: closure storage probe failed', 'Closure storage probe failed.' );
 	}
 
 	/** Whether the closure fold is pending; free once the latch is set. Throws when a probe fails. */

@@ -198,7 +198,18 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 				'session_id' => $session['id'],
 			)
 		);
-		$void = $store->create( $void_fields );
+		$writes = 0;
+		$sessions_table = ( new Register_Session_Store() )->table_name();
+		$count = static function ( $sql ) use ( $sessions_table, &$writes ) {
+			$writes += 0 === strpos( $sql, "UPDATE {$sessions_table} SET movements" ) ? 1 : 0;
+			return $sql;
+		};
+		add_filter( 'query', $count );
+		try {
+			$void = $store->create( $void_fields );
+		} finally {
+			remove_filter( 'query', $count );
+		}
 		$replay = $store->create( $void_fields );
 		$void_fields['id'] = wp_generate_uuid4();
 		$error = $store->create( $void_fields );
@@ -219,6 +230,8 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			$target
 		);
 		$this->assertSame( $target, $target_replay );
+		// The reversal and its target's stamp are one array write.
+		$this->assertSame( 1, $writes );
 		$this->assertSame( $void, $replay );
 		$this->assertSame( '0.0000', $void['amount'] );
 		$this->assertSame( $target['id'], $void['voids'] );
@@ -256,8 +269,13 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			)
 		);
 		$sessions = ( new Register_Session_Store() )->table_name();
-		$fail = static function ( $sql ) use ( $sessions ) {
-			return 0 === strpos( $sql, "UPDATE {$sessions} SET movements" ) ? 'INVALID VOID STAMP' : $sql;
+		$writes = 0;
+		$fail = static function ( $sql ) use ( $sessions, &$writes ) {
+			if ( 0 === strpos( $sql, "UPDATE {$sessions} SET movements" ) ) {
+				++$writes;
+				return 'INVALID VOID STAMP';
+			}
+			return $sql;
 		};
 		$previous = $wpdb->suppress_errors();
 		add_filter( 'query', $fail );
@@ -274,8 +292,49 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			remove_filter( 'query', $fail );
 			$wpdb->suppress_errors( $previous );
 		}
+		// One statement carries the reversal and the stamp, so its failure leaves neither.
+		$this->assertSame( 1, $writes );
 		$this->assertNull( $store->get( $session['id'], $fields['id'] ) );
 		$this->assertSame( array( $target ), $store->list( $session['id'] ) );
+	}
+
+	/**
+	 * An amount the strict DECIMAL(19,4) column refused is refused, never clamped or read as zero.
+	 *
+	 * @dataProvider unstorable_amounts
+	 * @param string $amount Submitted amount.
+	 */
+	public function test_create_unstorable_amount_throws_without_writing( string $amount ): void {
+		// Arrange.
+		$session = $this->closure_session( null, 'open' );
+		$store = new Cash_Movement_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $session['id'],
+			'type' => 'paid_in',
+			'amount' => $amount,
+			'reason' => 'Bad amount',
+			'actor' => 1,
+			'created_at_gmt' => '2026-09-11 10:00:00',
+		);
+
+		// Act.
+		try {
+			$store->create( $fields );
+			$this->fail( 'Expected the amount to be refused.' );
+		} catch ( \RuntimeException $error ) {
+			// Assert.
+			$this->assertSame( 'Movement amount cast failed.', $error->getMessage() );
+		}
+		$this->assertSame( array(), $store->list( $session['id'] ) );
+	}
+
+	/** Amounts the old column could not hold. */
+	public function unstorable_amounts(): array {
+		return array(
+			'non-numeric' => array( 'seven' ),
+			'out of range' => array( '1234567890123456' ),
+		);
 	}
 
 	/** A movement lives on its session row, so one for a session that does not exist is refused, never orphaned. */
@@ -339,6 +398,52 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 		$this->assertSame( array( $distinct ), $store->list( $second['id'] ) );
 	}
 
+	/** A uuid already holding another session's late movement is refused (its correction would be absorbed); a same-session replay still dedupes. */
+	public function test_late_movement_uuid_reused_in_another_session_returns_409_and_keeps_one_correction(): void {
+		// Arrange.
+		$sessions = array( $this->closure_session(), $this->closure_session() );
+		$closures = array();
+		foreach ( $sessions as $session ) {
+			$closures[] = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		}
+		$store = new Cash_Movement_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $sessions[0]['id'],
+			'type' => 'paid_in',
+			'amount' => '7',
+			'reason' => 'Late arrival',
+			'actor' => 1,
+			'created_at_gmt' => '2026-09-11 10:00:00',
+		);
+		$first = $store->create( $fields );
+
+		// Act.
+		$reused = $store->create( array_merge( $fields, array( 'session_id' => $sessions[1]['id'] ) ) );
+		$replay = $store->create( $fields );
+
+		// Assert.
+		$this->assertIsArray( $first );
+		$this->assertWPError( $reused );
+		$this->assertSame( 'wcpos_movement_id_reused', $reused->get_error_code() );
+		$this->assertSame( 409, $reused->get_error_data()['status'] );
+		$this->assertSame( array(), $store->list( $sessions[1]['id'] ) );
+		$this->assertSame( $first, $replay );
+		$fiscal = new Fiscal_Record_Store();
+		foreach ( array( 1, 0 ) as $index => $expected ) {
+			$this->assertCount(
+				$expected,
+				$fiscal->list(
+					array(
+						'type' => 'late_movement',
+						'closure_id' => $closures[ $index ]['id'],
+					)
+				)
+			);
+		}
+		$this->assertSame( array( '7.0000' ), array_column( array_column( ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->corrections_for( $closures[0]['id'] ), 'figures' ), 'cash_delta' ) );
+	}
+
 	/** A void whose target another request voided while this one waited is refused on the fresh read. */
 	public function test_create_void_target_voided_at_lock_refuses_without_writing(): void {
 		// Arrange.
@@ -393,8 +498,13 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 		$this->assertCount( 2, $store->list( $session['id'] ) );
 	}
 
-	/** Mid-fold a session's movements still in a legacy table are merged in, once each, in order. */
-	public function test_list_mid_fold_merges_legacy_rows_without_duplicates(): void {
+	/**
+	 * Mid-fold a session's movements still in a legacy table, or its renamed copy, are merged in, once each, in order.
+	 *
+	 * @dataProvider legacy_table_suffixes
+	 * @param string $suffix Legacy name suffix.
+	 */
+	public function test_list_mid_fold_merges_legacy_rows_without_duplicates( string $suffix ): void {
 		// Arrange.
 		global $wpdb;
 		$session = $this->closure_session( null, 'open' );
@@ -421,7 +531,7 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			'voided_by' => null,
 			'created_at_gmt' => '2026-09-11 09:00:00',
 		);
-		$legacy = $wpdb->prefix . Cash_Movement_Store::LEGACY_TABLE;
+		$legacy = $wpdb->prefix . Cash_Movement_Store::LEGACY_TABLE . $suffix;
 		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
 		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table, fixed DDL.
@@ -443,6 +553,14 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( array( $pending, $folded ), $listed );
 		$this->assertSame( $pending, $found );
+	}
+
+	/** The legacy name and the name the fold renames it to. */
+	public function legacy_table_suffixes(): array {
+		return array(
+			'legacy' => array( '' ),
+			'renamed' => array( '_folded' ),
+		);
 	}
 
 	/** Closure classification and movement insertion are inside the register lock. */

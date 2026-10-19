@@ -420,10 +420,10 @@ class Activator {
 		$legacy = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
 		$folded = $legacy . '_folded';
 		// An interrupted run left the renamed table: finish it before touching the legacy name.
-		if ( self::legacy_table_exists( $folded ) ) {
+		if ( self::legacy_table_exists( $folded, 'Closure fold' ) ) {
 			$this->finish_folded_closures( $folded, $sessions );
 		}
-		if ( ! self::legacy_table_exists( $legacy ) ) {
+		if ( ! self::legacy_table_exists( $legacy, 'Closure fold' ) ) {
 			return;
 		}
 		$this->copy_legacy_closures( $legacy, $sessions );
@@ -440,7 +440,7 @@ class Activator {
 	 * @param string $label Fold named in the failure message.
 	 * @throws \RuntimeException When the probe fails.
 	 */
-	private static function legacy_table_exists( string $table, string $label = 'Closure fold' ): bool {
+	private static function legacy_table_exists( string $table, string $label ): bool {
 		$exists = Sync_Health::table_exists( $table );
 		if ( self::query_failed() ) {
 			throw new \RuntimeException( esc_html( "{$label} probe failed." ) );
@@ -713,13 +713,18 @@ class Activator {
 				throw new \RuntimeException( 'Movement fold read failed.' );
 			}
 			foreach ( $batch as $session_id ) {
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables; the id is prepared.
+				// Each read is checked before the next: a later query clears the earlier one's error.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table; the id is prepared.
 				$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$legacy} WHERE session_id = %s", $session_id ), ARRAY_A );
-				$stored = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$sessions} WHERE id = %s", $session_id ) ), true );
-				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				if ( self::query_failed() ) {
 					throw new \RuntimeException( 'Movement fold read failed.' );
 				}
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+				$stored = $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$sessions} WHERE id = %s", $session_id ) );
+				if ( self::query_failed() ) {
+					throw new \RuntimeException( 'Movement fold read failed.' );
+				}
+				$stored = json_decode( (string) $stored, true );
 				$stored = is_array( $stored ) ? array_column( $stored, null, 'id' ) : array();
 				foreach ( $rows as $row ) {
 					$entry = Cash_Movement_Store::entry( $row );

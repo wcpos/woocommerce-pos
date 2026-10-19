@@ -1827,6 +1827,36 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** A run stopped after the rename resumes from the renamed table: the copied session is untouched, the straggler is copied, both names go. */
+	public function test_movement_fold_rerun_resumes_from_renamed_table(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$folded = $fixture['legacy'] . '_folded';
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables, fixed DDL.
+		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} ADD movements LONGTEXT NULL" ) );
+		$copied = wp_json_encode( array_map( array( \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::class, 'entry' ), $fixture['expected'][0] ) );
+		$this->assertSame( 1, $wpdb->update( $fixture['sessions_table'], array( 'movements' => $copied ), array( 'id' => $fixture['sessions'][0] ) ) );
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+			$this->assertSame( $copied, $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$fixture['sessions_table']} WHERE id = %s", $fixture['sessions'][0] ) ) );
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
+		} finally {
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
 	/** A copy stopped after the first session keeps the latch; the next run copies the rest without duplicating the first. */
 	public function test_movement_fold_failing_mid_copy_keeps_latch_and_resumes(): void {
 		// Arrange.
