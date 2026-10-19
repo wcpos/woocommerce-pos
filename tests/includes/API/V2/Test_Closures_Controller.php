@@ -1854,6 +1854,65 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( Store_Reach::FILTER, $filter );
 		}
 	}
+
+	/** Mid-fold, /last serves a newer closure only a legacy table holds unless its store is out of reach; once latched, the session row. */
+	public function test_closure_last_while_fold_is_pending_returns_newer_legacy_closure_in_reach(): void {
+		// Arrange.
+		global $wpdb;
+		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$second = $this->closure_session( $row['register_id'] );
+		$folded = $wpdb->prefix . Closure_Store::LEGACY_TABLE . '_folded';
+		$closure_id = wp_generate_uuid4();
+		$args = array( 'register_id' => $row['register_id'] );
+		$reach = static function () {
+			return array( 'store_id' => array( 456 ) );
+		};
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$folded} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, store_id BIGINT NULL, number BIGINT NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$folded,
+					array(
+						'id' => $closure_id,
+						'register_id' => $second['register_id'],
+						'session_id' => $second['id'],
+						'store_id' => 456,
+						'number' => 2,
+						'expected' => '{"cash":"150.0000"}',
+						'till_expected' => '{"cash":"100.0000"}',
+						'counted' => '{"cash":"101.0000"}',
+						'variance' => '{"cash":"-49.0000"}',
+						'perpetual_sales_total' => '80',
+						'breakdowns' => '{"transaction_count":0}',
+					)
+				)
+			);
+
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			$pending = $this->get( 'closures/last', $args )->get_data();
+			$this->assertSame( 1, $wpdb->update( $folded, array( 'store_id' => 789 ), array( 'id' => $closure_id ) ) );
+			add_filter( Store_Reach::FILTER, $reach );
+			$hidden = $this->get( 'closures/last', $args )->get_data();
+			remove_filter( Store_Reach::FILTER, $reach );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$latched = $this->get( 'closures/last', $args )->get_data();
+
+			// Assert.
+			$this->assertSame( array( $closure_id, 2 ), array( $pending['id'], $pending['number'] ) );
+			$this->assertSame( array( $row['id'], 1 ), array( $hidden['id'], $hidden['number'] ) );
+			$this->assertSame( array( $row['id'], 1 ), array( $latched['id'], $latched['number'] ) );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$folded}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		}
+	}
+
 	/** Unassigned closure detail, list and export share one reach. */
 	public function test_unassigned_closure_is_reachable_only_with_the_unassigned_key(): void {
 		// Arrange.

@@ -460,6 +460,11 @@ final class Closure_Store {
 		return $tables;
 	}
 
+	/** Whether the closure fold is pending; free once the latch is set. Throws when a probe fails. */
+	public function is_folding(): bool {
+		return array() !== self::migrating_tables();
+	}
+
 	/** The highest-numbered of a session-table row and each legacy table's match; a tie keeps the session row.
 	 *
 	 * @param array|null $row Session-table closure.

@@ -179,7 +179,8 @@ class Closures_Controller extends \WP_REST_Controller {
 				if ( is_wp_error( $args ) ) {
 					return $args;
 				}
-				$args = Store_Reach::for_request( $request )->narrow( $args );
+				$reach = Store_Reach::for_request( $request );
+				$args = $reach->narrow( $args );
 				if ( '/last' === substr( $route, -5 ) ) {
 					if ( empty( $args['register_id'] ) ) {
 						return $this->error( 'rest_invalid_param', 400 );
@@ -192,7 +193,14 @@ class Closures_Controller extends \WP_REST_Controller {
 							'per_page' => 1,
 						)
 					);
-					return new WP_REST_Response( $this->visible( $store->list( $args )[0] ?? null ) );
+					$row = $store->list( $args )[0] ?? null;
+					// Mid-fold the newest closure may live only in a legacy table, whose read is not
+					// narrowed to the caller's stores, so reach is checked here before it is served.
+					$latest = $store->is_folding() ? $store->last( $args['register_id'] ) : null;
+					if ( $latest && $latest['number'] > ( $row['number'] ?? 0 ) && $reach->admits( $latest['store_id'] ) ) {
+						$row = $latest;
+					}
+					return new WP_REST_Response( $this->visible( $row ) );
 				}
 				return new WP_REST_Response( array_map( array( $this, 'visible' ), $store->with_correction_counts( $store->list( $args ) ) ) );
 			}
