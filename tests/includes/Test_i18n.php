@@ -48,6 +48,13 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		delete_transient( 'wcpos_i18n_woocommerce-pos_missing_da_DK' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_missing_de_DE' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_missing_fr_FR' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_download_failed_de_DE' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_download_failed_da' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_download_failed_da_DK' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_download_failed_fr' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_download_failed_fr_FR' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_download_failed_nl_NL' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_download_failed_ja' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_write_failed' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_active_path' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos-pro_write_failed' );
@@ -651,12 +658,13 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 	}
 
 	/**
-	 * Verify non-404 failures do not cache missing locale.
+	 * Verify transport failures back off without marking the locale missing.
 	 *
 	 * @covers ::load_translations
 	 * @covers ::download_translation
 	 */
-	public function test_non_404_failures_do_not_cache_missing_locale(): void {
+	public function test_transport_failure_sets_download_failed_backoff_and_skips_retry(): void {
+		// Arrange.
 		add_filter(
 			'locale',
 			function () {
@@ -668,14 +676,114 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			return new \WP_Error( 'http_request_failed', 'Connection timed out' );
 		};
 
+		// Act.
 		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
-		$this->assertCount( 2, $this->http_requests, 'Should try exact locale and base locale on first attempt' );
+		// Assert.
+		$this->assertCount( 1, $this->http_requests, 'A transport failure on the exact locale must not try the base language too' );
 		$this->assertFalse( get_transient( 'wcpos_i18n_woocommerce-pos_missing_fr_FR' ), 'Transient should not cache missing locale for transport errors' );
+		$this->assertSame( '1.8.7', get_transient( 'wcpos_i18n_woocommerce-pos_download_failed_fr_FR' ), 'Download failure should be backed off at the current version' );
 
+		// Act: retry while the backoff is valid.
 		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
-		$this->assertCount( 4, $this->http_requests, 'Should retry downloads on subsequent attempts when failure was not 404' );
+		// Assert.
+		$this->assertCount( 1, $this->http_requests, 'No further requests should be made during download backoff' );
+	}
+
+	/**
+	 * Verify non-404 HTTP failures back off without marking the locale missing.
+	 *
+	 * @covers ::load_translations
+	 * @covers ::download_translation
+	 */
+	public function test_non_404_http_status_sets_download_failed_backoff_and_skips_retry(): void {
+		// Arrange.
+		add_filter(
+			'locale',
+			function () {
+				return 'fr_FR';
+			}
+		);
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 503 ),
+				'body'     => '',
+			);
+		};
+
+		// Act.
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		// Assert.
+		$this->assertCount( 2, $this->http_requests, 'Should try exact locale and base locale on first attempt' );
+		$this->assertFalse( get_transient( 'wcpos_i18n_woocommerce-pos_missing_fr_FR' ), 'A non-404 status must not mark the locale missing' );
+		$this->assertSame( '1.8.7', get_transient( 'wcpos_i18n_woocommerce-pos_download_failed_fr_FR' ), 'Download failure should be backed off at the current version' );
+
+		// Act: retry while the backoff is valid.
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		// Assert.
+		$this->assertCount( 2, $this->http_requests, 'No further requests should be made during download backoff' );
+	}
+
+	/**
+	 * Verify download backoff still loads a stale translation file.
+	 *
+	 * @covers ::load_translations
+	 */
+	public function test_download_failed_backoff_still_loads_stale_file(): void {
+		// Arrange.
+		add_filter(
+			'locale',
+			function () {
+				return 'fr_FR';
+			}
+		);
+		$stale_file = $this->temp_lang_dir . 'woocommerce-pos-fr_FR.l10n.php';
+		file_put_contents( $stale_file, "<?php\nreturn array('messages' => array('Hello' => 'Bonjour'));" );
+		set_transient( 'wcpos_i18n_woocommerce-pos_download_failed_fr_FR', '1.8.7' );
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made during download backoff' );
+			return false;
+		};
+
+		// Act.
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		// Assert.
+		$this->assertEmpty( $this->http_requests, 'No downloads should occur' );
+		$this->assertTrue( is_textdomain_loaded( 'woocommerce-pos' ), 'Stale translation file should be loaded during download backoff' );
+		$this->assertSame( 'Bonjour', __( 'Hello', 'woocommerce-pos' ), 'The stale file is the one that was loaded' );
+	}
+
+	/**
+	 * Verify successful download clears backoff left by a previous version.
+	 *
+	 * @covers ::load_translations
+	 */
+	public function test_successful_download_clears_download_failed_backoff(): void {
+		// Arrange.
+		add_filter(
+			'locale',
+			function () {
+				return 'de_DE';
+			}
+		);
+		set_transient( 'wcpos_i18n_woocommerce-pos_download_failed_de_DE', '0.0.1' );
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "<?php\nreturn array('messages' => array());",
+			);
+		};
+
+		// Act.
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		// Assert.
+		$this->assertFalse( get_transient( 'wcpos_i18n_woocommerce-pos_download_failed_de_DE' ), 'A successful download should clear a stale back-off' );
+		$this->assertSame( '1.8.7', get_transient( 'wcpos_i18n_woocommerce-pos_de_DE' ), 'Version transient should be set after a successful download' );
 	}
 
 	/**
