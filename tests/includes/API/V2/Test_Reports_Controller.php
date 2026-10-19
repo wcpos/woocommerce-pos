@@ -523,6 +523,15 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertNotSame( 'Renamed in another store', $this->received['register_name'] );
 		$this->assertNotSame( 'Renamed in another store', $response->get_data()['report']['scope']['register_name'] );
+		// A closure without a label snapshot falls back to the literal, never the current name.
+		$table = ( new Register_Session_Store() )->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table; the id is prepared.
+		$document = json_decode( $wpdb->get_var( $wpdb->prepare( "SELECT closure FROM {$table} WHERE id = %s", $session['id'] ) ), true );
+		unset( $document['breakdowns']['labels'] );
+		$wpdb->update( $table, array( 'closure' => wp_json_encode( $document ) ), array( 'id' => $session['id'] ) );
+		$this->received = null;
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+		$this->assertSame( 'Register', $this->received['register_name'] );
 	}
 
 	/**

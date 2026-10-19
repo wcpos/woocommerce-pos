@@ -133,7 +133,7 @@ class Registers_Controller extends WP_REST_Controller {
 	public function get_health( $request ) {
 		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', array(), $request ) );
 		$registers = ( new Register_Store() )->list( $args );
-		$known_ids = array_column( ( new Register_Store() )->list( array() ), 'id' );
+		$known_ids = ( new Register_Store() )->known_ids();
 		$store_ids = isset( $args['store_id'] ) ? (array) $args['store_id'] : null;
 		try {
 			return new WP_REST_Response( ( new Provenance_Health() )->report( $registers, $known_ids, $store_ids ) );

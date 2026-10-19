@@ -91,7 +91,7 @@ final class Report_Scope_Resolver {
 				// through every replay of the old session. Fall back to the label the closure
 				// captured at the time, which is what the closure builder prints anyway.
 				'register_name' => ( $session && ! $reach->admits( $register['store_id'] ?? null ) )
-					? (string) ( $closure['breakdowns']['labels']['register_name'] ?? '' )
+					? (string) ( $closure['breakdowns']['labels']['register_name'] ?? __( 'Register', 'woocommerce-pos' ) )
 					: ( $register['name'] ?? ( null === $register_id ? '' : ( new Register_Store() )->display_name( $register_id ) ) ),
 				'timezone' => $timezone->getName(),
 				// `business_day` is nullable and is back-filled in batches by

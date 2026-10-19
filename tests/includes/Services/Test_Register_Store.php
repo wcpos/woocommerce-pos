@@ -198,6 +198,30 @@ class Test_Register_Store extends WP_UnitTestCase {
 		$this->assertSame( 2, $registers->get( $id )['counters']['last_closure_number'] );
 	}
 
+	/** A session opened earlier but closed second does not move the start: it is closure 1's session opening. */
+	public function test_counters_started_is_closure_ones_session_when_an_earlier_session_closes_later(): void {
+		// Arrange: B, opened at 08:00, closes first and takes number 1; A's opening (an offline
+		// till's, synced late) is 07:00, earlier than B's, but A closes second.
+		global $wpdb;
+		$registers = new Register_Store();
+		$id = $registers->list( array() )[0]['id'];
+		$this->closure_registers[] = $id;
+		$sessions = new Register_Session_Store();
+		$closures = new Closure_Store();
+
+		// Act.
+		$first = $closures->create( $this->closure_fields( $this->closure_session( $id ) ) );
+		$a = $this->closure_session( $id );
+		$wpdb->update( $sessions->table_name(), array( 'opened_at_gmt' => '2026-09-11 07:00:00' ), array( 'id' => $a['id'] ) );
+		$second = $closures->create( $this->closure_fields( $sessions->get( $a['id'] ), 2 ) );
+
+		// Assert.
+		$this->assertSame( 1, $first['number'] );
+		$this->assertSame( 2, $second['number'] );
+		$this->assertSame( '2026-09-11T08:00:00Z', $registers->get( $id )['counters_started_at_gmt'] );
+		$this->assertSame( '2026-09-11T08:00:00Z', $registers->list( array() )[0]['counters_started_at_gmt'] );
+	}
+
 	/** Many registers (Pro's repository) list by name, filter by store, with one closure query. */
 	public function test_list_with_bound_repository_filters_and_orders_by_name_in_one_closure_query(): void {
 		// Arrange.

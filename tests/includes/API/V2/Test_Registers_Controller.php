@@ -377,6 +377,37 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $id ), array_column( $response->get_data()['registers'], 'id' ) );
 	}
 
+	/** A retired register's orders are provenance the site knows, not unregistered; an unknown id's are. */
+	public function test_health_treats_retired_register_ids_as_known(): void {
+		// Arrange.
+		$retired = wp_generate_uuid4();
+		$unknown = wp_generate_uuid4();
+		( new Register_Store() )->list( array() );
+		$option = get_option( Option_Register_Repository::OPTION );
+		$option['retired'][ $retired ] = array(
+			'id' => $retired,
+			'name' => 'Migrated till',
+			'store_id' => 5,
+			'default_float' => null,
+			'created_at_gmt' => '2026-09-01 08:00:00',
+		);
+		update_option( Option_Register_Repository::OPTION, $option, true );
+		foreach ( array( $retired, $unknown ) as $register ) {
+			$order = new \WC_Order();
+			$order->update_meta_data( '_wcpos_register', $register );
+			$order->save();
+		}
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$unregistered = array_column( $response->get_data()['unregistered'], 'register_id' );
+		$this->assertNotContains( $retired, $unregistered );
+		$this->assertContains( $unknown, $unregistered );
+	}
+
 	/** Health options describes diagnostics not register item. */
 	public function test_health_options_describes_diagnostics_not_register_item(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/registers/health' );

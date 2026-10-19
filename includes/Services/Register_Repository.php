@@ -60,4 +60,7 @@ interface Register_Repository {
 	 * @param string $id Register UUID.
 	 */
 	public function retired_name( string $id ): ?string;
+
+	/** Ids of retired registers: history still names them, and their orders are not unregistered. */
+	public function retired_ids(): array;
 }

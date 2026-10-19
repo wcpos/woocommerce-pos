@@ -111,6 +111,12 @@ final class Option_Register_Repository implements Register_Repository {
 		return is_string( $name ) ? $name : null;
 	}
 
+	/** Ids in the retired map. */
+	public function retired_ids(): array {
+		$retired = self::read()['retired'] ?? array();
+		return is_array( $retired ) ? array_map( 'strval', array_keys( $retired ) ) : array();
+	}
+
 	/**
 	 * Whether a row matches a `store_id` filter: an int or null, or a list narrowed by
 	 * Store_Reach where ints are stores and a null member is the unassigned rows.

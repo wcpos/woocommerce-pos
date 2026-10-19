@@ -896,9 +896,8 @@ class Activator {
 				$option['retired'] = $retired;
 				update_option( Option_Register_Repository::OPTION, $option, true );
 				Option_Register_Repository::forget_cached();
-				$stored = get_option( Option_Register_Repository::OPTION );
-				$others = array_diff( array_column( $rows, 'id' ), array( $keep ) );
-				if ( ! is_array( $stored ) || ( $stored['register']['id'] ?? null ) !== $keep || array_diff( $others, array_keys( (array) ( $stored['retired'] ?? array() ) ) ) ) {
+				// Compare the whole value: a filtered or failed write that left a stale name or float must not pass.
+				if ( get_option( Option_Register_Repository::OPTION ) !== $option ) {
 					Logger::error(
 						'Register fold refused: the option did not read back',
 						array(

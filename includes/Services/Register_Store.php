@@ -244,6 +244,12 @@ final class Register_Store {
 		return $this->repository()->exists( $id );
 	}
 
+	/** Every register id provenance may name: the held registers and the retired ones. */
+	public function known_ids(): array {
+		$this->ensure_free_default();
+		return array_values( array_unique( array_merge( array_column( $this->repository()->list( array() ), 'id' ), $this->repository()->retired_ids() ) ) );
+	}
+
 	/**
 	 * The name history prints for a register: its row, else its retired name, else "Register".
 	 *

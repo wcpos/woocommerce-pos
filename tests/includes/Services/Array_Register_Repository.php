@@ -88,6 +88,11 @@ final class Array_Register_Repository implements Register_Repository {
 		return $this->retired[ $id ] ?? null;
 	}
 
+	/** Retired ids. */
+	public function retired_ids(): array {
+		return array_keys( $this->retired );
+	}
+
 	/**
 	 * Remove a register the way a deactivated Pro leaves its registers unknown to Free.
 	 *

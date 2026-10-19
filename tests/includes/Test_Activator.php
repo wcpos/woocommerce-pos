@@ -2445,29 +2445,35 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
-	/** An option that does not read back stops the step: error logged, old latch and table kept. */
+	/** An option that does not read back exactly (unwritten, or one retired name off) stops the step: error logged, old latch and table kept. */
 	public function test_register_fold_with_unverified_option_keeps_latch_and_table_and_logs_error(): void {
-		// Arrange.
-		$fixture = $this->arrange_schema_eleven_with_legacy_registers();
-		$refuse = static function ( $value, $old_value ) {
-			return $old_value;
-		};
-		add_filter( 'pre_update_option_' . self::REGISTER_OPTION, $refuse, 10, 2 );
-		$logs = $this->capture_error_logs();
-		try {
-			// Act.
-			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
-			( new Activator() )->install_sync_schema();
+		foreach ( array( 'unwritten', 'renamed' ) as $case ) {
+			// Arrange.
+			$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+			$refuse = static function ( $value, $old_value ) use ( $case, $fixture ) {
+				if ( 'unwritten' === $case ) {
+					return $old_value;
+				}
+				$value['retired'][ $fixture['rows']['older']['id'] ]['name'] = 'Stale name';
+				return $value;
+			};
+			add_filter( 'pre_update_option_' . self::REGISTER_OPTION, $refuse, 10, 2 );
+			$logs = $this->capture_error_logs();
+			try {
+				// Act.
+				update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+				( new Activator() )->install_sync_schema();
 
-			// Assert.
-			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
-			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
-			$this->assertCount( 1, $logs->entries );
-			$this->assertStringContainsString( 'Register fold refused: the option did not read back', $logs->entries[0] );
-		} finally {
-			remove_filter( 'pre_update_option_' . self::REGISTER_OPTION, $refuse, 10 );
-			$logs->stop();
-			$this->restore_register_schema( $fixture );
+				// Assert.
+				$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ), $case );
+				$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ), $case );
+				$this->assertCount( 1, $logs->entries, $case );
+				$this->assertStringContainsString( 'Register fold refused: the option did not read back', $logs->entries[0], $case );
+			} finally {
+				remove_filter( 'pre_update_option_' . self::REGISTER_OPTION, $refuse, 10 );
+				$logs->stop();
+				$this->restore_register_schema( $fixture );
+			}
 		}
 	}
 

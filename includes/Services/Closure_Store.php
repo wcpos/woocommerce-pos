@@ -244,8 +244,9 @@ final class Closure_Store {
 
 	/** The latest numbered closure of each register, in one query once folded.
 	 *
-	 * Each row also carries `counters_started_at_gmt`: the opening of the register's first
-	 * numbered session, which is when its counters started.
+	 * Each row also carries `counters_started_at_gmt`: the opening of the session holding the
+	 * register's lowest closure number, which is when its counters started and never moves.
+	 * (The earliest opening would move to a session opened before closure 1 but closed after it.)
 	 *
 	 * @param string[] $register_ids Register UUIDs.
 	 * @return array<string, array> Closure rows keyed by register id; registers without one are absent.
@@ -262,7 +263,7 @@ final class Closure_Store {
 		$columns = self::columns();
 		$placeholders = implode( ', ', array_fill( 0, count( $register_ids ), '%s' ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns and generated placeholders.
-		$sql = $wpdb->prepare( "SELECT {$columns}, latest_started FROM {$table} INNER JOIN ( SELECT register_id AS latest_register_id, MAX(number) AS latest_number, MIN(opened_at_gmt) AS latest_started FROM {$table} WHERE register_id IN ({$placeholders}) AND number IS NOT NULL GROUP BY register_id ) latest ON latest_register_id = register_id AND latest_number = number", array_values( $register_ids ) );
+		$sql = $wpdb->prepare( "SELECT {$columns}, ( SELECT opener.opened_at_gmt FROM {$table} opener WHERE opener.register_id = latest_register_id AND opener.number = first_number ) AS latest_started FROM {$table} INNER JOIN ( SELECT register_id AS latest_register_id, MAX(number) AS latest_number, MIN(number) AS first_number FROM {$table} WHERE register_id IN ({$placeholders}) AND number IS NOT NULL GROUP BY register_id ) latest ON latest_register_id = register_id AND latest_number = number", array_values( $register_ids ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 		if ( self::read_failed() ) {
