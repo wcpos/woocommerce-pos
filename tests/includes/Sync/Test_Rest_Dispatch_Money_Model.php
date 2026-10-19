@@ -14,6 +14,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact pin scenarios.
 
+use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Api;
@@ -696,6 +697,176 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( 10, $this->stock_of( $product ) );
 		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
+	}
+
+	protected function card_row( string $status, string $amount = '5.00', array $extra = array() ): array {
+		return array(
+			'id'        => wp_generate_uuid4(),
+			'method_id' => 'pos_card',
+			'kind'      => 'card',
+			'amount'    => $amount,
+			'status'    => $status,
+		) + $extra;
+	}
+
+	/** Seed rows the way the server writes them, without projecting the order's status. */
+	protected function seed_rows( int $order_id, array $rows ): void {
+		Ledger::instance()->save( wc_get_order( $order_id ), $rows, false );
+	}
+
+	protected function push_status( int $order_id, string $status ) {
+		return $this->push_envelope(
+			'update',
+			array(
+				'status'    => $status,
+				'meta_data' => $this->uuid_meta(),
+			),
+			$this->order_revision( $order_id )
+		);
+	}
+
+	protected function assert_money_in_motion( $response, int $order_id, string $status ): void {
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_money_in_motion', $response->get_data()['code'] );
+		$this->assertSame( $status, wc_get_order( $order_id )->get_status() );
+	}
+
+	public function test_reopen_with_a_pending_row_is_refused_money_in_motion(): void {
+		// Arrange.
+		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 1 ) ) );
+		$row      = $this->card_row( 'pending' );
+		$this->seed_rows( $order_id, array( $row ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'processing' );
+		$this->assertSame( $row['id'], $response->get_data()['data']['payment_id'] );
+	}
+
+	public function test_reopen_with_an_authorized_row_is_refused(): void {
+		// Arrange.
+		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 1 ) ) );
+		$row      = $this->card_row( 'authorized' );
+		$this->seed_rows( $order_id, array( $row ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'processing' );
+		$this->assertSame( $row['id'], $response->get_data()['data']['payment_id'] );
+	}
+
+	public function test_reopen_with_a_sent_attempt_is_refused(): void {
+		// Arrange.
+		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 1 ) ) );
+		$attempt  = wp_generate_uuid4();
+		$order    = wc_get_order( $order_id );
+		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'sent' ) );
+		$order->save();
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'processing' );
+		$this->assertSame( $attempt, $response->get_data()['data']['attempt_id'] );
+	}
+
+	public function test_reopen_with_a_pending_refund_allocation_is_refused(): void {
+		// Arrange.
+		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 1 ) ) );
+		$row      = $this->card_row(
+			'captured',
+			'10.00',
+			array(
+				'refunds' => array(
+					array(
+						'id'     => 1234,
+						'amount' => '2.00',
+						'status' => 'pending',
+					),
+				),
+			)
+		);
+		$this->seed_rows( $order_id, array( $row ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'processing' );
+		$this->assertSame( $row['id'], $response->get_data()['data']['payment_id'] );
+	}
+
+	public function test_reopen_of_a_cancelled_order_with_a_standing_authorization_is_refused(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'cancelled', array( array( $this->product(), 1 ) ) );
+		$this->seed_rows( $order_id, array( $this->card_row( 'authorized' ) ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'cancelled' );
+	}
+
+	public function test_reopen_of_a_paid_sale_with_captured_rows_is_accepted_with_rows_and_balance_unchanged(): void {
+		// Arrange: two captured tenders cover the total and complete the sale.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		Ledger::instance()->save( wc_get_order( $order_id ), array( $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ), $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ) ) );
+		$order = wc_get_order( $order_id );
+		$order->set_status( 'processing' );
+		$order->save();
+		$rows      = $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) );
+		$summary   = Ledger::instance()->summary( wc_get_order( $order_id ) );
+		$date_paid = wc_get_order( $order_id )->get_date_paid( 'edit' );
+		$this->assertNotNull( $date_paid );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'pos-open', $order->get_status() );
+		$this->assertSame( $rows, $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) ) );
+		$after = Ledger::instance()->summary( $order );
+		$this->assertSame( $summary['paid'], $after['paid'] );
+		$this->assertSame( $summary['balance'], $after['balance'] );
+		$this->assertSame( $date_paid->getTimestamp(), $order->get_date_paid( 'edit' )->getTimestamp() );
+		$reopen_notes = array_filter(
+			wc_get_order_notes( array( 'order_id' => $order_id ) ),
+			static fn( $note ) => false !== strpos( $note->content, 're-opened via POS' )
+		);
+		$this->assertCount( 1, $reopen_notes );
+	}
+
+	public function test_cancel_with_a_pending_row_is_refused_money_in_motion(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$this->seed_rows( $order_id, array( $this->card_row( 'pending' ) ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'cancelled' );
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'pos-open' );
+	}
+
+	public function test_cancel_with_only_captured_rows_is_accepted(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$this->seed_rows( $order_id, array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'cancelled' );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'cancelled', wc_get_order( $order_id )->get_status() );
 	}
 
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {

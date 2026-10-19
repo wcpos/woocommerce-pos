@@ -9,6 +9,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
@@ -420,6 +421,33 @@ class Order_Writer extends Null_Writer {
 	}
 
 	/**
+	 * The payment or attempt still in motion on the order, or null: a `pending` or `authorized`
+	 * row, a `pending` refund allocation, a `sent` gateway attempt, or the awaiting-customer stamp.
+	 *
+	 * @return array{payment_id: ?string, attempt_id: ?string}|null
+	 */
+	private static function money_in_motion( \WC_Order $order ): ?array {
+		foreach ( Ledger::instance()->read( $order ) as $row ) {
+			$pending_refund = array_filter( is_array( $row['refunds'] ?? null ) ? $row['refunds'] : array(), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );
+			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || $pending_refund ) {
+				return array(
+					'payment_id' => (string) ( $row['id'] ?? '' ),
+					'attempt_id' => null,
+				);
+			}
+		}
+		$sent  = array_search( 'sent', Gateway_Submission::read_attempts( $order ), true );
+		$stamp = Gateway_Submission::read_stamp( $order );
+		if ( false !== $sent || null !== $stamp ) {
+			return array(
+				'payment_id' => null,
+				'attempt_id' => false !== $sent ? (string) $sent : (string) ( $stamp['attempt_id'] ?? '' ),
+			);
+		}
+		return null;
+	}
+
+	/**
 	 * Bring every line's stock reduction to its quantity, with wc/v3's own helper and note.
 	 * Skipped when the status change itself restored the order's stock (pending, cancelled).
 	 */
@@ -565,9 +593,11 @@ class Order_Writer extends Null_Writer {
 	/**
 	 * Refuse a push the order may not take, on the locked read (ADR 0040 rules 3, 4 and 6b).
 	 *
-	 * A line change needs an editable order (`reopen_required`, rule 4) unless the same push
-	 * moves the order into an editable status (D3: reopen and edit are one write); `cancelled`
-	 * never unlocks lines.
+	 * A reopen (a non-editable order pushed into an editable status) or a cancel is refused
+	 * while money is in motion (`wcpos_money_in_motion`, rule 3); captured, failed and voided
+	 * rows never block, and nothing is archived. A line change needs an editable order
+	 * (`reopen_required`, rule 4) unless the same push reopens it (D3: reopen and edit are one
+	 * write); `cancelled` never unlocks lines.
 	 *
 	 * @param \WC_Order $order         The order read under the order lock.
 	 * @param array     $forward       The forwarded update payload.
@@ -577,6 +607,11 @@ class Order_Writer extends Null_Writer {
 		$status   = (string) ( $forward['status'] ?? '' );
 		$editable = $order->is_editable();
 		$reopens  = ! $editable && in_array( $status, array( 'pos-open', 'pending', 'on-hold' ), true );
+		$cancels  = 'cancelled' === $status && 'cancelled' !== $order->get_status();
+		$motion   = ( $reopens || $cancels ) ? self::money_in_motion( $order ) : null;
+		if ( null !== $motion ) {
+			return new WP_Error( 'wcpos_money_in_motion', 'A payment on this order is still in progress; finish or cancel it first.', array( 'status' => 422 ) + $motion );
+		}
 		if ( ! $editable && ! $reopens && $lines_changed ) {
 			return new WP_Error(
 				'reopen_required',
