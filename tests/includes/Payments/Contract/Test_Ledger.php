@@ -1506,6 +1506,51 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
 	}
 
+	/** With prevent-overselling on, a tender holds the order's stock; a void releases it (§4.8). */
+	public function test_a_tender_holds_stock_against_another_order_until_it_is_voided(): void {
+		// Arrange: one unit of stock, two open POS orders for it.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		try {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( '10' );
+			$product->set_price( '10' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$orders = array();
+			foreach ( array( 'a', 'b' ) as $key ) {
+				$orders[ $key ] = wc_create_order();
+				$orders[ $key ]->set_created_via( 'woocommerce-pos' );
+				$orders[ $key ]->set_status( 'pos-open' );
+				$orders[ $key ]->add_product( $product, 1 );
+				$orders[ $key ]->calculate_totals( false );
+				$orders[ $key ]->save();
+			}
+			$hold = $this->payment( 'pos_card', $orders['a']->get_total() );
+			Ledger::instance()->intent( $orders['a'], $hold['id'], $hold, array( 'resume' => array( 'status' => 'authorized' ) ) );
+			$this->assertSame( 'authorized', Ledger::instance()->find( wc_get_order( $orders['a']->get_id() ), $hold['id'] )['status'] );
+
+			// Act: B tries to take the same unit.
+			$refused = Ledger::instance()->record( wc_get_order( $orders['b']->get_id() ), $this->payment( 'pos_cash', $orders['b']->get_total() ) );
+
+			// Assert.
+			$this->assertWPError( $refused );
+			$this->assertSame( 'wcpos_insufficient_stock', $refused->get_error_code() );
+			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $orders['b']->get_id() ) ) );
+
+			// Voiding A's hold releases the unit.
+			Ledger::instance()->void( wc_get_order( $orders['a']->get_id() ), $hold['id'], 'customer left' );
+			$recorded = Ledger::instance()->record( wc_get_order( $orders['b']->get_id() ), $this->payment( 'pos_cash', $orders['b']->get_total() ) );
+			$this->assertIsArray( $recorded );
+			$this->assertSame( 'captured', $recorded['status'] );
+		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
+	}
+
 	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */
 	public function test_authorized_at_gmt_is_stamped_on_approval_and_kept_through_capture(): void {
 		// Arrange.

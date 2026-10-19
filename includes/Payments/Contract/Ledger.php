@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_Error;
@@ -713,6 +714,11 @@ class Ledger {
 			return $this->refusal_error( $row, $order );
 		}
 
+		// Prevent-overselling holds the sale's stock before money is taken for it (§7.5).
+		$held = Stock_Validator::instance()->validate_checkout( $order );
+		if ( is_wp_error( $held ) ) {
+			return $held;
+		}
 		$row    = $this->normalize_row( $order, $row );
 		$rows[] = $row;
 		// Index the arrival before consuming its webhook, but do not mark money paid
@@ -828,6 +834,10 @@ class Ledger {
 					'payment_id' => $newest_pending['id'],
 				)
 			);
+		}
+		$held = Stock_Validator::instance()->validate_checkout( $order );
+		if ( is_wp_error( $held ) ) {
+			return $held;
 		}
 		$row = $this->normalize_row(
 			$order,
@@ -1525,6 +1535,10 @@ class Ledger {
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
 			self::saving( $order->get_id(), fn() => $order->save() );
+			if ( ! array_filter( $this->read( $order ), static fn( $live ) => in_array( $live['status'] ?? '', self::LIVE_STATUSES, true ) ) ) {
+				// Nothing is paying for the sale any more: its stock hold goes back to the shelf.
+				Stock_Validator::instance()->release_checkout_stock( $order );
+			}
 			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
 			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
 		}
