@@ -194,6 +194,7 @@ class Order_Writer extends Null_Writer {
 	/** Forward within the named order hook lifecycle. */
 	public function forward( array $prepared, callable $forward ) {
 		$declared = $prepared['context'];
+		$checkpoint = $declared['checkpoint_update'] ?? null;
 		if ( ! in_array( $declared['operation'] ?? '', array( 'create', 'update' ), true ) ) {
 			return $this->forward_with_reserved_stock( $prepared, $forward );
 		}
@@ -234,6 +235,12 @@ class Order_Writer extends Null_Writer {
 					return $error;
 				}
 			}
+			if ( 'update' === $declared['operation'] && $checkpoint ) {
+				$error = $checkpoint( $id, $response, $declared );
+				if ( is_wp_error( $error ) ) {
+					return $error;
+				}
+			}
 			if ( ! $this->lock( $id ) ) {
 				return new WP_REST_Response(
 					array(
@@ -263,7 +270,7 @@ class Order_Writer extends Null_Writer {
 			Money_Meta_Guard::authorised(
 				$saved->get_id(),
 				static function () use ( $saved, $context, $meta ): void {
-					$saved->update_meta_data( '_wcpos_money_epoch', (string) ( Money_Epoch::current( $context['money_before'] ) + 1 ) );
+					$saved->update_meta_data( '_wcpos_money_epoch', (string) ( $context['epoch_before'] + 1 ) );
 					foreach ( array( '_wcpos_completed_at', '_wcpos_completed_epoch', '_wcpos_completed_session', Money_Owner::META_KEY ) as $key ) {
 						$saved->delete_meta_data( $key );
 					}
@@ -276,12 +283,12 @@ class Order_Writer extends Null_Writer {
 		if ( ! is_string( $meta['_wcpos_completed_at'] ?? null ) || '' === $meta['_wcpos_completed_at'] ) {
 			return;
 		}
-		$before = $context['money_before'] ?? null;
+		$before_epoch = $context['epoch_before'] ?? 0;
 		$epoch = Money_Epoch::current( $saved );
 		$stamp = Money_Epoch::completion_stamp( $saved );
 		$keep_stamp = $stamp && $stamp['epoch'] >= $epoch;
-		$reduced = $before && Money_Epoch::current( $before ) > 0
-			&& ( array_intersect( array_keys( Settlement_Change::TYPES ), $context['settlement_changes'] ) || Money::minor( $saved->get_total() ) < Money::minor( $before->get_total() ) )
+		$reduced = $before_epoch > 0
+			&& ( array_intersect( array_keys( Settlement_Change::TYPES ), $context['settlement_changes'] ) || Money::minor( $saved->get_total() ) < Money::minor( $context['total_before'] ) )
 			&& Money::minor( $saved->get_total() ) <= Money_Epoch::net_paid( Ledger::instance()->read( $saved ) );
 		$free_create = 'create' === $context['operation'] && 0 === $epoch && 0 === Money::minor( $saved->get_total() );
 		if ( ! Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) && ! $reduced && ! $free_create ) {
@@ -446,6 +453,31 @@ class Order_Writer extends Null_Writer {
 					)
 				);
 			}
+			return null;
+		} finally {
+			$this->unlock( $id );
+		}
+	}
+
+	/** Resume only the post-PUT work; the original CAS and money gate already passed. */
+	public function recover_update( int $id, array $payload, array $money, array $checkpoint ) {
+		if ( ! $this->lock( $id ) ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+		}
+		try {
+			$order = wc_get_order( $id );
+			$context = $checkpoint['context'];
+			$context['pushed_payload'] = $payload;
+			$epoch = $order ? Money_Epoch::current( $order ) : -1;
+			if ( $epoch !== $context['epoch_before'] && ( empty( $context['reopen'] ) || $epoch !== $context['epoch_before'] + 1 ) ) {
+				return new WP_Error( 'wcpos_invalid_transition', 'The committed update belongs to a different money epoch.', array( 'status' => 409 ) );
+			}
+			// A reopen may already have saved before later post-update work failed.
+			if ( $epoch === $context['epoch_before'] ) {
+				Money_Owner::stamp( $payload, $money['tillAggregate'] ?? null, $order );
+				$this->complete_money_transition( $order, $context );
+			}
+			$this->after_update( $id, $payload, $checkpoint['current'], $checkpoint['response'], $context );
 			return null;
 		} finally {
 			$this->unlock( $id );
@@ -732,6 +764,8 @@ class Order_Writer extends Null_Writer {
 			'money' => $money,
 			'pushed_payload' => $pushed_payload,
 			'money_before' => $before,
+			'epoch_before' => $before ? Money_Epoch::current( $before ) : 0,
+			'total_before' => $before ? $before->get_total() : '0',
 			'settlement_changes' => $changes,
 			'reopen' => $reopen,
 			'requested_created_gmt' => $created_gmt,

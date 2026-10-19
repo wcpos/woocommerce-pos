@@ -44,6 +44,38 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** @dataProvider persistence_storage */
+	public function test_failed_ledger_save_releases_keeper_locks_but_preserves_outer_lock( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		$order = $this->create_pos_order();
+		$lock = Order_Lock::instance();
+		$competitor = new Order_Lock();
+		$lease = static fn( $sql ) => 0 === strpos( $sql, 'SELECT GET_LOCK(' ) ? 'SELECT NULL' : $sql;
+		$refuse = static function ( $saving ) use ( $order ): void {
+			if ( $saving->get_id() === $order->get_id() ) { throw new \RuntimeException( 'Save interrupted after keeper acquisition' ); }
+		};
+		add_filter( 'query', $lease );
+		add_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+		try {
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			try {
+				Ledger::instance()->adopt( $order, $this->payment( 'pos_cash', '5' ) );
+				$this->fail( 'Interrupted ledger save returned.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertInstanceOf( \WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception::class, $error );
+			}
+			$this->assertFalse( $competitor->acquire( $order->get_id() ), 'The caller still owns its outer lock.' );
+			$lock->release( $order->get_id() );
+			$this->assertFalse( get_option( 'wcpos_payment_lock_' . $order->get_id() ), 'Failed save leaked an option lease.' );
+			$this->assertTrue( $competitor->acquire( $order->get_id() ), 'Failed save stranded a reentrant acquisition.' );
+		} finally {
+			$competitor->release( $order->get_id() );
+			remove_filter( 'query', $lease );
+			remove_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	/** @dataProvider persistence_storage */
 	public function test_locked_save_uses_fresh_total_and_refreshes_caller( bool $hpos ): void {
 		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
 		try {

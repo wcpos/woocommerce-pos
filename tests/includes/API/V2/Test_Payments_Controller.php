@@ -73,6 +73,23 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'pos_cash', $data['order']['payment_method'] );
 	}
 
+	/** A GET that polls/persists payment state has the same reverse gate as POST. */
+	public function test_status_poll_requires_payments_13_for_reopened_order(): void {
+		$order = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '5.00' );
+		$this->assertSame( 200, $this->record( $order, $payment )->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save_meta_data() );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $payment['id'] . '/status' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.2' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 426, $response->get_status() );
+		$this->assertSame( 'wcpos_update_required', $response->get_data()['code'] );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+	}
+
 	/** @dataProvider reopened_payment_routes */
 	public function test_reopened_payment_route_ignores_retained_coverage( bool $intent ): void {
 		$order = $this->create_pos_order();

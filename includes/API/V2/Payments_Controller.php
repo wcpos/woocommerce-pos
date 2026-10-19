@@ -62,7 +62,8 @@ class Payments_Controller extends WC_REST_Controller {
 								(int) $request['id'],
 								function () use ( $request, $definition ) {
 									$order = wc_get_order( (int) $request['id'] );
-									if ( $order && WP_REST_Server::CREATABLE === $definition[0] ) {
+									// Every route mutates, including the provider-polling GET status.
+									if ( $order ) {
 										$error = \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::gate( $order, $request, null, false );
 										if ( $error ) {
 											return $error;

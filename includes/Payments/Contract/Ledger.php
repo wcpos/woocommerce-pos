@@ -1478,6 +1478,7 @@ class Ledger {
 	 */
 	public function save( WC_Order $order, array $rows, bool $derive = true, array $deleted_ids = array(), ?array $read_rows = null ): void {
 		$lock = Order_Lock::instance();
+		$keeper_count = $this->closure_locks[ $order->get_id() ] ?? 0;
 		if ( ! $lock->acquire( $order->get_id() ) ) {
 			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
 		}
@@ -1602,6 +1603,11 @@ class Ledger {
 				throw new Ledger_Persistence_Exception( 'WCPOS payment ledger was not persisted.' );
 			}
 		} finally {
+			// A failed WC save can skip after-save, including nested payment_complete() saves.
+			// Release only keeper acquisitions made here; an enclosing save still owns its lock.
+			while ( ( $this->closure_locks[ $order->get_id() ] ?? 0 ) > $keeper_count ) {
+				$this->release_closure_lock( $order );
+			}
 			$lock->release( $order->get_id() );
 		}
 	}

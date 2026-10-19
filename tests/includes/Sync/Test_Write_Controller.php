@@ -2714,9 +2714,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 	public function test_orders_update_accepts_pull_revision_that_ignores_identity_meta(): void {
 		$store = new Fake_Mutation_Store();
-		$store->resolve = 7001;
+		$order = wc_create_order();
+		$store->resolve = $order->get_id();
 		$payload = array(
-			'id' => 7001,
+			'id' => $order->get_id(),
 			'status' => 'processing',
 			'total' => '10.00',
 		);
@@ -2735,7 +2736,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $result->get_status() );
 		$this->assertSame( $revision, $result->get_data()['currentRevision'] );
-		$this->assertSame( array( self::MID => 7001 ), $store->finalized );
+		$this->assertSame( array( self::MID => $order->get_id() ), $store->finalized );
 		$this->assertSame( 'order', $store->persisted[0]['id_type'] );
 		$this->assertSame( array( 'GET', 'PUT', 'GET' ), array_map( static fn( $request ) => $request->get_method(), $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ) );
 	}

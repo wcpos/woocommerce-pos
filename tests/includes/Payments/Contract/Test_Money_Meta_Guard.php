@@ -70,6 +70,130 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	/** @dataProvider update_transition_failures */
+	public function test_committed_update_retry_recovers_money_without_reforwarding( string $transition, bool $reopen, int $epoch = 0, bool $unchanged = false ): void {
+		$meta = $reopen ? array( '_wcpos_completed_at' => self::AT, '_wcpos_completed_epoch' => '0' ) : array();
+		if ( $epoch ) { $meta = array( '_wcpos_money_epoch' => '1', '_wcpos_payments' => $this->cash() ); }
+		$order = $this->order( $meta );
+		if ( $reopen ) { $order->set_status( 'completed' ); $order->save(); }
+		$payload = $reopen ? $this->reopen() : array(
+			'fee_lines' => array( array( 'id' => array_key_first( $order->get_items( 'fee' ) ), 'total' => '40' ) ),
+			'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT, '_wcpos_payments' => $this->cash( '40' ) ) ),
+		);
+		if ( $epoch ) {
+			$payload['meta_data'] = $this->meta( array( '_wcpos_completed_at' => self::AT ) );
+			if ( $unchanged ) { $payload['fee_lines'][0]['total'] = '50'; }
+		}
+		$envelope = array( 'mutationId' => wp_generate_uuid4(), 'expectedEpoch' => $epoch, 'tillAggregate' => array( 'total' => '99' ) );
+		$original = null;
+		$puts = 0;
+		$checkpoint_options = array();
+		$watch_options = static function ( $option ) use ( &$checkpoint_options ) {
+			if ( 0 === strpos( $option, 'wcpos_update_transition_' ) ) { $checkpoint_options[] = $option; }
+		};
+		add_action( 'added_option', $watch_options );
+		$observe = static function ( $result, $server, $request ) use ( &$original, &$puts ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			if ( 'PUT' === $request->get_method() && 0 === strpos( $request->get_route(), '/wc/v3/orders/' ) ) { ++$puts; }
+			return $result;
+		};
+		$crash = static function ( $value ) use ( $transition ) {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( ( 'owner' === $transition && \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) )
+					|| ( 'completion' === $transition && 'complete_money_transition' === ( $frame['function'] ?? '' ) ) ) {
+					throw new \RuntimeException( 'Committed update transition failed' );
+				}
+			}
+			return $value;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		$hook = 'woocommerce_order_get_total';
+		add_filter( $hook, $crash );
+		try {
+			try {
+				$this->push( $order, $payload, $envelope );
+				$this->fail( 'Expected committed update transition failure' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Committed update transition failed', $error->getMessage() );
+			} finally {
+				remove_filter( $hook, $crash );
+			}
+			$this->assertSame( 1, $puts );
+			$this->assertSame( array(), $checkpoint_options, 'Recovery must not create option rows' );
+			$checkpoint = wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' );
+			$this->assertSame( $envelope['mutationId'], $checkpoint['mutation_id'] );
+			// A checkpoint for another mutation cannot authorize these transitions.
+			$stale = wc_get_order( $order->get_id() );
+			$stale->update_meta_data( '_wcpos_update_transition', array_merge( $checkpoint, array( 'mutation_id' => wp_generate_uuid4() ) ) );
+			Money_Meta_Guard::authorised( $stale->get_id(), static fn() => $stale->save_meta_data() );
+			$this->assertSame( 500, $this->server->dispatch( $original )->get_status() );
+			$this->assertSame( 1, $puts );
+			$stale->update_meta_data( '_wcpos_update_transition', $checkpoint );
+			Money_Meta_Guard::authorised( $stale->get_id(), static fn() => $stale->save_meta_data() );
+			// Simulate a retry after the reservation TTL, retaining the exact original revision.
+			global $wpdb;
+			$store = new \WCPOS\WooCommercePOS\Sync\Mutation_Store();
+			$wpdb->update( $store->table_name(), array( 'created_at' => '2000-01-01 00:00:00' ), array( 'mutation_id' => $envelope['mutationId'] ) );
+			$this->assertSame( 'poison', $store->lookup( 'orders', $envelope['mutationId'] )['status'] );
+			$lock = new Order_Lock();
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			try {
+				$this->assertSame( 409, $this->server->dispatch( $original )->get_status() );
+				$this->assertSame( 'poison', $store->lookup( 'orders', $envelope['mutationId'] )['status'] );
+			} finally {
+				$lock->release( $order->get_id() );
+			}
+			$retry = $this->server->dispatch( $original );
+			$this->assertSame( 200, $retry->get_status(), wp_json_encode( $retry->get_data() ) );
+			$this->assertSame( 1, $puts, 'Recovery must not dispatch a second PUT' );
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertSame( $reopen ? '' : 'server', $saved->get_meta( '_wcpos_money_owner' ) );
+			$this->assertSame( $reopen || $unchanged ? '' : self::AT, $saved->get_meta( '_wcpos_completed_at' ) );
+			$this->assertSame( $reopen ? 1 : $epoch, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $saved ) );
+			$this->assertSame( 'done', $store->lookup( 'orders', $envelope['mutationId'] )['status'] );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_update_transition' ) );
+			$this->assertSame( array(), $checkpoint_options );
+			$this->assertSame( 200, $this->server->dispatch( $original )->get_status() );
+			$this->assertSame( 1, $puts );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+			remove_action( 'added_option', $watch_options );
+		}
+	}
+
+	public function test_successful_update_removes_transition_checkpoint(): void {
+		$order = $this->order();
+		$this->ack_meta( $this->push( $order, array( 'customer_note' => 'Saved' ) ) );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' ) );
+	}
+
+	public function test_update_checkpoint_cannot_be_forged_changed_or_deleted(): void {
+		$order = $this->order();
+		$checkpoint = array( 'mutation_id' => wp_generate_uuid4(), 'context' => array( 'epoch_before' => 0 ), 'current' => array(), 'response' => array() );
+		$order->update_meta_data( '_wcpos_update_transition', $checkpoint );
+		$order->save();
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' ) );
+		$order->update_meta_data( '_wcpos_update_transition', $checkpoint );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save_meta_data() );
+		foreach ( array( array( 'mutation_id' => 'forged' ), null ) as $forged ) {
+			$order = wc_get_order( $order->get_id() );
+			if ( null === $forged ) { $order->delete_meta_data( '_wcpos_update_transition' ); }
+			else { $order->update_meta_data( '_wcpos_update_transition', $forged ); }
+			$order->save();
+			$this->assertSame( $checkpoint, wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' ) );
+		}
+	}
+
+	public function update_transition_failures(): array {
+		return array(
+			'owner' => array( 'owner', false ),
+			'completion' => array( 'completion', false ),
+			'reopen' => array( 'owner', true ),
+			'reduced total uses original edit proof' => array( 'owner', false, 1 ),
+			'unchanged total has no edit proof' => array( 'owner', false, 1, true ),
+		);
+	}
+
 	/** @dataProvider completed_status_downgrades */
 	public function test_completed_status_downgrade_requires_reopen_command( string $status, bool $modern, int $epoch ): void {
 		$order = $this->order( array( '_wcpos_money_epoch' => $epoch, '_wcpos_completed_at' => self::AT, '_wcpos_completed_epoch' => $epoch ) );

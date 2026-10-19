@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\API\V2\Writers\Collection_Writer_Resolver;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard;
 use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Sync\Api;
@@ -232,6 +233,9 @@ class Write_Controller extends WP_REST_Controller {
 		}
 		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
 			$writer = $this->writer( $meta );
+			if ( 'update' === ( $hit['operation'] ?? '' ) && $writer instanceof Writers\Order_Writer ) {
+				return $this->recover_order_update( $meta, $m, $hit, $writer );
+			}
 			$recovered = $this->identity->recover( $meta, $m, $hit, $writer );
 			if ( is_wp_error( $recovered ) ) {
 				return $recovered;
@@ -245,6 +249,56 @@ class Write_Controller extends WP_REST_Controller {
 			return $this->replay( $meta, $hit );
 		}
 		return null;
+	}
+
+	/** A poisoned order update has committed its PUT but not all post-write transitions. */
+	private function recover_order_update( array $meta, array $m, array $hit, Writers\Order_Writer $writer ) {
+		$id = (int) $hit['remote_id'];
+		$resolved = $this->store->resolve_id_by_uuid( $meta['id_type'], $m['recordId'], $meta );
+		if ( is_wp_error( $resolved ) ) {
+			return $resolved;
+		}
+		if ( $id <= 0 || $resolved !== $id ) {
+			return new WP_Error( 'woo_rxdb_sync_orphaned_mutation', 'Recorded mutation no longer matches its record.', array( 'status' => 410 ) );
+		}
+		if ( ! $writer->lock( $id ) ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+		}
+		try {
+			$order = wc_get_order( $id );
+			$checkpoint = $order ? $order->get_meta( '_wcpos_update_transition' ) : null;
+			if ( ! is_array( $checkpoint ) || ( $checkpoint['mutation_id'] ?? '' ) !== $m['mutationId'] ) {
+				return $this->finalize_error();
+			}
+			$error = $writer->recover_update( $id, $m['payload'], $meta['money'], $checkpoint );
+			if ( is_wp_error( $error ) ) {
+				return $error;
+			}
+			if ( ! $this->store->finalize_poison( $m['mutationId'], $id ) ) {
+				return $this->finalize_error();
+			}
+			$this->save_update_checkpoint( $id, null );
+			return $this->envelope_document( $this->document_for( $meta, $id ), $m['recordId'], $meta, $id, (int) $hit['response_status'], $writer );
+		} finally {
+			$writer->unlock( $id );
+		}
+	}
+
+	/** The caller holds the order lock; persist independently of later transition saves. */
+	private function save_update_checkpoint( int $id, ?array $checkpoint ): bool {
+		$order = wc_get_order( $id );
+		Money_Meta_Guard::authorised(
+			$id,
+			static function () use ( $order, $checkpoint ) {
+				if ( null === $checkpoint ) {
+					$order->delete_meta_data( '_wcpos_update_transition' );
+				} else {
+					$order->update_meta_data( '_wcpos_update_transition', $checkpoint );
+				}
+				$order->save_meta_data();
+			}
+		);
+		return wc_get_order( $id )->get_meta( '_wcpos_update_transition' ) === ( $checkpoint ?? '' );
 	}
 
 	/**
@@ -541,6 +595,24 @@ class Write_Controller extends WP_REST_Controller {
 				$prepared['context']  = $late['context'];
 			}
 
+			if ( $locked ) {
+				$prepared['context']['checkpoint_update'] = function ( int $id, WP_REST_Response $response, array $context ) use ( $m, $current_bare ) {
+					// The fingerprint-checked retry supplies payload/aggregate; retain only server decisions.
+					unset( $context['money_before'], $context['money'], $context['pushed_payload'] );
+					$checkpoint = array(
+						'mutation_id' => $m['mutationId'],
+						'context' => $context,
+						'current' => array_intersect_key( $current_bare, array_flip( array( 'status', 'customer_id' ) ) ),
+						'response' => array_intersect_key( $response->get_data(), array_flip( array( 'status', 'customer_id' ) ) ),
+					);
+					if ( ! $this->save_update_checkpoint( $id, $checkpoint ) || ! $this->store->mark_poison( $m['mutationId'], $id, $response->get_status() ) ) {
+						$this->store->mark_indeterminate( $m['mutationId'], $id, $response->get_status() );
+						return $this->finalize_error();
+					}
+					return null;
+				};
+			}
+
 			$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
 			if ( is_wp_error( $response ) ) {
 				return $response;
@@ -552,9 +624,14 @@ class Write_Controller extends WP_REST_Controller {
 			$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
 
 			$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] );
-			$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
+			$finalized = $locked
+				? ( $this->store->finalize_poison( $m['mutationId'], $id ) ? null : $this->finalize_error() )
+				: $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
 			if ( is_wp_error( $finalized ) ) {
 				return $finalized;
+			}
+			if ( $locked ) {
+				$this->save_update_checkpoint( $id, null );
 			}
 			return $this->envelope_document( $this->document_for( $meta, $id ), $m['recordId'], $meta, $id, null, $writer );
 		} finally {
