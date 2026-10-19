@@ -38,7 +38,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	);
 
 	/** Retired tables retained in uninstall for sites skipping old upgrades. */
-	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index', 'wcpos_closures' );
+	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index', 'wcpos_closures', 'wcpos_closures_folded' );
 
 	/**
 	 * User fixture committed by real DDL.

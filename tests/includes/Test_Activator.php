@@ -718,8 +718,8 @@ class Test_Activator extends WP_UnitTestCase {
 					'printed_number' => null,
 					'opened_at_gmt' => '2026-09-11 08:00:00',
 					'business_day' => '2026-09-11',
-					// The till's claim survives even where the session closed earlier.
-					'closed_at_gmt' => '2026-09-11 13:00:00',
+					// The row reads the session's close; the till's later claim stays in the document.
+					'closed_at_gmt' => '2026-09-11 12:00:00',
 					'opened_by' => 1,
 					'closed_by' => 1,
 					'approved_by' => null,
@@ -744,6 +744,8 @@ class Test_Activator extends WP_UnitTestCase {
 					'print_count' => 2,
 					'last_printed_at_gmt' => '2026-09-11 12:30:00',
 					'received_at_gmt' => '2026-09-11 13:00:05',
+					'till_opened_at_gmt' => null,
+					'till_closed_at_gmt' => '2026-09-11 13:00:00',
 				),
 				$closures->get( $fixture['closures'][0] )
 			);
@@ -763,26 +765,41 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
-	/** A second pass over an already folded install issues no DDL and changes no closure. */
-	public function test_closure_fold_rerun_is_a_no_op(): void {
+	/** A run stopped after the rename resumes from the renamed table: no DDL, the straggler is copied, nothing else changes. */
+	public function test_closure_fold_rerun_resumes_from_renamed_table(): void {
 		// Arrange.
+		global $wpdb;
 		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$folded = $fixture['legacy'] . '_folded';
 		$activator = new Activator();
+		$fail_drop = static function ( $sql ) use ( $folded ) {
+			return "DROP TABLE IF EXISTS {$folded}" === $sql ? 'INVALID DROP' : $sql;
+		};
 		$statements = array();
 		$observe = static function ( $sql ) use ( $fixture, &$statements ) {
-			if ( 0 === strpos( $sql, "ALTER TABLE {$fixture['sessions_table']}" ) || false !== strpos( $sql, "DROP TABLE IF EXISTS {$fixture['legacy']}" ) || 0 === strpos( $sql, "UPDATE `{$fixture['sessions_table']}`" ) ) {
+			if ( 0 === strpos( $sql, "ALTER TABLE {$fixture['sessions_table']}" ) || 0 === strpos( $sql, 'RENAME TABLE' ) ) {
 				$statements[] = $sql;
 			}
 			return $sql;
 		};
+		$previous = $wpdb->suppress_errors();
 		try {
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
-			$activator->install_sync_schema();
+			add_filter( 'query', $fail_drop );
+			try {
+				$activator->install_sync_schema();
+				$this->fail( 'Expected the drop to fail.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold drop failed.', $error->getMessage() );
+			}
+			remove_filter( 'query', $fail_drop );
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
 			$before = array_map( array( $closures, 'get' ), $fixture['closures'] );
+			$straggler = $this->add_legacy_closure( $fixture, $folded, 3 );
 
 			// Act.
-			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
 			add_filter( 'query', $observe );
 			$activator->install_sync_schema();
 			remove_filter( 'query', $observe );
@@ -790,9 +807,187 @@ class Test_Activator extends WP_UnitTestCase {
 			// Assert.
 			$this->assertSame( array(), $statements );
 			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
 			$this->assertSame( $before, array_map( array( $closures, 'get' ), $fixture['closures'] ) );
+			$this->assertSame( 3, $closures->get( $straggler )['number'] );
 		} finally {
+			remove_filter( 'query', $fail_drop );
 			remove_filter( 'query', $observe );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A closure a pre-fold request commits after the first copy still lands on its session row. */
+	public function test_closure_fold_copies_a_closure_committed_after_the_first_pass(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$straggler = null;
+		$insert = function ( $sql ) use ( $fixture, &$straggler ) {
+			if ( null === $straggler && 0 === strpos( $sql, "RENAME TABLE {$fixture['legacy']}" ) ) {
+				$straggler = '';
+				$straggler = $this->add_legacy_closure( $fixture, $fixture['legacy'], 3 );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $insert );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			( new Activator() )->install_sync_schema();
+			remove_filter( 'query', $insert );
+
+			// Assert.
+			$this->assertNotEmpty( $straggler );
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $straggler );
+			$this->assertSame( 3, $closure['number'] );
+			$this->assertSame( '80.0000', $closure['perpetual_sales_total'] );
+		} finally {
+			remove_filter( 'query', $insert );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A copy that fails partway keeps the latch; the next pass finishes it. */
+	public function test_closure_fold_failing_mid_copy_keeps_latch_and_resumes(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$updates = 0;
+		$fail_second = static function ( $sql ) use ( $fixture, &$updates ) {
+			if ( 0 === strpos( $sql, "UPDATE `{$fixture['sessions_table']}` SET `closure_id`" ) && 2 === ++$updates ) {
+				return 'INVALID FOLD WRITE';
+			}
+			return $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			add_filter( 'query', $fail_second );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the second copy to fail.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold write failed.', $error->getMessage() );
+			}
+			remove_filter( 'query', $fail_second );
+
+			// Assert.
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+			$this->assertSame( 1, $closures->get( $fixture['closures'][0] )['number'] );
+			$this->assertNull( $closures->get( $fixture['closures'][1] ) );
+			( new Activator() )->install_sync_schema();
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( 2, $closures->get( $fixture['closures'][1] )['number'] );
+		} finally {
+			remove_filter( 'query', $fail_second );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A failed legacy-table probe is not absence: the fold stops before latching. */
+	public function test_closure_fold_failed_probe_keeps_latch(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$break = static function ( $sql ) use ( $fixture ) {
+			return false !== strpos( $sql, "SHOW TABLES LIKE '" . $GLOBALS['wpdb']->esc_like( $fixture['legacy'] ) . "'" ) ? 'INVALID PROBE' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			add_filter( 'query', $break );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the failed probe to stop the fold.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold probe failed.', $error->getMessage() );
+			}
+			remove_filter( 'query', $break );
+
+			// Assert.
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+		} finally {
+			remove_filter( 'query', $break );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A legacy closure whose session carries another closure id stops the fold with the named error. */
+	public function test_closure_fold_with_mismatched_closure_keeps_latch_and_logs_error(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$this->assertSame( 1, $wpdb->update( $fixture['sessions_table'], array( 'closure_id' => wp_generate_uuid4() ), array( 'id' => $fixture['sessions'][1] ) ) );
+		$logs = array();
+		$capture = static function ( $enabled, $message ) use ( &$logs ) {
+			$logs[] = array( \WCPOS\WooCommercePOS\Logger::$log_level, $message );
+			return false;
+		};
+		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the fold to refuse a mismatched closure.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold found orphaned or mismatched closures.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$errors = array_values(
+				array_filter(
+					$logs,
+					static function ( $entry ) {
+						return 'error' === $entry[0];
+					}
+				)
+			);
+			$this->assertCount( 1, $errors );
+			$this->assertStringContainsString( 'Closure fold refused: legacy closures do not match their sessions', $errors[0][1] );
+			$this->assertStringContainsString( '"mismatches":1', $errors[0][1] );
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A schema-9 install without an active register is seeded before the fold adds the closure columns. */
+	public function test_schema_nine_install_without_register_seeds_one_and_latches(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$registers = ( new \WCPOS\WooCommercePOS\Services\Register_Store() )->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
+		$active = $wpdb->get_col( "SELECT id FROM {$registers} WHERE status = 'active'" );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
+		$wpdb->query( "UPDATE {$registers} SET status = 'archived' WHERE status = 'active'" );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
+			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$registers} WHERE status = 'active'" ) );
+		} finally {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
+			$wpdb->query( "DELETE FROM {$registers} WHERE status = 'active'" );
+			foreach ( $active as $id ) {
+				$wpdb->update( $registers, array( 'status' => 'active' ), array( 'id' => $id ) );
+			}
 			$this->restore_closure_schema( $fixture );
 		}
 	}
@@ -1061,13 +1256,49 @@ class Test_Activator extends WP_UnitTestCase {
 		return $fixture;
 	}
 
+	/** Close one more fixture session and record its closure in a legacy table.
+	 *
+	 * @param array  $fixture From arrange_schema_nine_with_legacy_closures().
+	 * @param string $table Legacy table to insert into.
+	 * @param int    $number Closure number.
+	 * @return string Closure id.
+	 */
+	private function add_legacy_closure( array $fixture, string $table, int $number ): string {
+		global $wpdb;
+		$session = wp_generate_uuid4();
+		$closure = wp_generate_uuid4();
+		$this->assertSame(
+			1,
+			$wpdb->insert(
+				$fixture['sessions_table'],
+				array(
+					'id' => $session,
+					'register_id' => $fixture['register_id'],
+					'store_id' => 456,
+					'status' => 'closed',
+					'opened_at_gmt' => '2026-09-11 08:00:00',
+					'opened_by' => 1,
+					'counted_float' => '100',
+					'closed_at_gmt' => '2026-09-11 12:00:00',
+					'closed_by' => 1,
+					'closure_id' => $closure,
+					'created_at_gmt' => '2026-09-11 08:00:00',
+				)
+			)
+		);
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables; ids are prepared.
+		$copied = $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} SELECT %s, register_id, %s, store_id, %d, NULL, opened_at_gmt, business_day, closed_at_gmt, opened_by, closed_by, approved_by, expected, till_expected, counted, variance, period_sales_total, period_refunds_total, perpetual_sales_total, perpetual_refunds_total, unsynced_count, unsynced_total, first_sale_counter, last_sale_counter, first_receipt_id, last_receipt_id, software_version, printed_at_gmt, breakdowns, findings, 0, NULL, received_at_gmt FROM {$table} WHERE id = %s", $closure, $session, $number, $fixture['closures'][0] ) );
+		$this->assertSame( 1, $copied );
+		return $closure;
+	}
+
 	/** Drop the legacy table and fixture rows, then put the closure columns back.
 	 *
 	 * @param array $fixture From arrange_schema_nine_with_legacy_closures().
 	 */
 	private function restore_closure_schema( array $fixture ): void {
 		global $wpdb;
-		$wpdb->query( "DROP TABLE IF EXISTS {$fixture['legacy']}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		$wpdb->query( "DROP TABLE IF EXISTS {$fixture['legacy']}, {$fixture['legacy']}_folded" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy tables.
 		$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $fixture['register_id'] ) );
 		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
 		( new Activator() )->install_sync_schema();
