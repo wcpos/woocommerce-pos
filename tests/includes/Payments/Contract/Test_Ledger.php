@@ -44,6 +44,76 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** @dataProvider persistence_storage */
+	public function test_stale_mint_rebases_an_existing_provider_updated_row( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$order->set_payment_method( 'pos_cash' );
+			$order->save();
+			$ledger->save( $order, array( $this->payment( 'pos_cash', '20', array( 'status' => 'failed' ) ) ), false );
+			$stale = wc_get_order( $order->get_id() );
+			$rows = $ledger->read( $stale );
+			$rows[0]['status'] = 'captured';
+			$rows[0]['refunded_amount'] = '3.00';
+			$rows[0]['refunds'] = array( array( 'id' => 123, 'status' => 'succeeded', 'amount' => '3.00' ) );
+			$rows[0]['events'] = array( array( 'type' => 'refunded' ) );
+			$rows[0]['seen_events'] = array( 'refund-123' );
+			$rows[0]['provider_refs'] = array( 'transaction_id' => 'fresh' );
+			$lock = Order_Lock::instance();
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			try { $ledger->save( wc_get_order( $order->get_id() ), $rows, false ); }
+			finally { $lock->release( $order->get_id() ); }
+			$fresh_row = $ledger->read( wc_get_order( $order->get_id() ) )[0];
+
+			$minted = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $stale );
+
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertIsArray( $minted );
+			$this->assertCount( 2, $ledger->read( $saved ) );
+			$this->assertSame( $fresh_row, $ledger->find( $saved, $fresh_row['id'] ) );
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_rebase_keeps_caller_edits_and_fresh_server_fields( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$ledger->save( $order, array( $this->payment( 'pos_cash', '20', array( 'status' => 'captured' ) ) ), false );
+			$read_rows = $ledger->read( $order );
+			$fresh = $read_rows;
+			$fresh[0]['refunded_amount'] = '3.00';
+			$fresh[0]['refunds'] = array( array( 'id' => 123, 'status' => 'succeeded', 'amount' => '3.00' ) );
+			$fresh[0]['events'] = array( array( 'type' => 'refunded' ) );
+			$fresh[0]['seen_events'] = array( 'refund-123' );
+			$ledger->save( wc_get_order( $order->get_id() ), $fresh, false );
+			$changed = $read_rows;
+			$changed[0]['receipt'] = array( 'reference' => 'caller edit' );
+
+			$ledger->save( $order, $changed, false, array(), $read_rows );
+
+			$saved = $ledger->read( wc_get_order( $order->get_id() ) )[0];
+			$this->assertSame( $changed[0]['receipt'], $saved['receipt'] );
+			foreach ( array( 'refunded_amount', 'refunds', 'events', 'seen_events', 'epoch' ) as $key ) {
+				$this->assertSame( $fresh[0][ $key ], $saved[ $key ], $key );
+			}
+			// An explicit server-field edit remains authoritative, not overwritten by the rebase.
+			$changed[0]['refunded_amount'] = '4.00';
+			$changed[0]['refunds'][0] = array( 'id' => 124, 'status' => 'succeeded', 'amount' => '4.00' );
+			$ledger->save( $order, $changed, false, array(), $read_rows );
+			$saved = $ledger->read( wc_get_order( $order->get_id() ) )[0];
+			$this->assertSame( '4.00', $saved['refunded_amount'] );
+			$this->assertSame( $changed[0]['refunds'], $saved['refunds'] );
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	/** @dataProvider persistence_storage */
 	public function test_stale_webview_save_keeps_a_concurrently_recorded_row( bool $hpos ): void {
 		if ( $hpos ) {
 			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );

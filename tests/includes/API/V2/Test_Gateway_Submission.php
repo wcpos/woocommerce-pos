@@ -259,6 +259,32 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'sent', $response->get_data()['outcome'] );
 	}
 
+	/** Replacing then cancelling an invoice leaves no unresolved historical send. */
+	public function test_superseded_send_is_terminal_and_does_not_block_reopen(): void {
+		$order = $this->create_pos_order();
+		$first = wp_generate_uuid4();
+		$again = wp_generate_uuid4();
+		$logs = array();
+		$log = static function ( $enabled, $message ) use ( &$logs ) { $logs[] = $message; return false; };
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		try {
+			$this->assertSame( 200, $this->submit( $order, $first, array( 'invoice_email' => 'first@example.com' ) )->get_status() );
+			$this->assertSame( 200, $this->submit( $order, $again, array( 'invoice_email' => 'second@example.com' ) )->get_status() );
+		} finally { remove_filter( 'woocommerce_pos_logging', $log, 10 ); }
+		$this->assertSame( 200, $this->cancel( $order, $again )->get_status() );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( array( 'state' => 'superseded', 'epoch' => 0 ), Gateway_Submission::read_attempts( $saved )[ $first ] );
+		$this->assertNotEmpty( array_filter( $logs, static fn( $message ) => is_string( $message ) && false !== strpos( $message, $first ) && false !== strpos( $message, 'cancel' ) ) );
+		$replay = $this->submit( $order, $first, array( 'invoice_email' => 'first@example.com' ) );
+		$this->assertSame( 409, $replay->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $replay->get_data()['code'] );
+		$this->assertSame( 2, Sent_Test_Gateway::$calls );
+		// Supply completion separately so this assertion specifically tests unresolved attempts.
+		$saved->update_meta_data( '_wcpos_completed_at', '2026-10-18T12:00:00Z' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $saved->get_id(), static fn() => $saved->save() );
+		$this->assertNull( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::reopen_refusal( wc_get_order( $saved->get_id() ) ) );
+	}
+
 	/** Sent attempts stamp the order, assign the gateway, and never send twice on replay. */
 	public function test_submit_email_stamps_order_and_replay_does_not_send(): void {
 		// Arrange.
@@ -312,7 +338,8 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$replay   = $this->submit( $order, $first, array( 'invoice_email' => 'buyer@example.com' ) );
 		// Assert.
 		$this->assertSame( 'sent', $response->get_data()['outcome'] );
-		$this->assertSame( 'sent', $replay->get_data()['outcome'] );
+		$this->assertSame( 409, $replay->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $replay->get_data()['code'] );
 		$this->assertSame( 2, Sent_Test_Gateway::$calls );
 		$stored = wc_get_order( $order->get_id() );
 		$stamp  = Gateway_Submission::read_stamp( $stored );
@@ -320,7 +347,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'fixed@example.com', $stamp['destination'] );
 		$this->assertSame(
 			array(
-				$first => array( 'state' => 'sent', 'epoch' => 0 ),
+				$first => array( 'state' => 'superseded', 'epoch' => 0 ),
 				$again => array( 'state' => 'sent', 'epoch' => 0 ),
 			),
 			Gateway_Submission::read_attempts( $stored )
@@ -482,11 +509,11 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$retry = $this->submit( $order, $again, array( 'invoice_email' => 'fixed@example.com' ) );
 		$this->assertSame( 409, $retry->get_status() );
 		$this->assertSame( 'wcpos_payment_conflict', $retry->get_data()['code'] );
-		$this->assertSame( 'sent', $this->submit( $order, $first, array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['outcome'] );
+		$this->assertSame( 'wcpos_payment_conflict', $this->submit( $order, $first, array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['code'] );
 		$this->assertSame( 2, Sent_Test_Gateway::$calls );
 		$this->assertSame(
 			array(
-				$first => array( 'state' => 'sent', 'epoch' => 0 ),
+				$first => array( 'state' => 'superseded', 'epoch' => 0 ),
 				$again => array( 'state' => 'cancelled', 'epoch' => 0 ),
 			),
 			Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) )

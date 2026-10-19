@@ -80,9 +80,9 @@ class Gateway_Submission {
 				'order' => $ledger->summary( $order ),
 			);
 		}
-		if ( 'cancelled' === ( $history[ $attempt_id ]['state'] ?? null ) ) {
-			// The till undid this send; a late retry of it must not send again.
-			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		if ( in_array( $history[ $attempt_id ]['state'] ?? null, array( 'cancelled', 'superseded' ), true ) ) {
+			// The till undid or replaced this send; a late retry must not send again.
+			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled or superseded at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		// Only a NEW attempt needs the method enabled: a replay above answers what already
 		// happened, even after the merchant has switched the method off.
@@ -290,6 +290,14 @@ class Gateway_Submission {
 			$order->add_order_note( sprintf( __( 'Settled via POS: %1$s on %2$s', 'woocommerce-pos' ), $verb['label'], wc_get_order_status_name( $settled_status ) ) );
 			Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 		} else {
+			foreach ( $history as $id => &$attempt ) {
+				if ( 'sent' === $attempt['state'] ) {
+					$attempt['state'] = 'superseded';
+					// Gateway capture has no invoice-cancellation operation (unlike provider void).
+					Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d superseded; invoice cancellation is unavailable for gateway submissions.', $id, $order->get_id() ) );
+				}
+			}
+			unset( $attempt );
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
 			$order->update_meta_data(
 				self::STAMP_META_KEY,

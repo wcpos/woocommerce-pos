@@ -102,6 +102,45 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( self::REC, wc_get_order( $response->get_data()['document']['id'] )->get_meta( '_woocommerce_pos_uuid' ) );
 	}
 
+	/** A born-twice retry repairs the owner stamp omitted by the failed first create. */
+	public function test_create_retry_repairs_owner_stamp_after_post_create_failure(): void {
+		$transition = 'owner';
+		$id = 0;
+		$crash = static function ( $total, $saved ) use ( &$id, $transition ) {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( ( 'owner' === $transition && \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) )
+					|| ( 'completion' === $transition && 'complete_money_transition' === ( $frame['function'] ?? '' ) && \WCPOS\WooCommercePOS\API\V2\Writers\Order_Writer::class === ( $frame['class'] ?? '' ) ) ) {
+					$id = $saved->get_id();
+					throw new \RuntimeException( 'Post-create transition failure' );
+				}
+			}
+			return $total;
+		};
+		$payload = array( 'status' => 'pos-open', 'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ) );
+		$envelope = array( 'tillAggregate' => array( 'total' => '99' ) );
+		add_filter( 'woocommerce_order_get_total', $crash, 10, 2 );
+		try {
+			$this->push( null, $payload, $envelope );
+			$this->fail( 'Expected post-create transition failure' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Post-create transition failure', $error->getMessage() );
+		} finally {
+			remove_filter( 'woocommerce_order_get_total', $crash, 10 );
+		}
+		$this->assertGreaterThan( 0, $id );
+		$this->assertSame( self::REC, wc_get_order( $id )->get_meta( '_woocommerce_pos_uuid' ) );
+		$this->assertSame( '', wc_get_order( $id )->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( '', wc_get_order( $id )->get_meta( '_wcpos_money_owner' ) );
+		$before = did_action( 'woocommerce_new_order' );
+		// An exception leaves the mutation reservation pending; a new mutation still owns the same recordId.
+		$retry = $this->push( null, $payload, $envelope );
+		$this->assertSame( 200, $retry->get_status() );
+		$this->assertSame( $id, $retry->get_data()['document']['id'] );
+		$this->assertSame( self::AT, wc_get_order( $id )->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( $before, did_action( 'woocommerce_new_order' ) );
+		$this->assertSame( 'server', wc_get_order( $id )->get_meta( '_wcpos_money_owner' ) );
+	}
+
 	/** @dataProvider create_transition_failures */
 	public function test_create_transition_failure_without_payload_uuid_keeps_identity( string $transition ): void {
 		$id = 0;
@@ -489,7 +528,7 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( self::AT, $meta['_wcpos_completed_at'] );
 		$this->assertSame( 0, (int) $meta['_wcpos_completed_epoch'] );
 		$meta = $this->ack_meta( $this->push( null, array(), array( 'tillAggregate' => array( 'total' => '99' ) ) ) );
-		$this->assertArrayNotHasKey( '_wcpos_money_owner', $meta );
+		$this->assertSame( 'server', $meta['_wcpos_money_owner'] );
 	}
 	public function test_forged_epoch_jump_is_dropped_and_plain_reopen_keeps_epoch(): void {
 		$order = $this->order( array( '_wcpos_completed_at' => self::AT, '_wcpos_money_owner' => 'server' ) );

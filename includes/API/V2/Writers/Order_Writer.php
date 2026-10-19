@@ -164,6 +164,9 @@ class Order_Writer extends Null_Writer {
 			$this->stamp_order_audit( $id, $payload, false );
 			$order = wc_get_order( $id );
 			if ( $order ) {
+				if ( '' === $order->get_meta( Money_Owner::META_KEY ) ) {
+					Money_Owner::stamp( $prepared['context']['pushed_payload'], $prepared['context']['money']['tillAggregate'] ?? null, $order );
+				}
 				$this->complete_money_transition( $order, $prepared['context'] );
 			}
 			return null;

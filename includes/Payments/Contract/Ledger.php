@@ -1051,8 +1051,9 @@ class Ledger {
 			);
 		}
 		$row['id'] = $id;
+		$read_rows = $rows;
 		$rows[] = $row;
-		$this->save( $order, $rows, $derive );
+		$this->save( $order, $rows, $derive, array(), $read_rows );
 		return $this->find( $order, $id );
 	}
 
@@ -1426,13 +1427,14 @@ class Ledger {
 	 * capture, apply_result, refund, settle_allocation, adopt, append_events, void).
 	 * A raw save() skips the transition table, the refund caps and the hooks.
 	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $rows  Payment rows.
-	 * @param bool     $derive Whether to project payment state (deferred during offline arrival).
-	 * @param array    $deleted_ids Explicitly removed payment ids (a refused intent only).
+	 * @param WC_Order   $order Order object.
+	 * @param array      $rows  Payment rows.
+	 * @param bool       $derive Whether to project payment state (deferred during offline arrival).
+	 * @param array      $deleted_ids Explicitly removed payment ids (a refused intent only).
+	 * @param array|null $read_rows Original rows read by an unlocked caller; null treats all rows as edited.
 	 * @throws Ledger_Persistence_Exception When the ledger cannot be locked or persisted.
 	 */
-	public function save( WC_Order $order, array $rows, bool $derive = true, array $deleted_ids = array() ): void {
+	public function save( WC_Order $order, array $rows, bool $derive = true, array $deleted_ids = array(), ?array $read_rows = null ): void {
 		$lock = Order_Lock::instance();
 		if ( ! $lock->acquire( $order->get_id() ) ) {
 			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
@@ -1464,10 +1466,33 @@ class Ledger {
 					$order->add_meta_data( $meta->key, $meta->value, false );
 				}
 			}
+			$original = array();
+			foreach ( $read_rows ?? array() as $read_row ) {
+				$original[ strtolower( (string) $read_row['id'] ) ] = $read_row;
+			}
 			$normalized = array();
 			foreach ( $rows as $row ) {
+				$requested_stamp = $row['updated_at_gmt'] ?? null;
 				$row      = $this->normalize_row( $fresh, $row );
 				$previous = $stored[ $row['id'] ] ?? null;
+				$read_row = $original[ $row['id'] ] ?? null;
+				if ( null !== $previous && null !== $read_row ) {
+					$base = $this->normalize_row( $fresh, $read_row );
+					$latest = $this->normalize_row( $fresh, $previous );
+					if ( $this->same_content( $row, $base ) ) {
+						$row = $latest;
+					} else {
+						// Carry concurrent server updates unless this writer explicitly edited them.
+						foreach ( array( 'refunded_amount', 'refunds', 'events', 'seen_events' ) as $key ) {
+							if ( $row[ $key ] === $base[ $key ] ) {
+								$row[ $key ] = $latest[ $key ];
+							}
+						}
+						if ( ( $read_row['updated_at_gmt'] ?? null ) === $requested_stamp && $this->valid_time( $previous['updated_at_gmt'] ?? null ) ) {
+							$row['updated_at_gmt'] = $previous['updated_at_gmt'];
+						}
+					}
+				}
 				$row['epoch'] = null === $previous ? $epoch : (int) ( $previous['epoch'] ?? 0 );
 				$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
 				if ( null !== $stamp && $this->same_content( $this->normalize_row( $fresh, $previous ), $row ) ) {
