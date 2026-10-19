@@ -4,6 +4,47 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\{Money_Epoch, Ledger};
 
 class Test_Money_Epoch extends \WP_UnitTestCase {
+	public function test_reopened_completion_requires_full_current_epoch_net_coverage(): void {
+		$order = new \WC_Order();
+		$order->set_total( '100' );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$old = array( 'id' => 'old', 'status' => 'captured', 'amount' => '100', 'epoch' => 0 );
+		$current = array( 'id' => 'new', 'status' => 'captured', 'amount' => '1', 'epoch' => 1 );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $old, $current ) ) );
+		$this->assertFalse( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+		$current['amount'] = '100';
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $old, $current ) ) );
+		$this->assertTrue( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+		$current['refunded_amount'] = '1';
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $old, $current ) ) );
+		$this->assertFalse( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+	}
+
+	public function test_reopen_ignores_prior_epoch_live_rows_and_attempts(): void {
+		$order = new \WC_Order();
+		$order->set_total( '100' );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->update_meta_data( '_wcpos_gateway_attempts', array( 'old' => array( 'state' => 'sent', 'epoch' => 0 ) ) );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array(
+			array( 'id' => 'old', 'status' => 'authorized', 'amount' => '100', 'epoch' => 0 ),
+			array( 'id' => 'new', 'status' => 'captured', 'amount' => '100', 'epoch' => 1 ),
+		) ) );
+		$this->assertNull( Money_Epoch::reopen_refusal( $order ) );
+	}
+
+	public function test_prior_epoch_row_does_not_represent_current_settled_attempt(): void {
+		$order = new \WC_Order();
+		$order->set_total( '100' );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->update_meta_data( '_wcpos_gateway_attempts', array( 'same-id' => array( 'state' => 'settled', 'epoch' => 1 ) ) );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array(
+			array( 'id' => 'same-id', 'status' => 'captured', 'amount' => '100', 'epoch' => 0 ),
+		) ) );
+		$refusal = Money_Epoch::reopen_refusal( $order );
+		$this->assertInstanceOf( \WP_Error::class, $refusal );
+		$this->assertSame( 'settled_without_row', $refusal->get_error_data()['reason'] );
+	}
+
 	public function test_reopen_malformed_legacy_row_id_is_not_attempt_representation(): void {
 		$order = new \WC_Order();
 		$order->set_total( '50' );

@@ -505,7 +505,7 @@ class Ledger {
 	 */
 	public function current_epoch_balance( WC_Order $order, array $rows ): string {
 		$epoch = Money_Epoch::current( $order );
-		$rows = array_filter( $rows, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === $epoch );
+		$rows = Money_Epoch::current_rows( $order, $rows );
 		if ( 0 === $epoch ) {
 			return $this->balance( $order, $rows );
 		}
@@ -528,6 +528,11 @@ class Ledger {
 			'balance'              => $this->balance( $order, $rows ),
 			'payment_method'       => $order->get_payment_method(),
 			'payment_method_title' => $order->get_payment_method_title(),
+			'current_epoch'        => array(
+				'epoch' => Money_Epoch::current( $order ),
+				'paid' => $this->paid( Money_Epoch::current_rows( $order, $rows ) ),
+				'balance' => $this->current_epoch_balance( $order, $rows ),
+			),
 		);
 	}
 
@@ -624,7 +629,7 @@ class Ledger {
 		// of it would count twice if the terminal later confirms (the money moved both ways).
 		// A leg the till has already asked to cancel does not block cash: the cashier accepted
 		// that risk by releasing it, and a provider outage must not stop the sale.
-		$reserved = $this->pending_reserved( $rows, false );
+		$reserved = $this->pending_reserved( Money_Epoch::current_rows( $order, $rows ), false );
 		if ( 0 === $balance || Money::minor( $amount ) > $balance || Money::minor( $amount ) > $balance - $reserved ) {
 			$row['status']          = 'failed';
 			$row['failure_reason']  = 0 === $balance ? 'order_already_paid' : ( Money::minor( $amount ) > $balance ? 'amount_exceeds_balance' : 'payment_in_flight' );
@@ -745,9 +750,9 @@ class Ledger {
 		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
 			return new WP_Error( 0 === $balance ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance', 0 === $balance ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ), array( 'status' => 0 === $balance ? 409 : 400 ) );
 		}
-		$pending = $this->pending_reserved( $rows );
+		$pending = $this->pending_reserved( Money_Epoch::current_rows( $order, $rows ) );
 		$newest_pending = null;
-		foreach ( $rows as $existing ) {
+		foreach ( Money_Epoch::current_rows( $order, $rows ) as $existing ) {
 			if ( 'pending' === $existing['status'] && ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) ) {
 				$newest_pending = $existing;
 			}
@@ -1292,7 +1297,7 @@ class Ledger {
 			// Name the newest leg that is actually blocking: one not already being cancelled,
 			// falling back to a cancelling one only when nothing else is live.
 			$blocking = null;
-			foreach ( $this->read( $order ) as $live ) {
+			foreach ( Money_Epoch::current_rows( $order, $this->read( $order ) ) as $live ) {
 				if ( 'pending' !== $live['status'] ) {
 					continue;
 				}
@@ -1567,7 +1572,7 @@ class Ledger {
 				$order->get_id(),
 				function () use ( $order, $normalized, $derive ): void {
 					$epoch = Money_Epoch::current( $order );
-					$paid = Money_Epoch::net_paid( array_filter( $normalized, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === $epoch ) );
+					$paid = Money_Epoch::net_paid( Money_Epoch::current_rows( $order, $normalized ) );
 					if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
 						$history = Gateway_Submission::read_attempts( $order );
 						$updated = $history;
@@ -1625,6 +1630,7 @@ class Ledger {
 	 * @param array    $rows  Payment rows.
 	 */
 	public function derive( WC_Order $order, array $rows ): void {
+		$rows = Money_Epoch::current_rows( $order, $rows );
 		$counting = array_values(
 			array_filter(
 				$rows,
@@ -1653,13 +1659,10 @@ class Ledger {
 		// A sent gateway order (awaiting the customer off-till) is POS-owned whatever status
 		// the gateway left it in, so it re-enters the projection the moment money lands.
 		$stamped = null !== Gateway_Submission::read_stamp( $order );
-		$current_counting = array_filter( $counting, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) );
 		// No counting rows: leave payment_method/title untouched (the cart, or every leg voided).
 		if ( $selected ) {
 			// Retained captures do not settle an invoice sent in the reopened epoch.
-			if ( $current_counting ) {
-				Gateway_Submission::clear_stamp( $order );
-			}
+			Gateway_Submission::clear_stamp( $order );
 			$titles = array();
 			foreach ( $counting as $row ) {
 				$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
@@ -1701,7 +1704,7 @@ class Ledger {
 				return 'pending' === ( $row['status'] ?? '' );
 			}
 		);
-		if ( ! $current_counting && $stamped ) {
+		if ( ! $counting && $stamped ) {
 			return;
 		}
 		// Retained coverage without a current-epoch proof leaves the reopened cart open.

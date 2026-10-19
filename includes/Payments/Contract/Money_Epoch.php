@@ -34,6 +34,12 @@ final class Money_Epoch {
 		return Gateway_Submission::read_attempts( $order );
 	}
 
+	/** Rows belonging to this sale, excluding retained history from earlier epochs. */
+	public static function current_rows( WC_Order $order, array $rows ): array {
+		$epoch = self::current( $order );
+		return array_filter( $rows, static fn( $row ) => self::epoch( $row['epoch'] ?? 0 ) === $epoch );
+	}
+
 	/** Counting-row net paid, in the ledger's integer minor units. */
 	public static function net_paid( array $rows ): int {
 		$paid = 0;
@@ -62,9 +68,10 @@ final class Money_Epoch {
 		return self::legacy_completed( $order );
 	}
 	private static function ledger_completed( WC_Order $order, Ledger $ledger ): bool {
-		if ( self::net_paid( $ledger->read( $order ) ) >= Money::minor( $order->get_total() ) ) {
-			foreach ( $ledger->read( $order ) as $row ) {
-				if ( in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) && self::epoch( $row['epoch'] ?? 0 ) === self::current( $order ) && Money::minor( $row['amount'] ?? 0 ) > Money::minor( $row['refunded_amount'] ?? 0 ) ) {
+		$rows = self::current_rows( $order, $ledger->read( $order ) );
+		if ( self::net_paid( $rows ) >= Money::minor( $order->get_total() ) ) {
+			foreach ( $rows as $row ) {
+				if ( in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) && Money::minor( $row['amount'] ?? 0 ) > Money::minor( $row['refunded_amount'] ?? 0 ) ) {
 					return true;
 				}
 			}
@@ -115,7 +122,7 @@ final class Money_Epoch {
 		if ( ! self::is_completed_in_current_epoch( $stored, $ledger ) ) {
 			$reason = 'not_completed';
 		} else {
-			$rows = $ledger->read( $stored );
+			$rows = self::current_rows( $stored, $ledger->read( $stored ) );
 			// A settled gateway with no represented amount cannot become an unpaid cart.
 			foreach ( self::attempt_entries( $stored ) as $id => $attempt ) {
 				$represented = array_filter( $rows, static fn( $row ) => is_array( $row ) && is_string( $row['id'] ?? null ) && strtolower( $row['id'] ) === strtolower( (string) $id ) && in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) );
@@ -129,7 +136,7 @@ final class Money_Epoch {
 				}
 			}
 			foreach ( self::attempt_entries( $stored ) as $attempt ) {
-				if ( in_array( $attempt['state'], array( 'in-flight', 'indeterminate', 'sent' ), true ) ) {
+				if ( self::current( $stored ) === $attempt['epoch'] && in_array( $attempt['state'], array( 'in-flight', 'indeterminate', 'sent' ), true ) ) {
 					$reason = $reason ?? 'attempt_unresolved';
 				}
 			}

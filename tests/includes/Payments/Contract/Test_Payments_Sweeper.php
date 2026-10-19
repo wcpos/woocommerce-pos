@@ -27,6 +27,17 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		Sweep_Test_Handler::$capture_patch = array( 'status' => 'captured' );
 	}
 
+	public function test_sweeper_does_not_redispatch_unanswered_prior_epoch_payment(): void {
+		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array( 'reader' => 'sn-1' ) ) );
+		$order = wc_get_order( $order->get_id() );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( array(), Sweep_Test_Handler::$intents );
+		$this->assertSame( 'voided', $this->row( $order, $id )['status'] );
+	}
+
 	public function test_sweeper_actionless_pending_is_dispatched_then_polled(): void {
 		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array( 'reader' => 'sn-1' ) ) );
 		( new Payments_Sweeper() )->run();

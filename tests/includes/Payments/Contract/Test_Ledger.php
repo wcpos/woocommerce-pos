@@ -43,6 +43,65 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	public function test_reopened_projection_selects_current_method_status_and_transaction(): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$ledger->record( $order, $this->payment( 'pos_cash', '92.95', array( 'provider_refs' => array( 'transaction_id' => 'old-cash' ) ) ) );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		$order->set_date_paid( null );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		add_filter( 'woocommerce_pos_payment_gateways_settings', static function ( $settings ) {
+			$settings['gateways']['pos_card']['order_status'] = 'processing';
+			return $settings;
+		} );
+		$ledger->record( $order, $this->payment( 'pos_card', '92.95', array( 'provider_refs' => array( 'transaction_id' => 'new-card' ) ) ) );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos_card', $saved->get_payment_method() );
+		$this->assertSame( 'Card', $saved->get_payment_method_title() );
+		$this->assertSame( 'new-card', $saved->get_transaction_id() );
+		$this->assertSame( 'processing', $saved->get_status() );
+	}
+
+	public function test_reopened_projection_and_summary_count_only_current_payment(): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$ledger->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$ledger->record( $order, $this->payment( 'pos_card', '1' ) );
+		$this->assertSame( 'pos-partial', $order->get_status() );
+		$summary = $ledger->summary( $order );
+		$this->assertSame( '93.95', $summary['paid'] );
+		$this->assertSame( '0.00', $summary['balance'] );
+		$this->assertSame( array( 'epoch' => 1, 'paid' => '1.00', 'balance' => '91.95' ), $summary['current_epoch'] );
+	}
+
+	/** @dataProvider pending_epoch_consumers */
+	public function test_reopened_pending_reservation_is_current_epoch_only( string $consumer ): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '92.95' );
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		if ( 'derive' === $consumer ) {
+			$ledger->derive( $order, $ledger->read( $order ) );
+			$this->assertSame( 'pos-open', $order->get_status() );
+		} else {
+			$input = $this->payment( 'record' === $consumer ? 'pos_cash' : 'pos_card', '92.95' );
+			$result = 'record' === $consumer ? $ledger->record( $order, $input ) : $ledger->intent( $order, $input['id'], $input, array() );
+			$this->assertNotWPError( $result );
+			$this->assertCount( 2, $ledger->read( $order ) );
+		}
+	}
+
+	public function pending_epoch_consumers(): array {
+		return array( array( 'derive' ), array( 'record' ), array( 'intent' ) );
+	}
+
 	/** @dataProvider current_epoch_captures */
 	public function test_attempt_promotion_requires_current_epoch_coverage( bool $capture ): void {
 		$ledger = Ledger::instance();
