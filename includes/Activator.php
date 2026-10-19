@@ -225,7 +225,6 @@ class Activator {
 	private function install_till_tables(): void {
 		( new Register_Store() )->install();
 		( new Register_Session_Store() )->install();
-		( new Cash_Movement_Store() )->install();
 		( new Register_Store() )->ensure_default();
 		( new Fiscal_Record_Store() )->install();
 	}
@@ -233,7 +232,7 @@ class Activator {
 	/**
 	 * Install the sync store and latch its aggregate schema version after verification.
 	 *
-	 * @throws \RuntimeException On fiscal carry, approval snapshot or closure fold upgrade failure.
+	 * @throws \RuntimeException On fiscal carry, approval snapshot, closure fold or movement fold upgrade failure.
 	 */
 	public function install_sync_schema(): void {
 		$previous_schema = get_option( Sync_Api::SCHEMA_OPTION, null );
@@ -260,6 +259,10 @@ class Activator {
 
 		if ( null === $previous_schema || version_compare( (string) $previous_schema, '10', '<' ) ) {
 			$this->fold_closures_into_sessions();
+		}
+
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '11', '<' ) ) {
+			$this->fold_movements_into_sessions();
 		}
 
 		if ( ! Sync_Health::is_healthy() ) {
@@ -302,36 +305,43 @@ class Activator {
 		// autoload_request_latches() on upgrade.
 		update_option( Sync_Api::SCHEMA_OPTION, Sync_Api::SCHEMA_VERSION, true );
 
-		// Old code can recreate the legacy table up to the latch write, so probe after it and restore
+		// Old code can recreate a legacy table up to the latch write, so probe after it and restore
 		// the old latch: the next run copies it. A recreation after this probe is the accepted
 		// dev-only gap recorded on the PR (old code still serving requests seconds after a deploy).
+		global $wpdb;
+		$folds = array();
 		if ( null === $previous_schema || version_compare( (string) $previous_schema, '10', '<' ) ) {
-			global $wpdb;
+			$folds['Closure fold'] = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
+		}
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '11', '<' ) ) {
+			$folds['Movement fold'] = $wpdb->prefix . Cash_Movement_Store::LEGACY_TABLE;
+		}
+		foreach ( $folds as $label => $legacy ) {
 			try {
-				$recreated = self::legacy_table_exists( $wpdb->prefix . Closure_Store::LEGACY_TABLE );
+				$recreated = self::legacy_table_exists( $legacy, $label );
 			} catch ( \RuntimeException $error ) {
 				$recreated = $error;
 			}
-			if ( false !== $recreated ) {
-				// Read back rather than trust the return (false also means unchanged); retry once.
-				for ( $attempt = 0; $attempt < 2 && get_option( Sync_Api::SCHEMA_OPTION, null ) !== $previous_schema; ++$attempt ) {
-					null === $previous_schema ? delete_option( Sync_Api::SCHEMA_OPTION ) : update_option( Sync_Api::SCHEMA_OPTION, $previous_schema, true );
-				}
-				if ( get_option( Sync_Api::SCHEMA_OPTION, null ) !== $previous_schema ) {
-					Logger::error(
-						'Closure fold latch rollback failed',
-						array(
-							'previous' => $previous_schema,
-							'legacy_table' => $wpdb->prefix . Closure_Store::LEGACY_TABLE,
-						)
-					);
-				}
-				throw true === $recreated ? new \RuntimeException( 'Closure fold found a recreated legacy table.' ) : $recreated;
+			if ( false === $recreated ) {
+				continue;
 			}
+			// Read back rather than trust the return (false also means unchanged); retry once.
+			for ( $attempt = 0; $attempt < 2 && get_option( Sync_Api::SCHEMA_OPTION, null ) !== $previous_schema; ++$attempt ) {
+				null === $previous_schema ? delete_option( Sync_Api::SCHEMA_OPTION ) : update_option( Sync_Api::SCHEMA_OPTION, $previous_schema, true );
+			}
+			if ( get_option( Sync_Api::SCHEMA_OPTION, null ) !== $previous_schema ) {
+				Logger::error(
+					"{$label} latch rollback failed",
+					array(
+						'previous' => $previous_schema,
+						'legacy_table' => $legacy,
+					)
+				);
+			}
+			throw true === $recreated ? new \RuntimeException( esc_html( "{$label} found a recreated legacy table." ) ) : $recreated;
 		}
 
 		if ( null !== $previous_schema && version_compare( (string) $previous_schema, Sync_Api::SCHEMA_VERSION, '<' ) ) {
-			global $wpdb;
 			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_change_log" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
 			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_order_index" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
 			// The legacy Change_Log_Purge class is gone; its recurring cron event
@@ -410,10 +420,10 @@ class Activator {
 		$legacy = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
 		$folded = $legacy . '_folded';
 		// An interrupted run left the renamed table: finish it before touching the legacy name.
-		if ( self::legacy_table_exists( $folded ) ) {
+		if ( self::legacy_table_exists( $folded, 'Closure fold' ) ) {
 			$this->finish_folded_closures( $folded, $sessions );
 		}
-		if ( ! self::legacy_table_exists( $legacy ) ) {
+		if ( ! self::legacy_table_exists( $legacy, 'Closure fold' ) ) {
 			return;
 		}
 		$this->copy_legacy_closures( $legacy, $sessions );
@@ -424,15 +434,16 @@ class Activator {
 		$this->finish_folded_closures( $folded, $sessions );
 	}
 
-	/** Whether a legacy closures table exists; a failed probe is never taken for absence.
+	/** Whether a legacy table exists; a failed probe is never taken for absence.
 	 *
 	 * @param string $table Legacy table.
+	 * @param string $label Fold named in the failure message.
 	 * @throws \RuntimeException When the probe fails.
 	 */
-	private static function legacy_table_exists( string $table ): bool {
+	private static function legacy_table_exists( string $table, string $label ): bool {
 		$exists = Sync_Health::table_exists( $table );
 		if ( self::query_failed() ) {
-			throw new \RuntimeException( 'Closure fold probe failed.' );
+			throw new \RuntimeException( esc_html( "{$label} probe failed." ) );
 		}
 		return $exists;
 	}
@@ -557,6 +568,260 @@ class Activator {
 		if ( self::query_failed() || null === $legacy_count || $legacy_count !== $folded_count ) {
 			throw new \RuntimeException( 'Closure fold verification failed.' );
 		}
+	}
+
+	/** Schema 11: a session row carries its movements as one JSON array. Add the column, copy any
+	 * legacy movements (dev builds of `next` only) and drop their table.
+	 *
+	 * As the closure fold: every statement is guarded, a partial copy resumes where it stopped,
+	 * and the verified table is renamed before a second copy and the drop. Data that does not
+	 * match its sessions is refused, never repaired: a human fixes it and the latch retries.
+	 *
+	 * @throws \RuntimeException On schema, read, copy or verification failure; leave the old latch in place.
+	 */
+	private function fold_movements_into_sessions(): void {
+		global $wpdb;
+		$sessions = ( new Register_Session_Store() )->table_name();
+		$this->add_column_if_missing( $sessions, 'movements', 'LONGTEXT NULL', 'Movement column' );
+		$legacy = $wpdb->prefix . Cash_Movement_Store::LEGACY_TABLE;
+		$folded = $legacy . '_folded';
+		// An interrupted run left the renamed table: finish it before touching the legacy name.
+		if ( self::legacy_table_exists( $folded, 'Movement fold' ) ) {
+			$this->finish_folded_movements( $folded, $sessions );
+		}
+		if ( ! self::legacy_table_exists( $legacy, 'Movement fold' ) ) {
+			return;
+		}
+		$this->copy_legacy_movements( $legacy, $sessions );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table names.
+		if ( false === $wpdb->query( "RENAME TABLE {$legacy} TO {$folded}" ) ) {
+			throw new \RuntimeException( 'Movement fold rename failed.' );
+		}
+		$this->finish_folded_movements( $folded, $sessions );
+	}
+
+	/** Copy the renamed table's stragglers, verify, then drop it.
+	 *
+	 * @param string $folded Renamed legacy table.
+	 * @param string $sessions Sessions table.
+	 * @throws \RuntimeException On copy, verification or drop failure.
+	 */
+	private function finish_folded_movements( string $folded, string $sessions ): void {
+		global $wpdb;
+		$this->copy_legacy_movements( $folded, $sessions );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+		if ( false === $wpdb->query( "DROP TABLE IF EXISTS {$folded}" ) ) {
+			throw new \RuntimeException( 'Movement fold drop failed.' );
+		}
+	}
+
+	/** Copy each session's legacy movements into its NULL array, then verify every row.
+	 *
+	 * @param string $legacy Legacy movements table.
+	 * @param string $sessions Sessions table.
+	 * @throws \RuntimeException On mismatched data, read, write or verification failure.
+	 */
+	private function copy_legacy_movements( string $legacy, string $sessions ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables, fixed predicates.
+		$orphans = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy} m LEFT JOIN {$sessions} s ON s.id = m.session_id WHERE s.id IS NULL" );
+		if ( self::query_failed() ) {
+			throw new \RuntimeException( 'Movement fold read failed.' );
+		}
+		if ( $orphans ) {
+			// Dev data a human must repair; the latch retries on every upgrade pass until then.
+			Logger::error(
+				'Movement fold refused: legacy movements have no session',
+				array(
+					'orphans' => $orphans,
+					'legacy_table' => $legacy,
+				)
+			);
+			throw new \RuntimeException( 'Movement fold found orphaned movements.' );
+		}
+		// A session already folded holds every copied row; any other legacy row for it was written
+		// after its copy (a table recreated by old code) and is refused before any write.
+		$this->matched_legacy_movements( $legacy, $sessions, true );
+		do {
+			// Copied sessions leave the next batch automatically.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.
+			$batch = $wpdb->get_results( "SELECT DISTINCT m.session_id, s.register_id FROM {$legacy} m INNER JOIN {$sessions} s ON s.id = m.session_id WHERE s.movements IS NULL LIMIT 100", ARRAY_A );
+			if ( self::query_failed() ) {
+				throw new \RuntimeException( 'Movement fold read failed.' );
+			}
+			foreach ( $batch as $session ) {
+				$this->copy_session_movements( $legacy, $sessions, $session['session_id'], $session['register_id'] );
+			}
+			$size = count( $batch );
+		} while ( 100 === $size );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table.
+		$legacy_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy}" );
+		if ( self::query_failed() || null === $legacy_count || (int) $legacy_count !== $this->matched_legacy_movements( $legacy, $sessions, false ) ) {
+			throw new \RuntimeException( 'Movement fold verification failed.' );
+		}
+	}
+
+	/** Write one session's legacy movements as its array, under its register lock, in one transaction.
+	 *
+	 * @param string $legacy Legacy movements table.
+	 * @param string $sessions Sessions table.
+	 * @param string $session_id Session UUID.
+	 * @param string $register_id Register UUID.
+	 * @throws \RuntimeException On lock, read or write failure; the write is rolled back.
+	 */
+	private function copy_session_movements( string $legacy, string $sessions, string $session_id, string $register_id ): void {
+		global $wpdb;
+		$registers = new Register_Store();
+		if ( ! $registers->lock( $register_id ) ) {
+			throw new \RuntimeException( 'Movement fold lock failed.' );
+		}
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table; the id is prepared.
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$legacy} WHERE session_id = %s ORDER BY created_at_gmt, id", $session_id ), ARRAY_A );
+			if ( self::query_failed() ) {
+				throw new \RuntimeException( 'Movement fold read failed.' );
+			}
+			$movements = wp_json_encode( Cash_Movement_Store::ordered( array_map( array( Cash_Movement_Store::class, 'entry' ), $rows ) ) );
+			if ( false === $movements || false === $wpdb->query( 'START TRANSACTION' ) ) {
+				throw new \RuntimeException( 'Movement fold write failed.' );
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values are prepared.
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$sessions} SET movements = %s WHERE id = %s AND movements IS NULL", $movements, $session_id ) ) || false === $wpdb->query( 'COMMIT' ) ) {
+				$wpdb->query( 'ROLLBACK' );
+				throw new \RuntimeException( 'Movement fold write failed.' );
+			}
+		} finally {
+			$registers->unlock( $register_id );
+		}
+	}
+
+	/** Count the legacy rows each folded session's array holds unchanged; any other row stops the fold.
+	 *
+	 * Before a copy, pre-fold code may have written to a session after it was copied: a legacy row
+	 * the array lacks is new data (uuids do not collide by accident) and is appended, and a stamp
+	 * gone from null to set is applied. An id on both sides with any other difference is refused.
+	 *
+	 * @param string $legacy Legacy movements table.
+	 * @param string $sessions Sessions table.
+	 * @param bool   $refuse Whether a mismatch is refused data (before the copy) or a failed verification.
+	 * @throws \RuntimeException On read failure or a legacy row the session's array does not hold.
+	 */
+	private function matched_legacy_movements( string $legacy, string $sessions, bool $refuse ): int {
+		global $wpdb;
+		$matched = 0;
+		$cursor = '';
+		do {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables; the cursor is prepared.
+			$batch = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT m.session_id FROM {$legacy} m INNER JOIN {$sessions} s ON s.id = m.session_id WHERE s.movements IS NOT NULL AND m.session_id > %s ORDER BY m.session_id LIMIT 100", $cursor ) );
+			if ( self::query_failed() ) {
+				throw new \RuntimeException( 'Movement fold read failed.' );
+			}
+			foreach ( $batch as $session_id ) {
+				// Each read is checked before the next: a later query clears the earlier one's error.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table; the id is prepared.
+				$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$legacy} WHERE session_id = %s", $session_id ), ARRAY_A );
+				if ( self::query_failed() ) {
+					throw new \RuntimeException( 'Movement fold read failed.' );
+				}
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+				$stored = $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$sessions} WHERE id = %s", $session_id ) );
+				if ( self::query_failed() ) {
+					throw new \RuntimeException( 'Movement fold read failed.' );
+				}
+				$raw = (string) $stored;
+				$stored = json_decode( $raw, true );
+				$stored = is_array( $stored ) ? array_column( $stored, null, 'id' ) : array();
+				$entries = array_column( array_map( array( Cash_Movement_Store::class, 'entry' ), $rows ), null, 'id' );
+				$late = array();
+				foreach ( $entries as $entry ) {
+					if ( $refuse && ( $stored[ $entry['id'] ] ?? null ) !== $entry && self::is_late_movement( $entry, $stored ) ) {
+						$late[] = $entry;
+					} elseif ( ( $stored[ $entry['id'] ] ?? null ) !== $entry ) {
+						if ( ! $refuse ) {
+							throw new \RuntimeException( 'Movement fold verification failed.' );
+						}
+						Logger::error(
+							'Movement fold refused: session already folded',
+							array(
+								'session_id' => $session_id,
+								'movement_id' => $entry['id'],
+								'legacy_table' => $legacy,
+							)
+						);
+						throw new \RuntimeException( 'Movement fold found a movement for a session already folded.' );
+					}
+					++$matched;
+				}
+				if ( $late ) {
+					$this->apply_late_movements( $sessions, $session_id, $raw, $late );
+				}
+				$cursor = $session_id;
+			}
+			$size = count( $batch );
+		} while ( 100 === $size );
+		return $matched;
+	}
+
+	/** Whether a legacy row is pre-fold data written after its session was copied.
+	 *
+	 * Either a row the array lacks, of any type, or a row identical but for a stamp gone from null to set.
+	 *
+	 * @param array $entry Legacy row as an entry.
+	 * @param array $stored The session's array entries by id.
+	 */
+	private static function is_late_movement( array $entry, array $stored ): bool {
+		if ( ! isset( $stored[ $entry['id'] ] ) ) {
+			return true;
+		}
+		return null === $stored[ $entry['id'] ]['voided_by']
+			&& null !== $entry['voided_by']
+			&& array_merge( $entry, array( 'voided_by' => null ) ) === $stored[ $entry['id'] ];
+	}
+
+	/** Append late movements and apply late stamps to a folded session's array, under its register lock, in one transaction.
+	 *
+	 * @param string $sessions Sessions table.
+	 * @param string $session_id Session UUID.
+	 * @param string $raw The array as checked; the write requires it unchanged.
+	 * @param array  $late New entries and stamped targets.
+	 * @throws \RuntimeException On read, lock or write failure; the write is rolled back.
+	 */
+	private function apply_late_movements( string $sessions, string $session_id, string $raw, array $late ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+		$register_id = (string) $wpdb->get_var( $wpdb->prepare( "SELECT register_id FROM {$sessions} WHERE id = %s", $session_id ) );
+		if ( self::query_failed() ) {
+			throw new \RuntimeException( 'Movement fold read failed.' );
+		}
+		$registers = new Register_Store();
+		if ( ! $registers->lock( $register_id ) ) {
+			throw new \RuntimeException( 'Movement fold lock failed.' );
+		}
+		try {
+			$entries = array_column( (array) json_decode( $raw, true ), null, 'id' );
+			foreach ( $late as $entry ) {
+				$entries[ $entry['id'] ] = $entry;
+			}
+			$movements = wp_json_encode( Cash_Movement_Store::ordered( array_values( $entries ) ) );
+			if ( false === $movements || false === $wpdb->query( 'START TRANSACTION' ) ) {
+				throw new \RuntimeException( 'Movement fold write failed.' );
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values are prepared.
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$sessions} SET movements = %s WHERE id = %s AND movements = %s", $movements, $session_id, $raw ) ) || false === $wpdb->query( 'COMMIT' ) ) {
+				$wpdb->query( 'ROLLBACK' );
+				throw new \RuntimeException( 'Movement fold write failed.' );
+			}
+		} finally {
+			$registers->unlock( $register_id );
+		}
+		Logger::log(
+			'Movement fold applied late movements',
+			array(
+				'session_id' => $session_id,
+				'count' => count( $late ),
+				'movement_ids' => array_column( $late, 'id' ),
+			)
+		);
 	}
 
 	/** Add a column unless it exists; DDL runs outside closure transactions.

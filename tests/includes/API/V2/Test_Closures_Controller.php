@@ -1785,7 +1785,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'query', $fail );
 		try {
 			$this->assertSame( 500, $this->post( 'movements', $movement )->get_status() );
-			$this->assertNull( ( new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() )->get( $movement['id'] ) );
+			$this->assertNull( ( new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() )->get( $session['id'], $movement['id'] ) );
 			$this->assertSame( $closure, ( new Closure_Store() )->get( $closure['id'] ) );
 		} finally {
 			remove_filter( 'query', $fail );

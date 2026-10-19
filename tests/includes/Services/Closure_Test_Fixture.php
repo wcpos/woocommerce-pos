@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
-use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 
 /** Real database fixtures, including cleanup of committed transactions. */
@@ -26,9 +25,7 @@ trait Closure_Test_Fixture {
 		parent::tearDown();
 		global $wpdb;
 		foreach ( $this->closure_registers as $id ) {
-			foreach ( ( new Register_Session_Store() )->list( array( 'register_id' => $id ) ) as $session ) {
-				$wpdb->delete( ( new Cash_Movement_Store() )->table_name(), array( 'session_id' => $session['id'] ) );
-			}
+			// Movements live on the session rows, so they go with them.
 			foreach ( array( new Register_Session_Store(), new Fiscal_Record_Store() ) as $store ) {
 				$wpdb->delete( $store->table_name(), array( 'register_id' => $id ) );
 			}

@@ -340,7 +340,15 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		}
-		$this->assertSame( $row, $store->create( array( 'id' => $row['id'] ) ) );
+		$this->assertSame(
+			$row,
+			$store->create(
+				array(
+					'id' => $row['id'],
+					'session_id' => $session['id'],
+				)
+			)
+		);
 		// An idempotent replay returns the existing row: the success path, not a fault.
 		$this->assert_event(
 			'info',
@@ -348,7 +356,17 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			array( 'movement_id' => $row['id'] )
 		);
 		$fields['id'] = wp_generate_uuid4();
-		$this->assertWPError( $store->create( $fields ) );
+		$transactions = 0;
+		$count_transactions = static function ( $sql ) use ( &$transactions ) {
+			$transactions += 'START TRANSACTION' === $sql ? 1 : 0;
+			return $sql;
+		};
+		add_filter( 'query', $count_transactions );
+		try {
+			$this->assertWPError( $store->create( $fields ) );
+		} finally {
+			remove_filter( 'query', $count_transactions );
+		}
 		$this->assert_event(
 			'warning',
 			'Cash movement refused: voids target already voided or unavailable',
@@ -357,7 +375,8 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 				'voids' => $fields['voids'],
 			)
 		);
-		$this->assert_logged_after_rollback( 'Cash movement refused: voids target already voided or unavailable' );
+		// Refused on the fresh read before any write, so no transaction can erase the warning.
+		$this->assertSame( 0, $transactions );
 		foreach ( array( 'counting', 'closed' ) as $status ) {
 			$session['status'] = $status;
 			$session['counting_started_at_gmt'] = '2026-09-11 11:00:00';
@@ -499,7 +518,16 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->logs = array();
-		$this->assertSame( 200, $this->post( 'movements', array( 'id' => $movement['id'] ) )->get_status() );
+		$this->assertSame(
+			200,
+			$this->post(
+				'movements',
+				array(
+					'id' => $movement['id'],
+					'session_id' => $session['id'],
+				)
+			)->get_status()
+		);
 		$this->assert_event(
 			'info',
 			'Cash movement already recorded; returning the existing row',

@@ -661,10 +661,11 @@ class Test_Activator extends WP_UnitTestCase {
 		);
 	}
 
-	/** Both activation and the versioned upgrade install missing bookkeeping tables. */
-	public function test_activation_and_upgrade_install_session_and_movement_tables(): void {
+	/** Both activation and the versioned upgrade install the missing session table, and never a movements table. */
+	public function test_activation_and_upgrade_install_session_table_without_movement_table(): void {
 		global $wpdb;
-		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() );
+		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() );
+		$legacy = $wpdb->prefix . \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::LEGACY_TABLE;
 		$activator = new Activator();
 		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
 		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
@@ -687,6 +688,7 @@ class Test_Activator extends WP_UnitTestCase {
 				foreach ( $stores as $store ) {
 					$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $store->table_name() ), $path );
 				}
+				$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $legacy ), $path );
 			}
 		} finally {
 			foreach ( $stores as $store ) {
@@ -705,7 +707,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
 			$this->assertSame(
@@ -806,7 +808,7 @@ class Test_Activator extends WP_UnitTestCase {
 
 			// Assert.
 			$this->assertSame( array(), $statements );
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
 			$this->assertSame( $before, array_map( array( $closures, 'get' ), $fixture['closures'] ) );
 			$this->assertSame( 3, $closures->get( $straggler )['number'] );
@@ -839,7 +841,7 @@ class Test_Activator extends WP_UnitTestCase {
 
 			// Assert.
 			$this->assertNotEmpty( $straggler );
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $straggler );
 			$this->assertSame( 3, $closure['number'] );
 			$this->assertSame( '80.0000', $closure['perpetual_sales_total'] );
@@ -871,7 +873,7 @@ class Test_Activator extends WP_UnitTestCase {
 
 			// Assert.
 			$this->assertTrue( $bumped );
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][0] );
 			$this->assertSame( 3, $closure['print_count'] );
 			$this->assertSame( '2026-09-11 14:00:00', $closure['last_printed_at_gmt'] );
@@ -903,7 +905,7 @@ class Test_Activator extends WP_UnitTestCase {
 
 			// Assert.
 			$this->assertTrue( $bumped );
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][0] );
 			$this->assertSame( 4, $closure['print_count'] );
 			$this->assertSame( '2026-09-11 14:30:00', $closure['last_printed_at_gmt'] );
@@ -951,7 +953,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertTrue( $bumped );
 			$this->assertSame( 3, $after_failed_drop );
 			$this->assertSame( '0', $left_on_folded );
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertSame( 3, $closures->get( $fixture['closures'][0] )['print_count'] );
 		} finally {
 			remove_filter( 'query', $interrupt );
@@ -993,7 +995,7 @@ class Test_Activator extends WP_UnitTestCase {
 
 			// Assert.
 			$this->assertNull( $number );
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertSame( 2, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][0] )['print_count'] );
 		} finally {
 			remove_filter( 'query', $fail_subtract );
@@ -1019,7 +1021,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
 			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
@@ -1058,7 +1060,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertTrue( $recreated );
 			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			( new Activator() )->install_sync_schema();
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$this->assertSame( 2, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][1] )['number'] );
 		} finally {
@@ -1100,7 +1102,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$fixture['legacy']}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
 			( new Activator() )->install_sync_schema();
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$this->assertSame( 3, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $straggler )['number'] );
 		} finally {
@@ -1296,7 +1298,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
 			$this->assertSame( array( 1, 2 ), array_column( array_map( array( $closures, 'get' ), $fixture['closures'] ), 'number' ) );
 			$this->assertNull( $closures->get( $straggler ) );
@@ -1339,7 +1341,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertSame( 1, $closures->get( $fixture['closures'][0] )['number'] );
 			$this->assertNull( $closures->get( $fixture['closures'][1] ) );
 			( new Activator() )->install_sync_schema();
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertSame( 2, $closures->get( $fixture['closures'][1] )['number'] );
 		} finally {
 			remove_filter( 'query', $fail_second );
@@ -1437,7 +1439,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
 			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$registers} WHERE status = 'active'" ) );
 		} finally {
@@ -1794,6 +1796,556 @@ class Test_Activator extends WP_UnitTestCase {
 		$wpdb->query( "DROP TABLE IF EXISTS {$fixture['legacy']}, {$fixture['legacy']}_folded" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy tables.
 		$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $fixture['register_id'] ) );
 		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+		( new Activator() )->install_sync_schema();
+		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
+		$wpdb->query( 'COMMIT' );
+	}
+
+	/** Schema 11 on a schema-10 install copies both sessions' movements (one a void pair), drops the legacy table and latches. */
+	public function test_movement_fold_on_schema_ten_install_copies_movements_and_drops_legacy_table(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] . '_folded' ) );
+			$this->assertSame( $fixture['expected'][0], $store->list( $fixture['sessions'][0] ) );
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+			$stored = json_decode( $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$fixture['sessions_table']} WHERE id = %s", $fixture['sessions'][0] ) ), true );
+			// The stored entry carries no session id: the row it lives on is the session.
+			$this->assertSame( array( 'id', 'type', 'amount', 'reason', 'actor', 'voids', 'voided_by', 'created_at_gmt' ), array_keys( $stored[0] ) );
+		} finally {
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** A run stopped after the rename resumes from the renamed table: the copied session is untouched, the straggler is copied, both names go. */
+	public function test_movement_fold_rerun_resumes_from_renamed_table(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$folded = $fixture['legacy'] . '_folded';
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables, fixed DDL.
+		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} ADD movements LONGTEXT NULL" ) );
+		$copied = wp_json_encode( array_map( array( \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::class, 'entry' ), $fixture['expected'][0] ) );
+		$this->assertSame( 1, $wpdb->update( $fixture['sessions_table'], array( 'movements' => $copied ), array( 'id' => $fixture['sessions'][0] ) ) );
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+			$this->assertSame( $copied, $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$fixture['sessions_table']} WHERE id = %s", $fixture['sessions'][0] ) ) );
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
+		} finally {
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** A void old code wrote after its session was copied is a late stamp: the second pass applies it and appends the void, then latches. */
+	public function test_movement_fold_second_pass_applies_a_late_void_stamp(): void {
+		// Arrange: session 0 was copied before its paid-out was voided on the legacy table.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$folded = $fixture['legacy'] . '_folded';
+		$before = array( array_merge( $fixture['expected'][0][0], array( 'voided_by' => null ) ) );
+		$this->fold_session_early( $fixture, $before );
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables.
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			$this->assertSame( $fixture['expected'][0], $store->list( $fixture['sessions'][0] ) );
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
+		} finally {
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** Any difference other than a late void stamp is refused before any write, the latch held. */
+	public function test_movement_fold_with_folded_amount_mismatch_refuses(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$before = $fixture['expected'][0];
+		$before[0]['amount'] = '6.0000';
+		$this->fold_session_early( $fixture, $before );
+		$logs = $this->capture_error_logs();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the fold to refuse a mismatched amount.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Movement fold found a movement for a session already folded.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+			$this->assertSame( wp_json_encode( array_map( array( \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::class, 'entry' ), $before ) ), $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$fixture['sessions_table']} WHERE id = %s", $fixture['sessions'][0] ) ) );
+			$this->assertCount( 1, $logs->entries );
+			$this->assertStringContainsString( 'Movement fold refused: session already folded', $logs->entries[0] );
+		} finally {
+			$logs->stop();
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** Add the movements column and give session 0 an array as an earlier copy wrote it.
+	 *
+	 * @param array $fixture From arrange_schema_ten_with_legacy_movements().
+	 * @param array $rows Movement rows the earlier copy held.
+	 */
+	private function fold_session_early( array $fixture, array $rows ): void {
+		global $wpdb;
+		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} ADD movements LONGTEXT NULL" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+		$movements = wp_json_encode( array_map( array( \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::class, 'entry' ), $rows ) );
+		$this->assertSame( 1, $wpdb->update( $fixture['sessions_table'], array( 'movements' => $movements ), array( 'id' => $fixture['sessions'][0] ) ) );
+	}
+
+	/** A copy stopped after the first session keeps the latch; the next run copies the rest without duplicating the first. */
+	public function test_movement_fold_failing_mid_copy_keeps_latch_and_resumes(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$writes = 0;
+		$fail_second = static function ( $sql ) use ( $fixture, &$writes ) {
+			if ( 0 === strpos( $sql, "UPDATE {$fixture['sessions_table']} SET movements" ) && 2 === ++$writes ) {
+				return 'INVALID MOVEMENT COPY';
+			}
+			return $sql;
+		};
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		$previous = $wpdb->suppress_errors();
+		try {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			add_filter( 'query', $fail_second );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the second session copy to fail.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Movement fold write failed.', $error->getMessage() );
+			}
+			remove_filter( 'query', $fail_second );
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed predicate.
+			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$fixture['sessions_table']} WHERE register_id = '{$fixture['register_id']}' AND movements IS NOT NULL" ) );
+
+			// Act.
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertSame( $fixture['expected'][0], $store->list( $fixture['sessions'][0] ) );
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
+		} finally {
+			remove_filter( 'query', $fail_second );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** An orphaned legacy movement stops the fold before any write: latch, table and the named error say so. */
+	public function test_movement_fold_with_orphan_movement_keeps_latch_table_and_logs_error(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$this->assertSame( 1, $wpdb->update( $fixture['legacy'], array( 'session_id' => wp_generate_uuid4() ), array( 'id' => $fixture['expected'][1][0]['id'] ) ) );
+		$logs = $this->capture_error_logs();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the fold to refuse an orphaned movement.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Movement fold found orphaned movements.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertSame( '3', $wpdb->get_var( "SELECT COUNT(*) FROM {$fixture['legacy']}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed predicate.
+			$this->assertSame( '0', $wpdb->get_var( "SELECT COUNT(*) FROM {$fixture['sessions_table']} WHERE register_id = '{$fixture['register_id']}' AND movements IS NOT NULL" ) );
+			$this->assertCount( 1, $logs->entries );
+			$this->assertStringContainsString( 'Movement fold refused: legacy movements have no session', $logs->entries[0] );
+			$this->assertStringContainsString( '"orphans":1', $logs->entries[0] );
+		} finally {
+			$logs->stop();
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** A paid-in old code wrote after its session was copied is new data: the second pass appends it to the array and the run latches. */
+	public function test_movement_fold_second_pass_appends_a_late_paid_in(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$folded = $fixture['legacy'] . '_folded';
+		$this->fold_session_early( $fixture, $fixture['expected'][0] );
+		$late = $this->add_legacy_movement( $fixture, $fixture['sessions'][0], '2026-09-11 11:00:00' );
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables.
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			$listed = $store->list( $fixture['sessions'][0] );
+			$this->assertSame( $fixture['expected'][0], array_slice( $listed, 0, 2 ) );
+			$this->assertSame(
+				array(
+					'id' => $late,
+					'session_id' => $fixture['sessions'][0],
+					'type' => 'paid_in',
+					'amount' => '1.0000',
+					'reason' => 'Pre-fold code',
+					'actor' => 1,
+					'voids' => null,
+					'voided_by' => null,
+					'created_at_gmt' => '2026-09-11 11:00:00',
+				),
+				$listed[2]
+			);
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
+		} finally {
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** While a legacy movements table exists, a new movement is refused rather than appended beside the copy. */
+	public function test_movement_create_while_legacy_table_exists_refuses(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} ADD movements LONGTEXT NULL" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		$id = wp_generate_uuid4();
+		try {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+
+			// Act.
+			try {
+				$store->create(
+					array(
+						'id' => $id,
+						'session_id' => $fixture['sessions'][1],
+						'type' => 'paid_in',
+						'amount' => '1',
+						'reason' => 'During the fold',
+						'actor' => 1,
+						'created_at_gmt' => '2026-09-11 10:30:00',
+					)
+				);
+				$this->fail( 'Expected movement writes to wait for the fold.' );
+			} catch ( \RuntimeException $error ) {
+				// Assert.
+				$this->assertSame( 'Movement storage is migrating.', $error->getMessage() );
+			}
+			$this->assertNull( $store->get( $fixture['sessions'][1], $id ) );
+			// Mid-fold the legacy rows still read through the store.
+			$this->assertSame( $fixture['expected'][0], $store->list( $fixture['sessions'][0] ) );
+		} finally {
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** A movements table recreated after the fold but before the latch write restores the old latch; the next run copies it and latches. */
+	public function test_movement_fold_recreated_between_fold_and_latch_restores_latch_then_completes(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$straggler = null;
+		$recreate = function ( $sql ) use ( $fixture, &$straggler ) {
+			if ( null === $straggler && self::writes_latest_schema_latch( $sql ) ) {
+				$straggler = '';
+				$this->create_legacy_movements_table( $fixture['legacy'] );
+				$straggler = $this->add_legacy_movement( $fixture, $fixture['sessions'][2], '2026-09-11 10:10:00' );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $recreate );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the recreated table to restore the latch.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Movement fold found a recreated legacy table.', $error->getMessage() );
+			}
+			remove_filter( 'query', $recreate );
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			( new Activator() )->install_sync_schema();
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+			$this->assertSame( array( $straggler ), array_column( $store->list( $fixture['sessions'][2] ), 'id' ) );
+			$this->assertSame( $fixture['expected'][0], $store->list( $fixture['sessions'][0] ) );
+		} finally {
+			remove_filter( 'query', $recreate );
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** A latch rollback the options table refuses after a recreated movements table is retried once, then logged; the run still throws. */
+	public function test_movement_fold_failed_latch_rollback_retries_logs_error_and_throws(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$recreated = false;
+		$refused = 0;
+		$refuse = function ( $sql ) use ( $fixture, &$recreated, &$refused ) {
+			if ( ! $recreated && self::writes_latest_schema_latch( $sql ) ) {
+				$recreated = true;
+				$this->create_legacy_movements_table( $fixture['legacy'] );
+			} elseif ( $recreated && false !== strpos( $sql, $GLOBALS['wpdb']->options ) && false !== strpos( $sql, "'" . \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION . "'" ) && false !== strpos( $sql, "`option_value` = '10'" ) ) {
+				++$refused;
+				return 'INVALID LATCH RESTORE';
+			}
+			return $sql;
+		};
+		$logs = $this->capture_error_logs();
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $refuse );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the recreated table to stop the run.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Movement fold found a recreated legacy table.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertSame( 2, $refused );
+			$this->assertCount( 1, $logs->entries );
+			$this->assertStringContainsString( 'Movement fold latch rollback failed', $logs->entries[0] );
+			$this->assertStringContainsString( '"previous":"10","legacy_table":"' . $fixture['legacy'] . '"', $logs->entries[0] );
+		} finally {
+			remove_filter( 'query', $refuse );
+			$logs->stop();
+			$wpdb->suppress_errors( $previous );
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** A fresh install creates the movements column; step 11 then issues no DDL. */
+	public function test_fresh_session_schema_carries_movements_column(): void {
+		// Arrange.
+		global $wpdb;
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$store = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$table = $store->table_name();
+		$alterations = 0;
+		$observe = static function ( $sql ) use ( $table, &$alterations ) {
+			if ( 0 === strpos( $sql, "ALTER TABLE {$table}" ) ) {
+				++$alterations;
+			}
+			return $sql;
+		};
+		try {
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
+
+			// Act.
+			$store->install();
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			add_filter( 'query', $observe );
+			( new Activator() )->install_sync_schema();
+			remove_filter( 'query', $observe );
+
+			// Assert.
+			$this->assertSame( 0, $alterations );
+			$definition = $wpdb->get_row( "SHOW COLUMNS FROM {$table} LIKE 'movements'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed column.
+			$this->assertSame( array( 'longtext', 'YES' ), array( $definition['Type'], $definition['Null'] ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+		} finally {
+			remove_filter( 'query', $observe );
+			$store->install();
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
+		}
+	}
+
+	/**
+	 * Shape a schema-10 install: sessions without the movements column and a legacy movements
+	 * table holding a paid-out and its void for one session and a paid-in for another. A third
+	 * session has no movements.
+	 *
+	 * DDL commits the test transaction, so restore_movement_schema() undoes all of it.
+	 */
+	private function arrange_schema_ten_with_legacy_movements(): array {
+		global $wpdb;
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$sessions = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$fixture = array(
+			'sessions_table' => $sessions->table_name(),
+			'legacy' => $wpdb->prefix . \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::LEGACY_TABLE,
+			'register_id' => wp_generate_uuid4(),
+			'sessions' => array( wp_generate_uuid4(), wp_generate_uuid4(), wp_generate_uuid4() ),
+		);
+		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} DROP COLUMN movements" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+		$this->create_legacy_movements_table( $fixture['legacy'] );
+		foreach ( $fixture['sessions'] as $id ) {
+			$this->assertIsArray(
+				$sessions->create(
+					array(
+						'id' => $id,
+						'register_id' => $fixture['register_id'],
+						'store_id' => 456,
+						'opened_at_gmt' => '2026-09-11 08:00:00',
+						'business_day' => '2026-09-11',
+						'opened_by' => 1,
+						'expected_float' => null,
+						'counted_float' => '100',
+					)
+				)
+			);
+			// One register holds one open session at a time: close each before opening the next.
+			$this->assertSame( 1, $wpdb->update( $fixture['sessions_table'], array( 'status' => 'closed' ), array( 'id' => $id ) ) );
+		}
+		$paid_out = wp_generate_uuid4();
+		$void = wp_generate_uuid4();
+		$rows = array(
+			array( $fixture['sessions'][0], $void, 'void', '0.0000', '', $paid_out, null, '2026-09-11 10:05:00' ),
+			array( $fixture['sessions'][0], $paid_out, 'paid_out', '5.0000', 'Change', null, $void, '2026-09-11 10:00:00' ),
+			array( $fixture['sessions'][1], wp_generate_uuid4(), 'paid_in', '20.0000', 'Float top-up', null, null, '2026-09-11 09:00:00' ),
+		);
+		$fixture['expected'] = array( array(), array() );
+		foreach ( $rows as list( $session, $id, $type, $amount, $reason, $voids, $voided_by, $at ) ) {
+			$row = array(
+				'id' => $id,
+				'session_id' => $session,
+				'type' => $type,
+				'amount' => $amount,
+				'reason' => $reason,
+				'actor' => 1,
+				'voids' => $voids,
+				'voided_by' => $voided_by,
+				'created_at_gmt' => $at,
+			);
+			$this->assertSame( 1, $wpdb->insert( $fixture['legacy'], $row ) );
+			$fixture['expected'][ $session === $fixture['sessions'][0] ? 0 : 1 ][] = $row;
+		}
+		// Listed oldest first: the paid-out, then its void.
+		$fixture['expected'][0] = array_reverse( $fixture['expected'][0] );
+		return $fixture;
+	}
+
+	/** Create a legacy movements table as dev builds of `next` created it.
+	 *
+	 * @param string $table Table name.
+	 */
+	private function create_legacy_movements_table( string $table ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+		$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$table} ( id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, type VARCHAR(16) NOT NULL, amount DECIMAL(19,4) NOT NULL, reason TEXT NOT NULL, actor BIGINT NOT NULL, voids CHAR(36) NULL, voided_by CHAR(36) NULL, created_at_gmt DATETIME NOT NULL, PRIMARY KEY  (id), KEY session_id (session_id), KEY voids (voids) ) {$wpdb->get_charset_collate()}" ) );
+	}
+
+	/** Record one paid-in in the legacy movements table the way pre-fold code did.
+	 *
+	 * @param array  $fixture From arrange_schema_ten_with_legacy_movements().
+	 * @param string $session_id Session UUID.
+	 * @param string $at Movement time.
+	 * @return string Movement id.
+	 */
+	private function add_legacy_movement( array $fixture, string $session_id, string $at ): string {
+		global $wpdb;
+		$id = wp_generate_uuid4();
+		$this->assertSame(
+			1,
+			$wpdb->insert(
+				$fixture['legacy'],
+				array(
+					'id' => $id,
+					'session_id' => $session_id,
+					'type' => 'paid_in',
+					'amount' => '1.0000',
+					'reason' => 'Pre-fold code',
+					'actor' => 1,
+					'created_at_gmt' => $at,
+				)
+			)
+		);
+		return $id;
+	}
+
+	/** Capture error-level log lines until stop() is called. */
+	private function capture_error_logs(): object {
+		$logs = new class() {
+			/**
+			 * Captured error messages.
+			 *
+			 * @var string[]
+			 */
+			public $entries = array();
+
+			/** Remove the capture. */
+			public function stop(): void {
+				remove_filter( 'woocommerce_pos_logging', array( $this, 'capture' ), 10 );
+			}
+
+			/** Keep error-level messages and suppress the write.
+			 *
+			 * @param bool   $enabled Whether logging is enabled.
+			 * @param string $message Formatted message.
+			 */
+			public function capture( $enabled, $message ): bool {
+				if ( 'error' === \WCPOS\WooCommercePOS\Logger::$log_level ) {
+					$this->entries[] = $message;
+				}
+				return false;
+			}
+		};
+		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
+		add_filter( 'woocommerce_pos_logging', array( $logs, 'capture' ), 10, 2 );
+		return $logs;
+	}
+
+	/** Drop the legacy tables and fixture sessions, then put the movements column back.
+	 *
+	 * @param array $fixture From arrange_schema_ten_with_legacy_movements().
+	 */
+	private function restore_movement_schema( array $fixture ): void {
+		global $wpdb;
+		$wpdb->query( "DROP TABLE IF EXISTS {$fixture['legacy']}, {$fixture['legacy']}_folded" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy tables.
+		$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $fixture['register_id'] ) );
+		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
 		( new Activator() )->install_sync_schema();
 		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
 		$wpdb->query( 'COMMIT' );

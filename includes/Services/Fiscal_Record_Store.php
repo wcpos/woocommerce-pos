@@ -292,6 +292,16 @@ final class Fiscal_Record_Store {
 	}
 
 	/**
+	 * A deterministic UUID-shaped digest of a compound replay identity, for the CHAR(36) source_id.
+	 *
+	 * @param string $identity Compound identity, e.g. "refund:{refund}:{allocation}".
+	 */
+	public static function digest_source_id( string $identity ): string {
+		$digest = md5( $identity );
+		return substr( $digest, 0, 8 ) . '-' . substr( $digest, 8, 4 ) . '-' . substr( $digest, 12, 4 ) . '-' . substr( $digest, 16, 4 ) . '-' . substr( $digest, 20, 12 );
+	}
+
+	/**
 	 * Read a record by its replay identity.
 	 *
 	 * @param string $type Record type.

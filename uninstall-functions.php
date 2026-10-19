@@ -38,12 +38,13 @@ function woocommerce_pos_uninstall_configuration_table_suffixes(): array {
 		'wcpos_fiscal_records',
 		'wcpos_registers',
 		'wcpos_register_sessions',
-		'wcpos_cash_movements',
-		// Legacy: closures live on session rows since sync schema 10. A dev build that
-		// never reached the upgrade still holds this table, or its renamed copy when the
-		// fold stopped between the rename and the drop.
+		// Legacy: closures live on session rows since sync schema 10, and movements since
+		// schema 11. A dev build that never reached the upgrade still holds these tables,
+		// or a renamed copy when a fold stopped between the rename and the drop.
 		'wcpos_closures',
 		'wcpos_closures_folded',
+		'wcpos_cash_movements',
+		'wcpos_cash_movements_folded',
 	);
 }
 
