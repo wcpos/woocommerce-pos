@@ -285,6 +285,48 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::reopen_refusal( wc_get_order( $saved->get_id() ) ) );
 	}
 
+	public function test_settled_submission_supersedes_prior_send(): void {
+		$order = $this->create_pos_order();
+		$first = wp_generate_uuid4();
+		$this->submit( $order, $first, array( 'invoice_email' => 'buyer@example.com' ) );
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
+		$this->assertSame( 'settled', $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['outcome'] );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( array( 'state' => 'superseded', 'epoch' => 0 ), Gateway_Submission::read_attempts( $saved )[ $first ] );
+		$this->assertSame( 'settled_without_row', \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::reopen_refusal( $saved )->get_error_data()['reason'] );
+	}
+
+	public function test_capture_persistence_failure_replay_does_not_charge_again(): void {
+		$order = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$refuse = static function ( $saving ) use ( $order ): void {
+			if ( $saving instanceof \WC_Order && $saving->get_id() === $order->get_id() && ( $saving->get_date_paid() || Ledger::instance()->read( $saving ) ) ) {
+				throw new \RuntimeException( 'Simulated ledger persistence failure' );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+		try {
+			$response = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
+		} finally { remove_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX ); }
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		$replay = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+		$this->assertSame( 'sent', $replay->get_data()['outcome'] );
+		$this->assertSame( array( 'state' => 'sent', 'epoch' => 0 ), Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) )[ $attempt ] );
+	}
+
+	public function test_clean_provider_failure_leaves_terminal_attempt(): void {
+		$order = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Sent_Test_Gateway::$failure = 'failure';
+		$this->assertSame( 502, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$this->assertSame( array( 'state' => 'cancelled', 'epoch' => 0 ), Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) )[ $attempt ] ?? null );
+		$this->assertSame( 409, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
 	/** Sent attempts stamp the order, assign the gateway, and never send twice on replay. */
 	public function test_submit_email_stamps_order_and_replay_does_not_send(): void {
 		// Arrange.
@@ -417,8 +459,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( $data['order']['status'], wc_get_is_paid_statuses() );
 		$this->assertSame( 'wcpos_paid_test', $data['order']['payment_method'] );
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
-		// Compared as JSON: the wire row's empty `receipt` is a fresh stdClass per response.
-		$this->assertSame( wp_json_encode( $data ), wp_json_encode( $this->submit( $order, $attempt, array(), 'wcpos_paid_test' )->get_data() ) );
+		$this->assertSame( array( 'outcome' => 'paid', 'payment' => null, 'order' => $data['order'] ), $this->submit( $order, $attempt, array(), 'wcpos_paid_test' )->get_data() );
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
 	}
 
@@ -810,7 +851,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$stored = wc_get_order( $order->get_id() );
 		$this->assertSame( 'processing', $stored->get_status() );
 		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
-		$this->assertSame( array(), Gateway_Submission::read_attempts( $stored ) );
+		$this->assertSame( array( $attempt => array( 'state' => 'paid', 'epoch' => 0 ) ), Gateway_Submission::read_attempts( $stored ) );
 	}
 
 	/** The date_paid suppression lets observed money through: payment_complete() still stamps the order paid. */
@@ -881,14 +922,14 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
 		$this->assertSame(
 			array(
-				$first => array( 'state' => 'sent', 'epoch' => 0 ),
+				$first => array( 'state' => 'superseded', 'epoch' => 0 ),
 				$again => array( 'state' => 'settled', 'epoch' => 0 ),
 			),
 			Gateway_Submission::read_attempts( $stored )
 		);
 		$this->assertSame( 2, Sent_Test_Gateway::$calls );
-		// The earlier send still replays as what it was.
-		$this->assertSame( 'sent', $this->submit( $order, $first, array() )->get_data()['outcome'] );
+		// The replaced invoice is terminal, never dispatched again.
+		$this->assertSame( 'wcpos_payment_conflict', $this->submit( $order, $first, array() )->get_data()['code'] );
 		$this->assertSame( 2, Sent_Test_Gateway::$calls );
 	}
 

@@ -202,7 +202,18 @@ class Webview_Passthrough {
 			),
 			$overrides
 		);
-		$adopted = $ledger->adopt( $order, $row );
+		$adopted = $ledger->adopt(
+			$order,
+			$row,
+			true,
+			static function ( $stored ) use ( $row ): bool {
+				$refs = array_filter( $row['provider_refs'] );
+				if ( $refs ) {
+					return ( $stored['method_id'] ?? null ) === $row['method_id'] && (bool) array_intersect_assoc( $refs, $stored['provider_refs'] ?? array() );
+				}
+				return 'webview' === ( $stored['source'] ?? null ) && in_array( $stored['status'] ?? '', Ledger::LIVE_STATUSES, true );
+			}
+		);
 		return is_wp_error( $adopted ) ? null : $adopted;
 	}
 }

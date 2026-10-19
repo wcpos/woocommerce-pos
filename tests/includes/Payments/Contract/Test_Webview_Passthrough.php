@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Webview payment passthrough tests. */
 class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
+	use \Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 	/**
 	 * A contended mint must not interrupt WooCommerce's payment hooks.
 	 *
@@ -62,6 +63,38 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			'payment complete' => array( 'woocommerce_payment_complete' ),
 			'status changed' => array( 'woocommerce_order_status_changed' ),
 		);
+	}
+
+	/** @dataProvider duplicate_payment_references */
+	public function test_stale_callbacks_mint_one_payment( string $reference, bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+		try {
+			$order = $this->create_order( true );
+			$order->set_payment_method( 'pos_card' );
+			$order->set_transaction_id( $reference );
+			$order->save();
+			$stale = wc_get_order( $order->get_id() );
+			$this->assertSame( array(), Ledger::instance()->read( $stale ) );
+			$first = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $order );
+			$second = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $stale );
+			$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			$this->assertSame( $first['id'], $second['id'] );
+		} finally {
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
+	public function duplicate_payment_references(): array {
+		return array( array( 'ch_duplicate', false ), array( '', false ), array( 'ch_duplicate', true ), array( '', true ) );
 	}
 
 	/** Payment completion mints a captured webview row. */

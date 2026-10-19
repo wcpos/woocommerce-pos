@@ -1025,36 +1025,52 @@ class Ledger {
 	 * Append a leg the Ledger did not open: money a WooCommerce gateway already took
 	 * (payment_complete(), the order-pay page), or a provider attempt started outside
 	 * the POS. It does no balance check and no handler call. The caller decides that
-	 * the payment is not already represented. One $order->save(), so order meta the
+	 * the payment is not already represented, with an optional locked identity recheck.
+	 * One $order->save(), so order meta the
 	 * caller staged rides the same write.
 	 *
-	 * @param WC_Order $order  Order object.
-	 * @param array    $row    Payment row.
-	 * @param bool     $derive Whether to project payment state.
+	 * @param WC_Order      $order  Order object.
+	 * @param array         $row    Payment row.
+	 * @param bool          $derive Whether to project payment state.
+	 * @param callable|null $identity Whether a stored row represents this payment.
+	 * @throws Ledger_Persistence_Exception When the order lock cannot be acquired.
 	 * @return array|WP_Error
 	 */
-	public function adopt( WC_Order $order, array $row, bool $derive = true ) {
+	public function adopt( WC_Order $order, array $row, bool $derive = true, ?callable $identity = null ) {
 		$id = strtolower( (string) ( $row['id'] ?? '' ) );
 		if ( ! Pos_Uuid::is_uuid( $id ) ) {
 			return $this->invalid( __( 'Payment id must be a UUID.', 'woocommerce-pos' ) );
 		}
-		$rows = $this->read( $order );
-		$stored = $this->find_in_rows( $rows, $id );
-		if ( $stored ) {
-			return new WP_Error(
-				'wcpos_payment_conflict',
-				__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
-				array(
-					'status'  => 409,
-					'payment' => self::to_wire( $stored ),
-				)
-			);
+		$lock = Order_Lock::instance();
+		if ( ! $lock->acquire( $order->get_id() ) ) {
+			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
 		}
-		$row['id'] = $id;
-		$read_rows = $rows;
-		$rows[] = $row;
-		$this->save( $order, $rows, $derive, array(), $read_rows );
-		return $this->find( $order, $id );
+		try {
+			foreach ( null === $identity ? array() : ( $this->stored( $order->get_id(), false )['payments'] ?? array() ) as $existing ) {
+				if ( $identity( $existing ) ) {
+					return $existing;
+				}
+			}
+			$rows = $this->read( $order );
+			$stored = $this->find_in_rows( $rows, $id );
+			if ( $stored ) {
+				return new WP_Error(
+					'wcpos_payment_conflict',
+					__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
+					array(
+						'status'  => 409,
+						'payment' => self::to_wire( $stored ),
+					)
+				);
+			}
+			$row['id'] = $id;
+			$read_rows = $rows;
+			$rows[] = $row;
+			$this->save( $order, $rows, $derive, array(), $read_rows );
+			return $this->find( $order, $id );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
 	}
 
 	/**

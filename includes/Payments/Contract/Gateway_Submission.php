@@ -46,6 +46,7 @@ class Gateway_Submission {
 	 * @param string   $attempt_id Attempt UUID; becomes the row id when money is recorded.
 	 * @param array    $values     Declared field values.
 	 * @return array|WP_Error
+	 * @throws Ledger_Persistence_Exception When the pre-dispatch attempt cannot be persisted (caught below).
 	 */
 	public static function submit( WC_Order $order, array $descriptor, string $attempt_id, array $values ) {
 		if ( 'gateway' !== $descriptor['capture']['mode'] ) {
@@ -197,9 +198,19 @@ class Gateway_Submission {
 				// window; WooCommerce only asks from set_status() on a real status change.
 				add_filter( 'woocommerce_payment_complete_order_status', $suppress_date_paid, PHP_INT_MAX, 3 );
 			}
+			// Persist before external money can move: a failed ledger mint must not redispatch.
+			self::remember_attempt( $order, $history, $attempt_id, 'sent' );
 			$order->set_payment_method( $gateway->id );
 			$order->set_payment_method_title( (string) $descriptor['title'] );
 			Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
+			$persisted = wc_get_order( $order->get_id() );
+			$persisted->read_meta_data( true );
+			if ( ( self::read_attempts( $persisted )[ $attempt_id ] ?? null ) !== array(
+				'state' => 'sent',
+				'epoch' => Money_Epoch::current( $order ),
+			) ) {
+				throw new Ledger_Persistence_Exception( 'WCPOS gateway attempt was not persisted.' );
+			}
 			add_action( 'woocommerce_payment_complete', $complete );
 			add_action( 'woocommerce_order_status_changed', $status_changed, 10, 3 );
 			self::$submitting_order_id = $order->get_id();
@@ -220,7 +231,7 @@ class Gateway_Submission {
 		$notices   = self::take_error_notices();
 		$malformed = ! is_array( $result ) || 'success' !== ( $result['result'] ?? null );
 		if ( $malformed && ! $paid ) {
-			self::restore_method( $order, $previous_method );
+			self::restore_method( $order, $previous_method, $threw ? null : $attempt_id );
 			$detail = implode( ' ', wp_list_pluck( $notices, 'notice' ) );
 			if ( $threw ) {
 				// A gateway that throws instead of adding a notice still owes the operator a reason.
@@ -240,7 +251,7 @@ class Gateway_Submission {
 		if ( null !== $elsewhere ) {
 			// A hosted checkout: the gateway wants the browser to go somewhere the till cannot
 			// follow. Nothing was sent and nothing was taken, so say so rather than stamp "sent".
-			self::restore_method( $order, $previous_method );
+			self::restore_method( $order, $previous_method, $attempt_id );
 			Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d: %s answered a redirect to %s; refused.', $attempt_id, $order->get_id(), $descriptor['id'], $elsewhere ) );
 			return new WP_Error(
 				'wcpos_provider_error',
@@ -283,6 +294,7 @@ class Gateway_Submission {
 				)
 			);
 		} elseif ( $settled ) {
+			$history = self::supersede_sent( $order, $history );
 			// Not awaiting the customer: no stamp, and a stale one from an earlier send goes.
 			self::clear_stamp( $order );
 			self::remember_attempt( $order, $history, $attempt_id, 'settled' );
@@ -290,14 +302,7 @@ class Gateway_Submission {
 			$order->add_order_note( sprintf( __( 'Settled via POS: %1$s on %2$s', 'woocommerce-pos' ), $verb['label'], wc_get_order_status_name( $settled_status ) ) );
 			Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 		} else {
-			foreach ( $history as $id => &$attempt ) {
-				if ( 'sent' === $attempt['state'] ) {
-					$attempt['state'] = 'superseded';
-					// Gateway capture has no invoice-cancellation operation (unlike provider void).
-					Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d superseded; invoice cancellation is unavailable for gateway submissions.', $id, $order->get_id() ) );
-				}
-			}
-			unset( $attempt );
+			$history = self::supersede_sent( $order, $history );
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
 			$order->update_meta_data(
 				self::STAMP_META_KEY,
@@ -321,6 +326,24 @@ class Gateway_Submission {
 			'payment' => $row,
 			'order' => $ledger->summary( $order ),
 		);
+	}
+
+	/**
+	 * Resolve earlier sends when a new submission replaces their invoice.
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param array    $history Earlier attempts, excluding the current dispatch.
+	 */
+	private static function supersede_sent( WC_Order $order, array $history ): array {
+		foreach ( $history as $id => &$attempt ) {
+			if ( 'sent' === $attempt['state'] ) {
+				$attempt['state'] = 'superseded';
+				// Gateway capture has no invoice-cancellation operation (unlike provider void).
+				Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d superseded; invoice cancellation is unavailable for gateway submissions.', $id, $order->get_id() ) );
+			}
+		}
+		unset( $attempt );
+		return $history;
 	}
 
 	/**
@@ -437,17 +460,21 @@ class Gateway_Submission {
 	/**
 	 * Put the order's previous payment method back after an attempt that wrote nothing else.
 	 *
-	 * @param WC_Order   $order    Order object (the route's instance; re-read before use).
-	 * @param array|null $previous `[ method id, title ]` as they were before this attempt; null when never changed.
+	 * @param WC_Order    $order    Order object (the route's instance; re-read before use).
+	 * @param array|null  $previous `[ method id, title ]` as they were before this attempt; null when never changed.
+	 * @param string|null $cancelled_attempt Attempt to close after a definite failure; throws remain unresolved.
 	 */
-	private static function restore_method( WC_Order $order, ?array $previous ): void {
+	private static function restore_method( WC_Order $order, ?array $previous, ?string $cancelled_attempt ): void {
 		$fresh = null === $previous ? null : wc_get_order( $order->get_id() );
 		if ( ! $fresh instanceof WC_Order ) {
 			return;
 		}
 		$fresh->set_payment_method( (string) $previous[0] );
 		$fresh->set_payment_method_title( (string) $previous[1] );
-		$fresh->save();
+		if ( null !== $cancelled_attempt ) {
+			self::remember_attempt( $fresh, self::read_attempts( $fresh ), $cancelled_attempt, 'cancelled' );
+		}
+		Money_Meta_Guard::authorised( $fresh->get_id(), fn() => $fresh->save() );
 	}
 
 	/**
@@ -482,7 +509,7 @@ class Gateway_Submission {
 	 * @param WC_Order $order      Order object.
 	 * @param array    $history    The history as read.
 	 * @param string   $attempt_id Attempt id (lowercase).
-	 * @param string   $fate       `sent`, `settled` or `cancelled`.
+	 * @param string   $fate       `sent` (persisted before dispatch), `settled` or `cancelled` (including definite provider failure).
 	 */
 	private static function remember_attempt( WC_Order $order, array $history, string $attempt_id, string $fate ): void {
 		unset( $history[ $attempt_id ] );
