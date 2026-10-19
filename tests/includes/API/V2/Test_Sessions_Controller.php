@@ -100,6 +100,29 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 456, $stored['store_id'] );
 	}
 
+	/** Moving the register while opening waits must use the new store. */
+	public function test_session_opening_register_moved_at_lock_stores_fresh_store(): void {
+		// Arrange.
+		global $wpdb;
+		$fields = $this->fields( 456 );
+		$race = static function ( $sql ) use ( $wpdb, $fields ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $fields['register_id'] ) ) {
+				$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => 789 ), array( 'id' => $fields['register_id'] ) );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$response = $this->post( 'sessions', $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		// Assert.
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 789, ( new Register_Session_Store() )->get( $fields['id'] )['store_id'] );
+	}
+
 	/** The client preamble's query store cannot override the register's store. */
 	public function test_session_opening_ignores_the_query_store(): void {
 		// Arrange.

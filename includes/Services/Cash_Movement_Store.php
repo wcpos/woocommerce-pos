@@ -92,9 +92,6 @@ final class Cash_Movement_Store {
 			return $existing;
 		}
 		$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
-		if ( $session && ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
-			return new \WP_Error( 'wcpos_session_not_open', __( 'This movement was recorded after counting began.', 'woocommerce-pos' ), array( 'status' => 409 ) );
-		}
 		$register = $session['register_id'] ?? '';
 		$locked = $session && ( new Register_Store() )->lock( $register );
 		if ( $session && ! $locked ) {
@@ -112,9 +109,19 @@ final class Cash_Movement_Store {
 		$sequence_locked = false;
 		$transaction = false;
 		try {
+			$existing = $this->get( $fields['id'] );
+			if ( $existing ) {
+				$this->log_replay( $existing );
+				return $existing;
+			}
+			$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
+			if ( $session && ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
+				return new \WP_Error( 'wcpos_session_not_open', __( 'This movement was recorded after counting began.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
 			$closure = ( new Closure_Store() )->for_session( $fields['session_id'] );
 			if ( $closure ) {
 				$fiscal->ensure_installed();
+				Register_Store::warn_if_locks_cannot_nest();
 				$sequence_locked = $fiscal->lock_sequence();
 				if ( ! $sequence_locked ) {
 					throw new \RuntimeException( 'Unable to acquire fiscal record sequence lock.' );

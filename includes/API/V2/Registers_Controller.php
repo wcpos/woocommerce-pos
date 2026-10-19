@@ -166,10 +166,20 @@ class Registers_Controller extends WP_REST_Controller {
 		if ( is_wp_error( $fields ) ) {
 			return $fields;
 		}
-		/** Filter admin fields; Pro may authorize store reassignment. */
-		$fields = apply_filters( 'woocommerce_pos_register_update_fields', $fields, $row, $request );
 		try {
-			return new WP_REST_Response( $store->update( $id, $fields ) );
+			return $store->with_lock(
+				$id,
+				function () use ( $store, $id, $fields, $request ) {
+					$row = $store->get( $id );
+					if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+						return $this->not_found();
+					}
+					/** Filter admin fields; Pro may authorize store reassignment. */
+					$fields = apply_filters( 'woocommerce_pos_register_update_fields', $fields, $row, $request );
+					return new WP_REST_Response( $store->update( $id, $fields ) );
+				},
+				'Register update lock failed.'
+			);
 		} catch ( \RuntimeException $error ) {
 			return $this->write_error();
 		}
