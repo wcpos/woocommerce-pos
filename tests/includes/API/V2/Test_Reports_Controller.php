@@ -818,7 +818,8 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		global $wpdb;
 		$session = $this->closure_session();
-		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		// The closure is the session row, so unassigning the session unassigns the closure.
 		$wpdb->update(
 			( new Register_Session_Store() )->table_name(),
 			array(
@@ -827,7 +828,6 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			),
 			array( 'id' => $session['id'] )
 		);
-		$wpdb->update( ( new Closure_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $closure['id'] ) );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
 		$request->set_query_params(
 			array(

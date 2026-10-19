@@ -99,7 +99,9 @@ class Closures_Controller extends \WP_REST_Controller {
 	 *
 	 * An id-only create is an idempotent replay that returns the stored row, so without this
 	 * a cashier holding only the cash capability could read any closure by replaying its id.
-	 * The counters the till needs to mint its next number are not figures and stay.
+	 * Every expected-side figure is report-only: expectations, variance, period and perpetual
+	 * totals, breakdowns and findings (which carry the approval variance). The till's own
+	 * facts and the counters it needs to mint its next number are not figures and stay.
 	 *
 	 * @param array|null $row Closure row.
 	 * @return array|null
@@ -111,7 +113,7 @@ class Closures_Controller extends \WP_REST_Controller {
 		// Manager approval permits the recount write, not access to hidden report figures.
 		// The unsalted payload checksum would allow guessing the hidden variance.
 		unset( $row['payload']['variance'], $row['checksum'] );
-		return array_diff_key( $row, array_flip( array( 'expected', 'till_expected', 'variance' ) ) );
+		return array_diff_key( $row, array_flip( array( 'expected', 'till_expected', 'variance', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'breakdowns', 'findings' ) ) );
 	}
 
 	/** Dispatch, preserving the URL document UUID separately from a recount's body id.
@@ -177,7 +179,8 @@ class Closures_Controller extends \WP_REST_Controller {
 				if ( is_wp_error( $args ) ) {
 					return $args;
 				}
-				$args = Store_Reach::for_request( $request )->narrow( $args );
+				$reach = Store_Reach::for_request( $request );
+				$args = $reach->narrow( $args );
 				if ( '/last' === substr( $route, -5 ) ) {
 					if ( empty( $args['register_id'] ) ) {
 						return $this->error( 'rest_invalid_param', 400 );
@@ -190,7 +193,14 @@ class Closures_Controller extends \WP_REST_Controller {
 							'per_page' => 1,
 						)
 					);
-					return new WP_REST_Response( $this->visible( $store->list( $args )[0] ?? null ) );
+					$row = $store->list( $args )[0] ?? null;
+					// Mid-fold the newest closure may live only in a legacy table, whose read is not
+					// narrowed to the caller's stores, so reach is checked here before it is served.
+					$latest = $store->is_folding() ? $store->last( $args['register_id'], $args ) : null;
+					if ( $latest && $latest['number'] > ( $row['number'] ?? 0 ) && $reach->admits( $latest['store_id'] ) ) {
+						$row = $latest;
+					}
+					return new WP_REST_Response( $this->visible( $row ) );
 				}
 				return new WP_REST_Response( array_map( array( $this, 'visible' ), $store->with_correction_counts( $store->list( $args ) ) ) );
 			}

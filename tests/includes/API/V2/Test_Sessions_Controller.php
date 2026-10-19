@@ -579,6 +579,51 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Closure columns on the session row never reach a session route, list or detail. */
+	public function test_session_routes_after_closure_write_return_only_session_keys(): void {
+		// Arrange: give the session row a closure document the way a closure write does.
+		global $wpdb;
+		$fields = $this->fields();
+		$this->post( 'sessions', $fields );
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+		$closure = array( 'number', 'printed_number', 'print_count', 'last_printed_at_gmt', 'closure' );
+		// Every session column a read returned before closures folded into the session row.
+		$session_keys = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+		$this->assertSame(
+			1,
+			$wpdb->update(
+				( new Register_Session_Store() )->table_name(),
+				array(
+					'closure_id' => wp_generate_uuid4(),
+					'number' => 7,
+					'printed_number' => 6,
+					'print_count' => 2,
+					'last_printed_at_gmt' => '2026-09-11 13:00:00',
+					'closure' => wp_json_encode( array( 'expected' => array( 'cash' => '150.0000' ) ) ),
+				),
+				array( 'id' => $fields['id'] )
+			)
+		);
+
+		// Act.
+		$list = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions' ) )->get_data();
+		$detail = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $fields['id'] ) )->get_data();
+
+		// Assert.
+		$listed = array_values(
+			array_filter(
+				$list,
+				static function ( $row ) use ( $fields ) {
+					return $fields['id'] === $row['id'];
+				}
+			)
+		);
+		$this->assertCount( 1, $listed );
+		$this->assertSame( $session_keys, array_keys( $listed[0] ) );
+		$this->assertSame( array(), array_intersect( $closure, array_keys( $detail ) ) );
+		$this->assertSame( $session_keys, array_slice( array_keys( $detail ), 0, count( $session_keys ) ) );
+	}
+
 	/** The expected figure is a report: a cashier counting blind never receives it. */
 	public function test_blind_cashier_session_read_omits_expected(): void {
 		$fields = $this->fields();

@@ -544,8 +544,9 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$store = new Closure_Store();
 		$closure = $store->create( $this->closure_fields( $session ) );
 		$previous = $wpdb->suppress_errors();
-		$fail = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'UPDATE ' . $store->table_name() . ' SET print_count' ) ? 'INVALID PRINT STAMP' : $sql;
+		$sessions_table = ( new Register_Session_Store() )->table_name();
+		$fail = static function ( $sql ) use ( $sessions_table ) {
+			return 0 === strpos( $sql, 'UPDATE ' . $sessions_table . ' SET print_count' ) ? 'INVALID PRINT STAMP' : $sql;
 		};
 		add_filter( 'query', $fail );
 		$this->logs = array();
@@ -693,8 +694,9 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$store = new Closure_Store();
 		$fields = $this->closure_fields( $session );
 		$this->logs = array();
-		$fail = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' ) ? 'INVALID CLOSURE WRITE' : $sql;
+		// The closure document lands with the session UPDATE; its commit is the closure write.
+		$fail = static function ( $sql ) {
+			return 'COMMIT' === $sql ? 'INVALID CLOSURE WRITE' : $sql;
 		};
 		$previous = $wpdb->suppress_errors();
 		add_filter( 'query', $fail );
@@ -743,6 +745,16 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assert_logged_after_rollback( 'Register closure refused: number precedes register sequence' );
+		$this->assertWPError( $store->create( $this->closure_fields( $next, 10007 ) ) );
+		$this->assert_event(
+			'warning',
+			'Register closure refused: number exceeds register sequence',
+			array(
+				'number' => 10007,
+				'next_number' => 6,
+			)
+		);
+		$this->assert_logged_after_rollback( 'Register closure refused: number exceeds register sequence' );
 		$store->create( $this->closure_fields( $next, 5 ) );
 		$this->assert_event(
 			'warning',
@@ -753,6 +765,41 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 	}
+	/** A number another close took after this one's sequence read fails on the unique key, logged after the rollback. */
+	public function test_duplicate_register_number_is_logged_after_the_rollback(): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session();
+		$store = new Closure_Store();
+		$store->create( $this->closure_fields( $session ) );
+		$next = $this->closure_session( $session['register_id'] );
+		// Hide the register's closures from this close's sequence reads, as a concurrent close would.
+		$hide = static function ( $sql ) use ( $session ) {
+			return str_replace( "WHERE number IS NOT NULL AND register_id = '{$session['register_id']}'", "WHERE 1 = 0 AND register_id = '{$session['register_id']}'", $sql );
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $hide );
+		$this->logs = array();
+		$this->rollbacks = array();
+		try {
+			// Act.
+			try {
+				$store->create( $this->closure_fields( $next ) );
+				$this->fail( 'Expected the duplicate number to fail.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Session write failed.', $error->getMessage() );
+			}
+		} finally {
+			remove_filter( 'query', $hide );
+			$wpdb->suppress_errors( $previous );
+		}
+
+		// Assert.
+		$this->assert_event( 'warning', 'Closure session write failed.', array( 'session_id' => $next['id'] ) );
+		$this->assert_logged_after_rollback( 'Closure session write failed.' );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $next['id'] )['status'] );
+	}
+
 	/** A failed ledger stamp rolls back before its warning is emitted. */
 	public function test_closure_stamp_failure_is_logged_after_the_rollback(): void {
 		global $wpdb;

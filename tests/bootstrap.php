@@ -195,7 +195,6 @@ class Bootstrap {
 		( new \WCPOS\WooCommercePOS\Services\Register_Store() )->install();
 		( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->install();
 		( new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() )->install();
-		( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->install();
 	}
 
 	/** Install fiscal history before per-test transactions; dbDelta is DDL. */

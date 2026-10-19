@@ -596,13 +596,14 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * presentation test, where the empty day was only incidental.
 	 */
 	public function test_export_includes_a_legacy_closure_without_a_business_day(): void {
-		// Arrange: two closures, one back-dated to the unstamped legacy shape.
+		// Arrange: two closures, one back-dated to the unstamped legacy shape (on its session row).
 		global $wpdb;
 		$store = new Closure_Store();
 		$legacy = $store->create( $this->closure_fields( $this->closure_session() ) );
 		$stamped = $store->create( $this->closure_fields( $this->closure_session() ) );
-		$wpdb->update( $store->table_name(), array( 'business_day' => null ), array( 'id' => $legacy['id'] ) );
-		$wpdb->update( $store->table_name(), array( 'business_day' => '2026-09-11' ), array( 'id' => $stamped['id'] ) );
+		$sessions = ( new Register_Session_Store() )->table_name();
+		$wpdb->update( $sessions, array( 'business_day' => null ), array( 'id' => $legacy['session_id'] ) );
+		$wpdb->update( $sessions, array( 'business_day' => '2026-09-11' ), array( 'id' => $stamped['session_id'] ) );
 
 		// Act.
 		$csv = $this->export_csv( $this->get( 'closures/export' ) );
@@ -830,19 +831,20 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/** Later pages extend a deterministic header; collisions and absence stay distinct. */
 	public function test_export_multiple_pages_preserves_union_and_distinct_columns(): void {
-		// Arrange. Clone stored rows to exercise paging without 101 session transactions.
+		// Arrange. Clone stored session rows to exercise paging without 101 session transactions.
 		global $wpdb;
 		$store = new Closure_Store();
 		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
-		$table = $store->table_name();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table name from Closure_Store::table_name(); the id is prepared.
-		$stored = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %s", $row['id'] ), ARRAY_A );
+		$table = ( new Register_Session_Store() )->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table name from Register_Session_Store::table_name(); the id is prepared.
+		$stored = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %s", $row['session_id'] ), ARRAY_A );
 		for ( $number = 2; $number <= 101; ++$number ) {
 			$copy = $stored;
 			$copy['id'] = wp_generate_uuid4();
-			$copy['session_id'] = wp_generate_uuid4();
+			$copy['closure_id'] = wp_generate_uuid4();
 			$copy['number'] = $number;
 			if ( 101 === $number ) {
+				$document = json_decode( $stored['closure'], true );
 				$breakdowns = $row['breakdowns'];
 				$breakdowns['payment_methods'] = array(
 					array(
@@ -865,13 +867,12 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 					'counted' => '99.0000',
 					'variance' => '-1.0000',
 				);
-				$copy['breakdowns'] = wp_json_encode( $breakdowns );
-				$copy['counted'] = wp_json_encode(
-					array(
-						'cash' => '101.0000',
-						'voucher' => '0.0000',
-					)
+				$document['breakdowns'] = $breakdowns;
+				$document['counted'] = array(
+					'cash' => '101.0000',
+					'voucher' => '0.0000',
 				);
+				$copy['closure'] = wp_json_encode( $document );
 			}
 			$this->assertSame( 1, $wpdb->insert( $table, $copy ) );
 		}
@@ -1217,7 +1218,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$args['after'] = '2026-09-11T00:00:00Z';
 		$args['before'] = '2026-09-12T00:00:00Z';
 		$this->assertSame( array(), $this->get( 'closures', $args )->get_data() );
-		$wpdb->update( ( new Closure_Store() )->table_name(), array( 'business_day' => null ), array( 'id' => $row['id'] ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => null ), array( 'id' => $session['id'] ) );
 		$this->assertSame( array( $row['id'] ), array_column( $this->get( 'closures', $args )->get_data(), 'id' ) );
 	}
 
@@ -1624,14 +1625,56 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		foreach ( array( 'expected', 'till_expected', 'variance' ) as $field ) {
 			$this->assertArrayNotHasKey( $field, $row, $field );
 		}
-		// The counters the till needs to mint the next number still come back.
+		// The counters the till needs to mint the next number still come back; the
+		// perpetual totals are report figures (closure-as-ruled §Storage) and do not.
 		$this->assertSame( 1, $row['number'] );
-		$this->assertArrayHasKey( 'perpetual_sales_total', $row );
+		$this->assertArrayNotHasKey( 'perpetual_sales_total', $row );
 		$cashier->add_cap( 'view_woocommerce_pos_reports' );
 		// wp_set_current_user() is a no-op for the same id; re-set so the cached caps reload.
 		wp_set_current_user( 0 );
 		wp_set_current_user( $cashier->ID );
 		$this->assertArrayHasKey( 'expected', $this->post( 'closures', array( 'id' => $id ) )->get_data() );
+	}
+
+	/** Every expected-side figure is report-only on create and replay; the till's own facts stay. */
+	public function test_closure_create_without_reports_capability_redacts_every_expected_side_figure(): void {
+		// Arrange.
+		$stripped = array( 'expected', 'till_expected', 'variance', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'breakdowns', 'findings' );
+		$kept = array( 'counted', 'number', 'printed_number', 'opened_at_gmt', 'closed_at_gmt', 'received_at_gmt', 'opened_by', 'closed_by', 'approved_by', 'first_sale_counter', 'last_sale_counter', 'first_receipt_id', 'last_receipt_id', 'unsynced_count', 'unsynced_total', 'software_version', 'print_count', 'last_printed_at_gmt' );
+		$session = $this->closure_session();
+		$body = $this->body( $session );
+		$cashier = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+		$cashier->add_cap( 'manage_woocommerce_pos_cash' );
+		wp_set_current_user( $cashier->ID );
+
+		// Act.
+		$created = $this->post( 'closures', $body );
+		$replay = $this->post( 'closures', array( 'id' => $body['id'] ) );
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status() );
+		$this->assertSame( 200, $replay->get_status() );
+		foreach ( array(
+			'create' => $created->get_data(),
+			'replay' => $replay->get_data(),
+		) as $label => $row ) {
+			foreach ( $stripped as $field ) {
+				$this->assertArrayNotHasKey( $field, $row, $label . ': ' . $field );
+			}
+			foreach ( $kept as $field ) {
+				$this->assertArrayHasKey( $field, $row, $label . ': ' . $field );
+			}
+		}
+		$manager = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		foreach ( array( 'access_woocommerce_pos', 'manage_woocommerce_pos_cash', 'view_woocommerce_pos_reports' ) as $cap ) {
+			$manager->add_cap( $cap );
+		}
+		wp_set_current_user( $manager->ID );
+		$full = $this->post( 'closures', array( 'id' => $body['id'] ) )->get_data();
+		foreach ( array_merge( $stripped, $kept ) as $field ) {
+			$this->assertArrayHasKey( $field, $full, 'manager: ' . $field );
+		}
 	}
 
 	/** List filters paging and register counters. */
@@ -1811,6 +1854,73 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( Store_Reach::FILTER, $filter );
 		}
 	}
+
+	/** Mid-fold, /last serves a newer closure only a legacy table holds unless its store is out of reach or its date is filtered out; once latched, the session row. */
+	public function test_closure_last_while_fold_is_pending_returns_newer_legacy_closure_in_reach(): void {
+		// Arrange.
+		global $wpdb;
+		$row = ( new Closure_Store() )->create( $this->closure_fields( $this->closure_session() ) );
+		$second = $this->closure_session( $row['register_id'] );
+		$folded = $wpdb->prefix . Closure_Store::LEGACY_TABLE . '_folded';
+		$closure_id = wp_generate_uuid4();
+		$args = array( 'register_id' => $row['register_id'] );
+		$reach = static function () {
+			return array( 'store_id' => array( 456 ) );
+		};
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$folded} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, store_id BIGINT NULL, number BIGINT NOT NULL, business_day CHAR(10) NULL, closed_at_gmt DATETIME NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$folded,
+					array(
+						'id' => $closure_id,
+						'register_id' => $second['register_id'],
+						'session_id' => $second['id'],
+						'store_id' => 456,
+						'number' => 2,
+						'business_day' => '2026-09-12',
+						'closed_at_gmt' => '2026-09-12 12:00:00',
+						'expected' => '{"cash":"150.0000"}',
+						'till_expected' => '{"cash":"100.0000"}',
+						'counted' => '{"cash":"101.0000"}',
+						'variance' => '{"cash":"-49.0000"}',
+						'perpetual_sales_total' => '80',
+						'breakdowns' => '{"transaction_count":0}',
+					)
+				)
+			);
+
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			$pending = $this->get( 'closures/last', $args )->get_data();
+			$before = $this->get( 'closures/last', $args + array( 'before' => '2026-09-11' ) )->get_data();
+			$after = $this->get( 'closures/last', $args + array( 'after' => '2026-09-12' ) )->get_data();
+			$none = $this->get( 'closures/last', $args + array( 'before' => '2026-09-10' ) )->get_data();
+			$this->assertSame( 1, $wpdb->update( $folded, array( 'store_id' => 789 ), array( 'id' => $closure_id ) ) );
+			add_filter( Store_Reach::FILTER, $reach );
+			$hidden = $this->get( 'closures/last', $args )->get_data();
+			remove_filter( Store_Reach::FILTER, $reach );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$latched = $this->get( 'closures/last', $args )->get_data();
+
+			// Assert.
+			$this->assertSame( array( $closure_id, 2 ), array( $pending['id'], $pending['number'] ) );
+			$this->assertSame( array( $row['id'], 1 ), array( $before['id'], $before['number'] ) );
+			$this->assertSame( array( $closure_id, 2 ), array( $after['id'], $after['number'] ) );
+			$this->assertNull( $none );
+			$this->assertSame( array( $row['id'], 1 ), array( $hidden['id'], $hidden['number'] ) );
+			$this->assertSame( array( $row['id'], 1 ), array( $latched['id'], $latched['number'] ) );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$folded}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		}
+	}
+
 	/** Unassigned closure detail, list and export share one reach. */
 	public function test_unassigned_closure_is_reachable_only_with_the_unassigned_key(): void {
 		// Arrange.
@@ -1818,7 +1928,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$empty = $this->get( 'closures/export' )->get_raw_body();
 		$store = new Closure_Store();
 		$row = $store->create( $this->closure_fields( $this->closure_session(), 42 ) );
-		$wpdb->update( $store->table_name(), array( 'store_id' => null ), array( 'id' => $row['id'] ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $row['session_id'] ) );
 		foreach ( array( true, false ) as $unassigned ) {
 			$filter = static function () use ( $unassigned ) {
 				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );

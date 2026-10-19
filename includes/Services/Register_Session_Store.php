@@ -15,6 +15,13 @@ final class Register_Session_Store {
 
 	use Owned_Table;
 
+	/**
+	 * Columns a session read returns. The closure columns (number, printed_number,
+	 * print_count, last_printed_at_gmt, closure) are report-only figures served by
+	 * Closure_Store, so a session route never selects them.
+	 */
+	private const COLUMNS = 'id, register_id, store_id, status, opened_at_gmt, business_day, opened_by, expected_float, counted_float, opening_variance, counting_started_at_gmt, closed_at_gmt, closed_by, approved_by, approved_counted, approved_expected, counted, closure_id, created_at_gmt';
+
 	/** Build the schema.
 	 *
 	 * @param string $table_name Table.
@@ -41,9 +48,17 @@ final class Register_Session_Store {
 			counted LONGTEXT NULL,
 			closure_id CHAR(36) NULL,
 			created_at_gmt DATETIME NOT NULL,
+			number BIGINT NULL,
+			printed_number BIGINT NULL,
+			print_count INT NOT NULL DEFAULT 0,
+			last_printed_at_gmt DATETIME NULL,
+			closure LONGTEXT NULL,
 			PRIMARY KEY  (id),
 			KEY register_status (register_id, status),
-			KEY store_status (store_id, status)
+			KEY store_status (store_id, status),
+			UNIQUE KEY register_number (register_id, number),
+			UNIQUE KEY closure_id (closure_id),
+			KEY store_closed (store_id, closed_at_gmt)
 		) {$charset_collate};";
 	}
 
@@ -79,8 +94,9 @@ final class Register_Session_Store {
 		$where = implode( ' AND ', $where );
 		$limit = max( 1, min( 100, (int) ( $args['per_page'] ?? 50 ) ) );
 		$offset = ( max( 1, (int) ( $args['page'] ?? 1 ) ) - 1 ) * $limit;
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, prepared predicates, integer pagination.
-		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY opened_at_gmt DESC, id DESC LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+		$columns = self::COLUMNS;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns, prepared predicates, integer pagination.
+		$rows = $wpdb->get_results( "SELECT {$columns} FROM {$table} WHERE {$where} ORDER BY opened_at_gmt DESC, id DESC LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
 		foreach ( $rows as &$row ) {
 			foreach ( array( 'store_id', 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 				$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
@@ -294,7 +310,7 @@ final class Register_Session_Store {
 	 * @return array|\WP_Error
 	 *
 	 * @param array      $session Current row.
-	 * @param array      $fields Transition fields.
+	 * @param array      $fields Transition fields; a close may carry the closure id, number and printed number.
 	 * @param bool       $printed Closure already printed; record missing approval instead of refusing.
 	 * @param array|null $approval_missing Server variance and threshold finding, if any.
 	 * @param bool       $locked_by_caller Caller owns the register lock through commit/rollback.
@@ -393,6 +409,10 @@ final class Register_Session_Store {
 				'id' => $session['id'],
 				'status' => $session['status'],
 			);
+			if ( isset( $fields['closure_id'] ) ) {
+				// A session carries one closure document; never overwrite it.
+				$where['closure_id'] = null;
+			}
 			if ( 'closed' === $fields['status'] ) {
 				foreach ( array( 'approved_by', 'approved_counted', 'approved_expected' ) as $key ) {
 					$where[ $key ] = is_array( $session[ $key ] ) ? wp_json_encode( $session[ $key ] ) : $session[ $key ];

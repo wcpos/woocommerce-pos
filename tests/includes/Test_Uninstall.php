@@ -38,7 +38,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	);
 
 	/** Retired tables retained in uninstall for sites skipping old upgrades. */
-	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index' );
+	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index', 'wcpos_closures', 'wcpos_closures_folded' );
 
 	/**
 	 * User fixture committed by real DDL.
@@ -1142,9 +1142,9 @@ PHP;
 			$store->install();
 		}
 	}
-	/** Closure documents survive ordinary uninstall and disappear only behind the gate. */
+	/** Closure documents (on session rows) survive ordinary uninstall and disappear only behind the gate. */
 	public function test_closures_survive_default_uninstall_and_drop_with_remove_all(): void {
-		$store = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+		$store = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
 		$store->install();
 		try {
 			$this->run_uninstall( false );

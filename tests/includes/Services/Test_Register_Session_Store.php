@@ -7,12 +7,35 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Session persistence and ledger-derived balances. */
 class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 	use Session_Expected_Tests;
+	use Closure_Test_Fixture;
+
+	/** The session columns a read returned before closures folded into the session row. */
+	public const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+
+	/** A closure on the session row never widens a session read. */
+	public function test_session_read_after_closure_returns_exactly_the_session_columns(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$store = new Register_Session_Store();
+
+		// Act.
+		$row = $store->get( $session['id'] );
+		$listed = $store->list( array( 'register_id' => $session['register_id'] ) );
+
+		// Assert.
+		$this->assertSame( $closure['id'], $row['closure_id'] );
+		$this->assertSame( self::SESSION_KEYS, array_keys( $row ) );
+		$this->assertCount( 1, $listed );
+		$this->assertSame( self::SESSION_KEYS, array_keys( $listed[0] ) );
+	}
 
 	/** Opening must fail without inserting when another connection owns the register. */
 	public function test_create_register_locked_throws_without_inserting(): void {

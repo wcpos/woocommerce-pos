@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
@@ -26,7 +27,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		global $wpdb;
 		$store = new Closure_Store();
 		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
-		$wpdb->update( $store->table_name(), array( 'store_id' => null ), array( 'id' => $row['id'] ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $row['session_id'] ) );
 		$filter = static function () {
 			return array( 'store_id' => array( 'invalid' ) );
 		};
@@ -960,7 +961,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		global $wpdb;
 		$store = new Closure_Store();
 		$row = $store->create( $this->closure_fields( $this->closure_session() ) );
-		$wpdb->update( $store->table_name(), array( 'store_id' => null ), array( 'id' => $row['id'] ) );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $row['session_id'] ) );
 		foreach ( array( true, false ) as $unassigned ) {
 			$filter = static function () use ( $unassigned ) {
 				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
