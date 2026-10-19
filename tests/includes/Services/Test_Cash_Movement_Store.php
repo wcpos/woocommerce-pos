@@ -554,6 +554,68 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 		$this->assertSame( array( $stamped, $void ), $listed );
 	}
 
+	/**
+	 * A write whose array changed since its read (locks that cannot nest let another writer in) fails instead of erasing the other entry.
+	 *
+	 * @dataProvider stale_snapshot_paths
+	 * @param string $status Session status: a counting session with a closure takes the late path.
+	 * @param string $trigger Statement the competing write lands before.
+	 */
+	public function test_create_array_changed_since_read_throws_and_keeps_the_competitor( string $status, string $trigger ): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session( null, $status );
+		if ( 'counting' === $status ) {
+			( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		}
+		$store = new Cash_Movement_Store();
+		$base = array(
+			'session_id' => $session['id'],
+			'type' => 'paid_in',
+			'amount' => '7.0000',
+			'reason' => 'Drawer',
+			'actor' => 1,
+			'created_at_gmt' => '2026-09-11 10:00:00',
+		);
+		$competitor = Cash_Movement_Store::entry( $base + array( 'id' => wp_generate_uuid4() ) );
+		$fields = $base + array( 'id' => wp_generate_uuid4() );
+		$sessions = ( new Register_Session_Store() )->table_name();
+		$raced = false;
+		$race = static function ( $sql ) use ( $wpdb, $sessions, $session, $competitor, $trigger, &$race, &$raced ) {
+			if ( 0 === strpos( $sql, $trigger ) ) {
+				remove_filter( 'query', $race );
+				// Another writer on this register appends after this one read the array.
+				$raced = 1 === $wpdb->update( $sessions, array( 'movements' => wp_json_encode( array( $competitor ) ) ), array( 'id' => $session['id'] ) );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			try {
+				$store->create( $fields );
+				$this->fail( 'Expected the stale write to fail.' );
+			} catch ( \RuntimeException $error ) {
+				// Assert.
+				$this->assertSame( 'Movement write failed.', $error->getMessage() );
+			}
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		$this->assertTrue( $raced );
+		$this->assertSame( array( $competitor['id'] ), array_column( $store->list( $session['id'] ), 'id' ) );
+		$this->assertNull( ( new Fiscal_Record_Store() )->find_by_source( 'late_movement', $fields['id'] ) );
+	}
+
+	/** The late path (the race lands before its transaction) and the open path (before the array write). */
+	public function stale_snapshot_paths(): array {
+		global $wpdb;
+		return array(
+			'late movement' => array( 'counting', 'START TRANSACTION' ),
+			'open session' => array( 'open', 'UPDATE ' . $wpdb->prefix . 'wcpos_register_sessions SET movements' ),
+		);
+	}
+
 	/** A void whose target another request voided while this one waited is refused on the fresh read. */
 	public function test_create_void_target_voided_at_lock_refuses_without_writing(): void {
 		// Arrange.

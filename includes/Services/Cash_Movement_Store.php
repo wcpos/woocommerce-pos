@@ -110,7 +110,7 @@ final class Cash_Movement_Store {
 		$transaction = false;
 		try {
 			// A fresh read under the lock: a retry that committed while this one waited is a replay.
-			$entries = self::entries( $fields['session_id'] );
+			$entries = self::entries( $fields['session_id'], $stored );
 			$existing = self::find( $entries, $fields['id'] );
 			if ( $existing ) {
 				$existing = self::row( $fields['session_id'], $existing );
@@ -165,8 +165,13 @@ final class Cash_Movement_Store {
 				$transaction = true;
 			}
 			$sessions = ( new Register_Session_Store() )->table_name();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values are prepared.
-			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$sessions} SET movements = %s WHERE id = %s", $movements, $fields['session_id'] ) ) ) {
+			// The register lock serialises writers, but a server that cannot nest named locks drops it
+			// when the fiscal lock is taken: the write also requires the array exactly as read (MD5 of
+			// the stored bytes, so the collation cannot equate two different arrays). A stale write
+			// fails, the transaction rolls back, and the outbox retry re-reads.
+			$unchanged = null === $stored ? 'movements IS NULL' : $wpdb->prepare( 'MD5(movements) = %s', md5( $stored ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values and the condition are prepared.
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$sessions} SET movements = %s WHERE id = %s AND {$unchanged}", $movements, $fields['session_id'] ) ) ) {
 				throw new \RuntimeException( 'Movement write failed.' );
 			}
 			if ( $closure ) {
@@ -337,10 +342,12 @@ final class Cash_Movement_Store {
 
 	/** The session's stored entries, read fresh; NULL and an empty array both mean none.
 	 *
-	 * @param string $session_id Session UUID.
+	 * @param string      $session_id Session UUID.
+	 * @param string|null $stored The column exactly as read, for a write that requires it unchanged.
+	 * @param-out string|null $stored
 	 * @throws \RuntimeException On read failure.
 	 */
-	private static function entries( string $session_id ): array {
+	private static function entries( string $session_id, ?string &$stored = null ): array {
 		global $wpdb;
 		$sessions = new Register_Session_Store();
 		$sessions->ensure_installed();
@@ -350,6 +357,7 @@ final class Cash_Movement_Store {
 		if ( '' !== $wpdb->last_error ) {
 			throw new \RuntimeException( 'Session movement read failed.' );
 		}
+		$stored = $movements;
 		$entries = null === $movements ? array() : json_decode( $movements, true );
 		if ( ! is_array( $entries ) ) {
 			throw new \RuntimeException( 'Session movement read failed.' );
