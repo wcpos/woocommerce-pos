@@ -633,6 +633,12 @@ class Ledger {
 			}
 			return $this->find( $order, $stored['id'] );
 		}
+		// A closed sale takes no new tender (§4.2). A paid one keeps the refused-row record below
+		// (offline cash may already be in the drawer); one never paid is refused outright.
+		$closed = $this->accepts_tender( $order );
+		if ( $closed && 'wcpos_order_already_paid' !== $closed->get_error_code() ) {
+			return $closed;
+		}
 
 		$descriptor = $this->validate_method( (string) ( $input['method_id'] ?? '' ) );
 		if ( is_wp_error( $descriptor ) ) {
@@ -687,7 +693,7 @@ class Ledger {
 			)
 		);
 
-		$balance = Money::minor( $this->balance( $order, $rows ) );
+		$balance = $closed ? 0 : Money::minor( $this->balance( $order, $rows ) );
 		// A provider leg still pending has reserved its share of the balance: cash taken on top
 		// of it would count twice if the terminal later confirms (the money moved both ways).
 		// A leg the till has already asked to cancel does not block cash: the cashier accepted
@@ -813,6 +819,10 @@ class Ledger {
 				'payment' => $applied,
 				'handoff' => $handoff,
 			);
+		}
+		$closed = $this->accepts_tender( $order );
+		if ( $closed ) {
+			return $closed;
 		}
 		$balance = Money::minor( $this->balance( $order, $rows ) );
 		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
@@ -1382,6 +1392,31 @@ class Ledger {
 			}
 		}
 		return new WP_Error( 'wcpos_' . $reason, $messages[ $reason ], $data );
+	}
+
+	/**
+	 * A closed sale takes no new tender (spec §4.2): a new row is accepted only while the sale is open
+	 * (editable, in progress, or awaiting a sent submit). A completed sale whose signed balance went
+	 * positive through a refund is reopened first, so the money lands on an open sale and completes it
+	 * again. Replays and the commands on an existing row never ask.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	public function accepts_tender( WC_Order $order ): ?WP_Error {
+		if ( $order->is_editable() || in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) || null !== Gateway_Submission::read_stamp( $order ) ) {
+			return null;
+		}
+		if ( null !== $order->get_date_paid( 'edit' ) ) {
+			return new WP_Error(
+				'wcpos_order_already_paid',
+				__( 'The order is already paid.', 'woocommerce-pos' ),
+				array(
+					'status' => 409,
+					'order'  => $this->summary( $order ),
+				)
+			);
+		}
+		return $this->invalid_transition();
 	}
 
 	/**

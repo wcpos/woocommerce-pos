@@ -88,6 +88,11 @@ class Gateway_Submission {
 		if ( empty( $descriptor['pos_enabled'] ) ) {
 			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is not enabled for the POS.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
+		// A new attempt needs an open sale; a replay above has already answered what happened (§4.2).
+		$closed = $ledger->accepts_tender( $order );
+		if ( $closed ) {
+			return $closed;
+		}
 		if ( 0 === Money::minor( $ledger->balance( $order, $rows ) ) ) {
 			return new WP_Error( 'wcpos_order_already_paid', __( 'Order is already paid.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}

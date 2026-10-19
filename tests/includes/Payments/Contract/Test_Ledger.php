@@ -1551,6 +1551,79 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/**
+	 * Payment rows read from storage, not from an order object.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function stored_rows( int $order_id ): array {
+		$order = wc_get_order( $order_id );
+		foreach ( $order->get_data_store()->read_meta( $order ) as $meta ) {
+			if ( Ledger::META_KEY === $meta->meta_key ) {
+				return json_decode( maybe_unserialize( $meta->meta_value ), true )['payments'];
+			}
+		}
+		return array();
+	}
+
+	/** A completed sale owes 20.00 after a refund, yet takes no new tender until it is reopened (§4.2). */
+	public function test_a_completed_sale_with_a_refund_takes_no_new_tender_until_reopened(): void {
+		// Arrange: 100.00 captured completes the sale; 20.00 refunded and allocated.
+		list( $order, $row ) = $this->paid_sale_with_lines( array( '100.00' ) );
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '20.00', Ledger::instance()->summary( $order )['balance'] );
+
+		// Act.
+		$cash   = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$card   = $this->payment( 'pos_card', '20.00' );
+		$intent = Ledger::instance()->intent( wc_get_order( $order->get_id() ), $card['id'], $card, array() );
+
+		// Assert.
+		foreach ( array( $cash, $intent ) as $refused ) {
+			$this->assertWPError( $refused );
+			$this->assertSame( 'wcpos_order_already_paid', $refused->get_error_code() );
+			$this->assertSame( 409, $refused->get_error_data()['status'] );
+			$this->assertSame( '20.00', $refused->get_error_data()['order']['balance'] );
+		}
+		// No new money counts: the cash attempt is kept only as the refused row record() always writes
+		// for a paid sale (offline cash may already be in the drawer); the intent writes nothing.
+		$stored = $this->stored_rows( $order->get_id() );
+		$this->assertSame( array( 'captured', 'failed' ), array_column( $stored, 'status' ) );
+		$this->assertSame( 'order_already_paid', $stored[1]['failure_reason'] );
+		$this->assertNotContains( $card['id'], array_column( $stored, 'id' ) );
+		$this->assertSame( '20.00', Ledger::instance()->summary( wc_get_order( $order->get_id() ) )['balance'] );
+
+		// Reopened, the same tender is taken and the sale completes again.
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$taken = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '20.00' ) );
+		$this->assertIsArray( $taken );
+		$this->assertSame( 'captured', $taken['status'] );
+		$paid = wc_get_order( $order->get_id() );
+		$this->assertTrue( $paid->is_paid() );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( $paid ), 'n' ) );
+	}
+
+	/** A cancelled order takes no tender. */
+	public function test_a_cancelled_order_takes_no_tender(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_status( 'cancelled' );
+		$order->save();
+
+		// Act.
+		$result = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '92.95' ) );
+
+		// Assert.
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_invalid_transition', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+		$this->assertSame( array(), $this->stored_rows( $order->get_id() ) );
+	}
+
 	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */
 	public function test_authorized_at_gmt_is_stamped_on_approval_and_kept_through_capture(): void {
 		// Arrange.
