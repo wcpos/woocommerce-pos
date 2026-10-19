@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-19T02:15:13+00:00\n"
+"POT-Creation-Date: 2026-10-19T13:20:45+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1147,18 +1147,18 @@ msgid "Sorry, you cannot access registers."
 msgstr ""
 
 #. translators: %s: register field name.
-#: includes/API/V2/Registers_Controller.php:429
+#: includes/API/V2/Registers_Controller.php:439
 #, php-format
 msgid "Invalid register field: %s."
 msgstr ""
 
-#: includes/API/V2/Registers_Controller.php:434
+#: includes/API/V2/Registers_Controller.php:444
 #: includes/Services/Report_Scope_Resolver.php:63
 #: includes/Services/Report_Scope_Resolver.php:66
 msgid "Register not found."
 msgstr ""
 
-#: includes/API/V2/Registers_Controller.php:439
+#: includes/API/V2/Registers_Controller.php:449
 msgid "Register could not be saved."
 msgstr ""
 
@@ -1197,12 +1197,12 @@ msgid "Report \"%1$s\" failed: %2$s"
 msgstr ""
 
 #. translators: %s: name of the request field that was rejected.
-#: includes/API/V2/Sessions_Controller.php:392
+#: includes/API/V2/Sessions_Controller.php:405
 #, php-format
 msgid "Invalid parameter: %s"
 msgstr ""
 
-#: includes/API/V2/Sessions_Controller.php:394
+#: includes/API/V2/Sessions_Controller.php:407
 msgid "The session request could not be completed."
 msgstr ""
 
@@ -1599,11 +1599,11 @@ msgstr ""
 msgid "Grant them under WCPOS Settings, Access, or assign a role that has them."
 msgstr ""
 
-#: includes/Services/Cash_Movement_Store.php:96
+#: includes/Services/Cash_Movement_Store.php:119
 msgid "This movement was recorded after counting began."
 msgstr ""
 
-#: includes/Services/Cash_Movement_Store.php:160
+#: includes/Services/Cash_Movement_Store.php:167
 msgid "The movement has already been voided or is unavailable."
 msgstr ""
 
@@ -1616,8 +1616,8 @@ msgid "This session already has a closure; the count was recorded as a recount."
 msgstr ""
 
 #: includes/Services/Closure_Store.php:533
-#: includes/Services/Register_Session_Store.php:251
-#: includes/Services/Register_Session_Store.php:417
+#: includes/Services/Register_Session_Store.php:278
+#: includes/Services/Register_Session_Store.php:439
 msgid "The session state has changed."
 msgstr ""
 
@@ -2990,7 +2990,7 @@ msgstr ""
 #. translators: Fiscal receipt label for the till (register) that rang the sale.
 #: includes/Services/Receipt_Data_Schema.php:1142
 #: includes/Services/Receipt_I18n_Labels.php:273
-#: includes/Services/Register_Store.php:116
+#: includes/Services/Register_Store.php:153
 #: includes/Services/Reports_Registry.php:188
 msgid "Register"
 msgstr ""
@@ -4657,23 +4657,23 @@ msgstr ""
 msgid "POS fiscal receipt snapshot created (receipt #%d)."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:130
+#: includes/Services/Register_Session_Store.php:161
 msgid "This register already has an open session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:196
+#: includes/Services/Register_Session_Store.php:227
 msgid "The cashier who opened this session cannot approve it."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:298
+#: includes/Services/Register_Session_Store.php:320
 msgid "The closure count differs from the closed session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:348
+#: includes/Services/Register_Session_Store.php:370
 msgid "Manager approval is required to close this session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:420
+#: includes/Services/Register_Session_Store.php:442
 msgid "The session approval has changed."
 msgstr ""
 
