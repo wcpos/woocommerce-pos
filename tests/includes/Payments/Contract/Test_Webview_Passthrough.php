@@ -58,6 +58,87 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	public function test_two_deferred_callbacks_preserve_both_payments(): void {
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			foreach ( array( 'charge_one', 'charge_two' ) as $reference ) {
+				$order->set_transaction_id( $reference );
+				$order->save();
+				do_action( 'woocommerce_payment_complete', $order->get_id() );
+			}
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+		$this->assertCount( 2, wc_get_order( $order->get_id() )->get_meta( '_wcpos_mint_pending', false ) );
+		$notes = implode( '\n', array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringNotContainsString( 'reconcile this payment manually', $notes );
+		( new Payments_Sweeper() )->run();
+		$saved = wc_get_order( $order->get_id() );
+		$rows = Ledger::instance()->read( $saved );
+		$this->assertSame( array( 'charge_one', 'charge_two' ), array_column( array_column( $rows, 'provider_refs' ), 'transaction_id' ) );
+		$this->assertSame( array( 0, 0 ), array_column( $rows, 'epoch' ) );
+		$this->assertSame( array(), $saved->get_meta( '_wcpos_mint_pending', false ) );
+	}
+
+	/** @dataProvider payment_hooks */
+	public function test_payment_hook_failed_deferral_leaves_note_without_throwing( string $hook ): void {
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->set_transaction_id( 'hook_lost_charge' );
+		$order->save();
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		$fail = static fn( $check, $id, $key ) => '_wcpos_mint_pending' === $key ? false : $check;
+		add_filter( 'add_post_metadata', $fail, 10, 3 );
+		try {
+			$this->in_pos_request( static function () use ( $hook, $order ): void {
+				do_action( 'woocommerce_before_pay_action', $order );
+				do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order );
+			} );
+		} finally {
+			$lock->release( $order->get_id() );
+			remove_filter( 'add_post_metadata', $fail );
+			do_action( 'woocommerce_before_pay_action', null );
+		}
+		$notes = implode( '\n', array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'hook_lost_charge', $notes );
+		$this->assertStringContainsString( '92.95', $notes );
+	}
+
+	public function test_failed_deferred_fact_write_leaves_note_and_rethrows(): void {
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->set_transaction_id( 'lost_charge' );
+		$order->save();
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		$logs = array();
+		$log = static function ( $enabled, $message ) use ( &$logs ) { $logs[] = array( Logger::$log_level, $message ); return false; };
+		$fail = static fn( $check, $id, $key ) => '_wcpos_mint_pending' === $key ? false : $check;
+		add_filter( 'add_post_metadata', $fail, 10, 3 );
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		$caught = null;
+		try {
+			\WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $order, array(), true );
+		} catch ( \WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$lock->release( $order->get_id() );
+			remove_filter( 'add_post_metadata', $fail );
+			remove_filter( 'woocommerce_pos_logging', $log );
+		}
+		$notes = implode( '\n', array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'lost_charge', $notes );
+		$this->assertStringContainsString( '92.95', $notes );
+		$this->assertInstanceOf( \WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception::class, $caught );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_mint_pending' ) );
+		$this->assertNotEmpty( array_filter( $logs, static fn( $entry ) => 'error' === $entry[0] && false !== strpos( $entry[1], 'lost_charge' ) ) );
+	}
+
 	public function test_deferred_prior_epoch_mint_is_retained_and_cleared(): void {
 		$order = $this->create_order( true );
 		$order->set_payment_method( 'pos_card' );

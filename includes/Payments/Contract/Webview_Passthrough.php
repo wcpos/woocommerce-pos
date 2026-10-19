@@ -98,8 +98,7 @@ class Webview_Passthrough {
 		try {
 			self::mint( $order, array(), true );
 		} catch ( Ledger_Persistence_Exception $error ) {
-			// The pending fact lets the sweeper reconcile without interrupting WooCommerce.
-			Logger::error( sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: %s', $order->get_id(), $error->getMessage() ) );
+			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
 		}
 	}
 
@@ -133,8 +132,7 @@ class Webview_Passthrough {
 		try {
 			self::mint( $order, array(), true );
 		} catch ( Ledger_Persistence_Exception $error ) {
-			// Only hook callers swallow this; direct submissions must still receive their 409.
-			Logger::error( sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: %s', $order->get_id(), $error->getMessage() ) );
+			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
 		}
 	}
 
@@ -217,19 +215,30 @@ class Webview_Passthrough {
 					Money_Meta_Guard::authorised(
 						$fresh->get_id(),
 						static function () use ( $fresh, $row, $epoch, $error ): void {
-							$fresh->update_meta_data(
+							$fresh->add_meta_data(
 								self::PENDING_META_KEY,
 								array(
 									'row' => $row,
 									'epoch' => $epoch,
 									'reason' => $error->getMessage(),
 									'created_at_gmt' => gmdate( 'c' ),
-								)
+								),
+								false
 							);
 							$fresh->save_meta_data();
 						}
 					);
+					$fresh->read_meta_data( true );
+					foreach ( $fresh->get_meta( self::PENDING_META_KEY, false ) as $fact ) {
+						if ( ( $fact->value['row']['id'] ?? null ) === $row['id'] ) {
+							Logger::error( sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: %s', $order->get_id(), $error->getMessage() ) );
+							return null; // Only a verified durable fact makes deferral safe.
+						}
+					}
 				}
+				$message = sprintf( 'WCPOS payment %s (%s %s) could not be recorded or deferred; reconcile this payment manually.', '' !== $transaction_id ? $transaction_id : $row['id'], $row['amount'], $row['currency'] );
+				Logger::error( $message, array( 'order_id' => $order->get_id() ) );
+				$order->add_order_note( $message );
 			}
 			throw $error;
 		}
@@ -241,24 +250,26 @@ class Webview_Passthrough {
 	 * @param WC_Order $order Locked order.
 	 */
 	public static function reconcile( WC_Order $order ): void {
-		$pending = $order->get_meta( self::PENDING_META_KEY );
-		if ( ! is_array( $pending ) ) {
-			return;
-		}
-		try {
-			if ( null === self::adopt( $order, $pending['row'], (int) $pending['epoch'] ) ) {
-				return;
+		foreach ( $order->get_meta( self::PENDING_META_KEY, false ) as $fact ) {
+			$pending = $fact->value;
+			if ( ! is_array( $pending ) ) {
+				continue;
 			}
-			Money_Meta_Guard::authorised(
-				$order->get_id(),
-				static function () use ( $order ): void {
-					$order->read_meta_data( true );
-					$order->delete_meta_data( self::PENDING_META_KEY );
-					$order->save_meta_data();
+			try {
+				if ( null === self::adopt( $order, $pending['row'], (int) $pending['epoch'] ) ) {
+					continue;
 				}
-			);
-		} catch ( Ledger_Persistence_Exception $error ) {
-			Logger::error( sprintf( 'WCPOS deferred webview payment on order #%d could not be saved: %s', $order->get_id(), $error->getMessage() ) );
+				Money_Meta_Guard::authorised(
+					$order->get_id(),
+					static function () use ( $order, $fact ): void {
+						$order->read_meta_data( true );
+						$order->delete_meta_data_by_mid( $fact->id );
+						$order->save_meta_data();
+					}
+				);
+			} catch ( Ledger_Persistence_Exception $error ) {
+				Logger::error( sprintf( 'WCPOS deferred webview payment on order #%d could not be saved: %s', $order->get_id(), $error->getMessage() ) );
+			}
 		}
 	}
 

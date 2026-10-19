@@ -482,6 +482,41 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		}
 	}
 
+	/** @dataProvider stale_checkpoint_retries */
+	public function test_done_update_cleans_stale_checkpoint( bool $replay ): void {
+		$order = $this->order();
+		$original = null;
+		$observe = static function ( $result, $server, $request ) use ( &$original ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			return $result;
+		};
+		// Both datastores delete metadata by id; refuse only this checkpoint's delete.
+		$fail = static function ( $sql ) {
+			if ( 0 === strpos( $sql, 'DELETE' ) ) {
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					if ( 'save_update_checkpoint' === ( $frame['function'] ?? '' ) ) { return 'SELECT 1'; }
+				}
+			}
+			return $sql;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		add_filter( 'query', $fail );
+		try {
+			$this->assertSame( 200, $this->push( $order, array( 'customer_note' => 'First' ) )->get_status() );
+		} finally {
+			remove_filter( 'query', $fail );
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+		$checkpoint = wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' );
+		$this->assertIsArray( $checkpoint );
+		$this->assertSame( 'done', ( new \WCPOS\WooCommercePOS\Sync\Mutation_Store() )->lookup( 'orders', $checkpoint['mutation_id'] )['status'] );
+		$result = $replay ? $this->server->dispatch( $original ) : $this->push( $order, array( 'customer_note' => 'Next' ) );
+		$this->assertSame( 200, $result->get_status(), wp_json_encode( $result->get_data() ) );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' ) );
+		$this->assertSame( $replay ? 'First' : 'Next', wc_get_order( $order->get_id() )->get_customer_note() );
+	}
+	public function stale_checkpoint_retries(): array { return array( array( true ), array( false ) ); }
+
 	public function test_successful_update_removes_transition_checkpoint(): void {
 		$order = $this->order();
 		$this->ack_meta( $this->push( $order, array( 'customer_note' => 'Saved' ) ) );

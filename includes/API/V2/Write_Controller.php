@@ -249,6 +249,22 @@ class Write_Controller extends WP_REST_Controller {
 			if ( 'applied' === $hit['status'] && ! $this->store->finalize( $m['mutationId'], (int) $hit['remote_id'] ) ) {
 				return $this->finalize_error();
 			}
+			if ( 'orders' === $collection && 'update' === $hit['operation'] ) {
+				$writer = $this->writer( $meta );
+				$id = (int) $hit['remote_id'];
+				if ( ! $writer->lock( $id ) ) {
+					return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+				}
+				try {
+					$order = wc_get_order( $id );
+					$checkpoint = $order ? $order->get_meta( '_wcpos_update_transition' ) : null;
+					if ( is_array( $checkpoint ) && ( $checkpoint['mutation_id'] ?? '' ) === $m['mutationId'] && ! $this->save_update_checkpoint( $id, null ) ) {
+						return $this->finalize_error();
+					}
+				} finally {
+					$writer->unlock( $id );
+				}
+			}
 			return $this->replay( $meta, $hit );
 		}
 		return null;
@@ -573,13 +589,18 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 		try {
+			$stale_checkpoint = false;
 			if ( $locked ) {
 				$order = wc_get_order( $id );
 				$checkpoint = $order ? $order->get_meta( '_wcpos_update_transition' ) : null;
 				if ( is_array( $checkpoint ) && ( $checkpoint['mutation_id'] ?? '' ) !== $m['mutationId'] ) {
 					// Recovery needs the original retry's fingerprint-checked payload and aggregate.
 					// A different mutation cannot supply them or replace that pending transition.
-					return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order transitions are pending; retry shortly.', array( 'status' => 409 ) );
+					$previous = $this->store->lookup( $collection, $checkpoint['mutation_id'] ?? '' );
+					if ( 'done' !== ( $previous['status'] ?? '' ) || (int) ( $previous['remote_id'] ?? 0 ) !== $id ) {
+						return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order transitions are pending; retry shortly.', array( 'status' => 409 ) );
+					}
+					$stale_checkpoint = true;
 				}
 			}
 			$current = $this->document_for( $meta, $id );
@@ -598,6 +619,10 @@ class Write_Controller extends WP_REST_Controller {
 					),
 					409
 				);
+			}
+			// Check CAS before cleanup: the checkpoint itself is part of the read revision.
+			if ( $stale_checkpoint && ! $this->save_update_checkpoint( $id, null ) ) {
+				return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order checkpoint cleanup failed; retry shortly.', array( 'status' => 409 ) );
 			}
 			if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
 				$late                = $prepared['context_factory']();
