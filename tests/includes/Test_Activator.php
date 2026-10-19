@@ -766,12 +766,11 @@ class Test_Activator extends WP_UnitTestCase {
 	/** A second pass over an already folded install issues no DDL and changes no closure. */
 	public function test_closure_fold_rerun_is_a_no_op(): void {
 		// Arrange.
-		global $wpdb;
 		$fixture = $this->arrange_schema_nine_with_legacy_closures();
 		$activator = new Activator();
 		$statements = array();
 		$observe = static function ( $sql ) use ( $fixture, &$statements ) {
-			if ( 0 === strpos( $sql, "ALTER TABLE {$fixture['sessions_table']}" ) || 0 === strpos( $sql, 'DROP TABLE' ) || 0 === strpos( $sql, "UPDATE `{$fixture['sessions_table']}`" ) ) {
+			if ( 0 === strpos( $sql, "ALTER TABLE {$fixture['sessions_table']}" ) || false !== strpos( $sql, "DROP TABLE IF EXISTS {$fixture['legacy']}" ) || 0 === strpos( $sql, "UPDATE `{$fixture['sessions_table']}`" ) ) {
 				$statements[] = $sql;
 			}
 			return $sql;
