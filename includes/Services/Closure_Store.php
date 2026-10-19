@@ -511,7 +511,7 @@ final class Closure_Store {
 		return $counted;
 	}
 
-	/** Write once, serializing the register's baseline with one conditional UPDATE.
+	/** Write once: one conditional session UPDATE claims the number, a second writes the document.
 	 *
 	 * @param array     $fields Validated client fields.
 	 * @param bool|null $created Whether this call inserted the document.
