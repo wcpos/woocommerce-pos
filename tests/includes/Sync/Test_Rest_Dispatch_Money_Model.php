@@ -869,6 +869,67 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'cancelled', wc_get_order( $order_id )->get_status() );
 	}
 
+	protected function currency_and_quantity_edit( int $order_id ): array {
+		$payload             = $this->quantity_edit( $order_id );
+		$payload['currency'] = 'EUR';
+
+		return $payload;
+	}
+
+	/** Push a currency change and a quantity change onto an open order holding one row of the given status. */
+	protected function assert_currency_locked_by_a_row( string $status ): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$this->seed_rows( $order_id, array( $this->cash_payment( '5.00' ) + array( 'status' => $status ) ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->currency_and_quantity_edit( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_currency_locked', $response->get_data()['code'] );
+		$this->assertSame( get_woocommerce_currency(), wc_get_order( $order_id )->get_currency() );
+		$this->assertSame( 2, $this->first_item( $order_id )->get_quantity() );
+	}
+
+	public function test_currency_change_with_a_captured_row_is_refused_currency_locked(): void {
+		$this->assert_currency_locked_by_a_row( 'captured' );
+	}
+
+	/** A row that no longer counts still names the currency the money moved in. */
+	public function test_currency_change_with_a_voided_row_is_still_refused(): void {
+		$this->assert_currency_locked_by_a_row( 'voided' );
+	}
+
+	public function test_currency_change_with_an_attempt_in_history_is_refused(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$order    = wc_get_order( $order_id );
+		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( wp_generate_uuid4() => 'cancelled' ) );
+		$order->save();
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->currency_and_quantity_edit( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_currency_locked', $response->get_data()['code'] );
+		$this->assertSame( get_woocommerce_currency(), wc_get_order( $order_id )->get_currency() );
+	}
+
+	public function test_currency_change_on_an_order_with_no_money_is_applied(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->currency_and_quantity_edit( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'EUR', wc_get_order( $order_id )->get_currency() );
+		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(

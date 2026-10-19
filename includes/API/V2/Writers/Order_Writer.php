@@ -593,6 +593,8 @@ class Order_Writer extends Null_Writer {
 	/**
 	 * Refuse a push the order may not take, on the locked read (ADR 0040 rules 3, 4 and 6b).
 	 *
+	 * A currency change is refused once any money exists on the order (`wcpos_currency_locked`,
+	 * rule 6b): there is no conversion protocol, and a 100 USD row must not cover a 100 EUR total.
 	 * A reopen (a non-editable order pushed into an editable status) or a cancel is refused
 	 * while money is in motion (`wcpos_money_in_motion`, rule 3); captured, failed and voided
 	 * rows never block, and nothing is archived. A line change needs an editable order
@@ -604,6 +606,11 @@ class Order_Writer extends Null_Writer {
 	 * @param bool      $lines_changed Whether the forward changes the order's money lines.
 	 */
 	private function money_gate( \WC_Order $order, array $forward, bool $lines_changed ): ?WP_Error {
+		$currency = isset( $forward['currency'] ) && is_scalar( $forward['currency'] ) ? (string) $forward['currency'] : '';
+		if ( '' !== $currency && $currency !== $order->get_currency( 'edit' )
+			&& ( Ledger::instance()->read( $order ) || Gateway_Submission::read_attempts( $order ) || null !== Gateway_Submission::read_stamp( $order ) ) ) {
+			return new WP_Error( 'wcpos_currency_locked', 'The currency cannot change once a payment exists on this order.', array( 'status' => 422 ) );
+		}
 		$status   = (string) ( $forward['status'] ?? '' );
 		$editable = $order->is_editable();
 		$reopens  = ! $editable && in_array( $status, array( 'pos-open', 'pending', 'on-hold' ), true );
