@@ -10,7 +10,7 @@ A custom table changes the architecture of every merchant's server: install and 
 
 **Rule (Paul, 2026-10-19):** a new table is the LAST resort. Before proposing one, show that each of these fails for the data in hand:
 
-1. an existing WCPOS table (for example `wcpos_sync_mutations` already keys refused mutations by uuid and mutation id);
+1. an existing WCPOS table (for example `wcpos_sync_mutations` keys every applied mutation by uuid and mutation id; a refused mutation is released today — `Write_Controller` calls `Mutation_Store::release()` — so holding a retained refusal there is a proposed extension of the store, not an existing fact);
 2. order, product, customer or term meta (through the object API — see `hpos-order-meta.mdc`);
 3. an option, for a handful of rows;
 4. a WooCommerce construct (order notes, refunds, the order itself);

@@ -16,7 +16,7 @@ The plugin went from **three** custom tables on `main` to **eight** on `next` be
 |---|---|---|---|---|
 | `wcpos_sync_journal` | `includes/Sync/Sync_Journal.php` | 2026-08-13 `13f51d2d` | change event (type, id, sequence, revision, deleted) | `Changes_Controller`, `Orders_Controller`, `Order_Query`, `Visibility_Observer`, `Sync_Journal_Purge` |
 | `wcpos_sync_mutations` | `includes/Sync/Mutation_Store.php` | 2026-07-14 `5b9999a6` | applied mutation id → server id, status, fingerprint | `Write_Controller`, `Collection_Writer_Resolver`, `Sync_Journal_Purge` |
-| `wcpos_sync_stored_digest` | `includes/Sync/Integrity_Digest.php` (via `Digest_Index`) | 2026-07-14 `5b9999a6` | product / variation (raw-row digest) | `Integrity_Controller`, `Augmentation_Pipeline`, `Pos_Uuid`, `Init` |
+| `wcpos_sync_stored_digest` | `includes/Sync/Integrity_Digest.php` (via `Digest_Index`) | 2026-07-14 `5b9999a6` | product / variation (raw-row digest) | `Integrity_Controller`, `Augmentation_Pipeline`, `Pos_Uuid`, `Init`, and the direct `Digest_Index::read_digests()` consumers `Digests_Controller`, `Product_Serializer`, `Variations_Controller` |
 | `wcpos_registers` | `includes/Services/Register_Store.php` | 2026-09-11 `2c42eed5` | register (till) | `Registers_Controller`, `Sessions_Controller`, `Receipt_Data_Builder`, `Report_Scope_Resolver`, `Provenance_Health`, closure and session stores |
 | `wcpos_register_sessions` | `includes/Services/Register_Session_Store.php` | 2026-09-12 `b0d2743c` | session (open/close, floats, counts, approvals, LONGTEXT blobs) | `Sessions_Controller`, `Closures_Controller`, `Fiscal_Record_Writers`, `Report_Scope_Resolver`, `Provenance_Health`, cash and closure stores |
 | `wcpos_cash_movements` | `includes/Services/Cash_Movement_Store.php` | 2026-09-12 `b0d2743c` | paid-in / paid-out within a session, with void stamp | `Sessions_Controller`, `Session_Figures`, `Closure_Store` |
@@ -38,13 +38,13 @@ Schemas: run `bash tests/bin/…` is not needed; each class has a `schema_sql()`
 | `wcpos_register_sessions` | Keep if the feature stays | One row per session, queried by register and status; a CPT would be one post plus ~15 meta rows. |
 | `wcpos_cash_movements` | Fold into sessions | Append-only entries per session with a void stamp. The session row already carries LONGTEXT blobs (`counted`, `approved_counted`, `approved_expected`); movements can be one more JSON column, written under the session lock. Cost: read-modify-write and losing the `voids` index. |
 | `wcpos_closures` | Fold into sessions | One-to-one with `session_id` (UNIQUE) and repeats the session's open/close/by/counted/expected fields. A closure is a closed session; number, totals, breakdowns, findings and print bookkeeping can be columns on the session with immutability enforced in code (`Owned_Table` write-once rules already exist). |
-| `wcpos_fiscal_records` | Keep where fiscal records are required | Gapless numbered series across orders, refunds and corrections; checksummed; append-only; must survive order deletion. Order meta cannot give a series across orders. Check whether it is created unconditionally or only when fiscal mode is on. |
+| `wcpos_fiscal_records` | Keep where fiscal records are required | Numbered series across orders, refunds and corrections — monotonic and unique, not gapless today: `Fiscal_Record_Store::record()` advances the sequence option before encoding and inserting the row, so a failed encode or insert consumes a number; a regime that needs a gapless series needs a transactional implementation first — checksummed; append-only; must survive order deletion. Order meta cannot give a series across orders. Check whether it is created unconditionally or only when fiscal mode is on. |
 
 Target shape if the verdicts hold: **five tables** (journal, mutations, registers, sessions, fiscal records), with the digest optional or gone.
 
 ## What the agent must do
 
-1. **Read, do not assume.** For each table read `schema_sql()`, every reader listed above, the wiki pages that specify it (`architecture/client/fiscal-groundwork/*.md`, `architecture/client/register-sessions/records-and-rules.md`, `architecture/plugin-free/receipt-snapshots-and-adapters.md`; pull the wiki clone first), and the ADR if one exists under `docs/adr/`.
+1. **Read, do not assume.** For each table read `schema_sql()`, every reader listed above, the wiki pages that specify it (`architecture/client/fiscal-groundwork/*.md`, `architecture/client/register-sessions/records-and-rules.md`, `architecture/plugin-free/receipt-snapshots-and-adapters.md`; a local agent pulls `/Users/kilbot/Projects/wiki` first, a cloud agent fetches each page with `gh api` as `CLAUDE.md` §Wiki describes), and the ADR if one exists under `docs/adr/`.
 2. **Write the justification paragraph for each table** in the form the rule now demands: what it stores, one row per what, why each alternative fails (existing WCPOS table / order or product meta / option / WooCommerce construct / JSON column on an existing WCPOS row), expected row growth per 1,000 sales, install and uninstall behaviour, HPOS and multisite behaviour. If the paragraph cannot be written honestly, the table does not earn its place.
 3. **For every "fold" or "drop" verdict, cost the migration:** `dbDelta` column additions on the surviving table, a one-shot data move in a versioned upgrade file (`update-<version>.php` runs AT MOST ONCE EVER — see the memory note on versioned upgrades), the readers to rewrite, the tests to move, the uninstall list, and what a dev-build site that already has the old tables experiences. State whether the move can be done before the next release so no merchant ever sees the eight.
 4. **Check the money-holds proposal** against the mutation store: confirm `wcpos_sync_mutations` can hold an orderless hold (status, uuid, mutation id, payload fingerprint) and draft the wiki amendment that replaces the `wcpos_money_holds` table with it.
@@ -61,7 +61,7 @@ Target shape if the verdicts hold: **five tables** (journal, mutations, register
 
 ## Pointers
 
-- Memory rule: `~/.claude/projects/-Users-kilbot-Projects-woocommerce-pos/memory/every-new-table-must-earn-its-place.md`
+- The rule itself: `.ai/rules/db-tables.mdc` (tracked in this repository); versioned-upgrade behaviour lives in `includes/Activator.php` and the `update-<version>.php` files it runs once each
 - Install path: `includes/Activator.php` (~line 345, `dbDelta` per store); write-once base: `includes/Services/Owned_Table.php`
 - Uninstall list: `uninstall-functions.php` lines 21–42
 - Tracking issue: https://github.com/wcpos/woocommerce-pos/issues/2321
