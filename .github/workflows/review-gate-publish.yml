@@ -11,7 +11,7 @@ permissions:
 jobs:
   resolve:
     if: github.event.workflow_run.event != 'workflow_run'
-    uses: wcpos/.github/.github/workflows/review-gate.yml@e215f45d27ff29ae58abc75d3995653011229014 # wcpos/.github main, 2026-10-18 (#17)
+    uses: wcpos/.github/.github/workflows/review-gate.yml@f053c4c9d80662c45bbc8155bf2350928a73531c # wcpos/.github main, 2026-10-19 (#19)
     with:
       resolve_only: true
       publish: false
@@ -21,6 +21,6 @@ jobs:
   publish:
     needs: resolve
     if: needs.resolve.outputs.sha != ''
-    uses: wcpos/.github/.github/workflows/review-gate.yml@e215f45d27ff29ae58abc75d3995653011229014 # wcpos/.github main, 2026-10-18 (#17)
+    uses: wcpos/.github/.github/workflows/review-gate.yml@f053c4c9d80662c45bbc8155bf2350928a73531c # wcpos/.github main, 2026-10-19 (#19)
     with:
       sha: ${{ needs.resolve.outputs.sha }}
