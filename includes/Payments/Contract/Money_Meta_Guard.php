@@ -15,7 +15,7 @@ final class Money_Meta_Guard {
 	private static $instance;
 	private array $locks = array();
 	private static array $authorised = array();
-	private const KEYS = array( '_wcpos_money_owner', '_wcpos_money_epoch', '_wcpos_completed_at', '_wcpos_completed_epoch', '_wcpos_completed_session', '_wcpos_epoch_provenance', '_wcpos_reopened_at', '_wcpos_awaiting_customer', '_wcpos_gateway_attempts', '_wcpos_money_hold', '_wcpos_update_transition' );
+	private const KEYS = array( '_wcpos_money_owner', '_wcpos_money_epoch', '_wcpos_completed_at', '_wcpos_completed_epoch', '_wcpos_completed_session', '_wcpos_epoch_provenance', '_wcpos_reopened_at', '_wcpos_awaiting_customer', '_wcpos_gateway_attempts', '_wcpos_money_hold', '_wcpos_update_transition', '_wcpos_mint_pending' );
 
 	private function __construct() {}
 

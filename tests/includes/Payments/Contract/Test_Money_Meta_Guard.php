@@ -70,6 +70,21 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	public function test_pending_mint_cannot_be_forged_or_removed_by_order_push(): void {
+		$order = $this->order();
+		$forged = array( 'epoch' => 0, 'row' => array( 'amount' => '500' ) );
+		$this->ack_meta( $this->push( $order, array( 'meta_data' => $this->meta( array( '_wcpos_mint_pending' => $forged ) ) ) ) );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_mint_pending' ) );
+		$order = wc_get_order( $order->get_id() );
+		$pending = array( 'epoch' => 0, 'row' => array( 'amount' => '50' ) );
+		$order->update_meta_data( '_wcpos_mint_pending', $pending );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		foreach ( array( $forged, null ) as $value ) {
+			$this->ack_meta( $this->push( wc_get_order( $order->get_id() ), array( 'meta_data' => $this->meta( array( '_wcpos_mint_pending' => $value ) ) ) ) );
+			$this->assertSame( $pending, wc_get_order( $order->get_id() )->get_meta( '_wcpos_mint_pending' ) );
+		}
+	}
+
 	/** A committed PUT remains recoverable when the mutation-table poison write fails. */
 	public function test_blocked_update_with_matching_checkpoint_recovers_money_transitions(): void {
 		$order = $this->order();

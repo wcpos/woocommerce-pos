@@ -14,6 +14,8 @@ use WCPOS\WooCommercePOS\Logger;
 
 /** Mints the server-owned ledger row for legacy webview payments. */
 class Webview_Passthrough {
+	const PENDING_META_KEY = '_wcpos_mint_pending';
+
 	/**
 	 * Order whose order-pay form WooCommerce is currently running a gateway against.
 	 *
@@ -94,9 +96,9 @@ class Webview_Passthrough {
 		}
 
 		try {
-			self::mint( $order );
+			self::mint( $order, array(), true );
 		} catch ( Ledger_Persistence_Exception $error ) {
-			// Leave reconciliation to a later sweep/submission without interrupting WooCommerce.
+			// The pending fact lets the sweeper reconcile without interrupting WooCommerce.
 			Logger::error( sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: %s', $order->get_id(), $error->getMessage() ) );
 		}
 	}
@@ -129,7 +131,7 @@ class Webview_Passthrough {
 		}
 
 		try {
-			self::mint( $order );
+			self::mint( $order, array(), true );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			// Only hook callers swallow this; direct submissions must still receive their 409.
 			Logger::error( sprintf( 'WCPOS webview payment ledger could not be saved on order #%d: %s', $order->get_id(), $error->getMessage() ) );
@@ -141,8 +143,10 @@ class Webview_Passthrough {
 	 *
 	 * @param WC_Order $order     Order object.
 	 * @param array    $overrides Submission-specific row values.
+	 * @param bool     $defer     Persist failed hook mints for reconciliation.
+	 * @throws Ledger_Persistence_Exception When the ledger cannot be saved.
 	 */
-	public static function mint( WC_Order $order, array $overrides = array() ): ?array {
+	public static function mint( WC_Order $order, array $overrides = array(), bool $defer = false ): ?array {
 		if ( ! wcpos_is_pos_order( $order ) ) {
 			return null;
 		}
@@ -202,11 +206,82 @@ class Webview_Passthrough {
 			),
 			$overrides
 		);
-		$adopted = $ledger->adopt(
+		$epoch = Money_Epoch::current( $order );
+		try {
+			return self::adopt( $order, $row );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			if ( $defer ) {
+				// Only flush this fact: a full save would re-enter the contended ledger keeper.
+				$fresh = wc_get_order( $order->get_id() );
+				if ( $fresh instanceof WC_Order ) {
+					Money_Meta_Guard::authorised(
+						$fresh->get_id(),
+						static function () use ( $fresh, $row, $epoch, $error ): void {
+							$fresh->update_meta_data(
+								self::PENDING_META_KEY,
+								array(
+									'row' => $row,
+									'epoch' => $epoch,
+									'reason' => $error->getMessage(),
+									'created_at_gmt' => gmdate( 'c' ),
+								)
+							);
+							$fresh->save_meta_data();
+						}
+					);
+				}
+			}
+			throw $error;
+		}
+	}
+
+	/**
+	 * Retry a deferred hook mint. The sweeper holds the order lock and reads fresh state.
+	 *
+	 * @param WC_Order $order Locked order.
+	 */
+	public static function reconcile( WC_Order $order ): void {
+		$pending = $order->get_meta( self::PENDING_META_KEY );
+		if ( ! is_array( $pending ) ) {
+			return;
+		}
+		// Never relabel a previous sale's payment as money taken in a reopened epoch.
+		if ( Money_Epoch::current( $order ) !== $pending['epoch'] ) {
+			Logger::error( sprintf( 'WCPOS deferred webview payment on order #%d needs reconciliation in epoch %d.', $order->get_id(), $pending['epoch'] ) );
+			return;
+		}
+		try {
+			if ( null === self::adopt( $order, $pending['row'] ) ) {
+				return;
+			}
+			Money_Meta_Guard::authorised(
+				$order->get_id(),
+				static function () use ( $order ): void {
+					$order->read_meta_data( true );
+					$order->delete_meta_data( self::PENDING_META_KEY );
+					$order->save_meta_data();
+				}
+			);
+		} catch ( Ledger_Persistence_Exception $error ) {
+			Logger::error( sprintf( 'WCPOS deferred webview payment on order #%d could not be saved: %s', $order->get_id(), $error->getMessage() ) );
+		}
+	}
+
+	/**
+	 * Adopt a captured snapshot with the same locked identity check on first write and retry.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $row   Captured payment snapshot.
+	 */
+	private static function adopt( WC_Order $order, array $row ): ?array {
+		$adopted = Ledger::instance()->adopt(
 			$order,
 			$row,
 			true,
 			static function ( $stored, int $epoch ) use ( $row ): bool {
+				if ( (int) ( $stored['epoch'] ?? 0 ) === $epoch && ( $stored['id'] ?? null ) === $row['id'] ) {
+					return true;
+				}
 				$refs = array_filter( $row['provider_refs'] );
 				if ( $refs ) {
 					return (int) ( $stored['epoch'] ?? 0 ) === $epoch && ( $stored['method_id'] ?? null ) === $row['method_id'] && (bool) array_intersect_assoc( $refs, $stored['provider_refs'] ?? array() );

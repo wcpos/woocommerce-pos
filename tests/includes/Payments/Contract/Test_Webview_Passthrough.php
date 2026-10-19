@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Payments\Contract\{Money_Epoch, Money_Meta_Guard, Payments_Sweeper};
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Webview payment passthrough tests. */
@@ -55,6 +56,83 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'woocommerce_pos_logging', $log_filter, 10 );
 			do_action( 'woocommerce_before_pay_action', null );
 		}
+	}
+
+	/** @dataProvider deferred_payment_hooks */
+	public function test_contended_payment_hook_is_reconciled_by_sweep( string $hook, bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+		$lock = new Order_Lock();
+		$order = null;
+		try {
+			$order = $this->create_order( true );
+			$order->set_payment_method( 'pos_card' );
+			$order->set_transaction_id( 'deferred_charge' );
+			$order->update_meta_data( '_wcpos_money_epoch', 1 );
+			Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			$this->in_pos_request( static function () use ( $hook, $order ): void {
+				if ( 'woocommerce_payment_complete' === $hook ) {
+					$order->payment_complete();
+				} else {
+					do_action( 'woocommerce_before_pay_action', $order );
+					$order->update_status( 'processing' );
+				}
+			} );
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertTrue( $saved->is_paid() );
+			$this->assertSame( array(), Ledger::instance()->read( $saved ) );
+			$this->assertFalse( Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) );
+			$this->assertNotEmpty( $saved->get_meta( '_wcpos_mint_pending' ) );
+			$this->assertSame( '', $saved->get_meta( Ledger::LIVE_LEG_META_KEY ) );
+			// A busy sweep leaves the durable fact for its next run.
+			( new Payments_Sweeper() )->run();
+			$this->assertNotEmpty( wc_get_order( $order->get_id() )->get_meta( '_wcpos_mint_pending' ) );
+			$lock->release( $order->get_id() );
+			do_action( 'woocommerce_before_pay_action', null );
+			// Reconciliation uses the original payment snapshot, not later core edits.
+			$saved->set_payment_method( 'bacs' );
+			$saved->set_transaction_id( 'unrelated_edit' );
+			$saved->save();
+			$pending = $saved->get_meta( '_wcpos_mint_pending' );
+			( new Payments_Sweeper() )->run();
+			$saved = wc_get_order( $order->get_id() );
+			$rows = Ledger::instance()->read( $saved );
+			$this->assertCount( 1, $rows );
+			$this->assertSame( 1, $rows[0]['epoch'] );
+			$this->assertSame( 'captured', $rows[0]['status'] );
+			$this->assertSame( '92.95', $rows[0]['amount'] );
+			$this->assertSame( 'pos_card', $rows[0]['method_id'] );
+			$this->assertSame( 'deferred_charge', $rows[0]['provider_refs']['transaction_id'] );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_mint_pending' ) );
+			$this->assertTrue( Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) );
+			// Simulate a worker dying after the row committed but before clearing its fact.
+			$saved->update_meta_data( '_wcpos_mint_pending', $pending );
+			Money_Meta_Guard::authorised( $saved->get_id(), static fn() => $saved->save_meta_data() );
+			( new Payments_Sweeper() )->run();
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertSame( $rows, Ledger::instance()->read( $saved ) );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_mint_pending' ) );
+		} finally {
+			if ( $order ) { $lock->release( $order->get_id() ); }
+			do_action( 'woocommerce_before_pay_action', null );
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
+	public function deferred_payment_hooks(): array {
+		return array(
+			array( 'woocommerce_payment_complete', false ), array( 'woocommerce_payment_complete', true ),
+			array( 'woocommerce_order_status_changed', false ), array( 'woocommerce_order_status_changed', true ),
+		);
 	}
 
 	/** Hook entry points that must contain ledger persistence errors. */

@@ -68,11 +68,12 @@ final class Payment_Index {
 	 * the moment every leg settles, so the candidate set is only ever orders with
 	 * something to reconcile — never the abandoned-cart mass.
 	 *
-	 * @param int $limit Batch cap.
+	 * @param int  $limit         Batch cap.
+	 * @param bool $pending_mints Include paid orders whose webview mint was deferred.
 	 *
 	 * @return int[] Order ids.
 	 */
-	public static function order_ids_with_live_legs( int $limit ): array {
+	public static function order_ids_with_live_legs( int $limit, bool $pending_mints = false ): array {
 		global $wpdb;
 		if ( $limit < 1 ) {
 			return array();
@@ -82,9 +83,10 @@ final class Payment_Index {
 				$wpdb->prepare(
 					"SELECT o.id FROM {$wpdb->prefix}wc_orders o"
 					. " WHERE o.type = 'shop_order' AND o.status NOT IN ( 'trash', 'auto-draft' )"
-					. " AND EXISTS ( SELECT 1 FROM {$wpdb->prefix}wc_orders_meta m WHERE m.order_id = o.id AND m.meta_key = %s )"
+					. " AND EXISTS ( SELECT 1 FROM {$wpdb->prefix}wc_orders_meta m WHERE m.order_id = o.id AND m.meta_key IN ( %s, %s ) )"
 					. ' ORDER BY o.date_updated_gmt ASC LIMIT %d',
 					Ledger::LIVE_LEG_META_KEY,
+					$pending_mints ? Webview_Passthrough::PENDING_META_KEY : Ledger::LIVE_LEG_META_KEY,
 					$limit
 				)
 			);
@@ -93,9 +95,10 @@ final class Payment_Index {
 				$wpdb->prepare(
 					"SELECT p.ID FROM {$wpdb->posts} p"
 					. " WHERE p.post_type = 'shop_order' AND p.post_status NOT IN ( 'trash', 'auto-draft' )"
-					. " AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m WHERE m.post_id = p.ID AND m.meta_key = %s )"
+					. " AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m WHERE m.post_id = p.ID AND m.meta_key IN ( %s, %s ) )"
 					. ' ORDER BY p.post_modified_gmt ASC LIMIT %d',
 					Ledger::LIVE_LEG_META_KEY,
+					$pending_mints ? Webview_Passthrough::PENDING_META_KEY : Ledger::LIVE_LEG_META_KEY,
 					$limit
 				)
 			);

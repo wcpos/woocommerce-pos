@@ -43,9 +43,11 @@ final class Payments_Sweeper {
 		$threshold = max( 0, (int) apply_filters( 'wcpos_payments_sweep_threshold', 5 * MINUTE_IN_SECONDS ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
 		// Selected by the live-leg index, not by order status: an authorization that covers
 		// the balance has already completed the order (ledger.md §3.3, authorized counts),
-		// and that leg still has to be voided if it expires uncaptured.
+		// and that leg still has to be voided if it expires uncaptured. Deferred webview
+		// mints are also selected, even though their paid orders have no live-leg index.
 		$order_ids = Payment_Index::order_ids_with_live_legs(
-			max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) ) // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+			max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+			true
 		);
 		foreach ( $order_ids as $order_id ) {
 			// A busy order is left for the next run; the existing lock owns contention policy.
@@ -56,6 +58,7 @@ final class Payments_Sweeper {
 					if ( ! $order instanceof WC_Order ) {
 						return;
 					}
+					Webview_Passthrough::reconcile( $order );
 					$ledger = Ledger::instance();
 					foreach ( $ledger->read( $order ) as $row ) {
 						$updated = strtotime( $row['updated_at_gmt'] ?? $row['created_at_gmt'] ?? '' );
