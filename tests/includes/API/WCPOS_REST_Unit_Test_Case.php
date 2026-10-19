@@ -163,7 +163,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	public function wp_rest_get_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_header( 'X-WCPOS-Protocol', '2' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$request->set_method( 'GET' );
 		$request->set_route( $path );
 
@@ -180,7 +180,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	public function wp_rest_post_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_header( 'X-WCPOS-Protocol', '2' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$request->set_method( 'POST' );
 		$request->set_route( $path );
 
@@ -198,7 +198,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	public function wp_rest_patch_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_header( 'X-WCPOS-Protocol', '2' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$request->set_method( 'POST' );
 		$request->set_route( $path );
 		$request->set_query_params( array( '_method' => 'PATCH' ) );

@@ -6,7 +6,7 @@ The sync engine and shared domain services remain under `includes/Sync`.
 ## Protocol gate (2.0.0)
 
 A POS-client request (one carrying the `X-WCPOS` / `wcpos=1` marker) under
-`/wcpos/v2/` must carry a client protocol signal of 2 or newer
+`/wcpos/v2/` must carry a client protocol signal of 3 or newer
 (`X-WCPOS-Protocol` header, or its `wcpos_protocol` query twin on hosts that
 strip headers). Anything older is refused with HTTP 426 and the stable
 `wcpos_update_required` envelope (`Services\Protocol_Gate`); the client keys on
@@ -20,8 +20,9 @@ service surfaces the wp-admin settings screen drives with cookie auth and no cli
 protocol claim: `/settings/`, `/templates/`, `/extensions/`, `/logs/` and
 `/print-jobs/` (their wire shapes did not change at the boundary; each controller
 declares its own entry in `wcpos_route_classifications()`).
-`server_protocol` stays 2: every 2.0.0 wire change is one the protocol-2
-client already tolerates (free#1752).
+`server_protocol` is 3: the push lane carries no money from 2.0.0 (ADR 0040), so the
+released 1.x app, which pays cash with `set_paid` on protocol 2, gets the update screen
+(D1; the one enforced break of free#1750 applied to the major).
 
 ## Version-skew stance for the sync journal (decided 2026-08-22, free#1560)
 

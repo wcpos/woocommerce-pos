@@ -16,7 +16,7 @@ use WP_REST_Response;
 /**
  * Tests the wcpos/v2 minimum client protocol gate (free#1868, batch free#1752).
  *
- * The shared request helpers model a CURRENT client (marker + protocol 2), so
+ * The shared request helpers model a CURRENT client (marker + protocol 3), so
  * every "no signal" case below strips the protocol header explicitly.
  */
 class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
@@ -29,8 +29,8 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 426, $response->get_status() );
 		$this->assertSame( 'wcpos_update_required', $data['code'] );
 		$this->assertSame( 426, $data['data']['status'] );
-		$this->assertSame( 2, $data['data']['min_protocol'] );
-		$this->assertSame( 2, $data['data']['server_protocol'] );
+		$this->assertSame( 3, $data['data']['min_protocol'] );
+		$this->assertSame( 3, $data['data']['server_protocol'] );
 		$this->assertSame( \WCPOS\WooCommercePOS\VERSION, $data['data']['plugin_version'] );
 		$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] );
 	}
@@ -51,21 +51,21 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( '_wcpos', $data );
 	}
 
-	/** Protocol 2 supplied by the canonical header passes the gate. */
-	public function test_gate_passes_protocol_2_via_header(): void {
-		$response = $this->dispatch_product_request( '2' );
+	/** Protocol 3 supplied by the canonical header passes the gate. */
+	public function test_gate_passes_protocol_3_via_header(): void {
+		$response = $this->dispatch_product_request( '3' );
 		$this->assertSame( 200, $response->get_status() );
 	}
 
-	/** Protocol 2 supplied by the query twin passes the gate (header-stripping hosts). */
-	public function test_gate_passes_protocol_2_via_query_twin(): void {
-		$response = $this->dispatch_product_request( '2', true );
+	/** Protocol 3 supplied by the query twin passes the gate (header-stripping hosts). */
+	public function test_gate_passes_protocol_3_via_query_twin(): void {
+		$response = $this->dispatch_product_request( '3', true );
 		$this->assertSame( 200, $response->get_status() );
 	}
 
 	/** Protocols newer than the server minimum pass the gate. */
-	public function test_gate_passes_protocol_greater_than_2(): void {
-		$response = $this->dispatch_product_request( '3' );
+	public function test_gate_passes_protocol_greater_than_3(): void {
+		$response = $this->dispatch_product_request( '4' );
 		$this->assertSame( 200, $response->get_status() );
 	}
 
@@ -75,11 +75,18 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 426, $response->get_status() );
 	}
 
+	/** Protocol 2 (the released 1.x app, which pays with `set_paid` on the push) is below the 2.0.0 minimum (ADR 0040, D1). */
+	public function test_gate_refuses_protocol_2(): void {
+		$response = $this->dispatch_product_request( '2' );
+		$this->assertSame( 426, $response->get_status() );
+		$this->assertSame( 'wcpos_update_required', $response->get_data()['code'] );
+	}
+
 	/** The header protocol wins when a newer query-twin protocol is also present. */
 	public function test_gate_prefers_stale_header_over_current_query_twin(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
-		$request->set_header( 'X-WCPOS-Protocol', '1' );
-		$request->set_query_params( array( 'wcpos_protocol' => '2' ) );
+		$request->set_header( 'X-WCPOS-Protocol', '2' );
+		$request->set_query_params( array( 'wcpos_protocol' => '3' ) );
 
 		$response = rest_get_server()->dispatch( $request );
 
@@ -89,8 +96,8 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 	/** The header protocol wins when an older query-twin protocol is also present. */
 	public function test_gate_prefers_current_header_over_stale_query_twin(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
-		$request->set_header( 'X-WCPOS-Protocol', '2' );
-		$request->set_query_params( array( 'wcpos_protocol' => '1' ) );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
+		$request->set_query_params( array( 'wcpos_protocol' => '2' ) );
 
 		$response = rest_get_server()->dispatch( $request );
 

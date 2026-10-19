@@ -348,7 +348,7 @@ class Test_Response_Envelope extends WCPOS_REST_Unit_Test_Case {
 		$request = new WP_REST_Request( $method, $route );
 		$request->set_header( 'X-WCPOS', '1' );
 		// A current client: the 2.0.0 protocol gate refuses marked v2 requests without this (free#1868).
-		$request->set_header( 'X-WCPOS-Protocol', '2' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$request->set_param( '_wcpos_envelope', 1 );
 
 		return $request;

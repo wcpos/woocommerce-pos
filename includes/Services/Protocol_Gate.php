@@ -12,8 +12,8 @@ use WP_REST_Response;
 
 /** Refuses clients whose wire protocol predates the sync surface. */
 final class Protocol_Gate {
-	public const MIN_PROTOCOL = 2;
-	public const SERVER_PROTOCOL = 2;
+	public const MIN_PROTOCOL = 3;
+	public const SERVER_PROTOCOL = 3;
 	public const ERROR_CODE = 'wcpos_update_required';
 
 	/**
