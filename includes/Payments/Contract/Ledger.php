@@ -61,7 +61,8 @@ class Ledger {
 	 */
 	public const IN_PROGRESS_STATUSES = array( 'pos-open', 'pos-partial', 'pending', 'failed' );
 	public const KINDS = array( 'cash', 'card', 'stored_value', 'bank_transfer', 'other' );
-	public const SOURCES = array( 'app', 'webview' );
+	/** Who opened a row: the till, a webview mint, or WooCommerce itself (a tender adopted at reopen, D5). */
+	public const SOURCES = array( 'app', 'webview', 'woocommerce' );
 
 	/**
 	 * Shared instance.

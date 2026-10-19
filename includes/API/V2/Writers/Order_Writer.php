@@ -10,8 +10,10 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
@@ -438,6 +440,69 @@ class Order_Writer extends Null_Writer {
 	}
 
 	/**
+	 * D5: a sale a WooCommerce gateway paid outside the ledger (online, or before the ledger existed)
+	 * shows that tender as a captured row once reopened, so its balance counts it and its refunds,
+	 * and a later close completes on it. Written before the status moves, without deriving, so the
+	 * reopen never completes the sale; a second reopen finds the row and adopts nothing.
+	 *
+	 * @param \WC_Order $order The order read under the push's order lock.
+	 */
+	private static function adopt_original_tender( \WC_Order $order ): ?WP_Error {
+		$paid   = $order->get_date_paid( 'edit' );
+		$method = (string) $order->get_payment_method( 'edit' );
+		if ( null === $paid || '' === $method ) {
+			return null;
+		}
+		foreach ( Ledger::instance()->read( $order ) as $row ) {
+			if ( 'captured' === ( $row['status'] ?? '' ) ) {
+				return null;
+			}
+		}
+		$descriptor = Descriptor_Builder::instance()->get( $method );
+		$at         = gmdate( 'c', $paid->getTimestamp() );
+		$refunds    = array();
+		$refunded   = 0;
+		foreach ( $order->get_refunds() as $refund ) {
+			$amount     = Money::normalize( $refund->get_amount() );
+			$refunds[]  = array(
+				'id'           => $refund->get_id(),
+				'amount'       => $amount,
+				'status'       => 'succeeded',
+				'provider_ref' => null,
+			);
+			$refunded  += Money::minor( $amount );
+		}
+		$transaction = (string) $order->get_transaction_id( 'edit' );
+		try {
+			$adopted = Ledger::instance()->adopt(
+				$order,
+				array(
+					'id'              => wp_generate_uuid4(),
+					'source'          => 'woocommerce',
+					'method_id'       => $method,
+					'kind'            => $descriptor['kind'] ?? 'other',
+					'provider'        => $descriptor['capture']['provider'] ?? null,
+					'capture_mode'    => 'webview',
+					'amount'          => $order->get_total(),
+					'currency'        => $order->get_currency(),
+					'status'          => 'captured',
+					'created_at_gmt'  => $at,
+					'captured_at_gmt' => $at,
+					'provider_refs'   => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
+					'cashier_id'      => (int) $order->get_meta( '_pos_user' ),
+					'refunds'         => $refunds,
+					'refunded_amount' => Money::format( $refunded ),
+				),
+				false,
+				static fn( $stored ) => 'woocommerce' === ( $stored['source'] ?? null )
+			);
+		} catch ( \Throwable $error ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', $error->getMessage(), array( 'status' => 409 ) );
+		}
+		return is_wp_error( $adopted ) ? $adopted : null;
+	}
+
+	/**
 	 * Whether any money exists on the order: a ledger row, a gateway attempt or the awaiting-customer
 	 * stamp, or WooCommerce's own paid facts for an order a gateway or an earlier version paid
 	 * (`date_paid`, a paid status, a transaction id, a refund).
@@ -672,6 +737,9 @@ class Order_Writer extends Null_Writer {
 		$forward       = $this->order_payload->for_update( $id, $forward );
 		$lines_changed = $order && $this->order_payload->lines_changed( $order, $forward );
 		$refusal       = $order ? $this->money_gate( $order, $forward, $lines_changed ) : null;
+		if ( null === $refusal && $order && self::reopens( $order, $forward ) ) {
+			$refusal = self::adopt_original_tender( $order );
+		}
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
