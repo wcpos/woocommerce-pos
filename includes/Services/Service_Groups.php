@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Orders;
 use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Products;
 use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Templates;
@@ -184,6 +185,7 @@ final class Service_Groups {
 		Webview_Passthrough::register_hooks();
 		Ledger::register_hooks();
 		Gateway_Submission::register_hooks();
+		Completion_Stamp::register_hooks();
 		Stock_Validator::instance();
 		Order_Write_Intent::register();
 		Role_Meta_Guard::register();

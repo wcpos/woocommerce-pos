@@ -21,6 +21,15 @@ class Webview_Passthrough {
 	 */
 	private static $paying_order_id = 0;
 
+	/**
+	 * Whether WooCommerce's order-pay form is running a gateway against this order right now.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public static function is_paying( int $order_id ): bool {
+		return 0 !== $order_id && self::$paying_order_id === $order_id;
+	}
+
 	/** Register payment completion hooks. */
 	public static function register_hooks(): void {
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 10, 1 );

@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -1379,6 +1380,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$paid = wc_get_order( $order->get_id() );
 		$this->assertTrue( $paid->is_paid() );
 		$this->assertNotNull( $paid->get_date_paid( 'edit' ) );
+		$this->assertCount( 1, Completion_Stamp::read( $paid ) );
 	}
 
 	/** An authorization is money in motion, not money taken: it cannot take a refund allocation. */
@@ -1501,6 +1503,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Another 10.00 covers it and completes the sale again.
 		Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '10.00' ) );
 		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
 	}
 
 	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */

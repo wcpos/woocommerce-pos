@@ -307,16 +307,18 @@ class Gateway_Submission {
 		} else {
 			$history     = self::supersede_sent( $order, $history );
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
-			$order->update_meta_data(
-				self::STAMP_META_KEY,
-				array(
-					'method_id' => $descriptor['id'],
-					'destination' => $destination,
-					'attempt_id' => $attempt_id,
-					'sent_at_gmt' => gmdate( 'c' ),
-					'cashier_id' => get_current_user_id(),
-				)
+			$stamp       = array(
+				'method_id' => $descriptor['id'],
+				'destination' => $destination,
+				'attempt_id' => $attempt_id,
+				'sent_at_gmt' => gmdate( 'c' ),
+				'cashier_id' => get_current_user_id(),
 			);
+			// A callback that completes the order in a later request still names the register that sent it.
+			if ( Completion_Stamp::provenance() ) {
+				$stamp['provenance'] = Completion_Stamp::provenance();
+			}
+			$order->update_meta_data( self::STAMP_META_KEY, $stamp );
 			self::remember_attempt( $order, $history, $attempt_id, 'sent' );
 			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the destination the cashier entered. */
 			$order->add_order_note( sprintf( __( 'Sent via POS: %1$s (%2$s)', 'woocommerce-pos' ), $verb['label'], (string) $destination ) );

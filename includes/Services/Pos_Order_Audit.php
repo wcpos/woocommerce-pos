@@ -14,6 +14,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
@@ -46,8 +47,8 @@ final class Pos_Order_Audit {
 		Ledger::PAYMENT_ID_META_KEY,
 		Ledger::LIVE_LEG_META_KEY,
 		'_wcpos_commands',
-		'_wcpos_completed_at',
-		'_wcpos_completions',
+		Completion_Stamp::COMPLETED_AT_META_KEY,
+		Completion_Stamp::META_KEY,
 		Gateway_Submission::ATTEMPTS_META_KEY,
 		Gateway_Submission::STAMP_META_KEY,
 		'_payment_method',

@@ -1747,6 +1747,8 @@ class Ledger {
 		$stamped = null !== Gateway_Submission::read_stamp( $order );
 		// No counting rows: leave payment_method/title untouched (the cart, or every leg voided).
 		if ( $selected ) {
+			// The completion this may cause still names the register a sent submit came from.
+			Completion_Stamp::memoise( $order );
 			Gateway_Submission::clear_stamp( $order );
 			$titles = array();
 			foreach ( $counting as $row ) {
