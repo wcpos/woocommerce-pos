@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-19T19:58:43+00:00\n"
+"POT-Creation-Date: 2026-10-19T21:54:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -152,25 +152,25 @@ msgid "Online"
 msgstr ""
 
 #. translators: Order list label shown in WooCommerce admin for POS orders.
-#: includes/Admin/Orders/Single_Order.php:86
+#: includes/Admin/Orders/Single_Order.php:69
 msgid "POS Cashier"
 msgstr ""
 
 #. translators: Order list label shown in WooCommerce admin for POS orders.
-#: includes/Admin/Orders/Single_Order.php:87
+#: includes/Admin/Orders/Single_Order.php:70
 msgid "Search for a cashier&hellip;"
 msgstr ""
 
 #. translators: 1: old POS cashier, 2: new POS cashier.
-#: includes/Admin/Orders/Single_Order.php:129
+#: includes/Admin/Orders/Single_Order.php:112
 #: includes/Services/Order_Notes.php:83
 #, php-format
 msgid "POS cashier changed from %1$s to %2$s."
 msgstr ""
 
 #. translators: Fallback cashier name shown when the POS cashier user cannot be found.
-#: includes/Admin/Orders/Single_Order.php:130
-#: includes/Admin/Orders/Single_Order.php:131
+#: includes/Admin/Orders/Single_Order.php:113
+#: includes/Admin/Orders/Single_Order.php:114
 #: includes/Services/Order_Notes.php:35
 msgid "Unknown"
 msgstr ""
@@ -1206,6 +1206,12 @@ msgstr ""
 msgid "The session request could not be completed."
 msgstr ""
 
+#. translators: 1: line name, 2: units.
+#: includes/API/V2/Writers/Order_Writer.php:558
+#, php-format
+msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
+msgstr ""
+
 #. translators: Checkout/payment form error message shown when the order cannot be found.
 #: includes/Form_Handler.php:52
 msgid "Order does not exist."
@@ -1310,27 +1316,27 @@ msgid "WCPOS is being updated on this site. Please try again in a few seconds."
 msgstr ""
 
 #. translators: POS order status label.
-#: includes/Orders.php:107
-#: includes/Orders.php:1204
+#: includes/Orders.php:108
+#: includes/Orders.php:1219
 msgctxt "Order status"
 msgid "POS - Open"
 msgstr ""
 
 #. translators: POS order status label.
-#: includes/Orders.php:108
-#: includes/Orders.php:1222
+#: includes/Orders.php:109
+#: includes/Orders.php:1237
 msgctxt "Order status"
 msgid "POS - Partial Payment"
 msgstr ""
 
 #. translators: %s: payment gateway title.
-#: includes/Orders.php:527
+#: includes/Orders.php:542
 #, php-format
 msgid "Order status set by %s; no payment was taken at the till."
 msgstr ""
 
 #. translators: %s is the number of orders with POS - Open status.
-#: includes/Orders.php:1210
+#: includes/Orders.php:1225
 #, php-format
 msgid "POS - Open <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
@@ -1338,7 +1344,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s is the number of orders with POS - Partial Payment status.
-#: includes/Orders.php:1228
+#: includes/Orders.php:1243
 #, php-format
 msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
@@ -4872,11 +4878,11 @@ msgstr ""
 msgid "The WCPOS sync store is not installed yet (initialising or a schema install failed). Retry shortly."
 msgstr ""
 
-#: includes/Sync/Order_Write_Payload.php:207
+#: includes/Sync/Order_Write_Payload.php:367
 msgid "date_created_gmt cannot be more than 24 hours in the future."
 msgstr ""
 
-#: includes/Sync/Order_Write_Payload.php:213
+#: includes/Sync/Order_Write_Payload.php:373
 msgid "date_created_gmt must be a valid ISO 8601 UTC date."
 msgstr ""
 
