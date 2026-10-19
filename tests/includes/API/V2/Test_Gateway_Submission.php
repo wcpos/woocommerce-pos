@@ -120,6 +120,45 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		if ( ! $epoch ) { $this->assertSame( Ledger::instance()->summary( wc_get_order( $order->get_id() ) ), $response->get_data()['order'] ); }
 		$this->assertSame( 0, Sent_Test_Gateway::$calls );
 	}
+	/** A row recorded under this attempt id in a prior sale is never replayed as this sale's money. */
+	public function test_prior_epoch_recorded_attempt_is_a_conflict(): void {
+		// Arrange: a paid row at epoch 0 with no attempt-history entry, then the sale is reopened.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger::instance()->save(
+			$order,
+			array(
+				array(
+					'id'        => $attempt,
+					'method_id' => 'wcpos_paid_test',
+					'amount'    => '92.95',
+					'status'    => 'captured',
+				),
+			)
+		);
+		$order = wc_get_order( $order->get_id() );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$before  = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/wcpos_paid_test/submit' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params(
+			array(
+				'attempt_id' => $attempt,
+				'values'     => array(),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $response->get_data()['code'] );
+		$this->assertSame( 0, Paid_Test_Gateway::$calls );
+		$this->assertSame( $before, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
 	public function paid_replay_epochs(): array {
 		return array( array( 0, false ), array( 0, true ), array( 1, false ), array( 1, true ) );
 	}

@@ -126,6 +126,30 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'processing', $saved->get_status() );
 	}
 
+	/** A record retry reusing a prior sale's payment id is a conflict, not this sale's money. */
+	public function test_record_retry_of_prior_epoch_payment_is_a_conflict(): void {
+		// Arrange.
+		$ledger  = Ledger::instance();
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95' );
+		$ledger->record( $order, $payment );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$before = wc_get_order( $order->get_id() )->get_meta( Ledger::META_KEY );
+
+		// Act.
+		$result = $ledger->record( wc_get_order( $order->get_id() ), $payment );
+
+		// Assert.
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'wcpos_payment_conflict', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( $before, $saved->get_meta( Ledger::META_KEY ) );
+		$this->assertSame( 'pos-open', $saved->get_status() );
+	}
+
 	public function test_reopened_projection_and_summary_count_only_current_payment(): void {
 		$ledger = Ledger::instance();
 		$order = $this->create_pos_order();

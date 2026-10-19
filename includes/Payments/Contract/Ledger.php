@@ -584,6 +584,10 @@ class Ledger {
 		$rows   = $this->read( $order );
 		$stored = $this->find_in_rows( $rows, strtolower( $input['id'] ) );
 		if ( $stored ) {
+			// A retained prior-sale row is not a replay of this sale's payment.
+			if ( (int) ( $stored['epoch'] ?? 0 ) !== Money_Epoch::current( $order ) ) {
+				return new WP_Error( 'wcpos_payment_conflict', __( 'This payment belongs to a different money epoch.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
 			$replayed = $this->replay( $order, $stored, $input, $amount, $currency );
 			if ( is_wp_error( $replayed ) ) {
 				return $replayed;

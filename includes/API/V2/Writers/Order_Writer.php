@@ -329,8 +329,9 @@ class Order_Writer extends Null_Writer {
 		$reduced = $before_epoch > 0
 			&& ( array_intersect( array_keys( Settlement_Change::TYPES ), $context['settlement_changes'] ) || Money::minor( $saved->get_total() ) < Money::minor( $context['total_before'] ) )
 			&& Money::minor( $saved->get_total() ) <= Money_Epoch::net_paid( Money_Epoch::current_rows( $saved, Ledger::instance()->read( $saved ) ) );
-		$free_create = 'create' === $context['operation'] && 0 === $epoch && 0 === Money::minor( $saved->get_total() );
-		if ( ! Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) && ! $reduced && ! $free_create ) {
+		// A zero-total sale completes at epoch 0 whether created or updated; never after a reopen.
+		$free = 0 === $epoch && 0 === Money::minor( $saved->get_total() );
+		if ( ! Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) && ! $reduced && ! $free ) {
 			Logger::warning( sprintf( 'WCPOS completion stamp refused on order #%d: no completion proof in the current epoch', $saved->get_id() ) );
 			return;
 		}
@@ -525,7 +526,7 @@ class Order_Writer extends Null_Writer {
 	/** Restore create side effects before a poisoned mutation can be finalized. */
 	public function after_recovery( int $id, array $payload, array $money = array() ) {
 		if ( ! $this->lock( $id ) ) {
-			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+			return $this->money_attention( $id, $money['mutation_id'] ?? null, 'the order lock is held by another operation' );
 		}
 		try {
 			$this->stamp_order_audit( $id, $payload, false );

@@ -293,8 +293,7 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'poison', $store->lookup( 'orders', $mutation )['status'] ?? null );
 		$this->assertSame( self::REC, wc_get_order( $id )->get_meta( '_woocommerce_pos_uuid' ) );
 		$this->assertSame( '', wc_get_order( $id )->get_meta( '_wcpos_completed_at' ) );
-		// A held lock refuses recovery before any transition runs; a failing transition is flagged again.
-		$this->assertSame( 'lock' === $fault ? 1 : 2, $this->attention_notes( $id, $mutation ) );
+		$this->assertSame( 2, $this->attention_notes( $id, $mutation ) );
 		// The logger folds a consecutive repeat of the same line, so the notes carry the count.
 		$this->assertNotEmpty( array_filter( $errors, static fn( $message ) => false !== strpos( $message, $mutation ) ) );
 
@@ -309,6 +308,60 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'server', wc_get_order( $id )->get_meta( '_wcpos_money_owner' ) );
 		$this->assertSame( 'done', $store->lookup( 'orders', $mutation )['status'] ?? null );
 		$this->assertSame( $created, did_action( 'woocommerce_new_order' ) );
+	}
+
+	/** A zero-total sale at epoch 0 completes by update, as a free item or full discount does. */
+	public function test_free_sale_completes_by_update_at_epoch_zero(): void {
+		// Arrange.
+		$order = $this->order( array(), '0' );
+
+		// Act.
+		$meta = $this->ack_meta(
+			$this->push(
+				$order,
+				array(
+					'status'    => 'completed',
+					'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ),
+				),
+				array( 'expectedEpoch' => 0 )
+			)
+		);
+
+		// Assert.
+		$this->assertSame( self::AT, $meta['_wcpos_completed_at'] ?? null );
+		$this->assertSame( '0', wc_get_order( $order->get_id() )->get_meta( '_wcpos_completed_epoch' ) );
+	}
+
+	/** A reopened zero-total sale is never completed by zero balance alone. */
+	public function test_free_sale_after_reopen_needs_completion_proof(): void {
+		// Arrange: the free sale completed at epoch 0, then reopened to epoch 1.
+		$order = $this->order( array(), '0' );
+		$this->ack_meta(
+			$this->push(
+				$order,
+				array(
+					'status'    => 'completed',
+					'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ),
+				),
+				array( 'expectedEpoch' => 0 )
+			)
+		);
+		$this->ack_meta( $this->push( wc_get_order( $order->get_id() ), $this->reopen(), array( 'expectedEpoch' => 0 ) ) );
+
+		// Act.
+		$response = $this->push(
+			wc_get_order( $order->get_id() ),
+			array( 'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ) ),
+			array( 'expectedEpoch' => 1 )
+		);
+
+		// Assert.
+		$meta  = $this->ack_meta( $response );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertArrayNotHasKey( '_wcpos_completed_at', $meta );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $saved ) );
+		$this->assertFalse( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::is_completed_in_current_epoch( $saved, \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance() ) );
 	}
 
 	/** Post-commit faults: a held order lock, a throwing transition, or a transition save WooCommerce swallows. */

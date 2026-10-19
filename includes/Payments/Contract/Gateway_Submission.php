@@ -65,6 +65,10 @@ class Gateway_Submission {
 		$history = self::read_attempts( $order );
 		$recorded = $ledger->find( $order, $attempt_id );
 		if ( $recorded && 'paid' !== ( $history[ $attempt_id ]['state'] ?? null ) ) {
+			// A prior sale's row (pre-1.3 rows carry no history) is never this sale's money.
+			if ( (int) ( $recorded['epoch'] ?? 0 ) !== Money_Epoch::current( $order ) ) {
+				return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt belongs to a different money epoch.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
 			return array(
 				'outcome' => 'recorded',
 				'payment' => $recorded,
