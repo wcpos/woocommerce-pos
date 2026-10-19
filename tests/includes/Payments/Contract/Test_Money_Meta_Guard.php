@@ -315,6 +315,183 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		}
 	}
 
+	/** @dataProvider checkpoint_write_failures */
+	public function test_update_checkpoint_write_failure_is_retryable( bool $before_put, bool $interrupt_recovery = false ): void {
+		$order = $this->order();
+		$mutation = wp_generate_uuid4();
+		$original = null;
+		$puts = 0;
+		$observe = static function ( $result, $server, $request ) use ( &$original, &$puts ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			if ( 'PUT' === $request->get_method() && 0 === strpos( $request->get_route(), '/wc/v3/orders/' ) ) { ++$puts; }
+			return $result;
+		};
+		$deny = static function ( $sql ) use ( $before_put ) {
+			if ( preg_match( '/^(INSERT|UPDATE) /', $sql ) && false !== strpos( $sql, '_wcpos_update_transition' ) ) {
+				foreach ( debug_backtrace() as $frame ) {
+					if ( 'save_update_checkpoint' === ( $frame['function'] ?? '' ) ) {
+						$checkpoint = $frame['args'][1];
+						if ( $before_put || ( $checkpoint['committed'] ?? true ) ) { return 'SELECT 1'; }
+					}
+				}
+			}
+			return $sql;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		add_filter( 'query', $deny );
+		try {
+			$response = $this->push( $order, array(
+				'fee_lines' => array( array( 'id' => array_key_first( $order->get_items( 'fee' ) ), 'total' => '40' ) ),
+				'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT, '_wcpos_payments' => $this->cash( '40' ) ) ),
+			), array( 'mutationId' => $mutation, 'tillAggregate' => array( 'total' => '99' ) ) );
+			remove_filter( 'query', $deny );
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
+			$this->assertSame( $before_put ? 0 : 1, $puts );
+			$store = new \WCPOS\WooCommercePOS\Sync\Mutation_Store();
+			if ( ! $before_put ) {
+				$this->assertSame( 'pending', $store->lookup( 'orders', $mutation )['status'] );
+				$this->assertFalse( wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' )['committed'] );
+				$retry_request = clone $original;
+				$forged = clone $original;
+				$body = $forged->get_json_params();
+				$body['payload']['customer_note'] = 'Different payload';
+				$forged->set_body( wp_json_encode( $body ) );
+				$this->assertSame( 422, $this->server->dispatch( $forged )->get_status() );
+				$original = $retry_request;
+			}
+			if ( $interrupt_recovery ) {
+				$crash = static function ( $value ) {
+					foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+						if ( \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) ) { throw new \RuntimeException( 'Interrupted recovery' ); }
+					}
+					return $value;
+				};
+				add_filter( 'woocommerce_order_get_total', $crash );
+				try {
+					$this->server->dispatch( $original );
+					$this->fail( 'Expected interrupted recovery' );
+				} catch ( \RuntimeException $error ) {
+					$this->assertSame( 'Interrupted recovery', $error->getMessage() );
+				} finally {
+					remove_filter( 'woocommerce_order_get_total', $crash );
+				}
+			}
+			$retry = $this->server->dispatch( $original );
+			$this->assertSame( 200, $retry->get_status(), wp_json_encode( $retry->get_data() ) );
+			$this->assertSame( 1, $puts, 'Only one PUT may commit.' );
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertSame( '40.00', $saved->get_total() );
+			$this->assertSame( self::AT, $saved->get_meta( '_wcpos_completed_at' ) );
+			$this->assertSame( 'server', $saved->get_meta( '_wcpos_money_owner' ) );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_update_transition' ) );
+			$this->assertSame( 'done', $store->lookup( 'orders', $mutation )['status'] );
+		} finally {
+			remove_filter( 'query', $deny );
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+	}
+
+	public function checkpoint_write_failures(): array { return array( 'before PUT' => array( true ), 'committed flip' => array( false ), 'interrupted recovery' => array( false, true ) ); }
+
+	public function test_failed_put_checkpoint_is_cleaned_and_retry_forwards_again(): void {
+		$order = $this->order();
+		$original = null;
+		$puts = 0;
+		$checkpoint_before_put = null;
+		$observe = static function ( $result, $server, $request ) use ( &$original, &$puts, &$checkpoint_before_put, $order ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			if ( 'PUT' === $request->get_method() && '/wc/v3/orders/' . $order->get_id() === $request->get_route() && 1 === ++$puts ) {
+				$checkpoint_before_put = wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' );
+				return new \WP_Error( 'injected_put_failure', 'PUT failed', array( 'status' => 503 ) );
+			}
+			return $result;
+		};
+		$deny_delete = static function ( $sql ) {
+			if ( 0 === strpos( $sql, 'DELETE FROM ' ) ) {
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					if ( 'save_update_checkpoint' === ( $frame['function'] ?? '' ) ) { return 'SELECT 1'; }
+				}
+			}
+			return $sql;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		add_filter( 'query', $deny_delete );
+		try {
+			$this->assertGreaterThanOrEqual( 400, $this->push( $order, array( 'customer_note' => 'Retried PUT' ) )->get_status() );
+			remove_filter( 'query', $deny_delete );
+			$this->assertIsArray( $checkpoint_before_put );
+			$this->assertFalse( $checkpoint_before_put['committed'] );
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+			$this->assertSame( 200, $this->server->dispatch( $original )->get_status() );
+			$this->assertSame( 2, $puts, 'Unchanged revision must re-forward, not recover transitions.' );
+			$this->assertSame( 'Retried PUT', wc_get_order( $order->get_id() )->get_customer_note() );
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' ) );
+		} finally {
+			remove_filter( 'query', $deny_delete );
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+	}
+
+	public function test_update_recovery_as_another_cashier_keeps_original_actor(): void {
+		$actor = get_current_user_id();
+		$retrier = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$order = $this->order( array( '_pos_user' => '0', '_wcpos_completed_at' => self::AT, '_wcpos_completed_epoch' => '0' ) );
+		$order->set_status( 'completed' );
+		$order->save();
+		$payload = $this->reopen();
+		$payload['meta_data'][] = array( 'key' => '_pos_user', 'value' => (string) $actor );
+		$original = null;
+		$observe = static function ( $result, $server, $request ) use ( &$original ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			return $result;
+		};
+		$crash = static function ( $value ) {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) ) {
+					throw new \RuntimeException( 'Actor recovery interrupted' );
+				}
+			}
+			return $value;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		add_filter( 'woocommerce_order_get_total', $crash );
+		try {
+			try {
+				$this->push( $order, $payload, array( 'expectedEpoch' => 0, 'tillAggregate' => array( 'total' => '99' ) ) );
+				$this->fail( 'Expected interrupted transition' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Actor recovery interrupted', $error->getMessage() );
+			} finally {
+				remove_filter( 'woocommerce_order_get_total', $crash );
+			}
+			wp_set_current_user( $retrier );
+			add_filter( 'woocommerce_order_get_total', $crash );
+			try {
+				$this->server->dispatch( $original );
+				$this->fail( 'Expected interrupted recovery' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Actor recovery interrupted', $error->getMessage() );
+				$this->assertSame( $retrier, get_current_user_id(), 'Failed recovery must restore its caller.' );
+			} finally {
+				remove_filter( 'woocommerce_order_get_total', $crash );
+			}
+			$this->assertSame( 200, $this->server->dispatch( $original )->get_status() );
+			$this->assertSame( $retrier, get_current_user_id(), 'Recovery must restore its caller.' );
+			$this->assertSame( (string) $actor, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+			$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+			$reopen_notes = array_values( array_filter( $notes, static fn( $note ) => false !== strpos( $note->content, 'Order re-opened via POS' ) ) );
+			$this->assertCount( 1, $reopen_notes );
+			$this->assertStringContainsString( get_userdata( $actor )->display_name, $reopen_notes[0]->content );
+			$this->assertSame( get_userdata( $actor )->display_name, get_comment( $reopen_notes[0]->id )->comment_author );
+			$this->assertSame( get_userdata( $actor )->user_email, get_comment( $reopen_notes[0]->id )->comment_author_email );
+		} finally {
+			wp_set_current_user( $actor );
+			remove_filter( 'woocommerce_order_get_total', $crash );
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+	}
+
 	public function test_pending_mint_cannot_be_forged_or_removed_by_order_push(): void {
 		$order = $this->order();
 		$forged = array( 'epoch' => 0, 'row' => array( 'amount' => '500' ) );

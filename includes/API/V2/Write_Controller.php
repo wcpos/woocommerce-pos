@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Create_Identity;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
+use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -231,7 +232,7 @@ class Write_Controller extends WP_REST_Controller {
 				return $mismatch;
 			}
 		}
-		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'poison', 'blocked' ), true ) && 'update' === ( $hit['operation'] ?? '' ) ) {
+		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'pending', 'poison', 'blocked' ), true ) && 'update' === ( $hit['operation'] ?? '' ) ) {
 			$writer = $this->writer( $meta );
 			if ( $writer instanceof Writers\Order_Writer ) {
 				return $this->recover_order_update( $meta, $m, $hit, $writer );
@@ -277,6 +278,12 @@ class Write_Controller extends WP_REST_Controller {
 		if ( is_wp_error( $resolved ) ) {
 			return $resolved;
 		}
+		if ( 'pending' === $hit['status'] ) {
+			$id = $resolved;
+			if ( $id <= 0 ) {
+				return null;
+			}
+		}
 		if ( $id <= 0 || $resolved !== $id ) {
 			return new WP_Error( 'woo_rxdb_sync_orphaned_mutation', 'Recorded mutation no longer matches its record.', array( 'status' => 410 ) );
 		}
@@ -288,7 +295,28 @@ class Write_Controller extends WP_REST_Controller {
 			$checkpoint = $order ? $order->get_meta( '_wcpos_update_transition' ) : null;
 			if ( ! is_array( $checkpoint ) || ( $checkpoint['mutation_id'] ?? '' ) !== $m['mutationId'] ) {
 				// A blocked write without matching proof remains indeterminate, never reclaimed.
-				return 'blocked' === $hit['status'] ? null : $this->finalize_error();
+				return in_array( $hit['status'], array( 'pending', 'blocked' ), true ) ? null : $this->finalize_error();
+			}
+			if ( 'pending' === $hit['status'] ) {
+				$current = $this->document_for( $meta, $id );
+				if ( $this->is_failure( $current ) ) {
+					return $current;
+				}
+				$bare = $current->get_data();
+				if ( empty( $checkpoint['committed'] ) && $this->update_checkpoint_revision( $bare ) === $checkpoint['pre_revision'] ) {
+					// The PUT never changed the order. Re-enter CAS and forward normally.
+					if ( ! $this->save_update_checkpoint( $id, null ) ) {
+						return $this->update_checkpoint_error();
+					}
+					$this->store->release( $m['mutationId'] );
+					return null;
+				}
+				$checkpoint['committed'] = true;
+				$checkpoint['response'] = array_intersect_key( $bare, array_flip( array( 'status', 'customer_id' ) ) );
+				if ( ! $this->save_update_checkpoint( $id, $checkpoint ) || ! $this->store->mark_poison( $m['mutationId'], $id, 200 ) ) {
+					return $this->update_checkpoint_error();
+				}
+				$hit['response_status'] = 200;
 			}
 			$error = $writer->recover_update( $id, $m['payload'], $meta['money'], $checkpoint );
 			if ( is_wp_error( $error ) ) {
@@ -302,6 +330,24 @@ class Write_Controller extends WP_REST_Controller {
 		} finally {
 			$writer->unlock( $id );
 		}
+	}
+
+	/** Recovery metadata is not evidence that the PUT changed the order. */
+	private function update_checkpoint_revision( array $bare ): string {
+		$bare['meta_data'] = array_values( array_filter( $bare['meta_data'] ?? array(), static fn( $entry ) => '_wcpos_update_transition' !== Meta_Entry::key( $entry ) ) );
+		return Order_Serializer::canonical_revision( $bare );
+	}
+
+	/** Keep the fingerprint reservation until the durable checkpoint is resolved. */
+	private function update_checkpoint_error(): WP_Error {
+		return new WP_Error(
+			'woo_rxdb_sync_record_locked',
+			'Order checkpoint could not be saved; retry shortly.',
+			array(
+				'status' => 409,
+				'retain_mutation' => true,
+			)
+		);
 	}
 
 	/** The caller holds the order lock; persist independently of later transition saves. */
@@ -387,7 +433,7 @@ class Write_Controller extends WP_REST_Controller {
 
 	private function retains_mutation( $result ): bool {
 		return $result instanceof WP_Error
-			&& in_array( $result->get_error_code(), array( 'woo_rxdb_sync_finalize_failed', 'woo_rxdb_sync_create_no_id' ), true );
+			&& ( ! empty( $result->get_error_data()['retain_mutation'] ) || in_array( $result->get_error_code(), array( 'woo_rxdb_sync_finalize_failed', 'woo_rxdb_sync_create_no_id' ), true ) );
 	}
 
 	private function envelope( WP_REST_Request $request ): array {
@@ -634,16 +680,30 @@ class Write_Controller extends WP_REST_Controller {
 			}
 
 			if ( $locked ) {
-				$prepared['context']['checkpoint_update'] = function ( int $id, WP_REST_Response $response, array $context ) use ( $m, $current_bare ) {
-					// The fingerprint-checked retry supplies payload/aggregate; retain only server decisions.
-					unset( $context['money_before'], $context['money'], $context['pushed_payload'] );
-					$checkpoint = array(
-						'mutation_id' => $m['mutationId'],
-						'context' => $context,
-						'current' => array_intersect_key( $current_bare, array_flip( array( 'status', 'customer_id' ) ) ),
-						'response' => array_intersect_key( $response->get_data(), array_flip( array( 'status', 'customer_id' ) ) ),
-					);
-					if ( ! $this->save_update_checkpoint( $id, $checkpoint ) || ! $this->store->mark_poison( $m['mutationId'], $id, $response->get_status() ) ) {
+				$checkpoint = null;
+				$prepared['context']['checkpoint_update'] = function ( int $id, ?WP_REST_Response $response, array $context ) use ( $m, $current_bare, &$checkpoint ) {
+					if ( null === $response ) {
+						// Persist server decisions before the PUT; retry supplies fingerprint-checked inputs.
+						unset( $context['money_before'], $context['money'], $context['pushed_payload'] );
+						$checkpoint = array(
+							'mutation_id' => $m['mutationId'],
+							'context' => $context,
+							'actor' => get_current_user_id(),
+							'pre_revision' => $this->update_checkpoint_revision( $current_bare ),
+							'committed' => false,
+							'current' => array_intersect_key( $current_bare, array_flip( array( 'status', 'customer_id' ) ) ),
+						);
+						if ( ! $this->save_update_checkpoint( $id, $checkpoint ) ) {
+							return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order checkpoint could not be saved; retry shortly.', array( 'status' => 409 ) );
+						}
+						return null;
+					}
+					$checkpoint['committed'] = true;
+					$checkpoint['response'] = array_intersect_key( $response->get_data(), array_flip( array( 'status', 'customer_id' ) ) );
+					if ( ! $this->save_update_checkpoint( $id, $checkpoint ) ) {
+						return $this->update_checkpoint_error();
+					}
+					if ( ! $this->store->mark_poison( $m['mutationId'], $id, $response->get_status() ) ) {
 						$this->store->mark_indeterminate( $m['mutationId'], $id, $response->get_status() );
 						return $this->finalize_error();
 					}
@@ -652,6 +712,9 @@ class Write_Controller extends WP_REST_Controller {
 			}
 
 			$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
+			if ( $locked && $this->is_failure( $response ) && ! $this->retains_mutation( $response ) && ! $this->save_update_checkpoint( $id, null ) ) {
+				return $this->update_checkpoint_error();
+			}
 			if ( is_wp_error( $response ) ) {
 				return $response;
 			}

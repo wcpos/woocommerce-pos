@@ -220,6 +220,12 @@ class Order_Writer extends Null_Writer {
 		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
 		$declared['set_paid'] = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
 		$prepared['context'] = $declared;
+		if ( 'update' === $declared['operation'] && $checkpoint ) {
+			$error = $checkpoint( $declared['id'], null, $declared );
+			if ( is_wp_error( $error ) ) {
+				return $error;
+			}
+		}
 		$response = Order_Write_Intent::open(
 			$declared,
 			function () use ( $prepared, $forward ) {
@@ -465,7 +471,11 @@ class Order_Writer extends Null_Writer {
 		if ( ! $this->lock( $id ) ) {
 			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
 		}
+		$retry_actor = get_current_user_id();
 		try {
+			// WooCommerce also attributes add_order_note() to the current user. Scope all
+			// recovered work to its original actor, restoring the retrier even on failure.
+			wp_set_current_user( (int) ( $checkpoint['actor'] ?? $retry_actor ) );
 			$order = wc_get_order( $id );
 			$context = $checkpoint['context'];
 			$context['pushed_payload'] = $payload;
@@ -481,6 +491,7 @@ class Order_Writer extends Null_Writer {
 			$this->after_update( $id, $payload, $checkpoint['current'], $checkpoint['response'], $context );
 			return null;
 		} finally {
+			wp_set_current_user( $retry_actor );
 			$this->unlock( $id );
 		}
 	}
