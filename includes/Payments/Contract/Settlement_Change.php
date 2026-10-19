@@ -79,6 +79,9 @@ final class Settlement_Change {
 					$changed[ $key ] = true;
 				}
 				$meta = self::meta( $line );
+				if ( array_key_exists( '_woocommerce_pos_uuid', $meta ) && $meta['_woocommerce_pos_uuid'] !== $item->get_meta( '_woocommerce_pos_uuid' ) ) {
+					$changed[ $key ] = true;
+				}
 				// Stored as JSON text on older orders and as a typed array on newer ones, with no key order promised either way.
 				if ( array_key_exists( '_woocommerce_pos_data', $meta ) && self::canonical( Meta_Normalizer::decode_to_array( $meta['_woocommerce_pos_data'] ) ) !== self::canonical( Meta_Normalizer::decode_to_array( $item->get_meta( '_woocommerce_pos_data' ) ) ) ) {
 					$changed[ $key ] = true;

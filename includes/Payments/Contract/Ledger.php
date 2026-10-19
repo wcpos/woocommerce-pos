@@ -1032,7 +1032,7 @@ class Ledger {
 	 * @param WC_Order      $order  Order object.
 	 * @param array         $row    Payment row.
 	 * @param bool          $derive Whether to project payment state.
-	 * @param callable|null $identity Whether a stored row represents this payment.
+	 * @param callable|null $identity Whether a stored row represents this payment; receives the row and locked epoch.
 	 * @throws Ledger_Persistence_Exception When the order lock cannot be acquired.
 	 * @return array|WP_Error
 	 */
@@ -1046,8 +1046,13 @@ class Ledger {
 			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
 		}
 		try {
+			$fresh = null === $identity ? $order : wc_get_order( $order->get_id() );
+			if ( ! $fresh instanceof WC_Order ) {
+				throw new Ledger_Persistence_Exception( 'WCPOS payment order no longer exists.' );
+			}
+			$epoch = Money_Epoch::current( $fresh );
 			foreach ( null === $identity ? array() : ( $this->stored( $order->get_id(), false )['payments'] ?? array() ) as $existing ) {
-				if ( $identity( $existing ) ) {
+				if ( $identity( $existing, $epoch ) ) {
 					return $existing;
 				}
 			}
@@ -1631,9 +1636,13 @@ class Ledger {
 		// A sent gateway order (awaiting the customer off-till) is POS-owned whatever status
 		// the gateway left it in, so it re-enters the projection the moment money lands.
 		$stamped = null !== Gateway_Submission::read_stamp( $order );
+		$current_counting = array_filter( $counting, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) );
 		// No counting rows: leave payment_method/title untouched (the cart, or every leg voided).
 		if ( $selected ) {
-			Gateway_Submission::clear_stamp( $order );
+			// Retained captures do not settle an invoice sent in the reopened epoch.
+			if ( $current_counting ) {
+				Gateway_Submission::clear_stamp( $order );
+			}
 			$titles = array();
 			foreach ( $counting as $row ) {
 				$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
@@ -1655,7 +1664,7 @@ class Ledger {
 		}
 		$paid  = Money::minor( $this->paid( $rows ) );
 		$total = Money::minor( $order->get_total() );
-		if ( $total > 0 && $paid >= $total ) {
+		if ( $total > 0 && $paid >= $total && Money_Epoch::is_completed_in_current_epoch( $order, $this ) ) {
 			if ( ! self::$deriving ) {
 				self::$deriving = true;
 				try {
@@ -1675,10 +1684,11 @@ class Ledger {
 				return 'pending' === ( $row['status'] ?? '' );
 			}
 		);
-		if ( ! $selected && $stamped ) {
+		if ( ! $current_counting && $stamped ) {
 			return;
 		}
-		$order->set_status( $pending ? 'pending' : ( $paid > 0 ? 'pos-partial' : 'pos-open' ) );
+		// Retained coverage without a current-epoch proof leaves the reopened cart open.
+		$order->set_status( $pending ? 'pending' : ( $paid > 0 && $paid < $total ? 'pos-partial' : 'pos-open' ) );
 	}
 
 	/**

@@ -3,6 +3,26 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Settlement_Change;
 
 class Test_Settlement_Change extends \WP_UnitTestCase {
+	/** Numeric pairing must not let the line's sync identity bypass the epoch gate. */
+	public function test_numeric_line_id_detects_uuid_replacement_and_first_assignment(): void {
+		foreach ( array( 'line_items' => 'WC_Order_Item_Product', 'fee_lines' => 'WC_Order_Item_Fee', 'shipping_lines' => 'WC_Order_Item_Shipping', 'coupon_lines' => 'WC_Order_Item_Coupon' ) as $type => $class ) {
+			$order = new \WC_Order();
+			$item = new $class();
+			$item->set_id( 42 );
+			$order->add_item( $item );
+			$uuid = wp_generate_uuid4();
+			$line = array( 'id' => 42, 'meta_data' => array( array( 'key' => '_woocommerce_pos_uuid', 'value' => $uuid ) ) );
+			$this->assertSame( array( $type ), Settlement_Change::changes( array( $type => array( $line ) ), $order ), 'First assignment changes identity.' );
+			$item->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+			$this->assertSame( array(), Settlement_Change::changes( array( $type => array( $line ) ), $order ) );
+			foreach ( array( wp_generate_uuid4(), null, '' ) as $replacement ) {
+				$line['meta_data'][0]['value'] = $replacement;
+				$this->assertSame( array( $type ), Settlement_Change::changes( array( $type => array( $line ) ), $order ) );
+			}
+			$this->assertSame( array(), Settlement_Change::changes( array( $type => array( array( 'id' => 42 ) ) ), $order ), 'Omitted meta is not a claim.' );
+		}
+	}
+
 	/** @dataProvider taxed_item_types */
 	public function test_rest_tax_rows_compare_by_rate_and_money( string $type, string $class ): void {
 		$order = new \WC_Order();

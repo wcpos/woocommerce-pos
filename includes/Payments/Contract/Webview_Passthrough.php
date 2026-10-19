@@ -84,7 +84,7 @@ class Webview_Passthrough {
 		if ( wcpos_is_pos_order( $order ) ) {
 			$live_methods = array();
 			foreach ( Ledger::instance()->read( $order ) as $row ) {
-				if ( in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
+				if ( (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) && in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
 					$live_methods[] = $row['method_id'];
 				}
 			}
@@ -149,7 +149,7 @@ class Webview_Passthrough {
 		$ledger = Ledger::instance();
 		$rows   = $ledger->read( $order );
 		foreach ( $rows as $row ) {
-			if ( in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
+			if ( (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) && in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
 				return null;
 			}
 		}
@@ -206,12 +206,13 @@ class Webview_Passthrough {
 			$order,
 			$row,
 			true,
-			static function ( $stored ) use ( $row ): bool {
+			static function ( $stored, int $epoch ) use ( $row ): bool {
 				$refs = array_filter( $row['provider_refs'] );
 				if ( $refs ) {
 					return ( $stored['method_id'] ?? null ) === $row['method_id'] && (bool) array_intersect_assoc( $refs, $stored['provider_refs'] ?? array() );
 				}
-				return 'webview' === ( $stored['source'] ?? null ) && in_array( $stored['status'] ?? '', Ledger::LIVE_STATUSES, true );
+				// A reference-less payment is represented only by a row in the locked epoch.
+				return (int) ( $stored['epoch'] ?? 0 ) === $epoch && 'webview' === ( $stored['source'] ?? null ) && in_array( $stored['status'] ?? '', Ledger::LIVE_STATUSES, true );
 			}
 		);
 		return is_wp_error( $adopted ) ? null : $adopted;

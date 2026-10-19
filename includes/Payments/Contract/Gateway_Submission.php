@@ -94,7 +94,7 @@ class Gateway_Submission {
 			return new WP_Error( 'wcpos_order_already_paid', __( 'Order is already paid.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		foreach ( $rows as $row ) {
-			if ( in_array( $row['status'], Ledger::LIVE_STATUSES, true ) ) {
+			if ( (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) && in_array( $row['status'], Ledger::LIVE_STATUSES, true ) ) {
 				return new WP_Error( 'wcpos_payment_conflict', __( 'Order already has a live payment.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			}
 		}
@@ -358,7 +358,7 @@ class Gateway_Submission {
 	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason ) {
 		$rows  = Ledger::instance()->read( $order );
 		$stamp = self::read_stamp( $order );
-		if ( ! $stamp || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) {
+		if ( ! $stamp || array_filter( $rows, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) && in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) {
 			return new WP_Error( 'wcpos_invalid_transition', __( 'This invoice cannot be cancelled.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		if ( ( $stamp['method_id'] ?? null ) !== $descriptor['id'] ) {

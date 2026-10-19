@@ -491,6 +491,47 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	public function test_current_invoice_cancellation_ignores_prior_epoch_capture(): void {
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '10' ) );
+		$attempt = wp_generate_uuid4();
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->update_meta_data( Gateway_Submission::STAMP_META_KEY, array( 'attempt_id' => $attempt, 'method_id' => 'wcpos_sent_test' ) );
+		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => array( 'state' => 'sent', 'epoch' => 1 ) ) );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/wcpos_sent_test/cancel' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params( array( 'attempt_id' => $attempt, 'reason' => 'Changed mind' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** Retained money is history, not a live invoice or a cancellation blocker. */
+	public function test_reopened_order_can_send_and_cancel_with_prior_epoch_capture(): void {
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pos-open' );
+		$order->set_date_paid( null );
+		$order->set_total( '100' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$attempt = wp_generate_uuid4();
+		foreach ( array( 'submit', 'cancel' ) as $action ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/wcpos_sent_test/' . $action );
+			$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+			$request->set_body_params( array( 'attempt_id' => $attempt, 'values' => array( 'invoice_email' => 'buyer@example.com' ), 'reason' => 'Changed mind' ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		}
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( array( 'state' => 'cancelled', 'epoch' => 1 ), Gateway_Submission::read_attempts( $saved )[ $attempt ] );
+		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+		$this->assertSame( 'pos-open', $saved->get_status() );
+		$this->assertSame( '7.05', Ledger::instance()->balance( $saved, Ledger::instance()->read( $saved ) ) );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
 	/** A live cash leg prevents a full-order gateway submission. */
 	public function test_submit_live_cash_returns_conflict(): void {
 		// Arrange.

@@ -43,6 +43,45 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	public function test_prior_epoch_projection_preserves_current_invoice(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, $this->payment( 'pos_cash', '10' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$stamp = array( 'attempt_id' => wp_generate_uuid4(), 'method_id' => 'bacs' );
+		$order->update_meta_data( '_wcpos_awaiting_customer', $stamp );
+		$order->set_status( 'pending' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$ledger->derive( $order, $ledger->read( $order ) );
+		$this->assertSame( $stamp, $order->get_meta( '_wcpos_awaiting_customer' ) );
+		$this->assertSame( 'pending', $order->get_status() );
+	}
+
+	/** A late webhook must reconcile history without closing the new money epoch. */
+	public function test_prior_epoch_settlement_keeps_reopened_order_open_and_invoice_stamped(): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$row = $ledger->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pos-open' );
+		$order->set_date_paid( null );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$this->assertTrue( \WCPOS\WooCommercePOS\Payments\Contract\Settlement::instance()->settle( $row['id'], array( 'status' => 'captured', 'receipt' => array( 'late' => true ) ) ) );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-open', $saved->get_status() );
+		$this->assertNull( $saved->get_date_paid( 'edit' ) );
+		$this->assertSame( '0.00', $ledger->balance( $saved, $ledger->read( $saved ) ) );
+		$this->assertSame( array( 'late' => true ), $ledger->read( $saved )[0]['receipt'] );
+
+		$stamp = array( 'attempt_id' => wp_generate_uuid4(), 'method_id' => 'bacs' );
+		$saved->update_meta_data( '_wcpos_awaiting_customer', $stamp );
+		$saved->set_status( 'pending' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $saved->get_id(), static fn() => $saved->save() );
+		$ledger->derive( $saved, $ledger->read( $saved ) );
+		$this->assertSame( $stamp, $saved->get_meta( '_wcpos_awaiting_customer' ) );
+		$this->assertSame( 'pending', $saved->get_status() );
+	}
+
 	/** @dataProvider persistence_storage */
 	public function test_stale_mint_rebases_an_existing_provider_updated_row( bool $hpos ): void {
 		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }

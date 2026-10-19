@@ -97,6 +97,61 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		return array( array( 'ch_duplicate', false ), array( '', false ), array( 'ch_duplicate', true ), array( '', true ) );
 	}
 
+	/** @dataProvider duplicate_payment_references */
+	public function test_reopened_order_pay_mints_current_epoch_completion( string $reference, bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+		try {
+			$order = $this->create_order( true );
+			$uuid = wp_generate_uuid4();
+			$order->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+			$order->set_payment_method( 'pos_card' );
+			$order->save();
+			$order->payment_complete( $reference );
+			$order = wc_get_order( $order->get_id() );
+			$this->assertSame( 0, Ledger::instance()->read( $order )[0]['epoch'] );
+
+			$read = new \WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );
+			$read->set_param( 'dp', '6' );
+			$data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::normalize( $this->server->dispatch( $read )->get_data() );
+			$revision = \WCPOS\WooCommercePOS\Sync\Order_Serializer::canonical_revision( \WCPOS\WooCommercePOS\Sync\Order_Serializer::add_pos_links( $data, $order ) );
+			$request = $this->wp_rest_post_request( '/wcpos/v2/push/orders' );
+			$request->set_header( 'Content-Type', 'application/json' );
+			$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+			$request->set_body( wp_json_encode( array(
+				'mutationId' => wp_generate_uuid4(), 'operation' => 'update', 'collection' => 'orders', 'recordId' => $uuid, 'baseRevision' => $revision, 'expectedEpoch' => 0,
+				'payload' => array( 'status' => 'pos-open', 'meta_data' => array(
+					array( 'key' => '_wcpos_money_epoch', 'value' => 1 ),
+					array( 'key' => '_wcpos_completed_at', 'value' => null ),
+					array( 'key' => '_wcpos_reopened_at', 'value' => '2026-10-19T12:00:00Z' ),
+				) ),
+			) ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			$order = wc_get_order( $order->get_id() );
+			$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $order ) );
+			$this->assertSame( 'pos-open', $order->get_status() );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+
+			$order->payment_complete( $reference ? 'ch_next_epoch' : '' );
+			$saved = wc_get_order( $order->get_id() );
+			$rows = Ledger::instance()->read( $saved );
+			$this->assertCount( 2, $rows );
+			$this->assertSame( array( 0, 1 ), array_column( $rows, 'epoch' ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) );
+		} finally {
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
 	/** Payment completion mints a captured webview row. */
 	public function test_payment_complete_on_pos_order_mints_webview_row(): void {
 		// Arrange.
