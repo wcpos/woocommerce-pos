@@ -1067,6 +1067,81 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** A table recreated after the fold but before the latch write restores the old latch; the next run copies its closure and latches. */
+	public function test_closure_fold_recreated_between_fold_and_latch_restores_latch_then_completes(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$source = $fixture['legacy'] . '_source';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables, generated UUID.
+		$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$source} SELECT * FROM {$fixture['legacy']} WHERE id = '{$fixture['closures'][0]}'" ) );
+		$straggler = null;
+		$recreate = function ( $sql ) use ( $fixture, $source, &$straggler ) {
+			if ( null === $straggler && self::writes_latest_schema_latch( $sql ) ) {
+				$this->create_legacy_table( $fixture['legacy'] );
+				$straggler = $this->add_legacy_closure( $fixture, $fixture['legacy'], 3, $source );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $recreate );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the recreated table to restore the latch.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold found a recreated legacy table.', $error->getMessage() );
+			}
+			remove_filter( 'query', $recreate );
+
+			// Assert.
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$fixture['legacy']}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			( new Activator() )->install_sync_schema();
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertSame( 3, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $straggler )['number'] );
+		} finally {
+			remove_filter( 'query', $recreate );
+			$wpdb->query( "DROP TABLE IF EXISTS {$source}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A failed legacy-table probe after the latch write is not absence: the old latch is restored. */
+	public function test_closure_fold_failed_probe_after_latch_write_restores_latch(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$latched = false;
+		$break = static function ( $sql ) use ( $fixture, &$latched ) {
+			$latched = $latched || self::writes_latest_schema_latch( $sql );
+			return $latched && false !== strpos( $sql, "SHOW TABLES LIKE '" . $GLOBALS['wpdb']->esc_like( $fixture['legacy'] ) . "'" ) ? 'INVALID PROBE' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $break );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the failed probe to restore the latch.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold probe failed.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertTrue( $latched );
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+		} finally {
+			remove_filter( 'query', $break );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
 	/** A recreated legacy table restarts its sequence: a number already folded is refused before any write, logged, and the latch held. */
 	public function test_closure_fold_with_colliding_recreated_number_keeps_latch_table_and_logs_error(): void {
 		// Arrange.
@@ -1647,6 +1722,16 @@ class Test_Activator extends WP_UnitTestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed column; values are prepared.
 		$this->assertSame( 1, $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET print_count = print_count + 1, last_printed_at_gmt = %s WHERE {$column} = %s", $at, $closure_id ) ) );
+	}
+
+	/** Whether a statement writes the current schema version to the sync latch.
+	 *
+	 * @param string $sql Statement.
+	 */
+	private static function writes_latest_schema_latch( string $sql ): bool {
+		return false !== strpos( $sql, $GLOBALS['wpdb']->options )
+			&& false !== strpos( $sql, "'" . \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION . "'" )
+			&& false !== strpos( $sql, "`option_value` = '" . \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION . "'" );
 	}
 
 	/** Drop the legacy table and fixture rows, then put the closure columns back.

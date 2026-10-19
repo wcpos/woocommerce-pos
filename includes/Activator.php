@@ -302,6 +302,26 @@ class Activator {
 		// autoload_request_latches() on upgrade.
 		update_option( Sync_Api::SCHEMA_OPTION, Sync_Api::SCHEMA_VERSION, true );
 
+		// Old code can recreate the legacy table up to the latch write, so probe after it and restore
+		// the old latch: the next run copies it. A recreation after this probe is the accepted
+		// dev-only gap recorded on the PR (old code still serving requests seconds after a deploy).
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '10', '<' ) ) {
+			global $wpdb;
+			try {
+				$recreated = self::legacy_table_exists( $wpdb->prefix . Closure_Store::LEGACY_TABLE );
+			} catch ( \RuntimeException $error ) {
+				$recreated = $error;
+			}
+			if ( false !== $recreated ) {
+				if ( null === $previous_schema ) {
+					delete_option( Sync_Api::SCHEMA_OPTION );
+				} else {
+					update_option( Sync_Api::SCHEMA_OPTION, $previous_schema, true );
+				}
+				throw true === $recreated ? new \RuntimeException( 'Closure fold found a recreated legacy table.' ) : $recreated;
+			}
+		}
+
 		if ( null !== $previous_schema && version_compare( (string) $previous_schema, Sync_Api::SCHEMA_VERSION, '<' ) ) {
 			global $wpdb;
 			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wcpos_sync_change_log" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
@@ -394,11 +414,6 @@ class Activator {
 			throw new \RuntimeException( 'Closure fold rename failed.' );
 		}
 		$this->finish_folded_closures( $folded, $sessions );
-		// A pre-fold request's create_table_if_missing() can bring the table back; hold the
-		// latch so the next run copies it.
-		if ( self::legacy_table_exists( $legacy ) ) {
-			throw new \RuntimeException( 'Closure fold found a recreated legacy table.' );
-		}
 	}
 
 	/** Whether a legacy closures table exists; a failed probe is never taken for absence.
