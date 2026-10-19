@@ -553,6 +553,49 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
 	}
 
+	/** An Error from a save hook while the paid row is adopted answers 409, loudly, never 500. */
+	public function test_paid_mint_save_hook_error_is_loud_conflict(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$deny    = static function ( $saving ) use ( $order ): void {
+			if ( $saving->get_id() !== $order->get_id() ) {
+				return;
+			}
+			foreach ( \WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::raw_meta( $saving ) as $meta ) {
+				if ( Ledger::META_KEY === $meta->key && null !== $meta->value && ( ! $meta->id || $meta->get_changes() ) ) {
+					throw new \Error( 'simulated' );
+				}
+			}
+		};
+		$errors = array();
+		$log    = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === \WCPOS\WooCommercePOS\Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		add_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+
+		// Act.
+		try {
+			$response = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'sent', Gateway_Submission::read_attempts( $saved )[ $attempt ]['state'] ?? null );
+		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'WCPOS: payment gateway-transaction (92.95 ', $notes );
+		$this->assertNotEmpty( array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'gateway-transaction (92.95 ' ) && false !== strpos( $message, 'simulated' ) ) );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+	}
+
 	/** A paid gateway yields exactly one client-minted row, keyed by the attempt. */
 	public function test_submit_paid_gateway_records_once_and_replays(): void {
 		// Arrange.

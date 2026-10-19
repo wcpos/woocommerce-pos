@@ -382,6 +382,55 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $saved ) );
 	}
 
+	/** A completed sale cannot take new lines (and a balance) without the reopen command. */
+	public function test_line_change_on_completed_sale_requires_reopen(): void {
+		// Arrange: a completed sale paid in full.
+		$order = $this->order(
+			array(
+				'_wcpos_payments'        => $this->cash(),
+				'_wcpos_completed_at'    => self::AT,
+				'_wcpos_completed_epoch' => '0',
+			)
+		);
+		$order->set_status( 'completed' );
+		$order->save();
+		// The till sends the whole line list: the existing sale line plus the new one.
+		$extra = array(
+			array(
+				'id'    => array_key_first( $order->get_items( 'fee' ) ),
+				'total' => '50',
+			),
+			array(
+				'name'       => 'Extra',
+				'total'      => '10',
+				'tax_status' => 'none',
+			),
+		);
+
+		// Act: add a fee line with the status omitted.
+		$response = $this->push( $order, array( 'fee_lines' => $extra ), array( 'expectedEpoch' => 0 ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertSame( 'reopen_required', $response->get_data()['data']['reason'] );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( '50.00', $saved->get_total() );
+		$this->assertCount( 1, $saved->get_fees() );
+		$this->assertSame( self::AT, $saved->get_meta( '_wcpos_completed_at' ) );
+
+		// Act: the same line through the reopen command.
+		$reopen              = $this->reopen();
+		$reopen['fee_lines'] = $extra;
+		$this->ack_meta( $this->push( $saved, $reopen, array( 'expectedEpoch' => 0 ) ) );
+
+		// Assert.
+		$reopened = wc_get_order( $order->get_id() );
+		$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $reopened ) );
+		$this->assertCount( 2, $reopened->get_fees() );
+		$this->assertSame( '60.00', $reopened->get_total() );
+	}
+
 	/** A zero-total sale at epoch 0 completes by update, as a free item or full discount does. */
 	public function test_free_sale_completes_by_update_at_epoch_zero(): void {
 		// Arrange.

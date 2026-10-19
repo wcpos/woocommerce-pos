@@ -716,9 +716,11 @@ class Order_Writer extends Null_Writer {
 		$changes = $before ? Settlement_Change::changes( $payload, $before ) : array();
 		$reopen = $before && Money_Epoch::is_reopen( $payload, $before );
 		$request = $money['request'] ?? new \WP_REST_Request();
-		// A completed sale becomes payable only through the epoch-advancing reopen command.
-		if ( $before && ! $reopen && isset( $payload['status'] ) && $payload['status'] !== $before->get_status()
-			&& in_array( $payload['status'], Ledger::IN_PROGRESS_STATUSES, true ) && Money_Epoch::is_completed_in_current_epoch( $before, Ledger::instance() ) ) {
+		// A completed sale becomes payable only through the epoch-advancing reopen command:
+		// neither a status downgrade nor a line change may give it a balance in this epoch.
+		$downgrade   = $before && isset( $payload['status'] ) && $payload['status'] !== $before->get_status() && in_array( $payload['status'], Ledger::IN_PROGRESS_STATUSES, true );
+		$line_change = (bool) array_intersect( array_merge( array_keys( Settlement_Change::TYPES ), array( 'tax_lines' ) ), $changes );
+		if ( $before && ! $reopen && ( $downgrade || $line_change ) && Money_Epoch::is_completed_in_current_epoch( $before, Ledger::instance() ) ) {
 			if ( ! Client_Signal::payments_at_least( Client_Signal::read( $request ), '1.3' ) ) {
 				return Protocol_Gate::refusal(
 					$request,

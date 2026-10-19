@@ -209,7 +209,7 @@ class Webview_Passthrough {
 		);
 		try {
 			return self::adopt( $order, $row );
-		} catch ( \RuntimeException $error ) {
+		} catch ( \Throwable $error ) {
 			// WooCommerce already took this money: say so loudly; a human reconciles it.
 			$reference = '' !== (string) $transaction_id ? $transaction_id : $row['id'];
 			Logger::error( sprintf( 'WCPOS payment %s (%s %s) captured but not recorded in the ledger on order #%d; reconcile manually: %s', $reference, $row['amount'], $row['currency'], $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );

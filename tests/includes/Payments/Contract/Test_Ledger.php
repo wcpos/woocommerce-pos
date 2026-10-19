@@ -1497,10 +1497,56 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( 'none', $fees[0]->get_tax_status() );
 				$this->assertSame( '7.05', $stored['tip'] );
 				$this->assertSame( '100.00', $order->get_total() );
+				// The tip fee and the new total are persisted, not only staged on the caller's object.
+				$saved = new \WC_Order( $order->get_id() );
+				$saved_fees = array_values( $saved->get_fees() );
+				$this->assertCount( 1, $saved_fees );
+				$this->assertSame( 'Tip', $saved_fees[0]->get_name() );
+				$this->assertSame( '7.05', $saved_fees[0]->get_total() );
+				$this->assertSame( '100.00', $saved->get_total() );
 				$this->assertSame( 'wcpos_invalid_transition', $ledger->capture( $order, $input['id'], $confirmed )->get_error_code() );
 				$this->assertCount( 1, $order->get_fees() );
 			}
 		}
+	}
+
+	/** Capturing an authorized leg with an on-reader tip persists the tip fee and the new total. */
+	public function test_authorized_capture_with_tip_persists_fee_and_total(): void {
+		// Arrange: an authorized on-reader leg for the order total.
+		$order   = $this->create_pos_order();
+		$product = ProductHelper::create_simple_product();
+		$product->set_price( '92.95' );
+		$product->set_tax_status( 'none' );
+		$product->save();
+		$order->add_product( $product );
+		$order->calculate_totals( false );
+		Integrity_Handler::$tips = 'on_reader';
+		$input  = $this->payment( 'pos_card', '92.95' );
+		$ledger = Ledger::instance();
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$ledger->capture(
+			$order,
+			$input['id'],
+			array(
+				'status' => 'authorized',
+				'amount' => '92.95',
+			)
+		);
+		$this->assertSame( 'authorized', $ledger->find( wc_get_order( $order->get_id() ), $input['id'] )['status'] );
+
+		// Act: the provider confirms a higher amount.
+		$ledger->capture( wc_get_order( $order->get_id() ), $input['id'], array( 'amount' => '100.00' ) );
+
+		// Assert: read storage, not the caller's object.
+		$saved = new \WC_Order( $order->get_id() );
+		$fees  = array_values( $saved->get_fees() );
+		$this->assertCount( 1, $fees );
+		$this->assertSame( 'Tip', $fees[0]->get_name() );
+		$this->assertSame( '7.05', $fees[0]->get_total() );
+		$this->assertSame( '100.00', $saved->get_total() );
+		$row = $ledger->find( $saved, $input['id'] );
+		$this->assertSame( '100.00', $row['amount'] );
+		$this->assertSame( '7.05', $row['tip'] );
 	}
 
 	public function capture_confirmations(): array {
