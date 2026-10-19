@@ -112,7 +112,11 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '100000000000000.0001', ( new Register_Store() )->get( $created->get_data()['id'] )['default_float'] );
 
 		// Arrange / Act: the same value through PATCH, and rounding stays half-up at the fourth decimal.
-		foreach ( array( '100000000000000.0001' => '100000000000000.0001', '1.23456' => '1.2346', '0000000000000001' => '1.0000' ) as $sent => $stored ) {
+		foreach ( array(
+			'100000000000000.0001' => '100000000000000.0001',
+			'1.23456' => '1.2346',
+			'0000000000000001' => '1.0000',
+		) as $sent => $stored ) {
 			$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $created->get_data()['id'] );
 			$request->set_method( 'PATCH' );
 			$request->set_body_params( array( 'default_float' => (string) $sent ) );
@@ -173,6 +177,103 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotContains( $id, array_column( $this->server->dispatch( $list )->get_data(), 'id' ) );
 		$list->set_query_params( array( 'status' => 'all' ) );
 		$this->assertContains( $id, array_column( $this->server->dispatch( $list )->get_data(), 'id' ) );
+	}
+
+	/** A competing register lock prevents PATCH from changing the row. */
+	public function test_patch_register_locked_returns_500_without_updating(): void {
+		// Arrange.
+		$store = new Register_Store();
+		$row = $store->create( array( 'name' => 'Front' ) );
+		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $row['id'] );
+		$request->set_method( 'PATCH' );
+		$request->set_body_params( array( 'name' => 'Back' ) );
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$name = 'wcpos_register_' . $row['id'];
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK( %s, 0 )', $name ) ) );
+			// Act.
+			$response = $this->server->dispatch( $request );
+			// Assert.
+			$this->assertSame( 500, $response->get_status() );
+			$this->assertSame( 'wcpos_register_write_failed', $response->get_data()['code'] );
+			$this->assertSame( $row, $store->get( $row['id'] ) );
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK( %s )', $name ) );
+			$contender->close();
+		}
+	}
+
+	/** A register deleted while PATCH waits answers exactly as unknown. */
+	public function test_patch_register_deleted_at_lock_returns_not_found_without_update(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Register_Store();
+		$row = $store->create( array( 'name' => 'Front' ) );
+		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $row['id'] );
+		$request->set_method( 'PATCH' );
+		$request->set_body_params( array( 'name' => 'Back' ) );
+		$updates = array();
+		$race = static function ( $sql ) use ( $wpdb, $store, $row, &$updates ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $row['id'] ) ) {
+				$wpdb->delete( $store->table_name(), array( 'id' => $row['id'] ) );
+			}
+			if ( false !== strpos( $sql, 'UPDATE `' . $store->table_name() . '`' ) ) {
+				$updates[] = $sql;
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_register_not_found', $response->get_data()['code'] );
+		$this->assertNull( $store->get( $row['id'] ) );
+		$this->assertSame( array(), $updates );
+	}
+
+	/** PATCH locks before the Pro guard and the register write. */
+	public function test_patch_update_filter_and_write_run_after_register_lock(): void {
+		// Arrange.
+		$store = new Register_Store();
+		$row = $store->create( array( 'name' => 'Front' ) );
+		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $row['id'] );
+		$request->set_method( 'PATCH' );
+		$request->set_body_params( array( 'name' => 'Back' ) );
+		$queries = array();
+		$lock_sql = "GET_LOCK( 'wcpos_register_" . $row['id'];
+		$filter_saw_lock = false;
+		$trace = static function ( $sql ) use ( &$queries ) {
+			$queries[] = $sql;
+			return $sql;
+		};
+		$filter = static function ( $fields ) use ( &$queries, $lock_sql, &$filter_saw_lock ) {
+			$filter_saw_lock = false !== strpos( implode( "\n", $queries ), $lock_sql );
+			return $fields;
+		};
+		add_filter( 'query', $trace );
+		add_filter( 'woocommerce_pos_register_update_fields', $filter );
+		try {
+			// Act.
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_filter( 'woocommerce_pos_register_update_fields', $filter );
+			remove_filter( 'query', $trace );
+		}
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Back', $response->get_data()['name'] );
+		$sql = implode( "\n", $queries );
+		$lock = strpos( $sql, $lock_sql );
+		$update = strpos( $sql, 'UPDATE `' . $store->table_name() . '`' );
+		$this->assertNotFalse( $lock );
+		$this->assertNotFalse( $update );
+		$this->assertGreaterThan( $lock, $update );
+		$this->assertTrue( $filter_saw_lock );
 	}
 
 	/** Unknown register returns 404. */

@@ -14,6 +14,145 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 	use Session_Expected_Tests;
 
+	/** Opening must fail without inserting when another connection owns the register. */
+	public function test_create_register_locked_throws_without_inserting(): void {
+		// Arrange.
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => null,
+			'counted_float' => '100',
+		);
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$name = 'wcpos_register_' . $fields['register_id'];
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK( %s, 0 )', $name ) ) );
+			// Act.
+			try {
+				$store->create( $fields );
+				$this->fail( 'Expected the register lock failure to be surfaced.' );
+			} catch ( \RuntimeException $error ) {
+				// Assert.
+				$this->assertSame( 'Session register lock failed.', $error->getMessage() );
+				$this->assertNull( $store->get( $fields['id'] ) );
+			}
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK( %s )', $name ) );
+			$contender->close();
+		}
+	}
+
+	/** A same-id opening committed while waiting for the lock is a replay. */
+	public function test_create_same_id_appears_at_lock_returns_open_session(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => null,
+			'counted_float' => '100',
+		);
+		$inserted = null;
+		$race = static function ( $sql ) use ( $wpdb, $store, $fields, &$inserted ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $fields['register_id'] ) ) {
+				$inserted = $wpdb->insert(
+					$store->table_name(),
+					$fields + array(
+						'status' => 'open',
+						'created_at_gmt' => '2026-09-11 10:00:00',
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$row = $store->create( $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		// Assert.
+		$this->assertSame( 1, $inserted );
+		$this->assertNotWPError( $row );
+		$this->assertSame( $fields['id'], $row['id'] );
+		$this->assertSame( 'open', $row['status'] );
+		$this->assertSame( $store->get( $fields['id'] ), $row );
+	}
+
+	/** A same-id session opened and closed while waiting remains a replay. */
+	public function test_create_same_id_closed_at_lock_returns_closed_session(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => null,
+			'counted_float' => '100',
+		);
+		$inserted = null;
+		$race = static function ( $sql ) use ( $wpdb, $store, $fields, &$inserted ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $fields['register_id'] ) ) {
+				$inserted = $wpdb->insert(
+					$store->table_name(),
+					$fields + array(
+						'status' => 'closed',
+						'created_at_gmt' => '2026-09-11 10:00:00',
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$row = $store->create( $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		// Assert.
+		$this->assertSame( 1, $inserted );
+		$this->assertNotWPError( $row );
+		$this->assertSame( $fields['id'], $row['id'] );
+		$this->assertSame( 'closed', $row['status'] );
+		$this->assertCount( 1, $store->list( array( 'register_id' => $fields['register_id'] ) ) );
+		$this->assertSame( $store->get( $fields['id'] ), $row );
+	}
+
+	/** An under-lock refusal must not persist an opening. */
+	public function test_create_under_lock_refusal_returns_error_without_inserting(): void {
+		// Arrange.
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => null,
+			'counted_float' => '100',
+		);
+		$error = new \WP_Error( 'rest_invalid_param', 'Unknown register.' );
+		// Act.
+		$result = $store->create(
+			$fields,
+			static function () use ( $error ) {
+				return $error;
+			}
+		);
+		// Assert.
+		$this->assertSame( $error, $result );
+		$this->assertNull( $store->get( $fields['id'] ) );
+	}
+
 	/** Opening variance, identity replay, non-closed uniqueness and transitions. */
 	public function test_create_uniqueness_and_transitions(): void {
 		$store = new Register_Session_Store();

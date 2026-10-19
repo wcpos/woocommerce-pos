@@ -95,11 +95,11 @@ final class Register_Session_Store {
 	/** Insert validated opening fields; replay preserves the original.
 	 *
 	 * @return array|\WP_Error
-	 * @param array $fields Opening fields.
+	 * @param array         $fields Opening fields.
+	 * @param callable|null $under_lock Optional opening validation under the register lock.
 	 * @throws \RuntimeException On database failure.
 	 */
-	public function create( array $fields ) {
-		global $wpdb;
+	public function create( array $fields, ?callable $under_lock = null ) {
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
 			// An idempotent replay, not a fault: the outbox retries a write whose response
@@ -107,6 +107,37 @@ final class Register_Session_Store {
 			// would appear in the merchant's log for every recovered network timeout.
 			$this->log_replay( $existing );
 			return $existing;
+		}
+		return ( new Register_Store() )->with_lock(
+			$fields['register_id'],
+			function () use ( $fields, $under_lock ) {
+				return $this->insert_open_session( $fields, $under_lock );
+			},
+			'Session register lock failed.',
+			array( 'session_id' => $fields['id'] )
+		);
+	}
+
+	/** Check uniqueness and insert while create() holds the register lock.
+	 *
+	 * @param array         $fields Opening fields.
+	 * @param callable|null $under_lock Optional opening validation under the register lock.
+	 * @return array|\WP_Error
+	 * @throws \RuntimeException On database failure.
+	 */
+	private function insert_open_session( array $fields, ?callable $under_lock = null ) {
+		global $wpdb;
+		$existing = $this->get( $fields['id'] );
+		if ( $existing ) {
+			$this->log_replay( $existing );
+			return $existing;
+		}
+		if ( $under_lock ) {
+			$validated = $under_lock( $fields );
+			if ( is_wp_error( $validated ) ) {
+				return $validated;
+			}
+			$fields = is_array( $validated ) ? $validated : $fields;
 		}
 		$open = $this->list(
 			array(
@@ -207,11 +238,7 @@ final class Register_Session_Store {
 	 * @throws \RuntimeException On database failure.
 	 */
 	public function approve( array $session, int $user_id, ?array $counted = null ) {
-		$registers = new Register_Store();
-		if ( ! $registers->lock( $session['register_id'] ) ) {
-			throw new \RuntimeException( 'Session register lock failed.' );
-		}
-		try {
+		$approve = function () use ( $session, $user_id, $counted ) {
 			global $wpdb;
 			$refused = $this->refuse_own_approval( $session, $user_id );
 			if ( $refused ) {
@@ -258,9 +285,8 @@ final class Register_Session_Store {
 				)
 			);
 			return $this->get( $session['id'] );
-		} finally {
-			$registers->unlock( $session['register_id'] );
-		}
+		};
+		return ( new Register_Store() )->with_lock( $session['register_id'], $approve, 'Session register lock failed.' );
 	}
 
 	/** Apply a validated transition, conditional on the observed state.
@@ -276,11 +302,7 @@ final class Register_Session_Store {
 	 */
 	public function transition( array $session, array $fields, bool $printed = false, ?array &$approval_missing = null, bool $locked_by_caller = false ) {
 		$approval_missing = null;
-		$registers = new Register_Store();
-		if ( ! $locked_by_caller && ! $registers->lock( $session['register_id'] ) ) {
-			throw new \RuntimeException( 'Session register lock failed.' );
-		}
-		try {
+		$transition = function () use ( $session, $fields, $printed, &$approval_missing ) {
 			global $wpdb;
 			if ( isset( $fields['approved_by'] ) ) {
 				$refused = $this->refuse_own_approval( $session, (int) $fields['approved_by'] );
@@ -433,10 +455,7 @@ final class Register_Session_Store {
 				);
 			}
 			return $row;
-		} finally {
-			if ( ! $locked_by_caller ) {
-				$registers->unlock( $session['register_id'] );
-			}
-		}
+		};
+		return $locked_by_caller ? $transition() : ( new Register_Store() )->with_lock( $session['register_id'], $transition, 'Session register lock failed.' );
 	}
 }

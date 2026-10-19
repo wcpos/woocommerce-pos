@@ -98,7 +98,20 @@ class Sessions_Controller extends \WP_REST_Controller {
 				return new WP_REST_Response( $this->visible_row( $row ) );
 			}
 			$fields = $movement ? $this->movement_fields( $request ) : $this->opening_fields( $request );
-			$result = is_wp_error( $fields ) ? $fields : $store->create( $fields );
+			if ( is_wp_error( $fields ) ) {
+				return $fields;
+			}
+			$result = $movement ? $store->create( $fields ) : $store->create(
+				$fields,
+				function ( $fields ) use ( $request ) {
+					$register = ( new Register_Store() )->get( $fields['register_id'] );
+					if ( ! $register || ! Store_Reach::for_request( $request )->admits( $register['store_id'] ) ) {
+						return $this->error( 'rest_invalid_param', 400, 'register_id' );
+					}
+					$fields['store_id'] = $register['store_id'];
+					return $fields;
+				}
+			);
 			return is_wp_error( $result ) ? $result : new WP_REST_Response( $this->visible_row( $result ), 201 );
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'wcpos_session_write_failed', 500 );
