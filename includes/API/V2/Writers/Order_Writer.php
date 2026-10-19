@@ -27,14 +27,6 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 /** Owns order audit, tax, reassignment, hook, note, email, and stock behavior. */
 class Order_Writer extends Null_Writer {
-	/**
-	 * Audit meta recording HOW an order came to be paid (ADR 0035 path 3):
-	 * `offline` means the till ASSERTED payment via `set_paid` — no gateway ran.
-	 * Server-owned (spoof-stripped via Pos_Order_Audit::SERVER_META_KEYS).
-	 */
-	public const PAYMENT_ASSERTED_META    = '_pos_payment_asserted';
-	public const PAYMENT_ASSERTED_OFFLINE = 'offline';
-
 	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
 
@@ -66,7 +58,7 @@ class Order_Writer extends Null_Writer {
 		if ( is_wp_error( $error ) ) {
 			return $error;
 		}
-		$forward                = $payload;
+		$forward                = self::without_money( $payload );
 		$forward['created_via'] = 'woocommerce-pos';
 		unset( $forward['tax_ids'] );
 		if ( isset( $forward['meta_data'] ) && is_array( $forward['meta_data'] ) ) {
@@ -79,11 +71,6 @@ class Order_Writer extends Null_Writer {
 		}
 		$till_meta['_pos_user']         = (string) get_current_user_id();
 		$till_meta['_pos_user_created'] = $till_meta['_pos_user'];
-		if ( self::asserts_payment( $payload ) ) {
-			// A CREATE carrying set_paid IS the payment event — the push itself
-			// marks the fresh order paid with no gateway involved.
-			$till_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
-		}
 		return array(
 			'method' => 'POST',
 			'route' => $meta['route'],
@@ -119,22 +106,8 @@ class Order_Writer extends Null_Writer {
 		);
 	}
 
-	/** Whether the push payload asserts payment via wc/v3's write-only set_paid flag. */
-	private static function asserts_payment( array $payload ): bool {
-		return isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
-	}
-
 	/** Repair an existing born-twice order without inventing a version stamp. */
 	public function validate_existing_create( int $id, array $payload, array $prepared ) {
-		// The repair runs against an EXISTING order: if a gateway paid it between
-		// the two create arrivals, the replayed set_paid no longer describes this
-		// order's payment — same needs_payment() guard as the update path. The
-		// recovery phases keep stamping unconditionally: there the order was paid
-		// by this very push.
-		$order = wc_get_order( $id );
-		if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
-			unset( $payload['set_paid'] );
-		}
 		$this->stamp_order_audit( $id, $payload, false );
 		return null;
 	}
@@ -147,7 +120,6 @@ class Order_Writer extends Null_Writer {
 		}
 		$payload = $prepared['payload'];
 		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
-		$declared['set_paid'] = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
 		// A cart restart and the payment routes contend for the same order: hold the
 		// payment lock from wc/v3's fresh load through its save, so no payment row can
 		// land between the pre-insert re-check and the write. Held by someone else
@@ -163,25 +135,6 @@ class Order_Writer extends Null_Writer {
 		$prepared['context'] = $declared;
 		if ( isset( $declared['id'] ) ) {
 			Ledger::save_was_refused( (int) $declared['id'] ); // A stale refusal from earlier in this request must not leak.
-		}
-		// An update carrying the payment ledger takes the payment lock before wc/v3 writes
-		// anything: the keeper would refuse the order save, but WooCommerce saves line items
-		// on their own first. A held lock answers a retryable 409 with nothing written.
-		$order_id      = 'update' === $declared['operation'] ? (int) ( $declared['id'] ?? 0 ) : 0;
-		$ledger_locked = false;
-		if ( $order_id > 0 ) {
-			foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
-				if ( Ledger::META_KEY === Meta_Entry::key( $entry ) ) {
-					if ( ! Order_Lock::instance()->acquire( $order_id ) ) {
-						if ( $locked ) {
-							Order_Lock::instance()->release( (int) $declared['id'] );
-						}
-						return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
-					}
-					$ledger_locked = true;
-					break;
-				}
-			}
 		}
 		try {
 			$response = Order_Write_Intent::open(
@@ -201,9 +154,6 @@ class Order_Writer extends Null_Writer {
 			}
 			return $response;
 		} finally {
-			if ( $ledger_locked ) {
-				Order_Lock::instance()->release( $order_id );
-			}
 			if ( $locked ) {
 				Order_Lock::instance()->release( (int) $declared['id'] );
 			}
@@ -259,27 +209,23 @@ class Order_Writer extends Null_Writer {
 	private function forward_with_reserved_stock( array $prepared, callable $forward ) {
 		$context = $prepared['context'];
 		$payload = $prepared['payload'];
-		$paid    = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
 		$status  = isset( $payload['status'] ) ? (string) $payload['status'] : '';
 		$validator = Stock_Validator::instance();
 
+		// The push carries no money (ADR 0040), so `set_paid` is always false here: the one
+		// pushable status that is not stock-exempt (`on-hold`) is created pending, held, then applied.
 		if ( 'create' !== $context['operation']
 			|| ! SettingsService::instance()->prevent_overselling_enabled()
-			|| ! $validator->should_validate_create_payload( $status, $paid ) ) {
+			|| ! $validator->should_validate_create_payload( $status, false ) ) {
 			return $this->forward_with_order_lifecycle( $prepared, $forward );
 		}
 
 		$response = null;
 		$order    = $validator->around_paid_create(
-			array(
-				'status'         => $status,
-				'set_paid'       => $paid,
-				'transaction_id' => isset( $payload['transaction_id'] ) ? (string) $payload['transaction_id'] : '',
-			),
+			array( 'status' => $status ),
 			function ( array $neutralised ) use ( $prepared, $forward, &$response ) {
-				$prepared['payload']['status']   = $neutralised['status'];
-				$prepared['payload']['set_paid'] = $neutralised['set_paid'];
-				$response                        = $this->forward_with_order_lifecycle( $prepared, $forward );
+				$prepared['payload']['status'] = $neutralised['status'];
+				$response                      = $this->forward_with_order_lifecycle( $prepared, $forward );
 				$data                            = $response instanceof \WP_REST_Response ? $response->get_data() : null;
 				$id                              = is_array( $data ) && isset( $data['id'] ) ? (int) $data['id'] : 0;
 
@@ -482,7 +428,7 @@ class Order_Writer extends Null_Writer {
 		$authorized = isset( $reassignment['_pos_store'] ) && is_scalar( $reassignment['_pos_store'] ) && '' !== (string) $reassignment['_pos_store']
 			? (bool) apply_filters( 'woocommerce_pos_order_store_reassignment_allowed', true, (string) $reassignment['_pos_store'], $id )
 			: false;
-		$forward = $payload;
+		$forward = self::without_money( $payload );
 		unset( $forward['created_via'], $forward['tax_ids'] );
 		if ( isset( $forward['meta_data'] ) && is_array( $forward['meta_data'] ) ) {
 			$forward['meta_data'] = $this->without_pos_audit_meta( $forward, $id );
@@ -499,18 +445,6 @@ class Order_Writer extends Null_Writer {
 			// Cart restart (wcpos/monorepo#2183): a first decision on the pre-read;
 			// the binding one is re-taken at pre-insert, see cart_restart_gmt().
 			$restart_gmt = self::cart_restart_gmt( $order, $created_gmt );
-			/*
-			 * `set_paid` is write-only in wc/v3, so a client re-sends it on every
-			 * later edit of an order it created offline. WooCommerce only takes
-			 * payment on update when the order still needs it (`$creating ||
-			 * needs_payment()` in its orders controller) — mirror that, pre-forward,
-			 * or an update to an order ALREADY paid by a real gateway (hosted pay
-			 * page) would stamp 'offline' over a gateway-taken payment: the exact
-			 * distinction this marker exists to draw. Fill-only, never overwrite.
-			 */
-			if ( self::asserts_payment( $payload ) && $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
-				$fill_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
-			}
 			$pre_store = (string) $order->get_meta( '_pos_store' );
 			foreach ( array( '_pos_user', '_pos_user_created' ) as $key ) {
 				if ( '' === (string) $order->get_meta( $key ) ) {
@@ -611,13 +545,6 @@ class Order_Writer extends Null_Writer {
 	/** Persist server-owned order audit metadata. */
 	private function stamp_order_audit( int $id, array $payload, bool $stamp_version ): void {
 		$meta = array( '_pos_user' => (string) get_current_user_id() );
-		// Create-shaped phases only (create_after_identity, create_recovery, the
-		// born-twice repair): the create push itself asserted the payment, so no
-		// needs_payment() gate — by the time this runs post-forward the order is
-		// already paid BY THIS PUSH. The update path carries its own guard.
-		if ( self::asserts_payment( $payload ) ) {
-			$meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
-		}
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;
 			$meta['_pos_user_created']         = $meta['_pos_user'];
@@ -642,6 +569,14 @@ class Order_Writer extends Null_Writer {
 		if ( $meta ) {
 			$this->store->persist_order_audit_meta( $id, $meta );
 		}
+	}
+
+	/** Drop every top-level money field: the push lane carries no money (ADR 0040 rule 2). */
+	private static function without_money( array $payload ): array {
+		foreach ( Pos_Order_Audit::SERVER_MONEY_FIELDS as $field ) {
+			unset( $payload[ $field ] );
+		}
+		return $payload;
 	}
 
 	/** Strip server-owned audit metadata from a forward. */

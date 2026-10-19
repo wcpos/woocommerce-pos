@@ -28,6 +28,7 @@ controller's `prepare_object_for_response()`, so `register_rest_field()` runs on
    mechanism, cashier-JWT gated with `_pos_user` attribution. Orders paid this way carry
    an explicit assertion marker distinguishing till-asserted payment from gateway-taken.
    The marker is a v2 contract: the legacy `wcpos/v1` lane strips a client-supplied marker and never generates one (ruled 2026-10-14, #2250).
+   *Path 3 is removed under ADR 0040 (2.0.0): the push lane carries no money; cash is recorded through `POST orders/{id}/payments`.*
 
 **Accepted parity notes (not defects):** some hooks fire 2–3× per request — WooCommerce
 core's own checkout is equally noisy, and suppressing hooks core fires would be

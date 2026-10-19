@@ -229,67 +229,6 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
 	}
 
-	/** An order save the payment-ledger keeper refuses is a retryable conflict, never an acknowledged write. */
-	public function test_order_push_refused_by_a_locked_ledger_is_a_retryable_conflict(): void {
-		// Arrange: a POS order with a stored ledger, and another owner holding its payment lock.
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'woocommerce-pos' );
-		$order->set_status( 'pos-open' );
-		$order->save();
-		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
-		$ledger->save( $order, array( array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '5.00', 'status' => 'captured' ) ), false );
-		$order    = wc_get_order( $order->get_id() );
-		$item_id  = array_key_first( $order->get_items() );
-		$quantity = $order->get_item( $item_id )->get_quantity();
-		$rows     = $ledger->read( $order );
-		$rows[]   = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '1.00', 'status' => 'captured' );
-		$payload  = array(
-			'customer_note' => 'Must wait',
-			'line_items'    => array( array( 'id' => $item_id, 'quantity' => $quantity + 2 ) ),
-			'meta_data'  => array( array( 'key' => \WCPOS\WooCommercePOS\Payments\Contract\Ledger::META_KEY, 'value' => array( 'schema' => 1, 'payments' => $rows ) ) ),
-		);
-		$store          = new Fake_Mutation_Store();
-		$store->resolve = $order->get_id();
-		$push           = function () use ( $store, $order, $payload ) {
-			// The server's revision reads the ledger typed, as the till does after a pull.
-			$read = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order->get_id() );
-			$read->set_param( 'dp', '6' );
-			$data     = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::normalize( rest_do_request( $read )->get_data() );
-			$revision = Order_Serializer::canonical_revision( Order_Serializer::add_pos_links( $data, wc_get_order( $order->get_id() ) ) );
-			$envelope = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => $revision, 'payload' => $payload ) );
-			return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
-		};
-		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
-		$this->assertTrue( $lock->acquire( $order->get_id() ) );
-
-		// Act.
-		try {
-			$refused = $push();
-		} finally {
-			$lock->release( $order->get_id() );
-		}
-
-		// Assert: refused before anything was written, the reservation released for a retry.
-		$this->assertInstanceOf( WP_Error::class, $refused );
-		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_error_code() );
-		$this->assertSame( 409, $refused->get_error_data()['status'] );
-		$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
-		$this->assertSame( $quantity, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
-		$this->assertCount( 1, $ledger->read( wc_get_order( $order->get_id() ) ) );
-		$this->assertNull( $store->lookup( 'orders', self::MID ) );
-
-		// Act: the same push once the lock is free.
-		$retried = $push();
-
-		// Assert.
-		$this->assertNotInstanceOf( WP_Error::class, $retried );
-		$this->assertLessThan( 300, $retried->get_status() );
-		$this->assertSame( 'Must wait', wc_get_order( $order->get_id() )->get_customer_note() );
-		$this->assertSame( $quantity + 2, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
-		$this->assertCount( 2, $ledger->read( wc_get_order( $order->get_id() ) ) );
-	}
-
 	/** A push that leaves the payment ledger alone is not held up by a payment operation on the order. */
 	public function test_order_push_without_ledger_proceeds_while_the_payment_lock_is_held(): void {
 		// Arrange.
@@ -332,21 +271,22 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertLessThanOrEqual( time(), strtotime( $order->get_meta( '_wcpos_sale_received_gmt' ) ) );
 	}
 
-	public function test_update_completing_sale_fills_missing_provenance_before_payment(): void {
+	/**
+	 * An unpaid sale with no provenance yet takes the till's tuple and a receipt time from the push.
+	 * Under ADR 0040 the push carries no money, so the sale completes later through a money command
+	 * against an order whose provenance is already stored; a `set_paid` in the push completes nothing.
+	 */
+	public function test_update_unpaid_sale_fills_missing_provenance_and_completes_nothing(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$order = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->set_status( 'pending' );
 		$order->calculate_totals( false );
 		$order->save();
-		$tuple = $this->provenance_tuple();
-		$seen = array();
-		$recorder = static function ( $id ) use ( &$seen, $tuple ) {
-			$sale = wc_get_order( $id );
-			foreach ( $tuple as $key => $value ) {
-				$seen[ $key ] = $sale->get_meta( $key );
-			}
-			$seen['_wcpos_sale_received_gmt'] = $sale->get_meta( '_wcpos_sale_received_gmt' );
+		$tuple     = $this->provenance_tuple();
+		$completed = 0;
+		$recorder  = static function () use ( &$completed ) {
+			++$completed;
 		};
 		add_action( 'woocommerce_payment_complete', $recorder, 5 );
 		try {
@@ -358,9 +298,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$order = wc_get_order( $order->get_id() );
 		foreach ( $tuple as $key => $value ) {
 			$this->assertSame( $value, $order->get_meta( $key ), $key );
-			$this->assertSame( $value, $seen[ $key ], $key );
 		}
-		$this->assertNotEmpty( $seen['_wcpos_sale_received_gmt'] );
+		$this->assertNotEmpty( $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$this->assertSame( 0, $completed );
+		$this->assertSame( 'pending', $order->get_status() );
 	}
 
 	public function test_update_changed_provenance_is_refused_with_one_note(): void {
@@ -1288,137 +1229,6 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( '123', $store_meta[0]->get_data()['value'] );
 		$this->assertSame( (string) $cashier_id, $order->get_meta( '_pos_user' ) );
 		$this->assertNotSame( '999', $order->get_meta( '_pos_user' ) );
-	}
-
-	public function test_offline_completed_create_snapshots_cashier_and_tender_at_payment_complete(): void {
-		// An offline-completed sale arrives as ONE create carrying set_paid — so
-		// woocommerce_payment_complete fires INSIDE the forwarded create, where
-		// Fiscal_Record_Writers stores the immutable fiscal sale. v1 stamped
-		// _pos_user before those hooks; v2's post-forward stamp is too late for a
-		// sale record that refuses to be overwritten. JWT-armed like the tax test.
-		$cashier_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $cashier_id );
-		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $cashier_id ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-
-		$seen = null;
-		$recorder = static function ( $order_id ) use ( &$seen ) {
-			$order = wc_get_order( $order_id );
-			if ( $order && null === $seen ) {
-				$unrelated = apply_filters( 'woocommerce_rest_pre_insert_shop_order_object', new \WC_Order(), new WP_REST_Request( 'POST', '/wc/v3/orders' ), true );
-				$seen = array(
-					'user'               => (string) $order->get_meta( '_pos_user' ),
-					'creator'            => (string) $order->get_meta( '_pos_user_created' ),
-					'tendered'           => (string) $order->get_meta( '_pos_cash_amount_tendered' ),
-					'unrelated_user'      => (string) $unrelated->get_meta( '_pos_user' ),
-					'unrelated_tendered'  => (string) $unrelated->get_meta( '_pos_cash_amount_tendered' ),
-				);
-			}
-		};
-		add_action( 'woocommerce_payment_complete', $recorder, 5 );
-
-		try {
-			$created = $this->push(
-				new Fake_Mutation_Store(),
-				array(
-					'collection' => 'orders',
-					'payload'    => array(
-						'set_paid'  => true,
-						'fee_lines' => array(
-							array(
-								'name'  => 'Offline sale',
-								'total' => '10.00',
-							),
-						),
-						'meta_data' => array(
-							array(
-								'key'   => '_pos_cash_amount_tendered',
-								'value' => '20.00',
-							),
-						),
-					),
-				)
-			);
-		} finally {
-			remove_action( 'woocommerce_payment_complete', $recorder, 5 );
-			unset( $_SERVER['HTTP_AUTHORIZATION'] );
-		}
-
-		$this->assertSame( 201, $created->get_status(), 'push response: ' . wp_json_encode( $created->get_data() ) );
-		$this->assertNotNull( $seen, 'payment_complete must fire for a set_paid create' );
-		$this->assertSame( (string) $cashier_id, $seen['user'], 'cashier must be attributed AT payment_complete time' );
-		$this->assertSame( (string) $cashier_id, $seen['creator'] );
-		$this->assertSame( '20.00', $seen['tendered'], 'cash tender must be visible AT payment_complete time' );
-		$this->assertSame( '', $seen['unrelated_user'], 'temporary create filter must not attribute an unrelated order' );
-		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary create filter must not stamp tender on an unrelated order' );
-	}
-
-	public function test_update_completing_payment_fills_missing_audit_meta_before_payment_complete(): void {
-		// A pos-open order completed by an update that carries set_paid + the cash
-		// tender: the fill-if-absent stamps must be on the order DURING the inner
-		// wc/v3 update, not only in the post-forward stamps — payment_complete
-		// (and the fiscal sale writer) fire inside the forward.
-		$cashier_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $cashier_id );
-		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $cashier_id ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'woocommerce-pos' );
-		// Simulate a legacy POS order with no cashier attribution and no tender.
-		$order->delete_meta_data( '_pos_user' );
-		$order->delete_meta_data( '_pos_user_created' );
-		$order->delete_meta_data( '_pos_cash_amount_tendered' );
-		$order->set_status( 'pending' );
-		// needs_payment() requires total > 0 or wc/v3 skips payment_complete on set_paid.
-		$order->calculate_totals( false );
-		$order->save();
-		$this->assertTrue( $order->needs_payment(), 'fixture must be payable for set_paid to fire payment_complete' );
-
-		$seen = null;
-		$recorder = static function ( $order_id ) use ( &$seen ) {
-			$updated = wc_get_order( $order_id );
-			if ( $updated && null === $seen ) {
-				$unrelated = apply_filters( 'woocommerce_rest_pre_insert_shop_order_object', new \WC_Order(), new WP_REST_Request( 'PUT', '/wc/v3/orders/999999' ), false );
-				$seen = array(
-					'user'               => (string) $updated->get_meta( '_pos_user' ),
-					'creator'            => (string) $updated->get_meta( '_pos_user_created' ),
-					'tendered'           => (string) $updated->get_meta( '_pos_cash_amount_tendered' ),
-					'unrelated_user'      => (string) $unrelated->get_meta( '_pos_user' ),
-					'unrelated_tendered'  => (string) $unrelated->get_meta( '_pos_cash_amount_tendered' ),
-				);
-			}
-		};
-		add_action( 'woocommerce_payment_complete', $recorder, 5 );
-
-		try {
-			$updated = $this->updateOrder(
-				$order,
-				array(
-					'set_paid'  => true,
-					'meta_data' => array(
-						array(
-							'key'   => '_pos_cash_amount_tendered',
-							'value' => '55.00',
-						),
-					),
-				)
-			);
-		} finally {
-			remove_action( 'woocommerce_payment_complete', $recorder, 5 );
-			unset( $_SERVER['HTTP_AUTHORIZATION'] );
-		}
-
-		$this->assertSame( 200, $updated->get_status(), 'push response: ' . wp_json_encode( $updated->get_data() ) );
-		$this->assertNotNull(
-			$seen,
-			'payment_complete must fire for a set_paid update; post-update status: '
-			. wc_get_order( $order->get_id() )->get_status()
-			. ' needs_payment-was: ' . wp_json_encode( $order->needs_payment() )
-		);
-		$this->assertSame( (string) $cashier_id, $seen['user'], 'missing cashier must be filled AT payment_complete time' );
-		$this->assertSame( (string) $cashier_id, $seen['creator'], 'missing creator must be filled AT payment_complete time' );
-		$this->assertSame( '55.00', $seen['tendered'], 'cash tender must be visible AT payment_complete time' );
-		$this->assertSame( '', $seen['unrelated_user'], 'temporary update filter must not attribute an unrelated order' );
-		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary update filter must not stamp tender on an unrelated order' );
 	}
 
 	public function test_store_reassignment_respects_the_authorization_filter(): void {

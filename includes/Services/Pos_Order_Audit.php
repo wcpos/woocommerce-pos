@@ -14,6 +14,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
@@ -24,9 +26,43 @@ final class Pos_Order_Audit {
 	/**
 	 * Audit keys the SERVER derives — a client-supplied value is never accepted.
 	 *
+	 * `_pos_payment_asserted` is a legacy marker (ADR 0035 path 3, removed under ADR 0040):
+	 * orders written before 2.0.0 carry it, and a client still may not write it.
+	 *
 	 * @var string[]
 	 */
 	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count' );
+
+	/**
+	 * Meta the server alone writes: the ledger and its index rows, the command and completion maps,
+	 * the gateway attempt history and stamp, and the WooCommerce money meta a push could address by id
+	 * on posts storage. A new server-owned key joins this list in the change that introduces it (ADR 0040 rule 2).
+	 *
+	 * @var string[]
+	 */
+	public const SERVER_MONEY_META_KEYS = array(
+		Ledger::META_KEY,
+		Ledger::INDEX_META_KEY,
+		Ledger::PAYMENT_ID_META_KEY,
+		Ledger::LIVE_LEG_META_KEY,
+		'_wcpos_commands',
+		'_wcpos_completed_at',
+		'_wcpos_completions',
+		Gateway_Submission::ATTEMPTS_META_KEY,
+		Gateway_Submission::STAMP_META_KEY,
+		'_payment_method',
+		'_payment_method_title',
+		'_transaction_id',
+		'_date_paid',
+		'_paid_date',
+	);
+
+	/**
+	 * Top-level wc/v3 fields that carry money; dropped from every push (ADR 0040 rule 2).
+	 *
+	 * @var string[]
+	 */
+	public const SERVER_MONEY_FIELDS = array( 'set_paid', 'date_paid', 'date_paid_gmt', 'transaction_id', 'payment_method', 'payment_method_title' );
 
 	/**
 	 * Audit keys sourced from the till at the sale (client-supplied, validated,
@@ -64,12 +100,14 @@ final class Pos_Order_Audit {
 	}
 
 	/**
-	 * Every audit key: the server-derived and the till-sourced set.
+	 * Every key a client may not write directly: the server-derived audit keys, the
+	 * till-sourced set (filled by the write path, never by the forward) and the
+	 * server-owned money keys.
 	 *
 	 * @return string[]
 	 */
 	public static function audit_meta_keys(): array {
-		return array_merge( self::SERVER_META_KEYS, self::TILL_META_KEYS );
+		return array_merge( self::SERVER_META_KEYS, self::TILL_META_KEYS, self::SERVER_MONEY_META_KEYS );
 	}
 
 	/**

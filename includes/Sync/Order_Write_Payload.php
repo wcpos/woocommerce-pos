@@ -45,8 +45,8 @@ use WP_Error;
  *   write intent: provenance is replaceable while the order still needs payment (a failed final leg
  *   re-stamps it) and frozen once paid, cash fills only what is missing. `main` does not yet protect
  *   the provenance tuple.
- * - Payment assertion marker: V2 stamps `_pos_payment_asserted` on an asserted create or eligible
- *   update (ADR 0035 path 3); V1 strips a client-supplied marker and never generates one.
+ * - Payment assertion marker: neither lane generates `_pos_payment_asserted` (V2's ADR 0035
+ *   path 3 was removed under ADR 0040); both strip a client-supplied marker.
  *
  * v1's schema relaxations in get_item_schema() are the validation-time half of the
  * same tolerance this class expresses at the forward seam. V1 updates retain an

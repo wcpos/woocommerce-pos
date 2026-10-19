@@ -19,6 +19,57 @@ class Test_Order_Writer extends WP_UnitTestCase {
 		$this->assertSame( array( array( 'key' => 'public', 'value' => 'kept' ) ), $prepared['payload']['meta_data'] );
 	}
 
+	/** Every server-owned top-level field and meta key, with values a till might send. */
+	private function money_payload(): array {
+		$meta = array( array( 'key' => 'public', 'value' => 'kept' ) );
+		foreach ( array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date' ) as $key ) {
+			$meta[] = array( 'key' => $key, 'value' => 'x' );
+		}
+		return array(
+			'set_paid'             => true,
+			'date_paid'            => '2026-05-01T10:00:00',
+			'date_paid_gmt'        => '2026-05-01T10:00:00',
+			'transaction_id'       => 'txn',
+			'payment_method'       => 'pos_cash',
+			'payment_method_title' => 'Cash',
+			'customer_note'        => 'kept',
+			'meta_data'            => $meta,
+		);
+	}
+
+	/** Assert a forwarded order body carries no money (ADR 0040 rule 2). */
+	private function assert_no_money( array $forwarded ): void {
+		foreach ( array( 'set_paid', 'date_paid', 'date_paid_gmt', 'transaction_id', 'payment_method', 'payment_method_title' ) as $field ) {
+			$this->assertArrayNotHasKey( $field, $forwarded );
+		}
+		$this->assertSame( 'kept', $forwarded['customer_note'] );
+		$this->assertSame( array( array( 'key' => 'public', 'value' => 'kept' ) ), $forwarded['meta_data'] );
+	}
+
+	/** A create forwards no top-level money field and no server-owned meta key. */
+	public function test_prepare_create_drops_money_fields_and_meta(): void {
+		$prepared = ( new Order_Writer( new \stdClass() ) )->prepare_create(
+			array( 'route' => '/wc/v3/orders' ),
+			$this->money_payload(),
+			static function () { return null; }
+		);
+
+		$this->assert_no_money( $prepared['payload'] );
+	}
+
+	/** An update forwards no top-level money field and no server-owned meta key. */
+	public function test_prepare_update_drops_money_fields_and_meta(): void {
+		$prepared = ( new Order_Writer( new \stdClass() ) )->prepare_update(
+			array( 'route' => '/wc/v3/orders' ),
+			PHP_INT_MAX,
+			$this->money_payload(),
+			static function () { return null; }
+		);
+		$late     = $prepared['context_factory']();
+
+		$this->assert_no_money( $late['payload'] );
+	}
+
 	/** Require a non-null mutation store dependency (pinned in review, 0ae23b11). */
 	public function test_constructor_requires_mutation_store(): void {
 		$constructor = new \ReflectionMethod( Order_Writer::class, '__construct' );

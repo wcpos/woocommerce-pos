@@ -114,6 +114,146 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		);
 	}
 
+	/** Every server-owned meta key (ADR 0040 rule 2), spelled out so the pin does not trust the constant it pins. */
+	protected function server_money_meta_keys(): array {
+		return array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date' );
+	}
+
+	/** Every top-level wc/v3 money field, set to a value that would mark the order paid. */
+	protected function server_money_fields(): array {
+		return array(
+			'set_paid'             => true,
+			'date_paid'            => '2026-05-01T10:00:00',
+			'date_paid_gmt'        => '2026-05-01T10:00:00',
+			'transaction_id'       => 'txn-from-the-till',
+			'payment_method'       => 'pos_cash',
+			'payment_method_title' => 'Cash',
+		);
+	}
+
+	/** The stored rows (id, key, value) of the given meta keys, read from the data store on a fresh order. */
+	protected function stored_meta_rows( int $order_id, array $keys ): array {
+		$order = wc_get_order( $order_id );
+		$rows  = array();
+		foreach ( $order->get_data_store()->read_meta( $order ) as $row ) {
+			if ( in_array( $row->meta_key, $keys, true ) ) {
+				$rows[] = array( (int) $row->meta_id, $row->meta_key, $row->meta_value );
+			}
+		}
+		sort( $rows );
+
+		return $rows;
+	}
+
+	protected function product( string $price = '10' ): \WC_Product {
+		return \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product(
+			array(
+				'regular_price' => $price,
+				'price'         => $price,
+			)
+		);
+	}
+
+	public function test_create_carrying_every_server_owned_key_stores_none_of_them(): void {
+		// Arrange.
+		$completed = 0;
+		$counter   = static function () use ( &$completed ): void {
+			++$completed;
+		};
+		add_action( 'woocommerce_payment_complete', $counter );
+		$meta = $this->uuid_meta();
+		foreach ( $this->server_money_meta_keys() as $key ) {
+			$meta[] = array(
+				'key'   => $key,
+				'value' => '_wcpos_payments' === $key ? (string) wp_json_encode( array( 'schema' => 1, 'payments' => array( $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ) ) ) ) : 'from-the-till',
+			);
+		}
+		$payload = $this->server_money_fields() + array(
+			'line_items' => array(
+				array(
+					'product_id' => $this->product()->get_id(),
+					'quantity'   => 1,
+				),
+			),
+			'meta_data'  => $meta,
+		);
+
+		// Act.
+		try {
+			$response = $this->push_envelope( 'create', $payload );
+		} finally {
+			remove_action( 'woocommerce_payment_complete', $counter );
+		}
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$order_id = (int) $response->get_data()['document']['id'];
+		$order    = wc_get_order( $order_id );
+		$this->assertSame( array(), $this->stored_meta_rows( $order_id, $this->server_money_meta_keys() ) );
+		$this->assertNull( $order->get_date_paid( 'edit' ) );
+		$this->assertSame( '', $order->get_payment_method( 'edit' ) );
+		$this->assertSame( '', $order->get_payment_method_title( 'edit' ) );
+		$this->assertSame( '', $order->get_transaction_id( 'edit' ) );
+		$this->assertSame( 'pending', $order->get_status() );
+		$this->assertSame( 0, $completed );
+	}
+
+	public function test_update_carrying_every_server_owned_key_by_key_and_by_meta_id_leaves_storage_unchanged(): void {
+		// Arrange: a pos-open order with a captured row, an attempt in history and a stamp.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$order    = wc_get_order( $order_id );
+		Ledger::instance()->save( $order, array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
+		$order = wc_get_order( $order_id );
+		$order->update_meta_data( '_wcpos_gateway_attempts', array( wp_generate_uuid4() => 'cancelled' ) );
+		$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
+		$order->save();
+		$keys   = $this->server_money_meta_keys();
+		$before = $this->stored_meta_rows( $order_id, $keys );
+		$this->assertGreaterThanOrEqual( 4, count( $before ), 'the ledger, its index, the attempts and the stamp are stored' );
+		$meta = $this->uuid_meta();
+		foreach ( $keys as $key ) {
+			$meta[] = array(
+				'key'   => $key,
+				'value' => 'changed-by-key',
+			);
+		}
+		foreach ( $before as $row ) {
+			$meta[] = array(
+				'id'    => $row[0],
+				'key'   => $row[1],
+				'value' => 'changed-by-id',
+			);
+			$meta[] = array(
+				'id'    => $row[0],
+				'key'   => 'harmless',
+				'value' => 'renamed-by-id',
+			);
+			$meta[] = array(
+				'id'    => $row[0],
+				'key'   => $row[1],
+				'value' => null,
+			);
+		}
+		$payload = $this->server_money_fields() + array(
+			'customer_note' => 'The push was applied',
+			'meta_data'     => $meta,
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( $before, $this->stored_meta_rows( $order_id, $keys ) );
+		$order = wc_get_order( $order_id );
+		$this->assertNull( $order->get_date_paid( 'edit' ) );
+		$this->assertSame( '', $order->get_payment_method( 'edit' ) );
+		$this->assertSame( '', $order->get_transaction_id( 'edit' ) );
+		$this->assertSame( 'pos-open', $order->get_status() );
+		$this->assertSame( 'The push was applied', $order->get_customer_note() );
+		$this->assertSame( '', $order->get_meta( 'harmless' ) );
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(

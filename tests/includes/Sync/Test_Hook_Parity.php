@@ -691,25 +691,6 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		);
 	}
 
-	public function test_parity_order_set_paid_checkout_path(): void {
-		$payload = array(
-			'set_paid' => true,
-			'fee_lines' => array(
-				array(
-					'name' => 'Offline sale',
-					'total' => '10.00',
-				),
-			),
-		);
-		$hooks   = array( 'woocommerce_pre_payment_complete', 'woocommerce_payment_complete', 'woocommerce_order_status_changed', 'woocommerce_new_order' );
-		$this->assert_hook_parity(
-			'order_set_paid_checkout_path',
-			$hooks,
-			$this->wc_operation( 'POST', '/wc/v3/orders', $payload, 201 ),
-			$this->v2_operation( 'create', 'orders', $this->next_uuid(), $payload )
-		);
-	}
-
 	public function test_parity_customer_update_with_tax_ids_fires_update_once(): void {
 		$customer_id = $this->customer_fixture( 'hook-parity-tax-id@example.test' );
 		$uuid        = $this->next_uuid();

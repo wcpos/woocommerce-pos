@@ -11,8 +11,6 @@ use WC_Order;
 use WC_Order_Item_Fee;
 use WC_Order_Item_Product;
 use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
-use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
-use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -2468,49 +2466,23 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $response->get_data() );
 	}
 
-	/** The v2 order write rebuilds a split index even when client meta rows have no ids. */
-	public function test_update_order_v2_ledger_rebuilds_the_payment_method_filter_index(): void {
+	/**
+	 * A split ledger saved by the server indexes every tender for the v2 read filter. Under
+	 * ADR 0040 the ledger is written only by the server (the push lane strips it), so the
+	 * ledger save is the one writer of the index.
+	 */
+	public function test_ledger_save_builds_the_split_payment_method_filter_index(): void {
 		// Arrange.
 		$order = OrderHelper::create_order();
 		$order->set_payment_method( 'pos_cash' );
-		$order->update_meta_data( '_woocommerce_pos_uuid', wp_generate_uuid4() );
 		$order->save();
-		// The same canonical revision the v2 writer computes, as the other push tests do.
-		$read = $this->wp_rest_get_request( '/wc/v3/orders/' . $order->get_id() );
-		$read->set_param( 'dp', '6' );
-		$current = $this->server->dispatch( $read );
-		$this->assertSame( 200, $current->get_status() );
-		$document = Meta_Normalizer::normalize( $current->get_data() );
-		$document = Order_Serializer::add_pos_links( $document, $order );
-		$revision = Order_Serializer::canonical_revision( $document );
-		$value = array(
-			'schema'   => 1,
-			'payments' => array(
-				array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '5.00', 'status' => 'captured' ),
-				array( 'id' => wp_generate_uuid4(), 'method_id' => 'stripe', 'amount' => '5.00', 'status' => 'captured' ),
-			),
+		$rows = array(
+			array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '5.00', 'status' => 'captured' ),
+			array( 'id' => wp_generate_uuid4(), 'method_id' => 'stripe', 'amount' => '5.00', 'status' => 'captured' ),
 		);
-		$envelope = array(
-			'mutationId'   => wp_generate_uuid4(),
-			'operation'    => 'update',
-			'collection'   => 'orders',
-			'recordId'     => $order->get_meta( '_woocommerce_pos_uuid' ),
-			'baseRevision' => $revision,
-			'payload'      => array(
-				'meta_data' => array(
-					array( 'key' => '_wcpos_payments', 'value' => $value ),
-					array( 'key' => '_wcpos_payment_method', 'value' => 'pos_cash' ),
-					array( 'key' => '_wcpos_payment_method', 'value' => 'stripe' ),
-				),
-			),
-		);
-		$request = $this->wp_rest_post_request( '/wcpos/v2/push/orders' );
-		$request->set_header( 'Content-Type', 'application/json' );
-		$request->set_body( (string) wp_json_encode( $envelope ) );
 
 		// Act.
-		$response = $this->server->dispatch( $request );
-		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		\WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->save( wc_get_order( $order->get_id() ), $rows, false );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
 		$request->set_param( 'payment_method', 'stripe' );
 		$response = $this->server->dispatch( $request );

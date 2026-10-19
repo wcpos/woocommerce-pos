@@ -177,19 +177,18 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		);
 	}
 
-	/** The loaded open cart can restart even when the same push closes it. */
-	public function test_restart_and_checkout_in_one_push_takes_the_restart_date(): void {
-		$product            = ProductHelper::create_simple_product();
-		$order_id           = $this->make_order( 'pos-open' );
-		$payload            = $this->restart_payload( $product->get_id() );
-		$payload['status']   = 'completed';
-		$payload['set_paid'] = true;
+	/** The loaded open cart can restart even when the same push moves it out of pos-open. */
+	public function test_restart_and_hold_in_one_push_takes_the_restart_date(): void {
+		$product           = ProductHelper::create_simple_product();
+		$order_id          = $this->make_order( 'pos-open' );
+		$payload           = $this->restart_payload( $product->get_id() );
+		$payload['status'] = 'on-hold';
 
 		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
 
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( self::RESTART_GMT, $this->stored_date_gmt( $order_id ) );
-		$this->assertSame( 'completed', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
 	}
 
 	/** The `Z`-suffixed form the till may send is the same instant. */
