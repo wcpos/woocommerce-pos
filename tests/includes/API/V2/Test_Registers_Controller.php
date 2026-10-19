@@ -259,6 +259,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'truncated', $properties );
 		$register = $properties['registers']['items']['properties'];
 		$this->assertSame( array( 'type' => 'integer' ), $register['duplicates']['items']['properties']['orders'] );
+		$this->assertSame( array( 'type' => 'string' ), $register['skew']['items']['properties']['till'] );
 		$this->assertSame( 'object', $register['skew_counts']['type'] );
 		$this->assertSame(
 			array(

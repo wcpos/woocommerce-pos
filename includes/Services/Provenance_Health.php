@@ -142,16 +142,13 @@ final class Provenance_Health {
 			'behind' => array(),
 		);
 		foreach ( $orders as $id => $meta ) {
+			$till = $this->sale_till( $meta, $register['id'] );
 			$value = $meta['_wcpos_sale_counter'] ?? '';
 			$counter = filter_var( $value, FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) );
 			if ( Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_counter', $value ) && false !== $counter ) {
-				$till_value = $meta['_wcpos_till'] ?? '';
-				$till       = Pos_Order_Audit::is_valid_till_value( '_wcpos_till', $till_value )
-					? strtolower( (string) $till_value )
-					: $register['id'];
 				$tills[ $till ][ $counter ][] = $id;
 			}
-			$skew = $this->order_skew( $id, $meta );
+			$skew = $this->order_skew( $id, $meta, $till );
 			if ( null !== $skew ) {
 				$skews[ $skew['direction'] ][] = $skew;
 			}
@@ -226,13 +223,26 @@ final class Provenance_Health {
 	}
 
 	/**
+	 * Name the till that made a sale: its stamped till, or the register when the sale carries no valid till.
+	 *
+	 * @param array  $meta Stored provenance.
+	 * @param string $register_id Register the sale belongs to.
+	 * @return string
+	 */
+	private function sale_till( array $meta, string $register_id ): string {
+		$till = $meta['_wcpos_till'] ?? '';
+		return Pos_Order_Audit::is_valid_till_value( '_wcpos_till', $till ) ? strtolower( (string) $till ) : $register_id;
+	}
+
+	/**
 	 * Compare the offset sale timestamp with the writer's UTC receipt stamp.
 	 *
-	 * @param int   $id Order id.
-	 * @param array $meta Stored provenance.
+	 * @param int    $id Order id.
+	 * @param array  $meta Stored provenance.
+	 * @param string $till Till that made the sale, so the operator can find the device.
 	 * @return array|null
 	 */
-	private function order_skew( int $id, array $meta ): ?array {
+	private function order_skew( int $id, array $meta, string $till ): ?array {
 		$sale = $meta['_wcpos_sale_time'] ?? '';
 		$received = $meta['_wcpos_sale_received_gmt'] ?? '';
 		if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $sale ) ) {
@@ -253,6 +263,7 @@ final class Provenance_Health {
 			'received_gmt' => $received,
 			'skew_seconds' => $seconds,
 			'direction' => $seconds < 0 ? 'behind' : 'ahead',
+			'till' => $till,
 		);
 	}
 
