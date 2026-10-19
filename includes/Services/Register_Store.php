@@ -110,9 +110,16 @@ final class Register_Store {
 		return $row;
 	}
 
-	/** Seed an active register during activation and upgrade only. */
+	/** Seed an active register during activation and upgrade only.
+	 *
+	 * Reads the registers table alone: list() also reads closure counters from session
+	 * columns that a pending sync-schema step may not have added yet.
+	 */
 	public function ensure_default(): void {
-		if ( ! $this->list( array( 'status' => 'active' ) ) ) {
+		global $wpdb;
+		$table = $this->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table, fixed predicate.
+		if ( null === $wpdb->get_var( "SELECT id FROM {$table} WHERE status = 'active' LIMIT 1" ) ) {
 			$this->create( array( 'name' => __( 'Register', 'woocommerce-pos' ) ) );
 		}
 	}
