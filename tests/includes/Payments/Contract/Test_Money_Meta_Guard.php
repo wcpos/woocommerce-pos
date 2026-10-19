@@ -336,6 +336,52 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $saved ) );
 	}
 
+	/** A poisoned create recovered onto a reopened sale only acknowledges identity: no owner stamp, no completion. */
+	public function test_poisoned_create_recovered_on_reopened_sale_leaves_money_state(): void {
+		// Arrange: the create commits but its money transition fails; the sale then moves to epoch 1.
+		$mutation = wp_generate_uuid4();
+		$payload  = array(
+			'status'    => 'pos-open',
+			'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ),
+		);
+		$envelope = array(
+			'mutationId'    => $mutation,
+			'tillAggregate' => array( 'total' => '99' ),
+		);
+		$store    = new \WCPOS\WooCommercePOS\Sync\Mutation_Store();
+		$remove   = $this->transition_fault( 'lock', null );
+		try {
+			$this->assertSame( 409, $this->push( null, $payload, $envelope )->get_status() );
+		} finally {
+			$remove();
+		}
+		$this->assertSame( 'poison', $store->lookup( 'orders', $mutation )['status'] ?? null );
+		$id    = (int) $store->lookup( 'orders', $mutation )['remote_id'];
+		$order = wc_get_order( $id );
+		Money_Meta_Guard::authorised(
+			$id,
+			static function () use ( $order ): void {
+				$order->update_meta_data( '_wcpos_money_epoch', '1' );
+				foreach ( array( '_wcpos_completed_at', '_wcpos_completed_epoch', '_wcpos_completed_session' ) as $key ) {
+					$order->delete_meta_data( $key );
+				}
+				$order->save();
+			}
+		);
+
+		// Act: the same envelope retries.
+		$retry = $this->push( null, $payload, $envelope );
+
+		// Assert.
+		$this->assertSame( 201, $retry->get_status() );
+		$this->assertSame( $id, $retry->get_data()['document']['id'] );
+		$this->assertSame( 'done', $store->lookup( 'orders', $mutation )['status'] ?? null );
+		$saved = wc_get_order( $id );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_money_owner' ) );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $saved ) );
+	}
+
 	/** A zero-total sale at epoch 0 completes by update, as a free item or full discount does. */
 	public function test_free_sale_completes_by_update_at_epoch_zero(): void {
 		// Arrange.

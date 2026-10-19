@@ -533,7 +533,8 @@ class Order_Writer extends Null_Writer {
 			$this->stamp_order_audit( $id, $payload, false );
 			$this->order_payload->persist_tax_ids( $id, $payload, true );
 			$order = wc_get_order( $id );
-			if ( $order ) {
+			// A recovered create is an epoch-0 fact: on a reopened sale it only acknowledges identity.
+			if ( $order && 0 === Money_Epoch::current( $order ) ) {
 				if ( '' === $order->get_meta( Money_Owner::META_KEY ) ) {
 					$this->stamp_owner( $payload, $money['tillAggregate'] ?? null, $order );
 				}
