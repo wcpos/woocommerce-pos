@@ -97,6 +97,9 @@ class Webview_Passthrough {
 			self::mint( $order );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
+		} catch ( \Throwable $error ) {
+			// Anything else is unexpected: record it once, and still never interrupt the gateway hook.
+			Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
 		}
 	}
 
@@ -131,6 +134,9 @@ class Webview_Passthrough {
 			self::mint( $order );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
+		} catch ( \Throwable $error ) {
+			// Anything else is unexpected: record it once, and still never interrupt the gateway hook.
+			Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
 		}
 	}
 
@@ -203,12 +209,16 @@ class Webview_Passthrough {
 		);
 		try {
 			return self::adopt( $order, $row );
-		} catch ( Ledger_Persistence_Exception $error ) {
+		} catch ( \RuntimeException $error ) {
 			// WooCommerce already took this money: say so loudly; a human reconciles it.
 			$reference = '' !== (string) $transaction_id ? $transaction_id : $row['id'];
 			Logger::error( sprintf( 'WCPOS payment %s (%s %s) captured but not recorded in the ledger on order #%d; reconcile manually: %s', $reference, $row['amount'], $row['currency'], $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
-			$order->add_order_note( sprintf( 'WCPOS: payment %s (%s %s) captured but not recorded in the ledger; reconcile manually.', $reference, $row['amount'], $row['currency'] ) );
-			throw $error;
+			try {
+				$order->add_order_note( sprintf( 'WCPOS: payment %s (%s %s) captured but not recorded in the ledger; reconcile manually.', $reference, $row['amount'], $row['currency'] ) );
+			} catch ( \Throwable $note_error ) {
+				Logger::error( sprintf( 'WCPOS could not add the unrecorded-payment note on order #%d: %s', $order->get_id(), $note_error->getMessage() ) );
+			}
+			throw $error instanceof Ledger_Persistence_Exception ? $error : new Ledger_Persistence_Exception( esc_html( $error->getMessage() ), 0, $error );
 		}
 	}
 

@@ -126,6 +126,33 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'processing', $saved->get_status() );
 	}
 
+	/** Adoption stamps the epoch of the locked, reloaded order, never a stale caller object's. */
+	public function test_adopt_through_stale_order_uses_locked_epoch(): void {
+		// Arrange: a stale object loaded at epoch 0; the sale is reopened through a fresh instance.
+		$order = $this->create_pos_order();
+		$stale = wc_get_order( $order->get_id() );
+		$fresh = wc_get_order( $order->get_id() );
+		$fresh->update_meta_data( '_wcpos_money_epoch', '1' );
+		Money_Meta_Guard::authorised( $fresh->get_id(), static fn() => $fresh->save() );
+		$id = wp_generate_uuid4();
+
+		// Act.
+		Ledger::instance()->adopt(
+			$stale,
+			array(
+				'id'        => $id,
+				'method_id' => 'pos_cash',
+				'amount'    => '92.95',
+				'currency'  => 'USD',
+				'status'    => 'captured',
+			)
+		);
+
+		// Assert.
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $id );
+		$this->assertSame( 1, $row['epoch'] ?? null );
+	}
+
 	/** A record retry reusing a prior sale's payment id is a conflict, not this sale's money. */
 	public function test_record_retry_of_prior_epoch_payment_is_a_conflict(): void {
 		// Arrange.

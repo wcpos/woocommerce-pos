@@ -1099,7 +1099,8 @@ class Ledger {
 			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
 		}
 		try {
-			$fresh = null === $identity ? $order : wc_get_order( $order->get_id() );
+			// The adoption epoch always comes from the locked, reloaded order, never a stale caller object.
+			$fresh = wc_get_order( $order->get_id() );
 			if ( ! $fresh instanceof WC_Order ) {
 				throw new Ledger_Persistence_Exception( 'WCPOS payment order no longer exists.' );
 			}

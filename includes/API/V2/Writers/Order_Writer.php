@@ -171,14 +171,15 @@ class Order_Writer extends Null_Writer {
 			}
 			$this->stamp_order_audit( $id, $payload, false );
 			$order = wc_get_order( $id );
-			if ( $order ) {
+			// A create replay is an epoch-0 fact: on a reopened sale it only acknowledges identity.
+			if ( $order && 0 === Money_Epoch::current( $order ) ) {
 				if ( '' === $order->get_meta( Money_Owner::META_KEY ) ) {
 					$this->stamp_owner( $prepared['context']['pushed_payload'], $prepared['context']['money']['tillAggregate'] ?? null, $order );
 				}
 				$this->complete_money_transition( $order, $prepared['context'] );
 			}
 			return null;
-		} catch ( \Exception $error ) {
+		} catch ( \Throwable $error ) {
 			return $this->money_attention( $id, $prepared['context']['money']['mutation_id'] ?? null, $error->getMessage() );
 		} finally {
 			$this->unlock( $id );
@@ -249,7 +250,7 @@ class Order_Writer extends Null_Writer {
 					$this->stamp_owner( $declared['pushed_payload'], $declared['money']['tillAggregate'] ?? null, $saved );
 					$this->complete_money_transition( $saved, $declared );
 				}
-			} catch ( \Exception $error ) {
+			} catch ( \Throwable $error ) {
 				return $this->money_attention( $id, $mutation_id, $error->getMessage() );
 			} finally {
 				$this->unlock( $id );
@@ -545,7 +546,7 @@ class Order_Writer extends Null_Writer {
 				);
 			}
 			return null;
-		} catch ( \Exception $error ) {
+		} catch ( \Throwable $error ) {
 			return $this->money_attention( $id, $money['mutation_id'] ?? null, $error->getMessage() );
 		} finally {
 			$this->unlock( $id );

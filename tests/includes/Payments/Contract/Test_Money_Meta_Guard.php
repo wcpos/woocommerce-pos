@@ -310,6 +310,32 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $created, did_action( 'woocommerce_new_order' ) );
 	}
 
+	/** A create replayed onto a reopened sale only acknowledges identity: no owner stamp, no completion. */
+	public function test_born_twice_create_on_reopened_sale_leaves_money_state(): void {
+		// Arrange: a completed, owner-stamped create, then reopened to epoch 1.
+		$payload  = array(
+			'status'    => 'pos-open',
+			'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ),
+		);
+		$envelope = array( 'tillAggregate' => array( 'total' => '99' ) );
+		$created  = $this->push( null, $payload, $envelope );
+		$this->assertSame( 201, $created->get_status() );
+		$id = (int) $created->get_data()['document']['id'];
+		$this->assertSame( 'server', wc_get_order( $id )->get_meta( '_wcpos_money_owner' ) );
+		$this->ack_meta( $this->push( wc_get_order( $id ), $this->reopen(), array( 'expectedEpoch' => 0 ) ) );
+
+		// Act: the original create arrives again under a new mutation id.
+		$replay = $this->push( null, $payload, $envelope );
+
+		// Assert.
+		$this->assertSame( 200, $replay->get_status() );
+		$this->assertSame( $id, $replay->get_data()['document']['id'] );
+		$saved = wc_get_order( $id );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_money_owner' ) );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $saved ) );
+	}
+
 	/** A zero-total sale at epoch 0 completes by update, as a free item or full discount does. */
 	public function test_free_sale_completes_by_update_at_epoch_zero(): void {
 		// Arrange.
@@ -370,6 +396,7 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 			'order lock held' => array( 'lock' ),
 			'transition throws' => array( 'throw' ),
 			'transition save refused' => array( 'save' ),
+			'save hook throws an Error' => array( 'error' ),
 		);
 	}
 
@@ -462,18 +489,18 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 	/**
 	 * Fail the post-commit money transition: another owner takes the order lock inside
 	 * the committed write, the owner stamp throws, or a late save hook refuses any save
-	 * carrying the key (WooCommerce swallows that throw). Returns the remover.
+	 * carrying the key (WooCommerce swallows that Exception, not an Error). Returns the remover.
 	 *
-	 * @param string   $fault    'lock', 'throw' or 'save'.
+	 * @param string   $fault    'lock', 'throw', 'save' or 'error'.
 	 * @param int|null $order_id Order to fault, or null for the order being created.
 	 * @param string   $key      Meta key whose pending write a refused save trips on.
 	 */
 	private function transition_fault( string $fault, ?int $order_id, string $key = '_wcpos_completed_at' ): \Closure {
-		if ( 'save' === $fault ) {
-			$refuse = static function ( $saving ) use ( $key ): void {
+		if ( in_array( $fault, array( 'save', 'error' ), true ) ) {
+			$refuse = static function ( $saving ) use ( $key, $fault ): void {
 				foreach ( Money_Meta_Guard::raw_meta( $saving ) as $meta ) {
 					if ( $key === $meta->key && null !== $meta->value && ( ! $meta->id || $meta->get_changes() ) ) {
-						throw new \RuntimeException( 'simulated transition failure' );
+						throw 'error' === $fault ? new \Error( 'simulated' ) : new \RuntimeException( 'simulated transition failure' );
 					}
 				}
 			};
