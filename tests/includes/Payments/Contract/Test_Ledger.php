@@ -952,7 +952,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		} else {
 			$this->assertSame( $confirmed['status'] ?? 'captured', $stored['status'] );
 			$this->assertSame( $confirmed['amount'] ?? '92.95', $stored['amount'] );
-			$this->assertSame( '0.00', $ledger->summary( $order )['balance'] );
+			// An authorization reserves the balance but pays nothing (D6); a capture pays it.
+			$this->assertSame( 'authorized' === ( $confirmed['status'] ?? null ) ? '92.95' : '0.00', $ledger->summary( $order )['balance'] );
 			if ( 'on_reader' === $tips ) {
 				$fees = array_values( $order->get_fees() );
 				$this->assertCount( 1, $fees );
@@ -1342,19 +1343,87 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Authorized money counts toward the paid total. */
-	public function test_derive_authorized_row_counts_toward_balance(): void {
+	/** A full authorization leaves the sale open, reserves its amount, and only capture completes it (D6). */
+	public function test_full_authorization_leaves_the_order_open_and_reserves_its_amount(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
+		$card  = $this->payment( 'pos_card', '92.95' );
+
+		// Act: the reader approves the whole total.
+		Ledger::instance()->intent( $order, $card['id'], $card, array( 'resume' => array( 'status' => 'authorized' ) ) );
+
+		// Assert: open, nothing paid, the authorization shown beside the balance.
+		$fresh   = wc_get_order( $order->get_id() );
+		$summary = Ledger::instance()->summary( $fresh );
+		$this->assertSame( 'pos-open', $fresh->get_status() );
+		$this->assertSame( '92.95', $summary['authorized'] );
+		$this->assertSame( '0.00', $summary['paid'] );
+		$this->assertSame( '92.95', $summary['balance'] );
+		$this->assertNull( $fresh->get_date_paid( 'edit' ) );
+		$this->assertFalse( (bool) $fresh->get_data_store()->get_stock_reduced( $order->get_id() ) );
+
+		// A second tender against the standing authorization is refused, naming it.
+		$cash  = Ledger::instance()->record( $fresh, $this->payment( 'pos_cash', '92.95' ) );
+		$this->assertWPError( $cash );
+		$this->assertSame( 'wcpos_payment_in_flight', $cash->get_error_code() );
+		$this->assertSame( 409, $cash->get_error_data()['status'] );
+		$this->assertSame( $card['id'], $cash->get_error_data()['payment_id'] );
+		$intent = $this->payment( 'pos_card', '10.00' );
+		$second = Ledger::instance()->intent( wc_get_order( $order->get_id() ), $intent['id'], $intent, array() );
+		$this->assertWPError( $second );
+		$this->assertSame( 'wcpos_payment_in_flight', $second->get_error_code() );
+		$this->assertSame( $card['id'], $second->get_error_data()['payment_id'] );
+
+		// Capture completes it.
+		Ledger::instance()->capture( wc_get_order( $order->get_id() ), $card['id'], array() );
+		$paid = wc_get_order( $order->get_id() );
+		$this->assertTrue( $paid->is_paid() );
+		$this->assertNotNull( $paid->get_date_paid( 'edit' ) );
+	}
+
+	/** An authorization is money in motion, not money taken: it cannot take a refund allocation. */
+	public function test_authorized_row_is_not_refundable(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = Ledger::instance()->record( $order, $this->payment( 'pos_card', '20.00', array( 'status' => 'authorized' ) ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '5.00' );
+		$refund->save();
 
 		// Act.
-		Ledger::instance()->record( $order, $this->payment( 'pos_card', '92.95', array( 'status' => 'authorized' ) ) );
-		$summary = Ledger::instance()->summary( $order );
+		$result = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '5.00' );
 
 		// Assert.
-		$this->assertSame( '92.95', $summary['paid'] );
-		$this->assertSame( '0.00', $summary['balance'] );
-		$this->assertSame( 'completed', $order->get_status() );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_invalid_transition', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+	}
+
+	/** An approval for the wrong amount fails the row, though an authorization no longer counts. */
+	public function test_authorization_for_a_different_amount_fails_the_row(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '92.95' );
+
+		// Act.
+		$result = Ledger::instance()->intent(
+			$order,
+			$input['id'],
+			$input,
+			array(
+				'resume' => array(
+					'status' => 'authorized',
+					'amount' => '90.00',
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertWPError( $result );
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] );
+		$this->assertSame( 'failed', $row['status'] );
+		$this->assertSame( 'amount_mismatch', $row['failure_reason'] );
 	}
 
 	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */

@@ -21,9 +21,9 @@ class Ledger {
 	public const INDEX_META_KEY = '_wcpos_payment_method';
 	public const PAYMENT_ID_META_KEY = '_wcpos_payment_id';
 	/**
-	 * One meta row per pending or authorized leg. What the sweep selects orders by: an
-	 * authorization that covers the balance completes the order through payment_complete(),
-	 * so a status filter would lose exactly the leg that most needs reconciling.
+	 * One meta row per pending or authorized leg. What the sweep selects orders by: a status
+	 * filter would lose a leg on an order whose status moved on (a cancel, an earlier
+	 * completion), which is exactly the leg that most needs reconciling.
 	 */
 	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
@@ -48,7 +48,10 @@ class Ledger {
 	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'provider_refs', 'receipt' );
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
-	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
+	/** Only captured money pays a sale (ADR 0040 rule 1, D6): an authorization is money in motion. */
+	public const COUNTING_STATUSES = array( 'captured' );
+	/** Provider answers whose amount and currency are verified against the row before they are applied. */
+	private const VERIFIED_STATUSES = array( 'authorized', 'captured' );
 	public const STATUSES = array( 'pending', 'authorized', 'captured', 'failed', 'voided' );
 
 	/**
@@ -514,7 +517,7 @@ class Ledger {
 	}
 
 	/**
-	 * Sum authorized and captured rows.
+	 * Sum captured rows.
 	 *
 	 * @param array $rows Payment rows.
 	 */
@@ -556,10 +559,17 @@ class Ledger {
 	 */
 	public function summary( WC_Order $order, ?array $rows = null ): array {
 		$rows = null === $rows ? $this->read( $order ) : $rows;
+		$authorized = 0;
+		foreach ( $rows as $row ) {
+			if ( 'authorized' === ( $row['status'] ?? '' ) ) {
+				$authorized += Money::minor( $row['amount'] ?? 0 );
+			}
+		}
 		return array(
 			'status'               => $order->get_status(),
 			'total'                => Money::normalize( $order->get_total() ),
 			'paid'                 => $this->paid( $rows ),
+			'authorized'           => Money::format( $authorized ),
 			'balance'              => $this->balance( $order, $rows ),
 			'payment_method'       => $order->get_payment_method(),
 			'payment_method_title' => $order->get_payment_method_title(),
@@ -783,7 +793,7 @@ class Ledger {
 		$pending = $this->pending_reserved( $rows );
 		$newest_pending = null;
 		foreach ( $rows as $existing ) {
-			if ( 'pending' === $existing['status'] && ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) ) {
+			if ( in_array( $existing['status'], array( 'pending', 'authorized' ), true ) && ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) ) {
 				$newest_pending = $existing;
 			}
 		}
@@ -931,7 +941,7 @@ class Ledger {
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
 		}
-		if ( in_array( $applied['status'], self::COUNTING_STATUSES, true ) ) {
+		if ( in_array( $applied['status'], self::VERIFIED_STATUSES, true ) ) {
 			$confirmed = array_key_exists( 'amount', $new ) ? $new['amount'] : $row['amount'];
 			$valid = is_numeric( $confirmed );
 			$difference = $valid ? Money::minor( $confirmed ) - Money::minor( $row['amount'] ) : 0;
@@ -1326,7 +1336,7 @@ class Ledger {
 			// falling back to a cancelling one only when nothing else is live.
 			$blocking = null;
 			foreach ( $this->read( $order ) as $live ) {
-				if ( 'pending' !== $live['status'] ) {
+				if ( ! in_array( $live['status'], array( 'pending', 'authorized' ), true ) ) {
 					continue;
 				}
 				$live_cancelling     = ! empty( $live['void_requested_at'] );
@@ -1824,7 +1834,7 @@ class Ledger {
 	}
 
 	/**
-	 * Minor units reserved by pending legs: money a provider may still confirm.
+	 * Minor units reserved by pending and authorized legs: money a provider may still confirm or capture.
 	 *
 	 * @param array $rows               Payment rows.
 	 * @param bool  $include_cancelling Whether legs whose cancel is already requested still reserve.
@@ -1832,7 +1842,7 @@ class Ledger {
 	private function pending_reserved( array $rows, bool $include_cancelling = true ): int {
 		$reserved = 0;
 		foreach ( $rows as $row ) {
-			if ( 'pending' === ( $row['status'] ?? '' ) && ( $include_cancelling || empty( $row['void_requested_at'] ) ) ) {
+			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) && ( $include_cancelling || empty( $row['void_requested_at'] ) ) ) {
 				$reserved += Money::minor( $row['amount'] ?? 0 );
 			}
 		}

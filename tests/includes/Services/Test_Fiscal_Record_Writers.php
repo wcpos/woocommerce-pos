@@ -458,7 +458,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	public function test_refund_with_two_counting_rows_without_meta_is_unallocated(): void {
 		$order = $this->order();
 		$rows = array();
-		foreach ( array( 'authorized', 'captured' ) as $status ) {
+		// Two captured rows: an authorization no longer counts (ADR 0040 D6).
+		foreach ( array( 'captured', 'captured' ) as $status ) {
 			$rows[] = array(
 				'id' => wp_generate_uuid4(),
 				'method_id' => 'pos_cash',
