@@ -70,6 +70,74 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	public function test_reduced_reopened_sale_cannot_complete_from_retained_capture(): void {
+		$order = $this->order( array( '_wcpos_payments' => $this->cash( '100' ), '_wcpos_completed_at' => self::AT ), '100' );
+		$this->ack_meta( $this->push( $order, $this->reopen(), array( 'expectedEpoch' => 0 ) ) );
+		$fee_id = array_key_first( $order->get_items( 'fee' ) );
+		$this->ack_meta( $this->push( $order, array( 'fee_lines' => array( array( 'id' => $fee_id, 'total' => '200' ) ) ), array( 'expectedEpoch' => 1 ) ) );
+		$meta = $this->ack_meta( $this->push( $order, array(
+			'fee_lines' => array( array( 'id' => $fee_id, 'total' => '100' ) ),
+			'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT ) ),
+		), array( 'expectedEpoch' => 1 ) ) );
+		$this->assertArrayNotHasKey( '_wcpos_completed_at', $meta );
+		$this->assertArrayNotHasKey( '_wcpos_completed_epoch', $meta );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( '100.00', $saved->get_total() );
+		$this->assertFalse( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::is_completed_in_current_epoch( $saved, \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance() ) );
+	}
+
+	public function test_competing_update_preserves_pending_transition_until_original_recovers(): void {
+		$order = $this->order();
+		$mutation = wp_generate_uuid4();
+		$original = null;
+		$puts = 0;
+		$observe = static function ( $result, $server, $request ) use ( &$original, &$puts, $mutation ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() && $mutation === $request->get_param( 'mutationId' ) ) { $original = clone $request; }
+			if ( 'PUT' === $request->get_method() && 0 === strpos( $request->get_route(), '/wc/v3/orders/' ) ) { ++$puts; }
+			return $result;
+		};
+		$crash = static function ( $value ) {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) ) {
+					throw new \RuntimeException( 'Pending transition interrupted' );
+				}
+			}
+			return $value;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		add_filter( 'woocommerce_order_get_total', $crash );
+		try {
+			try {
+				$this->push( $order, array( 'meta_data' => $this->meta( array( '_wcpos_payments' => $this->cash(), '_wcpos_completed_at' => self::AT ) ) ), array( 'mutationId' => $mutation, 'tillAggregate' => array( 'total' => '99' ) ) );
+				$this->fail( 'Expected transition failure' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Pending transition interrupted', $error->getMessage() );
+			} finally {
+				remove_filter( 'woocommerce_order_get_total', $crash );
+			}
+			$checkpoint = wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' );
+			$this->assertSame( $mutation, $checkpoint['mutation_id'] );
+			$second = array( 'mutationId' => wp_generate_uuid4() );
+			$refusal = $this->push( $order, array( 'customer_note' => 'Competing till' ), $second );
+			$this->assertSame( 409, $refusal->get_status() );
+			$this->assertSame( 'woo_rxdb_sync_record_locked', $refusal->get_data()['code'] );
+			$this->assertSame( $checkpoint, wc_get_order( $order->get_id() )->get_meta( '_wcpos_update_transition' ) );
+			$this->assertSame( 1, $puts );
+			$this->assertSame( 200, $this->server->dispatch( $original )->get_status() );
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertSame( 'server', $saved->get_meta( '_wcpos_money_owner' ) );
+			$this->assertSame( self::AT, $saved->get_meta( '_wcpos_completed_at' ) );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_update_transition' ) );
+			$store = new \WCPOS\WooCommercePOS\Sync\Mutation_Store();
+			$this->assertSame( 'done', $store->lookup( 'orders', $mutation )['status'] );
+			$this->assertSame( 1, $puts );
+			$this->assertSame( 200, $this->push( $saved, array( 'customer_note' => 'Competing till' ), $second )->get_status() );
+			$this->assertSame( 2, $puts );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+	}
+
 	public function test_reopen_waits_for_pending_mint_then_retains_original_epoch(): void {
 		$row = $this->cash()['payments'][0];
 		$row['source'] = 'webview';
@@ -287,7 +355,7 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 			$this->assertSame( 1, $puts, 'Recovery must not dispatch a second PUT' );
 			$saved = wc_get_order( $order->get_id() );
 			$this->assertSame( $reopen ? '' : 'server', $saved->get_meta( '_wcpos_money_owner' ) );
-			$this->assertSame( $reopen || $unchanged ? '' : self::AT, $saved->get_meta( '_wcpos_completed_at' ) );
+			$this->assertSame( $reopen || $unchanged || $epoch > 0 ? '' : self::AT, $saved->get_meta( '_wcpos_completed_at' ) );
 			$this->assertSame( $reopen ? 1 : $epoch, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( $saved ) );
 			$this->assertSame( 'done', $store->lookup( 'orders', $envelope['mutationId'] )['status'] );
 			$this->assertSame( '', $saved->get_meta( '_wcpos_update_transition' ) );
@@ -328,7 +396,7 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 			'owner' => array( 'owner', false ),
 			'completion' => array( 'completion', false ),
 			'reopen' => array( 'owner', true ),
-			'reduced total uses original edit proof' => array( 'owner', false, 1 ),
+			'reduced total cannot use prior epoch proof' => array( 'owner', false, 1 ),
 			'unchanged total has no edit proof' => array( 'owner', false, 1, true ),
 		);
 	}
@@ -646,6 +714,12 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		if ( $order ) { $fee['id'] = array_key_first( $order->get_items( 'fee' ) ); }
 		$payload = array( 'fee_lines' => array( $fee ), 'meta_data' => $this->meta( array( '_woocommerce_pos_uuid' => self::REC, '_wcpos_completed_at' => self::AT, '_wcpos_payments' => $this->cash( '40' ) ) ) );
 		$id = 0;
+		$original = null;
+		$observe = static function ( $result, $server, $request ) use ( &$original ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			return $result;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
 		$crash = static function ( $total, $saved ) use ( &$id ) {
 			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
 				if ( \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) ) {
@@ -663,12 +737,13 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 			$this->assertSame( 'Post-forward failure', $e->getMessage() );
 		} finally {
 			remove_filter( 'woocommerce_order_get_total', $crash, 10 );
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
 		}
 		$saved = wc_get_order( $id );
 		$this->assertSame( '40.00', $saved->get_total() );
 		$this->assertSame( '', $saved->get_meta( '_wcpos_completed_at' ) );
-		// New mutation, fresh CAS for update; create resolves the already-saved UUID.
-		$meta = $this->ack_meta( $this->push( $create ? null : $saved, $payload ) );
+		// Updates must recover the pending mutation; a duplicate create resolves the saved UUID.
+		$meta = $this->ack_meta( $create ? $this->push( null, $payload ) : $this->server->dispatch( $original ) );
 		$this->assertSame( self::AT, $meta['_wcpos_completed_at'] ?? null );
 	}
 	/** @dataProvider paid_attempt_paths */
@@ -836,6 +911,11 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		$meta = $this->ack_meta( $this->push( $order, $payload, array( 'expectedEpoch' => 1 ) ) );
 		$this->assertArrayNotHasKey( '_wcpos_completed_at', $meta );
 		$payload['fee_lines'] = array( array( 'id' => array_key_first( $order->get_items( 'fee' ) ), 'total' => '40' ) );
+		$meta = $this->ack_meta( $this->push( $order, $payload, array( 'expectedEpoch' => 1 ) ) );
+		$this->assertArrayNotHasKey( '_wcpos_completed_at', $meta );
+		$this->assertArrayNotHasKey( '_wcpos_epoch_provenance', $meta );
+		// A new tender belongs to this epoch and supplies the missing completion proof.
+		$payload['meta_data'][] = array( 'key' => '_wcpos_payments', 'value' => $this->cash( '40' ) );
 		$meta = $this->ack_meta( $this->push( $order, $payload, array( 'expectedEpoch' => 1 ) ) );
 		$this->assertSame( 1, (int) $meta['_wcpos_completed_epoch'] );
 		$this->assertSame( 7, $meta['_wcpos_epoch_provenance'][1]['sale_counter'] );

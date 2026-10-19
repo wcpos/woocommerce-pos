@@ -54,6 +54,21 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		return array_values( array_filter( $this->logged_messages, static fn( $line ) => false !== strpos( $line, 'WCPOS payment' ) ) );
 	}
 
+	/** Refund objects are not orders accepted by the payment route family. */
+	public function test_refund_id_on_payment_routes_returns_not_found(): void {
+		$order = $this->create_pos_order();
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '1' );
+		$refund->save();
+		$base = '/wcpos/v2/orders/' . $refund->get_id() . '/payments';
+		foreach ( array( $this->wp_rest_post_request( $base ), $this->wp_rest_get_request( $base . '/' . wp_generate_uuid4() . '/status' ) ) as $request ) {
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 404, $response->get_status() );
+			$this->assertSame( 'wcpos_order_not_found', $response->get_data()['code'] );
+		}
+	}
+
 	/** Recording cash returns the captured row and paid order summary. */
 	public function test_record_cash_payment_returns_row_and_summary(): void {
 		// Arrange.

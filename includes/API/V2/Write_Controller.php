@@ -573,6 +573,15 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 		try {
+			if ( $locked ) {
+				$order = wc_get_order( $id );
+				$checkpoint = $order ? $order->get_meta( '_wcpos_update_transition' ) : null;
+				if ( is_array( $checkpoint ) && ( $checkpoint['mutation_id'] ?? '' ) !== $m['mutationId'] ) {
+					// Recovery needs the original retry's fingerprint-checked payload and aggregate.
+					// A different mutation cannot supply them or replace that pending transition.
+					return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order transitions are pending; retry shortly.', array( 'status' => 409 ) );
+				}
+			}
 			$current = $this->document_for( $meta, $id );
 			if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
 				return $current;

@@ -290,7 +290,7 @@ class Order_Writer extends Null_Writer {
 		$keep_stamp = $stamp && $stamp['epoch'] >= $epoch;
 		$reduced = $before_epoch > 0
 			&& ( array_intersect( array_keys( Settlement_Change::TYPES ), $context['settlement_changes'] ) || Money::minor( $saved->get_total() ) < Money::minor( $context['total_before'] ) )
-			&& Money::minor( $saved->get_total() ) <= Money_Epoch::net_paid( Ledger::instance()->read( $saved ) );
+			&& Money::minor( $saved->get_total() ) <= Money_Epoch::net_paid( Money_Epoch::current_rows( $saved, Ledger::instance()->read( $saved ) ) );
 		$free_create = 'create' === $context['operation'] && 0 === $epoch && 0 === Money::minor( $saved->get_total() );
 		if ( ! Money_Epoch::is_completed_in_current_epoch( $saved, Ledger::instance() ) && ! $reduced && ! $free_create ) {
 			Logger::warning( sprintf( 'WCPOS completion stamp refused on order #%d: no completion proof in the current epoch', $saved->get_id() ) );
