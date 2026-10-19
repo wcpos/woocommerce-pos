@@ -455,12 +455,12 @@ class Order_Writer extends Null_Writer {
 		if ( ! $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) {
 			return;
 		}
-		require_once WC_ABSPATH . 'includes/admin/wc-admin-functions.php';
+		require_once WC()->plugin_path() . '/includes/admin/wc-admin-functions.php';
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			$changed = wc_maybe_adjust_line_item_product_stock( $item );
 			if ( is_array( $changed ) ) {
 				/* translators: %s item name. */
-				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $item->get_name(), $changed['from'], $changed['to'] ) ), false, true );
+				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $item->get_name(), $changed['from'], $changed['to'] ) ), 0, true );
 			}
 		}
 	}

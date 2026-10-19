@@ -856,12 +856,9 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * POST /wcpos/v2/push/orders with one mutation envelope.
+	 * The revision the till holds for an order: the canonical hash of its pulled document.
 	 *
-	 * @param string      $operation     create|update.
-	 * @param string      $record_id     Client record uuid.
-	 * @param array       $payload       Order document.
-	 * @param string|null $base_revision Revision the update is based on.
+	 * @param int $order_id Order id.
 	 */
 	private function order_revision( int $order_id ): string {
 		$request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id );
@@ -871,6 +868,14 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		return Order_Serializer::canonical_revision( Order_Serializer::add_pos_links( $data, wc_get_order( $order_id ) ) );
 	}
 
+	/**
+	 * POST /wcpos/v2/push/orders with one mutation envelope.
+	 *
+	 * @param string      $operation     create|update.
+	 * @param string      $record_id     Client record uuid.
+	 * @param array       $payload       Order document.
+	 * @param string|null $base_revision Revision the update is based on.
+	 */
 	private function push_order( string $operation, string $record_id, array $payload, ?string $base_revision = null ): WP_REST_Response {
 		$envelope = array(
 			'mutationId'   => wp_generate_uuid4(),

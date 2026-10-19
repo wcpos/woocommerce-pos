@@ -164,10 +164,14 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		};
 		add_action( 'woocommerce_payment_complete', $counter );
 		$meta = $this->uuid_meta();
+		$ledger = array(
+			'schema'   => 1,
+			'payments' => array( $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ) ),
+		);
 		foreach ( $this->server_money_meta_keys() as $key ) {
 			$meta[] = array(
 				'key'   => $key,
-				'value' => '_wcpos_payments' === $key ? (string) wp_json_encode( array( 'schema' => 1, 'payments' => array( $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ) ) ) ) : 'from-the-till',
+				'value' => '_wcpos_payments' === $key ? (string) wp_json_encode( $ledger ) : 'from-the-till',
 			);
 		}
 		$payload = $this->server_money_fields() + array(

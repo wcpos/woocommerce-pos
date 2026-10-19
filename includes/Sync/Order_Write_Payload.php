@@ -107,10 +107,33 @@ final class Order_Write_Payload {
 		if ( isset( $forwarded['coupon_lines'] ) && is_array( $forwarded['coupon_lines'] ) ) {
 			return true;
 		}
+		// Field => decimals to compare at: null is store precision, false a plain string compare.
 		$types = array(
-			'line_items'     => array( 'line_item', array( 'quantity' => 6, 'subtotal' => null, 'total' => null, 'product_id' => 0, 'variation_id' => 0 ) ),
-			'fee_lines'      => array( 'fee', array( 'total' => null, 'tax_class' => false, 'name' => false ) ),
-			'shipping_lines' => array( 'shipping', array( 'total' => null, 'method_id' => false ) ),
+			'line_items'     => array(
+				'line_item',
+				array(
+					'quantity'     => 6,
+					'subtotal'     => null,
+					'total'        => null,
+					'product_id'   => 0,
+					'variation_id' => 0,
+				),
+			),
+			'fee_lines'      => array(
+				'fee',
+				array(
+					'total'     => null,
+					'tax_class' => false,
+					'name'      => false,
+				),
+			),
+			'shipping_lines' => array(
+				'shipping',
+				array(
+					'total'     => null,
+					'method_id' => false,
+				),
+			),
 		);
 		foreach ( $types as $key => list( $type, $fields ) ) {
 			foreach ( is_array( $forwarded[ $key ] ?? null ) ? $forwarded[ $key ] : array() as $line ) {
@@ -130,7 +153,7 @@ final class Order_Write_Payload {
 					if ( ! isset( $line[ $field ] ) || ! is_scalar( $line[ $field ] ) ) {
 						continue;
 					}
-					$stored = $item->{"get_{$field}"}( 'edit' );
+					$stored = $item->get_data()[ $field ] ?? '';
 					if ( false === $dp ? (string) $line[ $field ] !== (string) $stored
 						: wc_format_decimal( $line[ $field ], $dp ?? wc_get_price_decimals() ) !== wc_format_decimal( $stored, $dp ?? wc_get_price_decimals() ) ) {
 						return true;
