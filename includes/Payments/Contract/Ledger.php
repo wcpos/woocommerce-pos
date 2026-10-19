@@ -1396,11 +1396,13 @@ class Ledger {
 	public function close( WC_Order $order ) {
 		$rows = $this->read( $order );
 		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'on-hold' ), true ) ) {
+			// Replay only a completion that still stands: a cancel or other reopen marked it.
 			$history = Completion_Stamp::read( $order );
-			if ( null === $order->get_date_paid( 'edit' ) || ! $history ) {
+			$latest  = end( $history );
+			if ( null === $order->get_date_paid( 'edit' ) || ! is_array( $latest ) || ! empty( $latest['reopened_at_gmt'] ) ) {
 				return $this->invalid_transition();
 			}
-			return $this->closed( $order, $rows, end( $history ) );
+			return $this->closed( $order, $rows, $latest );
 		}
 		foreach ( $rows as $row ) {
 			$pending_refund = array_filter( (array) ( $row['refunds'] ?? array() ), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );

@@ -555,6 +555,22 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $history, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** A cancelled sale is not closed: its completion no longer stands, so nothing replays. */
+	public function test_close_on_a_cancelled_sale_is_an_invalid_transition(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_status() );
+		wc_get_order( $order->get_id() )->update_status( 'cancelled' );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertSame( 'cancelled', wc_get_order( $order->get_id() )->get_status() );
+	}
+
 	/** Close alone may complete an on-hold order its payments cover. */
 	public function test_close_on_an_on_hold_covered_order_completes_it(): void {
 		// Arrange.
