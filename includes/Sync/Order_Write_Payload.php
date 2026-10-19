@@ -169,7 +169,7 @@ final class Order_Write_Payload {
 		$types = array(
 			'line_items'     => array( 'line_item', array( 'quantity', 'subtotal', 'total', 'product_id', 'variation_id', 'tax_class' ) ),
 			'fee_lines'      => array( 'fee', array( 'total', 'tax_class', 'tax_status', 'name' ) ),
-			'shipping_lines' => array( 'shipping', array( 'total', 'method_id' ) ),
+			'shipping_lines' => array( 'shipping', array( 'total', 'method_id', 'instance_id' ) ),
 		);
 		foreach ( $types as $key => list( $type, $fields ) ) {
 			foreach ( is_array( $forwarded[ $key ] ?? null ) ? $forwarded[ $key ] : array() as $line ) {

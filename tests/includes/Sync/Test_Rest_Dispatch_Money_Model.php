@@ -1159,8 +1159,8 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '2', (string) $item->get_meta( '_reduced_stock', true ) );
 	}
 
-	/** A paid processing sale of one taxed line (10.00 at 10%) whose POS line data says taxable. */
-	protected function paid_taxed_pos_line_order(): int {
+	/** A paid sale (processing unless told otherwise) of one taxed line (10.00 at 10%) whose POS line data says taxable. */
+	protected function paid_taxed_pos_line_order( string $status = 'processing' ): int {
 		update_option( 'woocommerce_calc_taxes', 'yes' );
 		\WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper::create_tax_rate(
 			array(
@@ -1185,7 +1185,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$order_id = $order->get_id();
 		wc_get_order( $order_id )->payment_complete();
 		$order = wc_get_order( $order_id );
-		$order->set_status( 'processing' );
+		$order->set_status( $status );
 		$order->save();
 		$this->assertSame( '1', wc_format_decimal( $this->first_item( $order_id )->get_total_tax( 'edit' ), 0 ) );
 
@@ -1299,6 +1299,238 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertFalse( wc_get_order( $order_id )->get_item( $item_id ) );
 		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
+	}
+
+	public function test_currency_change_on_a_gateway_paid_order_is_refused_currency_locked(): void {
+		// Arrange: paid by a WooCommerce gateway, so no ledger row exists.
+		$order_id = $this->make_order( 'pending', array( array( $this->product(), 1 ) ) );
+		wc_get_order( $order_id )->payment_complete( 'txn-1' );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order_id ) ) );
+		$payload = array(
+			'currency'  => 'EUR',
+			'meta_data' => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_currency_locked', $response->get_data()['code'] );
+		$this->assertSame( get_woocommerce_currency(), wc_get_order( $order_id )->get_currency() );
+	}
+
+	public function test_currency_only_change_on_an_open_cart_with_no_money_is_applied(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$payload  = array(
+			'currency'  => 'EUR',
+			'meta_data' => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'EUR', wc_get_order( $order_id )->get_currency() );
+	}
+
+	/** A reopened (pos-open, stock still reduced) sale of two A, and the push that re-binds its line to B. */
+	protected function reopened_sale_rebinding_to( \WC_Product $a, \WC_Product $b ): array {
+		$order_id = $this->paid_sale_of_two( $a );
+		$this->assertSame( 200, $this->push_status( $order_id, 'pos-open' )->get_status() );
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'         => $this->first_item( $order_id )->get_id(),
+					'product_id' => $b->get_id(),
+					'quantity'   => 2,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		return array( $order_id, $payload );
+	}
+
+	public function test_a_failed_forward_moves_no_stock(): void {
+		// Arrange: the write fails after wc/v3 prepared the re-bound line.
+		$a                         = $this->stock_product( 10 );
+		$b                         = $this->stock_product( 5 );
+		list( $order_id, $payload ) = $this->reopened_sale_rebinding_to( $a, $b );
+		$fail                      = static fn() => new \WP_Error( 'test_refused', 'Refused by test.', array( 'status' => 400 ) );
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $fail, 30 );
+
+		// Act.
+		try {
+			$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $fail, 30 );
+		}
+
+		// Assert.
+		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
+		$this->assertSame( 8, $this->stock_of( $a ) );
+		$this->assertSame( 5, $this->stock_of( $b ) );
+		$this->assertSame( '2', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+	}
+
+	public function test_a_prevented_stock_adjustment_is_a_no_op_not_a_failure(): void {
+		// Arrange.
+		$product           = $this->stock_product( 10 );
+		$order_id          = $this->paid_sale_of_two( $product );
+		$payload           = $this->quantity_edit( $order_id );
+		$payload['status'] = 'pos-open';
+		add_filter( 'woocommerce_prevent_adjust_line_item_product_stock', '__return_true' );
+
+		// Act.
+		try {
+			$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+		} finally {
+			remove_filter( 'woocommerce_prevent_adjust_line_item_product_stock', '__return_true' );
+		}
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 8, $this->stock_of( $product ) );
+		$failures = array_filter(
+			wc_get_order_notes( array( 'order_id' => $order_id ) ),
+			static fn( $note ) => false !== strpos( $note->content, 'could not be adjusted' )
+		);
+		$this->assertCount( 0, $failures );
+	}
+
+	public function test_rebinding_with_a_move_to_pending_leaves_both_products_unreduced(): void {
+		// Arrange: WooCommerce restores an order's stock when it moves to pending.
+		$a                         = $this->stock_product( 10 );
+		$b                         = $this->stock_product( 5 );
+		list( $order_id, $payload ) = $this->reopened_sale_rebinding_to( $a, $b );
+		$payload['status']         = 'pending';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'pending', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( 10, $this->stock_of( $a ) );
+		$this->assertSame( 5, $this->stock_of( $b ) );
+	}
+
+	/** Every money figure of an order as stored: totals and each line's tax. */
+	protected function stored_totals( int $order_id ): array {
+		$order   = wc_get_order( $order_id );
+		$figures = array( $order->get_total( 'edit' ), $order->get_total_tax( 'edit' ) );
+		foreach ( $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) as $item ) {
+			$figures[] = $item->get_total_tax( 'edit' );
+		}
+
+		return $figures;
+	}
+
+	/** The order's full document with a new billing country and postcode. */
+	protected function document_with_new_billing( int $order_id ): array {
+		$document                        = $this->order_document( $order_id );
+		$document['billing']['country']  = 'GB';
+		$document['billing']['postcode'] = 'SW1A 1AA';
+
+		return $document;
+	}
+
+	/** A second rate for every location, added after the sale. */
+	protected function add_tax_rate_after_the_sale(): void {
+		\WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper::create_tax_rate(
+			array(
+				'country'  => '',
+				'rate'     => '5.000',
+				'name'     => 'Later tax',
+				'priority' => 2,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+	}
+
+	public function test_address_change_on_a_paid_order_stores_the_address_and_keeps_its_totals(): void {
+		// Arrange.
+		$order_id = $this->paid_taxed_pos_line_order();
+		$before   = $this->stored_totals( $order_id );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'GB', $order->get_billing_country() );
+		$this->assertSame( 'SW1A 1AA', $order->get_billing_postcode() );
+		$this->assertSame( 'GB', $response->get_data()['document']['billing']['country'] );
+		$this->assertSame( $before, $this->stored_totals( $order_id ) );
+	}
+
+	public function test_a_tax_rate_added_after_the_sale_does_not_move_a_paid_orders_totals(): void {
+		// Arrange.
+		$order_id = $this->paid_taxed_pos_line_order();
+		$before   = $this->stored_totals( $order_id );
+		$this->add_tax_rate_after_the_sale();
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( $before, $this->stored_totals( $order_id ) );
+	}
+
+	public function test_a_tax_rate_added_after_the_sale_recalculates_an_editable_on_hold_order(): void {
+		// Arrange: on-hold is editable, so wc/v3 recalculates as it always has.
+		$order_id = $this->paid_taxed_pos_line_order( 'on-hold' );
+		$before   = $this->stored_totals( $order_id );
+		$this->add_tax_rate_after_the_sale();
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertNotSame( $before, $this->stored_totals( $order_id ) );
+	}
+
+	public function test_shipping_instance_change_on_a_processing_order_is_refused_reopen_required(): void {
+		// Arrange: a paid order with a flat-rate shipping line.
+		$order_id = $this->make_order( 'pending', array( array( $this->product(), 1 ) ) );
+		$order    = wc_get_order( $order_id );
+		$shipping = new \WC_Order_Item_Shipping();
+		$shipping->set_method_id( 'flat_rate' );
+		$shipping->set_instance_id( '1' );
+		$shipping->set_method_title( 'Flat rate' );
+		$shipping->set_total( '5.00' );
+		$order->add_item( $shipping );
+		$order->calculate_totals();
+		$order->save();
+		wc_get_order( $order_id )->payment_complete();
+		$order = wc_get_order( $order_id );
+		$order->set_status( 'processing' );
+		$order->save();
+		$shipping_id = array_key_first( wc_get_order( $order_id )->get_items( 'shipping' ) );
+		$payload     = array(
+			'shipping_lines' => array(
+				array(
+					'id'          => $shipping_id,
+					'instance_id' => '2',
+				),
+			),
+			'meta_data'      => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'reopen_required', $response->get_data()['code'] );
+		$this->assertSame( '1', (string) wc_get_order( $order_id )->get_item( $shipping_id )->get_instance_id() );
 	}
 
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {

@@ -9,6 +9,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -289,6 +290,16 @@ class Order_Writer extends Null_Writer {
 		$this->stamp_order_till_meta( $id, $payload );
 		$this->order_payload->persist_tax_ids( $id, $payload, false );
 		$this->persist_cashier_store_reassignment( $id, $current, $response_data, $context );
+		if ( ! empty( $context['frozen_addresses'] ) ) {
+			// A non-editable order's address change lands without wc/v3's calculate_totals().
+			$order = wc_get_order( $id );
+			if ( $order ) {
+				foreach ( $context['frozen_addresses'] as $type => $address ) {
+					$order->set_address( $address, $type );
+				}
+				Ledger::saving( $id, fn() => $order->save() );
+			}
+		}
 		if ( ! empty( $context['clear_email'] ) ) {
 			$order = wc_get_order( $id );
 			if ( $order ) {
@@ -385,19 +396,11 @@ class Order_Writer extends Null_Writer {
 		// wc/v3 adjusts a set line's stock only on processing/completed/on-hold (and restores a removed
 		// line's reduction itself); a reopened sale is pos-open with its stock still reduced, so after the
 		// save every line is brought to its quantity. An unchanged line is a no-op: `_reduced_stock` matches.
+		// Every movement runs after the save, so a failed write moves nothing (rule 4b).
 		$adjust_stock = static function ( $order, $request, $creating ) use ( $context, $prepared ) {
 			if ( ! $creating && $order instanceof \WC_Order && $context['id'] === $order->get_id() && $request->get_route() === $prepared['route'] ) {
-				self::adjust_line_stock( $order );
+				self::adjust_line_stock( $order, $context['bindings'] ?? array() );
 			}
-		};
-		// A stored line re-bound to another product gives back its old product's reduction before the
-		// write; the post-save pass then reduces the new product in full (rule 4b).
-		$restore_rebound = static function ( $order ) use ( $context ) {
-			$intent = Order_Write_Intent::current();
-			if ( $order instanceof \WC_Order && null !== $intent && $intent->is_subject( $order ) ) {
-				self::restore_rebound_line_stock( $order, $context['bindings'] ?? array() );
-			}
-			return $order;
 		};
 		$use_filter = array() !== ( $context['fill_provenance'] ?? array() ) || isset( $context['restart_gmt'] );
 		if ( $use_filter ) {
@@ -413,7 +416,6 @@ class Order_Writer extends Null_Writer {
 			}
 			add_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10, 3 );
 			if ( ! empty( $context['adjust_stock'] ) ) {
-				add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $restore_rebound, 20 );
 				add_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10, 3 );
 			}
 			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
@@ -421,7 +423,6 @@ class Order_Writer extends Null_Writer {
 			$qd->clear();
 			remove_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10 );
 			remove_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10 );
-			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $restore_rebound, 20 );
 			if ( $use_filter ) {
 				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10 );
 			}
@@ -429,6 +430,21 @@ class Order_Writer extends Null_Writer {
 				remove_action( 'woocommerce_before_order_object_save', $created_via );
 			}
 		}
+	}
+
+	/** Whether the push moves a non-editable order into an editable status (a reopen, D3). */
+	private static function reopens( \WC_Order $order, array $forward ): bool {
+		return ! $order->is_editable() && in_array( (string) ( $forward['status'] ?? '' ), array( 'pos-open', 'pending', 'on-hold' ), true );
+	}
+
+	/**
+	 * Whether any money exists on the order: a ledger row, a gateway attempt or the awaiting-customer
+	 * stamp, or WooCommerce's own paid facts for an order a gateway or an earlier version paid
+	 * (`date_paid`, a paid status, a transaction id, a refund).
+	 */
+	private static function has_money( \WC_Order $order ): bool {
+		return Ledger::instance()->read( $order ) || Gateway_Submission::read_attempts( $order ) || null !== Gateway_Submission::read_stamp( $order )
+			|| null !== $order->get_date_paid( 'edit' ) || $order->is_paid() || '' !== (string) $order->get_transaction_id( 'edit' ) || array() !== $order->get_refunds();
 	}
 
 	/**
@@ -459,46 +475,87 @@ class Order_Writer extends Null_Writer {
 	}
 
 	/**
-	 * Give back the old product's reduction for each stored line the push re-binds to another
-	 * product or variation; wc/v3 keeps the line's `_reduced_stock`, so the post-save diff
-	 * would otherwise leave the old product reduced and never reduce the new one.
+	 * After the save, move stock for a sale whose stock was already reduced. A line re-bound to
+	 * another product first gives its old product back the reduction the pre-read recorded (wc/v3
+	 * keeps the line's `_reduced_stock`); then every line is brought to its quantity with wc/v3's
+	 * own helper and note. When the status change itself restored the order's stock (pending,
+	 * cancelled), WooCommerce returned a re-bound line's reduction to its NEW product, so that
+	 * unit is moved back to the old one. A helper that fails is logged and noted for the merchant,
+	 * never rolled back: the write landed, and a retry would compare unchanged.
+	 *
+	 * @param \WC_Order $order    The saved order.
+	 * @param array     $bindings Reduced lines as the pre-read saw them: id => [product, variation, reduced, name].
 	 */
-	private static function restore_rebound_line_stock( \WC_Order $order, array $bindings ): void {
+	private static function adjust_line_stock( \WC_Order $order, array $bindings ): void {
+		$reduced_now = (bool) $order->get_data_store()->get_stock_reduced( $order->get_id() );
+		require_once WC()->plugin_path() . '/includes/admin/wc-admin-functions.php';
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			list( $product_id, $variation_id, $reduced, $name ) = $bindings[ $item->get_id() ] ?? array( 0, 0, 0, '' );
-			if ( $reduced <= 0 || ! $item instanceof \WC_Order_Item_Product
-				|| ( $product_id === $item->get_product_id() && $variation_id === $item->get_variation_id() ) ) {
+			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product
+				&& ( $product_id !== $item->get_product_id() || $variation_id !== $item->get_variation_id() ) ) {
+				if ( ! $reduced_now ) {
+					self::move_stock( $order, $item->get_product(), $item->get_name(), $reduced, 'decrease' );
+				}
+				$moved = self::move_stock( $order, wc_get_product( $variation_id ? $variation_id : $product_id ), $name, $reduced, 'increase' );
+				if ( ! $moved || ! $reduced_now ) {
+					continue;
+				}
+				$item->update_meta_data( '_reduced_stock', '0' );
+				$item->save();
+			}
+			if ( ! $reduced_now ) {
 				continue;
 			}
-			$product = wc_get_product( $variation_id ? $variation_id : $product_id );
-			if ( ! $product || ! $product->managing_stock() ) {
-				continue;
-			}
-			$to = wc_update_product_stock( $product, $reduced, 'increase' );
-			$item->update_meta_data( '_reduced_stock', '0' );
-			if ( ! is_wp_error( $to ) && false !== $to ) {
+			$changed = wc_maybe_adjust_line_item_product_stock( $item );
+			if ( is_array( $changed ) ) {
 				/* translators: %s item name. */
-				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $name, $to - $reduced, $to ) ), 0, true );
+				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $item->get_name(), $changed['from'], $changed['to'] ) ), 0, true );
+			} elseif ( is_wp_error( $changed ) ) {
+				$delta = wc_stock_amount( $item->get_quantity() ) - wc_stock_amount( $item->get_meta( '_restock_refunded_items', true ) ) - wc_stock_amount( $item->get_meta( '_reduced_stock', true ) );
+				self::stock_not_adjusted( $order, $item->get_name(), $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id(), $delta, $changed->get_error_message() );
 			}
 		}
 	}
 
 	/**
-	 * Bring every line's stock reduction to its quantity, with wc/v3's own helper and note.
-	 * Skipped when the status change itself restored the order's stock (pending, cancelled).
+	 * Move a stock-managed product's stock by a line's reduction, with wc/v3's note; a failure is noted.
+	 *
+	 * @param \WC_Order       $order     The order.
+	 * @param \WC_Product|null $product   The product, or null/false when it is gone.
+	 * @param string          $name      Line name for the note.
+	 * @param int|float       $quantity  Units to move.
+	 * @param string          $operation `increase` or `decrease`.
+	 * @return bool Whether the stock moved (or needed no move: an unmanaged or missing product).
 	 */
-	private static function adjust_line_stock( \WC_Order $order ): void {
-		if ( ! $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) {
-			return;
+	private static function move_stock( \WC_Order $order, $product, string $name, $quantity, string $operation ): bool {
+		if ( ! $product instanceof \WC_Product || ! $product->managing_stock() ) {
+			return true;
 		}
-		require_once WC()->plugin_path() . '/includes/admin/wc-admin-functions.php';
-		foreach ( $order->get_items( 'line_item' ) as $item ) {
-			$changed = wc_maybe_adjust_line_item_product_stock( $item );
-			if ( is_array( $changed ) ) {
-				/* translators: %s item name. */
-				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $item->get_name(), $changed['from'], $changed['to'] ) ), 0, true );
-			}
+		// wc_update_product_stock() answers the new stock, or false/null when it could not update it.
+		$to = wc_update_product_stock( $product, $quantity, $operation );
+		if ( ! is_numeric( $to ) ) {
+			self::stock_not_adjusted( $order, $name, $product->get_id(), 'increase' === $operation ? $quantity : -$quantity, 'wc_update_product_stock() did not update the stock' );
+			return false;
 		}
+		$from = 'increase' === $operation ? $to - $quantity : $to + $quantity;
+		/* translators: %s item name. */
+		$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $name, $from, $to ) ), 0, true );
+		return true;
+	}
+
+	/**
+	 * Log and note a stock movement that did not happen, for the merchant to reconcile.
+	 *
+	 * @param \WC_Order $order      The order.
+	 * @param string    $name       Line name.
+	 * @param int       $product_id Product whose stock did not move.
+	 * @param int|float $delta      Units the stock should have moved by (positive back into stock).
+	 * @param string    $message    The helper's error.
+	 */
+	private static function stock_not_adjusted( \WC_Order $order, string $name, int $product_id, $delta, string $message ): void {
+		Logger::error( sprintf( 'WCPOS: stock not adjusted for %1$s (#%2$d) on order #%3$d: %4$s', $name, $product_id, $order->get_id(), $message ) );
+		/* translators: 1: line name, 2: units. */
+		$order->add_order_note( sprintf( __( 'WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product\'s stock manually.', 'woocommerce-pos' ), $name, $delta ), 0, true );
 	}
 
 	/** Name and execute the permanent/trash stock restore/rollback protocol. */
@@ -618,6 +675,18 @@ class Order_Writer extends Null_Writer {
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
+		// A non-editable order that is not being reopened keeps its lines and totals: wc/v3 recalculates
+		// whenever lines or an address are posted, which would move a paid order's tax. Its unchanged
+		// lines are not forwarded and its addresses are applied after the write, without a recalculation.
+		if ( $order && ! $order->is_editable() && ! self::reopens( $order, $forward ) && ! $lines_changed ) {
+			unset( $forward['line_items'], $forward['fee_lines'], $forward['shipping_lines'], $forward['coupon_lines'] );
+			$context['frozen_addresses'] = array_filter( array_intersect_key( $forward, array_flip( array( 'billing', 'shipping' ) ) ), 'is_array' );
+			unset( $forward['billing'], $forward['shipping'] );
+			$email = $context['frozen_addresses']['billing']['email'] ?? '';
+			if ( ! is_scalar( $email ) || ( '' !== (string) $email && ! is_email( (string) $email ) ) ) {
+				return new WP_Error( 'rest_invalid_param', 'Invalid parameter(s): billing', array( 'status' => 400 ) );
+			}
+		}
 		// Stock already reduced (a paid or reopened sale): the line edit moves stock by its delta (rule 4b).
 		$context['adjust_stock'] = $lines_changed && (bool) $order->get_data_store()->get_stock_reduced( $id );
 		// wc/v3 saves an updated line before the pre-insert filters run: keep each reduced line's binding as read.
@@ -651,13 +720,12 @@ class Order_Writer extends Null_Writer {
 	 */
 	private function money_gate( \WC_Order $order, array $forward, bool $lines_changed ): ?WP_Error {
 		$currency = isset( $forward['currency'] ) && is_scalar( $forward['currency'] ) ? (string) $forward['currency'] : '';
-		if ( '' !== $currency && $currency !== $order->get_currency( 'edit' )
-			&& ( Ledger::instance()->read( $order ) || Gateway_Submission::read_attempts( $order ) || null !== Gateway_Submission::read_stamp( $order ) ) ) {
+		if ( '' !== $currency && $currency !== $order->get_currency( 'edit' ) && self::has_money( $order ) ) {
 			return new WP_Error( 'wcpos_currency_locked', 'The currency cannot change once a payment exists on this order.', array( 'status' => 422 ) );
 		}
 		$status   = (string) ( $forward['status'] ?? '' );
 		$editable = $order->is_editable();
-		$reopens  = ! $editable && in_array( $status, array( 'pos-open', 'pending', 'on-hold' ), true );
+		$reopens  = self::reopens( $order, $forward );
 		$cancels  = 'cancelled' === $status && 'cancelled' !== $order->get_status();
 		$motion   = ( $reopens || $cancels ) ? self::money_in_motion( $order ) : null;
 		if ( null !== $motion ) {
