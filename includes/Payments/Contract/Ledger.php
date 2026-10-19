@@ -498,6 +498,22 @@ class Ledger {
 	}
 
 	/**
+	 * Balance available to a new payment in the current money epoch.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	public function current_epoch_balance( WC_Order $order, array $rows ): string {
+		$epoch = Money_Epoch::current( $order );
+		$rows = array_filter( $rows, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === $epoch );
+		if ( 0 === $epoch ) {
+			return $this->balance( $order, $rows );
+		}
+		// A reopened order can retain date_paid from its previous epoch; it is not coverage.
+		return Money::format( max( 0, Money::minor( $order->get_total() ) - Money::minor( $this->paid( $rows ) ) ) );
+	}
+
+	/**
 	 * Build the ledger-backed order summary.
 	 *
 	 * @param WC_Order   $order Order object.
@@ -603,7 +619,7 @@ class Ledger {
 			)
 		);
 
-		$balance = Money::minor( $this->balance( $order, $rows ) );
+		$balance = Money::minor( $this->current_epoch_balance( $order, $rows ) );
 		// A provider leg still pending has reserved its share of the balance: cash taken on top
 		// of it would count twice if the terminal later confirms (the money moved both ways).
 		// A leg the till has already asked to cancel does not block cash: the cashier accepted
@@ -725,7 +741,7 @@ class Ledger {
 				'handoff' => $handoff,
 			);
 		}
-		$balance = Money::minor( $this->balance( $order, $rows ) );
+		$balance = Money::minor( $this->current_epoch_balance( $order, $rows ) );
 		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
 			return new WP_Error( 0 === $balance ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance', 0 === $balance ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ), array( 'status' => 0 === $balance ? 409 : 400 ) );
 		}
@@ -1550,12 +1566,13 @@ class Ledger {
 			Money_Meta_Guard::authorised(
 				$order->get_id(),
 				function () use ( $order, $normalized, $derive ): void {
-					$paid = Money_Epoch::net_paid( $normalized );
+					$epoch = Money_Epoch::current( $order );
+					$paid = Money_Epoch::net_paid( array_filter( $normalized, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === $epoch ) );
 					if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
 						$history = Gateway_Submission::read_attempts( $order );
 						$updated = $history;
 						foreach ( $updated as &$attempt ) {
-							if ( 'sent' === $attempt['state'] ) {
+							if ( 'sent' === $attempt['state'] && $attempt['epoch'] === $epoch ) {
 								$attempt['state'] = 'paid';
 							}
 						}

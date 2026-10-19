@@ -90,7 +90,7 @@ class Gateway_Submission {
 		if ( empty( $descriptor['pos_enabled'] ) ) {
 			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is not enabled for the POS.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
-		if ( 0 === Money::minor( $ledger->balance( $order, $rows ) ) ) {
+		if ( 0 === Money::minor( $ledger->current_epoch_balance( $order, $rows ) ) ) {
 			return new WP_Error( 'wcpos_order_already_paid', __( 'Order is already paid.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		foreach ( $rows as $row ) {

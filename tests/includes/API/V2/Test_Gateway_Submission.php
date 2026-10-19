@@ -532,6 +532,35 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 
+	/** @dataProvider reopened_paid_dates */
+	public function test_reopened_same_total_submission_records_current_epoch( bool $retain_date_paid ): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pos-open' );
+		if ( ! $retain_date_paid ) {
+			$order->set_date_paid( null );
+		}
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$attempt = wp_generate_uuid4();
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/wcpos_paid_test/submit' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params( array( 'attempt_id' => $attempt, 'values' => array(), 'epoch' => 1 ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$this->assertSame( 1, $response->get_data()['payment']['epoch'] );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertCount( 2, $ledger->read( $saved ) );
+		$this->assertTrue( \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::is_completed_in_current_epoch( $saved, $ledger ) );
+	}
+
+	public function reopened_paid_dates(): array {
+		return array( 'cleared paid date' => array( false ), 'retained paid date' => array( true ) );
+	}
+
 	/** A live cash leg prevents a full-order gateway submission. */
 	public function test_submit_live_cash_returns_conflict(): void {
 		// Arrange.

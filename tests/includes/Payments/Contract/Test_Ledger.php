@@ -43,6 +43,41 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** @dataProvider current_epoch_captures */
+	public function test_attempt_promotion_requires_current_epoch_coverage( bool $capture ): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$ledger->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pending' );
+		$old = wp_generate_uuid4();
+		$current = wp_generate_uuid4();
+		$stamp = array( 'attempt_id' => $current, 'method_id' => 'bacs' );
+		$order->update_meta_data( '_wcpos_awaiting_customer', $stamp );
+		$order->update_meta_data( '_wcpos_gateway_attempts', array(
+			$old => array( 'state' => 'sent', 'epoch' => 0 ),
+			$current => array( 'state' => 'sent', 'epoch' => 1 ),
+		) );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$rows = $ledger->read( $order );
+		if ( $capture ) {
+			$rows[] = array_merge( $rows[0], array( 'id' => wp_generate_uuid4(), 'epoch' => 1 ) );
+		}
+		$ledger->save( $order, $rows );
+		$saved = wc_get_order( $order->get_id() );
+		$history = \WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::read_attempts( $saved );
+		$this->assertSame( $capture ? 'paid' : 'sent', $history[ $current ]['state'] );
+		$this->assertSame( 'sent', $history[ $old ]['state'] );
+		if ( ! $capture ) {
+			$this->assertSame( $stamp, $saved->get_meta( '_wcpos_awaiting_customer' ) );
+			$this->assertSame( 'pending', $saved->get_status() );
+		}
+	}
+
+	public function current_epoch_captures(): array {
+		return array( 'retained capture only' => array( false ), 'current capture arrives' => array( true ) );
+	}
+
 	public function test_prior_epoch_projection_preserves_current_invoice(): void {
 		$order = $this->create_pos_order();
 		$ledger = Ledger::instance();

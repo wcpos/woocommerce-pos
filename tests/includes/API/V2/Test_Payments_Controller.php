@@ -73,6 +73,35 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'pos_cash', $data['order']['payment_method'] );
 	}
 
+	/** @dataProvider reopened_payment_routes */
+	public function test_reopened_payment_route_ignores_retained_coverage( bool $intent ): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pos-open' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$payment = $this->payment( 'pos_cash', '92.95', array( 'epoch' => 1 ) );
+		$path = '/wcpos/v2/orders/' . $order->get_id() . '/payments';
+		if ( $intent ) {
+			\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+			add_filter( 'wcpos_payment_method_capture_mode', static fn() => 'route_test' );
+			$path .= '/' . $payment['id'] . '/intent';
+		}
+		$request = $this->wp_rest_post_request( $path );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params( array( 'payment' => $payment ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( $intent ? 'pending' : 'captured', $response->get_data()['payment']['status'] );
+		$this->assertSame( 1, $response->get_data()['payment']['epoch'] );
+		$this->assertCount( 2, $ledger->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	public function reopened_payment_routes(): array {
+		return array( 'cash record' => array( false ), 'provider intent' => array( true ) );
+	}
+
 	/** A swallowed Woo save failure must not be acknowledged as a recorded payment. */
 	public function test_record_persistence_failure_returns_retryable_conflict(): void {
 		$order = $this->create_pos_order();
