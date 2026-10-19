@@ -107,23 +107,14 @@ final class Register_Session_Store {
 			$this->log_replay( $existing );
 			return $existing;
 		}
-		$registers = new Register_Store();
-		if ( ! $registers->lock( $fields['register_id'] ) ) {
-			Logger::warning(
-				'Session register lock failed.',
-				array(
-					'session_id' => $fields['id'],
-					'register_id' => $fields['register_id'],
-					'user_id' => get_current_user_id(),
-				)
-			);
-			throw new \RuntimeException( 'Session register lock failed.' );
-		}
-		try {
-			return $this->insert_open_session( $fields );
-		} finally {
-			$registers->unlock( $fields['register_id'] );
-		}
+		return ( new Register_Store() )->with_lock(
+			$fields['register_id'],
+			function () use ( $fields ) {
+				return $this->insert_open_session( $fields );
+			},
+			'Session register lock failed.',
+			array( 'session_id' => $fields['id'] )
+		);
 	}
 
 	/** Check uniqueness and insert while create() holds the register lock.
@@ -141,6 +132,10 @@ final class Register_Session_Store {
 			)
 		);
 		if ( $open ) {
+			if ( $open[0]['id'] === $fields['id'] ) {
+				$this->log_replay( $open[0] );
+				return $open[0];
+			}
 			Logger::warning(
 				'Register session opening refused: register already has an open session',
 				array(
@@ -233,11 +228,7 @@ final class Register_Session_Store {
 	 * @throws \RuntimeException On database failure.
 	 */
 	public function approve( array $session, int $user_id, ?array $counted = null ) {
-		$registers = new Register_Store();
-		if ( ! $registers->lock( $session['register_id'] ) ) {
-			throw new \RuntimeException( 'Session register lock failed.' );
-		}
-		try {
+		$approve = function () use ( $session, $user_id, $counted ) {
 			global $wpdb;
 			$refused = $this->refuse_own_approval( $session, $user_id );
 			if ( $refused ) {
@@ -284,9 +275,8 @@ final class Register_Session_Store {
 				)
 			);
 			return $this->get( $session['id'] );
-		} finally {
-			$registers->unlock( $session['register_id'] );
-		}
+		};
+		return ( new Register_Store() )->with_lock( $session['register_id'], $approve, 'Session register lock failed.' );
 	}
 
 	/** Apply a validated transition, conditional on the observed state.
@@ -302,11 +292,7 @@ final class Register_Session_Store {
 	 */
 	public function transition( array $session, array $fields, bool $printed = false, ?array &$approval_missing = null, bool $locked_by_caller = false ) {
 		$approval_missing = null;
-		$registers = new Register_Store();
-		if ( ! $locked_by_caller && ! $registers->lock( $session['register_id'] ) ) {
-			throw new \RuntimeException( 'Session register lock failed.' );
-		}
-		try {
+		$transition = function () use ( $session, $fields, $printed, &$approval_missing ) {
 			global $wpdb;
 			if ( isset( $fields['approved_by'] ) ) {
 				$refused = $this->refuse_own_approval( $session, (int) $fields['approved_by'] );
@@ -459,10 +445,7 @@ final class Register_Session_Store {
 				);
 			}
 			return $row;
-		} finally {
-			if ( ! $locked_by_caller ) {
-				$registers->unlock( $session['register_id'] );
-			}
-		}
+		};
+		return $locked_by_caller ? $transition() : ( new Register_Store() )->with_lock( $session['register_id'], $transition, 'Session register lock failed.' );
 	}
 }

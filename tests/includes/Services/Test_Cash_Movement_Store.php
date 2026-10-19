@@ -7,6 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Services\Register_Store;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WP_UnitTestCase;
@@ -46,10 +50,117 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK( %s )', $name ) );
 			$contender->close();
 		}
-		$error = $store->create( $fields );
+		$queries = array();
+		$trace = static function ( $sql ) use ( &$queries ) {
+			$queries[] = $sql;
+			return $sql;
+		};
+		add_filter( 'query', $trace );
+		try {
+			// Act: with the register available, rejection must use a fresh session read.
+			$error = $store->create( $fields );
+		} finally {
+			remove_filter( 'query', $trace );
+		}
+		// Assert.
+		$sql = implode( "\n", $queries );
+		$lock = strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] );
+		$this->assertNotFalse( $lock );
+		$lookup = strpos( $sql, 'SELECT * FROM ' . ( new Register_Session_Store() )->table_name(), $lock );
+		$this->assertNotFalse( $lookup );
+		$this->assertGreaterThan( $lock, $lookup );
 		$this->assertWPError( $error );
 		$this->assertSame( 'wcpos_session_not_open', $error->get_error_code() );
 		$this->assertNull( $store->get( $fields['id'] ) );
+	}
+
+	/** Only nested fiscal locking warns, once even across multiple movements. */
+	public function test_create_nested_locks_unsupported_logs_one_warning(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		$reflection = new \ReflectionProperty( Order_Lock::class, 'multi_lock' );
+		$reflection->setAccessible( true );
+		$reflection->setValue( null, false );
+		$previous_level = Logger::$log_level;
+		Logger::set_log_level( 'info' );
+		Logger::reset_dedup_state();
+		$warnings = array();
+		$capture = static function ( $enabled, $message ) use ( &$warnings ) {
+			if ( 'warning' === Logger::$log_level ) {
+				$warnings[] = $message;
+			}
+			return false;
+		};
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		try {
+			// Act / Assert: a register lock alone must not warn.
+			$registers = new Register_Store();
+			$locked = $registers->lock( $session['register_id'] );
+			if ( $locked ) {
+				$registers->unlock( $session['register_id'] );
+			}
+			$this->assertTrue( $locked );
+			$this->assertSame( array(), $warnings );
+			// Act: both writes reach the nested fiscal sequence lock.
+			for ( $i = 0; $i < 2; ++$i ) {
+				$row = ( new Cash_Movement_Store() )->create(
+					array(
+						'id' => wp_generate_uuid4(),
+						'session_id' => $session['id'],
+						'type' => 'paid_in',
+						'amount' => '7',
+						'reason' => 'Late arrival',
+						'actor' => get_current_user_id(),
+						'created_at_gmt' => '2026-09-11 10:00:00',
+					)
+				);
+				$this->assertNotWPError( $row );
+			}
+			// Assert.
+			$this->assertSame( array( 'Register lock nesting is unsupported on this database server; a concurrent close and movement may interleave' ), $warnings );
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			Logger::reset_dedup_state();
+			Logger::$log_level = $previous_level;
+			$reflection->setValue( null, null );
+		}
+	}
+
+	/** A movement committed while waiting for the register lock is a replay. */
+	public function test_create_same_id_appears_at_lock_returns_existing_movement(): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session();
+		$store = new Cash_Movement_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $session['id'],
+			'type' => 'paid_in',
+			'amount' => '7',
+			'reason' => 'Concurrent replay',
+			'actor' => get_current_user_id(),
+			'created_at_gmt' => '2026-09-11 12:00:00',
+		);
+		$inserted = null;
+		$race = static function ( $sql ) use ( $wpdb, $store, $fields, $session, &$inserted ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] ) ) {
+				$inserted = $wpdb->insert( $store->table_name(), $fields );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$row = $store->create( $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		// Assert: replay succeeds even though a new write would fail the cutoff.
+		$this->assertSame( 1, $inserted );
+		$this->assertNotWPError( $row );
+		$this->assertSame( $fields['id'], $row['id'] );
+		$this->assertSame( $store->get( $fields['id'] ), $row );
 	}
 
 	/** Create, replay and stamp without changing the original movement. */

@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
-use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Session persistence and ledger-derived balances. */
@@ -46,13 +45,45 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Register locking can use the public server capability check. */
-	public function test_multiple_locks_test_server_returns_true(): void {
-		// Arrange: use the configured test database server.
-		// Act.
-		$supported = Order_Lock::supports_multiple_locks();
+	/** A same-id opening committed while waiting for the lock is a replay. */
+	public function test_create_same_id_appears_at_lock_returns_open_session(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => null,
+			'counted_float' => '100',
+		);
+		$inserted = null;
+		$race = static function ( $sql ) use ( $wpdb, $store, $fields, &$inserted ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $fields['register_id'] ) ) {
+				$inserted = $wpdb->insert(
+					$store->table_name(),
+					$fields + array(
+						'status' => 'open',
+						'created_at_gmt' => '2026-09-11 10:00:00',
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$row = $store->create( $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
 		// Assert.
-		$this->assertTrue( $supported );
+		$this->assertSame( 1, $inserted );
+		$this->assertNotWPError( $row );
+		$this->assertSame( $fields['id'], $row['id'] );
+		$this->assertSame( 'open', $row['status'] );
+		$this->assertSame( $store->get( $fields['id'] ), $row );
 	}
 
 	/** Opening variance, identity replay, non-closed uniqueness and transitions. */

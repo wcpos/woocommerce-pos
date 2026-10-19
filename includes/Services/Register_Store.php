@@ -26,11 +26,6 @@ final class Register_Store {
 	 */
 	public function lock( string $register_id ): bool {
 		global $wpdb;
-		static $warned = false;
-		if ( ! $warned && ! Order_Lock::supports_multiple_locks() ) {
-			$warned = true;
-			Logger::warning( 'Register lock nesting is unsupported on this database server; a concurrent close and movement may interleave' );
-		}
 		return '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', 'wcpos_register_' . strtolower( $register_id ), self::LOCK_WAIT_SECONDS ) );
 	}
 
@@ -41,6 +36,42 @@ final class Register_Store {
 	public function unlock( string $register_id ): void {
 		global $wpdb;
 		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', 'wcpos_register_' . strtolower( $register_id ) ) );
+	}
+
+	/** Run an operation under the register lock.
+	 *
+	 * @param string   $register_id Register UUID.
+	 * @param callable $callback Locked operation.
+	 * @param string   $failure_message Lock acquisition failure message.
+	 * @param array    $context Additional failure log context.
+	 * @return mixed
+	 * @throws \RuntimeException When the lock cannot be acquired.
+	 */
+	public function with_lock( string $register_id, callable $callback, string $failure_message, array $context = array() ) {
+		if ( ! $this->lock( $register_id ) ) {
+			Logger::warning(
+				$failure_message,
+				array(
+					'register_id' => $register_id,
+					'user_id' => get_current_user_id(),
+				) + $context
+			);
+			throw new \RuntimeException( $failure_message ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Internal failure message, not HTML output.
+		}
+		try {
+			return $callback();
+		} finally {
+			$this->unlock( $register_id );
+		}
+	}
+
+	/** Warn once per request, only where a second named lock is needed. */
+	public static function warn_if_locks_cannot_nest(): void {
+		static $warned = false;
+		if ( ! $warned && ! Order_Lock::supports_multiple_locks() ) {
+			$warned = true;
+			Logger::warning( 'Register lock nesting is unsupported on this database server; a concurrent close and movement may interleave' );
+		}
 	}
 
 	/**
