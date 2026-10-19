@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-19T13:20:45+00:00\n"
+"POT-Creation-Date: 2026-10-19T14:24:14+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1197,12 +1197,12 @@ msgid "Report \"%1$s\" failed: %2$s"
 msgstr ""
 
 #. translators: %s: name of the request field that was rejected.
-#: includes/API/V2/Sessions_Controller.php:405
+#: includes/API/V2/Sessions_Controller.php:410
 #, php-format
 msgid "Invalid parameter: %s"
 msgstr ""
 
-#: includes/API/V2/Sessions_Controller.php:407
+#: includes/API/V2/Sessions_Controller.php:412
 msgid "The session request could not be completed."
 msgstr ""
 
