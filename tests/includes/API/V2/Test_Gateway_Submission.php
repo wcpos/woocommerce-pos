@@ -584,6 +584,29 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
 	}
 
+	/** Only the paying attempt becomes paid; an earlier invoice it replaced is superseded. */
+	public function test_paying_submission_supersedes_an_earlier_sent_invoice(): void {
+		// Arrange: attempt A is sent as an invoice.
+		$order = $this->create_pos_order();
+		$sent  = wp_generate_uuid4();
+		$pays  = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $sent, array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['outcome'] );
+
+		// Act: attempt B pays through the paying gateway.
+		$this->assertSame( 'recorded', $this->submit( wc_get_order( $order->get_id() ), $pays, array(), 'wcpos_paid_test' )->get_data()['outcome'] );
+
+		// Assert.
+		$history = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$this->assertSame( 'superseded', $history[ $sent ] ?? null );
+		$this->assertSame( 'paid', $history[ $pays ] ?? null );
+		$replay_sent = $this->submit( wc_get_order( $order->get_id() ), $sent, array( 'invoice_email' => 'buyer@example.com' ) );
+		$this->assertSame( 409, $replay_sent->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $replay_sent->get_data()['code'] );
+		$this->assertSame( 'paid', $this->submit( wc_get_order( $order->get_id() ), $pays, array(), 'wcpos_paid_test' )->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+	}
+
 	/** A paid gateway yields exactly one client-minted row, keyed by the attempt. */
 	public function test_submit_paid_gateway_records_once_and_replays(): void {
 		// Arrange.

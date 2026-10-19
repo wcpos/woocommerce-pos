@@ -161,13 +161,26 @@ class Order_Writer extends Null_Writer {
 			unset( $declared['restart_gmt'] );
 		}
 		$prepared['context'] = $declared;
+		if ( isset( $declared['id'] ) ) {
+			Ledger::save_was_refused( (int) $declared['id'] ); // A stale refusal from earlier in this request must not leak.
+		}
 		try {
-			return Order_Write_Intent::open(
+			$response = Order_Write_Intent::open(
 				$declared,
 				function () use ( $prepared, $forward ) {
 					return $this->forward_with_reserved_stock( $prepared, $forward );
 				}
 			);
+			$id = 0;
+			if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 ) {
+				$data = $response->get_data();
+				$id   = (int) ( ( is_array( $data ) ? ( $data['id'] ?? null ) : null ) ?? $declared['id'] ?? 0 );
+			}
+			// WooCommerce swallows the keeper's refusal and answers 2xx with nothing written.
+			if ( $id > 0 && Ledger::save_was_refused( $id ) ) {
+				return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order save was refused while its payment ledger was locked; retry shortly.', array( 'status' => 409 ) );
+			}
+			return $response;
 		} finally {
 			if ( $locked ) {
 				Order_Lock::instance()->release( (int) $declared['id'] );

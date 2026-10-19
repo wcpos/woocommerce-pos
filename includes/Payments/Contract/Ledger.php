@@ -88,6 +88,13 @@ class Ledger {
 	 */
 	private $server_saves = array();
 
+	/**
+	 * Orders whose save the keeper refused in this request (WooCommerce swallows the throw).
+	 *
+	 * @var array<int, bool>
+	 */
+	private static $refused = array();
+
 	/** Get the shared ledger. */
 	public static function instance(): self {
 		if ( null === self::$instance ) {
@@ -327,6 +334,7 @@ class Ledger {
 		} else {
 			$message = sprintf( 'WCPOS payment ledger locked on order #%d; the save was refused', $order_id );
 			Logger::error( $message, array( 'order_id' => $order_id ) );
+			self::$refused[ $order_id ] = true;
 			throw new \RuntimeException( esc_html( $message ) );
 		}
 		$stored = $this->stored( $order->get_id(), false );
@@ -396,6 +404,17 @@ class Ledger {
 			$order->update_meta_data( self::META_KEY, is_array( $raw ) ? $value : wp_json_encode( $value ) );
 		}
 		$this->reindex( $order, $value['payments'] );
+	}
+
+	/**
+	 * Whether the keeper refused a save of this order since the last check; reading clears it.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	public static function save_was_refused( int $order_id ): bool {
+		$refused = isset( self::$refused[ $order_id ] );
+		unset( self::$refused[ $order_id ] );
+		return $refused;
 	}
 
 	/** Keep the first occurrence of each row id on the order-write lane.
@@ -1593,13 +1612,19 @@ class Ledger {
 					$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
 				}
 			}
-			// Money that covers the order resolves every send still waiting on the customer.
+			// Money that covers the order: the send whose row paid it is paid, the sends it replaced are superseded.
 			$paid = Money::minor( $this->paid( $normalized ) );
 			if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
-				$history = Gateway_Submission::read_attempts( $order );
-				$updated = array_map( static fn( $state ) => 'sent' === $state ? 'paid' : $state, $history );
-				if ( $updated !== $history ) {
-					$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $updated );
+				$history  = Gateway_Submission::read_attempts( $order );
+				$counting = array_column( array_filter( $normalized, static fn( $row ) => in_array( $row['status'], self::COUNTING_STATUSES, true ) ), 'id' );
+				$paying   = array_intersect_key( array_filter( $history, static fn( $state ) => 'sent' === $state ), array_flip( array_map( 'strtolower', $counting ) ) );
+				if ( $paying ) {
+					foreach ( $history as $attempt_id => $state ) {
+						if ( 'sent' === $state ) {
+							$history[ $attempt_id ] = isset( $paying[ $attempt_id ] ) ? 'paid' : 'superseded';
+						}
+					}
+					$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $history );
 				}
 			}
 			$order_id = $order->get_id();
