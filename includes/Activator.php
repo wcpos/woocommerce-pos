@@ -423,9 +423,11 @@ class Activator {
 	private function finish_folded_closures( string $folded, string $sessions ): void {
 		global $wpdb;
 		$this->copy_legacy_closures( $folded, $sessions );
-		// A pre-fold print may have bumped a legacy row after its first copy; keep the later count.
+		// The copy left each legacy row holding only the prints recorded since. A maximum would
+		// drop one of a pre-fold print on that row and a new-code print on the session row, so
+		// add the delta and zero it in the same statement: a re-run after a failed drop adds nothing.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.
-		$wpdb->query( "UPDATE {$sessions} s INNER JOIN {$folded} c ON s.closure_id = c.id SET s.print_count = GREATEST(s.print_count, c.print_count), s.last_printed_at_gmt = COALESCE(GREATEST(s.last_printed_at_gmt, c.last_printed_at_gmt), s.last_printed_at_gmt, c.last_printed_at_gmt)" );
+		$wpdb->query( "UPDATE {$sessions} s INNER JOIN {$folded} c ON s.closure_id = c.id SET s.print_count = s.print_count + c.print_count, c.print_count = 0, s.last_printed_at_gmt = COALESCE(GREATEST(s.last_printed_at_gmt, c.last_printed_at_gmt), s.last_printed_at_gmt, c.last_printed_at_gmt)" );
 		if ( self::query_failed() ) {
 			throw new \RuntimeException( 'Closure fold print reconcile failed.' );
 		}
@@ -477,7 +479,14 @@ class Activator {
 					$row[ 'till_' . $key ] = $row[ $key ] === $row[ 'session_' . $key ] ? null : $row[ $key ];
 				}
 				$document = wp_json_encode( Closure_Store::document( Closure_Store::normalize( $row ) ) );
-				if ( false === $document || 1 !== $wpdb->update(
+				// The copied prints leave the legacy row in the write's transaction, so a concurrent
+				// pre-fold increment stays behind as the delta finish_folded_closures() adds.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy table; values are prepared.
+				$subtract = $wpdb->prepare( "UPDATE {$legacy} SET print_count = print_count - %d WHERE id = %s", $row['print_count'], $row['id'] );
+				if ( false === $document || false === $wpdb->query( 'START TRANSACTION' ) ) {
+					throw new \RuntimeException( 'Closure fold write failed.' );
+				}
+				if ( 1 !== $wpdb->update(
 					$sessions,
 					array(
 						'closure_id' => $row['id'],
@@ -491,7 +500,8 @@ class Activator {
 						'id' => $row['session_id'],
 						'number' => null,
 					)
-				) ) {
+				) || false === $wpdb->query( $subtract ) || false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+					$wpdb->query( 'ROLLBACK' );
 					throw new \RuntimeException( 'Closure fold write failed.' );
 				}
 			}

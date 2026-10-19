@@ -612,6 +612,81 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** A recreated empty legacy table does not hide a closure only the renamed table holds; create() refuses while either name exists. */
+	public function test_folded_closure_is_read_while_recreated_legacy_table_is_empty(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Closure_Store();
+		$first = $this->closure_session();
+		$this->assertIsArray( $store->create( $this->closure_fields( $first ) ) );
+		$second = $this->closure_session( $first['register_id'] );
+		$legacy = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
+		$folded = $legacy . '_folded';
+		$closure_id = wp_generate_uuid4();
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$errors = array();
+		try {
+			foreach ( array( $legacy, $folded ) as $table ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy tables.
+				$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$table} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, number BIGINT NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
+			}
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$folded,
+					array(
+						'id' => $closure_id,
+						'register_id' => $second['register_id'],
+						'session_id' => $second['id'],
+						'number' => 2,
+						'expected' => '{"cash":"150.0000"}',
+						'till_expected' => '{"cash":"100.0000"}',
+						'counted' => '{"cash":"101.0000"}',
+						'variance' => '{"cash":"-49.0000"}',
+						'perpetual_sales_total' => '80',
+						'breakdowns' => '{"transaction_count":0}',
+					)
+				)
+			);
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+
+			// Act.
+			$for_session = $store->for_session( $second['id'] );
+			$last = $store->last( $first['register_id'] );
+			$cases = array(
+				'both' => null,
+				'legacy' => $folded,
+			);
+			foreach ( $cases as $case => $drop ) {
+				if ( null !== $drop ) {
+					$wpdb->query( "DROP TABLE IF EXISTS {$drop}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+				}
+				try {
+					$store->create( $this->closure_fields( $second, 3 ) );
+					$errors[ $case ] = null;
+				} catch ( \RuntimeException $error ) {
+					$errors[ $case ] = $error->getMessage();
+				}
+			}
+
+			// Assert.
+			$this->assertSame( $closure_id, $for_session['id'] ?? null );
+			$this->assertSame( $closure_id, $last['id'] ?? null );
+			$this->assertSame( 2, $last['number'] );
+			$this->assertSame(
+				array(
+					'both' => 'Closure storage is migrating.',
+					'legacy' => 'Closure storage is migrating.',
+				),
+				$errors
+			);
+		} finally {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$legacy}, {$folded}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy tables.
+		}
+	}
+
 	/** A number more than 10000 past the register sequence is refused; the edge is accepted. */
 	public function test_number_far_ahead_of_sequence_is_refused(): void {
 		// Arrange.

@@ -855,17 +855,10 @@ class Test_Activator extends WP_UnitTestCase {
 		global $wpdb;
 		$fixture = $this->arrange_schema_nine_with_legacy_closures();
 		$bumped = false;
-		$bump = static function ( $sql ) use ( $fixture, &$bumped ) {
+		$bump = function ( $sql ) use ( $fixture, &$bumped ) {
 			if ( ! $bumped && 0 === strpos( $sql, "RENAME TABLE {$fixture['legacy']}" ) ) {
 				$bumped = true;
-				$GLOBALS['wpdb']->update(
-					$fixture['legacy'],
-					array(
-						'print_count' => 3,
-						'last_printed_at_gmt' => '2026-09-11 14:00:00',
-					),
-					array( 'id' => $fixture['closures'][0] )
-				);
+				$this->record_fixture_print( $fixture['legacy'], 'id', $fixture['closures'][0], '2026-09-11 14:00:00' );
 			}
 			return $sql;
 		};
@@ -884,6 +877,127 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertSame( '2026-09-11 14:00:00', $closure['last_printed_at_gmt'] );
 		} finally {
 			remove_filter( 'query', $bump );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A pre-fold print on the legacy row and a new-code print on the copied session row both count. */
+	public function test_closure_fold_with_prints_on_both_tables_after_the_first_pass_keeps_both(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$bumped = false;
+		$bump = function ( $sql ) use ( $fixture, &$bumped ) {
+			if ( ! $bumped && 0 === strpos( $sql, "RENAME TABLE {$fixture['legacy']}" ) ) {
+				$bumped = true;
+				$this->record_fixture_print( $fixture['sessions_table'], 'closure_id', $fixture['closures'][0], '2026-09-11 14:00:00' );
+				$this->record_fixture_print( $fixture['legacy'], 'id', $fixture['closures'][0], '2026-09-11 14:30:00' );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $bump );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			( new Activator() )->install_sync_schema();
+			remove_filter( 'query', $bump );
+
+			// Assert.
+			$this->assertTrue( $bumped );
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][0] );
+			$this->assertSame( 4, $closure['print_count'] );
+			$this->assertSame( '2026-09-11 14:30:00', $closure['last_printed_at_gmt'] );
+		} finally {
+			remove_filter( 'query', $bump );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A run whose drop fails has already moved the late print; the re-run adds nothing more. */
+	public function test_closure_fold_rerun_after_failed_drop_does_not_double_count_prints(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$folded = $fixture['legacy'] . '_folded';
+		$bumped = false;
+		$interrupt = function ( $sql ) use ( $fixture, $folded, &$bumped ) {
+			if ( ! $bumped && 0 === strpos( $sql, "RENAME TABLE {$fixture['legacy']}" ) ) {
+				$bumped = true;
+				$this->record_fixture_print( $fixture['legacy'], 'id', $fixture['closures'][0], '2026-09-11 14:00:00' );
+			}
+			return "DROP TABLE IF EXISTS {$folded}" === $sql ? 'INVALID DROP' : $sql;
+		};
+		$activator = new Activator();
+		$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+		$previous = $wpdb->suppress_errors();
+		try {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			add_filter( 'query', $interrupt );
+			try {
+				$activator->install_sync_schema();
+				$this->fail( 'Expected the drop to fail.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold drop failed.', $error->getMessage() );
+			}
+			remove_filter( 'query', $interrupt );
+			$after_failed_drop = $closures->get( $fixture['closures'][0] )['print_count'];
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table; the id is prepared.
+			$left_on_folded = $wpdb->get_var( $wpdb->prepare( "SELECT print_count FROM {$folded} WHERE id = %s", $fixture['closures'][0] ) );
+
+			// Act.
+			$activator->install_sync_schema();
+
+			// Assert.
+			$this->assertTrue( $bumped );
+			$this->assertSame( 3, $after_failed_drop );
+			$this->assertSame( '0', $left_on_folded );
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( 3, $closures->get( $fixture['closures'][0] )['print_count'] );
+		} finally {
+			remove_filter( 'query', $interrupt );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A failed print subtraction rolls back its session write, so the re-run copies the count once. */
+	public function test_closure_fold_failed_print_subtraction_rolls_back_the_copy(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$failed = false;
+		$fail_subtract = static function ( $sql ) use ( $fixture, &$failed ) {
+			if ( ! $failed && 0 === strpos( $sql, "UPDATE {$fixture['legacy']} SET print_count = print_count -" ) ) {
+				$failed = true;
+				return 'INVALID SUBTRACT';
+			}
+			return $sql;
+		};
+		$activator = new Activator();
+		$previous = $wpdb->suppress_errors();
+		try {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			add_filter( 'query', $fail_subtract );
+			try {
+				$activator->install_sync_schema();
+				$this->fail( 'Expected the subtraction to fail.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold write failed.', $error->getMessage() );
+			}
+			remove_filter( 'query', $fail_subtract );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table; the id is prepared.
+			$number = $wpdb->get_var( $wpdb->prepare( "SELECT number FROM {$fixture['sessions_table']} WHERE id = %s", $fixture['sessions'][0] ) );
+
+			// Act.
+			$activator->install_sync_schema();
+
+			// Assert.
+			$this->assertNull( $number );
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( 2, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][0] )['print_count'] );
+		} finally {
+			remove_filter( 'query', $fail_subtract );
+			$wpdb->suppress_errors( $previous );
 			$this->restore_closure_schema( $fixture );
 		}
 	}
@@ -1404,6 +1518,19 @@ class Test_Activator extends WP_UnitTestCase {
 		$copied = $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} SELECT %s, register_id, %s, store_id, %d, NULL, opened_at_gmt, business_day, closed_at_gmt, opened_by, closed_by, approved_by, expected, till_expected, counted, variance, period_sales_total, period_refunds_total, perpetual_sales_total, perpetual_refunds_total, unsynced_count, unsynced_total, first_sale_counter, last_sale_counter, first_receipt_id, last_receipt_id, software_version, printed_at_gmt, breakdowns, findings, 0, NULL, received_at_gmt FROM {$table} WHERE id = %s", $closure, $session, $number, $fixture['closures'][0] ) );
 		$this->assertSame( 1, $copied );
 		return $closure;
+	}
+
+	/** Record one print on a closure row the way record_print() does: an increment, never a set.
+	 *
+	 * @param string $table Legacy closures or sessions table.
+	 * @param string $column id or closure_id.
+	 * @param string $closure_id Closure UUID.
+	 * @param string $at Print stamp.
+	 */
+	private function record_fixture_print( string $table, string $column, string $closure_id, string $at ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed column; values are prepared.
+		$this->assertSame( 1, $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET print_count = print_count + 1, last_printed_at_gmt = %s WHERE {$column} = %s", $at, $closure_id ) ) );
 	}
 
 	/** Drop the legacy table and fixture rows, then put the closure columns back.

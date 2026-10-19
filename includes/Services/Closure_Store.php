@@ -139,9 +139,7 @@ final class Closure_Store {
 	 * @param string $id Session UUID.
 	 */
 	public function for_session( string $id ): ?array {
-		$row = $this->list( array( 'session_id' => $id ) )[0] ?? null;
-		$legacy = null === $row ? self::migrating_table() : null;
-		return null === $legacy ? $row : self::legacy_row( $legacy, 'session_id', $id );
+		return self::with_legacy( $this->list( array( 'session_id' => $id ) )[0] ?? null, 'session_id', $id );
 	}
 
 	/** Latest numbered document, independently of a till's clock.
@@ -156,10 +154,8 @@ final class Closure_Store {
 				'per_page' => 1,
 			)
 		)[0] ?? null;
-		// Mid-fold the highest number may still live only in the legacy table.
-		$legacy = self::migrating_table();
-		$legacy = null === $legacy ? null : self::legacy_row( $legacy, 'register_id', $register_id );
-		return null !== $legacy && $legacy['number'] > ( $row['number'] ?? 0 ) ? $legacy : $row;
+		// Mid-fold the highest number may still live only in a legacy table.
+		return self::with_legacy( $row, 'register_id', $register_id );
 	}
 
 	/** Last number, or zero before the first closure.
@@ -428,18 +424,20 @@ final class Closure_Store {
 		return array_map( array( self::class, 'sum' ), $totals );
 	}
 
-	/** The legacy closures table still to be folded, or null once the schema-10 latch is set.
+	/** Every legacy closures table still to be folded, or none once the schema-10 latch is set.
 	 *
-	 * The fold renames the table before its drop, so either name counts. The latch is
+	 * The fold renames the table before its drop, and a pre-fold request can recreate the
+	 * old name beside an interrupted rename, so both names are probed. The latch is
 	 * autoloaded: a folded site never probes.
 	 *
-	 * @throws \RuntimeException When the probe fails; a caller must not assume absence.
+	 * @throws \RuntimeException When a probe fails; a caller must not assume absence.
 	 */
-	private static function migrating_table(): ?string {
+	private static function migrating_tables(): array {
 		global $wpdb;
 		if ( Sync\Api::SCHEMA_VERSION === get_option( Sync\Api::SCHEMA_OPTION, null ) ) {
-			return null;
+			return array();
 		}
+		$tables = array();
 		foreach ( array( self::LEGACY_TABLE, self::LEGACY_TABLE . '_folded' ) as $suffix ) {
 			$exists = Health::table_exists( $wpdb->prefix . $suffix );
 			if ( self::read_failed() ) {
@@ -447,10 +445,27 @@ final class Closure_Store {
 				throw new \RuntimeException( 'Closure storage probe failed.' );
 			}
 			if ( $exists ) {
-				return $wpdb->prefix . $suffix;
+				$tables[] = $wpdb->prefix . $suffix;
 			}
 		}
-		return null;
+		return $tables;
+	}
+
+	/** The highest-numbered of a session-table row and each legacy table's match; a tie keeps the session row.
+	 *
+	 * @param array|null $row Session-table closure.
+	 * @param string     $column session_id or register_id.
+	 * @param string     $value UUID.
+	 * @throws \RuntimeException On probe or read failure.
+	 */
+	private static function with_legacy( ?array $row, string $column, string $value ): ?array {
+		foreach ( self::migrating_tables() as $table ) {
+			$legacy = self::legacy_row( $table, $column, $value );
+			if ( null !== $legacy && $legacy['number'] > ( $row['number'] ?? 0 ) ) {
+				$row = $legacy;
+			}
+		}
+		return $row;
 	}
 
 	/** The highest-numbered legacy closure matching one column, in the closure row shape.
@@ -566,9 +581,9 @@ final class Closure_Store {
 			$this->log_replay( $existing );
 			return $existing;
 		}
-		if ( null !== self::migrating_table() ) {
+		if ( array() !== self::migrating_tables() ) {
 			// Step 10 has not copied every legacy closure yet: a number minted now could
-			// collide with one only the legacy table holds. The outbox retries the 500.
+			// collide with one only a legacy table holds. The outbox retries the 500.
 			// Once the latch reads the current schema the fold is done and nothing is probed.
 			Logger::warning(
 				'Register closure refused: closure storage is migrating',
