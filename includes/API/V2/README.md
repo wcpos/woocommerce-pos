@@ -106,3 +106,26 @@ the served revision is computed at pull from the payload (ADR 0033). `/orders/pu
 branch, tombstone and other non-document checkpoints carry `revision: ""` (the literal
 `'deleted'` marker is gone), and the schema-6 upgrade blanks the pre-#1746 `sha256:` hashes
 and `'deleted'` markers older rows still held.
+
+## Closing a sale: `POST /orders/{id}/close` (2.0.0, ADR 0040)
+
+`close` is a money command beside the payments family (same `publish_shop_orders`
+permission, same order lock, same `wcpos_payment_locked` / `woo_rxdb_sync_record_locked`
+409s). It moves no money: it re-derives the order from its payment rows and, when the signed
+balance (total − captured rows + succeeded refund allocations) covers a non-zero total, runs
+the paid transition, which writes the next entry of the order's completion history
+(`_wcpos_completions`). It is how a reopened sale completes again; the push lane cannot close a
+sale. Retained money above a reduced total still completes and reads as `order.refund_due`.
+
+- Body: an optional `provenance` object (`register_id`, `session_id`, `sale_time`, `sale_tz`,
+  `sale_counter`), validated like the till meta; an invalid field is dropped, never refused.
+  The same object on `record`, `intent`, `capture` and `submit` names the register that
+  completes the sale, if that command does.
+- 200: `{ order: summary, completion: { n, id } }`. A sale already paid replays its last
+  completion and writes nothing.
+- 409 `wcpos_payment_in_flight` (with `payment_id` or `attempt_id`): a row `pending` or
+  `authorized`, a refund allocation `pending`, or a gateway attempt sent and unanswered.
+- 409 `wcpos_balance_outstanding` (with `order`): uncovered, or a zero total.
+- 409 `wcpos_invalid_transition`: the order is in no open status and was never completed.
+
+`command_id` and `revision` arrive with the rest of the money routes (PR 3).
