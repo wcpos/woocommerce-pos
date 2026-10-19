@@ -93,7 +93,14 @@ class Webview_Passthrough {
 			}
 		}
 
-		self::mint( $order );
+		try {
+			self::mint( $order );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
+		} catch ( \Throwable $error ) {
+			// Anything else is unexpected: record it once, and still never interrupt the gateway hook.
+			Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
+		}
 	}
 
 	/**
@@ -123,7 +130,14 @@ class Webview_Passthrough {
 			return;
 		}
 
-		self::mint( $order );
+		try {
+			self::mint( $order );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
+		} catch ( \Throwable $error ) {
+			// Anything else is unexpected: record it once, and still never interrupt the gateway hook.
+			Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
+		}
 	}
 
 	/**
@@ -131,6 +145,7 @@ class Webview_Passthrough {
 	 *
 	 * @param WC_Order $order     Order object.
 	 * @param array    $overrides Submission-specific row values.
+	 * @throws Ledger_Persistence_Exception When the ledger cannot be saved.
 	 */
 	public static function mint( WC_Order $order, array $overrides = array() ): ?array {
 		if ( ! wcpos_is_pos_order( $order ) ) {
@@ -192,7 +207,35 @@ class Webview_Passthrough {
 			),
 			$overrides
 		);
-		$adopted = $ledger->adopt( $order, $row );
+		try {
+			$adopted = $ledger->adopt(
+				$order,
+				$row,
+				true,
+				static function ( $stored ) use ( $row ): bool {
+					// Concurrent callbacks for one payment mint one row: same id, or the same
+					// method with an intersecting provider reference, or a reference-less live webview row.
+					if ( ( $stored['id'] ?? null ) === $row['id'] ) {
+						return true;
+					}
+					$refs = array_filter( $row['provider_refs'] );
+					if ( $refs ) {
+						return ( $stored['method_id'] ?? null ) === $row['method_id'] && (bool) array_intersect_assoc( $refs, $stored['provider_refs'] ?? array() );
+					}
+					return 'webview' === ( $stored['source'] ?? null ) && in_array( $stored['status'] ?? '', Ledger::LIVE_STATUSES, true );
+				}
+			);
+		} catch ( \Throwable $error ) {
+			// WooCommerce already took this money: say so loudly; a human reconciles it.
+			$reference = '' !== (string) $transaction_id ? $transaction_id : $row['id'];
+			Logger::error( sprintf( 'WCPOS payment %s (%s %s) captured but not recorded in the ledger on order #%d; reconcile manually: %s', $reference, $row['amount'], $row['currency'], $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
+			try {
+				$order->add_order_note( sprintf( 'WCPOS: payment %s (%s %s) captured but not recorded in the ledger; reconcile manually.', $reference, $row['amount'], $row['currency'] ) );
+			} catch ( \Throwable $note_error ) {
+				Logger::error( sprintf( 'WCPOS could not add the unrecorded-payment note on order #%d: %s', $order->get_id(), $note_error->getMessage() ) );
+			}
+			throw $error instanceof Ledger_Persistence_Exception ? $error : new Ledger_Persistence_Exception( esc_html( $error->getMessage() ), 0, $error );
+		}
 		return is_wp_error( $adopted ) ? null : $adopted;
 	}
 }

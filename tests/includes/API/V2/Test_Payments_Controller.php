@@ -73,6 +73,28 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'pos_cash', $data['order']['payment_method'] );
 	}
 
+	/** A swallowed Woo save failure must not be acknowledged as a recorded payment. */
+	public function test_record_persistence_failure_returns_retryable_conflict(): void {
+		$order = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '5.00' );
+		$refuse = static function ( $saving ) use ( $order ): void {
+			if ( $saving->get_id() === $order->get_id() ) {
+				throw new \RuntimeException( 'Simulated refused data-store write' );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $refuse, 1 );
+		try {
+			$response = $this->record( $order, $payment );
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
+			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $refuse, 1 );
+		}
+		$this->assertSame( 200, $this->record( $order, $payment )->get_status() );
+		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Cashiers cannot forge handler events or an in-flight cancellation. */
 	public function test_record_client_events_and_cancel_stamp_do_not_persist(): void {
 		$order   = $this->create_pos_order();

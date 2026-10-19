@@ -556,7 +556,7 @@ class Order_Writer extends Null_Writer {
 			$order->update_meta_data( '_pos_store', (string) $change['_pos_store'] );
 		}
 		if ( $cashier_changed || $store_changed ) {
-			$order->save();
+			Ledger::saving( $order->get_id(), fn() => $order->save() );
 		}
 		if ( 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' ) ) {
 			Order_Notes::add_reopen_note( $order, $current_user, $order->get_meta( '_pos_store' ) );
