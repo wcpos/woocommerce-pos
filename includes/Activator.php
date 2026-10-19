@@ -697,6 +697,10 @@ class Activator {
 
 	/** Count the legacy rows each folded session's array holds unchanged; any other row stops the fold.
 	 *
+	 * Before a copy, pre-fold code may have written to a session after it was copied: a legacy row
+	 * the array lacks is new data (uuids do not collide by accident) and is appended, and a stamp
+	 * gone from null to set is applied. An id on both sides with any other difference is refused.
+	 *
 	 * @param string $legacy Legacy movements table.
 	 * @param string $sessions Sessions table.
 	 * @param bool   $refuse Whether a mismatch is refused data (before the copy) or a failed verification.
@@ -724,11 +728,15 @@ class Activator {
 				if ( self::query_failed() ) {
 					throw new \RuntimeException( 'Movement fold read failed.' );
 				}
-				$stored = json_decode( (string) $stored, true );
+				$raw = (string) $stored;
+				$stored = json_decode( $raw, true );
 				$stored = is_array( $stored ) ? array_column( $stored, null, 'id' ) : array();
-				foreach ( $rows as $row ) {
-					$entry = Cash_Movement_Store::entry( $row );
-					if ( ( $stored[ $entry['id'] ] ?? null ) !== $entry ) {
+				$entries = array_column( array_map( array( Cash_Movement_Store::class, 'entry' ), $rows ), null, 'id' );
+				$late = array();
+				foreach ( $entries as $entry ) {
+					if ( $refuse && ( $stored[ $entry['id'] ] ?? null ) !== $entry && self::is_late_movement( $entry, $stored ) ) {
+						$late[] = $entry;
+					} elseif ( ( $stored[ $entry['id'] ] ?? null ) !== $entry ) {
 						if ( ! $refuse ) {
 							throw new \RuntimeException( 'Movement fold verification failed.' );
 						}
@@ -744,11 +752,76 @@ class Activator {
 					}
 					++$matched;
 				}
+				if ( $late ) {
+					$this->apply_late_movements( $sessions, $session_id, $raw, $late );
+				}
 				$cursor = $session_id;
 			}
 			$size = count( $batch );
 		} while ( 100 === $size );
 		return $matched;
+	}
+
+	/** Whether a legacy row is pre-fold data written after its session was copied.
+	 *
+	 * Either a row the array lacks, of any type, or a row identical but for a stamp gone from null to set.
+	 *
+	 * @param array $entry Legacy row as an entry.
+	 * @param array $stored The session's array entries by id.
+	 */
+	private static function is_late_movement( array $entry, array $stored ): bool {
+		if ( ! isset( $stored[ $entry['id'] ] ) ) {
+			return true;
+		}
+		return null === $stored[ $entry['id'] ]['voided_by']
+			&& null !== $entry['voided_by']
+			&& array_merge( $entry, array( 'voided_by' => null ) ) === $stored[ $entry['id'] ];
+	}
+
+	/** Append late movements and apply late stamps to a folded session's array, under its register lock, in one transaction.
+	 *
+	 * @param string $sessions Sessions table.
+	 * @param string $session_id Session UUID.
+	 * @param string $raw The array as checked; the write requires it unchanged.
+	 * @param array  $late New entries and stamped targets.
+	 * @throws \RuntimeException On read, lock or write failure; the write is rolled back.
+	 */
+	private function apply_late_movements( string $sessions, string $session_id, string $raw, array $late ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+		$register_id = (string) $wpdb->get_var( $wpdb->prepare( "SELECT register_id FROM {$sessions} WHERE id = %s", $session_id ) );
+		if ( self::query_failed() ) {
+			throw new \RuntimeException( 'Movement fold read failed.' );
+		}
+		$registers = new Register_Store();
+		if ( ! $registers->lock( $register_id ) ) {
+			throw new \RuntimeException( 'Movement fold lock failed.' );
+		}
+		try {
+			$entries = array_column( (array) json_decode( $raw, true ), null, 'id' );
+			foreach ( $late as $entry ) {
+				$entries[ $entry['id'] ] = $entry;
+			}
+			$movements = wp_json_encode( Cash_Movement_Store::ordered( array_values( $entries ) ) );
+			if ( false === $movements || false === $wpdb->query( 'START TRANSACTION' ) ) {
+				throw new \RuntimeException( 'Movement fold write failed.' );
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values are prepared.
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$sessions} SET movements = %s WHERE id = %s AND movements = %s", $movements, $session_id, $raw ) ) || false === $wpdb->query( 'COMMIT' ) ) {
+				$wpdb->query( 'ROLLBACK' );
+				throw new \RuntimeException( 'Movement fold write failed.' );
+			}
+		} finally {
+			$registers->unlock( $register_id );
+		}
+		Logger::log(
+			'Movement fold applied late movements',
+			array(
+				'session_id' => $session_id,
+				'count' => count( $late ),
+				'movement_ids' => array_column( $late, 'id' ),
+			)
+		);
 	}
 
 	/** Add a column unless it exists; DDL runs outside closure transactions.

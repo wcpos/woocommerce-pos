@@ -444,6 +444,116 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 		$this->assertSame( array( '7.0000' ), array_column( array_column( ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->corrections_for( $closures[0]['id'] ), 'figures' ), 'cash_delta' ) );
 	}
 
+	/** Two registers race the same uuid past the register-lock check: the loser's late movement is refused, never committed without its correction. */
+	public function test_late_movement_uuid_claimed_by_another_session_during_write_returns_409_and_stores_nothing(): void {
+		// Arrange.
+		global $wpdb;
+		$sessions = array( $this->closure_session(), $this->closure_session() );
+		$closures = array();
+		foreach ( $sessions as $session ) {
+			$closures[] = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		}
+		$store = new Cash_Movement_Store();
+		$fiscal = new Fiscal_Record_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $sessions[0]['id'],
+			'type' => 'paid_in',
+			'amount' => '7',
+			'reason' => 'Late arrival',
+			'actor' => 1,
+			'created_at_gmt' => '2026-09-11 10:00:00',
+		);
+		$competitor = array_merge( $fields, array( 'session_id' => $sessions[1]['id'] ) );
+		$raced = false;
+		$race = static function ( $sql ) use ( $fiscal, $competitor, $closures, $sessions, &$race, &$raced ) {
+			if ( 'START TRANSACTION' === $sql ) {
+				// The other register's writer records its correction first.
+				remove_filter( 'query', $race );
+				$raced = null !== $fiscal->record(
+					array(
+						'type' => 'late_movement',
+						'source_id' => $competitor['id'],
+						'closure_id' => $closures[1]['id'],
+						'session_id' => $sessions[1]['id'],
+						'register_id' => $sessions[1]['register_id'],
+						'store_id' => 456,
+						'cashier_id' => 1,
+						'payload' => $competitor,
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$result = $store->create( $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+
+		// Assert.
+		$this->assertTrue( $raced );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_movement_id_reused', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+		$this->assertSame( array(), $store->list( $sessions[0]['id'] ) );
+		$this->assertSame( $sessions[1]['id'], $fiscal->find_by_source( 'late_movement', $fields['id'] )['session_id'] );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+		$this->assertSame( '1', $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$fiscal->table_name()} WHERE type = 'late_movement' AND source_id = %s", $fields['id'] ) ) );
+	}
+
+	/** Mid-fold, a void old code wrote after the session was copied stamps its legacy target: the stamp wins over the stale folded copy. */
+	public function test_list_mid_fold_legacy_void_stamp_wins_over_folded_target(): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session( null, 'open' );
+		$store = new Cash_Movement_Store();
+		$target = $store->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session['id'],
+				'type' => 'paid_out',
+				'amount' => '5',
+				'reason' => 'Change',
+				'actor' => 1,
+				'created_at_gmt' => '2026-09-11 10:00:00',
+			)
+		);
+		$void = array_merge(
+			$target,
+			array(
+				'id' => wp_generate_uuid4(),
+				'type' => 'void',
+				'amount' => '0.0000',
+				'reason' => '',
+				'voids' => $target['id'],
+				'created_at_gmt' => '2026-09-11 10:05:00',
+			)
+		);
+		$stamped = array_merge( $target, array( 'voided_by' => $void['id'] ) );
+		$legacy = $wpdb->prefix . Cash_Movement_Store::LEGACY_TABLE;
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table, fixed DDL.
+		$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$legacy} ( id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, type VARCHAR(16) NOT NULL, amount DECIMAL(19,4) NOT NULL, reason TEXT NOT NULL, actor BIGINT NOT NULL, voids CHAR(36) NULL, voided_by CHAR(36) NULL, created_at_gmt DATETIME NOT NULL, PRIMARY KEY  (id) )" ) );
+		try {
+			$this->assertSame( 1, $wpdb->insert( $legacy, $stamped ) );
+			$this->assertSame( 1, $wpdb->insert( $legacy, $void ) );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+
+			// Act.
+			$listed = $store->list( $session['id'] );
+		} finally {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		}
+
+		// Assert.
+		$this->assertSame( array( $stamped, $void ), $listed );
+	}
+
 	/** A void whose target another request voided while this one waited is refused on the fresh read. */
 	public function test_create_void_target_voided_at_lock_refuses_without_writing(): void {
 		// Arrange.

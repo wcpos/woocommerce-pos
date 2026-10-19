@@ -55,7 +55,12 @@ final class Cash_Movement_Store {
 				throw new \RuntimeException( 'Session movement read failed.' );
 			}
 			foreach ( $legacy as $entry ) {
-				$rows += array( $entry['id'] => self::row( $session_id, self::entry( $entry ) ) );
+				$row = self::row( $session_id, self::entry( $entry ) );
+				// A stamp only goes from null to set, and pre-fold code can void a target after its
+				// session was copied: a stamped legacy row wins over the stale folded entry.
+				if ( ! isset( $rows[ $row['id'] ] ) || null !== $row['voided_by'] ) {
+					$rows[ $row['id'] ] = $row;
+				}
 			}
 		}
 		return self::ordered( array_values( $rows ) );
@@ -117,16 +122,7 @@ final class Cash_Movement_Store {
 			// and the till mints a new uuid. A replay into the same session was answered above.
 			$claimed = $fiscal->find_by_source( 'late_movement', $fields['id'] );
 			if ( $claimed && 0 !== strcasecmp( (string) $claimed['session_id'], $fields['session_id'] ) ) {
-				Logger::warning(
-					'Cash movement refused: movement id already names a late movement of another session',
-					array(
-						'movement_id' => $fields['id'],
-						'session_id' => $fields['session_id'],
-						'owning_session_id' => $claimed['session_id'],
-						'user_id' => $fields['actor'],
-					)
-				);
-				return new \WP_Error( 'wcpos_movement_id_reused', __( 'This movement id is already used by another session.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+				return $this->refuse_reused_id( $fields, (string) $claimed['session_id'] );
 			}
 			$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
 			if ( ! $session || ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
@@ -173,19 +169,30 @@ final class Cash_Movement_Store {
 			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$sessions} SET movements = %s WHERE id = %s", $movements, $fields['session_id'] ) ) ) {
 				throw new \RuntimeException( 'Movement write failed.' );
 			}
-			if ( $closure && null === $fiscal->record(
-				array(
-					'type' => 'late_movement',
-					'source_id' => $fields['id'],
-					'closure_id' => $closure['id'],
-					'session_id' => $fields['session_id'],
-					'register_id' => $closure['register_id'],
-					'store_id' => $closure['store_id'],
-					'cashier_id' => $fields['actor'],
-					'payload' => $fields,
-				)
-			) ) {
-				throw new \RuntimeException( 'Late movement write failed.' );
+			if ( $closure ) {
+				$record = $fiscal->record(
+					array(
+						'type' => 'late_movement',
+						'source_id' => $fields['id'],
+						'closure_id' => $closure['id'],
+						'session_id' => $fields['session_id'],
+						'register_id' => $closure['register_id'],
+						'store_id' => $closure['store_id'],
+						'cashier_id' => $fields['actor'],
+						'payload' => $fields,
+					)
+				);
+				if ( null === $record ) {
+					throw new \RuntimeException( 'Late movement write failed.' );
+				}
+				// The check above ran under this register's lock only: a writer on another register
+				// can record the same uuid first, and record() then returns its row. Never commit
+				// a late movement whose correction belongs to another session.
+				if ( 0 !== strcasecmp( (string) $record['session_id'], $fields['session_id'] ) ) {
+					$wpdb->query( 'ROLLBACK' );
+					$transaction = false;
+					return $this->refuse_reused_id( $fields, (string) $record['session_id'] );
+				}
 			}
 			if ( $transaction ) {
 				if ( false === $wpdb->query( 'COMMIT' ) ) {
@@ -222,6 +229,24 @@ final class Cash_Movement_Store {
 			)
 		);
 		return $row;
+	}
+
+	/** Refuse a uuid another session already holds as a late movement; the till mints a new one.
+	 *
+	 * @param array  $fields Movement fields.
+	 * @param string $owner Session holding the late_movement record.
+	 */
+	private function refuse_reused_id( array $fields, string $owner ): \WP_Error {
+		Logger::warning(
+			'Cash movement refused: movement id already names a late movement of another session',
+			array(
+				'movement_id' => $fields['id'],
+				'session_id' => $fields['session_id'],
+				'owning_session_id' => $owner,
+				'user_id' => $fields['actor'],
+			)
+		);
+		return new \WP_Error( 'wcpos_movement_id_reused', __( 'This movement id is already used by another session.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 	}
 
 	/** An idempotent replay returned the existing row: the success path, not a fault.

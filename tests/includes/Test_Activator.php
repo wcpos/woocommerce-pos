@@ -1857,6 +1857,76 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** A void old code wrote after its session was copied is a late stamp: the second pass applies it and appends the void, then latches. */
+	public function test_movement_fold_second_pass_applies_a_late_void_stamp(): void {
+		// Arrange: session 0 was copied before its paid-out was voided on the legacy table.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$folded = $fixture['legacy'] . '_folded';
+		$before = array( array_merge( $fixture['expected'][0][0], array( 'voided_by' => null ) ) );
+		$this->fold_session_early( $fixture, $before );
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables.
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			$this->assertSame( $fixture['expected'][0], $store->list( $fixture['sessions'][0] ) );
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
+		} finally {
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** Any difference other than a late void stamp is refused before any write, the latch held. */
+	public function test_movement_fold_with_folded_amount_mismatch_refuses(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_ten_with_legacy_movements();
+		$before = $fixture['expected'][0];
+		$before[0]['amount'] = '6.0000';
+		$this->fold_session_early( $fixture, $before );
+		$logs = $this->capture_error_logs();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the fold to refuse a mismatched amount.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Movement fold found a movement for a session already folded.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+			$this->assertSame( wp_json_encode( array_map( array( \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::class, 'entry' ), $before ) ), $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$fixture['sessions_table']} WHERE id = %s", $fixture['sessions'][0] ) ) );
+			$this->assertCount( 1, $logs->entries );
+			$this->assertStringContainsString( 'Movement fold refused: session already folded', $logs->entries[0] );
+		} finally {
+			$logs->stop();
+			$this->restore_movement_schema( $fixture );
+		}
+	}
+
+	/** Add the movements column and give session 0 an array as an earlier copy wrote it.
+	 *
+	 * @param array $fixture From arrange_schema_ten_with_legacy_movements().
+	 * @param array $rows Movement rows the earlier copy held.
+	 */
+	private function fold_session_early( array $fixture, array $rows ): void {
+		global $wpdb;
+		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} ADD movements LONGTEXT NULL" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+		$movements = wp_json_encode( array_map( array( \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::class, 'entry' ), $rows ) );
+		$this->assertSame( 1, $wpdb->update( $fixture['sessions_table'], array( 'movements' => $movements ), array( 'id' => $fixture['sessions'][0] ) ) );
+	}
+
 	/** A copy stopped after the first session keeps the latch; the next run copies the rest without duplicating the first. */
 	public function test_movement_fold_failing_mid_copy_keeps_latch_and_resumes(): void {
 		// Arrange.
@@ -1933,37 +2003,43 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
-	/** A legacy row for a session whose array is already written (a recreated table) is refused before any write. */
-	public function test_movement_fold_with_row_for_session_already_folded_keeps_latch_and_logs_error(): void {
+	/** A paid-in old code wrote after its session was copied is new data: the second pass appends it to the array and the run latches. */
+	public function test_movement_fold_second_pass_appends_a_late_paid_in(): void {
 		// Arrange.
 		global $wpdb;
 		$fixture = $this->arrange_schema_ten_with_legacy_movements();
-		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} ADD movements LONGTEXT NULL" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
-		$folded = wp_json_encode( array( \WCPOS\WooCommercePOS\Services\Cash_Movement_Store::entry( $fixture['expected'][1][0] ) ) );
-		$this->assertSame( 1, $wpdb->update( $fixture['sessions_table'], array( 'movements' => $folded ), array( 'id' => $fixture['sessions'][1] ) ) );
-		$recreated = $this->add_legacy_movement( $fixture, $fixture['sessions'][1], '2026-09-11 11:00:00' );
-		$logs = $this->capture_error_logs();
+		$folded = $fixture['legacy'] . '_folded';
+		$this->fold_session_early( $fixture, $fixture['expected'][0] );
+		$late = $this->add_legacy_movement( $fixture, $fixture['sessions'][0], '2026-09-11 11:00:00' );
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables.
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
 		try {
 			// Act.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
-			try {
-				( new Activator() )->install_sync_schema();
-				$this->fail( 'Expected the fold to refuse a row for a folded session.' );
-			} catch ( \RuntimeException $error ) {
-				$this->assertSame( 'Movement fold found a movement for a session already folded.', $error->getMessage() );
-			}
+			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
-			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; ids are prepared.
-			$movements = $wpdb->get_col( $wpdb->prepare( "SELECT movements FROM {$fixture['sessions_table']} WHERE id IN ( %s, %s ) ORDER BY id = %s", $fixture['sessions'][0], $fixture['sessions'][1], $fixture['sessions'][1] ) );
-			$this->assertSame( array( null, $folded ), $movements );
-			$this->assertCount( 1, $logs->entries );
-			$this->assertStringContainsString( 'Movement fold refused: session already folded', $logs->entries[0] );
-			$this->assertStringContainsString( '"movement_id":"' . $recreated . '"', $logs->entries[0] );
+			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			$listed = $store->list( $fixture['sessions'][0] );
+			$this->assertSame( $fixture['expected'][0], array_slice( $listed, 0, 2 ) );
+			$this->assertSame(
+				array(
+					'id' => $late,
+					'session_id' => $fixture['sessions'][0],
+					'type' => 'paid_in',
+					'amount' => '1.0000',
+					'reason' => 'Pre-fold code',
+					'actor' => 1,
+					'voids' => null,
+					'voided_by' => null,
+					'created_at_gmt' => '2026-09-11 11:00:00',
+				),
+				$listed[2]
+			);
+			$this->assertSame( $fixture['expected'][1], $store->list( $fixture['sessions'][1] ) );
 		} finally {
-			$logs->stop();
 			$this->restore_movement_schema( $fixture );
 		}
 	}
