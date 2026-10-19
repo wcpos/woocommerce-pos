@@ -140,6 +140,54 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '0.00', $sales[1]['payload']['fiscal']['adjustment'] );
 	}
 
+	/** Completion 2 at another register names that register in its frozen document as well as its columns. */
+	public function test_a_recompletion_at_another_register_names_it_in_the_payload_and_the_columns(): void {
+		// Arrange: completed at register A (the till tuple), reopened.
+		$registers = new \WCPOS\WooCommercePOS\Services\Register_Store();
+		$a         = $registers->create(
+			array(
+				'name' => 'Register A',
+				'store_id' => 12,
+			)
+		)['id'];
+		$b         = $registers->create(
+			array(
+				'name' => 'Register B',
+				'store_id' => 12,
+			)
+		)['id'];
+		$order     = $this->order();
+		$order->update_meta_data( '_wcpos_register', $a );
+		$order->save();
+		$this->pay( $order );
+		$reopened = $this->reopen( $order );
+
+		// Act: closed at register B.
+		Completion_Stamp::with_provenance(
+			array(
+				'register_id' => $b,
+				'sale_time' => '2026-10-20T09:15:00+02:00',
+				'sale_tz' => 'Europe/Berlin',
+				'sale_counter' => '42',
+			),
+			static function () use ( $reopened ): void {
+				$reopened->payment_complete();
+			}
+		);
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 2, $sales );
+		$this->assertSame( $a, $sales[0]['register_id'] );
+		$this->assertSame( $a, $sales[0]['payload']['register']['id'] );
+		$this->assertSame( $b, $sales[1]['register_id'] );
+		$this->assertSame( $b, $sales[1]['payload']['register']['id'] );
+		$this->assertSame( 'Register B', $sales[1]['payload']['register']['name'] );
+		$this->assertSame( 'Europe/Berlin', $sales[1]['payload']['fiscal']['sale_tz'] );
+		$this->assertSame( 42, $sales[1]['payload']['fiscal']['sale_counter'] );
+		$this->assertSame( $a, wc_get_order( $order->get_id() )->get_meta( '_wcpos_register' ) );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.
