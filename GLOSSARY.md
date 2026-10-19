@@ -40,7 +40,7 @@ A write-once row about an event on a sale: a completion, a refund, a void, a can
 _Avoid_: snapshot (the retired order-meta copy), receipt (the rendering of a record)
 
 **Money command**:
-A request that creates or changes a payment row: record a tender, start or capture a gateway payment, void, refund, cancel. Carries a till-minted row id and the order revision it was built against; the order push lane is not a money command and cannot carry money.
+A request that creates or changes a payment row or closes a sale: record a tender, start or capture a gateway payment, void, refund, cancel, submit, close. Carries a till-minted command id (the row id when the command creates the row) and the order revision it was built against; the order push lane is not a money command and cannot carry money or close a sale.
 _Avoid_: payment route (the transport), mutation (the push lane's word)
 
 **Attempt**:

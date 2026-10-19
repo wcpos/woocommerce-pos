@@ -60,34 +60,51 @@ needs no new concept.
 
 **The rules.**
 
-1. *Paid is derived on every money write.* Balance = total − Σ captured rows + Σ refunds. Balance
-   ≤ 0 on a non-zero total runs `payment_complete()` into the configured paid status (the
-   per-gateway POS order status; "completed" in WooCommerce means fulfilled, "processing" means
-   paid); 0 < paid < total is `pos-partial`; nothing paid leaves the order in the open status it
-   had. The server writes the POS completion stamp (sale time, zone, register, session, counter,
-   for receipts and fiscal provenance) at that transition, as a record of when it closed the
-   sale, never as evidence read back from the till. The order's `payment_method` becomes the
-   tender that actually paid.
-2. *Money never travels in the order document.* `_wcpos_payments`, `_wcpos_completed_at`,
-   `date_paid`, `set_paid` and `transaction_id` in a pushed order document are dropped before
-   the write. The push lane carries lines, customer, address, notes and status changes among
-   open statuses.
-3. *Reopen is a status change with all payments still counting.* It is refused only while a
-   provider leg is `pending`/`authorized` or a gateway attempt is unresolved; those are locks on
-   money in motion, not money rules. A fully paid sale reopened and closed unchanged is still
-   paid. Whether the till closes it before the cashier has finished editing is the app's trigger,
-   not a server concept.
-4. *Line edits need an open status first.* A pushed change to line, fee, shipping, coupon or tax
-   lines on an order in a paid or completed status is refused with `reopen_required`. This is
-   WooCommerce's `is_editable()` enforced at the POS layer, because wc/v3 does not enforce it.
-5. *Every money command is idempotent by the row id the till minted, for as long as the row
-   exists.* The row carries the command's body fingerprint and outcome: same id and body replays
-   the outcome; same id and a different body is 422; same id while the first is in flight is
-   409. Offline cash rows replay days later and create one row. No separate table (see
+1. *Paid is derived on every money write and on the explicit close.* Balance = total − Σ captured
+   rows + Σ **succeeded** refunds; a `pending` refund is a reservation shown beside the balance,
+   never added to it, and a `failed` refund adds nothing. Balance ≤ 0 on a non-zero total runs
+   `payment_complete()` into the configured paid status (the per-gateway POS order status;
+   "completed" in WooCommerce means fulfilled, "processing" means paid); 0 < paid < total is
+   `pos-partial`; nothing paid leaves the order in the open status it had. The server writes the
+   POS completion stamp (sale time, zone, register, session, counter, for receipts and fiscal
+   provenance) at that transition, as a record of when it closed the sale, never as evidence read
+   back from the till. The order's `payment_method` becomes the tender that actually paid. The
+   money commands are **record, intent, capture, void, refund, cancel, submit** and **close**:
+   `close` moves no money; it re-derives the balance and, when it is covered, runs the same paid
+   transition, so a reopened sale that the cashier closes without a line change completes again
+   (completion `n+1`) through a request the till is allowed to make. The push lane cannot close a
+   sale.
+2. *Money never travels in the order document.* The push lane carries lines, customer, address,
+   notes and status changes among open statuses. Every **server-owned key** in a pushed document
+   is dropped before the write, whether sent by key or as an id-addressed edit or tombstone of an
+   existing meta row: `_wcpos_payments` and the ledger index keys, `_wcpos_completed_at` and
+   `_wcpos_completions`, `_wcpos_gateway_attempts`, `_wcpos_awaiting_customer`, and the
+   WooCommerce money fields `date_paid`, `set_paid` and `transaction_id`. This is a key list and a
+   strip, not the fail-closed guard of #2312: the list is the design's own, and a new server-owned
+   key joins it in the same change that introduces it.
+3. *Reopen is a status change with all payments still counting.* It is refused only while money
+   is in motion: a provider leg is `pending` or `authorized`, a gateway attempt is unresolved, or
+   a refund allocation is `pending` at the provider. Those are locks on money in motion, not
+   money rules. A fully paid sale reopened and closed unchanged is still paid. Whether the till
+   closes it before the cashier has finished editing is the app's trigger, not a server concept.
+4. *Line edits need an editable status first.* A pushed change to line, fee, shipping, coupon or
+   tax lines on an order WooCommerce's `is_editable()` refuses (every paid, completed, cancelled,
+   refunded or failed status, not only the paid ones) is refused with `reopen_required`. This is
+   `is_editable()` enforced at the POS layer, because wc/v3 does not enforce it.
+5. *Every money command is idempotent by a till-minted command id, for as long as the row it
+   touched exists.* `record` and the webview mint use the row id as the command id, because they
+   create the row; `intent`, `capture`, `void`, each `refund` allocation, `cancel`, `submit` and
+   `close` carry their own command id, because several of them act on the same row over its life.
+   The row keeps a history of `(command id, body fingerprint, outcome)` entries: same id and body
+   replays the stored outcome; same id and a different body is 422; same id while the first is in
+   flight is 409. Offline cash rows replay days later and create one row. No separate table (see
    `.ai/rules/db-tables.mdc`).
 6. *Every money command carries the order revision it was built against* (the same content hash
-   as the push lane, ADR 0033) and a stale one is refused so the till re-reads. Nothing in
-   WooCommerce serialises concurrent writers to an order; the POS has to.
+   as the push lane, ADR 0033) and a stale one is refused so the till re-reads. **Replay is checked
+   before the revision**: a retry of a command that already ran carries the revision from before
+   its own effect, so the same-id-same-body lookup of rule 5 answers it with the stored outcome,
+   and only a command that has not run meets the revision check. Nothing in WooCommerce
+   serialises concurrent writers to an order; the POS has to.
 7. *Gateway and terminal payments are two saves around the external call.* The attempt is
    persisted before `process_payment()`; the row is posted or voided after; a sweeper resolves a
    stranded attempt by asking the provider for the client's reference before any retry. This is
@@ -151,8 +168,11 @@ identity on `(order_id, epoch)`, stamped `_wcpos_epoch_provenance[n]` and fired
 `wcpos_sale_completed( $order, $epoch )`. Under this ADR that identity is the **completion
 number**: each time the server completes the sale (rule 1), it appends an entry to the order's
 completion history, `_wcpos_completions[n]` with the sale time and zone, register, session,
-counter and total of that completion, and `n` is the fiscal sale record's key. Money never reads
-`n`; it is provenance, not a money state. The fiscal writers then behave exactly as the
+counter and total of that completion, and the pair **`(order_id, n)`** is the fiscal sale
+record's write-once key, exactly where the wiki had `(order_id, epoch)`; `n` restarts at 1 on
+every order and is never an identity on its own. Money never reads `n`; it is provenance, not a
+money state, and the push lane strips `_wcpos_completions` like every other server-owned key
+(rule 2). The fiscal writers then behave exactly as the
 groundwork rules them: completion `n` writes `sale` record `n` whose payload names the record it
 supersedes, closure totals take the signed adjustment (new total minus superseded total) through
 the `adjustments` counter so sales and refunds stay monotonic, a cancellation names the current
@@ -180,7 +200,8 @@ an online gateway shows its original tender in the ledger (a synthetic row from
 `_transaction_id`, as the webview passthrough already does for order-pay); and the exact
 refusal codes, which stay 422 on the push lane and 409 on the route family (#2312's ruling).
 
-Research: `.claude/research/2026-10-19-pos-money-state-models/RESEARCH.md`. History:
+Research: `.claude/research/2026-10-19-pos-money-state-models/RESEARCH.md`, committed beside this
+ADR so a fresh checkout can audit the evidence. History:
 #2312 (25 rounds), #2328 (the carve, 5 rounds), the carve handoff
 `.claude/handoffs/2026-10-19-payments-1-3-carve/HANDOFF.md`.
 
