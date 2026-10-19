@@ -19,7 +19,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
-use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
@@ -177,19 +176,18 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		);
 	}
 
-	/** The loaded open cart can restart even when the same push closes it. */
-	public function test_restart_and_checkout_in_one_push_takes_the_restart_date(): void {
-		$product            = ProductHelper::create_simple_product();
-		$order_id           = $this->make_order( 'pos-open' );
-		$payload            = $this->restart_payload( $product->get_id() );
-		$payload['status']   = 'completed';
-		$payload['set_paid'] = true;
+	/** The loaded open cart can restart even when the same push moves it out of pos-open. */
+	public function test_restart_and_hold_in_one_push_takes_the_restart_date(): void {
+		$product           = ProductHelper::create_simple_product();
+		$order_id          = $this->make_order( 'pos-open' );
+		$payload           = $this->restart_payload( $product->get_id() );
+		$payload['status'] = 'on-hold';
 
 		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
 
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( self::RESTART_GMT, $this->stored_date_gmt( $order_id ) );
-		$this->assertSame( 'completed', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
 	}
 
 	/** The `Z`-suffixed form the till may send is the same instant. */
@@ -308,34 +306,16 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
 	}
 
-	/** The payment lock held elsewhere means a payment operation is running: the push succeeds without the restart. */
-	public function test_a_held_payment_lock_forwards_the_update_without_the_restart(): void {
-		$product  = ProductHelper::create_simple_product();
-		$order_id = $this->make_order( 'pos-open' );
-		$lock     = new Order_Lock();
-		$this->assertTrue( $lock->acquire( $order_id ) );
-		try {
-			$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
-		} finally {
-			$lock->release( $order_id );
-		}
-
-		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
-		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );
-		$this->assertCount( 1, wc_get_order( $order_id )->get_items() );
-		// Released: the same restart now goes through.
-		$response = $this->push_envelope( 'update', $this->restart_payload( $product->get_id() ), $this->order_revision( $order_id ) );
-		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
-		$this->assertSame( self::RESTART_GMT, $this->stored_date_gmt( $order_id ) );
-	}
-
+	/** A paid order is not a cart: a newer date on its push is ignored (the push may not set a paid status or change its lines either, ADR 0040). */
 	public function test_update_of_a_paid_order_keeps_the_stored_date(): void {
 		$product  = ProductHelper::create_simple_product();
 		$order_id = $this->make_order( 'processing', array( array( $product, 1 ) ) );
-		$payload  = $this->restart_payload( $product->get_id() );
+		$payload  = array(
+			'date_created_gmt' => self::RESTART_GMT,
+			'meta_data'        => $this->uuid_meta(),
+		);
 
-		$payload['status'] = 'processing';
-		$response          = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
 
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( self::STORED_GMT, $this->stored_date_gmt( $order_id ) );

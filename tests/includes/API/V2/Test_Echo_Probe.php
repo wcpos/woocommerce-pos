@@ -111,7 +111,7 @@ class Test_Echo_Probe extends WCPOS_REST_Unit_Test_Case {
 				'authorization' => 'Bearer query-token',
 				'wcpos'         => '1',
 				'store_id'      => '9',
-				'wcpos_protocol' => '2',
+				'wcpos_protocol' => '3',
 				'wcpos_client'   => 'web/2.0.0',
 			)
 		);

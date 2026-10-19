@@ -217,7 +217,7 @@ class Test_Settlement extends \WP_UnitTestCase {
 		list( $order, $row ) = $this->pending();
 		$request = new \WP_REST_Request( 'GET', '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $row['id'] . '/status' );
 		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_header( 'X-WCPOS-Protocol', '2' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$lock = new Order_Lock();
 		$this->assertTrue( $lock->acquire( $order->get_id() ) );
 		$writes = 0;

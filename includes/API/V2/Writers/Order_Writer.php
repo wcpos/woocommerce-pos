@@ -9,6 +9,8 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
@@ -28,12 +30,13 @@ use const WCPOS\WooCommercePOS\VERSION;
 /** Owns order audit, tax, reassignment, hook, note, email, and stock behavior. */
 class Order_Writer extends Null_Writer {
 	/**
-	 * Audit meta recording HOW an order came to be paid (ADR 0035 path 3):
-	 * `offline` means the till ASSERTED payment via `set_paid` — no gateway ran.
-	 * Server-owned (spoof-stripped via Pos_Order_Audit::SERVER_META_KEYS).
+	 * The statuses a till may push (ADR 0040 D4): the open statuses and cancel. `pos-partial`
+	 * is derived from the ledger, and `failed` and every paid status are the server's.
 	 */
-	public const PAYMENT_ASSERTED_META    = '_pos_payment_asserted';
-	public const PAYMENT_ASSERTED_OFFLINE = 'offline';
+	public const PUSHABLE_STATUSES = array( 'pos-open', 'pending', 'on-hold', 'cancelled' );
+
+	/** Payload keys that can move money on the order: a push carrying one is serialised against the money commands. */
+	private const MONEY_SENSITIVE_KEYS = array( 'line_items', 'fee_lines', 'shipping_lines', 'coupon_lines', 'currency', 'status', 'customer_id', 'date_created_gmt' );
 
 	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
@@ -66,7 +69,11 @@ class Order_Writer extends Null_Writer {
 		if ( is_wp_error( $error ) ) {
 			return $error;
 		}
-		$forward                = $payload;
+		$payload = self::with_pushable_status( $payload );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+		$forward                = self::without_money( $payload );
 		$forward['created_via'] = 'woocommerce-pos';
 		unset( $forward['tax_ids'] );
 		if ( isset( $forward['meta_data'] ) && is_array( $forward['meta_data'] ) ) {
@@ -79,11 +86,6 @@ class Order_Writer extends Null_Writer {
 		}
 		$till_meta['_pos_user']         = (string) get_current_user_id();
 		$till_meta['_pos_user_created'] = $till_meta['_pos_user'];
-		if ( self::asserts_payment( $payload ) ) {
-			// A CREATE carrying set_paid IS the payment event — the push itself
-			// marks the fresh order paid with no gateway involved.
-			$till_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
-		}
 		return array(
 			'method' => 'POST',
 			'route' => $meta['route'],
@@ -108,6 +110,8 @@ class Order_Writer extends Null_Writer {
 		if ( is_wp_error( $error ) ) {
 			return $error;
 		}
+		// The pushable-status check runs on the locked pre-read: a full document echoes the
+		// order's current status, and an unchanged status is not a push of that status.
 		return array(
 			'method' => 'PUT',
 			'route' => $meta['route'] . '/' . $id,
@@ -119,24 +123,31 @@ class Order_Writer extends Null_Writer {
 		);
 	}
 
-	/** Whether the push payload asserts payment via wc/v3's write-only set_paid flag. */
-	private static function asserts_payment( array $payload ): bool {
-		return isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
-	}
-
 	/** Repair an existing born-twice order without inventing a version stamp. */
 	public function validate_existing_create( int $id, array $payload, array $prepared ) {
-		// The repair runs against an EXISTING order: if a gateway paid it between
-		// the two create arrivals, the replayed set_paid no longer describes this
-		// order's payment — same needs_payment() guard as the update path. The
-		// recovery phases keep stamping unconditionally: there the order was paid
-		// by this very push.
-		$order = wc_get_order( $id );
-		if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
-			unset( $payload['set_paid'] );
-		}
 		$this->stamp_order_audit( $id, $payload, false );
 		return null;
+	}
+
+	/**
+	 * Hold the order lock (the one the money commands and the ledger keeper hold) from the
+	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b),
+	 * so a capture cannot land between the compare and the write. The Mutation_Store record
+	 * lock is already held; Order_Lock falls back to its option lease on servers that cannot
+	 * nest named locks. A note or address push takes no order lock, as before.
+	 */
+	public function with_write_lock( int $id, array $payload, callable $work ) {
+		if ( ! array_intersect( self::MONEY_SENSITIVE_KEYS, array_keys( $payload ) ) ) {
+			return $work();
+		}
+		if ( ! Order_Lock::instance()->acquire( $id ) ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+		}
+		try {
+			return $work();
+		} finally {
+			Order_Lock::instance()->release( $id );
+		}
 	}
 
 	/** Forward within the named order hook lifecycle. */
@@ -147,67 +158,26 @@ class Order_Writer extends Null_Writer {
 		}
 		$payload = $prepared['payload'];
 		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
-		$declared['set_paid'] = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
-		// A cart restart and the payment routes contend for the same order: hold the
-		// payment lock from wc/v3's fresh load through its save, so no payment row can
-		// land between the pre-insert re-check and the write. Held by someone else
-		// means a payment operation is running on this order — then it is not a
-		// restartable cart, and the push goes ahead without the restart (never a 409:
-		// the till's other edits are still good). The Mutation_Store record lock is
-		// already held on this connection; Order_Lock falls back to its option lease
-		// on servers that cannot nest named locks, so that lock is never dropped.
-		$locked = isset( $declared['restart_gmt'] ) && Order_Lock::instance()->acquire( (int) $declared['id'] );
-		if ( isset( $declared['restart_gmt'] ) && ! $locked ) {
-			unset( $declared['restart_gmt'] );
-		}
-		$prepared['context'] = $declared;
+		$prepared['context']          = $declared;
 		if ( isset( $declared['id'] ) ) {
 			Ledger::save_was_refused( (int) $declared['id'] ); // A stale refusal from earlier in this request must not leak.
 		}
-		// An update carrying the payment ledger takes the payment lock before wc/v3 writes
-		// anything: the keeper would refuse the order save, but WooCommerce saves line items
-		// on their own first. A held lock answers a retryable 409 with nothing written.
-		$order_id      = 'update' === $declared['operation'] ? (int) ( $declared['id'] ?? 0 ) : 0;
-		$ledger_locked = false;
-		if ( $order_id > 0 ) {
-			foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
-				if ( Ledger::META_KEY === Meta_Entry::key( $entry ) ) {
-					if ( ! Order_Lock::instance()->acquire( $order_id ) ) {
-						if ( $locked ) {
-							Order_Lock::instance()->release( (int) $declared['id'] );
-						}
-						return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
-					}
-					$ledger_locked = true;
-					break;
-				}
+		$response = Order_Write_Intent::open(
+			$declared,
+			function () use ( $prepared, $forward ) {
+				return $this->forward_with_reserved_stock( $prepared, $forward );
 			}
+		);
+		$id = 0;
+		if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 ) {
+			$data = $response->get_data();
+			$id   = (int) ( ( is_array( $data ) ? ( $data['id'] ?? null ) : null ) ?? $declared['id'] ?? 0 );
 		}
-		try {
-			$response = Order_Write_Intent::open(
-				$declared,
-				function () use ( $prepared, $forward ) {
-					return $this->forward_with_reserved_stock( $prepared, $forward );
-				}
-			);
-			$id = 0;
-			if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 ) {
-				$data = $response->get_data();
-				$id   = (int) ( ( is_array( $data ) ? ( $data['id'] ?? null ) : null ) ?? $declared['id'] ?? 0 );
-			}
-			// WooCommerce swallows the keeper's refusal and answers 2xx with nothing written.
-			if ( $id > 0 && Ledger::save_was_refused( $id ) ) {
-				return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order save was refused while its payment ledger was locked; retry shortly.', array( 'status' => 409 ) );
-			}
-			return $response;
-		} finally {
-			if ( $ledger_locked ) {
-				Order_Lock::instance()->release( $order_id );
-			}
-			if ( $locked ) {
-				Order_Lock::instance()->release( (int) $declared['id'] );
-			}
+		// WooCommerce swallows the keeper's refusal and answers 2xx with nothing written.
+		if ( $id > 0 && Ledger::save_was_refused( $id ) ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order save was refused while its payment ledger was locked; retry shortly.', array( 'status' => 409 ) );
 		}
+		return $response;
 	}
 
 	/**
@@ -227,8 +197,9 @@ class Order_Writer extends Null_Writer {
 	 * so a push that restarts and closes the cart in one request takes the restart date.
 	 *
 	 * Decided twice on purpose: at the pre-read, and again at pre-insert on the order
-	 * wc/v3 is about to write (under the payment lock), so a payment that completed
-	 * in between wins — the same shape as the provenance re-decision.
+	 * wc/v3 is about to write, so a payment that completed in between wins — the same
+	 * shape as the provenance re-decision. A restart push is money-sensitive (it carries
+	 * date_created_gmt), so both decisions run under the order lock (with_write_lock()).
 	 *
 	 * @param \WC_Order $order       The order as currently loaded.
 	 * @param int|null  $created_gmt Validated client date_created_gmt (UTC timestamp), or null when absent.
@@ -259,27 +230,23 @@ class Order_Writer extends Null_Writer {
 	private function forward_with_reserved_stock( array $prepared, callable $forward ) {
 		$context = $prepared['context'];
 		$payload = $prepared['payload'];
-		$paid    = isset( $payload['set_paid'] ) && rest_sanitize_boolean( $payload['set_paid'] );
 		$status  = isset( $payload['status'] ) ? (string) $payload['status'] : '';
 		$validator = Stock_Validator::instance();
 
+		// The push carries no money (ADR 0040), so `set_paid` is always false here: the one
+		// pushable status that is not stock-exempt (`on-hold`) is created pending, held, then applied.
 		if ( 'create' !== $context['operation']
 			|| ! SettingsService::instance()->prevent_overselling_enabled()
-			|| ! $validator->should_validate_create_payload( $status, $paid ) ) {
+			|| ! $validator->should_validate_create_payload( $status, false ) ) {
 			return $this->forward_with_order_lifecycle( $prepared, $forward );
 		}
 
 		$response = null;
 		$order    = $validator->around_paid_create(
-			array(
-				'status'         => $status,
-				'set_paid'       => $paid,
-				'transaction_id' => isset( $payload['transaction_id'] ) ? (string) $payload['transaction_id'] : '',
-			),
+			array( 'status' => $status ),
 			function ( array $neutralised ) use ( $prepared, $forward, &$response ) {
-				$prepared['payload']['status']   = $neutralised['status'];
-				$prepared['payload']['set_paid'] = $neutralised['set_paid'];
-				$response                        = $this->forward_with_order_lifecycle( $prepared, $forward );
+				$prepared['payload']['status'] = $neutralised['status'];
+				$response                      = $this->forward_with_order_lifecycle( $prepared, $forward );
 				$data                            = $response instanceof \WP_REST_Response ? $response->get_data() : null;
 				$id                              = is_array( $data ) && isset( $data['id'] ) ? (int) $data['id'] : 0;
 
@@ -323,6 +290,16 @@ class Order_Writer extends Null_Writer {
 		$this->stamp_order_till_meta( $id, $payload );
 		$this->order_payload->persist_tax_ids( $id, $payload, false );
 		$this->persist_cashier_store_reassignment( $id, $current, $response_data, $context );
+		if ( ! empty( $context['frozen_addresses'] ) ) {
+			// A non-editable order's address change lands without wc/v3's calculate_totals().
+			$order = wc_get_order( $id );
+			if ( $order ) {
+				foreach ( $context['frozen_addresses'] as $type => $address ) {
+					$order->set_address( $address, $type );
+				}
+				Ledger::saving( $id, fn() => $order->save() );
+			}
+		}
 		if ( ! empty( $context['clear_email'] ) ) {
 			$order = wc_get_order( $id );
 			if ( $order ) {
@@ -416,6 +393,15 @@ class Order_Writer extends Null_Writer {
 				$qd->persist( $order );
 			}
 		};
+		// wc/v3 adjusts a set line's stock only on processing/completed/on-hold (and restores a removed
+		// line's reduction itself); a reopened sale is pos-open with its stock still reduced, so after the
+		// save every line is brought to its quantity. An unchanged line is a no-op: `_reduced_stock` matches.
+		// Every movement runs after the save, so a failed write moves nothing (rule 4b).
+		$adjust_stock = static function ( $order, $request, $creating ) use ( $context, $prepared ) {
+			if ( ! $creating && $order instanceof \WC_Order && $context['id'] === $order->get_id() && $request->get_route() === $prepared['route'] ) {
+				self::adjust_line_stock( $order, $context['bindings'] ?? array() );
+			}
+		};
 		$use_filter = array() !== ( $context['fill_provenance'] ?? array() ) || isset( $context['restart_gmt'] );
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
@@ -429,10 +415,14 @@ class Order_Writer extends Null_Writer {
 				return $error;
 			}
 			add_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10, 3 );
+			if ( ! empty( $context['adjust_stock'] ) ) {
+				add_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10, 3 );
+			}
 			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
 		} finally {
 			$qd->clear();
 			remove_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10 );
+			remove_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10 );
 			if ( $use_filter ) {
 				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10 );
 			}
@@ -440,6 +430,132 @@ class Order_Writer extends Null_Writer {
 				remove_action( 'woocommerce_before_order_object_save', $created_via );
 			}
 		}
+	}
+
+	/** Whether the push moves a non-editable order into an editable status (a reopen, D3). */
+	private static function reopens( \WC_Order $order, array $forward ): bool {
+		return ! $order->is_editable() && in_array( (string) ( $forward['status'] ?? '' ), array( 'pos-open', 'pending', 'on-hold' ), true );
+	}
+
+	/**
+	 * Whether any money exists on the order: a ledger row, a gateway attempt or the awaiting-customer
+	 * stamp, or WooCommerce's own paid facts for an order a gateway or an earlier version paid
+	 * (`date_paid`, a paid status, a transaction id, a refund).
+	 */
+	private static function has_money( \WC_Order $order ): bool {
+		return Ledger::instance()->read( $order ) || Gateway_Submission::read_attempts( $order ) || null !== Gateway_Submission::read_stamp( $order )
+			|| null !== $order->get_date_paid( 'edit' ) || $order->is_paid() || '' !== (string) $order->get_transaction_id( 'edit' ) || array() !== $order->get_refunds();
+	}
+
+	/**
+	 * The payment or attempt still in motion on the order, or null: a `pending` or `authorized`
+	 * row, a `pending` refund allocation, a `sent` gateway attempt, or the awaiting-customer stamp.
+	 *
+	 * @return array{payment_id: ?string, attempt_id: ?string}|null
+	 */
+	private static function money_in_motion( \WC_Order $order ): ?array {
+		foreach ( Ledger::instance()->read( $order ) as $row ) {
+			$pending_refund = array_filter( is_array( $row['refunds'] ?? null ) ? $row['refunds'] : array(), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );
+			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || $pending_refund ) {
+				return array(
+					'payment_id' => (string) ( $row['id'] ?? '' ),
+					'attempt_id' => null,
+				);
+			}
+		}
+		$sent  = array_search( 'sent', Gateway_Submission::read_attempts( $order ), true );
+		$stamp = Gateway_Submission::read_stamp( $order );
+		if ( false !== $sent || null !== $stamp ) {
+			return array(
+				'payment_id' => null,
+				'attempt_id' => false !== $sent ? (string) $sent : (string) ( $stamp['attempt_id'] ?? '' ),
+			);
+		}
+		return null;
+	}
+
+	/**
+	 * After the save, move stock for a sale whose stock was already reduced. A line re-bound to
+	 * another product first gives its old product back the reduction the pre-read recorded (wc/v3
+	 * keeps the line's `_reduced_stock`); then every line is brought to its quantity with wc/v3's
+	 * own helper and note. When the status change itself restored the order's stock (pending,
+	 * cancelled), WooCommerce returned a re-bound line's reduction to its NEW product, so that
+	 * unit is moved back to the old one. A helper that fails is logged and noted for the merchant,
+	 * never rolled back: the write landed, and a retry would compare unchanged.
+	 *
+	 * @param \WC_Order $order    The saved order.
+	 * @param array     $bindings Reduced lines as the pre-read saw them: id => [product, variation, reduced, name].
+	 */
+	private static function adjust_line_stock( \WC_Order $order, array $bindings ): void {
+		$reduced_now = (bool) $order->get_data_store()->get_stock_reduced( $order->get_id() );
+		require_once WC()->plugin_path() . '/includes/admin/wc-admin-functions.php';
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			list( $product_id, $variation_id, $reduced, $name ) = $bindings[ $item->get_id() ] ?? array( 0, 0, 0, '' );
+			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product
+				&& ( $product_id !== $item->get_product_id() || $variation_id !== $item->get_variation_id() ) ) {
+				if ( ! $reduced_now ) {
+					self::move_stock( $order, $item->get_product(), $item->get_name(), $reduced, 'decrease' );
+				}
+				$moved = self::move_stock( $order, wc_get_product( $variation_id ? $variation_id : $product_id ), $name, $reduced, 'increase' );
+				if ( ! $moved || ! $reduced_now ) {
+					continue;
+				}
+				$item->update_meta_data( '_reduced_stock', '0' );
+				$item->save();
+			}
+			if ( ! $reduced_now ) {
+				continue;
+			}
+			$changed = wc_maybe_adjust_line_item_product_stock( $item );
+			if ( is_array( $changed ) ) {
+				/* translators: %s item name. */
+				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $item->get_name(), $changed['from'], $changed['to'] ) ), 0, true );
+			} elseif ( is_wp_error( $changed ) ) {
+				$delta = wc_stock_amount( $item->get_quantity() ) - wc_stock_amount( $item->get_meta( '_restock_refunded_items', true ) ) - wc_stock_amount( $item->get_meta( '_reduced_stock', true ) );
+				self::stock_not_adjusted( $order, $item->get_name(), $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id(), $delta, $changed->get_error_message() );
+			}
+		}
+	}
+
+	/**
+	 * Move a stock-managed product's stock by a line's reduction, with wc/v3's note; a failure is noted.
+	 *
+	 * @param \WC_Order       $order     The order.
+	 * @param \WC_Product|null $product   The product, or null/false when it is gone.
+	 * @param string          $name      Line name for the note.
+	 * @param int|float       $quantity  Units to move.
+	 * @param string          $operation `increase` or `decrease`.
+	 * @return bool Whether the stock moved (or needed no move: an unmanaged or missing product).
+	 */
+	private static function move_stock( \WC_Order $order, $product, string $name, $quantity, string $operation ): bool {
+		if ( ! $product instanceof \WC_Product || ! $product->managing_stock() ) {
+			return true;
+		}
+		// wc_update_product_stock() answers the new stock, or false/null when it could not update it.
+		$to = wc_update_product_stock( $product, $quantity, $operation );
+		if ( ! is_numeric( $to ) ) {
+			self::stock_not_adjusted( $order, $name, $product->get_id(), 'increase' === $operation ? $quantity : -$quantity, 'wc_update_product_stock() did not update the stock' );
+			return false;
+		}
+		$from = 'increase' === $operation ? $to - $quantity : $to + $quantity;
+		/* translators: %s item name. */
+		$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $name, $from, $to ) ), 0, true );
+		return true;
+	}
+
+	/**
+	 * Log and note a stock movement that did not happen, for the merchant to reconcile.
+	 *
+	 * @param \WC_Order $order      The order.
+	 * @param string    $name       Line name.
+	 * @param int       $product_id Product whose stock did not move.
+	 * @param int|float $delta      Units the stock should have moved by (positive back into stock).
+	 * @param string    $message    The helper's error.
+	 */
+	private static function stock_not_adjusted( \WC_Order $order, string $name, int $product_id, $delta, string $message ): void {
+		Logger::error( sprintf( 'WCPOS: stock not adjusted for %1$s (#%2$d) on order #%3$d: %4$s', $name, $product_id, $order->get_id(), $message ) );
+		/* translators: 1: line name, 2: units. */
+		$order->add_order_note( sprintf( __( 'WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product\'s stock manually.', 'woocommerce-pos' ), $name, $delta ), 0, true );
 	}
 
 	/** Name and execute the permanent/trash stock restore/rollback protocol. */
@@ -470,8 +586,14 @@ class Order_Writer extends Null_Writer {
 	 * @param int      $id          Order ID.
 	 * @param array    $payload     Client order document.
 	 * @param int|null $created_gmt Validated client date_created_gmt (UTC timestamp), or null when absent.
+	 * @return array|WP_Error The late payload and context, or the refusal.
 	 */
-	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null ): array {
+	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null ) {
+		$order   = wc_get_order( $id );
+		$payload = self::with_pushable_status( $payload, $order ? $order->get_status() : null );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
 		$reassignment = array();
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
 			$key = Meta_Entry::key( $entry );
@@ -482,7 +604,7 @@ class Order_Writer extends Null_Writer {
 		$authorized = isset( $reassignment['_pos_store'] ) && is_scalar( $reassignment['_pos_store'] ) && '' !== (string) $reassignment['_pos_store']
 			? (bool) apply_filters( 'woocommerce_pos_order_store_reassignment_allowed', true, (string) $reassignment['_pos_store'], $id )
 			: false;
-		$forward = $payload;
+		$forward = self::without_money( $payload );
 		unset( $forward['created_via'], $forward['tax_ids'] );
 		if ( isset( $forward['meta_data'] ) && is_array( $forward['meta_data'] ) ) {
 			$forward['meta_data'] = $this->without_pos_audit_meta( $forward, $id );
@@ -494,23 +616,10 @@ class Order_Writer extends Null_Writer {
 		$provenance_refused = array();
 		$pre_store   = null;
 		$restart_gmt = null;
-		$order       = wc_get_order( $id );
 		if ( $order ) {
 			// Cart restart (wcpos/monorepo#2183): a first decision on the pre-read;
 			// the binding one is re-taken at pre-insert, see cart_restart_gmt().
 			$restart_gmt = self::cart_restart_gmt( $order, $created_gmt );
-			/*
-			 * `set_paid` is write-only in wc/v3, so a client re-sends it on every
-			 * later edit of an order it created offline. WooCommerce only takes
-			 * payment on update when the order still needs it (`$creating ||
-			 * needs_payment()` in its orders controller) — mirror that, pre-forward,
-			 * or an update to an order ALREADY paid by a real gateway (hosted pay
-			 * page) would stamp 'offline' over a gateway-taken payment: the exact
-			 * distinction this marker exists to draw. Fill-only, never overwrite.
-			 */
-			if ( self::asserts_payment( $payload ) && $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
-				$fill_meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
-			}
 			$pre_store = (string) $order->get_meta( '_pos_store' );
 			foreach ( array( '_pos_user', '_pos_user_created' ) as $key ) {
 				if ( '' === (string) $order->get_meta( $key ) ) {
@@ -560,10 +669,79 @@ class Order_Writer extends Null_Writer {
 		if ( null !== $restart_gmt ) {
 			$context['restart_gmt'] = $restart_gmt;
 		}
+		$forward       = $this->order_payload->for_update( $id, $forward );
+		$lines_changed = $order && $this->order_payload->lines_changed( $order, $forward );
+		$refusal       = $order ? $this->money_gate( $order, $forward, $lines_changed ) : null;
+		if ( null !== $refusal ) {
+			return $refusal;
+		}
+		// A non-editable order that is not being reopened keeps its lines and totals: wc/v3 recalculates
+		// whenever lines or an address are posted, which would move a paid order's tax. Its unchanged
+		// lines are not forwarded and its addresses are applied after the write, without a recalculation.
+		if ( $order && ! $order->is_editable() && ! self::reopens( $order, $forward ) && ! $lines_changed ) {
+			unset( $forward['line_items'], $forward['fee_lines'], $forward['shipping_lines'], $forward['coupon_lines'] );
+			$context['frozen_addresses'] = array_filter( array_intersect_key( $forward, array_flip( array( 'billing', 'shipping' ) ) ), 'is_array' );
+			unset( $forward['billing'], $forward['shipping'] );
+			$email = $context['frozen_addresses']['billing']['email'] ?? '';
+			if ( ! is_scalar( $email ) || ( '' !== (string) $email && ! is_email( (string) $email ) ) ) {
+				return new WP_Error( 'rest_invalid_param', 'Invalid parameter(s): billing', array( 'status' => 400 ) );
+			}
+		}
+		// Stock already reduced (a paid or reopened sale): the line edit moves stock by its delta (rule 4b).
+		$context['adjust_stock'] = $lines_changed && (bool) $order->get_data_store()->get_stock_reduced( $id );
+		// wc/v3 saves an updated line before the pre-insert filters run: keep each reduced line's binding as read.
+		$context['bindings'] = array();
+		foreach ( $context['adjust_stock'] ? $order->get_items( 'line_item' ) : array() as $item ) {
+			$reduced = wc_stock_amount( $item->get_meta( '_reduced_stock', true ) );
+			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product ) {
+				$context['bindings'][ $item->get_id() ] = array( $item->get_product_id(), $item->get_variation_id(), $reduced, $item->get_name() );
+			}
+		}
 		return array(
-			'payload' => $this->order_payload->for_update( $id, $forward ),
+			'payload' => $forward,
 			'context' => $context,
 		);
+	}
+
+	/**
+	 * Refuse a push the order may not take, on the locked read (ADR 0040 rules 3, 4 and 6b).
+	 *
+	 * A currency change is refused once any money exists on the order (`wcpos_currency_locked`,
+	 * rule 6b): there is no conversion protocol, and a 100 USD row must not cover a 100 EUR total.
+	 * A reopen (a non-editable order pushed into an editable status) or a cancel is refused
+	 * while money is in motion (`wcpos_money_in_motion`, rule 3); captured, failed and voided
+	 * rows never block, and nothing is archived. A line change needs an editable order
+	 * (`reopen_required`, rule 4) unless the same push reopens it (D3: reopen and edit are one
+	 * write); `cancelled` never unlocks lines.
+	 *
+	 * @param \WC_Order $order         The order read under the order lock.
+	 * @param array     $forward       The forwarded update payload.
+	 * @param bool      $lines_changed Whether the forward changes the order's money lines.
+	 */
+	private function money_gate( \WC_Order $order, array $forward, bool $lines_changed ): ?WP_Error {
+		$currency = isset( $forward['currency'] ) && is_scalar( $forward['currency'] ) ? (string) $forward['currency'] : '';
+		if ( '' !== $currency && $currency !== $order->get_currency( 'edit' ) && self::has_money( $order ) ) {
+			return new WP_Error( 'wcpos_currency_locked', 'The currency cannot change once a payment exists on this order.', array( 'status' => 422 ) );
+		}
+		$status   = (string) ( $forward['status'] ?? '' );
+		$editable = $order->is_editable();
+		$reopens  = self::reopens( $order, $forward );
+		$cancels  = 'cancelled' === $status && 'cancelled' !== $order->get_status();
+		$motion   = ( $reopens || $cancels ) ? self::money_in_motion( $order ) : null;
+		if ( null !== $motion ) {
+			return new WP_Error( 'wcpos_money_in_motion', 'A payment on this order is still in progress; finish or cancel it first.', array( 'status' => 422 ) + $motion );
+		}
+		if ( ! $editable && ! $reopens && $lines_changed ) {
+			return new WP_Error(
+				'reopen_required',
+				'Reopen the order before changing its lines.',
+				array(
+					'status'       => 422,
+					'order_status' => $order->get_status(),
+				)
+			);
+		}
+		return null;
 	}
 
 	/** Persist reassignment and its mutually exclusive order-note policy. */
@@ -611,13 +789,6 @@ class Order_Writer extends Null_Writer {
 	/** Persist server-owned order audit metadata. */
 	private function stamp_order_audit( int $id, array $payload, bool $stamp_version ): void {
 		$meta = array( '_pos_user' => (string) get_current_user_id() );
-		// Create-shaped phases only (create_after_identity, create_recovery, the
-		// born-twice repair): the create push itself asserted the payment, so no
-		// needs_payment() gate — by the time this runs post-forward the order is
-		// already paid BY THIS PUSH. The update path carries its own guard.
-		if ( self::asserts_payment( $payload ) ) {
-			$meta[ self::PAYMENT_ASSERTED_META ] = self::PAYMENT_ASSERTED_OFFLINE;
-		}
 		if ( $stamp_version ) {
 			$meta['_woocommerce_pos_version'] = VERSION;
 			$meta['_pos_user_created']         = $meta['_pos_user'];
@@ -642,6 +813,48 @@ class Order_Writer extends Null_Writer {
 		if ( $meta ) {
 			$this->store->persist_order_audit_meta( $id, $meta );
 		}
+	}
+
+	/**
+	 * The payload with its `status` normalised (no `wc-` prefix), or a 422 when the till may not push it.
+	 * An absent or empty status is untouched (wc/v3 defaults a create to `pending`); on an update, the
+	 * order's own status echoed back by a full document is dropped from the forward, not refused.
+	 *
+	 * @param array       $payload Client payload.
+	 * @param string|null $current The order's status on the locked read, or null on create.
+	 * @return array|WP_Error
+	 */
+	private static function with_pushable_status( array $payload, ?string $current = null ) {
+		if ( ! isset( $payload['status'] ) || '' === $payload['status'] ) {
+			return $payload;
+		}
+		$status = is_scalar( $payload['status'] ) ? (string) $payload['status'] : '';
+		$status = 0 === strpos( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
+		if ( null !== $current && $status === $current && ! in_array( $status, self::PUSHABLE_STATUSES, true ) ) {
+			unset( $payload['status'] );
+			return $payload;
+		}
+		if ( ! in_array( $status, self::PUSHABLE_STATUSES, true ) ) {
+			return new WP_Error(
+				'wcpos_status_not_pushable',
+				'This order status is set by the server, not pushed by the till.',
+				array(
+					'status'    => 422,
+					'requested' => $status,
+					'pushable'  => self::PUSHABLE_STATUSES,
+				)
+			);
+		}
+		$payload['status'] = $status;
+		return $payload;
+	}
+
+	/** Drop every top-level money field: the push lane carries no money (ADR 0040 rule 2). */
+	private static function without_money( array $payload ): array {
+		foreach ( Pos_Order_Audit::SERVER_MONEY_FIELDS as $field ) {
+			unset( $payload[ $field ] );
+		}
+		return $payload;
 	}
 
 	/** Strip server-owned audit metadata from a forward. */

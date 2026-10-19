@@ -131,6 +131,47 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Both POS open statuses are editable on every request, not only in wp-admin (ADR 0040 rule 4):
+	 * a layaway (`pos-partial`) takes a line edit without a status flip, and every paid,
+	 * completed, cancelled, refunded or failed order keeps WooCommerce's answer.
+	 *
+	 * @dataProvider editable_statuses
+	 *
+	 * @param string $status   Order status.
+	 * @param bool   $editable Expected is_editable() answer.
+	 */
+	public function test_order_is_editable_outside_admin_for_open_statuses_only( string $status, bool $editable ): void {
+		// Arrange.
+		$order_id = $this->create_pos_order( $status )->get_id();
+
+		// Act.
+		$actual = wc_get_order( $order_id )->is_editable();
+
+		// Assert.
+		$this->assertFalse( is_admin() );
+		$this->assertSame( $editable, $actual );
+	}
+
+	/**
+	 * Statuses and whether a line edit may land on them.
+	 *
+	 * @return array<string, array{string, bool}>
+	 */
+	public static function editable_statuses(): array {
+		return array(
+			'pos-open'    => array( 'pos-open', true ),
+			'pos-partial' => array( 'pos-partial', true ),
+			'pending'     => array( 'pending', true ),
+			'on-hold'     => array( 'on-hold', true ),
+			'processing'  => array( 'processing', false ),
+			'completed'   => array( 'completed', false ),
+			'cancelled'   => array( 'cancelled', false ),
+			'refunded'    => array( 'refunded', false ),
+			'failed'      => array( 'failed', false ),
+		);
+	}
+
+	/**
 	 * Test that pos-open status is valid for payment.
 	 */
 	public function test_pos_open_valid_for_payment(): void {

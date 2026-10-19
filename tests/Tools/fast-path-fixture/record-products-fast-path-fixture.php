@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // The plugin registers its routes on rest_api_init only for a marked request: mark this
 // process and drop any REST server built during bootstrap, so rest_api_init runs again.
 $_SERVER['HTTP_X_WCPOS']          = '1';
-$_SERVER['HTTP_X_WCPOS_PROTOCOL'] = '2';
+$_SERVER['HTTP_X_WCPOS_PROTOCOL'] = '3';
 $GLOBALS['wp_rest_server']        = null;
 
 global $wpdb;
@@ -76,7 +76,7 @@ try {
 	);
 	$headers = array(
 		'X-WCPOS'          => '1',
-		'X-WCPOS-Protocol' => '2',
+		'X-WCPOS-Protocol' => '3',
 	);
 	$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
 	$request->set_query_params( $query );

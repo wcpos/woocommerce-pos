@@ -34,6 +34,13 @@ interface Collection_Writer_Interface {
 	 */
 	public function prepare_update( array $meta, int $id, array $payload, callable $validate_tax_ids );
 
+	/**
+	 * Run an update's compare-and-write under whatever lock the collection needs.
+	 *
+	 * @return mixed The work's result, or a retryable refusal when the lock is held elsewhere.
+	 */
+	public function with_write_lock( int $id, array $payload, callable $work );
+
 	/** Validate and repair an already-existing create target. */
 	public function validate_existing_create( int $id, array $payload, array $prepared );
 

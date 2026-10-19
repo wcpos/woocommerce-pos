@@ -45,14 +45,25 @@ use WP_Error;
  *   write intent: provenance is replaceable while the order still needs payment (a failed final leg
  *   re-stamps it) and frozen once paid, cash fills only what is missing. `main` does not yet protect
  *   the provenance tuple.
- * - Payment assertion marker: V2 stamps `_pos_payment_asserted` on an asserted create or eligible
- *   update (ADR 0035 path 3); V1 strips a client-supplied marker and never generates one.
+ * - Payment assertion marker: neither lane generates `_pos_payment_asserted` (V2's ADR 0035
+ *   path 3 was removed under ADR 0040); both strip a client-supplied marker.
  *
  * v1's schema relaxations in get_item_schema() are the validation-time half of the
  * same tolerance this class expresses at the forward seam. V1 updates retain an
  * explicit empty billing email; V2 drops it here and its writer clears it explicitly.
  */
 final class Order_Write_Payload {
+	/** The item class whose data store's internal keys are a line type's own storage, per posted collection. */
+	private const ITEM_CLASSES = array(
+		'line_items'     => \WC_Order_Item_Product::class,
+		'fee_lines'      => \WC_Order_Item_Fee::class,
+		'shipping_lines' => \WC_Order_Item_Shipping::class,
+		'coupon_lines'   => \WC_Order_Item_Coupon::class,
+	);
+
+	/** Plain item meta the stock helper reads as its baseline (wc_maybe_adjust_line_item_product_stock). */
+	private const STOCK_BASELINE_ITEM_META = array( '_reduced_stock', '_restock_refunded_items' );
+
 	/**
 	 * Shape a CREATE payload for the wc/v3 forward.
 	 *
@@ -61,7 +72,7 @@ final class Order_Write_Payload {
 	 * @return array The forwardable payload.
 	 */
 	public function for_create( array $payload ): array {
-		return $this->sanitize_order_wc_payload( $this->without_empty_billing_email( $payload ) );
+		return $this->sanitize_order_wc_payload( $this->without_empty_billing_email( $this->without_internal_item_meta( false, $payload ) ) );
 	}
 
 	/**
@@ -83,6 +94,7 @@ final class Order_Write_Payload {
 			$order = false;
 		}
 		$payload = $this->reconcile_order_item_ids( $order, $payload );
+		$payload = $this->without_internal_item_meta( $order, $payload );
 		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
 		$payload = $this->remove_omitted_order_items( $order, $payload );
 		$payload = $this->reconcile_order_coupon_lines( $order, $payload );
@@ -91,6 +103,154 @@ final class Order_Write_Payload {
 		// Runs last: it reads the FORWARDED line shape, after normalize_line_item_product_identity
 		// has already resolved the posted sku (which outranks the ids in wc/v3's get_product_id).
 		return $this->drop_unchanged_line_identity( $order, $payload );
+	}
+
+	/**
+	 * Drop a line's meta entries that would write the item itself: WooCommerce routes an item data
+	 * store's internal key to its setter or stores it as the plain row it reads back as the line's
+	 * quantity, total, product or cost, and the stock helper reads `_reduced_stock` as its baseline.
+	 * Dropped by key and, on a stored line, by the meta id of such a row (ADR 0040 rules 2 and 4).
+	 *
+	 * @param \WC_Abstract_Order|false $order   Loaded order, or false on create.
+	 * @param array                    $payload Order payload about to be forwarded.
+	 * @return array Payload whose line meta carries no item storage keys.
+	 */
+	private function without_internal_item_meta( $order, array $payload ): array {
+		foreach ( self::ITEM_CLASSES as $type => $class ) {
+			if ( ! isset( $payload[ $type ] ) || ! is_array( $payload[ $type ] ) ) {
+				continue;
+			}
+			try {
+				$keys = ( new $class() )->get_data_store()->get_internal_meta_keys();
+			} catch ( \Throwable $error ) {
+				$keys = array();
+			}
+			$keys = array_merge( is_array( $keys ) ? $keys : array(), self::STOCK_BASELINE_ITEM_META );
+			foreach ( $payload[ $type ] as $i => $line ) {
+				if ( ! is_array( $line ) || ! isset( $line['meta_data'] ) || ! is_array( $line['meta_data'] ) ) {
+					continue;
+				}
+				$item = $order && isset( $line['id'] ) && is_numeric( $line['id'] ) ? $order->get_item( (int) $line['id'] ) : false;
+				$ids  = array();
+				foreach ( $item ? $item->get_meta_data() : array() as $meta ) {
+					if ( in_array( $meta->key, $keys, true ) ) {
+						$ids[] = (int) $meta->id;
+					}
+				}
+				$payload[ $type ][ $i ]['meta_data'] = array_values(
+					array_filter(
+						$line['meta_data'],
+						static function ( $entry ) use ( $keys, $ids ) {
+							$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
+							return ! in_array( Meta_Entry::key( $entry ), $keys, true ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) );
+						}
+					)
+				);
+			}
+		}
+		return $payload;
+	}
+
+	/**
+	 * Whether a FORWARDED update (the shape for_update() returns) changes the order's money lines:
+	 * a new line, an id the order does not have, a wc/v3 removal (`item_is_null()` or quantity 0),
+	 * or a posted money field that differs from the stored item. A full document whose lines equal
+	 * storage is not a line change. `tax_lines` is readonly in wc/v3 and never read; coupon_lines
+	 * survive for_update() only when the code set changed. Decimals compare at store precision.
+	 *
+	 * @param \WC_Abstract_Order $order     The order as read under the order lock.
+	 * @param array              $forwarded The forwarded update payload.
+	 */
+	public function lines_changed( \WC_Abstract_Order $order, array $forwarded ): bool {
+		if ( isset( $forwarded['coupon_lines'] ) && is_array( $forwarded['coupon_lines'] ) ) {
+			return true;
+		}
+		// Money compares at store precision, quantity at six decimals, everything else as a string.
+		$types = array(
+			'line_items'     => array( 'line_item', array( 'quantity', 'subtotal', 'total', 'product_id', 'variation_id', 'tax_class' ) ),
+			'fee_lines'      => array( 'fee', array( 'total', 'tax_class', 'tax_status', 'name' ) ),
+			'shipping_lines' => array( 'shipping', array( 'total', 'method_id', 'instance_id' ) ),
+		);
+		foreach ( $types as $key => list( $type, $fields ) ) {
+			foreach ( is_array( $forwarded[ $key ] ?? null ) ? $forwarded[ $key ] : array() as $line ) {
+				if ( ! is_array( $line ) ) {
+					continue;
+				}
+				$item = isset( $line['id'] ) && is_numeric( $line['id'] ) ? $order->get_item( (int) $line['id'] ) : false;
+				if ( ! $item || $type !== $item->get_type() ) {
+					return true;
+				}
+				foreach ( array( 'product_id', 'method_id', 'method_title', 'name', 'code' ) as $null_key ) {
+					if ( array_key_exists( $null_key, $line ) && null === $line[ $null_key ] ) {
+						return true;
+					}
+				}
+				// wc/v3 removes any stored line posted with an integer 0 quantity, whatever it stores.
+				if ( isset( $line['quantity'] ) && 0 === $line['quantity'] ) {
+					return true;
+				}
+				foreach ( $fields as $field ) {
+					if ( ! isset( $line[ $field ] ) || ! is_scalar( $line[ $field ] ) ) {
+						continue;
+					}
+					$stored = $item->get_data()[ $field ] ?? '';
+					$dp     = 'quantity' === $field ? 6 : ( in_array( $field, array( 'subtotal', 'total' ), true ) ? wc_get_price_decimals() : false );
+					if ( false === $dp ? (string) $line[ $field ] !== (string) $stored
+						: wc_format_decimal( $line[ $field ], $dp ) !== wc_format_decimal( $stored, $dp ) ) {
+						return true;
+					}
+				}
+				if ( 'line_item' === $type && $this->pos_data_changed( $item, $line ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a posted line changes its stored `_woocommerce_pos_data` (by key, or by that row's
+	 * meta id). calculate_totals() reads it (`tax_status: none` zeroes the line's taxes, and the
+	 * coupon path reads its prices), so on a paid order it is a line change. Values compare decoded
+	 * with keys sorted; an omitted entry leaves the stored row alone and is not a change.
+	 *
+	 * @param \WC_Order_Item $item The stored line.
+	 * @param array          $line The forwarded line.
+	 */
+	private function pos_data_changed( \WC_Order_Item $item, array $line ): bool {
+		$stored_id = 0;
+		$stored    = null;
+		foreach ( $item->get_meta_data() as $meta ) {
+			if ( '_woocommerce_pos_data' === $meta->key ) {
+				$stored_id = (int) $meta->id;
+				$stored    = self::sorted( Meta_Normalizer::decode_to_array( $meta->value ) );
+				break;
+			}
+		}
+		foreach ( is_array( $line['meta_data'] ?? null ) ? $line['meta_data'] : array() as $entry ) {
+			$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
+			if ( ( '_woocommerce_pos_data' === Meta_Entry::key( $entry ) || ( $stored_id > 0 && is_numeric( $id ) && (int) $id === $stored_id ) )
+				&& self::sorted( Meta_Normalizer::decode_to_array( Meta_Entry::value( $entry ) ) ) !== $stored ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The array with its keys sorted at every level, or null.
+	 *
+	 * @param array|null $value Decoded value.
+	 */
+	private static function sorted( ?array $value ): ?array {
+		if ( null === $value ) {
+			return null;
+		}
+		ksort( $value );
+		foreach ( $value as $key => $child ) {
+			$value[ $key ] = is_array( $child ) ? self::sorted( $child ) : $child;
+		}
+		return $value;
 	}
 
 	/**

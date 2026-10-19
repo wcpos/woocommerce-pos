@@ -12,8 +12,11 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Connect_TaxJar_Integration;
 use WC_Order;
 use WC_Product;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
+use WP_REST_Request;
 use WP_REST_Response;
 
 require_once dirname( __DIR__, 2 ) . '/Helpers/WC_Connect_TaxJar_Integration_Stub.php';
@@ -283,10 +286,11 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Checkout on the wcpos/v2 push: the final document carries the paid status
-	 * and the final lines together.
+	 * A status change on the wcpos/v2 push: the final document carries the new
+	 * status and the final lines together. (The push cannot complete a sale under
+	 * ADR 0040; `on-hold` is the status that leaves the open set.)
 	 */
-	public function test_v2_open_order_paid_in_the_same_push_gets_tax_for_the_final_lines(): void {
+	public function test_v2_open_order_held_in_the_same_push_gets_tax_for_the_final_lines(): void {
 		// Arrange.
 		$record_id = wp_generate_uuid4();
 		$created   = $this->push_order(
@@ -302,20 +306,21 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$order_id = (int) $document['id'];
 
 		// Act.
-		$document['status']       = 'completed';
+		$document['status']       = 'on-hold';
 		$document['line_items'][] = $this->line( $this->product( 20 ) );
 		$updated                  = $this->push_order( 'update', $record_id, $document, $created->get_data()['currentRevision'] );
 
 		// Assert.
 		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
-		$this->assertSame( 'completed', $updated->get_data()['document']['status'] );
+		$this->assertSame( 'on-hold', $updated->get_data()['document']['status'] );
 		$this->assertSame( 0, $this->taxjar->snapshots_taken );
 		$this->assert_order_amounts( $order_id, 3.0, 33.0 );
 	}
 
 	/**
 	 * The wcpos/v2 push carries the whole document, so a reopen and a line change
-	 * can arrive as one update.
+	 * can arrive as one update (ADR 0040 D3). The sale is completed by the server,
+	 * not the push, so the fixture completes it directly.
 	 */
 	public function test_v2_reopened_order_with_changed_lines_recalculates_tax(): void {
 		// Arrange.
@@ -324,19 +329,22 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 			'create',
 			$record_id,
 			array(
-				'status'     => 'completed',
+				'status'     => 'pos-open',
 				'line_items' => array( $this->line( $this->product( 10 ) ) ),
 			)
 		);
 		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
 		$document = $created->get_data()['document'];
 		$order_id = (int) $document['id'];
+		$order    = wc_get_order( $order_id );
+		$order->set_status( 'completed' );
+		$order->save();
 		$this->assert_order_amounts( $order_id, 1.0, 11.0 );
 
 		// Act.
 		$document['status']       = 'pos-open';
 		$document['line_items'][] = $this->line( $this->product( 20 ) );
-		$updated                  = $this->push_order( 'update', $record_id, $document, $created->get_data()['currentRevision'] );
+		$updated                  = $this->push_order( 'update', $record_id, $document, $this->order_revision( $order_id ) );
 
 		// Assert.
 		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
@@ -845,6 +853,19 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 		$request->set_body_params( array( 'line_items' => $line_items ) );
 
 		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * The revision the till holds for an order: the canonical hash of its pulled document.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	private function order_revision( int $order_id ): string {
+		$request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id );
+		$request->set_param( 'dp', '6' );
+		$data = Meta_Normalizer::normalize( rest_do_request( $request )->get_data() );
+
+		return Order_Serializer::canonical_revision( Order_Serializer::add_pos_links( $data, wc_get_order( $order_id ) ) );
 	}
 
 	/**

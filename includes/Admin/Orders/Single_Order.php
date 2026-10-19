@@ -20,7 +20,6 @@ class Single_Order {
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_filter( 'wc_order_is_editable', array( $this, 'wc_order_is_editable' ), 10, 2 );
 		add_action( 'woocommerce_admin_order_data_after_order_details', array( $this, 'add_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'add_customer_change_note' ), 10 );
@@ -48,22 +47,6 @@ class Single_Order {
 			// Directly set the modified gateways back to the WooCommerce Payment Gateways instance.
 			WC()->payment_gateways->payment_gateways = $payment_gateways;
 		}
-	}
-
-	/**
-	 * Makes POS orders editable by default.
-	 *
-	 * @param bool              $is_editable Whether the order is editable.
-	 * @param WC_Abstract_Order $order       The order object.
-	 *
-	 * @return bool
-	 */
-	public function wc_order_is_editable( $is_editable, WC_Abstract_Order $order ) {
-		if ( 'pos-open' == $order->get_status() ) {
-			return true;
-		}
-
-		return $is_editable;
 	}
 
 	/**

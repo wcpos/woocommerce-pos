@@ -33,7 +33,11 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A stock-managed paid create on this lane takes a hold while it runs.
+	 * A stock-managed `on-hold` create on this lane takes a hold while it runs.
+	 *
+	 * Under ADR 0040 the push carries no money, so `on-hold` is the one pushable
+	 * status that is not stock-exempt: it reduces stock on the transition exactly
+	 * as a paid status did, and the hold is taken the same way.
 	 *
 	 * The hold is deliberately short-lived: it is taken once the order exists,
 	 * and WooCommerce releases it again the moment the status transition reduces
@@ -43,7 +47,7 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 	 * means the unit was claimed; peak of 0 means the lane only ever compared
 	 * numbers, which is what two tills racing can both do at once.
 	 */
-	public function test_v2_paid_create_takes_a_hold_while_it_runs(): void {
+	public function test_v2_on_hold_create_takes_a_hold_while_it_runs(): void {
 		global $wpdb;
 
 		$product   = $this->stock_product( 5 );
@@ -72,11 +76,11 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 1, $peak_held, 'the v2 lane must hold the stock it is about to sell' );
 
 		// The sequence forwards the create as `pending` and applies the real
-		// status afterwards, so the client must still be told `processing` — the
+		// status afterwards, so the client must still be told `on-hold` — the
 		// response document is rebuilt from the live order, not the forwarded body.
 		$document = $response->get_data()['document'] ?? array();
-		$this->assertSame( 'processing', $document['status'] ?? null, 'client must see the final status, not the provisional one' );
-		$this->assertSame( 'processing', wc_get_order( $document['id'] )->get_status(), 'the stored order must match what the client was told' );
+		$this->assertSame( 'on-hold', $document['status'] ?? null, 'client must see the final status, not the provisional one' );
+		$this->assertSame( 'on-hold', wc_get_order( $document['id'] )->get_status(), 'the stored order must match what the client was told' );
 		$this->assertSame( 3.0, (float) wc_get_product( $product->get_id() )->get_stock_quantity() );
 		$this->assertSame(
 			0,
@@ -88,7 +92,7 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 	/**
 	 * A unit already held by another order cannot be sold on this lane.
 	 */
-	public function test_v2_create_cannot_sell_a_unit_another_order_holds(): void {
+	public function test_v2_on_hold_create_cannot_take_a_unit_another_order_holds(): void {
 		$product = $this->stock_product( 1 );
 
 		// Another till has this unit in an open checkout.
@@ -119,7 +123,7 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 	}
 
 	/** A thrown stock validation deletes the temporary v2 order before propagating. */
-	public function test_v2_create_deletes_order_when_stock_validation_throws(): void {
+	public function test_v2_on_hold_create_deletes_order_when_stock_validation_throws(): void {
 		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
 		$product            = $this->stock_product( 1 );
 		$throw_validation   = static function (): void {
@@ -167,7 +171,7 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Push one paid order create through the v2 write lane.
+	 * Push one `on-hold` order create through the v2 write lane.
 	 *
 	 * @param WC_Product $product  Line product.
 	 * @param int        $quantity Line quantity.
@@ -187,10 +191,8 @@ class Test_Overselling_V2_Reservations extends Sync_REST_Store_Test_Case {
 					'recordId'     => '20000000-0000-4000-8000-' . str_pad( $suffix, 12, '0', STR_PAD_LEFT ),
 					'baseRevision' => null,
 					'payload'      => array(
-						'status'         => 'processing',
-						'set_paid'       => true,
-						'payment_method' => 'pos_cash',
-						'line_items'     => array(
+						'status'     => 'on-hold',
+						'line_items' => array(
 							array(
 								'product_id' => $product->get_id(),
 								'quantity'   => $quantity,

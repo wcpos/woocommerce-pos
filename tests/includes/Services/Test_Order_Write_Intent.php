@@ -64,8 +64,13 @@ class Test_Order_Write_Intent extends Sync_REST_Store_Test_Case {
 		}
 	}
 
-	/** Capturing the neutralised request instead of the declaration loses the sale intent. */
-	public function test_paid_create_publishes_the_clients_intent_under_stock_neutralisation(): void {
+	/**
+	 * Capturing the neutralised request instead of the declaration loses the sale intent.
+	 *
+	 * The v1 lane still carries `set_paid` (frozen data lane); the v2 push carries no money
+	 * under ADR 0040, so its stock-checked create is `on-hold` and declares `set_paid` false.
+	 */
+	public function test_stock_checked_create_publishes_the_clients_intent_under_stock_neutralisation(): void {
 		// Arrange.
 		$product = ProductHelper::create_simple_product();
 		$product->set_manage_stock( true );
@@ -79,13 +84,21 @@ class Test_Order_Write_Intent extends Sync_REST_Store_Test_Case {
 		};
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $observer, 10, 2 );
 		try {
-			foreach ( array( '/wcpos/v2/push/orders', '/wcpos/v1/orders' ) as $route ) {
+			$lanes = array(
+				'/wcpos/v2/push/orders' => array(
+					'status' => 'on-hold',
+					'set_paid' => false,
+				),
+				'/wcpos/v1/orders'      => array(
+					'status' => 'completed',
+					'set_paid' => true,
+				),
+			);
+			foreach ( $lanes as $route => $intent ) {
 				// Act.
 				$response = $this->create_order(
 					$route,
-					array(
-						'status' => 'completed',
-						'set_paid' => true,
+					array_filter( $intent ) + array(
 						'line_items' => array(
 							array(
 								'product_id' => $product->get_id(),
@@ -96,9 +109,9 @@ class Test_Order_Write_Intent extends Sync_REST_Store_Test_Case {
 				);
 				// Assert.
 				$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
-				$this->assertSame( array( array( 'completed', true, true, true, 'pending' ) ), $observed );
+				$this->assertSame( array( array( $intent['status'], $intent['set_paid'], true, true, 'pending' ) ), $observed );
 				$data = $response->get_data();
-				$this->assertSame( 'completed', wc_get_order( $data['document']['id'] ?? $data['id'] )->get_status() );
+				$this->assertSame( $intent['status'], wc_get_order( $data['document']['id'] ?? $data['id'] )->get_status() );
 				$this->assertNull( Order_Write_Intent::current() );
 				$observed = array();
 			}
