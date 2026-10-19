@@ -10,12 +10,13 @@ namespace WCPOS\WooCommercePOS\Services;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 
-/** Owns the registers table; callers validate fields. */
+/** Registers through the bound repository; callers validate fields. */
 final class Register_Store {
-	/** Table suffix. */
-	public const TABLE = 'wcpos_registers';
+	/** The pre-schema-12 table; sync-schema step 12 copies it into the option and drops it. */
+	public const LEGACY_TABLE = 'wcpos_registers';
 
-	use Owned_Table;
+	/** Named lock serialising the lazy default register and the schema-12 copy. */
+	public const DEFAULT_LOCK = 'wcpos_register_default';
 
 	/** A close stamps every session leg, so allow longer than Order_Lock's wait. */
 	private const LOCK_WAIT_SECONDS = 10;
@@ -75,34 +76,18 @@ final class Register_Store {
 	}
 
 	/**
-	 * Build the portable register schema.
+	 * The bound repository, resolved once per instance.
 	 *
-	 * @param string $table_name Table name.
-	 * @param string $charset_collate Charset and collation.
+	 * @var Register_Repository|null
 	 */
-	public function schema_sql( string $table_name, string $charset_collate = '' ): string {
-		return "CREATE TABLE {$table_name} (
-			id CHAR(36) NOT NULL,
-			name VARCHAR(191) NOT NULL,
-			store_id BIGINT NULL,
-			default_float DECIMAL(19,4) NULL,
-			platform VARCHAR(16) NOT NULL DEFAULT '',
-			app_version VARCHAR(64) NOT NULL DEFAULT '',
-			status VARCHAR(16) NOT NULL DEFAULT 'active',
-			counters_started_at_gmt DATETIME NULL,
-			created_at_gmt DATETIME NOT NULL,
-			last_seen_at_gmt DATETIME NOT NULL,
-			PRIMARY KEY  (id),
-			KEY store_status (store_id, status)
-		) {$charset_collate};";
-	}
+	private $repository;
 
 	/**
 	 * Create a server-owned register.
 	 *
 	 * @param array                 $fields Validated fields.
 	 * @param \WP_REST_Request|null $request REST create context for the Pro fields filter.
-	 * @throws \RuntimeException When storage fails.
+	 * @throws \RuntimeException When storage fails or refuses another register.
 	 */
 	public function create( array $fields, ?\WP_REST_Request $request = null ): array {
 		$id           = wp_generate_uuid4();
@@ -112,7 +97,8 @@ final class Register_Store {
 			$fields = apply_filters( 'woocommerce_pos_register_upsert_fields', $fields, $request );
 		}
 		$fields['id'] = $id;
-		$row = $this->get( $this->insert_row( $fields ) );
+		$this->insert_row( $fields );
+		$row = $this->get( $id );
 		Logger::log(
 			'Register created',
 			array(
@@ -126,90 +112,80 @@ final class Register_Store {
 	}
 
 	/**
-	 * Insert an active register row, without reading it back.
+	 * Insert a register row, without reading it back.
 	 *
-	 * @param array $fields Validated fields; a missing id is generated.
-	 * @throws \RuntimeException When storage fails.
+	 * @param array $fields Validated fields with an id.
+	 * @throws \RuntimeException When storage fails or refuses the row.
 	 */
-	private function insert_row( array $fields ): string {
-		global $wpdb;
-		$this->ensure_installed();
-		$id = $fields['id'] ?? wp_generate_uuid4();
-		$now = gmdate( 'Y-m-d H:i:s' );
-		$data = array(
-			'id' => $id,
-			'name' => $fields['name'],
-			'store_id' => $fields['store_id'] ?? null,
-			'default_float' => $fields['default_float'] ?? null,
-			'status' => 'active',
-			'created_at_gmt' => $now,
-			'last_seen_at_gmt' => $now,
+	private function insert_row( array $fields ): void {
+		$this->repository()->insert(
+			array(
+				'id' => $fields['id'],
+				'name' => $fields['name'],
+				'store_id' => $fields['store_id'] ?? null,
+				'default_float' => $fields['default_float'] ?? null,
+				'created_at_gmt' => gmdate( 'Y-m-d H:i:s' ),
+			)
 		);
-		if ( false === $wpdb->insert( $this->table_name(), $data ) ) {
-			Logger::warning(
-				'Register write refused: storage operation failed',
-				array(
-					'register_id' => $id,
-					'user_id' => get_current_user_id(),
-				)
-			);
-			throw new \RuntimeException( 'Register write failed.' );
-		}
-		return $id;
 	}
 
-	/** Seed an active register during activation and upgrade only.
+	/**
+	 * Mint the default register when the repository holds none, under a named lock:
+	 * add_option() is not atomic, so two first requests would otherwise mint two.
 	 *
-	 * Touches the registers table alone: list() and get() also read closure counters from
-	 * session columns that a pending sync-schema step may not have added yet.
+	 * @throws \RuntimeException When the lock or the write fails.
 	 */
 	public function ensure_default(): void {
 		global $wpdb;
-		$table = $this->table_name();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table, fixed predicate.
-		if ( null === $wpdb->get_var( "SELECT id FROM {$table} WHERE status = 'active' LIMIT 1" ) ) {
-			$this->insert_row( array( 'name' => __( 'Register', 'woocommerce-pos' ) ) );
+		if ( $this->repository()->list( array() ) ) {
+			return;
+		}
+		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::DEFAULT_LOCK, self::LOCK_WAIT_SECONDS ) ) ) {
+			Logger::warning( 'Default register lock failed.', array( 'user_id' => get_current_user_id() ) );
+			throw new \RuntimeException( 'Default register lock failed.' );
+		}
+		try {
+			// Re-read inside the lock: another request may have minted it since this one cached the options.
+			Option_Register_Repository::forget_cached();
+			if ( ! $this->repository()->list( array() ) ) {
+				$this->insert_row(
+					array(
+						'id' => wp_generate_uuid4(),
+						'name' => __( 'Register', 'woocommerce-pos' ),
+					)
+				);
+			}
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::DEFAULT_LOCK ) );
 		}
 	}
 
 	/**
-	 * Read one register.
+	 * Read one register; null for an id the repository does not hold.
 	 *
 	 * @param string $id Register UUID.
 	 */
 	public function get( string $id ): ?array {
-		global $wpdb;
-		$this->ensure_installed();
-		$table = $this->table_name();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table name.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %s", $id ), ARRAY_A );
+		$this->ensure_free_default();
+		$row = $this->repository()->get( $id );
 		return $row ? $this->normalize_row( $row ) : null;
 	}
 
 	/**
-	 * List registers by name, optionally scoped by store and status.
+	 * List registers by name, optionally scoped by store.
 	 *
 	 * @param array $args Filters.
 	 * @throws \RuntimeException When latest closure counters cannot be read.
 	 */
 	public function list( array $args ): array {
-		global $wpdb;
-		$this->ensure_installed();
-		$table = $this->table_name();
-		$where = array( '1=1' );
-		if ( array_key_exists( 'store_id', $args ) ) {
-			if ( is_array( $args['store_id'] ) ) {
-				$where[] = Store_Reach::store_predicate( (array) $args['store_id'] );
-			} else {
-				$where[] = null === $args['store_id'] ? 'store_id IS NULL' : $wpdb->prepare( 'store_id = %d', $args['store_id'] );
+		$this->ensure_free_default();
+		$rows = $this->repository()->list( $args );
+		usort(
+			$rows,
+			static function ( $a, $b ) {
+				return strcasecmp( (string) $a['name'], (string) $b['name'] );
 			}
-		}
-		if ( isset( $args['status'] ) && 'all' !== $args['status'] ) {
-			$where[] = $wpdb->prepare( 'status = %s', $args['status'] );
-		}
-		$where = implode( ' AND ', $where );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table and prepared predicates.
-		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY name", ARRAY_A );
+		);
 		$latest = ( new Closure_Store() )->latest_for_registers( array_column( $rows, 'id' ) );
 		return array_map(
 			function ( $row ) use ( $latest ) {
@@ -227,7 +203,6 @@ final class Register_Store {
 	 * @throws \RuntimeException When storage fails.
 	 */
 	public function update( string $id, array $fields ): ?array {
-		global $wpdb;
 		$before = $this->get( $id );
 		if ( ! $before ) {
 			Logger::warning(
@@ -239,16 +214,9 @@ final class Register_Store {
 			);
 			return null;
 		}
-		$data = array_intersect_key( $fields, array_flip( array( 'name', 'default_float', 'status', 'store_id' ) ) );
-		if ( $data && false === $wpdb->update( $this->table_name(), $data, array( 'id' => $id ) ) ) {
-			Logger::warning(
-				'Register write refused: storage operation failed',
-				array(
-					'register_id' => $id,
-					'user_id' => get_current_user_id(),
-				)
-			);
-			throw new \RuntimeException( 'Register write failed.' );
+		$data = array_intersect_key( $fields, array_flip( array( 'name', 'default_float', 'store_id' ) ) );
+		if ( $data ) {
+			$this->repository()->update( $id, $data );
 		}
 		$row = $this->get( $id );
 		$changed = array();
@@ -278,24 +246,58 @@ final class Register_Store {
 	 * @param string $id Register UUID.
 	 */
 	public function exists( string $id ): bool {
-		return null !== $this->get( $id );
+		$this->ensure_free_default();
+		return $this->repository()->exists( $id );
 	}
 
 	/**
-	 * Convert database types to the REST resource types.
+	 * The name history prints for a register: its row, else its retired name, else "Register".
 	 *
-	 * @param array      $row Database row.
+	 * @param string $id Register UUID.
+	 */
+	public function display_name( string $id ): string {
+		$row = $this->repository()->get( $id );
+		if ( $row ) {
+			return (string) $row['name'];
+		}
+		return $this->repository()->retired_name( $id ) ?? __( 'Register', 'woocommerce-pos' );
+	}
+
+	/** Resolve the repository once: Free's option, or the one Pro binds. */
+	private function repository(): Register_Repository {
+		if ( null === $this->repository ) {
+			$repository = apply_filters( 'woocommerce_pos_register_repository', new Option_Register_Repository() );
+			if ( ! $repository instanceof Register_Repository ) {
+				Logger::warning( 'woocommerce_pos_register_repository did not return a Register_Repository; using the option' );
+				$repository = new Option_Register_Repository();
+			}
+			$this->repository = $repository;
+		}
+		return $this->repository;
+	}
+
+	/** A fresh Free site has its register the first time anything asks. */
+	private function ensure_free_default(): void {
+		if ( $this->repository() instanceof Option_Register_Repository && ! $this->repository()->list( array() ) ) {
+			$this->ensure_default();
+		}
+	}
+
+	/**
+	 * Convert stored types to the REST resource types.
+	 *
+	 * @param array      $row Repository row.
 	 * @param null|array $closure Preloaded latest closure; null loads it here.
 	 */
 	private function normalize_row( array $row, ?array $closure = null ): array {
-		$row['store_id'] = null === $row['store_id'] ? null : (int) $row['store_id'];
-		// The column is DECIMAL(19,4), so the row already carries four exact decimals;
-		// wc_format_decimal() would pass it through floatval() and drop them above 2^53.
-		$row['default_float'] = null === $row['default_float'] ? null : (string) $row['default_float'];
-		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt', 'last_seen_at_gmt' ) as $key ) {
+		$closure = null === $closure ? ( ( new Closure_Store() )->latest_for_registers( array( $row['id'] ) )[ $row['id'] ] ?? array() ) : $closure;
+		$row['store_id'] = null === ( $row['store_id'] ?? null ) ? null : (int) $row['store_id'];
+		$row['default_float'] = null === ( $row['default_float'] ?? null ) ? null : (string) $row['default_float'];
+		// Derived: the opening of the register's first numbered session, null before its first closure.
+		$row['counters_started_at_gmt'] = $closure['counters_started_at_gmt'] ?? null;
+		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt' ) as $key ) {
 			$row[ $key ] = null === $row[ $key ] ? null : str_replace( ' ', 'T', $row[ $key ] ) . 'Z';
 		}
-		$closure = null === $closure ? ( new Closure_Store() )->last( $row['id'] ) : $closure;
 		$row['counters'] = array(
 			'last_closure_number' => isset( $closure['number'] ) ? (int) $closure['number'] : 0,
 			'perpetual_sales_total' => $closure['perpetual_sales_total'] ?? '0',

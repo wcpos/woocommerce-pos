@@ -190,9 +190,9 @@ class Bootstrap {
 	 * The checkout ships the pack, so this is a local copy, not a download.
 	 */
 	public function install_register_table(): void {
-		// Create wcpos_registers before the per-test transactions begin: dbDelta is
-		// DDL, and a CREATE TABLE inside a test commits that test's transaction.
-		( new \WCPOS\WooCommercePOS\Services\Register_Store() )->install();
+		// Create the sessions table before the per-test transactions begin: dbDelta is
+		// DDL, and a CREATE TABLE inside a test commits that test's transaction. The
+		// register itself is the wcpos_register option, minted on first read.
 		( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->install();
 	}
 

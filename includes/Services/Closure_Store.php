@@ -244,6 +244,9 @@ final class Closure_Store {
 
 	/** The latest numbered closure of each register, in one query once folded.
 	 *
+	 * Each row also carries `counters_started_at_gmt`: the opening of the register's first
+	 * numbered session, which is when its counters started.
+	 *
 	 * @param string[] $register_ids Register UUIDs.
 	 * @return array<string, array> Closure rows keyed by register id; registers without one are absent.
 	 * @throws \RuntimeException On read failure.
@@ -259,19 +262,28 @@ final class Closure_Store {
 		$columns = self::columns();
 		$placeholders = implode( ', ', array_fill( 0, count( $register_ids ), '%s' ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns and generated placeholders.
-		$sql = $wpdb->prepare( "SELECT {$columns} FROM {$table} INNER JOIN ( SELECT register_id AS latest_register_id, MAX(number) AS latest_number FROM {$table} WHERE register_id IN ({$placeholders}) AND number IS NOT NULL GROUP BY register_id ) latest ON latest_register_id = register_id AND latest_number = number", array_values( $register_ids ) );
+		$sql = $wpdb->prepare( "SELECT {$columns}, latest_started FROM {$table} INNER JOIN ( SELECT register_id AS latest_register_id, MAX(number) AS latest_number, MIN(opened_at_gmt) AS latest_started FROM {$table} WHERE register_id IN ({$placeholders}) AND number IS NOT NULL GROUP BY register_id ) latest ON latest_register_id = register_id AND latest_number = number", array_values( $register_ids ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 		if ( self::read_failed() ) {
 			throw new \RuntimeException( 'Register closure read failed.' );
 		}
-		$rows = array_column( array_map( array( self::class, 'hydrate' ), $rows ), null, 'register_id' );
+		$rows = array_column(
+			array_map(
+				static function ( $row ) {
+					return self::hydrate( $row ) + array( 'counters_started_at_gmt' => $row['latest_started'] );
+				},
+				$rows
+			),
+			null,
+			'register_id'
+		);
 		// Mid-fold a register's newest closure may still live only in a legacy table.
 		if ( self::migrating_tables() ) {
 			foreach ( $register_ids as $register_id ) {
 				$row = self::with_legacy( $rows[ $register_id ] ?? null, 'register_id', $register_id );
 				if ( null !== $row ) {
-					$rows[ $register_id ] = $row;
+					$rows[ $register_id ] = $row + array( 'counters_started_at_gmt' => $rows[ $register_id ]['counters_started_at_gmt'] ?? null );
 				}
 			}
 		}
@@ -605,16 +617,16 @@ final class Closure_Store {
 		}
 		$sessions = new Register_Session_Store();
 		$session = $sessions->get( $fields['session_id'] );
-		$register_exists = $session && ( new Register_Store() )->exists( $session['register_id'] );
-		if ( ! $session || ! $register_exists || ! in_array( $session['status'], array( 'counting', 'closed' ), true ) ) {
+		// The session row is the provenance: a register its repository no longer holds still closes.
+		if ( ! $session || ! in_array( $session['status'], array( 'counting', 'closed' ), true ) ) {
 			Logger::warning(
-				'Register closure refused: session or register missing, or status is not counting or closed',
+				'Register closure refused: session missing, or status is not counting or closed',
 				array(
 					'closure_id' => $fields['id'],
 					'session_id' => $fields['session_id'],
 					'register_id' => $session['register_id'] ?? null,
 					'status' => $session['status'] ?? null,
-					'field' => ! $session ? 'session_id' : ( ! $register_exists ? 'register_id' : 'status' ),
+					'field' => ! $session ? 'session_id' : 'status',
 				)
 			);
 			return new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
@@ -653,19 +665,6 @@ final class Closure_Store {
 		$replay = null;
 		$figures = null;
 		try {
-			$table = ( new Register_Store() )->table_name();
-			// The row lock lasts through commit; subsequent reads see the preceding closure.
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned register table.
-			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET counters_started_at_gmt = COALESCE(counters_started_at_gmt, %s) WHERE id = %s", $session['opened_at_gmt'], $session['register_id'] ) ) ) {
-				$deferred = array(
-					'Closure counter start failed.',
-					array(
-						'closure_id' => $fields['id'],
-						'session_id' => $fields['session_id'],
-					),
-				);
-				throw new \RuntimeException( 'Closure counter start failed.' );
-			}
 			$existing = $this->get( $fields['id'] );
 			if ( $existing ) {
 				// Idempotent replay under the counter lock — the success path, not a fault.
@@ -793,7 +792,7 @@ final class Closure_Store {
 			);
 			$fields['breakdowns']['timezone'] = $resolver->resolve_store_timezone()->getName();
 			$fields['breakdowns']['store'] = array_intersect_key( $resolver->build_store_section(), array_flip( array( 'name', 'address_lines' ) ) );
-			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->get( $session['register_id'] )['name'] ?? '' );
+			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->display_name( $session['register_id'] ) );
 			foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 				$fields['breakdowns']['labels'][ $key . '_name' ] = get_userdata( (int) ( $fields[ $key ] ?? 0 ) )->display_name ?? '';
 			}

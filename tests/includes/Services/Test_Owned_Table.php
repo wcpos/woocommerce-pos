@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
-use WCPOS\WooCommercePOS\Services\Register_Store;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 
 /** Tests request-local installation checks across sites. */
 class Test_Owned_Table extends \WP_UnitTestCase {
@@ -16,10 +16,10 @@ class Test_Owned_Table extends \WP_UnitTestCase {
 		global $wpdb;
 
 		// Arrange: memoise the real table, then intercept the second site's probe.
-		$store = new Register_Store();
+		$store = new Register_Session_Store();
 		$store->ensure_installed();
 		$real_prefix = $wpdb->prefix;
-		$alt_table   = $real_prefix . 'site2' . Register_Store::TABLE;
+		$alt_table   = $real_prefix . 'site2' . Register_Session_Store::TABLE;
 		$seen        = array();
 		$filter      = static function ( $query ) use ( &$seen, $alt_table ) {
 			if ( false !== strpos( $query, 'site2' ) ) {

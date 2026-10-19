@@ -81,8 +81,8 @@ class Test_Report_Scope_Resolver extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** The exact reach boundary is allowed in Pro, but neither edition can go one day older. */
-	public function test_gate_reach_and_free_register_day_rules_are_enforced(): void {
+	/** The exact reach boundary is allowed in Pro, but neither edition can go one day older; Free's one register is all registers. */
+	public function test_gate_reach_and_free_day_rules_are_enforced(): void {
 		$today = new \DateTimeImmutable( 'today', new \DateTimeZone( 'Pacific/Kiritimati' ) );
 		$scope = array(
 			'mode' => 'range',
@@ -93,7 +93,7 @@ class Test_Report_Scope_Resolver extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertTrue( Report_Scope_Gate::check( $scope, false ) );
 		$this->assertTrue( Report_Scope_Gate::check( array_replace( $scope, array( 'register_id' => null ) ), true ) );
-		$this->assertWPError( Report_Scope_Gate::check( array_replace( $scope, array( 'register_id' => null ) ), false ) );
+		$this->assertTrue( Report_Scope_Gate::check( array_replace( $scope, array( 'register_id' => null ) ), false ) );
 		$scope['from'] = $today->modify( '-92 days' )->format( 'Y-m-d' );
 		$this->assertTrue( Report_Scope_Gate::check( $scope, true ) );
 		$this->assertWPError( Report_Scope_Gate::check( $scope, false ) );

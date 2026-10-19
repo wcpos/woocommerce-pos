@@ -38,7 +38,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	);
 
 	/** Retired tables retained in uninstall for sites skipping old upgrades. */
-	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index', 'wcpos_closures', 'wcpos_closures_folded', 'wcpos_cash_movements', 'wcpos_cash_movements_folded' );
+	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index', 'wcpos_closures', 'wcpos_closures_folded', 'wcpos_cash_movements', 'wcpos_cash_movements_folded', 'wcpos_registers' );
 
 	/**
 	 * User fixture committed by real DDL.
@@ -652,28 +652,26 @@ PHP;
 	}
 
 	/**
-	 * Registers are user-authored configuration: kept by a plain uninstall,
-	 * dropped only by a full wipe.
+	 * The register (the wcpos_register option) and its sessions are user-authored
+	 * configuration: kept by a plain uninstall, removed only by a full wipe.
 	 */
-	public function test_registers_table_survives_default_uninstall_and_goes_with_remove_all(): void {
-		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Store(), new \WCPOS\WooCommercePOS\Services\Register_Session_Store() );
+	public function test_register_option_and_sessions_survive_default_uninstall_and_go_with_remove_all(): void {
+		// Arrange.
+		$store = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$register = ( new \WCPOS\WooCommercePOS\Services\Register_Store() )->list( array() )[0];
+		$option = \WCPOS\WooCommercePOS\Services\Option_Register_Repository::OPTION;
 		try {
-			foreach ( $stores as $store ) {
-				$store->install();
-				$this->assertTrue( Health::table_exists( $store->table_name() ) );
-			}
+			// Act.
 			$this->run_uninstall( false );
-			foreach ( $stores as $store ) {
-				$this->assertTrue( Health::table_exists( $store->table_name() ), 'Default uninstall preserves bookkeeping.' );
-			}
+
+			// Assert.
+			$this->assertSame( $register['id'], get_option( $option )['register']['id'], 'Default uninstall preserves the register.' );
+			$this->assertTrue( Health::table_exists( $store->table_name() ), 'Default uninstall preserves bookkeeping.' );
 			$this->run_uninstall( true );
-			foreach ( $stores as $store ) {
-				$this->assertFalse( Health::table_exists( $store->table_name() ), 'Full wipe removes bookkeeping.' );
-			}
+			$this->assertFalse( get_option( $option ), 'Full wipe removes the register.' );
+			$this->assertFalse( Health::table_exists( $store->table_name() ), 'Full wipe removes bookkeeping.' );
 		} finally {
-			foreach ( $stores as $store ) {
-				$store->install();
-			}
+			$store->install();
 		}
 	}
 

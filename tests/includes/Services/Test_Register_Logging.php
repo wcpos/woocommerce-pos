@@ -157,7 +157,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$store->update(
 			$session['register_id'],
 			array(
-				'default_float' => '125',
+				'default_float' => '125.0000',
 				'name' => 'Front till',
 				'password' => 'never-log-this',
 			)
@@ -754,7 +754,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$this->assertWPError( $store->create( $this->closure_fields( $session ) ) );
 		$this->assert_event(
 			'warning',
-			'Register closure refused: session or register missing, or status is not counting or closed',
+			'Register closure refused: session missing, or status is not counting or closed',
 			array(
 				'session_id' => $session['id'],
 				'status' => 'open',

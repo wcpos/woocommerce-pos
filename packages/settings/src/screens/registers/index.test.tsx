@@ -11,24 +11,16 @@ import en from '../../translations/locales/en/wp-admin-settings.json';
 
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
-vi.mock('../../translations', () => ({ t: (_key: string, fallback: string) => fallback }));
+vi.mock('../../translations', () => ({ t: (_key: string, fallback?: string) => fallback ?? _key }));
 
 const register = {
 	id: '11111111-1111-4111-8111-111111111111',
 	name: 'Front desk',
-	platform: 'web',
-	app_version: '1.0.0',
-	last_seen_at_gmt: '2026-09-11T10:00:00Z',
 	created_at_gmt: '2026-09-11T09:00:00Z',
 	counters_started_at_gmt: null,
 	default_float: '50.0000',
-	status: 'active',
 	store_id: null,
 };
-const storeOptions = [
-	{ id: 1, name: 'Main store' },
-	{ id: 2, name: 'Second store' },
-];
 
 // The root layout renders this shared notice context above the active screen.
 function SharedNotice() {
@@ -57,144 +49,83 @@ afterEach(() => {
 	delete window.wcpos;
 });
 
-describe('Registers store column', () => {
-	it('catalogs the register creation actions', () => {
+describe('Registers (Free, one register)', () => {
+	it('catalogs the one-register line', () => {
 		expect(en).toMatchObject({
-			'registers.add': 'Add register',
-			'registers.create': 'Create register',
+			'registers.one_register': 'One register per site. Two devices share it; more registers need WCPOS Pro.',
 		});
 	});
 
-	it('creates a register from the form and refreshes the list', async () => {
-		const created = { ...register, id: '22222222-2222-4222-8222-222222222222', name: 'Back desk' };
-		apiFetchMock
-			.mockResolvedValueOnce([register])
-			.mockResolvedValueOnce(created)
-			.mockResolvedValue([register, created]);
-		renderScreen();
-		fireEvent.click(await screen.findByRole('button', { name: 'Add register' }));
-		fireEvent.change(screen.getByTestId('new-register-name'), { target: { value: 'Back desk' } });
-		fireEvent.change(screen.getByTestId('new-register-float'), { target: { value: '25.00' } });
-		fireEvent.click(screen.getByRole('button', { name: 'Create register' }));
-		await waitFor(() =>
-			expect(apiFetchMock).toHaveBeenCalledWith({
-				path: '/wcpos/v2/registers',
-				method: 'POST',
-				headers: { 'X-WCPOS': '1' },
-				data: { name: 'Back desk', default_float: '25.00' },
-			})
-		);
-		expect(await screen.findByTestId(`register-${created.id}`)).toBeInTheDocument();
-		expect(screen.getByDisplayValue('Back desk')).toBeInTheDocument();
-	});
-
-	it('clears a failed-create notice when retrying successfully', async () => {
-		const created = { ...register, id: '22222222-2222-4222-8222-222222222222', name: 'Back desk' };
-		apiFetchMock
-			.mockResolvedValueOnce([register])
-			.mockRejectedValueOnce(new Error('Register could not be saved.'))
-			.mockResolvedValueOnce(created)
-			.mockResolvedValue([register, created]);
-		renderScreen();
-		fireEvent.click(await screen.findByRole('button', { name: 'Add register' }));
-		fireEvent.change(screen.getByTestId('new-register-name'), { target: { value: 'Back desk' } });
-		fireEvent.click(screen.getByRole('button', { name: 'Create register' }));
-		expect(await screen.findByText('Register could not be saved.')).toBeInTheDocument();
-
-		fireEvent.click(screen.getByRole('button', { name: 'Create register' }));
-
-		expect(await screen.findByTestId(`register-${created.id}`)).toBeInTheDocument();
-		expect(screen.queryByText('Register could not be saved.')).not.toBeInTheDocument();
-	});
-
-	it('clears the creation draft when cancelling', async () => {
-		apiFetchMock.mockResolvedValue([register]);
-		renderScreen();
-		fireEvent.click(await screen.findByRole('button', { name: 'Add register' }));
-		fireEvent.change(screen.getByTestId('new-register-name'), { target: { value: 'Back desk' } });
-		fireEvent.change(screen.getByTestId('new-register-float'), { target: { value: '25.00' } });
-
-		fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-		fireEvent.click(screen.getByRole('button', { name: 'Add register' }));
-
-		expect(screen.getByTestId('new-register-name')).toHaveValue('');
-		expect(screen.getByTestId('new-register-float')).toHaveValue('');
-	});
-
-	it('keeps the Free table unchanged without store options or assigned rows', async () => {
+	it('shows one register card with no list, store, status or add controls, and the Pro line', async () => {
 		apiFetchMock.mockResolvedValue([register]);
 		renderScreen();
 
-		await screen.findByRole('table');
-		expect(screen.queryByRole('columnheader', { name: 'Store' })).not.toBeInTheDocument();
+		expect(await screen.findByTestId(`register-${register.id}`)).toBeInTheDocument();
+		expect(apiFetchMock).toHaveBeenCalledWith({
+			path: '/wcpos/v2/registers',
+			method: 'GET',
+			headers: { 'X-WCPOS': '1' },
+		});
+		expect(screen.getByDisplayValue('Front desk')).toBeInTheDocument();
+		expect(screen.getByDisplayValue('50.0000')).toBeInTheDocument();
+		expect(screen.queryByRole('table')).not.toBeInTheDocument();
 		expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-		expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
-			'Name',
-			'Platform',
-			'Last seen',
-			'Default float',
-			'Status',
-		]);
+		expect(screen.queryByRole('button', { name: 'Add register' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
+		expect(
+			screen.getByText(/One register per site\. Two devices share it; more registers need WCPOS Pro\./)
+		).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'common.upgrade_to_pro' })).toHaveAttribute(
+			'href',
+			'https://wcpos.com/pro'
+		);
 	});
 
-	it('shows the assigned store after Name and PATCHes a selected store', async () => {
-		window.wcpos = { settings: { cloudPrintStoreOptions: storeOptions } };
+	it('PATCHes a renamed register and refreshes it', async () => {
 		apiFetchMock
-			.mockResolvedValueOnce([{ ...register, store_id: 1 }])
-			.mockResolvedValueOnce({ ...register, store_id: 2 })
-			.mockResolvedValue([{ ...register, store_id: 2 }]);
+			.mockResolvedValueOnce([register])
+			.mockResolvedValueOnce({ ...register, name: 'Back desk' })
+			.mockResolvedValue([{ ...register, name: 'Back desk' }]);
 		renderScreen();
 
-		const select = await screen.findByRole('combobox', { name: 'Store' });
-		expect(screen.getAllByRole('columnheader')[1]).toHaveTextContent('Store');
-		expect(select).toHaveDisplayValue('Main store');
-		expect(screen.getByRole('option', { name: /Unassigned/ })).toBeDisabled();
-		fireEvent.change(select, { target: { value: '2' } });
+		const name = await screen.findByDisplayValue('Front desk');
+		fireEvent.change(name, { target: { value: 'Back desk' } });
+		fireEvent.blur(name);
 
 		await waitFor(() =>
 			expect(apiFetchMock).toHaveBeenCalledWith({
 				path: `/wcpos/v2/registers/${register.id}`,
 				method: 'PATCH',
 				headers: { 'X-WCPOS': '1' },
-				data: { store_id: 2 },
+				data: { name: 'Back desk' },
 			})
 		);
-		await waitFor(() => expect(select).toHaveDisplayValue('Second store'));
+		expect(await screen.findByDisplayValue('Back desk')).toBeInTheDocument();
 	});
 
-	it('shows the server message when a move is refused with a 409', async () => {
-		window.wcpos = { settings: { cloudPrintStoreOptions: storeOptions } };
-		apiFetchMock.mockResolvedValueOnce([{ ...register, store_id: 1 }]).mockRejectedValueOnce({
-			code: 'register_move_refused',
-			message: 'Close the open session first.',
-			data: { status: 409 },
-		});
+	it('shows the server message when a save fails', async () => {
+		apiFetchMock.mockResolvedValueOnce([register]).mockRejectedValueOnce(new Error('Register could not be saved.'));
 		renderScreen();
 
-		const select = await screen.findByRole('combobox', { name: 'Store' });
-		fireEvent.change(select, { target: { value: '2' } });
+		const float = await screen.findByDisplayValue('50.0000');
+		fireEvent.change(float, { target: { value: '20' } });
+		fireEvent.blur(float);
 
-		expect(await screen.findByText('Close the open session first.')).toBeInTheDocument();
-		expect(select).toHaveDisplayValue('Main store');
+		expect(await screen.findByText('Register could not be saved.')).toBeInTheDocument();
 	});
 
-	it.each([null, 99])(
-		'shows Unassigned for store_id %s rather than the first store',
-		async (id) => {
-			window.wcpos = { settings: { cloudPrintStoreOptions: storeOptions } };
-			apiFetchMock.mockResolvedValue([{ ...register, store_id: id }]);
-			renderScreen();
-
-			const select = await screen.findByRole('combobox', { name: 'Store' });
-			expect(select).toHaveDisplayValue('— Unassigned');
-		}
-	);
-
-	it('shows the column for an assigned row even with only one store option', async () => {
-		window.wcpos = { settings: { cloudPrintStoreOptions: [storeOptions[0]] } };
-		apiFetchMock.mockResolvedValue([{ ...register, store_id: 1 }]);
+	it('renders the component Pro registers in place of the whole screen body', async () => {
+		const getComponent = vi.fn((key: string) =>
+			key === 'registers.screen' ? () => <div data-testid="pro-registers">Pro registers</div> : undefined
+		);
+		window.wcpos = { settings: { getComponent } as unknown as WcposSettings };
+		apiFetchMock.mockResolvedValue([register]);
 		renderScreen();
 
-		expect(await screen.findByRole('combobox', { name: 'Store' })).toHaveDisplayValue('Main store');
+		expect(await screen.findByTestId('pro-registers')).toBeInTheDocument();
+		expect(getComponent).toHaveBeenCalledWith('registers.screen');
+		expect(screen.queryByTestId(`register-${register.id}`)).not.toBeInTheDocument();
+		expect(screen.queryByText(/One register per site/)).not.toBeInTheDocument();
+		expect(apiFetchMock).not.toHaveBeenCalled();
 	});
 });

@@ -28,14 +28,12 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
+	use Register_Fixture;
+
 	/** Provenance uses the sale zone, not UTC or the current store zone. */
 	public function test_build_provenance_in_both_modes(): void {
 		$order = OrderHelper::create_order();
-		$registers = new Register_Store();
-		$id = $registers->create( array( 'name' => 'Front till' ) )['id'];
-		// Preserve coverage for legacy register platform data.
-		global $wpdb;
-		$wpdb->update( $registers->table_name(), array( 'platform' => 'ios' ), array( 'id' => $id ) );
+		$id = $this->create_register( array( 'name' => 'Front till' ) )['id'];
 		foreach ( array(
 			'register' => $id,
 			'app_version' => '1.8.7',
@@ -69,7 +67,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 					'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
 					'app_version' => '1.8.7',
 					'app_build' => '42',
-					'platform' => 'ios',
+					'platform' => '',
 				),
 				$data['software']
 			);
@@ -89,7 +87,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Missing provenance and missing register rows retain empty identity. */
+	/** Missing provenance keeps empty identity; a register nobody holds prints its display name. */
 	public function test_build_without_provenance_uses_defaults(): void {
 		$order = OrderHelper::create_order();
 		foreach ( array( '', wp_generate_uuid4() ) as $id ) {
@@ -99,7 +97,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 				$this->assertSame(
 					array(
 						'id' => '',
-						'name' => '',
+						'name' => '' === $id ? '' : 'Register',
 					),
 					$data['register']
 				);
@@ -142,10 +140,8 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_live_build_preserves_snapshot_identity_after_edits(): void {
 		$order = OrderHelper::create_order();
 		$registers = new Register_Store();
-		$id = $registers->create( array( 'name' => 'Original till' ) )['id'];
-		// Preserve coverage for legacy register platform data.
+		$id = $this->create_register( array( 'name' => 'Original till' ) )['id'];
 		global $wpdb;
-		$wpdb->update( $registers->table_name(), array( 'platform' => 'ios' ), array( 'id' => $id ) );
 		$order->update_meta_data( '_wcpos_register', $id );
 		$order->update_meta_data( '_wcpos_app_version', '1.8.7' );
 		$order->save();
