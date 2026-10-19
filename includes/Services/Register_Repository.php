@@ -22,6 +22,9 @@ interface Register_Repository {
 
 	/**
 	 * List register rows, honouring a `store_id` filter (int, null, or a narrowed list).
+	 * Impure: another request may store a register between two calls.
+	 *
+	 * @phpstan-impure
 	 *
 	 * @param array $args Filters.
 	 */

@@ -15,7 +15,7 @@ final class Register_Store {
 	/** The pre-schema-12 table; sync-schema step 12 copies it into the option and drops it. */
 	public const LEGACY_TABLE = 'wcpos_registers';
 
-	/** Named lock serialising the lazy default register and the schema-12 copy. */
+	/** Named lock every writer of the register option shares: Free's repository, schema 12 and Pro's retired-map writes. */
 	public const DEFAULT_LOCK = 'wcpos_register_default';
 
 	/** A close stamps every session leg, so allow longer than Order_Lock's wait. */
@@ -130,33 +130,27 @@ final class Register_Store {
 	}
 
 	/**
-	 * Mint the default register when the repository holds none, under a named lock:
-	 * add_option() is not atomic, so two first requests would otherwise mint two.
+	 * Mint the default register when the repository holds none. Free's option writes run
+	 * under one named lock and re-read inside it (add_option() is not atomic), so a second
+	 * request minting at once is refused there; its register is then the default.
 	 *
-	 * @throws \RuntimeException When the lock or the write fails.
+	 * @throws \RuntimeException When the write fails and no register was minted meanwhile.
 	 */
 	public function ensure_default(): void {
-		global $wpdb;
 		if ( $this->repository()->list( array() ) ) {
 			return;
 		}
-		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::DEFAULT_LOCK, self::LOCK_WAIT_SECONDS ) ) ) {
-			Logger::warning( 'Default register lock failed.', array( 'user_id' => get_current_user_id() ) );
-			throw new \RuntimeException( 'Default register lock failed.' );
-		}
 		try {
-			// Re-read inside the lock: another request may have minted it since this one cached the options.
-			Option_Register_Repository::forget_cached();
+			$this->insert_row(
+				array(
+					'id' => wp_generate_uuid4(),
+					'name' => __( 'Register', 'woocommerce-pos' ),
+				)
+			);
+		} catch ( \RuntimeException $error ) {
 			if ( ! $this->repository()->list( array() ) ) {
-				$this->insert_row(
-					array(
-						'id' => wp_generate_uuid4(),
-						'name' => __( 'Register', 'woocommerce-pos' ),
-					)
-				);
+				throw $error;
 			}
-		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::DEFAULT_LOCK ) );
 		}
 	}
 

@@ -46,27 +46,30 @@ final class Option_Register_Repository implements Register_Repository {
 	 * @throws \RuntimeException When the option holds another register or the write fails.
 	 */
 	public function insert( array $row ): void {
-		$option = self::read();
-		$held = $option['register']['id'] ?? null;
-		if ( null !== $held && $held !== $row['id'] ) {
-			Logger::warning(
-				'Register create refused: Free holds one register',
-				array(
-					'register_id' => $held,
-					'user_id' => get_current_user_id(),
-				)
-			);
-			throw new \RuntimeException( 'Free holds one register.' );
-		}
-		$option['register'] = array(
-			'id' => $row['id'],
-			'name' => $row['name'],
-			// Free's register has no store; the app filters out a register in another store.
-			'store_id' => null,
-			'default_float' => $row['default_float'] ?? null,
-			'created_at_gmt' => $row['created_at_gmt'],
+		self::locked(
+			static function ( array $option ) use ( $row ): array {
+				$held = $option['register']['id'] ?? null;
+				if ( null !== $held && $held !== $row['id'] ) {
+					Logger::warning(
+						'Register create refused: Free holds one register',
+						array(
+							'register_id' => $held,
+							'user_id' => get_current_user_id(),
+						)
+					);
+					throw new \RuntimeException( 'Free holds one register.' );
+				}
+				$option['register'] = array(
+					'id' => $row['id'],
+					'name' => $row['name'],
+					// Free's register has no store; the app filters out a register in another store.
+					'store_id' => null,
+					'default_float' => $row['default_float'] ?? null,
+					'created_at_gmt' => $row['created_at_gmt'],
+				);
+				return $option;
+			}
 		);
-		self::write( $option );
 	}
 
 	/**
@@ -77,12 +80,16 @@ final class Option_Register_Repository implements Register_Repository {
 	 * @throws \RuntimeException When the register is not held or the write fails.
 	 */
 	public function update( string $id, array $fields ): void {
-		$option = self::read();
-		if ( null === $this->get( $id ) ) {
-			throw new \RuntimeException( 'Register write failed.' );
-		}
-		$option['register'] = array_replace( $option['register'], array_intersect_key( $fields, array_flip( array( 'name', 'default_float' ) ) ) );
-		self::write( $option );
+		self::locked(
+			static function ( array $option ) use ( $id, $fields ): array {
+				if ( ( $option['register']['id'] ?? null ) !== $id ) {
+					throw new \RuntimeException( 'Register write failed.' );
+				}
+				// The stored store_id stays as it is: only Pro's adoption reads it.
+				$option['register'] = array_replace( $option['register'], array_intersect_key( $fields, array_flip( array( 'name', 'default_float' ) ) ) );
+				return $option;
+			}
+		);
 	}
 
 	/**
@@ -133,6 +140,28 @@ final class Option_Register_Repository implements Register_Repository {
 	private static function register(): ?array {
 		$row = self::read()['register'] ?? null;
 		return is_array( $row ) && isset( $row['id'] ) ? array_replace( $row, array( 'store_id' => null ) ) : null;
+	}
+
+	/**
+	 * Read-modify-write the option under the one lock every writer of it shares (the lazy
+	 * default, admin edits, schema 12 and Pro's retired-map writes), re-reading inside it.
+	 *
+	 * @param callable $change Receives the fresh option, returns the option to write.
+	 * @throws \RuntimeException When the lock is refused, the change refuses, or the write fails.
+	 */
+	private static function locked( callable $change ): void {
+		global $wpdb;
+		Register_Store::warn_if_locks_cannot_nest();
+		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', Register_Store::DEFAULT_LOCK, 10 ) ) ) {
+			Logger::warning( 'Register option lock failed.', array( 'user_id' => get_current_user_id() ) );
+			throw new \RuntimeException( 'Register option lock failed.' );
+		}
+		try {
+			self::forget_cached();
+			self::write( $change( self::read() ) );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', Register_Store::DEFAULT_LOCK ) );
+		}
 	}
 
 	/** Read the option as an array. */
