@@ -610,6 +610,136 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'movements', $data );
 	}
 
+	/** Keys of a stored session row, as the store reads it. */
+	private const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+
+	/** Keys of a stored movement row, as the store reads it. */
+	private const MOVEMENT_KEYS = array( 'id', 'session_id', 'type', 'amount', 'reason', 'actor', 'voids', 'voided_by', 'created_at_gmt' );
+
+	/** Keys the detail adds to its session row for every caller. */
+	private const DETAIL_KEYS = array( 'movements', 'sales_count', 'order_ids', 'ledger_row_ids', 'ledger_rows', 'refund_ids', 'refunds', 'as_of_gmt' );
+
+	/** Figures a blind count withholds from a session or movement row. */
+	private const BLIND_KEYS = array( 'counted_float', 'expected_float', 'opening_variance', 'approved_expected', 'amount', 'reason' );
+
+	/** Open a session holding a paid out and its void; the void commits, so the transaction restarts.
+	 *
+	 * @return array Session id, paid-out id and void id.
+	 */
+	private function session_with_committed_void(): array {
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$paid_out = $this->movement( $id, 'paid_out', '3', 'Milk' );
+		$void = $this->movement( $id, 'void', '0', '', $paid_out );
+		$this->start_transaction();
+		return array( $id, $paid_out, $void );
+	}
+
+	/** Every session and movement response a till reads, as the current user, grouped by row shape.
+	 *
+	 * @param string $session_id Session to post a movement on and read back.
+	 */
+	private function till_responses( string $session_id ): array {
+		$opening = $this->fields();
+		$movement = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $session_id,
+			'type' => 'paid_in',
+			'amount' => '20',
+			'reason' => 'Change',
+			'created_at' => '2026-09-11T10:00:00Z',
+		);
+		$responses = array(
+			'open' => $this->post( 'sessions', $opening ),
+			'open replay' => $this->post( 'sessions', array( 'id' => $opening['id'] ) ),
+			'movement' => $this->post( 'movements', $movement ),
+			'movement replay' => $this->post( 'movements', array( 'id' => $movement['id'] ) ),
+			'list' => $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions' ) ),
+			'detail' => $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session_id ) ),
+			'movements' => $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session_id . '/movements' ) ),
+		);
+		foreach ( $responses as $name => $response ) {
+			$this->assertSame( in_array( $name, array( 'open', 'movement' ), true ) ? 201 : 200, $response->get_status(), $name );
+			$responses[ $name ] = $response->get_data();
+		}
+		$this->assertCount( 2, $responses['list'] );
+		$this->assertCount( 3, $responses['movements'] );
+		return array(
+			'sessions' => array_merge( array( $responses['open'], $responses['open replay'], array_diff_key( $responses['detail'], array_flip( array_merge( self::DETAIL_KEYS, array( 'expected', 'terms' ) ) ) ) ), $responses['list'] ),
+			'movements' => array_merge( array( $responses['movement'], $responses['movement replay'] ), $responses['detail']['movements'], $responses['movements'] ),
+			'detail' => $responses['detail'],
+		);
+	}
+
+	/** Assert a row carries exactly these keys, in any order.
+	 *
+	 * @param array $expected Keys.
+	 * @param array $row Response row.
+	 */
+	private function assert_keys( array $expected, array $row ): void {
+		sort( $expected );
+		$actual = array_keys( $row );
+		sort( $actual );
+		$this->assertSame( array_values( $expected ), $actual );
+	}
+
+	/** A blind cashier's session and movement responses omit every float, variance, amount and reason. */
+	public function test_blind_count_cashier_responses_omit_figures(): void {
+		// Arrange.
+		list( $session_id, $paid_out, $void ) = $this->session_with_committed_void();
+		$cashier = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+		$cashier->add_cap( 'manage_woocommerce_pos_cash' );
+		$cashier->add_cap( 'view_woocommerce_pos_reports', false );
+		wp_set_current_user( $cashier->ID );
+
+		// Act.
+		$seen = $this->till_responses( $session_id );
+
+		// Assert.
+		foreach ( $seen['sessions'] as $row ) {
+			$this->assert_keys( array_diff( self::SESSION_KEYS, self::BLIND_KEYS ), $row );
+		}
+		foreach ( $seen['movements'] as $row ) {
+			$this->assert_keys( array_diff( self::MOVEMENT_KEYS, self::BLIND_KEYS ), $row );
+		}
+		$detail = $seen['detail'];
+		$this->assert_keys( array_merge( array_diff( self::SESSION_KEYS, self::BLIND_KEYS ), self::DETAIL_KEYS ), $detail );
+		$movements = array_column( $detail['movements'], null, 'id' );
+		$this->assertSame( $paid_out, $movements[ $void ]['voids'] );
+		$this->assertSame( $void, $movements[ $paid_out ]['voided_by'] );
+		$this->assertSame( $cashier->ID, $seen['movements'][0]['actor'] );
+		$this->assertSame( 0, $detail['sales_count'] );
+		$this->assertSame( array(), $detail['order_ids'] );
+		$this->assertSame( array(), $detail['ledger_rows'] );
+		$this->assertSame( array(), $detail['refunds'] );
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $detail['as_of_gmt'] );
+	}
+
+	/** A manager's session and movement responses are the stored rows, every figure included. */
+	public function test_blind_count_manager_responses_carry_every_figure(): void {
+		// Arrange.
+		list( $session_id ) = $this->session_with_committed_void();
+		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
+
+		// Act.
+		$seen = $this->till_responses( $session_id );
+
+		// Assert.
+		foreach ( $seen['sessions'] as $row ) {
+			$this->assert_keys( self::SESSION_KEYS, $row );
+			$this->assertSame( ( new Register_Session_Store() )->get( $row['id'] ), $row );
+		}
+		foreach ( $seen['movements'] as $row ) {
+			$this->assert_keys( self::MOVEMENT_KEYS, $row );
+			$this->assertSame( ( new Cash_Movement_Store() )->get( $row['id'] ), $row );
+		}
+		$this->assert_keys( array_merge( self::SESSION_KEYS, self::DETAIL_KEYS, array( 'expected', 'terms' ) ), $seen['detail'] );
+		$opened = $seen['sessions'][0];
+		$this->assertSame( array( '100.0000', '95.0000', '5.0000' ), array( $opened['counted_float'], $opened['expected_float'], $opened['opening_variance'] ) );
+		$this->assertSame( array( '20.0000', 'Change' ), array( $seen['movements'][0]['amount'], $seen['movements'][0]['reason'] ) );
+		$this->assertSame( array( 'cash' => '120.0000' ), $seen['detail']['expected'] );
+	}
+
 	/** Post one movement on a session and return its id.
 	 *
 	 * @param string      $session_id Session UUID.

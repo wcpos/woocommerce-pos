@@ -136,11 +136,12 @@ class Sessions_Controller extends \WP_REST_Controller {
 			// use the returned IDs, not this clock boundary, to decide snapshot membership.
 			$as_of_gmt = gmdate( 'Y-m-d H:i:s' );
 			$figures   = Session_Figures::for_session( $row );
+			$movements = array_map( array( $this, 'visible_row' ), $figures->movements() );
 			if ( substr( rtrim( $request->get_route(), '/' ), -10 ) === '/movements' ) {
-				return new WP_REST_Response( $figures->movements() );
+				return new WP_REST_Response( $movements );
 			}
 			$detail = array(
-				'movements' => $figures->movements(),
+				'movements' => $movements,
 				'sales_count' => $figures->sales_count(),
 				'order_ids' => $figures->order_ids(),
 				// Keep the plain ID list for one release alongside the versioned rows.
@@ -181,13 +182,17 @@ class Sessions_Controller extends \WP_REST_Controller {
 		return new WP_REST_Response( array_map( array( $this, 'visible_row' ), $store->list( Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_sessions_list_args', $args, $request ) ) ) ) );
 	}
 
-	/** Keep approval figures blind even when a manager authenticated for the caller.
+	/** Keep the count blind: without the report capability a session or movement row omits every figure.
+	 *
+	 * A cashier who saw the floats, the opening variance or the movement amounts and reasons could
+	 * add them up to the expected drawer; approval figures stay blind even when a manager approved.
+	 * One helper serves both shapes: session rows carry no amount or reason, movement rows no floats.
 	 *
 	 * @param array $row Response row.
 	 */
 	private function visible_row( array $row ): array {
 		if ( ! current_user_can( 'view_woocommerce_pos_reports' ) ) {
-			unset( $row['approved_expected'] );
+			unset( $row['approved_expected'], $row['counted_float'], $row['expected_float'], $row['opening_variance'], $row['amount'], $row['reason'] );
 		}
 		return $row;
 	}
