@@ -138,6 +138,7 @@ class Gateway_Submission {
 				$complete( $id );
 			}
 		};
+		$dispatch_started = false;
 		$threw           = null;
 		$previous_method = null;
 		// The status the merchant stored as THIS gateway's POS Order Status (§3.1 `settled`),
@@ -214,6 +215,7 @@ class Gateway_Submission {
 			add_action( 'woocommerce_payment_complete', $complete );
 			add_action( 'woocommerce_order_status_changed', $status_changed, 10, 3 );
 			self::$submitting_order_id = $order->get_id();
+			$dispatch_started          = true;
 			$result                    = $gateway->process_payment( $order->get_id() );
 		} catch ( \Throwable $throwable ) {
 			$result = null;
@@ -231,7 +233,7 @@ class Gateway_Submission {
 		$notices   = self::take_error_notices();
 		$malformed = ! is_array( $result ) || 'success' !== ( $result['result'] ?? null );
 		if ( $malformed && ! $paid ) {
-			self::restore_method( $order, $previous_method, $threw ? null : $attempt_id );
+			self::restore_method( $order, $previous_method, $threw && $dispatch_started ? null : $attempt_id );
 			$detail = implode( ' ', wp_list_pluck( $notices, 'notice' ) );
 			if ( $threw ) {
 				// A gateway that throws instead of adding a notice still owes the operator a reason.

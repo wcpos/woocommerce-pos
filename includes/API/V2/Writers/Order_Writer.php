@@ -25,6 +25,7 @@ use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
@@ -161,6 +162,10 @@ class Order_Writer extends Null_Writer {
 			$order = wc_get_order( $id );
 			if ( $order && ! $order->needs_payment() && '' === (string) $order->get_meta( self::PAYMENT_ASSERTED_META ) ) {
 				unset( $payload['set_paid'] );
+			}
+			// A post-create lock refusal precedes after_create(); repair only missing tax identity.
+			if ( $order && ! ( new Tax_Id_Reader() )->read_for_order( $order ) ) {
+				$this->order_payload->persist_tax_ids( $id, $payload, true );
 			}
 			$this->stamp_order_audit( $id, $payload, false );
 			$order = wc_get_order( $id );

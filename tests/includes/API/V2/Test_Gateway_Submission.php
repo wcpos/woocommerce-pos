@@ -296,6 +296,35 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'settled_without_row', \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::reopen_refusal( $saved )->get_error_data()['reason'] );
 	}
 
+	/** @dataProvider dispatch_throw_phases */
+	public function test_submission_throw_tracks_whether_dispatch_started( bool $before_dispatch ): void {
+		$order = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$throw = static function ( $saving ) use ( $order, $attempt, &$throw ): void {
+			if ( $saving instanceof \WC_Order && $saving->get_id() === $order->get_id() && 'sent' === ( Gateway_Submission::read_attempts( $saving )[ $attempt ]['state'] ?? null ) ) {
+				remove_action( 'woocommerce_after_order_object_save', $throw );
+				throw new \Error( 'After-save failure before dispatch' );
+			}
+		};
+		if ( $before_dispatch ) {
+			add_action( 'woocommerce_after_order_object_save', $throw );
+		} else {
+			Sent_Test_Gateway::$failure = 'throw';
+		}
+		try {
+			$this->assertSame( 502, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		} finally { remove_action( 'woocommerce_after_order_object_save', $throw ); }
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( $before_dispatch ? 'cancelled' : 'sent', Gateway_Submission::read_attempts( $saved )[ $attempt ]['state'] );
+		$replay = $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+		$this->assertSame( $before_dispatch ? 409 : 200, $replay->get_status() );
+		$this->assertSame( $before_dispatch ? 0 : 1, Sent_Test_Gateway::$calls );
+	}
+
+	public function dispatch_throw_phases(): array {
+		return array( 'before dispatch' => array( true ), 'after dispatch' => array( false ) );
+	}
+
 	public function test_capture_persistence_failure_replay_does_not_charge_again(): void {
 		$order = $this->create_pos_order();
 		$attempt = wp_generate_uuid4();

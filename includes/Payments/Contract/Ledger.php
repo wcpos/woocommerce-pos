@@ -1498,7 +1498,9 @@ class Ledger {
 			// Refresh meta ids too: an object loaded before the first row otherwise inserts
 			// a second ledger meta entry on HPOS. Keep meta deliberately staged by adopt's caller.
 			$pending = array_filter( Money_Meta_Guard::raw_meta( $order ), static fn( $meta ) => ! $meta->id || $meta->get_changes() || null === $meta->value );
-			$order->read_meta_data( true );
+			// Core totals/status must also come from the locked read, not the waiting caller.
+			$caller = $order;
+			$order = $fresh;
 			foreach ( $pending as $meta ) {
 				if ( null === $meta->value ) {
 					$order->delete_meta_data_by_mid( $meta->id );
@@ -1592,6 +1594,9 @@ class Ledger {
 					$order->save();
 				}
 			);
+			// record()/adopt() return through the supplied object; refresh core and meta together.
+			$caller->get_data_store()->read( $caller );
+			$caller->read_meta_data( true );
 			// The keeper may legitimately restore closure stamps during save.
 			if ( ( $this->stored( $order->get_id(), false )['payments'] ?? null ) !== $this->read( $order ) ) {
 				throw new Ledger_Persistence_Exception( 'WCPOS payment ledger was not persisted.' );

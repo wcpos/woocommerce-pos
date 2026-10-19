@@ -27,6 +27,30 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		Sweep_Test_Handler::$capture_patch = array( 'status' => 'captured' );
 	}
 
+	/** @dataProvider prior_epoch_void_support */
+	public function test_prior_epoch_answered_authorization_is_never_captured( bool $supports_void ): void {
+		Capture_Mode_Registry::instance()->register( 'sweep_no_void', Sweep_No_Void_Handler::class );
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'capture_mode' => $supports_void ? 'sweep_test' : 'sweep_no_void', 'expires_at' => gmdate( 'c', time() + 3600 ) ) );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'completed' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+
+		( new Payments_Sweeper() )->run();
+
+		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( 'voided', $this->row( $order, $id )['status'] );
+		if ( ! $supports_void ) { $this->assertSame( 'prior_epoch_void_unsupported', $this->row( $order, $id )['failure_reason'] ); }
+		$this->assertEmpty( wc_get_order( $order->get_id() )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
+		$calls = Sweep_Test_Handler::$calls;
+		( new Payments_Sweeper() )->run();
+		$this->assertSame( $calls, Sweep_Test_Handler::$calls );
+	}
+
+	public function prior_epoch_void_support(): array {
+		return array( 'void supported' => array( true ), 'void unsupported' => array( false ) );
+	}
+
 	public function test_sweeper_does_not_redispatch_unanswered_prior_epoch_payment(): void {
 		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array( 'reader' => 'sn-1' ) ) );
 		$order = wc_get_order( $order->get_id() );
@@ -275,6 +299,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$rows = Ledger::instance()->read( $order );
 		$expired = array_merge( $rows[0], array( 'id' => wp_generate_uuid4(), 'amount' => '80.00', 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() - 60 ) ) );
 		$order->set_total( '100.00' );
+		$order->save();
 		Ledger::instance()->save( $order, array( $rows[0], $expired ) );
 		$rows = Ledger::instance()->read( $order );
 		foreach ( $rows as &$row ) { $row['updated_at_gmt'] = gmdate( 'c', time() - 600 ); }
@@ -434,6 +459,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->set_status( 'pos-open' );
 		$order->set_total( '92.95' );
+		$order->save();
 		$row = array_merge( array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_card', 'capture_mode' => 'sweep_test', 'amount' => '20.00', 'status' => 'pending' ), $extra );
 		Ledger::instance()->save( $order, array( $row ) );
 		$rows = Ledger::instance()->read( $order );
@@ -469,5 +495,11 @@ class Sweep_Test_Handler extends Manual_Handler {
 	public function capture( array $row, array $context ) {
 		self::$captures[] = array( $row['id'], $row['status'], $context['source'] ?? null );
 		return self::$capture_patch;
+	}
+}
+
+class Sweep_No_Void_Handler extends Sweep_Test_Handler {
+	public function void( array $row, string $reason ) {
+		return new \WP_Error( 'wcpos_capture_mode_unsupported', 'Void unsupported' );
 	}
 }

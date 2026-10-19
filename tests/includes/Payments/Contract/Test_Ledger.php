@@ -43,6 +43,37 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** @dataProvider persistence_storage */
+	public function test_locked_save_uses_fresh_total_and_refreshes_caller( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$order->set_total( '100' );
+			$attempt = wp_generate_uuid4();
+			$order->update_meta_data( '_wcpos_gateway_attempts', array( $attempt => array( 'state' => 'sent', 'epoch' => 0 ) ) );
+			Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+			$stale = wc_get_order( $order->get_id() );
+			$stale->update_meta_data( '_wcpos_test_staged', 'kept' );
+			$fresh = wc_get_order( $order->get_id() );
+			$fresh->set_total( '200' );
+			$fresh->save();
+
+			$row = $ledger->adopt( $stale, $this->payment( 'pos_cash', '100', array( 'status' => 'captured' ) ) );
+
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertSame( 'pos-partial', $saved->get_status() );
+			$this->assertNull( $saved->get_date_paid() );
+			$this->assertSame( 'sent', $saved->get_meta( '_wcpos_gateway_attempts' )[ $attempt ]['state'] );
+			$this->assertSame( 'kept', $saved->get_meta( '_wcpos_test_staged' ) );
+			$this->assertSame( '200.00', $stale->get_total() );
+			$this->assertSame( $saved->get_status(), $stale->get_status() );
+			$this->assertSame( $row, $ledger->find( $stale, $row['id'] ) );
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
 	public function test_reopened_projection_selects_current_method_status_and_transaction(): void {
 		$ledger = Ledger::instance();
 		$order = $this->create_pos_order();
