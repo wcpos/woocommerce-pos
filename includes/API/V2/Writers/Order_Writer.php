@@ -108,10 +108,8 @@ class Order_Writer extends Null_Writer {
 		if ( is_wp_error( $error ) ) {
 			return $error;
 		}
-		$payload = self::with_pushable_status( $payload );
-		if ( is_wp_error( $payload ) ) {
-			return $payload;
-		}
+		// The pushable-status check runs on the locked pre-read: a full document echoes the
+		// order's current status, and an unchanged status is not a push of that status.
 		return array(
 			'method' => 'PUT',
 			'route' => $meta['route'] . '/' . $id,
@@ -437,8 +435,14 @@ class Order_Writer extends Null_Writer {
 	 * @param int      $id          Order ID.
 	 * @param array    $payload     Client order document.
 	 * @param int|null $created_gmt Validated client date_created_gmt (UTC timestamp), or null when absent.
+	 * @return array|WP_Error The late payload and context, or the refusal.
 	 */
-	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null ): array {
+	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null ) {
+		$order   = wc_get_order( $id );
+		$payload = self::with_pushable_status( $payload, $order ? $order->get_status() : null );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
 		$reassignment = array();
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
 			$key = Meta_Entry::key( $entry );
@@ -461,7 +465,6 @@ class Order_Writer extends Null_Writer {
 		$provenance_refused = array();
 		$pre_store   = null;
 		$restart_gmt = null;
-		$order       = wc_get_order( $id );
 		if ( $order ) {
 			// Cart restart (wcpos/monorepo#2183): a first decision on the pre-read;
 			// the binding one is re-taken at pre-insert, see cart_restart_gmt().
@@ -515,10 +518,42 @@ class Order_Writer extends Null_Writer {
 		if ( null !== $restart_gmt ) {
 			$context['restart_gmt'] = $restart_gmt;
 		}
+		$forward = $this->order_payload->for_update( $id, $forward );
+		$refusal = $order ? $this->money_gate( $order, $forward ) : null;
+		if ( null !== $refusal ) {
+			return $refusal;
+		}
 		return array(
-			'payload' => $this->order_payload->for_update( $id, $forward ),
+			'payload' => $forward,
 			'context' => $context,
 		);
+	}
+
+	/**
+	 * Refuse a push the order may not take, on the locked read (ADR 0040 rules 3, 4 and 6b).
+	 *
+	 * A line change needs an editable order (`reopen_required`, rule 4) unless the same push
+	 * moves the order into an editable status (D3: reopen and edit are one write); `cancelled`
+	 * never unlocks lines.
+	 *
+	 * @param \WC_Order $order   The order read under the order lock.
+	 * @param array     $forward The forwarded update payload.
+	 */
+	private function money_gate( \WC_Order $order, array $forward ): ?WP_Error {
+		$status   = (string) ( $forward['status'] ?? '' );
+		$editable = $order->is_editable();
+		$reopens  = ! $editable && in_array( $status, array( 'pos-open', 'pending', 'on-hold' ), true );
+		if ( ! $editable && ! $reopens && $this->order_payload->lines_changed( $order, $forward ) ) {
+			return new WP_Error(
+				'reopen_required',
+				'Reopen the order before changing its lines.',
+				array(
+					'status'       => 422,
+					'order_status' => $order->get_status(),
+				)
+			);
+		}
+		return null;
 	}
 
 	/** Persist reassignment and its mutually exclusive order-note policy. */
@@ -594,16 +629,23 @@ class Order_Writer extends Null_Writer {
 
 	/**
 	 * The payload with its `status` normalised (no `wc-` prefix), or a 422 when the till may not push it.
-	 * An absent or empty status is untouched (wc/v3 defaults a create to `pending`).
+	 * An absent or empty status is untouched (wc/v3 defaults a create to `pending`); on an update, the
+	 * order's own status echoed back by a full document is dropped from the forward, not refused.
 	 *
+	 * @param array       $payload Client payload.
+	 * @param string|null $current The order's status on the locked read, or null on create.
 	 * @return array|WP_Error
 	 */
-	private static function with_pushable_status( array $payload ) {
+	private static function with_pushable_status( array $payload, ?string $current = null ) {
 		if ( ! isset( $payload['status'] ) || '' === $payload['status'] ) {
 			return $payload;
 		}
 		$status = is_scalar( $payload['status'] ) ? (string) $payload['status'] : '';
 		$status = 0 === strpos( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
+		if ( null !== $current && $status === $current && ! in_array( $status, self::PUSHABLE_STATUSES, true ) ) {
+			unset( $payload['status'] );
+			return $payload;
+		}
 		if ( ! in_array( $status, self::PUSHABLE_STATUSES, true ) ) {
 			return new WP_Error(
 				'wcpos_status_not_pushable',

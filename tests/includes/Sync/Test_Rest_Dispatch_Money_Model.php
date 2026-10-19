@@ -433,6 +433,154 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		);
 	}
 
+	/** The order's own document as the till holds it after a pull (dp 6, POS links, meta normalised). */
+	protected function order_document( int $order_id ): array {
+		$request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id );
+		$request->set_param( 'dp', '6' );
+		$data = Meta_Normalizer::normalize( rest_do_request( $request )->get_data() );
+
+		return Order_Serializer::add_pos_links( $data, wc_get_order( $order_id ) );
+	}
+
+	/** A paid order the way the server completes one: lines, stock reduced, then the given status. */
+	protected function paid_order( string $status, array $line_items ): int {
+		$order_id = $this->make_order( 'pending', $line_items );
+		$order    = wc_get_order( $order_id );
+		$order->payment_complete();
+		$order = wc_get_order( $order_id );
+		if ( $status !== $order->get_status() ) {
+			$order->set_status( $status );
+			$order->save();
+		}
+
+		return $order_id;
+	}
+
+	protected function first_item( int $order_id ): \WC_Order_Item_Product {
+		$order = wc_get_order( $order_id );
+
+		return $order->get_item( array_key_first( $order->get_items() ) );
+	}
+
+	/**
+	 * @dataProvider locked_statuses
+	 * @param string $status A status WooCommerce's is_editable() refuses.
+	 */
+	public function test_line_change_on_a_processing_order_is_refused_reopen_required( string $status ): void {
+		// Arrange.
+		$order_id = $this->paid_order( $status, array( array( $this->product(), 2 ) ) );
+		$reduced  = $this->first_item( $order_id )->get_meta( '_reduced_stock', true );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->quantity_edit( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'reopen_required', $response->get_data()['code'] );
+		$this->assertSame( $status, $response->get_data()['data']['order_status'] );
+		$this->assertSame( 2, $this->first_item( $order_id )->get_quantity() );
+		$this->assertSame( $reduced, $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( $status, wc_get_order( $order_id )->get_status() );
+	}
+
+	public static function locked_statuses(): array {
+		return array(
+			'processing' => array( 'processing' ),
+			'completed'  => array( 'completed' ),
+			'cancelled'  => array( 'cancelled' ),
+			'refunded'   => array( 'refunded' ),
+			'failed'     => array( 'failed' ),
+		);
+	}
+
+	public function test_full_document_with_unchanged_lines_on_a_paid_order_applies_the_note(): void {
+		// Arrange: the full document a till holds, paid status and all.
+		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 2 ) ) );
+		$document = $this->order_document( $order_id );
+		$this->assertSame( 'processing', $document['status'] );
+		$document['customer_note'] = 'Gift wrap please';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'Gift wrap please', $order->get_customer_note() );
+		$this->assertSame( 'processing', $order->get_status() );
+		$this->assertSame( 2, $this->first_item( $order_id )->get_quantity() );
+	}
+
+	public function test_line_change_on_an_on_hold_order_is_applied(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'on-hold', array( array( $this->product(), 2 ) ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->quantity_edit( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
+	}
+
+	public function test_line_change_on_a_layaway_is_applied_without_a_status_change(): void {
+		// Arrange: a partly paid sale.
+		$order_id = $this->make_order( 'pos-partial', array( array( $this->product(), 2 ) ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->quantity_edit( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
+		$this->assertSame( 'pos-partial', wc_get_order( $order_id )->get_status() );
+	}
+
+	public function test_reopen_and_line_change_in_one_push_is_one_write(): void {
+		// Arrange: a paid sale with one captured cash row.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		Ledger::instance()->record( wc_get_order( $order_id ), $this->cash_payment( wc_get_order( $order_id )->get_total() ) );
+		$this->assertSame( 'completed', wc_get_order( $order_id )->get_status() );
+		$rows      = $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) );
+		$date_paid = wc_get_order( $order_id )->get_date_paid( 'edit' );
+		$this->assertNotNull( $date_paid );
+		$payload           = $this->quantity_edit( $order_id );
+		$payload['status'] = 'pos-open';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'pos-open', $order->get_status() );
+		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
+		$this->assertSame( $rows, $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) ) );
+		$this->assertSame( $date_paid->getTimestamp(), $order->get_date_paid( 'edit' )->getTimestamp() );
+		$reopen_notes = array_filter(
+			wc_get_order_notes( array( 'order_id' => $order_id ) ),
+			static fn( $note ) => false !== strpos( $note->content, 're-opened via POS' )
+		);
+		$this->assertCount( 1, $reopen_notes );
+	}
+
+	public function test_reopen_with_cancelled_in_the_payload_does_not_unlock_lines(): void {
+		// Arrange.
+		$order_id          = $this->paid_order( 'processing', array( array( $this->product(), 2 ) ) );
+		$payload           = $this->quantity_edit( $order_id );
+		$payload['status'] = 'cancelled';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'reopen_required', $response->get_data()['code'] );
+		$this->assertSame( 'processing', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( 2, $this->first_item( $order_id )->get_quantity() );
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(

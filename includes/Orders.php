@@ -70,6 +70,7 @@ class Orders {
 		$this->register_order_status();
 		add_filter( 'wc_order_statuses', array( $this, 'wc_order_statuses' ), 10, 1 );
 		add_filter( 'woocommerce_order_needs_payment', array( $this, 'order_needs_payment' ), 10, 3 );
+		add_filter( 'wc_order_is_editable', array( $this, 'order_is_editable' ), 10, 2 );
 		add_filter( 'woocommerce_valid_order_statuses_for_payment', array( $this, 'valid_order_statuses_for_payment' ), 10, 2 );
 		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2 );
 		add_filter( 'woocommerce_order_is_pending_statuses', array( $this, 'order_is_pending_statuses' ), 10, 1 );
@@ -128,6 +129,20 @@ class Orders {
 		}
 
 		return $needs_payment;
+	}
+
+	/**
+	 * Both POS open statuses are editable on every request, not only in wp-admin: the push
+	 * lane's `reopen_required` gate reads is_editable() (ADR 0040 rule 4), and a layaway
+	 * (`pos-partial`, derived from the ledger) takes a line edit without a status flip.
+	 *
+	 * @param bool              $is_editable Whether the order is editable.
+	 * @param WC_Abstract_Order $order       The order object.
+	 *
+	 * @return bool
+	 */
+	public function order_is_editable( $is_editable, WC_Abstract_Order $order ) {
+		return \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true ) ? true : $is_editable;
 	}
 
 	/**

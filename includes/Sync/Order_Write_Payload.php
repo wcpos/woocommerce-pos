@@ -94,6 +94,54 @@ final class Order_Write_Payload {
 	}
 
 	/**
+	 * Whether a FORWARDED update (the shape for_update() returns) changes the order's money lines:
+	 * a new line, an id the order does not have, a wc/v3 removal (`item_is_null()` or quantity 0),
+	 * or a posted money field that differs from the stored item. A full document whose lines equal
+	 * storage is not a line change. `tax_lines` is readonly in wc/v3 and never read; coupon_lines
+	 * survive for_update() only when the code set changed. Decimals compare at store precision.
+	 *
+	 * @param \WC_Abstract_Order $order     The order as read under the order lock.
+	 * @param array              $forwarded The forwarded update payload.
+	 */
+	public function lines_changed( \WC_Abstract_Order $order, array $forwarded ): bool {
+		if ( isset( $forwarded['coupon_lines'] ) && is_array( $forwarded['coupon_lines'] ) ) {
+			return true;
+		}
+		$types = array(
+			'line_items'     => array( 'line_item', array( 'quantity' => 6, 'subtotal' => null, 'total' => null, 'product_id' => 0, 'variation_id' => 0 ) ),
+			'fee_lines'      => array( 'fee', array( 'total' => null, 'tax_class' => false, 'name' => false ) ),
+			'shipping_lines' => array( 'shipping', array( 'total' => null, 'method_id' => false ) ),
+		);
+		foreach ( $types as $key => list( $type, $fields ) ) {
+			foreach ( is_array( $forwarded[ $key ] ?? null ) ? $forwarded[ $key ] : array() as $line ) {
+				if ( ! is_array( $line ) ) {
+					continue;
+				}
+				$item = isset( $line['id'] ) && is_numeric( $line['id'] ) ? $order->get_item( (int) $line['id'] ) : false;
+				if ( ! $item || $type !== $item->get_type() ) {
+					return true;
+				}
+				foreach ( array( 'product_id', 'method_id', 'method_title', 'name', 'code' ) as $null_key ) {
+					if ( array_key_exists( $null_key, $line ) && null === $line[ $null_key ] ) {
+						return true;
+					}
+				}
+				foreach ( $fields as $field => $dp ) {
+					if ( ! isset( $line[ $field ] ) || ! is_scalar( $line[ $field ] ) ) {
+						continue;
+					}
+					$stored = $item->{"get_{$field}"}( 'edit' );
+					if ( false === $dp ? (string) $line[ $field ] !== (string) $stored
+						: wc_format_decimal( $line[ $field ], $dp ?? wc_get_price_decimals() ) !== wc_format_decimal( $stored, $dp ?? wc_get_price_decimals() ) ) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Shape the v1 lane's partial update; see for_update for the full-document shape.
 	 *
 	 * The 2026-09-18 rulings omit omission markers and coupon reconciliation here.

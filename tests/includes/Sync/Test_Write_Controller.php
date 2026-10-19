@@ -121,9 +121,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		return $envelope;
 	}
 
+	/** A real, editable order and its document (a paid order would refuse the line edits these forward-shape pins send). */
 	private function real_order_payload(): array {
 		$order = OrderHelper::create_order();
-		$order->set_status( 'processing' );
+		$order->set_status( 'pending' );
 		$order->save();
 		$payload = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
 		return array( $order->get_id(), $payload );
