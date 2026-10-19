@@ -23,4 +23,6 @@ jobs:
     uses: wcpos/.github/.github/workflows/review-gate.yml@f053c4c9d80662c45bbc8155bf2350928a73531c # wcpos/.github main, 2026-10-19 (#19)
     with:
       publish: false
-      pr: ${{ inputs.pr || 0 }}
+      # workflow_dispatch hands a `number` input over as a string, which the reusable workflow's
+      # typed input rejects at validation ("Unexpected value '2309'", every dispatch since 2026-10-17).
+      pr: ${{ fromJSON(inputs.pr || 0) }}
