@@ -196,9 +196,57 @@ final class Order_Write_Payload {
 						return true;
 					}
 				}
+				if ( 'line_item' === $type && $this->pos_data_changed( $item, $line ) ) {
+					return true;
+				}
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether a posted line changes its stored `_woocommerce_pos_data` (by key, or by that row's
+	 * meta id). calculate_totals() reads it (`tax_status: none` zeroes the line's taxes, and the
+	 * coupon path reads its prices), so on a paid order it is a line change. Values compare decoded
+	 * with keys sorted; an omitted entry leaves the stored row alone and is not a change.
+	 *
+	 * @param \WC_Order_Item $item The stored line.
+	 * @param array          $line The forwarded line.
+	 */
+	private function pos_data_changed( \WC_Order_Item $item, array $line ): bool {
+		$stored_id = 0;
+		$stored    = null;
+		foreach ( $item->get_meta_data() as $meta ) {
+			if ( '_woocommerce_pos_data' === $meta->key ) {
+				$stored_id = (int) $meta->id;
+				$stored    = self::sorted( Meta_Normalizer::decode_to_array( $meta->value ) );
+				break;
+			}
+		}
+		foreach ( is_array( $line['meta_data'] ?? null ) ? $line['meta_data'] : array() as $entry ) {
+			$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
+			if ( ( '_woocommerce_pos_data' === Meta_Entry::key( $entry ) || ( $stored_id > 0 && is_numeric( $id ) && (int) $id === $stored_id ) )
+				&& self::sorted( Meta_Normalizer::decode_to_array( Meta_Entry::value( $entry ) ) ) !== $stored ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The array with its keys sorted at every level, or null.
+	 *
+	 * @param array|null $value Decoded value.
+	 */
+	private static function sorted( ?array $value ): ?array {
+		if ( null === $value ) {
+			return null;
+		}
+		ksort( $value );
+		foreach ( $value as $key => $child ) {
+			$value[ $key ] = is_array( $child ) ? self::sorted( $child ) : $child;
+		}
+		return $value;
 	}
 
 	/**

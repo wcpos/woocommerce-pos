@@ -1159,6 +1159,98 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '2', (string) $item->get_meta( '_reduced_stock', true ) );
 	}
 
+	/** A paid processing sale of one taxed line (10.00 at 10%) whose POS line data says taxable. */
+	protected function paid_taxed_pos_line_order(): int {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		\WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper::create_tax_rate(
+			array(
+				'country'  => '',
+				'rate'     => '10.000',
+				'name'     => 'Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+		$order   = wc_create_order();
+		$item_id = $order->add_product( $this->product(), 1 );
+		$item    = $order->get_item( $item_id );
+		$item->add_meta_data( '_woocommerce_pos_data', '{"tax_status":"taxable","note":"x"}', true );
+		$item->save();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_woocommerce_pos_uuid', self::REC );
+		$order->calculate_totals();
+		$order->set_status( 'pending' );
+		$order->save();
+		$order_id = $order->get_id();
+		wc_get_order( $order_id )->payment_complete();
+		$order = wc_get_order( $order_id );
+		$order->set_status( 'processing' );
+		$order->save();
+		$this->assertSame( '1', wc_format_decimal( $this->first_item( $order_id )->get_total_tax( 'edit' ), 0 ) );
+
+		return $order_id;
+	}
+
+	/** The order's own document with its first line's POS data replaced by the given JSON. */
+	protected function document_with_pos_data( int $order_id, string $pos_data ): array {
+		$document = $this->order_document( $order_id );
+		$meta     = array_values(
+			array_filter(
+				$document['line_items'][0]['meta_data'] ?? array(),
+				static fn( $entry ) => '_woocommerce_pos_data' !== ( is_array( $entry ) ? ( $entry['key'] ?? '' ) : '' )
+			)
+		);
+		$meta[]   = array(
+			'key'   => '_woocommerce_pos_data',
+			'value' => $pos_data,
+		);
+		$document['line_items'][0]['meta_data'] = $meta;
+
+		return $document;
+	}
+
+	public function test_pos_data_tax_status_change_on_a_paid_line_is_refused_reopen_required(): void {
+		// Arrange.
+		$order_id = $this->paid_taxed_pos_line_order();
+		$tax      = $this->first_item( $order_id )->get_total_tax( 'edit' );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_pos_data( $order_id, '{"tax_status":"none","note":"x"}' ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'reopen_required', $response->get_data()['code'] );
+		$this->assertSame( $tax, $this->first_item( $order_id )->get_total_tax( 'edit' ) );
+	}
+
+	public function test_pos_data_re_encoded_with_the_same_value_on_a_paid_line_is_not_a_line_change(): void {
+		// Arrange.
+		$order_id = $this->paid_taxed_pos_line_order();
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_pos_data( $order_id, '{"note":"x","tax_status":"taxable"}' ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'processing', wc_get_order( $order_id )->get_status() );
+	}
+
+	public function test_pos_data_tax_status_change_with_a_reopen_is_applied(): void {
+		// Arrange.
+		$order_id           = $this->paid_taxed_pos_line_order();
+		$document           = $this->document_with_pos_data( $order_id, '{"tax_status":"none","note":"x"}' );
+		$document['status'] = 'pos-open';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( '0', wc_format_decimal( $this->first_item( $order_id )->get_total_tax( 'edit' ), 0 ) );
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(
