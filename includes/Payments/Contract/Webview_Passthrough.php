@@ -245,13 +245,8 @@ class Webview_Passthrough {
 		if ( ! is_array( $pending ) ) {
 			return;
 		}
-		// Never relabel a previous sale's payment as money taken in a reopened epoch.
-		if ( Money_Epoch::current( $order ) !== $pending['epoch'] ) {
-			Logger::error( sprintf( 'WCPOS deferred webview payment on order #%d needs reconciliation in epoch %d.', $order->get_id(), $pending['epoch'] ) );
-			return;
-		}
 		try {
-			if ( null === self::adopt( $order, $pending['row'] ) ) {
+			if ( null === self::adopt( $order, $pending['row'], (int) $pending['epoch'] ) ) {
 				return;
 			}
 			Money_Meta_Guard::authorised(
@@ -272,8 +267,9 @@ class Webview_Passthrough {
 	 *
 	 * @param WC_Order $order Order object.
 	 * @param array    $row   Captured payment snapshot.
+	 * @param int|null $epoch Original epoch when reconciling a deferred payment.
 	 */
-	private static function adopt( WC_Order $order, array $row ): ?array {
+	private static function adopt( WC_Order $order, array $row, ?int $epoch = null ): ?array {
 		$adopted = Ledger::instance()->adopt(
 			$order,
 			$row,
@@ -288,7 +284,8 @@ class Webview_Passthrough {
 				}
 				// A reference-less payment is represented only by a row in the locked epoch.
 				return (int) ( $stored['epoch'] ?? 0 ) === $epoch && 'webview' === ( $stored['source'] ?? null ) && in_array( $stored['status'] ?? '', Ledger::LIVE_STATUSES, true );
-			}
+			},
+			$epoch
 		);
 		return is_wp_error( $adopted ) ? null : $adopted;
 	}

@@ -60,13 +60,27 @@ final class Money_Epoch {
 		if ( self::ledger_completed( $order, $ledger ) ) {
 			return true;
 		}
-		foreach ( self::attempt_entries( $order ) as $attempt ) {
-			if ( $attempt['epoch'] === $epoch && in_array( $attempt['state'], array( 'settled', 'paid' ), true ) ) {
+		foreach ( self::attempt_entries( $order ) as $id => $attempt ) {
+			if ( $attempt['epoch'] === $epoch && ( 'settled' === $attempt['state'] || ( 'paid' === $attempt['state'] && self::represented( $order, $ledger, (string) $id, true ) ) ) ) {
 				return true;
 			}
 		}
 		return self::legacy_completed( $order );
 	}
+	/** An attempt must retain its counting money in this epoch. */
+	private static function represented( WC_Order $order, Ledger $ledger, string $id, bool $paid = false ): bool {
+		// A sent invoice can be paid by separate tenders covering this sale (save's promotion).
+		if ( $paid && self::ledger_completed( $order, $ledger ) ) {
+			return true;
+		}
+		foreach ( self::current_rows( $order, $ledger->read( $order ) ) as $row ) {
+			if ( is_string( $row['id'] ?? null ) && strtolower( $row['id'] ) === strtolower( $id ) && in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static function ledger_completed( WC_Order $order, Ledger $ledger ): bool {
 		$rows = self::current_rows( $order, $ledger->read( $order ) );
 		if ( self::net_paid( $rows ) >= Money::minor( $order->get_total() ) ) {
@@ -118,18 +132,17 @@ final class Money_Epoch {
 
 	public static function reopen_refusal( WC_Order $stored ): ?\WP_Error {
 		$ledger = Ledger::instance();
-		$reason = null;
+		$reason = $stored->meta_exists( Webview_Passthrough::PENDING_META_KEY ) ? 'mint_pending' : null;
+		// Neither a completion stamp nor another payment can replace this attempt's money.
+		foreach ( self::attempt_entries( $stored ) as $id => $attempt ) {
+			if ( self::current( $stored ) === $attempt['epoch'] && in_array( $attempt['state'], array( 'settled', 'paid' ), true ) && ! self::represented( $stored, $ledger, (string) $id, 'paid' === $attempt['state'] ) ) {
+				$reason = $reason ?? $attempt['state'] . '_without_row';
+			}
+		}
 		if ( ! self::is_completed_in_current_epoch( $stored, $ledger ) ) {
-			$reason = 'not_completed';
+			$reason = $reason ?? 'not_completed';
 		} else {
 			$rows = self::current_rows( $stored, $ledger->read( $stored ) );
-			// A settled gateway with no represented amount cannot become an unpaid cart.
-			foreach ( self::attempt_entries( $stored ) as $id => $attempt ) {
-				$represented = array_filter( $rows, static fn( $row ) => is_array( $row ) && is_string( $row['id'] ?? null ) && strtolower( $row['id'] ) === strtolower( (string) $id ) && in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) );
-				if ( 'settled' === $attempt['state'] && self::current( $stored ) === $attempt['epoch'] && ! $represented ) {
-					$reason = 'settled_without_row';
-				}
-			}
 			foreach ( $rows as $row ) {
 				if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) ) {
 					$reason = $reason ?? 'live_leg';

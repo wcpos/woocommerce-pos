@@ -58,6 +58,42 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	public function test_deferred_prior_epoch_mint_is_retained_and_cleared(): void {
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->set_transaction_id( 'previous_epoch_charge' );
+		$order->save();
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$this->in_pos_request( static fn() => $order->payment_complete() );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+		$order = wc_get_order( $order->get_id() );
+		$pending = $order->get_meta( '_wcpos_mint_pending' );
+		$this->assertSame( 0, $pending['epoch'] );
+		// Reproduce an already advanced order from before the pending-mint reopen guard.
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		( new Payments_Sweeper() )->run();
+		$order = wc_get_order( $order->get_id() );
+		$rows = Ledger::instance()->read( $order );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 0, $rows[0]['epoch'] );
+		$this->assertSame( 'previous_epoch_charge', $rows[0]['provider_refs']['transaction_id'] );
+		$this->assertSame( '', $order->get_meta( '_wcpos_mint_pending' ) );
+		$this->assertFalse( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+		// A retried reconciliation recognizes the historical row, not the current epoch.
+		$order->update_meta_data( '_wcpos_mint_pending', $pending );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save_meta_data() );
+		( new Payments_Sweeper() )->run();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $rows, Ledger::instance()->read( $order ) );
+		$this->assertSame( '', $order->get_meta( '_wcpos_mint_pending' ) );
+	}
+
 	/** @dataProvider deferred_payment_hooks */
 	public function test_contended_payment_hook_is_reconciled_by_sweep( string $hook, bool $hpos ): void {
 		if ( $hpos ) {

@@ -4,6 +4,32 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\{Money_Epoch, Ledger};
 
 class Test_Money_Epoch extends \WP_UnitTestCase {
+	/** @dataProvider paid_attempt_checks */
+	public function test_paid_attempt_without_current_counting_row_is_refused( bool $reopen ): void {
+		$order = new \WC_Order();
+		$order->set_total( '50' );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->update_meta_data( '_wcpos_gateway_attempts', array( 'paid-id' => array( 'state' => 'paid', 'epoch' => 1 ) ) );
+		$row = array( 'id' => 'paid-id', 'status' => 'captured', 'amount' => '50', 'epoch' => 1 );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row ) ) );
+		$this->assertTrue( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+		$this->assertNull( Money_Epoch::reopen_refusal( $order ) );
+		foreach ( array( array(), array( array_merge( $row, array( 'epoch' => 0 ) ) ), array( array_merge( $row, array( 'status' => 'voided' ) ) ) ) as $rows ) {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => $rows ) );
+			if ( $reopen ) {
+				$error = Money_Epoch::reopen_refusal( $order );
+				$this->assertInstanceOf( \WP_Error::class, $error );
+				$this->assertSame( 'paid_without_row', $error->get_error_data()['reason'] );
+			} else {
+				$this->assertFalse( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+			}
+		}
+	}
+
+	public function paid_attempt_checks(): array {
+		return array( array( false ), array( true ) );
+	}
+
 	public function test_reopened_completion_requires_full_current_epoch_net_coverage(): void {
 		$order = new \WC_Order();
 		$order->set_total( '100' );
@@ -71,7 +97,7 @@ class Test_Money_Epoch extends \WP_UnitTestCase {
 		$this->assertFalse( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
 		$order->update_meta_data( '_wcpos_gateway_attempts', array( 'old' => 'settled', 'new' => array( 'state' => 'paid', 'epoch' => 1 ), 'bad' => 9 ) );
 		$this->assertSame( array( 'old' => array( 'state' => 'settled', 'epoch' => 0 ), 'new' => array( 'state' => 'paid', 'epoch' => 1 ) ), Money_Epoch::attempt_entries( $order ) );
-		$this->assertTrue( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
+		$this->assertFalse( Money_Epoch::is_completed_in_current_epoch( $order, Ledger::instance() ) );
 		$order->delete_meta_data( '_wcpos_gateway_attempts' );
 		$order->update_meta_data( '_wcpos_completed_at', '2026-10-18T12:00:00Z' );
 		$order->update_meta_data( '_wcpos_completed_epoch', 1 );

@@ -81,6 +81,13 @@ class Ledger {
 	 */
 	private $closure_locks = array();
 
+	/**
+	 * Explicit historical epochs scoped to a server adoption, never client row input.
+	 *
+	 * @var array<int, array<string, int>>
+	 */
+	private $adoption_epochs = array();
+
 	/** Get the shared ledger. */
 	public static function instance(): self {
 		if ( null === self::$instance ) {
@@ -353,7 +360,7 @@ class Ledger {
 			$id = strtolower( $row['id'] );
 			$present[ $id ] = true;
 			$previous = $stored_rows[ $id ] ?? null;
-			$row['epoch'] = $previous ? (int) ( $previous['epoch'] ?? 0 ) : Money_Epoch::current( $fresh instanceof WC_Order ? $fresh : $order );
+			$row['epoch'] = $previous ? (int) ( $previous['epoch'] ?? 0 ) : ( $this->adoption_epochs[ $order_id ][ $id ] ?? Money_Epoch::current( $fresh instanceof WC_Order ? $fresh : $order ) );
 			if ( ! Money_Meta_Guard::is_authorised( $order_id ) ) {
 				foreach ( array( 'seen_events', 'events' ) as $field ) {
 					if ( array_key_exists( $field, $row ) || isset( $previous[ $field ] ) ) {
@@ -1053,11 +1060,12 @@ class Ledger {
 	 * @param WC_Order      $order  Order object.
 	 * @param array         $row    Payment row.
 	 * @param bool          $derive Whether to project payment state.
-	 * @param callable|null $identity Whether a stored row represents this payment; receives the row and locked epoch.
+	 * @param callable|null $identity Whether a stored row represents this payment; receives the row and adoption epoch.
+	 * @param int|null      $row_epoch Original epoch of a deferred server payment; null uses the locked epoch.
 	 * @throws Ledger_Persistence_Exception When the order lock cannot be acquired.
 	 * @return array|WP_Error
 	 */
-	public function adopt( WC_Order $order, array $row, bool $derive = true, ?callable $identity = null ) {
+	public function adopt( WC_Order $order, array $row, bool $derive = true, ?callable $identity = null, ?int $row_epoch = null ) {
 		$id = strtolower( (string) ( $row['id'] ?? '' ) );
 		if ( ! Pos_Uuid::is_uuid( $id ) ) {
 			return $this->invalid( __( 'Payment id must be a UUID.', 'woocommerce-pos' ) );
@@ -1071,7 +1079,7 @@ class Ledger {
 			if ( ! $fresh instanceof WC_Order ) {
 				throw new Ledger_Persistence_Exception( 'WCPOS payment order no longer exists.' );
 			}
-			$epoch = Money_Epoch::current( $fresh );
+			$epoch = $row_epoch ?? Money_Epoch::current( $fresh );
 			foreach ( null === $identity ? array() : ( $this->stored( $order->get_id(), false )['payments'] ?? array() ) as $existing ) {
 				if ( $identity( $existing, $epoch ) ) {
 					return $existing;
@@ -1090,11 +1098,13 @@ class Ledger {
 				);
 			}
 			$row['id'] = $id;
+			$this->adoption_epochs[ $order->get_id() ][ $id ] = $epoch;
 			$read_rows = $rows;
 			$rows[] = $row;
 			$this->save( $order, $rows, $derive, array(), $read_rows );
 			return $this->find( $order, $id );
 		} finally {
+			unset( $this->adoption_epochs[ $order->get_id() ][ $id ] );
 			$lock->release( $order->get_id() );
 		}
 	}
@@ -1538,7 +1548,7 @@ class Ledger {
 						}
 					}
 				}
-				$row['epoch'] = null === $previous ? $epoch : (int) ( $previous['epoch'] ?? 0 );
+				$row['epoch'] = null === $previous ? ( $this->adoption_epochs[ $order->get_id() ][ $row['id'] ] ?? $epoch ) : (int) ( $previous['epoch'] ?? 0 );
 				$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
 				if ( null !== $stamp && $this->same_content( $this->normalize_row( $fresh, $previous ), $row ) ) {
 					$row['updated_at_gmt'] = $stamp;

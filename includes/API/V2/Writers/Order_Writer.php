@@ -487,7 +487,7 @@ class Order_Writer extends Null_Writer {
 
 	/** Persist till metadata, tax IDs, reassignment, and email changes after update. */
 	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void {
-		if ( ! empty( $context['prepare_under_lock'] ) ) {
+		if ( ! empty( $context['prepare_under_lock'] ) && ! empty( $this->update_context ) ) {
 			$context = $this->update_context;
 			$this->update_context = array();
 		}

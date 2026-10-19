@@ -7,6 +7,27 @@ use WP_UnitTestCase;
 
 /** Pins server-authoritative order shaping. */
 class Test_Order_Writer extends WP_UnitTestCase {
+	public function test_after_update_preserves_supplied_context_without_in_request_preparation(): void {
+		$old = self::factory()->user->create();
+		$current = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $current );
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos_user', (string) $old );
+		$order->set_billing_email( 'old@example.com' );
+		$order->save();
+		$context = array(
+			'prepare_under_lock' => true,
+			'reassignment' => array( '_pos_user' => (string) $current ),
+			'store_authorized' => false,
+			'pre_store' => null,
+			'clear_email' => true,
+		);
+		( new Order_Writer( new \stdClass() ) )->after_update( $order->get_id(), array(), array(), array(), $context );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) $current, $saved->get_meta( '_pos_user' ) );
+		$this->assertSame( '', $saved->get_billing_email() );
+	}
+
 	public function test_create_transition_locks_then_reads_the_new_orders_money(): void {
 		$order = wc_create_order( array( 'status' => 'pos-open' ) );
 		$order->set_total( 10 );

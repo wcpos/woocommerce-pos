@@ -70,6 +70,69 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	public function test_reopen_waits_for_pending_mint_then_retains_original_epoch(): void {
+		$row = $this->cash()['payments'][0];
+		$row['source'] = 'webview';
+		$row['provider_refs'] = array( 'transaction_id' => 'pending_charge' );
+		$order = $this->order( array(
+			'_wcpos_completed_at' => self::AT,
+			'_wcpos_completed_epoch' => '0',
+			'_wcpos_mint_pending' => array( 'epoch' => 0, 'row' => $row ),
+		) );
+		$refusal = $this->push( $order, $this->reopen(), array( 'expectedEpoch' => 0 ) );
+		$this->assertSame( 422, $refusal->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $refusal->get_data()['code'] );
+		$this->assertSame( 'mint_pending', $refusal->get_data()['data']['reason'] );
+		( new \WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper() )->run();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $order->get_meta( '_wcpos_mint_pending' ) );
+		$this->assertSame( 0, \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $order )[0]['epoch'] );
+		$this->assertSame( 200, $this->push( $order, $this->reopen(), array( 'expectedEpoch' => 0 ) )->get_status() );
+		$this->assertSame( 1, \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::current( wc_get_order( $order->get_id() ) ) );
+	}
+
+	public function test_committed_update_retry_preserves_checkpoint_cashier_context(): void {
+		$old_id = $this->factory->user->create();
+		$new_id = get_current_user_id();
+		$order = $this->order( array( '_pos_user' => (string) $old_id ) );
+		$payload = array( 'meta_data' => $this->meta( array( '_pos_user' => (string) $new_id ) ) );
+		$original = null;
+		$puts = 0;
+		$observe = static function ( $result, $server, $request ) use ( &$original, &$puts ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			if ( 'PUT' === $request->get_method() && 0 === strpos( $request->get_route(), '/wc/v3/orders/' ) ) { ++$puts; }
+			return $result;
+		};
+		$crash = static function ( $value ) {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( \WCPOS\WooCommercePOS\Payments\Contract\Money_Owner::class === ( $frame['class'] ?? '' ) ) {
+					throw new \RuntimeException( 'Reassignment transition interrupted' );
+				}
+			}
+			return $value;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		add_filter( 'woocommerce_order_get_total', $crash );
+		try {
+			try {
+				$this->push( $order, $payload, array( 'tillAggregate' => array( 'total' => '99' ) ) );
+				$this->fail( 'Expected transition failure' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Reassignment transition interrupted', $error->getMessage() );
+			} finally {
+				remove_filter( 'woocommerce_order_get_total', $crash );
+			}
+			$this->assertSame( (string) $old_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+			$this->assertSame( 200, $this->server->dispatch( $original )->get_status() );
+			$this->assertSame( 1, $puts );
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertSame( (string) $new_id, $saved->get_meta( '_pos_user' ) );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_update_transition' ) );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+	}
+
 	public function test_pending_mint_cannot_be_forged_or_removed_by_order_push(): void {
 		$order = $this->order();
 		$forged = array( 'epoch' => 0, 'row' => array( 'amount' => '500' ) );
