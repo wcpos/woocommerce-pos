@@ -934,6 +934,231 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
 	}
 
+	/** WooCommerce's internal order keys that a push could reach through `meta_data` (setter-backed and plain). */
+	protected function internal_order_meta(): array {
+		return array(
+			'_order_currency'       => 'EUR',
+			'_order_stock_reduced'  => 'yes',
+			'_created_via'          => 'checkout',
+			'_date_completed'       => (string) ( time() - DAY_IN_SECONDS ),
+			'_recorded_sales'       => 'yes',
+			'_order_key'            => 'wc_order_forged',
+			'_customer_user'        => (string) self::factory()->user->create(),
+		);
+	}
+
+	public function test_push_carrying_woocommerce_internal_order_meta_changes_nothing(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$before   = wc_get_order( $order_id );
+		$keys     = array_keys( $this->internal_order_meta() );
+		$rows     = $this->stored_meta_rows( $order_id, $keys );
+		$meta     = $this->uuid_meta();
+		foreach ( $this->internal_order_meta() as $key => $value ) {
+			$meta[] = array(
+				'key'   => $key,
+				'value' => $value,
+			);
+		}
+		foreach ( $rows as $row ) {
+			$meta[] = array(
+				'id'    => $row[0],
+				'key'   => $row[1],
+				'value' => 'changed-by-id',
+			);
+		}
+
+		// Act.
+		$response = $this->push_envelope( 'update', array( 'meta_data' => $meta ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$after = wc_get_order( $order_id );
+		$this->assertSame( $before->get_currency( 'edit' ), $after->get_currency( 'edit' ) );
+		$this->assertSame( 'woocommerce-pos', $after->get_created_via( 'edit' ) );
+		$this->assertFalse( (bool) $after->get_data_store()->get_stock_reduced( $order_id ) );
+		$this->assertNull( $after->get_date_completed( 'edit' ) );
+		$this->assertFalse( (bool) $after->get_data_store()->get_recorded_sales( $order_id ) );
+		$this->assertSame( $before->get_order_key( 'edit' ), $after->get_order_key( 'edit' ) );
+		$this->assertSame( $before->get_customer_id( 'edit' ), $after->get_customer_id( 'edit' ) );
+		$this->assertSame( $rows, $this->stored_meta_rows( $order_id, $keys ) );
+	}
+
+	/** Line meta keys that are a line's own storage in WooCommerce, or the stock helper's baseline. */
+	protected function internal_line_meta( int $other_product_id ): array {
+		return array(
+			array(
+				'key'   => '_qty',
+				'value' => '9',
+			),
+			array(
+				'key'   => '_line_total',
+				'value' => '1.00',
+			),
+			array(
+				'key'   => '_product_id',
+				'value' => (string) $other_product_id,
+			),
+			array(
+				'key'   => '_reduced_stock',
+				'value' => '0',
+			),
+		);
+	}
+
+	public function test_line_meta_carrying_internal_item_keys_on_a_paid_order_changes_nothing(): void {
+		// Arrange: the full document of a paid order, one line carrying WooCommerce's own item keys.
+		$product  = $this->stock_product( 10 );
+		$other    = $this->product();
+		$order_id = $this->paid_sale_of_two( $product );
+		$item     = $this->first_item( $order_id );
+		$total    = $item->get_total( 'edit' );
+		$document = $this->order_document( $order_id );
+		$document['line_items'][0]['meta_data'] = array_merge( $document['line_items'][0]['meta_data'] ?? array(), $this->internal_line_meta( $other->get_id() ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$item = $this->first_item( $order_id );
+		$this->assertSame( 2, $item->get_quantity() );
+		$this->assertSame( wc_format_decimal( $total, 2 ), wc_format_decimal( $item->get_total( 'edit' ), 2 ) );
+		$this->assertSame( $product->get_id(), $item->get_product_id() );
+		$this->assertSame( '2', (string) $item->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( 8, $this->stock_of( $product ) );
+	}
+
+	public function test_line_meta_addressing_the_reduced_stock_row_by_id_changes_nothing(): void {
+		// Arrange.
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->paid_sale_of_two( $product );
+		$item     = $this->first_item( $order_id );
+		$row_id   = 0;
+		foreach ( $item->get_meta_data() as $meta ) {
+			if ( '_reduced_stock' === $meta->key ) {
+				$row_id = (int) $meta->id;
+			}
+		}
+		$this->assertGreaterThan( 0, $row_id );
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'        => $item->get_id(),
+					'meta_data' => array(
+						array(
+							'id'    => $row_id,
+							'key'   => '_reduced_stock',
+							'value' => '0',
+						),
+						array(
+							'id'    => $row_id,
+							'key'   => 'harmless',
+							'value' => '0',
+						),
+					),
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$item = $this->first_item( $order_id );
+		$this->assertSame( '2', (string) $item->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( '', (string) $item->get_meta( 'harmless', true ) );
+	}
+
+	public function test_tax_class_change_on_a_processing_order_is_refused_reopen_required(): void {
+		// Arrange.
+		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 2 ) ) );
+		$payload  = array(
+			'line_items' => array(
+				array(
+					'id'        => $this->first_item( $order_id )->get_id(),
+					'tax_class' => 'reduced-rate',
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'reopen_required', $response->get_data()['code'] );
+		$this->assertSame( '', $this->first_item( $order_id )->get_tax_class( 'edit' ) );
+	}
+
+	public function test_fee_tax_status_change_on_a_processing_order_is_refused_reopen_required(): void {
+		// Arrange: a paid order with a taxable fee.
+		$order_id = $this->make_order( 'pending', array( array( $this->product(), 1 ) ) );
+		$order    = wc_get_order( $order_id );
+		$fee      = new \WC_Order_Item_Fee();
+		$fee->set_name( 'Service' );
+		$fee->set_total( '2.00' );
+		$fee->set_tax_status( 'taxable' );
+		$order->add_item( $fee );
+		$order->calculate_totals();
+		$order->save();
+		$order = wc_get_order( $order_id );
+		$order->payment_complete();
+		$order = wc_get_order( $order_id );
+		$order->set_status( 'processing' );
+		$order->save();
+		$fee_id  = array_key_first( wc_get_order( $order_id )->get_fees() );
+		$payload = array(
+			'fee_lines' => array(
+				array(
+					'id'         => $fee_id,
+					'tax_status' => 'none',
+				),
+			),
+			'meta_data' => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'reopen_required', $response->get_data()['code'] );
+		$this->assertSame( 'taxable', wc_get_order( $order_id )->get_item( $fee_id )->get_tax_status( 'edit' ) );
+	}
+
+	public function test_rebinding_a_reduced_line_to_another_product_moves_its_stock(): void {
+		// Arrange: a paid sale of two A (10 -> 8), reopened.
+		$a        = $this->stock_product( 10 );
+		$b        = $this->stock_product( 5 );
+		$order_id = $this->paid_sale_of_two( $a );
+		$this->assertSame( 200, $this->push_status( $order_id, 'pos-open' )->get_status() );
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'         => $this->first_item( $order_id )->get_id(),
+					'product_id' => $b->get_id(),
+					'quantity'   => 2,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 10, $this->stock_of( $a ) );
+		$this->assertSame( 3, $this->stock_of( $b ) );
+		$item = $this->first_item( $order_id );
+		$this->assertSame( $b->get_id(), $item->get_product_id() );
+		$this->assertSame( '2', (string) $item->get_meta( '_reduced_stock', true ) );
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(

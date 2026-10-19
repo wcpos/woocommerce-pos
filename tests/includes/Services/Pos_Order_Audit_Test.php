@@ -15,6 +15,35 @@ use WP_UnitTestCase;
  */
 class Pos_Order_Audit_Test extends WP_UnitTestCase {
 	/**
+	 * Every key the live order data store treats as internal is stripped: WooCommerce routes such
+	 * a key to a setter, or reads its plain row back as the order's own data (ADR 0040 rule 2).
+	 */
+	public function test_strip_audit_meta_drops_every_internal_order_key(): void {
+		// Arrange.
+		$internal = \WC_Data_Store::load( 'order' )->get_internal_meta_keys();
+		$meta     = array(
+			array(
+				'key'   => 'public',
+				'value' => 'kept',
+			),
+		);
+		foreach ( $internal as $key ) {
+			$meta[] = array(
+				'key'   => $key,
+				'value' => 'x',
+			);
+		}
+
+		// Act.
+		$result = Pos_Order_Audit::strip_audit_meta( $meta );
+
+		// Assert.
+		$this->assertNotEmpty( $internal );
+		$this->assertContains( '_order_currency', $internal );
+		$this->assertSame( array( $meta[0] ), $result );
+	}
+
+	/**
 	 * Server-derived keys are removed on create; other meta passes through.
 	 */
 	public function test_sanitize_create_meta_strips_server_derived_keys(): void {

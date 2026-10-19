@@ -111,6 +111,26 @@ final class Pos_Order_Audit {
 	}
 
 	/**
+	 * Every key an order write strips from client meta: the audit and money keys, plus the
+	 * live order data store's internal keys. WooCommerce routes an internal key to its setter
+	 * (`_created_via`, `_order_key`, `_date_completed`…) or stores it as a plain row that the
+	 * posts store reads back as the order's own data (`_order_currency`, `_order_stock_reduced`,
+	 * `_customer_user`…), so a `meta_data` entry would write the order (ADR 0040 rule 2).
+	 *
+	 * @return string[]
+	 */
+	public static function protected_order_meta_keys(): array {
+		$internal = array();
+		try {
+			$internal = ( new \WC_Order() )->get_data_store()->get_internal_meta_keys();
+		} catch ( \Throwable $error ) {
+			$internal = array();
+		}
+
+		return array_values( array_unique( array_merge( self::audit_meta_keys(), \is_array( $internal ) ? $internal : array() ) ) );
+	}
+
+	/**
 	 * A `meta_data` array safe to apply on order CREATE: the server-derived keys
 	 * are removed (the write path re-stamps them from the authenticated request),
 	 * and till entries use the same last-entry-wins parser as the v2 create path.
@@ -150,7 +170,7 @@ final class Pos_Order_Audit {
 	 * @return array
 	 */
 	public static function strip_audit_meta( array $meta_data, array $protected_meta_ids = array() ): array {
-		$strip = self::audit_meta_keys();
+		$strip = self::protected_order_meta_keys();
 
 		return array_values(
 			array_filter(
@@ -179,7 +199,7 @@ final class Pos_Order_Audit {
 		if ( ! \is_object( $order ) || ! method_exists( $order, 'get_meta_data' ) ) {
 			return array();
 		}
-		$keys = self::audit_meta_keys();
+		$keys = self::protected_order_meta_keys();
 		$ids  = array();
 		foreach ( $order->get_meta_data() as $meta ) {
 			$data = \is_object( $meta ) && method_exists( $meta, 'get_data' ) ? $meta->get_data() : array();

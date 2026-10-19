@@ -390,6 +390,15 @@ class Order_Writer extends Null_Writer {
 				self::adjust_line_stock( $order );
 			}
 		};
+		// A stored line re-bound to another product gives back its old product's reduction before the
+		// write; the post-save pass then reduces the new product in full (rule 4b).
+		$restore_rebound = static function ( $order ) use ( $context ) {
+			$intent = Order_Write_Intent::current();
+			if ( $order instanceof \WC_Order && null !== $intent && $intent->is_subject( $order ) ) {
+				self::restore_rebound_line_stock( $order, $context['bindings'] ?? array() );
+			}
+			return $order;
+		};
 		$use_filter = array() !== ( $context['fill_provenance'] ?? array() ) || isset( $context['restart_gmt'] );
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
@@ -404,6 +413,7 @@ class Order_Writer extends Null_Writer {
 			}
 			add_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10, 3 );
 			if ( ! empty( $context['adjust_stock'] ) ) {
+				add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $restore_rebound, 20 );
 				add_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10, 3 );
 			}
 			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
@@ -411,6 +421,7 @@ class Order_Writer extends Null_Writer {
 			$qd->clear();
 			remove_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10 );
 			remove_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10 );
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $restore_rebound, 20 );
 			if ( $use_filter ) {
 				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10 );
 			}
@@ -445,6 +456,31 @@ class Order_Writer extends Null_Writer {
 			);
 		}
 		return null;
+	}
+
+	/**
+	 * Give back the old product's reduction for each stored line the push re-binds to another
+	 * product or variation; wc/v3 keeps the line's `_reduced_stock`, so the post-save diff
+	 * would otherwise leave the old product reduced and never reduce the new one.
+	 */
+	private static function restore_rebound_line_stock( \WC_Order $order, array $bindings ): void {
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			list( $product_id, $variation_id, $reduced, $name ) = $bindings[ $item->get_id() ] ?? array( 0, 0, 0, '' );
+			if ( $reduced <= 0 || ! $item instanceof \WC_Order_Item_Product
+				|| ( $product_id === $item->get_product_id() && $variation_id === $item->get_variation_id() ) ) {
+				continue;
+			}
+			$product = wc_get_product( $variation_id ? $variation_id : $product_id );
+			if ( ! $product || ! $product->managing_stock() ) {
+				continue;
+			}
+			$to = wc_update_product_stock( $product, $reduced, 'increase' );
+			$item->update_meta_data( '_reduced_stock', '0' );
+			if ( ! is_wp_error( $to ) && false !== $to ) {
+				/* translators: %s item name. */
+				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $name, $to - $reduced, $to ) ), 0, true );
+			}
+		}
 	}
 
 	/**
@@ -584,6 +620,14 @@ class Order_Writer extends Null_Writer {
 		}
 		// Stock already reduced (a paid or reopened sale): the line edit moves stock by its delta (rule 4b).
 		$context['adjust_stock'] = $lines_changed && (bool) $order->get_data_store()->get_stock_reduced( $id );
+		// wc/v3 saves an updated line before the pre-insert filters run: keep each reduced line's binding as read.
+		$context['bindings'] = array();
+		foreach ( $context['adjust_stock'] ? $order->get_items( 'line_item' ) : array() as $item ) {
+			$reduced = wc_stock_amount( $item->get_meta( '_reduced_stock', true ) );
+			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product ) {
+				$context['bindings'][ $item->get_id() ] = array( $item->get_product_id(), $item->get_variation_id(), $reduced, $item->get_name() );
+			}
+		}
 		return array(
 			'payload' => $forward,
 			'context' => $context,

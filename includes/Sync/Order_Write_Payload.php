@@ -53,6 +53,17 @@ use WP_Error;
  * explicit empty billing email; V2 drops it here and its writer clears it explicitly.
  */
 final class Order_Write_Payload {
+	/** The item class whose data store's internal keys are a line type's own storage, per posted collection. */
+	private const ITEM_CLASSES = array(
+		'line_items'     => \WC_Order_Item_Product::class,
+		'fee_lines'      => \WC_Order_Item_Fee::class,
+		'shipping_lines' => \WC_Order_Item_Shipping::class,
+		'coupon_lines'   => \WC_Order_Item_Coupon::class,
+	);
+
+	/** Plain item meta the stock helper reads as its baseline (wc_maybe_adjust_line_item_product_stock). */
+	private const STOCK_BASELINE_ITEM_META = array( '_reduced_stock', '_restock_refunded_items' );
+
 	/**
 	 * Shape a CREATE payload for the wc/v3 forward.
 	 *
@@ -61,7 +72,7 @@ final class Order_Write_Payload {
 	 * @return array The forwardable payload.
 	 */
 	public function for_create( array $payload ): array {
-		return $this->sanitize_order_wc_payload( $this->without_empty_billing_email( $payload ) );
+		return $this->sanitize_order_wc_payload( $this->without_empty_billing_email( $this->without_internal_item_meta( false, $payload ) ) );
 	}
 
 	/**
@@ -83,6 +94,7 @@ final class Order_Write_Payload {
 			$order = false;
 		}
 		$payload = $this->reconcile_order_item_ids( $order, $payload );
+		$payload = $this->without_internal_item_meta( $order, $payload );
 		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
 		$payload = $this->remove_omitted_order_items( $order, $payload );
 		$payload = $this->reconcile_order_coupon_lines( $order, $payload );
@@ -91,6 +103,52 @@ final class Order_Write_Payload {
 		// Runs last: it reads the FORWARDED line shape, after normalize_line_item_product_identity
 		// has already resolved the posted sku (which outranks the ids in wc/v3's get_product_id).
 		return $this->drop_unchanged_line_identity( $order, $payload );
+	}
+
+	/**
+	 * Drop a line's meta entries that would write the item itself: WooCommerce routes an item data
+	 * store's internal key to its setter or stores it as the plain row it reads back as the line's
+	 * quantity, total, product or cost, and the stock helper reads `_reduced_stock` as its baseline.
+	 * Dropped by key and, on a stored line, by the meta id of such a row (ADR 0040 rules 2 and 4).
+	 *
+	 * @param \WC_Abstract_Order|false $order   Loaded order, or false on create.
+	 * @param array                    $payload Order payload about to be forwarded.
+	 * @return array Payload whose line meta carries no item storage keys.
+	 */
+	private function without_internal_item_meta( $order, array $payload ): array {
+		foreach ( self::ITEM_CLASSES as $type => $class ) {
+			if ( ! isset( $payload[ $type ] ) || ! is_array( $payload[ $type ] ) ) {
+				continue;
+			}
+			try {
+				$keys = ( new $class() )->get_data_store()->get_internal_meta_keys();
+			} catch ( \Throwable $error ) {
+				$keys = array();
+			}
+			$keys = array_merge( is_array( $keys ) ? $keys : array(), self::STOCK_BASELINE_ITEM_META );
+			foreach ( $payload[ $type ] as $i => $line ) {
+				if ( ! is_array( $line ) || ! isset( $line['meta_data'] ) || ! is_array( $line['meta_data'] ) ) {
+					continue;
+				}
+				$item = $order && isset( $line['id'] ) && is_numeric( $line['id'] ) ? $order->get_item( (int) $line['id'] ) : false;
+				$ids  = array();
+				foreach ( $item ? $item->get_meta_data() : array() as $meta ) {
+					if ( in_array( $meta->key, $keys, true ) ) {
+						$ids[] = (int) $meta->id;
+					}
+				}
+				$payload[ $type ][ $i ]['meta_data'] = array_values(
+					array_filter(
+						$line['meta_data'],
+						static function ( $entry ) use ( $keys, $ids ) {
+							$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
+							return ! in_array( Meta_Entry::key( $entry ), $keys, true ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) );
+						}
+					)
+				);
+			}
+		}
+		return $payload;
 	}
 
 	/**
@@ -107,33 +165,11 @@ final class Order_Write_Payload {
 		if ( isset( $forwarded['coupon_lines'] ) && is_array( $forwarded['coupon_lines'] ) ) {
 			return true;
 		}
-		// Field => decimals to compare at: null is store precision, false a plain string compare.
+		// Money compares at store precision, quantity at six decimals, everything else as a string.
 		$types = array(
-			'line_items'     => array(
-				'line_item',
-				array(
-					'quantity'     => 6,
-					'subtotal'     => null,
-					'total'        => null,
-					'product_id'   => 0,
-					'variation_id' => 0,
-				),
-			),
-			'fee_lines'      => array(
-				'fee',
-				array(
-					'total'     => null,
-					'tax_class' => false,
-					'name'      => false,
-				),
-			),
-			'shipping_lines' => array(
-				'shipping',
-				array(
-					'total'     => null,
-					'method_id' => false,
-				),
-			),
+			'line_items'     => array( 'line_item', array( 'quantity', 'subtotal', 'total', 'product_id', 'variation_id', 'tax_class' ) ),
+			'fee_lines'      => array( 'fee', array( 'total', 'tax_class', 'tax_status', 'name' ) ),
+			'shipping_lines' => array( 'shipping', array( 'total', 'method_id' ) ),
 		);
 		foreach ( $types as $key => list( $type, $fields ) ) {
 			foreach ( is_array( $forwarded[ $key ] ?? null ) ? $forwarded[ $key ] : array() as $line ) {
@@ -149,13 +185,14 @@ final class Order_Write_Payload {
 						return true;
 					}
 				}
-				foreach ( $fields as $field => $dp ) {
+				foreach ( $fields as $field ) {
 					if ( ! isset( $line[ $field ] ) || ! is_scalar( $line[ $field ] ) ) {
 						continue;
 					}
 					$stored = $item->get_data()[ $field ] ?? '';
+					$dp     = 'quantity' === $field ? 6 : ( in_array( $field, array( 'subtotal', 'total' ), true ) ? wc_get_price_decimals() : false );
 					if ( false === $dp ? (string) $line[ $field ] !== (string) $stored
-						: wc_format_decimal( $line[ $field ], $dp ?? wc_get_price_decimals() ) !== wc_format_decimal( $stored, $dp ?? wc_get_price_decimals() ) ) {
+						: wc_format_decimal( $line[ $field ], $dp ) !== wc_format_decimal( $stored, $dp ) ) {
 						return true;
 					}
 				}

@@ -89,6 +89,42 @@ class Test_Order_Writer extends WP_UnitTestCase {
 		$this->assert_no_money( $late['payload'] );
 	}
 
+	/** A line's meta cannot carry the item's own storage keys or the stock baseline (ADR 0040 rules 2, 4). */
+	public function test_prepare_create_drops_internal_item_meta_from_lines(): void {
+		$line     = static function ( array $keys ): array {
+			$meta = array(
+				array(
+					'key'   => 'note',
+					'value' => 'kept',
+				),
+			);
+			foreach ( $keys as $key ) {
+				$meta[] = array(
+					'key'   => $key,
+					'value' => '9',
+				);
+			}
+			return array( 'meta_data' => $meta );
+		};
+		$payload  = array(
+			'line_items'     => array( $line( array( '_qty', '_line_total', '_product_id', '_reduced_stock', '_restock_refunded_items' ) ) ),
+			'fee_lines'      => array( $line( array( '_fee_amount', '_tax_status', '_line_total' ) ) ),
+			'shipping_lines' => array( $line( array( 'cost', 'method_id', 'taxes' ) ) ),
+			'coupon_lines'   => array( $line( array( 'discount_amount', 'discount_amount_tax' ) ) ),
+		);
+		$prepared = ( new Order_Writer( new \stdClass() ) )->prepare_create(
+			array( 'route' => '/wc/v3/orders' ),
+			$payload,
+			static function () {
+				return null;
+			}
+		);
+
+		foreach ( array( 'line_items', 'fee_lines', 'shipping_lines', 'coupon_lines' ) as $type ) {
+			$this->assertSame( array( 'note' ), array_column( $prepared['payload'][ $type ][0]['meta_data'], 'key' ), $type );
+		}
+	}
+
 	/** Require a non-null mutation store dependency (pinned in review, 0ae23b11). */
 	public function test_constructor_requires_mutation_store(): void {
 		$constructor = new \ReflectionMethod( Order_Writer::class, '__construct' );
