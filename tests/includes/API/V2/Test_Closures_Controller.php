@@ -1855,7 +1855,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Mid-fold, /last serves a newer closure only a legacy table holds unless its store is out of reach; once latched, the session row. */
+	/** Mid-fold, /last serves a newer closure only a legacy table holds unless its store is out of reach or its date is filtered out; once latched, the session row. */
 	public function test_closure_last_while_fold_is_pending_returns_newer_legacy_closure_in_reach(): void {
 		// Arrange.
 		global $wpdb;
@@ -1871,7 +1871,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
 		try {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
-			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$folded} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, store_id BIGINT NULL, number BIGINT NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$folded} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, store_id BIGINT NULL, number BIGINT NOT NULL, business_day CHAR(10) NULL, closed_at_gmt DATETIME NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
 			$this->assertSame(
 				1,
 				$wpdb->insert(
@@ -1882,6 +1882,8 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 						'session_id' => $second['id'],
 						'store_id' => 456,
 						'number' => 2,
+						'business_day' => '2026-09-12',
+						'closed_at_gmt' => '2026-09-12 12:00:00',
 						'expected' => '{"cash":"150.0000"}',
 						'till_expected' => '{"cash":"100.0000"}',
 						'counted' => '{"cash":"101.0000"}',
@@ -1895,6 +1897,9 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			// Act.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
 			$pending = $this->get( 'closures/last', $args )->get_data();
+			$before = $this->get( 'closures/last', $args + array( 'before' => '2026-09-11' ) )->get_data();
+			$after = $this->get( 'closures/last', $args + array( 'after' => '2026-09-12' ) )->get_data();
+			$none = $this->get( 'closures/last', $args + array( 'before' => '2026-09-10' ) )->get_data();
 			$this->assertSame( 1, $wpdb->update( $folded, array( 'store_id' => 789 ), array( 'id' => $closure_id ) ) );
 			add_filter( Store_Reach::FILTER, $reach );
 			$hidden = $this->get( 'closures/last', $args )->get_data();
@@ -1904,6 +1909,9 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 
 			// Assert.
 			$this->assertSame( array( $closure_id, 2 ), array( $pending['id'], $pending['number'] ) );
+			$this->assertSame( array( $row['id'], 1 ), array( $before['id'], $before['number'] ) );
+			$this->assertSame( array( $closure_id, 2 ), array( $after['id'], $after['number'] ) );
+			$this->assertNull( $none );
 			$this->assertSame( array( $row['id'], 1 ), array( $hidden['id'], $hidden['number'] ) );
 			$this->assertSame( array( $row['id'], 1 ), array( $latched['id'], $latched['number'] ) );
 		} finally {

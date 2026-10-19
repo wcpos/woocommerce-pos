@@ -145,17 +145,19 @@ final class Closure_Store {
 	/** Latest numbered document, independently of a till's clock.
 	 *
 	 * @param string $register_id Register UUID.
+	 * @param array  $args Optional list() filters (a caller's reach and dates); the legacy read applies only the dates.
 	 */
-	public function last( string $register_id ): ?array {
+	public function last( string $register_id, array $args = array() ): ?array {
 		$row = $this->list(
 			array(
 				'register_id' => $register_id,
 				'number_order' => true,
+				'page' => 1,
 				'per_page' => 1,
-			)
+			) + $args
 		)[0] ?? null;
 		// Mid-fold the highest number may still live only in a legacy table.
-		return self::with_legacy( $row, 'register_id', $register_id );
+		return self::with_legacy( $row, 'register_id', $register_id, $args );
 	}
 
 	/** Last number, or zero before the first closure.
@@ -197,6 +199,30 @@ final class Closure_Store {
 				$where[] = null === $args[ $key ] ? "{$column} IS NULL" : $wpdb->prepare( "{$column} = %s", $args[ $key ] );
 			}
 		}
+		$where = array_merge( $where, self::date_predicates( $args ) );
+		$where = implode( ' AND ', $where );
+		$limit = max( 1, min( self::MAX_PER_PAGE, (int) ( $args['per_page'] ?? 50 ) ) );
+		$offset = ( max( 1, (int) ( $args['page'] ?? 1 ) ) - 1 ) * $limit;
+		$order = empty( $args['number_order'] ) ? 'closed_at_gmt DESC, number DESC, closure_id DESC' : 'number DESC';
+		if ( 'register_asc' === ( $args['number_order'] ?? null ) ) {
+			$order = 'register_id ASC, number ASC, closure_id ASC';
+		}
+		$columns = self::columns();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns, prepared predicates and integer pagination.
+		$rows = $wpdb->get_results( "SELECT {$columns} FROM {$table} WHERE {$where} ORDER BY {$order} LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Closure read failed.' );
+		}
+		return array_map( array( self::class, 'hydrate' ), $rows );
+	}
+
+	/** Prepared after/before predicates over business_day, falling back to closed_at_gmt.
+	 *
+	 * @param array $args Filters.
+	 */
+	private static function date_predicates( array $args ): array {
+		global $wpdb;
+		$where = array();
 		foreach ( array(
 			'after' => '>=',
 			'before' => '<=',
@@ -215,20 +241,7 @@ final class Closure_Store {
 				$where[] = $wpdb->prepare( "(business_day {$operator} %s OR (business_day IS NULL AND closed_at_gmt {$closed_operator} %s))", $args[ $key . '_business_day' ] ?? substr( $args[ $key ], 0, 10 ), $boundary );
 			}
 		}
-		$where = implode( ' AND ', $where );
-		$limit = max( 1, min( self::MAX_PER_PAGE, (int) ( $args['per_page'] ?? 50 ) ) );
-		$offset = ( max( 1, (int) ( $args['page'] ?? 1 ) ) - 1 ) * $limit;
-		$order = empty( $args['number_order'] ) ? 'closed_at_gmt DESC, number DESC, closure_id DESC' : 'number DESC';
-		if ( 'register_asc' === ( $args['number_order'] ?? null ) ) {
-			$order = 'register_id ASC, number ASC, closure_id ASC';
-		}
-		$columns = self::columns();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns, prepared predicates and integer pagination.
-		$rows = $wpdb->get_results( "SELECT {$columns} FROM {$table} WHERE {$where} ORDER BY {$order} LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
-		if ( '' !== $wpdb->last_error ) {
-			throw new \RuntimeException( 'Closure read failed.' );
-		}
-		return array_map( array( self::class, 'hydrate' ), $rows );
+		return $where;
 	}
 
 	/** The latest numbered closure of each register, in one query once folded.
@@ -470,11 +483,12 @@ final class Closure_Store {
 	 * @param array|null $row Session-table closure.
 	 * @param string     $column session_id or register_id.
 	 * @param string     $value UUID.
+	 * @param array      $args Optional after/before filters.
 	 * @throws \RuntimeException On probe or read failure.
 	 */
-	private static function with_legacy( ?array $row, string $column, string $value ): ?array {
+	private static function with_legacy( ?array $row, string $column, string $value, array $args = array() ): ?array {
 		foreach ( self::migrating_tables() as $table ) {
-			$legacy = self::legacy_row( $table, $column, $value );
+			$legacy = self::legacy_row( $table, $column, $value, $args );
 			if ( null !== $legacy && $legacy['number'] > ( $row['number'] ?? 0 ) ) {
 				$row = $legacy;
 			}
@@ -487,12 +501,14 @@ final class Closure_Store {
 	 * @param string $table Legacy table.
 	 * @param string $column session_id or register_id.
 	 * @param string $value UUID.
+	 * @param array  $args Optional after/before filters.
 	 * @throws \RuntimeException On read failure.
 	 */
-	private static function legacy_row( string $table, string $column, string $value ): ?array {
+	private static function legacy_row( string $table, string $column, string $value, array $args = array() ): ?array {
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table, allowlisted column.
-		$legacy = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$column} = %s ORDER BY number DESC LIMIT 1", $value ), ARRAY_A );
+		$where = implode( ' AND ', array_merge( array( $wpdb->prepare( "{$column} = %s", $value ) ), self::date_predicates( $args ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Allowlisted column.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table, prepared predicates.
+		$legacy = $wpdb->get_row( "SELECT * FROM {$table} WHERE {$where} ORDER BY number DESC LIMIT 1", ARRAY_A );
 		if ( self::read_failed() ) {
 			throw new \RuntimeException( 'Closure read failed.' );
 		}

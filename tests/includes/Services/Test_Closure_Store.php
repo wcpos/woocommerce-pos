@@ -750,6 +750,58 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Mid-fold, last() applies its date filters to the legacy row as to the session table. */
+	public function test_last_while_fold_is_pending_applies_date_filters_to_legacy_closure(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Closure_Store();
+		$first = $this->closure_session();
+		$this->assertIsArray( $store->create( $this->closure_fields( $first ) ) );
+		$second = $this->closure_session( $first['register_id'] );
+		$legacy = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
+		$closure_id = wp_generate_uuid4();
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$legacy} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, number BIGINT NOT NULL, business_day CHAR(10) NULL, closed_at_gmt DATETIME NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$legacy,
+					array(
+						'id' => $closure_id,
+						'register_id' => $second['register_id'],
+						'session_id' => $second['id'],
+						'number' => 2,
+						'business_day' => '2026-09-11',
+						'closed_at_gmt' => '2026-09-11 12:00:00',
+						'expected' => '{"cash":"150.0000"}',
+						'till_expected' => '{"cash":"100.0000"}',
+						'counted' => '{"cash":"101.0000"}',
+						'variance' => '{"cash":"-49.0000"}',
+						'perpetual_sales_total' => '80',
+						'breakdowns' => '{"transaction_count":0}',
+					)
+				)
+			);
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+
+			// Act.
+			$unfiltered = $store->last( $first['register_id'] );
+			$after = $store->last( $first['register_id'], array( 'after' => '2026-09-11' ) );
+			$before = $store->last( $first['register_id'], array( 'before' => '2026-09-10' ) );
+
+			// Assert.
+			$this->assertSame( array( $closure_id, 2 ), array( $unfiltered['id'], $unfiltered['number'] ) );
+			$this->assertSame( array( $closure_id, 2 ), array( $after['id'], $after['number'] ) );
+			$this->assertNull( $before );
+		} finally {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		}
+	}
+
 	/** A number more than 10000 past the register sequence is refused; the edge is accepted. */
 	public function test_number_far_ahead_of_sequence_is_refused(): void {
 		// Arrange.

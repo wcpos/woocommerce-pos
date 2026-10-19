@@ -1110,6 +1110,57 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** A latch rollback the options table refuses is retried once, then logged as an error; the run still throws. */
+	public function test_closure_fold_failed_latch_rollback_retries_logs_error_and_throws(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$recreated = false;
+		$refused = 0;
+		$refuse = function ( $sql ) use ( $fixture, &$recreated, &$refused ) {
+			if ( ! $recreated && self::writes_latest_schema_latch( $sql ) ) {
+				$recreated = true;
+				$this->create_legacy_table( $fixture['legacy'] );
+			} elseif ( $recreated && false !== strpos( $sql, $GLOBALS['wpdb']->options ) && false !== strpos( $sql, "'" . \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION . "'" ) && false !== strpos( $sql, "`option_value` = '9'" ) ) {
+				++$refused;
+				return 'INVALID LATCH RESTORE';
+			}
+			return $sql;
+		};
+		$logs = array();
+		$capture = static function ( $enabled, $message ) use ( &$logs ) {
+			if ( 'error' === \WCPOS\WooCommercePOS\Logger::$log_level ) {
+				$logs[] = $message;
+			}
+			return false;
+		};
+		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $refuse );
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the recreated table to stop the run.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold found a recreated legacy table.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertSame( 2, $refused );
+			$this->assertCount( 1, $logs );
+			$this->assertStringContainsString( 'Closure fold latch rollback failed', $logs[0] );
+			$this->assertStringContainsString( '"previous":"9","legacy_table":"' . $fixture['legacy'] . '"', $logs[0] );
+		} finally {
+			remove_filter( 'query', $refuse );
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
 	/** A failed legacy-table probe after the latch write is not absence: the old latch is restored. */
 	public function test_closure_fold_failed_probe_after_latch_write_restores_latch(): void {
 		// Arrange.

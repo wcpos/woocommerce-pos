@@ -313,10 +313,18 @@ class Activator {
 				$recreated = $error;
 			}
 			if ( false !== $recreated ) {
-				if ( null === $previous_schema ) {
-					delete_option( Sync_Api::SCHEMA_OPTION );
-				} else {
-					update_option( Sync_Api::SCHEMA_OPTION, $previous_schema, true );
+				// Read back rather than trust the return (false also means unchanged); retry once.
+				for ( $attempt = 0; $attempt < 2 && get_option( Sync_Api::SCHEMA_OPTION, null ) !== $previous_schema; ++$attempt ) {
+					null === $previous_schema ? delete_option( Sync_Api::SCHEMA_OPTION ) : update_option( Sync_Api::SCHEMA_OPTION, $previous_schema, true );
+				}
+				if ( get_option( Sync_Api::SCHEMA_OPTION, null ) !== $previous_schema ) {
+					Logger::error(
+						'Closure fold latch rollback failed',
+						array(
+							'previous' => $previous_schema,
+							'legacy_table' => $wpdb->prefix . Closure_Store::LEGACY_TABLE,
+						)
+					);
 				}
 				throw true === $recreated ? new \RuntimeException( 'Closure fold found a recreated legacy table.' ) : $recreated;
 			}

@@ -196,7 +196,7 @@ class Closures_Controller extends \WP_REST_Controller {
 					$row = $store->list( $args )[0] ?? null;
 					// Mid-fold the newest closure may live only in a legacy table, whose read is not
 					// narrowed to the caller's stores, so reach is checked here before it is served.
-					$latest = $store->is_folding() ? $store->last( $args['register_id'] ) : null;
+					$latest = $store->is_folding() ? $store->last( $args['register_id'], $args ) : null;
 					if ( $latest && $latest['number'] > ( $row['number'] ?? 0 ) && $reach->admits( $latest['store_id'] ) ) {
 						$row = $latest;
 					}
