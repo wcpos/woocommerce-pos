@@ -574,6 +574,112 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Reopen an order in place, as the push lane's status change does.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @param string    $total Optional new total (a line edit's effect).
+	 */
+	private function reopen( \WC_Order $order, string $total = '' ): \WC_Order {
+		$order = wc_get_order( $order->get_id() );
+		$order->set_status( 'pos-open' );
+		if ( '' !== $total ) {
+			$order->set_total( $total );
+		}
+		$order->save();
+		return wc_get_order( $order->get_id() );
+	}
+
+	/** Cash that counted in a completion leaves only through a refund once the sale is reopened. */
+	public function test_void_of_a_cash_row_that_counted_in_a_completion_is_refused_after_reopen(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_data()['payment'];
+		$this->reopen( $order );
+
+		// Act.
+		$response = $this->void( $order, $row['id'] );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertSame( 'captured', Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] )['status'] );
+	}
+
+	/** That counted cash row is refunded instead. */
+	public function test_refund_of_that_row_is_allowed(): void {
+		// Arrange.
+		$order  = $this->create_pos_order();
+		$row    = $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_data()['payment'];
+		$order  = $this->reopen( $order );
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => '10.00',
+				'refund_payment' => false,
+			)
+		);
+
+		// Act.
+		$request = $this->wp_rest_post_request( $this->payment_path( $order, $row['id'] ) . '/refund' );
+		$request->set_body_params(
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount' => '10.00',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'succeeded', $response->get_data()['payment']['refunds'][0]['status'] );
+	}
+
+	/** A split tender taken after the reopen can be voided until a completion counts it. */
+	public function test_a_cash_row_recorded_after_reopen_is_voidable_until_the_next_completion(): void {
+		// Arrange: completed, reopened with a higher total.
+		$order = $this->create_pos_order();
+		$this->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order = $this->reopen( $order, '120.00' );
+
+		// Act + Assert: a part tender is voidable.
+		$part = $this->record( $order, $this->payment( 'pos_cash', '10.00' ) )->get_data()['payment'];
+		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertSame( 200, $this->void( $order, $part['id'] )->get_status() );
+
+		// Once a completion counts the covering tender, a later reopen cannot void it.
+		$cover = $this->record( $order, $this->payment( 'pos_cash', '27.05' ) )->get_data()['payment'];
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		$this->reopen( $order );
+		$this->assertSame( 409, $this->void( $order, $cover['id'] )->get_status() );
+	}
+
+	/** A cash sale completed before the history existed is as non-voidable after a reopen. */
+	public function test_a_pre_deploy_cash_row_is_not_voidable_after_reopen(): void {
+		// Arrange: paid with a captured cash row and no completion history.
+		$order = $this->create_pos_order();
+		$cash  = $this->captured_row( '92.95' );
+		Ledger::instance()->save( $order, array( $cash ), false );
+		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
+		try {
+			$paid = wc_get_order( $order->get_id() );
+			$paid->set_date_paid( time() );
+			$paid->set_status( 'completed' );
+			$paid->save();
+		} finally {
+			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
+		}
+		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->reopen( $order );
+
+		// Act.
+		$response = $this->void( $order, $cash['id'] );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+	}
+
+	/**
 	 * Every payment mutation respects the order lock.
 	 *
 	 * @param string $action Payment action.

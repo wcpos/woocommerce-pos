@@ -1533,8 +1533,9 @@ class Ledger {
 
 	/**
 	 * Whether a row may be voided: pending or authorized always; captured only when it is a
-	 * manual row on an order still in progress (cancelling a split mid-way). Once the order
-	 * has completed, derive() will not unwind it, so a captured cash leg is refunded instead.
+	 * manual row on an order still in progress (cancelling a split mid-way) that no completion
+	 * has counted. Once a completion counted it, a reopen does not make it voidable again: the
+	 * money leaves only through a linked refund (ADR 0040 rule 3).
 	 *
 	 * @param array    $row   Payment row.
 	 * @param WC_Order $order Order object.
@@ -1546,7 +1547,8 @@ class Ledger {
 		}
 		return 'captured' === $status
 			&& 'manual' === ( $row['capture_mode'] ?? '' )
-			&& in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true );
+			&& in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true )
+			&& ! Completion_Stamp::counted( $order, (string) ( $row['id'] ?? '' ) );
 	}
 
 	/**
