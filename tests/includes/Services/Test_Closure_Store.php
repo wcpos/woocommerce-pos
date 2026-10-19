@@ -18,6 +18,14 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/** Break the one session UPDATE that writes a closure document. */
+	private static function fail_closure_write(): callable {
+		$table = ( new Register_Session_Store() )->table_name();
+		return static function ( $sql ) use ( $table ) {
+			return 0 === strpos( $sql, 'UPDATE `' . $table . '`' ) && false !== strpos( $sql, '`closure_id`' ) ? 'INVALID CLOSURE WRITE' : $sql;
+		};
+	}
+
 	/** Raw negative and refund-kind legs both belong in period refunds. */
 	public function test_closure_period_totals_count_negative_and_refund_kind_legs_as_refunds(): void {
 		$session = $this->closure_session();
@@ -97,16 +105,15 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsArray( $record );
 		$fourth_session = $this->closure_session( $session['register_id'] );
 		global $wpdb;
-		$fail = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' ) ? 'INVALID CLOSURE INSERT' : $sql;
-		};
+		$fail = self::fail_closure_write();
 		$previous = $wpdb->suppress_errors();
 		add_filter( 'query', $fail );
 		try {
 			$store->create( $this->closure_fields( $fourth_session, 4 ) );
 			$this->fail( 'Expected closure failure after carrying corrections.' );
 		} catch ( \RuntimeException $error ) {
-			$this->assertSame( 'Closure write failed.', $error->getMessage() );
+			// The closure document is written by the session UPDATE that closes the session.
+			$this->assertSame( 'Session write failed.', $error->getMessage() );
 			$this->assertNull( ( new Fiscal_Record_Store() )->get( $record['id'] )['carried_by_closure_id'] );
 		} finally {
 			remove_filter( 'query', $fail );
@@ -132,36 +139,33 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$session = $this->closure_session();
 		$closures = new Closure_Store();
 		$closure = $closures->create( $this->closure_fields( $session ) );
-		$stores = array( new Register_Session_Store(), $closures );
+		$sessions = new Register_Session_Store();
 		$timezone = get_option( 'timezone_string' );
 		$schema = get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION );
 		$activator = new \WCPOS\WooCommercePOS\Activator();
 		try {
 			update_option( 'timezone_string', 'America/New_York' );
-			foreach ( $stores as $store ) {
-				$table = $store->table_name();
-				$wpdb->update( $table, array( 'opened_at_gmt' => '2026-09-11 02:00:00' ), array( 'id' => $store instanceof Closure_Store ? $closure['id'] : $session['id'] ) );
-				$wpdb->query( "ALTER TABLE {$table} DROP COLUMN business_day" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
-			}
+			// A closure's business day is its session's, so the session row is the one to back-date.
+			$table = $sessions->table_name();
+			$wpdb->update( $table, array( 'opened_at_gmt' => '2026-09-11 02:00:00' ), array( 'id' => $session['id'] ) );
+			$wpdb->query( "ALTER TABLE {$table} DROP COLUMN business_day" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
 			$fiscal_table = ( new Fiscal_Record_Store() )->table_name();
 			$wpdb->query( "ALTER TABLE {$fiscal_table} DROP COLUMN carried_by_closure_id" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '6' );
 			$activator->install_sync_schema();
 			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertSame( 'carried_by_closure_id', $wpdb->get_var( "SHOW COLUMNS FROM {$fiscal_table} LIKE 'carried_by_closure_id'" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
-			foreach ( $stores as $store ) {
-				$id = $store instanceof Closure_Store ? $closure['id'] : $session['id'];
-				$this->assertSame( '2026-09-10', $store->get( $id )['business_day'] );
-				$wpdb->update( $store->table_name(), array( 'business_day' => '2026-09-09' ), array( 'id' => $id ) );
-			}
+			$this->assertSame( '2026-09-10', $closures->get( $closure['id'] )['business_day'] );
+			$this->assertSame( '2026-09-10', $sessions->get( $session['id'] )['business_day'] );
+			$wpdb->update( $table, array( 'business_day' => '2026-09-09' ), array( 'id' => $session['id'] ) );
 			$other = $this->closure_session();
 			$other_closure = $closures->create( $this->closure_fields( $other ) );
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '6' );
 			$activator->install_sync_schema();
 			$this->assertSame( '2026-09-09', $closures->get( $closure['id'] )['business_day'] );
-			$this->assertSame( '2026-09-09', $stores[0]->get( $session['id'] )['business_day'] );
+			$this->assertSame( '2026-09-09', $sessions->get( $session['id'] )['business_day'] );
 			$this->assertSame( '2026-09-11', $closures->get( $other_closure['id'] )['business_day'] );
-			$this->assertSame( '2026-09-11', $stores[0]->get( $other['id'] )['business_day'] );
+			$this->assertSame( '2026-09-11', $sessions->get( $other['id'] )['business_day'] );
 		} finally {
 			update_option( 'timezone_string', $timezone );
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '6' );
@@ -197,7 +201,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( 'longtext', $definition['Type'] );
 				$this->assertSame( 'YES', $definition['Null'] );
 			}
-			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			add_filter( 'query', $observe );
 			$activator->install_sync_schema();
 			$this->assertSame( 0, $alterations );
@@ -368,9 +372,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$session = $this->closure_session();
 		$store = new Closure_Store();
 		$fields = $this->closure_fields( $session );
-		$fail = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' ) ? 'INVALID CLOSURE INSERT' : $sql;
-		};
+		$fail = self::fail_closure_write();
 		$previous = $wpdb->suppress_errors();
 		add_filter( 'query', $fail );
 		try {
@@ -483,9 +485,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->closure_ledger( $session );
 		$store = new Closure_Store();
 		$fields = $this->closure_fields( $session );
-		$fail = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' ) ? 'INVALID CLOSURE INSERT' : $sql;
-		};
+		$fail = self::fail_closure_write();
 		$previous = $wpdb->suppress_errors();
 		add_filter( 'query', $fail );
 		try {

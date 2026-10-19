@@ -130,7 +130,7 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 		}
 		$sql = implode( "\n", $queries );
 		$lock = strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] );
-		$lookup = strpos( $sql, 'SELECT * FROM ' . ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->table_name() . ' WHERE 1=1 AND session_id =' );
+		$lookup = strpos( $sql, 'SELECT * FROM ' . ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->table_name() . ' WHERE number IS NOT NULL AND id =' );
 		$insert = strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' );
 		$release = strpos( $sql, "RELEASE_LOCK( 'wcpos_register_" . $session['register_id'] );
 		foreach ( array( $lock, $lookup, $insert, $release ) as $position ) {

@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
-use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -30,7 +29,7 @@ trait Closure_Test_Fixture {
 			foreach ( ( new Register_Session_Store() )->list( array( 'register_id' => $id ) ) as $session ) {
 				$wpdb->delete( ( new Cash_Movement_Store() )->table_name(), array( 'session_id' => $session['id'] ) );
 			}
-			foreach ( array( new Closure_Store(), new Register_Session_Store(), new Fiscal_Record_Store() ) as $store ) {
+			foreach ( array( new Register_Session_Store(), new Fiscal_Record_Store() ) as $store ) {
 				$wpdb->delete( $store->table_name(), array( 'register_id' => $id ) );
 			}
 			$wpdb->delete( ( new Register_Store() )->table_name(), array( 'id' => $id ) );

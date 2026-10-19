@@ -61,7 +61,7 @@ class Test_Register_Store extends WP_UnitTestCase {
 		$this->assertSame( array( $a['id'], $b['id'] ), array_column( $store->list( array( 'store_id' => 987 ) ), 'id' ) );
 		$closure_queries = array();
 		$trace = static function ( $sql ) use ( &$closure_queries ) {
-			if ( false !== strpos( $sql, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->table_name() ) && false !== stripos( $sql, 'SELECT' ) ) {
+			if ( false !== strpos( $sql, ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->table_name() ) && false !== stripos( $sql, 'SELECT' ) ) {
 				$closure_queries[] = $sql;
 			}
 			return $sql;

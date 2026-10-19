@@ -544,8 +544,9 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$store = new Closure_Store();
 		$closure = $store->create( $this->closure_fields( $session ) );
 		$previous = $wpdb->suppress_errors();
-		$fail = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'UPDATE ' . $store->table_name() . ' SET print_count' ) ? 'INVALID PRINT STAMP' : $sql;
+		$sessions_table = ( new Register_Session_Store() )->table_name();
+		$fail = static function ( $sql ) use ( $sessions_table ) {
+			return 0 === strpos( $sql, 'UPDATE ' . $sessions_table . ' SET print_count' ) ? 'INVALID PRINT STAMP' : $sql;
 		};
 		add_filter( 'query', $fail );
 		$this->logs = array();
@@ -693,8 +694,9 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$store = new Closure_Store();
 		$fields = $this->closure_fields( $session );
 		$this->logs = array();
-		$fail = static function ( $sql ) use ( $store ) {
-			return 0 === strpos( $sql, 'INSERT INTO `' . $store->table_name() . '`' ) ? 'INVALID CLOSURE WRITE' : $sql;
+		// The closure document lands with the session UPDATE; its commit is the closure write.
+		$fail = static function ( $sql ) {
+			return 'COMMIT' === $sql ? 'INVALID CLOSURE WRITE' : $sql;
 		};
 		$previous = $wpdb->suppress_errors();
 		add_filter( 'query', $fail );

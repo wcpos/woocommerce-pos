@@ -664,7 +664,7 @@ class Test_Activator extends WP_UnitTestCase {
 	/** Both activation and the versioned upgrade install missing bookkeeping tables. */
 	public function test_activation_and_upgrade_install_session_and_movement_tables(): void {
 		global $wpdb;
-		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store(), new \WCPOS\WooCommercePOS\Services\Closure_Store() );
+		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() );
 		$activator = new Activator();
 		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
 		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
@@ -693,6 +693,387 @@ class Test_Activator extends WP_UnitTestCase {
 				$store->install();
 			}
 		}
+	}
+
+	/** Schema 10 on a schema-9 install copies both legacy closures, drops the table and latches. */
+	public function test_closure_fold_on_schema_nine_install_copies_closures_and_drops_legacy_table(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+			$this->assertSame(
+				array(
+					'id' => $fixture['closures'][0],
+					'register_id' => $fixture['register_id'],
+					'session_id' => $fixture['sessions'][0],
+					'store_id' => 456,
+					'number' => 1,
+					'printed_number' => null,
+					'opened_at_gmt' => '2026-09-11 08:00:00',
+					'business_day' => '2026-09-11',
+					// The till's claim survives even where the session closed earlier.
+					'closed_at_gmt' => '2026-09-11 13:00:00',
+					'opened_by' => 1,
+					'closed_by' => 1,
+					'approved_by' => null,
+					'expected' => array( 'cash' => '150.0000' ),
+					'till_expected' => array( 'cash' => '100.0000' ),
+					'counted' => array( 'cash' => '101.0000' ),
+					'variance' => array( 'cash' => '-49.0000' ),
+					'period_sales_total' => '80.0000',
+					'period_refunds_total' => '0.0000',
+					'perpetual_sales_total' => '80.0000',
+					'perpetual_refunds_total' => '0.0000',
+					'unsynced_count' => 0,
+					'unsynced_total' => '0.0000',
+					'first_sale_counter' => null,
+					'last_sale_counter' => null,
+					'first_receipt_id' => null,
+					'last_receipt_id' => null,
+					'software_version' => 'fixture',
+					'printed_at_gmt' => null,
+					'breakdowns' => array( 'transaction_count' => 0 ),
+					'findings' => null,
+					'print_count' => 2,
+					'last_printed_at_gmt' => '2026-09-11 12:30:00',
+					'received_at_gmt' => '2026-09-11 13:00:05',
+				),
+				$closures->get( $fixture['closures'][0] )
+			);
+			$second = $closures->for_session( $fixture['sessions'][1] );
+			$this->assertSame( $fixture['closures'][1], $second['id'] );
+			$this->assertSame( 2, $second['number'] );
+			$this->assertSame( 1, $second['printed_number'] );
+			$this->assertSame( 0, $second['print_count'] );
+			$this->assertSame( 2, $closures->last_number( $fixture['register_id'] ) );
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+			$document = json_decode( $wpdb->get_var( $wpdb->prepare( "SELECT closure FROM {$fixture['sessions_table']} WHERE id = %s", $fixture['sessions'][0] ) ), true );
+			// Nested figures are objects in the document, never double-encoded strings.
+			$this->assertSame( array( 'cash' => '150.0000' ), $document['expected'] );
+		} finally {
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A second pass over an already folded install issues no DDL and changes no closure. */
+	public function test_closure_fold_rerun_is_a_no_op(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$activator = new Activator();
+		$statements = array();
+		$observe = static function ( $sql ) use ( $fixture, &$statements ) {
+			if ( 0 === strpos( $sql, "ALTER TABLE {$fixture['sessions_table']}" ) || 0 === strpos( $sql, 'DROP TABLE' ) || 0 === strpos( $sql, "UPDATE `{$fixture['sessions_table']}`" ) ) {
+				$statements[] = $sql;
+			}
+			return $sql;
+		};
+		try {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			$activator->install_sync_schema();
+			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+			$before = array_map( array( $closures, 'get' ), $fixture['closures'] );
+
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			add_filter( 'query', $observe );
+			$activator->install_sync_schema();
+			remove_filter( 'query', $observe );
+
+			// Assert.
+			$this->assertSame( array(), $statements );
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( $before, array_map( array( $closures, 'get' ), $fixture['closures'] ) );
+		} finally {
+			remove_filter( 'query', $observe );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** An orphaned legacy closure stops the fold: latch, table and log say so, and no closure is minted. */
+	public function test_closure_fold_with_orphan_closure_keeps_latch_table_and_logs_error(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$this->assertSame( 1, $wpdb->update( $fixture['legacy'], array( 'session_id' => wp_generate_uuid4() ), array( 'id' => $fixture['closures'][1] ) ) );
+		$logs = array();
+		$capture = static function ( $enabled, $message ) use ( &$logs ) {
+			$logs[] = array( \WCPOS\WooCommercePOS\Logger::$log_level, $message );
+			return false;
+		};
+		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the fold to refuse an orphaned closure.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold found orphaned or mismatched closures.', $error->getMessage() );
+			}
+
+			// Assert.
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertSame( '2', $wpdb->get_var( "SELECT COUNT(*) FROM {$fixture['legacy']}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			$errors = array_values(
+				array_filter(
+					$logs,
+					static function ( $entry ) {
+						return 'error' === $entry[0];
+					}
+				)
+			);
+			$this->assertCount( 1, $errors );
+			$this->assertStringContainsString( 'Closure fold refused: legacy closures do not match their sessions', $errors[0][1] );
+			$this->assertStringContainsString( '"orphans":1', $errors[0][1] );
+			try {
+				( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create(
+					array(
+						'id' => wp_generate_uuid4(),
+						'session_id' => $fixture['sessions'][0],
+					)
+				);
+				$this->fail( 'Expected closure writes to wait for the fold.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure storage is migrating.', $error->getMessage() );
+			}
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A fresh install creates the closure columns and indexes; step 10 then issues no DDL. */
+	public function test_fresh_session_schema_carries_closure_columns_and_indexes(): void {
+		// Arrange.
+		global $wpdb;
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$store = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$table = $store->table_name();
+		$alterations = 0;
+		$observe = static function ( $sql ) use ( $table, &$alterations ) {
+			if ( 0 === strpos( $sql, "ALTER TABLE {$table}" ) ) {
+				++$alterations;
+			}
+			return $sql;
+		};
+		try {
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
+
+			// Act.
+			$store->install();
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			add_filter( 'query', $observe );
+			( new Activator() )->install_sync_schema();
+			remove_filter( 'query', $observe );
+
+			// Assert.
+			$this->assertSame( 0, $alterations );
+			foreach ( array(
+				'number' => array( 'bigint', 'YES' ),
+				'printed_number' => array( 'bigint', 'YES' ),
+				'print_count' => array( 'int', 'NO' ),
+				'last_printed_at_gmt' => array( 'datetime', 'YES' ),
+				'closure' => array( 'longtext', 'YES' ),
+			) as $column => $shape ) {
+				$definition = $wpdb->get_row( "SHOW COLUMNS FROM {$table} LIKE '{$column}'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed columns.
+				$this->assertNotNull( $definition, $column );
+				$this->assertSame( $shape[0], preg_replace( '/\(\d+\)$/', '', $definition['Type'] ), $column );
+				$this->assertSame( $shape[1], $definition['Null'], $column );
+			}
+			$indexes = array();
+			foreach ( $wpdb->get_results( "SHOW INDEX FROM {$table}", ARRAY_A ) as $part ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table.
+				$indexes[ $part['Key_name'] ]['unique'] = '0' === (string) $part['Non_unique'];
+				$indexes[ $part['Key_name'] ]['columns'][ (int) $part['Seq_in_index'] ] = $part['Column_name'];
+			}
+			$this->assertSame(
+				array(
+					'unique' => true,
+					'columns' => array(
+						1 => 'register_id',
+						2 => 'number',
+					),
+				),
+				$indexes['register_number']
+			);
+			$this->assertSame(
+				array(
+					'unique' => true,
+					'columns' => array( 1 => 'closure_id' ),
+				),
+				$indexes['closure_id']
+			);
+			$this->assertSame(
+				array(
+					'unique' => false,
+					'columns' => array(
+						1 => 'store_id',
+						2 => 'closed_at_gmt',
+					),
+				),
+				$indexes['store_closed']
+			);
+		} finally {
+			remove_filter( 'query', $observe );
+			$store->install();
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
+		}
+	}
+
+	/**
+	 * Shape a schema-9 install: sessions without the closure columns and a legacy closures
+	 * table holding two closures for two closed sessions of one register.
+	 *
+	 * DDL commits the test transaction, so restore_closure_schema() undoes all of it.
+	 */
+	private function arrange_schema_nine_with_legacy_closures(): array {
+		global $wpdb;
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$sessions = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$fixture = array(
+			'sessions_table' => $sessions->table_name(),
+			'legacy' => $wpdb->prefix . 'wcpos_closures',
+			'register_id' => wp_generate_uuid4(),
+			'sessions' => array( wp_generate_uuid4(), wp_generate_uuid4() ),
+			'closures' => array( wp_generate_uuid4(), wp_generate_uuid4() ),
+		);
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables, fixed DDL.
+		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} DROP INDEX register_number, DROP INDEX closure_id, DROP INDEX store_closed, DROP COLUMN number, DROP COLUMN printed_number, DROP COLUMN print_count, DROP COLUMN last_printed_at_gmt, DROP COLUMN closure" ) );
+		// The table as schema 9 created it on dev builds of `next`.
+		$this->assertNotFalse(
+			$wpdb->query(
+				"CREATE TABLE {$fixture['legacy']} (
+				id CHAR(36) NOT NULL,
+				register_id CHAR(36) NOT NULL,
+				session_id CHAR(36) NOT NULL,
+				store_id BIGINT NULL,
+				number BIGINT NOT NULL,
+				printed_number BIGINT NULL,
+				opened_at_gmt DATETIME NOT NULL,
+				business_day CHAR(10) NULL,
+				closed_at_gmt DATETIME NOT NULL,
+				opened_by BIGINT NOT NULL,
+				closed_by BIGINT NOT NULL,
+				approved_by BIGINT NULL,
+				expected LONGTEXT NOT NULL,
+				till_expected LONGTEXT NOT NULL,
+				counted LONGTEXT NOT NULL,
+				variance LONGTEXT NOT NULL,
+				period_sales_total DECIMAL(19,4) NOT NULL,
+				period_refunds_total DECIMAL(19,4) NOT NULL,
+				perpetual_sales_total DECIMAL(19,4) NOT NULL,
+				perpetual_refunds_total DECIMAL(19,4) NOT NULL,
+				unsynced_count INT NOT NULL,
+				unsynced_total DECIMAL(19,4) NOT NULL,
+				first_sale_counter BIGINT NULL,
+				last_sale_counter BIGINT NULL,
+				first_receipt_id BIGINT NULL,
+				last_receipt_id BIGINT NULL,
+				software_version VARCHAR(64) NOT NULL,
+				printed_at_gmt DATETIME NULL,
+				breakdowns LONGTEXT NOT NULL,
+				findings LONGTEXT NULL,
+				print_count INT NOT NULL DEFAULT 0,
+				last_printed_at_gmt DATETIME NULL,
+				received_at_gmt DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY register_number (register_id, number),
+				UNIQUE KEY session_id (session_id),
+				KEY store_closed (store_id, closed_at_gmt)
+			) {$wpdb->get_charset_collate()}"
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( array( 0, 1 ) as $index ) {
+			$sessions->create(
+				array(
+					'id' => $fixture['sessions'][ $index ],
+					'register_id' => $fixture['register_id'],
+					'store_id' => 456,
+					'opened_at_gmt' => '2026-09-11 08:00:00',
+					'business_day' => '2026-09-11',
+					'opened_by' => 1,
+					'expected_float' => null,
+					'counted_float' => '100',
+				)
+			);
+			$this->assertSame(
+				1,
+				$wpdb->update(
+					$fixture['sessions_table'],
+					array(
+						'status' => 'closed',
+						'closed_at_gmt' => '2026-09-11 12:00:00',
+						'closed_by' => 1,
+						'counted' => '{"cash":"101.0000"}',
+						'closure_id' => $fixture['closures'][ $index ],
+					),
+					array( 'id' => $fixture['sessions'][ $index ] )
+				)
+			);
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$fixture['legacy'],
+					array(
+						'id' => $fixture['closures'][ $index ],
+						'register_id' => $fixture['register_id'],
+						'session_id' => $fixture['sessions'][ $index ],
+						'store_id' => 456,
+						'number' => $index + 1,
+						'printed_number' => 0 === $index ? null : 1,
+						'opened_at_gmt' => '2026-09-11 08:00:00',
+						'business_day' => '2026-09-11',
+						'closed_at_gmt' => '2026-09-11 13:00:00',
+						'opened_by' => 1,
+						'closed_by' => 1,
+						'approved_by' => null,
+						'expected' => '{"cash":"150.0000"}',
+						'till_expected' => '{"cash":"100.0000"}',
+						'counted' => '{"cash":"101.0000"}',
+						'variance' => '{"cash":"-49.0000"}',
+						'period_sales_total' => '80',
+						'period_refunds_total' => '0',
+						'perpetual_sales_total' => '80',
+						'perpetual_refunds_total' => '0',
+						'unsynced_count' => 0,
+						'unsynced_total' => '0',
+						'software_version' => 'fixture',
+						'breakdowns' => '{"transaction_count":0}',
+						'print_count' => 0 === $index ? 2 : 0,
+						'last_printed_at_gmt' => 0 === $index ? '2026-09-11 12:30:00' : null,
+						'received_at_gmt' => '2026-09-11 13:00:05',
+					)
+				)
+			);
+		}
+		return $fixture;
+	}
+
+	/** Drop the legacy table and fixture rows, then put the closure columns back.
+	 *
+	 * @param array $fixture From arrange_schema_nine_with_legacy_closures().
+	 */
+	private function restore_closure_schema( array $fixture ): void {
+		global $wpdb;
+		$wpdb->query( "DROP TABLE IF EXISTS {$fixture['legacy']}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $fixture['register_id'] ) );
+		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+		( new Activator() )->install_sync_schema();
+		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
+		$wpdb->query( 'COMMIT' );
 	}
 
 	/**
