@@ -547,8 +547,23 @@ class Ledger {
 		if ( 0 === $paid && ( $order->is_paid() || $order->get_date_paid() ) ) {
 			return Money::format( 0 );
 		}
-		$balance = Money::minor( $order->get_total() ) - $paid;
-		return Money::format( max( 0, $balance ) );
+		return Money::format( max( 0, $this->signed_balance( $order, $rows ) ) );
+	}
+
+	/**
+	 * The signed balance in minor units (ADR 0040 rule 1): total − Σ captured rows + Σ succeeded
+	 * refund allocations. Positive is still due; negative is owed back to the customer. A pending
+	 * allocation is a reservation shown beside it, never added.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	public function signed_balance( WC_Order $order, array $rows ): int {
+		$refunded = 0;
+		foreach ( $rows as $row ) {
+			$refunded += self::refunded_total( $row );
+		}
+		return Money::minor( $order->get_total() ) - Money::minor( $this->paid( $rows ) ) + $refunded;
 	}
 
 	/**
@@ -560,9 +575,13 @@ class Ledger {
 	public function summary( WC_Order $order, ?array $rows = null ): array {
 		$rows = null === $rows ? $this->read( $order ) : $rows;
 		$authorized = 0;
+		$pending    = 0;
 		foreach ( $rows as $row ) {
 			if ( 'authorized' === ( $row['status'] ?? '' ) ) {
 				$authorized += Money::minor( $row['amount'] ?? 0 );
+			}
+			foreach ( $row['refunds'] ?? array() as $allocation ) {
+				$pending += 'pending' === ( $allocation['status'] ?? '' ) ? Money::minor( $allocation['amount'] ?? 0 ) : 0;
 			}
 		}
 		return array(
@@ -571,6 +590,8 @@ class Ledger {
 			'paid'                 => $this->paid( $rows ),
 			'authorized'           => Money::format( $authorized ),
 			'balance'              => $this->balance( $order, $rows ),
+			'refund_due'           => Money::format( max( 0, -$this->signed_balance( $order, $rows ) ) ),
+			'refund_pending'       => Money::format( $pending ),
 			'payment_method'       => $order->get_payment_method(),
 			'payment_method_title' => $order->get_payment_method_title(),
 		);
@@ -1748,7 +1769,9 @@ class Ledger {
 		}
 		$paid  = Money::minor( $this->paid( $rows ) );
 		$total = Money::minor( $order->get_total() );
-		if ( $total > 0 && $paid >= $total ) {
+		// Covered on the signed balance: a refund allocated after an earlier completion is money
+		// that left, so gross captured money alone does not complete a reopened sale again.
+		if ( $total > 0 && $this->signed_balance( $order, $rows ) <= 0 ) {
 			if ( ! self::$deriving ) {
 				self::$deriving = true;
 				try {

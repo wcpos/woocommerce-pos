@@ -1426,6 +1426,83 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'amount_mismatch', $row['failure_reason'] );
 	}
 
+	/** Captured money above a reduced total is owed back, and reads apart from money still due (§4.2). */
+	public function test_summary_reports_refund_due_when_captured_money_exceeds_a_reduced_total(): void {
+		// Arrange: 100.00 captured on two lines, reopened, the 20.00 line removed.
+		list( $order, $row, $lines ) = $this->paid_sale_with_lines( array( '80.00', '20.00' ) );
+		$order->set_status( 'pos-open' );
+		$order->remove_item( $lines[1] );
+		$order->calculate_totals( false );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '80.00', $order->get_total() );
+
+		// Act + Assert: covered, and 20.00 owed back.
+		$summary = Ledger::instance()->summary( $order );
+		$this->assertSame( '0.00', $summary['balance'] );
+		$this->assertSame( '20.00', $summary['refund_due'] );
+		$this->assertSame( '0.00', $summary['refund_pending'] );
+
+		// A succeeded 20.00 allocation settles what was owed.
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+		$summary = Ledger::instance()->summary( wc_get_order( $order->get_id() ) );
+		$this->assertSame( '0.00', $summary['refund_due'] );
+		$this->assertSame( '0.00', $summary['balance'] );
+	}
+
+	/** A pending allocation is a reservation shown beside the balance, never added to it (rule 1). */
+	public function test_summary_reports_a_pending_allocation_as_refund_pending_not_as_balance(): void {
+		// Arrange.
+		list( $order, $row, $lines ) = $this->paid_sale_with_lines( array( '80.00', '20.00' ) );
+		$order->set_status( 'pos-open' );
+		$order->remove_item( $lines[1] );
+		$order->calculate_totals( false );
+		$order->save();
+		$order  = wc_get_order( $order->get_id() );
+		$refund = $this->refund_of( $order, '20.00' );
+		$stored = Ledger::instance()->find( $order, $row['id'] );
+		$stored['refunds'] = array(
+			array(
+				'id' => $refund->get_id(),
+				'amount' => '20.00',
+				'status' => 'pending',
+				'provider_ref' => null,
+			),
+		);
+		Ledger::instance()->save( $order, array( $stored ), false );
+
+		// Act.
+		$summary = Ledger::instance()->summary( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( '20.00', $summary['refund_due'] );
+		$this->assertSame( '20.00', $summary['refund_pending'] );
+		$this->assertSame( '0.00', $summary['balance'] );
+	}
+
+	/** derive() completes on the signed balance, not on gross captured money (§4.2). */
+	public function test_derive_does_not_complete_a_partly_refunded_reopened_sale_on_gross_captured_money(): void {
+		// Arrange: 100.00 captured, 20.00 refunded and allocated, reopened unchanged.
+		list( $order, $row ) = $this->paid_sale_with_lines( array( '100.00' ) );
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+		$order = wc_get_order( $order->get_id() );
+		$order->set_status( 'pos-open' );
+		$order->save();
+
+		// Act: 10.00 cash leaves 10.00 still due.
+		$first = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '10.00' ) );
+
+		// Assert.
+		$this->assertSame( 'captured', $first['status'] );
+		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+
+		// Another 10.00 covers it and completes the sale again.
+		Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '10.00' ) );
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+	}
+
 	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */
 	public function test_authorized_at_gmt_is_stamped_on_approval_and_kept_through_capture(): void {
 		// Arrange.
@@ -2511,6 +2588,51 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'Tip', $fees[0]->get_name() );
 		$this->assertSame( '7.05', $fees[0]->get_total() );
 		$this->assertCount( 1, Ledger::instance()->read( $saved ) );
+	}
+
+	/**
+	 * A POS sale paid in full in cash, with one simple-product line per price.
+	 *
+	 * @param string[] $prices Line prices.
+	 * @return array{0: \WC_Order, 1: array, 2: int[]} The paid order, its cash row, its line ids.
+	 */
+	private function paid_sale_with_lines( array $prices ): array {
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$lines = array();
+		foreach ( $prices as $price ) {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( $price );
+			$product->set_price( $price );
+			$product->set_tax_status( 'none' );
+			$product->save();
+			$lines[] = $order->add_product( $product );
+		}
+		$order->calculate_totals( false );
+		$order->save();
+		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', $order->get_total() ) );
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		return array( wc_get_order( $order->get_id() ), $row, $lines );
+	}
+
+	/**
+	 * A WooCommerce refund object on the order, with no gateway call.
+	 *
+	 * @param \WC_Order $order  Parent order.
+	 * @param string    $amount Refund amount.
+	 */
+	private function refund_of( \WC_Order $order, string $amount ): \WC_Order_Refund {
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => $amount,
+				'refund_payment' => false,
+				'restock_items' => false,
+			)
+		);
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		return $refund;
 	}
 
 	private function create_pos_order(): \WC_Order {
