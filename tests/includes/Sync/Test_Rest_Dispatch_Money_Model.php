@@ -18,6 +18,8 @@ use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
@@ -1024,6 +1026,47 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( $before, $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) ) );
 		$this->assertSame( array( 'app' ), array_column( Ledger::instance()->read( wc_get_order( $order_id ) ), 'source' ) );
+	}
+
+	/** A sale completed into a configured on-hold status is marked reopened by a push to pos-open, so close writes entry 2. */
+	public function test_a_sale_completed_into_a_configured_on_hold_status_reopens_and_closes_as_completion_2(): void {
+		// Arrange: Cash's POS Order Status stored as On hold; cash covers the sale.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+					'pos_card' => array( 'enabled' => true ),
+				),
+			)
+		);
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$record   = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params( array( 'payment' => $this->cash_payment( '20.00' ) ) );
+		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
+		$this->assertCount( 1, Completion_Stamp::read( wc_get_order( $order_id ) ) );
+
+		// Act: reopen, drop a unit, close.
+		$reopen  = $this->push_status( $order_id, 'pos-open' );
+		$marked  = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$edit    = $this->push_envelope( 'update', $this->quantity_edit( $order_id, -1 ), $this->order_revision( $order_id ) );
+		$closed  = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+
+		// Assert.
+		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
+		$this->assertNotNull( $marked[0]['reopened_at_gmt'] );
+		$this->assertSame( 200, $edit->get_status(), 'Response: ' . wp_json_encode( $edit->get_data() ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$history = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
+		$this->assertIsArray( ( new Fiscal_Record_Store() )->find_sale( $order_id, $history[1]['id'] ) );
 	}
 
 	public function test_cancel_with_a_pending_row_is_refused_money_in_motion(): void {
