@@ -270,12 +270,12 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			$lock->release( $order->get_id() );
 		}
 
-		// Assert: refused, the order save not written, the reservation released for a retry.
-		// (WooCommerce persists line items through its own item saves, outside the refused order save.)
+		// Assert: refused before anything was written, the reservation released for a retry.
 		$this->assertInstanceOf( WP_Error::class, $refused );
 		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_error_code() );
 		$this->assertSame( 409, $refused->get_error_data()['status'] );
 		$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+		$this->assertSame( $quantity, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
 		$this->assertCount( 1, $ledger->read( wc_get_order( $order->get_id() ) ) );
 		$this->assertNull( $store->lookup( 'orders', self::MID ) );
 
@@ -288,6 +288,34 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'Must wait', wc_get_order( $order->get_id() )->get_customer_note() );
 		$this->assertSame( $quantity + 2, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
 		$this->assertCount( 2, $ledger->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** A push that leaves the payment ledger alone is not held up by a payment operation on the order. */
+	public function test_order_push_without_ledger_proceeds_while_the_payment_lock_is_held(): void {
+		// Arrange.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$store          = new Fake_Mutation_Store();
+		$store->resolve = $order->get_id();
+		$current        = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+		$envelope       = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => Order_Serializer::canonical_revision( $current ), 'payload' => array( 'customer_note' => 'Goes through' ) ) );
+		$lock           = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+
+		// Act.
+		try {
+			$result = ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+
+		// Assert.
+		$this->assertNotInstanceOf( WP_Error::class, $result );
+		$this->assertLessThan( 300, $result->get_status() );
+		$this->assertSame( 'Goes through', wc_get_order( $order->get_id() )->get_customer_note() );
 	}
 
 	public function test_create_full_provenance_tuple_is_stored_with_received_time(): void {

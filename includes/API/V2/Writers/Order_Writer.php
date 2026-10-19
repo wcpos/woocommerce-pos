@@ -164,6 +164,25 @@ class Order_Writer extends Null_Writer {
 		if ( isset( $declared['id'] ) ) {
 			Ledger::save_was_refused( (int) $declared['id'] ); // A stale refusal from earlier in this request must not leak.
 		}
+		// An update carrying the payment ledger takes the payment lock before wc/v3 writes
+		// anything: the keeper would refuse the order save, but WooCommerce saves line items
+		// on their own first. A held lock answers a retryable 409 with nothing written.
+		$order_id      = 'update' === $declared['operation'] ? (int) ( $declared['id'] ?? 0 ) : 0;
+		$ledger_locked = false;
+		if ( $order_id > 0 ) {
+			foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
+				if ( Ledger::META_KEY === Meta_Entry::key( $entry ) ) {
+					if ( ! Order_Lock::instance()->acquire( $order_id ) ) {
+						if ( $locked ) {
+							Order_Lock::instance()->release( (int) $declared['id'] );
+						}
+						return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+					}
+					$ledger_locked = true;
+					break;
+				}
+			}
+		}
 		try {
 			$response = Order_Write_Intent::open(
 				$declared,
@@ -182,6 +201,9 @@ class Order_Writer extends Null_Writer {
 			}
 			return $response;
 		} finally {
+			if ( $ledger_locked ) {
+				Order_Lock::instance()->release( $order_id );
+			}
 			if ( $locked ) {
 				Order_Lock::instance()->release( (int) $declared['id'] );
 			}
