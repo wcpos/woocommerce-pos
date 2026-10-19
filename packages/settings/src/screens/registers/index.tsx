@@ -48,7 +48,10 @@ function Registers() {
 			}),
 	});
 	const register = data[0];
-	const saveInput = (event: React.FocusEvent<HTMLInputElement>, field: 'name' | 'default_float') => {
+	const saveInput = (
+		event: React.FocusEvent<HTMLInputElement>,
+		field: 'name' | 'default_float'
+	) => {
 		const input = event.currentTarget;
 		if (!register || !input.reportValidity()) return;
 		const value = field === 'default_float' && input.value === '' ? null : input.value;

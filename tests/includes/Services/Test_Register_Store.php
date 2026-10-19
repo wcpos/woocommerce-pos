@@ -176,7 +176,7 @@ class Test_Register_Store extends WP_UnitTestCase {
 		$this->assertSame( 'Register', $store->display_name( wp_generate_uuid4() ) );
 	}
 
-	/** counters_started_at_gmt is derived: null, then the first numbered session's opening. */
+	/** The derived counters_started_at_gmt is null, then the first numbered session's opening. */
 	public function test_counters_started_is_null_then_first_closures_session_opening(): void {
 		// Arrange.
 		global $wpdb;

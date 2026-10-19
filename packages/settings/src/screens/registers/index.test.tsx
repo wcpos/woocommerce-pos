@@ -52,7 +52,8 @@ afterEach(() => {
 describe('Registers (Free, one register)', () => {
 	it('catalogs the one-register line', () => {
 		expect(en).toMatchObject({
-			'registers.one_register': 'One register per site. Two devices share it; more registers need WCPOS Pro.',
+			'registers.one_register':
+				'One register per site. Two devices share it; more registers need WCPOS Pro.',
 		});
 	});
 
@@ -73,7 +74,9 @@ describe('Registers (Free, one register)', () => {
 		expect(screen.queryByRole('button', { name: 'Add register' })).not.toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
 		expect(
-			screen.getByText(/One register per site\. Two devices share it; more registers need WCPOS Pro\./)
+			screen.getByText(
+				/One register per site\. Two devices share it; more registers need WCPOS Pro\./
+			)
 		).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'common.upgrade_to_pro' })).toHaveAttribute(
 			'href',
@@ -104,7 +107,9 @@ describe('Registers (Free, one register)', () => {
 	});
 
 	it('shows the server message when a save fails', async () => {
-		apiFetchMock.mockResolvedValueOnce([register]).mockRejectedValueOnce(new Error('Register could not be saved.'));
+		apiFetchMock
+			.mockResolvedValueOnce([register])
+			.mockRejectedValueOnce(new Error('Register could not be saved.'));
 		renderScreen();
 
 		const float = await screen.findByDisplayValue('50.0000');
@@ -116,7 +121,9 @@ describe('Registers (Free, one register)', () => {
 
 	it('renders the component Pro registers in place of the whole screen body', async () => {
 		const getComponent = vi.fn((key: string) =>
-			key === 'registers.screen' ? () => <div data-testid="pro-registers">Pro registers</div> : undefined
+			key === 'registers.screen'
+				? () => <div data-testid="pro-registers">Pro registers</div>
+				: undefined
 		);
 		window.wcpos = { settings: { getComponent } as unknown as WcposSettings };
 		apiFetchMock.mockResolvedValue([register]);
