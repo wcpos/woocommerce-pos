@@ -373,10 +373,11 @@ trait WCPOS_REST_API {
 					$meta_id = 'meta_id';
 				}
 				// The audit keys come from the shared authority so a new audit key
-				// reaches this degraded-meta read path without a second edit.
+				// reaches this degraded-meta read path without a second edit. The
+				// server-owned money keys are stripped from writes, not read here.
 				$keys = array_merge(
 					$keys,
-					Pos_Order_Audit::audit_meta_keys(),
+					array_diff( Pos_Order_Audit::audit_meta_keys(), Pos_Order_Audit::SERVER_MONEY_META_KEYS ),
 					array(
 						'_woocommerce_pos_tax_based_on',
 					)
