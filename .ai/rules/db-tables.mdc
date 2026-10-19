@@ -1,0 +1,25 @@
+---
+description: Every new database table must earn its place — Paul's number-one schema rule (2026-10-19)
+globs: ["includes/**/*.php", "uninstall-functions.php"]
+alwaysApply: true
+---
+
+# Database tables: every new table must earn its place
+
+A custom table changes the architecture of every merchant's server: install and upgrade DDL, backups, HPOS and multisite behaviour, host tooling, and support burden. Rows in an existing table or in meta are reversible; a table is not.
+
+**Rule (Paul, 2026-10-19):** a new table is the LAST resort. Before proposing one, show that each of these fails for the data in hand:
+
+1. an existing WCPOS table (for example `wcpos_sync_mutations` keys every applied mutation by uuid and mutation id; a refused mutation is released today — `Write_Controller` calls `Mutation_Store::release()` — so holding a retained refusal there is a proposed extension of the store, not an existing fact);
+2. order, product, customer or term meta (through the object API — see `hpos-order-meta.mdc`);
+3. an option, for a handful of rows;
+4. a WooCommerce construct (order notes, refunds, the order itself);
+5. a JSON column on an existing WCPOS row (sessions already carry LONGTEXT blobs).
+
+**Process:**
+- The decision is Paul's, every time, BEFORE the table is briefed or built. Ask with the justification in hand, not after the code exists.
+- A PR that adds a table carries in its body the one-paragraph justification: what it stores, one row per what, why alternatives 1–5 fail, expected row growth per 1,000 sales, install and uninstall behaviour (`includes/Activator.php`, `uninstall-functions.php`), HPOS and multisite behaviour. Without that paragraph the PR is not ready for review.
+- A new column or option on an existing table is also Paul's call, with the same paragraph in shorter form.
+- When consolidating, prefer folding into an existing row over keeping a one-to-one table (a closure is a closed session).
+
+Audit of the tables that existed when this rule was written: `.claude/handoffs/2026-10-19-table-audit/HANDOFF.md`, tracked as #2321.
