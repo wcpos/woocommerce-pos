@@ -108,6 +108,7 @@ final class Fiscal_Record_Writers {
 	public function recover( WC_Order $order ): void {
 		$history = Completion_Stamp::read( $order );
 		$latest  = end( $history );
+		// A reopened completion is never rebuilt (record_sale() refuses it); skip the lookup.
 		if ( ! is_array( $latest ) || ! empty( $latest['legacy'] ) || ! empty( $latest['reopened_at_gmt'] ) ) {
 			return;
 		}
@@ -154,7 +155,14 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		$n = (int) $completion['n'];
-		if ( null === $this->store->find_sale( $order->get_id(), $completion['id'] ) ) {
+		$missing = null === $this->store->find_sale( $order->get_id(), $completion['id'] );
+		if ( $missing && ! empty( $completion['reopened_at_gmt'] ) ) {
+			// The order may have been edited since this completion was reopened: its document can no
+			// longer be built faithfully, so no caller rebuilds it; the failure note names it for a human.
+			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d was not rebuilt: the completion was reopened before its record landed.', $n, $order->get_id() ) );
+			return;
+		}
+		if ( $missing ) {
 			$previous = null;
 			foreach ( $history as $entry ) {
 				if ( (int) ( $entry['n'] ?? 0 ) === $n - 1 ) {

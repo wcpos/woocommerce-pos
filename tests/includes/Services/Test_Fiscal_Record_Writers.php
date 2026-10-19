@@ -280,9 +280,9 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->sales( $order->get_id() ) );
 	}
 
-	/** A late-written completion 1 names no predecessor; completion 2 still names completion 1. */
-	public function test_a_recovered_completion_1_names_no_predecessor_and_completion_2_still_names_it(): void {
-		// Arrange: completion 1's sale fails, completion 2's lands.
+	/** A reopened completion whose record never landed is never rebuilt; completion 2 still names it. */
+	public function test_a_reopened_unrecovered_completion_is_never_rebuilt_and_completion_2_still_names_it(): void {
+		// Arrange: completion 1's sale fails; reopened and edited to 80.00; completion 2's lands.
 		$order  = $this->order();
 		$enrich = static function () {
 			throw new \Error( 'boom' );
@@ -300,22 +300,17 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order   = wc_get_order( $order->get_id() );
 		$history = Completion_Stamp::read( $order );
 
-		// Act: the failure consumer writes completion 1 afterwards.
+		// Act: any caller asks for completion 1's record.
 		Fiscal_Record_Writers::instance()->record_sale( $order, $history[0] );
 
-		// Assert.
+		// Assert: only completion 2's record, which names completion 1 without a record.
 		$sales = $this->sales( $order->get_id() );
-		$this->assertCount( 2, $sales );
-		$two = $sales[0];
-		$one = $sales[1];
-		$this->assertSame( $history[1]['id'], $two['source_id'] );
-		$this->assertSame( $history[0]['id'], $one['source_id'] );
-		$this->assertNull( $one['corrects_record_id'] );
-		$this->assertNull( $one['payload']['fiscal']['supersedes'] );
-		$this->assertNull( $two['corrects_record_id'] );
-		$this->assertSame( $history[0]['id'], $two['payload']['fiscal']['supersedes']['completion_id'] );
-		$this->assertNull( $two['payload']['fiscal']['supersedes']['record_id'] );
-		$this->assertSame( '-20.00', $two['payload']['fiscal']['adjustment'] );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( $history[1]['id'], $sales[0]['source_id'] );
+		$this->assertNull( $sales[0]['corrects_record_id'] );
+		$this->assertSame( $history[0]['id'], $sales[0]['payload']['fiscal']['supersedes']['completion_id'] );
+		$this->assertNull( $sales[0]['payload']['fiscal']['supersedes']['record_id'] );
+		$this->assertSame( '-20.00', $sales[0]['payload']['fiscal']['adjustment'] );
 	}
 
 	/** Each completion's cancellation is its own record (complete, cancel, reopen, complete, cancel). */
