@@ -46,6 +46,7 @@ class Payments_Controller extends WC_REST_Controller {
 			$method_path . '/submit' => array( WP_REST_Server::CREATABLE, 'submit_item' ),
 			$method_path . '/cancel' => array( WP_REST_Server::CREATABLE, 'cancel_item' ),
 			$payment_path => array( WP_REST_Server::CREATABLE, 'create_item' ),
+			'/' . $this->rest_base . '/(?P<id>[\d]+)/close' => array( WP_REST_Server::CREATABLE, 'close_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/status' => array( WP_REST_Server::READABLE, 'get_status' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/intent' => array( WP_REST_Server::CREATABLE, 'intent_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/capture' => array( WP_REST_Server::CREATABLE, 'capture_item' ),
@@ -135,6 +136,21 @@ class Payments_Controller extends WC_REST_Controller {
 			return $refusal;
 		}
 		return $this->payment_response( $row, $order );
+	}
+
+	/**
+	 * Close a sale: no money moves; a covered order completes (ADR 0040 rule 1, D2).
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function close_item( $request ) {
+		$order = $this->get_order( (int) $request['id'] );
+		if ( is_wp_error( $order ) ) {
+			return $order;
+		}
+		$result = Ledger::instance()->close( $order );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
 	}
 
 	/**

@@ -15,6 +15,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact pin scenarios.
 
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Api;
@@ -846,6 +847,41 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 			static fn( $note ) => false !== strpos( $note->content, 're-opened via POS' )
 		);
 		$this->assertCount( 1, $reopen_notes );
+	}
+
+	/** Completed on register A, reopened by a push and closed on register B: entry 2 names B (§4.4). */
+	public function test_reopen_and_close_on_another_register_writes_entry_2_naming_it(): void {
+		// Arrange: a cash sale completed on register A.
+		$register_a = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+		$register_b = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+		$order_id   = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$record     = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params(
+			array(
+				'payment' => $this->cash_payment( '20.00' ),
+				'provenance' => array( 'register_id' => $register_a ),
+			)
+		);
+		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
+		$first = Completion_Stamp::read( wc_get_order( $order_id ) );
+
+		// Act: the push reopens it; register B closes it.
+		$reopen = $this->push_status( $order_id, 'pos-open' );
+		$close  = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' );
+		$close->set_body_params( array( 'provenance' => array( 'register_id' => $register_b ) ) );
+		$closed = $this->server->dispatch( $close );
+
+		// Assert.
+		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$history = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
+		$this->assertSame( $register_a, $history[0]['register'] );
+		$this->assertSame( $register_b, $history[1]['register'] );
+		$this->assertSame( $first[0]['id'], $history[0]['id'] );
+		$this->assertSame( $first[0]['at_gmt'], $history[0]['at_gmt'] );
+		$this->assertNotNull( $history[0]['reopened_at_gmt'] );
+		$this->assertTrue( wc_get_order( $order_id )->is_paid() );
 	}
 
 	public function test_cancel_with_a_pending_row_is_refused_money_in_motion(): void {

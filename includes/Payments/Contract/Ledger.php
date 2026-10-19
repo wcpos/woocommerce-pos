@@ -1374,6 +1374,79 @@ class Ledger {
 	}
 
 	/**
+	 * Close a sale (ADR 0040 rule 1, D2): move no money, re-derive, and complete it when the signed
+	 * balance covers a non-zero total — the way a reopened sale is completed again (completion n+1).
+	 * A sale already paid replays its last completion. Refused while money is in motion, and with
+	 * `wcpos_balance_outstanding` when uncovered (a zero total too: derive() never completes one).
+	 *
+	 * @param WC_Order $order Order object, read under the route's order lock.
+	 * @return array|WP_Error `{ order: summary, completion: { n, id } }`.
+	 */
+	public function close( WC_Order $order ) {
+		$rows = $this->read( $order );
+		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'on-hold' ), true ) ) {
+			$history = Completion_Stamp::read( $order );
+			if ( null === $order->get_date_paid( 'edit' ) || ! $history ) {
+				return $this->invalid_transition();
+			}
+			return $this->closed( $order, $rows, end( $history ) );
+		}
+		foreach ( $rows as $row ) {
+			$pending_refund = array_filter( (array) ( $row['refunds'] ?? array() ), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );
+			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || $pending_refund ) {
+				return $this->in_flight( $order, array( 'payment_id' => $row['id'] ) );
+			}
+		}
+		$sent  = array_search( 'sent', Gateway_Submission::read_attempts( $order ), true );
+		$stamp = Gateway_Submission::read_stamp( $order );
+		if ( false !== $sent || null !== $stamp ) {
+			return $this->in_flight( $order, array( 'attempt_id' => false !== $sent ? $sent : ( $stamp['attempt_id'] ?? null ) ) );
+		}
+		if ( Money::minor( $order->get_total() ) <= 0 || $this->signed_balance( $order, $rows ) > 0 ) {
+			return new WP_Error(
+				'wcpos_balance_outstanding',
+				__( 'The order is not covered by its payments.', 'woocommerce-pos' ),
+				array(
+					'status' => 409,
+					'order' => $this->summary( $order, $rows ),
+				)
+			);
+		}
+		$this->derive( $order, $rows, true );
+		self::saving( $order->get_id(), fn() => $order->save() );
+		$fresh   = wc_get_order( $order->get_id() );
+		$history = Completion_Stamp::read( $fresh );
+		return $this->closed( $fresh, $this->read( $fresh ), end( $history ) );
+	}
+
+	/**
+	 * The close answer: the order summary and the completion it stands on.
+	 *
+	 * @param WC_Order    $order Order object.
+	 * @param array       $rows  Payment rows.
+	 * @param array|false $entry Latest completion entry, if any.
+	 */
+	private function closed( WC_Order $order, array $rows, $entry ): array {
+		return array(
+			'order'      => $this->summary( $order, $rows ),
+			'completion' => is_array( $entry ) ? array(
+				'n'  => (int) $entry['n'],
+				'id' => (string) $entry['id'],
+			) : null,
+		);
+	}
+
+	/**
+	 * Money in motion refuses a close.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $named The payment or attempt in motion.
+	 */
+	private function in_flight( WC_Order $order, array $named ): WP_Error {
+		return new WP_Error( 'wcpos_payment_in_flight', __( 'Another payment is already in progress on this order.', 'woocommerce-pos' ), array_merge( array( 'status' => 409 ), $named, array( 'order' => $this->summary( $order ) ) ) );
+	}
+
+	/**
 	 * Refresh one row through its capture-mode handler.
 	 *
 	 * @param WC_Order $order Order object.
@@ -1713,10 +1786,11 @@ class Ledger {
 	/**
 	 * Derive WooCommerce fields without changing the order total.
 	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $rows  Payment rows.
+	 * @param WC_Order $order   Order object.
+	 * @param array    $rows    Payment rows.
+	 * @param bool     $closing Whether `close` asked: only it may complete an editable order outside the projected set (on-hold).
 	 */
-	public function derive( WC_Order $order, array $rows ): void {
+	public function derive( WC_Order $order, array $rows, bool $closing = false ): void {
 		$counting = array_values(
 			array_filter(
 				$rows,
@@ -1766,7 +1840,7 @@ class Ledger {
 
 		// Only the ledger-managed states are projected; a completed/processing/on-hold/refunded
 		// order is never pulled back by a later ledger write (a refused row, a void of a leg).
-		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && ! $stamped ) {
+		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && ! $stamped && ! ( $closing && $order->is_editable() ) ) {
 			return;
 		}
 		$paid  = Money::minor( $this->paid( $rows ) );

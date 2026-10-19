@@ -9,7 +9,10 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -40,6 +43,8 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			return false;
 		};
 		add_filter( 'woocommerce_pos_logging', $this->log_filter, 10, 2 );
+		// WP restores hooks between tests while the writer singleton survives: arm its sale trigger.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
 	}
 
 	/** Remove the capture filter after each test. */
@@ -392,6 +397,182 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'rest_forbidden', $response->get_data()['code'] );
 	}
 
+	/** Close needs the payment routes' capability. */
+	public function test_close_requires_publish_shop_orders(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$user  = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $user->ID );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_forbidden', $response->get_data()['code'] );
+	}
+
+	/** A covered open order completes on close. */
+	public function test_close_on_a_covered_open_order_completes_it(): void {
+		// Arrange: money recorded without deriving.
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertTrue( $stored->is_paid() );
+		$this->assertNotNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertSame( 1, $response->get_data()['completion']['n'] );
+		$this->assertCount( 1, Completion_Stamp::read( $stored ) );
+		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
+	}
+
+	/** A reopened sale closed with its lines unchanged is completion 2, at the same total. */
+	public function test_close_on_a_reopened_sale_with_unchanged_lines_writes_completion_2(): void {
+		// Arrange.
+		list( $order, $product ) = $this->paid_sale_of( array( '50.00' ), 2 );
+		$date_paid = $order->get_date_paid( 'edit' )->getTimestamp();
+		$this->assertSame( 8, wc_get_product( $product[0] )->get_stock_quantity() );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$announced = array();
+		$listener  = static function ( $completed, $n ) use ( &$announced ): void {
+			$announced[] = $n;
+		};
+		add_action( 'wcpos_sale_completed', $listener, 5, 2 );
+
+		// Act.
+		$response = $this->close( $order );
+		remove_action( 'wcpos_sale_completed', $listener, 5 );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$stored  = wc_get_order( $order->get_id() );
+		$history = Completion_Stamp::read( $stored );
+		$this->assertTrue( $stored->is_paid() );
+		$this->assertSame( $date_paid, $stored->get_date_paid( 'edit' )->getTimestamp() );
+		$this->assertSame( 8, wc_get_product( $product[0] )->get_stock_quantity() );
+		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
+		$this->assertSame( array( 2 ), $announced );
+		$this->assertSame(
+			array(
+				'n' => 2,
+				'id' => $history[1]['id'],
+			),
+			$response->get_data()['completion']
+		);
+		$records = new Fiscal_Record_Store();
+		$one     = $records->find_sale( $order->get_id(), $history[0]['id'] );
+		$two     = $records->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertSame( $one['id'], $two['corrects_record_id'] );
+		$this->assertSame( '0.00', $two['payload']['fiscal']['adjustment'] );
+	}
+
+	/** Retained money above a reduced total still completes, and the excess reads as refund_due. */
+	public function test_close_on_a_reopened_sale_with_a_reduced_total_completes_with_refund_due(): void {
+		// Arrange: 100.00 captured on 80.00 + 20.00; reopened and the 20.00 line removed.
+		list( $order ) = $this->paid_sale_of( array( '80.00', '20.00' ), 1 );
+		$order->set_status( 'pos-open' );
+		$lines = array_keys( $order->get_items() );
+		$order->remove_item( $lines[1] );
+		$order->calculate_totals( false );
+		$order->save();
+
+		// Act.
+		$response = $this->close( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 2, $response->get_data()['completion']['n'] );
+		$this->assertSame( '20.00', $response->get_data()['order']['refund_due'] );
+		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$two     = ( new Fiscal_Record_Store() )->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertSame( '-20.00', $two['payload']['fiscal']['adjustment'] );
+	}
+
+	/** An uncovered order is refused and nothing is written. */
+	public function test_close_with_balance_outstanding_is_refused_and_writes_nothing(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '50.00' ) ), false );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_balance_outstanding', $response->get_data()['code'] );
+		$this->assertSame( '42.95', $response->get_data()['data']['order']['balance'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-open', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertSame( array(), Completion_Stamp::read( $stored ) );
+	}
+
+	/** Money in motion refuses a close, naming the row. */
+	public function test_close_with_a_pending_row_is_refused_in_flight(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$pending = array_merge( $this->captured_row( '92.95' ), array( 'status' => 'pending' ) );
+		Ledger::instance()->save( $order, array( $pending ), false );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_payment_in_flight', $response->get_data()['code'] );
+		$this->assertSame( $pending['id'], $response->get_data()['data']['payment_id'] );
+		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** Closing a paid sale again replays its completion and writes nothing. */
+	public function test_close_on_a_paid_order_replays_the_last_completion(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_status() );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'n' => 1,
+				'id' => $history[0]['id'],
+			),
+			$response->get_data()['completion']
+		);
+		$this->assertSame( $history, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** Close alone may complete an on-hold order its payments cover. */
+	public function test_close_on_an_on_hold_covered_order_completes_it(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_status( 'on-hold' );
+		$order->save();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$this->assertSame( 'on-hold', wc_get_order( $order->get_id() )->get_status() );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		$this->assertSame( 1, $response->get_data()['completion']['n'] );
+	}
+
 	/**
 	 * Every payment mutation respects the order lock.
 	 *
@@ -403,8 +584,8 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$other = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
 		$this->assertTrue( $other->acquire( $order->get_id() ) );
 		try {
-			$path = '/wcpos/v2/orders/' . $order->get_id() . '/payments';
-			if ( 'record' !== $action ) {
+			$path = '/wcpos/v2/orders/' . $order->get_id() . ( 'close' === $action ? '/close' : '/payments' );
+			if ( ! in_array( $action, array( 'record', 'close' ), true ) ) {
 				$path .= '/' . wp_generate_uuid4() . '/' . $action;
 			}
 			$request = 'status' === $action ? $this->wp_rest_get_request( $path ) : $this->wp_rest_post_request( $path );
@@ -422,7 +603,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			static function ( $action ) {
 				return array( $action );
 			},
-			array( 'record', 'intent', 'capture', 'status', 'void', 'refund' )
+			array( 'record', 'intent', 'capture', 'status', 'void', 'refund', 'close' )
 		);
 	}
 
@@ -570,6 +751,62 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** Create an open POS order at the contract total. */
+	/**
+	 * A captured cash row, for seeding without deriving.
+	 *
+	 * @param string $amount Amount.
+	 */
+	private function captured_row( string $amount ): array {
+		return array(
+			'id' => wp_generate_uuid4(),
+			'method_id' => 'pos_cash',
+			'kind' => 'cash',
+			'capture_mode' => 'manual',
+			'amount' => $amount,
+			'status' => 'captured',
+		);
+	}
+
+	/**
+	 * A POS sale paid in cash: one stock-managed product line (stock 10) per price, at a quantity.
+	 *
+	 * @param string[] $prices   Line prices.
+	 * @param int      $quantity Units per line.
+	 * @return array{0: \WC_Order, 1: int[]} The paid order and its product ids.
+	 */
+	private function paid_sale_of( array $prices, int $quantity ): array {
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$products = array();
+		foreach ( $prices as $price ) {
+			$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+			$product->set_regular_price( $price );
+			$product->set_price( $price );
+			$product->set_tax_status( 'none' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 10 );
+			$product->save();
+			$order->add_product( $product, $quantity );
+			$products[] = $product->get_id();
+		}
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', $order->get_total(), array( 'currency' => $order->get_currency() ) ) )->get_status() );
+		$paid = wc_get_order( $order->get_id() );
+		$this->assertTrue( $paid->is_paid() );
+		return array( $paid, $products );
+	}
+
+	/**
+	 * Close through the route.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	private function close( \WC_Order $order ): \WP_REST_Response {
+		return $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' ) );
+	}
+
 	private function create_pos_order(): \WC_Order {
 		$order = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );

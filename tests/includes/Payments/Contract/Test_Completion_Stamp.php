@@ -10,6 +10,8 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** One entry per completion at a register, from every completion path, with its own provenance. */
@@ -148,6 +150,75 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $history );
 		$this->assertNotNull( $history[0]['reopened_at_gmt'] );
 		$this->assertSame( array( 1 ), $this->announced );
+	}
+
+	/** An order completed before the history existed: the reopen synthesises entry 1, close writes entry 2. */
+	public function test_a_pre_deploy_completed_order_reopened_and_closed_writes_completion_2(): void {
+		global $wpdb;
+		// Arrange: a paid cash sale with a fiscal sale row and no history, as the previous version left it.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order = $this->create_pos_order();
+		$cash  = array(
+			'id' => wp_generate_uuid4(),
+			'method_id' => 'pos_cash',
+			'kind' => 'cash',
+			'capture_mode' => 'manual',
+			'amount' => '92.95',
+			'status' => 'captured',
+		);
+		Ledger::instance()->save( $order, array( $cash ), false );
+		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
+		try {
+			$paid = wc_get_order( $order->get_id() );
+			$paid->set_date_paid( time() );
+			$paid->set_status( 'completed' );
+			$paid->save();
+		} finally {
+			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
+		}
+		$store = new Fiscal_Record_Store();
+		$store->ensure_installed();
+		$wpdb->insert(
+			$store->table_name(),
+			array(
+				'type' => 'sale',
+				'series' => '',
+				'number' => 900,
+				'order_id' => $order->get_id(),
+				'register_id' => self::REGISTER_A,
+				'payload' => wp_json_encode( array( 'totals' => array( 'total_incl' => 92.95 ) ) ),
+				'checksum' => str_repeat( 'a', 64 ),
+				'received_at_gmt' => '2026-10-01 10:00:00',
+			)
+		);
+		$legacy_row = (int) $wpdb->insert_id;
+		$this->assertSame( array(), $this->stored_history( $order->get_id() ) );
+
+		// Act: reopen, then close from register B.
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$synthesised = $this->stored_history( $order->get_id() );
+		$request     = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
+		$request->set_body_params( array( 'provenance' => $this->provenance( self::REGISTER_B, self::SESSION_B ) ) );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertCount( 1, $synthesised );
+		$this->assertTrue( $synthesised[0]['legacy'] );
+		$this->assertSame( Fiscal_Record_Store::digest_source_id( 'sale:' . $legacy_row ), $synthesised[0]['id'] );
+		$this->assertSame( array( $cash['id'] ), $synthesised[0]['payment_ids'] );
+		$this->assertSame( self::REGISTER_A, $synthesised[0]['register'] );
+		$this->assertNotNull( $synthesised[0]['reopened_at_gmt'] );
+		$this->assertSame( 200, $response->get_status() );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
+		$this->assertSame( self::REGISTER_B, $history[1]['register'] );
+		$this->assertSame( array( 2 ), $this->announced );
+		$two = $store->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertSame( $legacy_row, $two['corrects_record_id'] );
+		$this->assertSame( $synthesised[0]['id'], $two['payload']['fiscal']['supersedes']['completion_id'] );
+		$this->assertSame( '0.00', $two['payload']['fiscal']['adjustment'] );
 	}
 
 	/** A webview (order-pay) completion writes one entry. */
