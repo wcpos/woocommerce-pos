@@ -66,7 +66,8 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 		$sql = implode( "\n", $queries );
 		$lock = strpos( $sql, "GET_LOCK( 'wcpos_register_" . $session['register_id'] );
 		$this->assertNotFalse( $lock );
-		$lookup = strpos( $sql, 'SELECT * FROM ' . ( new Register_Session_Store() )->table_name(), $lock );
+		// The session read selects an explicit column list; anchor on the table, not the projection.
+		$lookup = strpos( $sql, ' FROM ' . ( new Register_Session_Store() )->table_name() . ' WHERE ', $lock );
 		$this->assertNotFalse( $lookup );
 		$this->assertGreaterThan( $lock, $lookup );
 		$this->assertWPError( $error );
