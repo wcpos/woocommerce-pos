@@ -381,23 +381,47 @@ class Activator {
 		}
 		$legacy = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
 		$folded = $legacy . '_folded';
-		$present = array();
-		foreach ( array( $legacy, $folded ) as $table ) {
-			$present[ $table ] = Sync_Health::table_exists( $table );
-			// A failed probe reads as absence; never take it for a finished fold.
-			if ( self::query_failed() ) {
-				throw new \RuntimeException( 'Closure fold probe failed.' );
-			}
+		// An interrupted run left the renamed table: finish it before touching the legacy name.
+		if ( self::legacy_table_exists( $folded ) ) {
+			$this->finish_folded_closures( $folded, $sessions );
 		}
-		if ( $present[ $legacy ] ) {
-			$this->copy_legacy_closures( $legacy, $sessions );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table names.
-			if ( false === $wpdb->query( "RENAME TABLE {$legacy} TO {$folded}" ) ) {
-				throw new \RuntimeException( 'Closure fold rename failed.' );
-			}
-		} elseif ( ! $present[ $folded ] ) {
+		if ( ! self::legacy_table_exists( $legacy ) ) {
 			return;
 		}
+		$this->copy_legacy_closures( $legacy, $sessions );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table names.
+		if ( false === $wpdb->query( "RENAME TABLE {$legacy} TO {$folded}" ) ) {
+			throw new \RuntimeException( 'Closure fold rename failed.' );
+		}
+		$this->finish_folded_closures( $folded, $sessions );
+		// A pre-fold request's create_table_if_missing() can bring the table back; hold the
+		// latch so the next run copies it.
+		if ( self::legacy_table_exists( $legacy ) ) {
+			throw new \RuntimeException( 'Closure fold found a recreated legacy table.' );
+		}
+	}
+
+	/** Whether a legacy closures table exists; a failed probe is never taken for absence.
+	 *
+	 * @param string $table Legacy table.
+	 * @throws \RuntimeException When the probe fails.
+	 */
+	private static function legacy_table_exists( string $table ): bool {
+		$exists = Sync_Health::table_exists( $table );
+		if ( self::query_failed() ) {
+			throw new \RuntimeException( 'Closure fold probe failed.' );
+		}
+		return $exists;
+	}
+
+	/** Copy the renamed table's stragglers, keep any later print bookkeeping, then drop it.
+	 *
+	 * @param string $folded Renamed legacy table.
+	 * @param string $sessions Sessions table.
+	 * @throws \RuntimeException On copy, reconcile or drop failure.
+	 */
+	private function finish_folded_closures( string $folded, string $sessions ): void {
+		global $wpdb;
 		$this->copy_legacy_closures( $folded, $sessions );
 		// A pre-fold print may have bumped a legacy row after its first copy; keep the later count.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.

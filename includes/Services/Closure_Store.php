@@ -840,7 +840,7 @@ final class Closure_Store {
 			$fields['breakdowns']['labels']['approved_by_name'] = get_userdata( (int) ( $result['approved_by'] ?? 0 ) )->display_name ?? '';
 			// The row reads the session's timestamps so filter, sort and display agree; a
 			// deferred close keeps the till's own claims in the document.
-			$fields['till_closed_at_gmt'] = 'counting' === $session['status'] ? null : $fields['closed_at_gmt'];
+			$fields['till_closed_at_gmt'] = 'closed' === $session['status'] && $fields['closed_at_gmt'] !== $session['closed_at_gmt'] ? $fields['closed_at_gmt'] : null;
 			$fields['till_opened_at_gmt'] = $fields['opened_at_gmt'] === $session['opened_at_gmt'] ? null : $fields['opened_at_gmt'];
 			$document = wp_json_encode( self::document( $fields ) );
 			if ( false === $document ) {

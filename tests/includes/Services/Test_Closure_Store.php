@@ -459,6 +459,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( array( $later['id'], $deferred['id'] ), array_column( $after_early, 'id' ) );
+		$this->assertSame( '2026-09-11 12:00:00', $after_early[1]['closed_at_gmt'] );
 		$this->assertSame( array( $later['id'] ), array_column( $after_late, 'id' ) );
 	}
 
@@ -558,6 +559,56 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'query', $observe );
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
 			$wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		}
+	}
+
+	/** While the fold is pending, create() refuses when only the renamed legacy table exists, and when its probe fails. */
+	public function test_create_refuses_while_folded_table_exists_or_probe_fails(): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session();
+		$folded = $wpdb->prefix . Closure_Store::LEGACY_TABLE . '_folded';
+		$store = new Closure_Store();
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$break = static function ( $sql ) {
+			return false !== strpos( $sql, 'SHOW TABLES LIKE' ) && false !== strpos( $sql, 'wcpos\\_closures' ) ? 'INVALID PROBE' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		$errors = array();
+		try {
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$folded} ( id CHAR(36) NOT NULL, PRIMARY KEY  (id) )" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+
+			// Act.
+			foreach ( array( 'folded', 'probe' ) as $case ) {
+				if ( 'probe' === $case ) {
+					$wpdb->query( "DROP TABLE IF EXISTS {$folded}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+					add_filter( 'query', $break );
+				}
+				try {
+					$store->create( $this->closure_fields( $session ) );
+					$errors[ $case ] = null;
+				} catch ( \RuntimeException $error ) {
+					$errors[ $case ] = $error->getMessage();
+				}
+				remove_filter( 'query', $break );
+			}
+
+			// Assert.
+			$this->assertSame(
+				array(
+					'folded' => 'Closure storage is migrating.',
+					'probe' => 'Closure storage probe failed.',
+				),
+				$errors
+			);
+			$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $session['id'] )['status'] );
+		} finally {
+			remove_filter( 'query', $break );
+			$wpdb->suppress_errors( $previous );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$folded}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
 		}
 	}
 

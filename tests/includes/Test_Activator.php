@@ -888,6 +888,71 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** Both names present (a run stopped after the rename, then the table came back): the run finishes both and latches. */
+	public function test_closure_fold_with_both_legacy_names_finishes_and_latches(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$folded = $fixture['legacy'] . '_folded';
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables.
+		$this->create_legacy_table( $fixture['legacy'] );
+		$straggler = $this->add_legacy_closure( $fixture, $folded, 3 );
+		$this->assertNotFalse( $wpdb->query( "INSERT INTO {$fixture['legacy']} SELECT * FROM {$folded} WHERE id = '{$straggler}'" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables, generated UUID.
+		$this->assertNotFalse( $wpdb->query( "DELETE FROM {$folded} WHERE id = '{$straggler}'" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, generated UUID.
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+			$this->assertSame( array( 1, 2, 3 ), array_column( array_map( array( $closures, 'get' ), array_merge( $fixture['closures'], array( $straggler ) ) ), 'number' ) );
+		} finally {
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A legacy table recreated during the final drop holds the latch; the next run completes. */
+	public function test_closure_fold_with_recreated_legacy_table_keeps_latch_then_completes(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$folded = $fixture['legacy'] . '_folded';
+		$recreated = false;
+		$recreate = function ( $sql ) use ( $fixture, $folded, &$recreated ) {
+			if ( ! $recreated && "DROP TABLE IF EXISTS {$folded}" === $sql ) {
+				$recreated = true;
+				$this->create_legacy_table( $fixture['legacy'] );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $recreate );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the recreated table to hold the latch.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold found a recreated legacy table.', $error->getMessage() );
+			}
+			remove_filter( 'query', $recreate );
+
+			// Assert.
+			$this->assertTrue( $recreated );
+			$this->assertSame( '9', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			( new Activator() )->install_sync_schema();
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertSame( 2, ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][1] )['number'] );
+		} finally {
+			remove_filter( 'query', $recreate );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
 	/** A copy that fails partway keeps the latch; the next pass finishes it. */
 	public function test_closure_fold_failing_mid_copy_keeps_latch_and_resumes(): void {
 		// Arrange.
@@ -1184,50 +1249,7 @@ class Test_Activator extends WP_UnitTestCase {
 		);
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables, fixed DDL.
 		$this->assertNotFalse( $wpdb->query( "ALTER TABLE {$fixture['sessions_table']} DROP INDEX register_number, DROP INDEX closure_id, DROP INDEX store_closed, DROP COLUMN number, DROP COLUMN printed_number, DROP COLUMN print_count, DROP COLUMN last_printed_at_gmt, DROP COLUMN closure" ) );
-		// The table as schema 9 created it on dev builds of `next`.
-		$this->assertNotFalse(
-			$wpdb->query(
-				"CREATE TABLE {$fixture['legacy']} (
-				id CHAR(36) NOT NULL,
-				register_id CHAR(36) NOT NULL,
-				session_id CHAR(36) NOT NULL,
-				store_id BIGINT NULL,
-				number BIGINT NOT NULL,
-				printed_number BIGINT NULL,
-				opened_at_gmt DATETIME NOT NULL,
-				business_day CHAR(10) NULL,
-				closed_at_gmt DATETIME NOT NULL,
-				opened_by BIGINT NOT NULL,
-				closed_by BIGINT NOT NULL,
-				approved_by BIGINT NULL,
-				expected LONGTEXT NOT NULL,
-				till_expected LONGTEXT NOT NULL,
-				counted LONGTEXT NOT NULL,
-				variance LONGTEXT NOT NULL,
-				period_sales_total DECIMAL(19,4) NOT NULL,
-				period_refunds_total DECIMAL(19,4) NOT NULL,
-				perpetual_sales_total DECIMAL(19,4) NOT NULL,
-				perpetual_refunds_total DECIMAL(19,4) NOT NULL,
-				unsynced_count INT NOT NULL,
-				unsynced_total DECIMAL(19,4) NOT NULL,
-				first_sale_counter BIGINT NULL,
-				last_sale_counter BIGINT NULL,
-				first_receipt_id BIGINT NULL,
-				last_receipt_id BIGINT NULL,
-				software_version VARCHAR(64) NOT NULL,
-				printed_at_gmt DATETIME NULL,
-				breakdowns LONGTEXT NOT NULL,
-				findings LONGTEXT NULL,
-				print_count INT NOT NULL DEFAULT 0,
-				last_printed_at_gmt DATETIME NULL,
-				received_at_gmt DATETIME NOT NULL,
-				PRIMARY KEY  (id),
-				UNIQUE KEY register_number (register_id, number),
-				UNIQUE KEY session_id (session_id),
-				KEY store_closed (store_id, closed_at_gmt)
-			) {$wpdb->get_charset_collate()}"
-			)
-		);
+		$this->create_legacy_table( $fixture['legacy'] );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		foreach ( array( 0, 1 ) as $index ) {
 			$sessions->create(
@@ -1295,6 +1317,60 @@ class Test_Activator extends WP_UnitTestCase {
 		return $fixture;
 	}
 
+	/** Create a legacy closures table as schema 9 created it on dev builds of `next`.
+	 *
+	 * @param string $table Table name.
+	 */
+	private function create_legacy_table( string $table ): void {
+		global $wpdb;
+		$collate = $wpdb->get_charset_collate();
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+		$this->assertNotFalse(
+			$wpdb->query(
+				"CREATE TABLE {$table} (
+				id CHAR(36) NOT NULL,
+				register_id CHAR(36) NOT NULL,
+				session_id CHAR(36) NOT NULL,
+				store_id BIGINT NULL,
+				number BIGINT NOT NULL,
+				printed_number BIGINT NULL,
+				opened_at_gmt DATETIME NOT NULL,
+				business_day CHAR(10) NULL,
+				closed_at_gmt DATETIME NOT NULL,
+				opened_by BIGINT NOT NULL,
+				closed_by BIGINT NOT NULL,
+				approved_by BIGINT NULL,
+				expected LONGTEXT NOT NULL,
+				till_expected LONGTEXT NOT NULL,
+				counted LONGTEXT NOT NULL,
+				variance LONGTEXT NOT NULL,
+				period_sales_total DECIMAL(19,4) NOT NULL,
+				period_refunds_total DECIMAL(19,4) NOT NULL,
+				perpetual_sales_total DECIMAL(19,4) NOT NULL,
+				perpetual_refunds_total DECIMAL(19,4) NOT NULL,
+				unsynced_count INT NOT NULL,
+				unsynced_total DECIMAL(19,4) NOT NULL,
+				first_sale_counter BIGINT NULL,
+				last_sale_counter BIGINT NULL,
+				first_receipt_id BIGINT NULL,
+				last_receipt_id BIGINT NULL,
+				software_version VARCHAR(64) NOT NULL,
+				printed_at_gmt DATETIME NULL,
+				breakdowns LONGTEXT NOT NULL,
+				findings LONGTEXT NULL,
+				print_count INT NOT NULL DEFAULT 0,
+				last_printed_at_gmt DATETIME NULL,
+				received_at_gmt DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY register_number (register_id, number),
+				UNIQUE KEY session_id (session_id),
+				KEY store_closed (store_id, closed_at_gmt)
+			) {$collate}"
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
 	/** Close one more fixture session and record its closure in a legacy table.
 	 *
 	 * @param array  $fixture From arrange_schema_nine_with_legacy_closures().
@@ -1320,7 +1396,6 @@ class Test_Activator extends WP_UnitTestCase {
 					'counted_float' => '100',
 					'closed_at_gmt' => '2026-09-11 12:00:00',
 					'closed_by' => 1,
-					'closure_id' => $closure,
 					'created_at_gmt' => '2026-09-11 08:00:00',
 				)
 			)
