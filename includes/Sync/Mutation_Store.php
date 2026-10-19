@@ -184,16 +184,16 @@ class Mutation_Store {
 		return false !== $affected && 1 === (int) $affected;
 	}
 
-	/** Complete an identity stamp without reopening the non-idempotent create. */
+	/** Finalize verified recovery; blocked order updates require the caller's matching checkpoint. */
 	public function finalize_poison( string $mutation_id, int $remote_id ): bool {
 		global $wpdb;
-		$affected = $wpdb->update(
-			$this->table_name(),
-			array( 'status' => 'done' ),
-			array(
-				'mutation_id' => $mutation_id,
-				'remote_id' => $remote_id,
-				'status' => 'poison',
+		$affected = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$this->table_name()} SET status = 'done'
+				 WHERE mutation_id = %s AND remote_id = %d
+				 AND (status = 'poison' OR (status = 'blocked' AND collection = 'orders' AND operation = 'update'))",
+				$mutation_id,
+				$remote_id
 			)
 		);
 		if ( false === $affected || 0 !== (int) $affected ) {

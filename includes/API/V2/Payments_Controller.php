@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -67,6 +68,20 @@ class Payments_Controller extends WC_REST_Controller {
 										$error = \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::gate( $order, $request, null, false );
 										if ( $error ) {
 											return $error;
+										}
+										// Refund allocations may address retained captures; other row commands belong to this sale.
+										if ( in_array( $definition[1], array( 'void_item', 'capture_item', 'intent_item' ), true ) ) {
+											$row = Ledger::instance()->find( $order, (string) $request['uuid'] );
+											if ( $row && (int) ( $row['epoch'] ?? 0 ) !== Money_Epoch::current( $order ) ) {
+												return new WP_Error(
+													'wcpos_invalid_transition',
+													__( 'This payment belongs to a previous money epoch.', 'woocommerce-pos' ),
+													array(
+														'status' => 409,
+														'reason' => 'prior_epoch_row',
+													)
+												);
+											}
 										}
 									}
 									try {

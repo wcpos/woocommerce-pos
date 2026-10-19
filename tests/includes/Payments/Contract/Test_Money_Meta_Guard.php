@@ -70,6 +70,67 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	/** A committed PUT remains recoverable when the mutation-table poison write fails. */
+	public function test_blocked_update_with_matching_checkpoint_recovers_money_transitions(): void {
+		$order = $this->order();
+		$store = new \WCPOS\WooCommercePOS\Sync\Mutation_Store();
+		$mutation = wp_generate_uuid4();
+		$original = null;
+		$puts = 0;
+		$observe = static function ( $result, $server, $request ) use ( &$original, &$puts ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() ) { $original = clone $request; }
+			if ( 'PUT' === $request->get_method() && 0 === strpos( $request->get_route(), '/wc/v3/orders/' ) ) { ++$puts; }
+			return $result;
+		};
+		$deny_poison = static function ( $sql ) use ( $store, $mutation ) {
+			if ( 0 === strpos( $sql, 'UPDATE `' . $store->table_name() . '`' ) && false !== strpos( $sql, "'poison'" ) && false !== strpos( $sql, $mutation ) ) {
+				return $sql . ' AND 1 = 0';
+			}
+			return $sql;
+		};
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		add_filter( 'query', $deny_poison );
+		try {
+			$response = $this->push( $order, array(
+				'fee_lines' => array( array( 'id' => array_key_first( $order->get_items( 'fee' ) ), 'total' => '40' ) ),
+				'meta_data' => $this->meta( array( '_wcpos_completed_at' => self::AT, '_wcpos_payments' => $this->cash( '40' ) ) ),
+			), array( 'mutationId' => $mutation, 'tillAggregate' => array( 'total' => '99' ) ) );
+		} finally {
+			remove_filter( 'query', $deny_poison );
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 'blocked', $store->lookup( 'orders', $mutation )['status'] );
+		$saved = wc_get_order( $order->get_id() );
+		$checkpoint = $saved->get_meta( '_wcpos_update_transition' );
+		$this->assertSame( $mutation, $checkpoint['mutation_id'] );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_money_owner' ) );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_completed_at' ) );
+		// Neither an absent checkpoint nor one for another mutation can authorize recovery.
+		foreach ( array( null, array_merge( $checkpoint, array( 'mutation_id' => wp_generate_uuid4() ) ) ) as $invalid ) {
+			$saved->update_meta_data( '_wcpos_update_transition', $invalid );
+			Money_Meta_Guard::authorised( $saved->get_id(), static fn() => $saved->save_meta_data() );
+			$this->assertGreaterThanOrEqual( 400, $this->server->dispatch( $original )->get_status() );
+			$this->assertSame( 'blocked', $store->lookup( 'orders', $mutation )['status'] );
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_completed_at' ) );
+		}
+		$saved->update_meta_data( '_wcpos_update_transition', $checkpoint );
+		Money_Meta_Guard::authorised( $saved->get_id(), static fn() => $saved->save_meta_data() );
+		add_filter( 'rest_pre_dispatch', $observe, 1, 3 );
+		try {
+			$retry = $this->server->dispatch( $original );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $observe, 1 );
+		}
+		$this->assertSame( 200, $retry->get_status(), wp_json_encode( $retry->get_data() ) );
+		$this->assertSame( 1, $puts );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'server', $saved->get_meta( '_wcpos_money_owner' ) );
+		$this->assertSame( self::AT, $saved->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_update_transition' ) );
+		$this->assertSame( 'done', $store->lookup( 'orders', $mutation )['status'] );
+	}
+
 	/** @dataProvider update_transition_failures */
 	public function test_committed_update_retry_recovers_money_without_reforwarding( string $transition, bool $reopen, int $epoch = 0, bool $unchanged = false ): void {
 		$meta = $reopen ? array( '_wcpos_completed_at' => self::AT, '_wcpos_completed_epoch' => '0' ) : array();

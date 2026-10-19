@@ -90,6 +90,72 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
 	}
 
+	/** Reopening does not turn a previous sale's captured cash into a cancellable split. */
+	public function test_reopened_order_refuses_prior_epoch_void_but_allows_current_epoch_void(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$old = $this->payment( 'pos_cash', '92.95' );
+		$ledger->record( $order, $old );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pos-open' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $old['id'] . '/void' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertSame( 'prior_epoch_row', $response->get_data()['data']['reason'] );
+		$this->assertSame( 'captured', $ledger->find( wc_get_order( $order->get_id() ), $old['id'] )['status'] );
+		$current = $this->payment( 'pos_cash', '5.00', array( 'epoch' => 1 ) );
+		$ledger->record( wc_get_order( $order->get_id() ), $current );
+		$request->set_route( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $current['id'] . '/void' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'voided', $response->get_data()['payment']['status'] );
+	}
+
+	/** @dataProvider prior_epoch_provider_commands */
+	public function test_reopened_order_refuses_prior_epoch_provider_command( string $operation ): void {
+		$order = $this->create_pos_order();
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		$row = $this->payment( 'pos_cash', '10.00', array( 'status' => 'intent' === $operation ? 'pending' : 'authorized', 'capture_mode' => 'route_test' ) );
+		Ledger::instance()->save( $order, array( $row ), false );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save_meta_data() );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $row['id'] . '/' . $operation );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params( array( 'payment' => $row, 'context' => array( 'reader' => 'test-reader' ) ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertSame( 'prior_epoch_row', $response->get_data()['data']['reason'] );
+		$this->assertSame( $row['status'], Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] )['status'] );
+	}
+
+	public function prior_epoch_provider_commands(): array {
+		return array( 'capture' => array( 'capture' ), 'resume intent' => array( 'intent' ) );
+	}
+
+	/** Retained captures remain refundable through an explicit Woo refund allocation. */
+	public function test_reopened_order_allows_explicit_refund_of_prior_epoch_capture(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$old = $this->payment( 'pos_cash', '92.95' );
+		$ledger->record( $order, $old );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pos-open' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$refund = wc_create_refund( array( 'order_id' => $order->get_id(), 'amount' => '5.00', 'refund_payment' => false ) );
+		$this->assertNotWPError( $refund );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $old['id'] . '/refund' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params( array( 'refund_id' => $refund->get_id(), 'amount' => '5.00' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'captured', $response->get_data()['payment']['status'] );
+		$this->assertSame( '5.00', $response->get_data()['payment']['refunded_amount'] );
+	}
+
 	/** @dataProvider reopened_payment_routes */
 	public function test_reopened_payment_route_ignores_retained_coverage( bool $intent ): void {
 		$order = $this->create_pos_order();

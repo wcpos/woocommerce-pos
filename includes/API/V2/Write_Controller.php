@@ -231,11 +231,14 @@ class Write_Controller extends WP_REST_Controller {
 				return $mismatch;
 			}
 		}
-		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
+		if ( is_array( $hit ) && in_array( ( $hit['status'] ?? '' ), array( 'poison', 'blocked' ), true ) && 'update' === ( $hit['operation'] ?? '' ) ) {
 			$writer = $this->writer( $meta );
-			if ( 'update' === ( $hit['operation'] ?? '' ) && $writer instanceof Writers\Order_Writer ) {
+			if ( $writer instanceof Writers\Order_Writer ) {
 				return $this->recover_order_update( $meta, $m, $hit, $writer );
 			}
+		}
+		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
+			$writer = $this->writer( $meta );
 			$recovered = $this->identity->recover( $meta, $m, $hit, $writer );
 			if ( is_wp_error( $recovered ) ) {
 				return $recovered;
@@ -251,7 +254,7 @@ class Write_Controller extends WP_REST_Controller {
 		return null;
 	}
 
-	/** A poisoned order update has committed its PUT but not all post-write transitions. */
+	/** A checkpointed order update has committed its PUT but not all post-write transitions. */
 	private function recover_order_update( array $meta, array $m, array $hit, Writers\Order_Writer $writer ) {
 		$id = (int) $hit['remote_id'];
 		$resolved = $this->store->resolve_id_by_uuid( $meta['id_type'], $m['recordId'], $meta );
@@ -268,7 +271,8 @@ class Write_Controller extends WP_REST_Controller {
 			$order = wc_get_order( $id );
 			$checkpoint = $order ? $order->get_meta( '_wcpos_update_transition' ) : null;
 			if ( ! is_array( $checkpoint ) || ( $checkpoint['mutation_id'] ?? '' ) !== $m['mutationId'] ) {
-				return $this->finalize_error();
+				// A blocked write without matching proof remains indeterminate, never reclaimed.
+				return 'blocked' === $hit['status'] ? null : $this->finalize_error();
 			}
 			$error = $writer->recover_update( $id, $m['payload'], $meta['money'], $checkpoint );
 			if ( is_wp_error( $error ) ) {

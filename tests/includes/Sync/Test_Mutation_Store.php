@@ -86,6 +86,18 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 		$this->assertSame( 'done', $this->store->lookup( 'products', 'mutation-poison' )['status'] );
 	}
 
+	/** Only a committed order update may finalize the indeterminate fallback state. */
+	public function test_blocked_order_update_can_finalize_but_blocked_create_cannot(): void {
+		foreach ( array( 'create', 'update' ) as $operation ) {
+			$id = 'blocked-' . $operation;
+			$this->assertTrue( $this->store->reserve( 'orders', $id, 'record-1', $operation ) );
+			$this->assertTrue( $this->store->mark_indeterminate( $id, 42, 200 ) );
+			$this->assertFalse( $this->store->finalize_poison( $id, 99 ) );
+			$this->assertSame( 'update' === $operation, $this->store->finalize_poison( $id, 42 ) );
+			$this->assertSame( 'update' === $operation ? 'done' : 'blocked', $this->store->lookup( 'orders', $id )['status'] );
+		}
+	}
+
 	public function test_indeterminate_checkpoint_is_not_released_or_reclaimed(): void {
 		$this->store->reserve( 'products', 'mutation-blocked', 'record-1', 'create', 'fingerprint-1' );
 		$this->assertTrue( $this->store->mark_indeterminate( 'mutation-blocked', 0, 201 ) );

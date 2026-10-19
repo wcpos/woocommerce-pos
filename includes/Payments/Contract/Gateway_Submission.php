@@ -358,6 +358,17 @@ class Gateway_Submission {
 	 * @return array|WP_Error
 	 */
 	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason ) {
+		$attempt = self::read_attempts( $order )[ strtolower( $attempt_id ) ] ?? null;
+		if ( $attempt && Money_Epoch::current( $order ) !== $attempt['epoch'] ) {
+			return new WP_Error(
+				'wcpos_invalid_transition',
+				__( 'This invoice belongs to a previous money epoch.', 'woocommerce-pos' ),
+				array(
+					'status' => 409,
+					'reason' => 'prior_epoch_row',
+				)
+			);
+		}
 		$rows  = Ledger::instance()->read( $order );
 		$stamp = self::read_stamp( $order );
 		if ( ! $stamp || array_filter( $rows, static fn( $row ) => (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) && in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) {

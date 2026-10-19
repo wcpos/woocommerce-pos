@@ -520,6 +520,26 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** An old attempt must not be rewritten as cancelled in a later money epoch. */
+	public function test_cancel_prior_epoch_attempt_returns_invalid_transition(): void {
+		$order = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'a@example.com' ) )->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save_meta_data() );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/wcpos_sent_test/cancel' );
+		$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 payments=1.3' );
+		$request->set_body_params( array( 'attempt_id' => $attempt ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertSame( 'prior_epoch_row', $response->get_data()['data']['reason'] );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( $attempt, Gateway_Submission::read_stamp( $saved )['attempt_id'] );
+		$this->assertSame( array( 'state' => 'sent', 'epoch' => 0 ), Gateway_Submission::read_attempts( $saved )[ $attempt ] );
+	}
+
 	public function test_current_invoice_cancellation_ignores_prior_epoch_capture(): void {
 		$order = $this->create_pos_order();
 		Ledger::instance()->record( $order, array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '10' ) );
