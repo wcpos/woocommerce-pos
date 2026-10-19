@@ -38,7 +38,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 	);
 
 	/** Retired tables retained in uninstall for sites skipping old upgrades. */
-	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index', 'wcpos_closures', 'wcpos_closures_folded' );
+	private const LEGACY_TABLES = array( 'wcpos_sync_change_log', 'wcpos_sync_order_index', 'wcpos_closures', 'wcpos_closures_folded', 'wcpos_cash_movements', 'wcpos_cash_movements_folded' );
 
 	/**
 	 * User fixture committed by real DDL.
@@ -656,7 +656,7 @@ PHP;
 	 * dropped only by a full wipe.
 	 */
 	public function test_registers_table_survives_default_uninstall_and_goes_with_remove_all(): void {
-		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Store(), new \WCPOS\WooCommercePOS\Services\Register_Session_Store(), new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() );
+		$stores = array( new \WCPOS\WooCommercePOS\Services\Register_Store(), new \WCPOS\WooCommercePOS\Services\Register_Session_Store() );
 		try {
 			foreach ( $stores as $store ) {
 				$store->install();

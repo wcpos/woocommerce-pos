@@ -31,7 +31,8 @@ final class Api {
 	// 8: fiscal corrections track the closure carrying their perpetual deltas.
 	// 9: sessions bind manager approval to counted and expected snapshots.
 	// 10: closures fold into their session rows; the legacy closures table is copied and dropped.
-	public const SCHEMA_VERSION  = '10';
+	// 11: cash movements fold into a JSON array on their session rows; the legacy movements table is copied and dropped.
+	public const SCHEMA_VERSION  = '11';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

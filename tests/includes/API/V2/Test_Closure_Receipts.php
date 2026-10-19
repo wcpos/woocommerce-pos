@@ -682,7 +682,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, \WCPOS\WooCommercePOS\Payments\Contract\Ledger::META_KEY ) ) {
 				++$reads['orders'];
 			}
-			if ( 0 === strpos( $sql, 'SELECT * FROM' ) && false !== strpos( $sql, 'wcpos_cash_movements' ) ) {
+			if ( 0 === strpos( $sql, 'SELECT movements FROM ' . ( new Register_Session_Store() )->table_name() ) ) {
 				++$reads['movements'];
 			}
 			return $sql;

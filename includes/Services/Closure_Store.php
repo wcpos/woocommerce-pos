@@ -364,7 +364,7 @@ final class Closure_Store {
 				);
 			} elseif ( 'late_movement' === $record['type'] ) {
 				$void = 'void' === $payload['type'];
-				$movement = $void ? ( new Cash_Movement_Store() )->get( $payload['voids'] ) : $payload;
+				$movement = $void ? ( new Cash_Movement_Store() )->get( $payload['session_id'], $payload['voids'] ) : $payload;
 				if ( ! $movement ) {
 					throw new \RuntimeException( 'Closure correction movement missing.' );
 				}
@@ -640,7 +640,6 @@ final class Closure_Store {
 			);
 			return new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
-		( new Cash_Movement_Store() )->ensure_installed();
 		( new Fiscal_Record_Store() )->ensure_installed();
 		if ( ! ( new Register_Store() )->lock( $session['register_id'] ) ) {
 			Logger::warning(

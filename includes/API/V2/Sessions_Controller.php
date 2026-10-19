@@ -85,8 +85,13 @@ class Sessions_Controller extends \WP_REST_Controller {
 			$request->set_param( 'id', strtolower( $request['id'] ) );
 			$movement = '/wcpos/v2/movements' === rtrim( $request->get_route(), '/' );
 			$store = $movement ? new Cash_Movement_Store() : new Register_Session_Store();
+			if ( $movement && ! Pos_Uuid::is_uuid( $request['session_id'] ) ) {
+				return $this->error( 'rest_invalid_param', 400, 'session_id' );
+			}
+			// A movement is keyed by (session, uuid): its replay is looked up in the body's session.
+			$existing = $movement ? $store->get( strtolower( $request['session_id'] ), $request['id'] ) : $store->get( $request['id'] );
 			/** Filter a directly addressed session or movement row on the write routes; nothing hooks it today. Read routes are checked by Store_Reach. */
-			$row = apply_filters( 'woocommerce_pos_session_row', $store->get( $request['id'] ), $request );
+			$row = apply_filters( 'woocommerce_pos_session_row', $existing, $request );
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
@@ -352,7 +357,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 				return $this->error( 'rest_invalid_param', 400, 'voids' );
 			}
 			$voids = strtolower( $request['voids'] );
-			$target = ( new Cash_Movement_Store() )->get( $voids );
+			$target = ( new Cash_Movement_Store() )->get( $session['id'], $voids );
 			if ( ! $target || $target['session_id'] !== $session['id'] || null !== $target['voided_by'] || 'void' === $target['type'] ) {
 				// The store's own refusal covers only the race after this check; an ordinary
 				// refused reversal is decided here and must be recorded here.

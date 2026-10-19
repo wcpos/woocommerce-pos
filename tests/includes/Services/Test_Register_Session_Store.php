@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -32,6 +33,34 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( $closure['id'], $row['closure_id'] );
+		$this->assertSame( self::SESSION_KEYS, array_keys( $row ) );
+		$this->assertCount( 1, $listed );
+		$this->assertSame( self::SESSION_KEYS, array_keys( $listed[0] ) );
+	}
+
+	/** Movements on the session row never widen a session read either: they are read through the movement store. */
+	public function test_session_read_after_movement_returns_exactly_the_session_columns(): void {
+		// Arrange.
+		$session = $this->closure_session( null, 'open' );
+		$movement = ( new Cash_Movement_Store() )->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session['id'],
+				'type' => 'paid_in',
+				'amount' => '7',
+				'reason' => 'Float top-up',
+				'actor' => get_current_user_id(),
+				'created_at_gmt' => '2026-09-11 10:00:00',
+			)
+		);
+		$store = new Register_Session_Store();
+
+		// Act.
+		$row = $store->get( $session['id'] );
+		$listed = $store->list( array( 'register_id' => $session['register_id'] ) );
+
+		// Assert.
+		$this->assertSame( array( $movement ), ( new Cash_Movement_Store() )->list( $session['id'] ) );
 		$this->assertSame( self::SESSION_KEYS, array_keys( $row ) );
 		$this->assertCount( 1, $listed );
 		$this->assertSame( self::SESSION_KEYS, array_keys( $listed[0] ) );

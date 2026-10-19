@@ -8,72 +8,62 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Sync;
+use WCPOS\WooCommercePOS\Sync\Health;
 
-/** Append-only movements, except for the target's one-time void stamp. */
+/**
+ * Append-only movements, except for the target's one-time void stamp.
+ *
+ * A session row carries its movements as one JSON array, `movements`, in
+ * (created_at_gmt, id) order. The idempotency key is (session, uuid): every
+ * lookup reads one session's array, and every write is a read-modify-write of
+ * that array under the session's register lock.
+ */
 final class Cash_Movement_Store {
-	public const TABLE = 'wcpos_cash_movements';
+	/** The table movements lived in before sync schema 11; kept for the fold and its guards. */
+	public const LEGACY_TABLE = 'wcpos_cash_movements';
 
-	use Owned_Table;
+	/** The sync schema whose latch proves the legacy table is folded. */
+	private const FOLDED_SCHEMA = '11';
 
-	/** Build the schema.
+	/** Read one movement of a session.
 	 *
-	 * @param string $table_name Table.
-	 * @param string $charset_collate Collation.
+	 * @param string $session_id Session UUID.
+	 * @param string $id Movement UUID.
+	 * @throws \RuntimeException On read failure.
 	 */
-	public function schema_sql( string $table_name, string $charset_collate = '' ): string {
-		return "CREATE TABLE {$table_name} (
-			id CHAR(36) NOT NULL,
-			session_id CHAR(36) NOT NULL,
-			type VARCHAR(16) NOT NULL,
-			amount DECIMAL(19,4) NOT NULL,
-			reason TEXT NOT NULL,
-			actor BIGINT NOT NULL,
-			voids CHAR(36) NULL,
-			voided_by CHAR(36) NULL,
-			created_at_gmt DATETIME NOT NULL,
-			PRIMARY KEY  (id),
-			KEY session_id (session_id),
-			KEY voids (voids)
-		) {$charset_collate};";
-	}
-
-	/** Read one movement.
-	 *
-	 * @param string $id UUID.
-	 */
-	public function get( string $id ): ?array {
-		global $wpdb;
-		$this->ensure_installed();
-		$table = $this->table_name();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %s", $id ), ARRAY_A );
-		if ( $row ) {
-			$row['actor'] = (int) $row['actor'];
-		}
-		return $row ? $row : null;
+	public function get( string $session_id, string $id ): ?array {
+		return self::find( $this->list( $session_id ), $id );
 	}
 
 	/** List all movements oldest first, including voids.
 	 *
+	 * Mid-fold a session's movements may still live in a legacy table, so those rows are
+	 * merged in, de-duplicated by id: no figure misses a movement during the window.
+	 *
 	 * @param string $session_id Session UUID.
-	 * @throws \RuntimeException On read failure.
+	 * @throws \RuntimeException On probe or read failure.
 	 */
 	public function list( string $session_id ): array {
 		global $wpdb;
-		$this->ensure_installed();
-		$table = $this->table_name();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE session_id = %s ORDER BY created_at_gmt, id", $session_id ), ARRAY_A );
-		if ( '' !== $wpdb->last_error ) {
-			throw new \RuntimeException( 'Session movement read failed.' );
+		$rows = array();
+		foreach ( self::entries( $session_id ) as $entry ) {
+			$rows[ $entry['id'] ] = self::row( $session_id, $entry );
 		}
-		foreach ( $rows as &$row ) {
-			$row['actor'] = (int) $row['actor'];
+		foreach ( self::migrating_tables() as $table ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table; the id is prepared.
+			$legacy = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE session_id = %s", $session_id ), ARRAY_A );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Session movement read failed.' );
+			}
+			foreach ( $legacy as $entry ) {
+				$rows += array( $entry['id'] => self::row( $session_id, self::entry( $entry ) ) );
+			}
 		}
-		return $rows;
+		return self::ordered( array_values( $rows ) );
 	}
 
-	/** Insert validated fields; only a null voided_by may subsequently change.
+	/** Append validated fields; only a null voided_by may subsequently change.
 	 *
 	 * @param array $fields Movement fields.
 	 * @return array|\WP_Error
@@ -82,7 +72,7 @@ final class Cash_Movement_Store {
 	 */
 	public function create( array $fields ) {
 		global $wpdb;
-		$existing = $this->get( $fields['id'] );
+		$existing = $this->get( $fields['session_id'], $fields['id'] );
 		if ( $existing ) {
 			// An idempotent replay, not a fault: the outbox retries a movement whose
 			// response was lost, and returning the existing row IS the success path.
@@ -91,32 +81,65 @@ final class Cash_Movement_Store {
 			$this->log_replay( $existing );
 			return $existing;
 		}
+		$context = array(
+			'movement_id' => $fields['id'],
+			'session_id' => $fields['session_id'],
+			'user_id' => $fields['actor'],
+		);
+		if ( array() !== self::migrating_tables() ) {
+			// Step 11 has not copied every legacy movement yet: an append now could be lost
+			// to, or duplicated by, the copy. The outbox retries the 500.
+			Logger::warning( 'Cash movement refused: movement storage is migrating', $context );
+			throw new \RuntimeException( 'Movement storage is migrating.' );
+		}
 		$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
-		$register = $session['register_id'] ?? '';
-		$locked = $session && ( new Register_Store() )->lock( $register );
-		if ( $session && ! $locked ) {
-			Logger::warning(
-				'Movement register lock failed.',
-				array(
-					'movement_id' => $fields['id'],
-					'session_id' => $fields['session_id'],
-					'user_id' => $fields['actor'],
-				)
-			);
+		if ( ! $session ) {
+			Logger::warning( 'Movement session missing.', $context );
+			throw new \RuntimeException( 'Movement session missing.' );
+		}
+		$register = $session['register_id'];
+		if ( ! ( new Register_Store() )->lock( $register ) ) {
+			Logger::warning( 'Movement register lock failed.', $context );
 			throw new \RuntimeException( 'Movement register lock failed.' );
 		}
 		$fiscal = new Fiscal_Record_Store();
 		$sequence_locked = false;
 		$transaction = false;
 		try {
-			$existing = $this->get( $fields['id'] );
+			// A fresh read under the lock: a retry that committed while this one waited is a replay.
+			$entries = self::entries( $fields['session_id'] );
+			$existing = self::find( $entries, $fields['id'] );
 			if ( $existing ) {
+				$existing = self::row( $fields['session_id'], $existing );
 				$this->log_replay( $existing );
 				return $existing;
 			}
 			$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
-			if ( $session && ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
+			if ( ! $session || ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
 				return new \WP_Error( 'wcpos_session_not_open', __( 'This movement was recorded after counting began.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
+			$entry = self::entry( $fields + array( 'voids' => null ) );
+			if ( 'void' === $entry['type'] ) {
+				$target = self::position( $entries, (string) $entry['voids'] );
+				if ( null === $target || null !== $entries[ $target ]['voided_by'] || 'void' === $entries[ $target ]['type'] ) {
+					Logger::warning(
+						'Cash movement refused: voids target already voided or unavailable',
+						array(
+							'movement_id' => $fields['id'],
+							'session_id' => $fields['session_id'],
+							'voids' => $entry['voids'],
+							'user_id' => $fields['actor'],
+						)
+					);
+					return new \WP_Error( 'wcpos_movement_void_refused', __( 'The movement has already been voided or is unavailable.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+				}
+				// The stamp and the reversal are one array write, so neither lands without the other.
+				$entries[ $target ]['voided_by'] = $entry['id'];
+			}
+			$entries[] = $entry;
+			$movements = wp_json_encode( self::ordered( $entries ) );
+			if ( false === $movements ) {
+				throw new \RuntimeException( 'Movement write failed.' );
 			}
 			$closure = ( new Closure_Store() )->for_session( $fields['session_id'] );
 			if ( $closure ) {
@@ -126,46 +149,15 @@ final class Cash_Movement_Store {
 				if ( ! $sequence_locked ) {
 					throw new \RuntimeException( 'Unable to acquire fiscal record sequence lock.' );
 				}
-			}
-			$void = 'void' === $fields['type'];
-			if ( $void || null !== $closure ) {
 				if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
 					throw new \RuntimeException( 'Movement transaction failed.' );
 				}
 				$transaction = true;
 			}
-			if ( false === $wpdb->insert( $this->table_name(), $fields ) ) {
+			$sessions = ( new Register_Session_Store() )->table_name();
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values are prepared.
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$sessions} SET movements = %s WHERE id = %s", $movements, $fields['session_id'] ) ) ) {
 				throw new \RuntimeException( 'Movement write failed.' );
-			}
-			if ( $void ) {
-				$updated = $wpdb->update(
-					$this->table_name(),
-					array( 'voided_by' => $fields['id'] ),
-					array(
-						'id' => $fields['voids'],
-						'session_id' => $fields['session_id'],
-						'voided_by' => null,
-					)
-				);
-				if ( false === $updated ) {
-					throw new \RuntimeException( 'Movement void stamp failed.' );
-				}
-				if ( 0 === $updated ) {
-					// Roll back BEFORE logging: WooCommerce's database log handler writes
-					// through this same connection, so a warning emitted inside the
-					// transaction is erased with it.
-					$wpdb->query( 'ROLLBACK' );
-					Logger::warning(
-						'Cash movement refused: voids target already voided or unavailable',
-						array(
-							'movement_id' => $fields['id'],
-							'session_id' => $fields['session_id'],
-							'voids' => $fields['voids'],
-							'user_id' => $fields['actor'],
-						)
-					);
-					return new \WP_Error( 'wcpos_movement_void_refused', __( 'The movement has already been voided or is unavailable.', 'woocommerce-pos' ), array( 'status' => 409 ) );
-				}
 			}
 			if ( $closure && null === $fiscal->record(
 				array(
@@ -194,24 +186,15 @@ final class Cash_Movement_Store {
 			// through this same connection, so a warning emitted inside the
 			// transaction is erased with it and the merchant loses exactly the
 			// failure record this audit exists to keep.
-			Logger::warning(
-				$error->getMessage(),
-				array(
-					'movement_id' => $fields['id'],
-					'session_id' => $fields['session_id'],
-					'user_id' => $fields['actor'],
-				)
-			);
+			Logger::warning( $error->getMessage(), $context );
 			throw $error;
 		} finally {
 			if ( $sequence_locked ) {
 				$fiscal->unlock_sequence();
 			}
-			if ( $locked ) {
-				( new Register_Store() )->unlock( $register );
-			}
+			( new Register_Store() )->unlock( $register );
 		}
-		$row = $this->get( $fields['id'] );
+		$row = self::row( $fields['session_id'], $entry );
 		Logger::log(
 			'Cash movement accepted',
 			array(
@@ -226,6 +209,7 @@ final class Cash_Movement_Store {
 		);
 		return $row;
 	}
+
 	/** An idempotent replay returned the existing row: the success path, not a fault.
 	 *
 	 * The REST controller answers a replay before create() runs, so it calls this too.
@@ -262,5 +246,141 @@ final class Cash_Movement_Store {
 			);
 		}
 		return $accepted;
+	}
+
+	/** Build one stored array entry with the casts a movement row has always had.
+	 *
+	 * Amounts are four-place decimal strings, as the DECIMAL(19,4) column returned them;
+	 * an amount not already in that shape is cast by the database, never by a float.
+	 *
+	 * @param array $fields Movement fields or a legacy row.
+	 * @throws \RuntimeException When the amount cannot be cast.
+	 */
+	public static function entry( array $fields ): array {
+		global $wpdb;
+		$amount = (string) $fields['amount'];
+		if ( ! preg_match( '/^-?\d+\.\d{4}$/D', $amount ) ) {
+			$amount = $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(%s AS DECIMAL(19,4))', $amount ) );
+			if ( '' !== $wpdb->last_error || ! is_string( $amount ) ) {
+				throw new \RuntimeException( 'Movement amount cast failed.' );
+			}
+		}
+		return array(
+			'id' => (string) $fields['id'],
+			'type' => (string) $fields['type'],
+			'amount' => $amount,
+			'reason' => (string) $fields['reason'],
+			'actor' => (int) $fields['actor'],
+			'voids' => isset( $fields['voids'] ) ? (string) $fields['voids'] : null,
+			'voided_by' => isset( $fields['voided_by'] ) ? (string) $fields['voided_by'] : null,
+			'created_at_gmt' => (string) $fields['created_at_gmt'],
+		);
+	}
+
+	/** Order entries as the table's ORDER BY created_at_gmt, id did.
+	 *
+	 * @param array $entries Entries or rows.
+	 */
+	public static function ordered( array $entries ): array {
+		usort(
+			$entries,
+			static function ( $a, $b ) {
+				return array( $a['created_at_gmt'], $a['id'] ) <=> array( $b['created_at_gmt'], $b['id'] );
+			}
+		);
+		return $entries;
+	}
+
+	/** The session's stored entries, read fresh; NULL and an empty array both mean none.
+	 *
+	 * @param string $session_id Session UUID.
+	 * @throws \RuntimeException On read failure.
+	 */
+	private static function entries( string $session_id ): array {
+		global $wpdb;
+		$sessions = new Register_Session_Store();
+		$sessions->ensure_installed();
+		$table = $sessions->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+		$movements = $wpdb->get_var( $wpdb->prepare( "SELECT movements FROM {$table} WHERE id = %s", $session_id ) );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Session movement read failed.' );
+		}
+		$entries = null === $movements ? array() : json_decode( $movements, true );
+		if ( ! is_array( $entries ) ) {
+			throw new \RuntimeException( 'Session movement read failed.' );
+		}
+		return $entries;
+	}
+
+	/** One entry as a movement row: the session id restored, in the table's column order.
+	 *
+	 * @param string $session_id Session UUID.
+	 * @param array  $entry Stored entry.
+	 */
+	private static function row( string $session_id, array $entry ): array {
+		return array(
+			'id' => $entry['id'],
+			'session_id' => $session_id,
+			'type' => $entry['type'],
+			'amount' => $entry['amount'],
+			'reason' => $entry['reason'],
+			'actor' => (int) $entry['actor'],
+			'voids' => $entry['voids'],
+			'voided_by' => $entry['voided_by'],
+			'created_at_gmt' => $entry['created_at_gmt'],
+		);
+	}
+
+	/** The entry with an id, compared as the CHAR(36) column did (case-insensitively).
+	 *
+	 * @param array  $entries Entries or rows.
+	 * @param string $id Movement UUID.
+	 */
+	private static function find( array $entries, string $id ): ?array {
+		$position = self::position( $entries, $id );
+		return null === $position ? null : $entries[ $position ];
+	}
+
+	/** The index of the entry with an id, or null.
+	 *
+	 * @param array  $entries Entries or rows.
+	 * @param string $id Movement UUID.
+	 */
+	private static function position( array $entries, string $id ): ?int {
+		foreach ( $entries as $index => $entry ) {
+			if ( 0 === strcasecmp( $entry['id'], $id ) ) {
+				return $index;
+			}
+		}
+		return null;
+	}
+
+	/** Every legacy movements table still to be folded, or none once the schema-11 latch is set.
+	 *
+	 * The fold renames the table before its drop, and a pre-fold request can recreate the
+	 * old name beside an interrupted rename, so both names are probed. The latch is
+	 * autoloaded: a folded site never probes.
+	 *
+	 * @throws \RuntimeException When a probe fails; a caller must not assume absence.
+	 */
+	private static function migrating_tables(): array {
+		global $wpdb;
+		$latch = get_option( Sync\Api::SCHEMA_OPTION, null );
+		if ( null !== $latch && version_compare( (string) $latch, self::FOLDED_SCHEMA, '>=' ) ) {
+			return array();
+		}
+		$tables = array();
+		foreach ( array( self::LEGACY_TABLE, self::LEGACY_TABLE . '_folded' ) as $suffix ) {
+			$exists = Health::table_exists( $wpdb->prefix . $suffix );
+			if ( '' !== $wpdb->last_error ) {
+				Logger::warning( 'Cash movement read refused: movement storage probe failed' );
+				throw new \RuntimeException( 'Movement storage probe failed.' );
+			}
+			if ( $exists ) {
+				$tables[] = $wpdb->prefix . $suffix;
+			}
+		}
+		return $tables;
 	}
 }
