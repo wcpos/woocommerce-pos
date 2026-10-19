@@ -157,19 +157,25 @@ final class Register_Store {
 		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY name", ARRAY_A );
 		$latest = array_fill_keys( array_column( $rows, 'id' ), array() );
 		if ( $rows ) {
-			$closures = new Closure_Store();
-			$closures->ensure_installed();
-			$closure_table = $closures->table_name();
+			$sessions = new Register_Session_Store();
+			$sessions->ensure_installed();
+			$session_table = $sessions->table_name();
 			$placeholders = implode( ', ', array_fill( 0, count( $rows ), '%s' ) );
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table and generated placeholders.
-			$sql = $wpdb->prepare( "SELECT closure.register_id, closure.number, closure.perpetual_sales_total, closure.perpetual_refunds_total FROM {$closure_table} closure INNER JOIN ( SELECT register_id, MAX(number) AS number FROM {$closure_table} WHERE register_id IN ({$placeholders}) GROUP BY register_id ) latest_closure ON latest_closure.register_id = closure.register_id AND latest_closure.number = closure.number", array_column( $rows, 'id' ) );
+			$sql = $wpdb->prepare( "SELECT closure.register_id, closure.number, closure.closure FROM {$session_table} closure INNER JOIN ( SELECT register_id, MAX(number) AS number FROM {$session_table} WHERE register_id IN ({$placeholders}) AND number IS NOT NULL GROUP BY register_id ) latest_closure ON latest_closure.register_id = closure.register_id AND latest_closure.number = closure.number", array_column( $rows, 'id' ) );
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
 			$closure_rows = $wpdb->get_results( $sql, ARRAY_A );
 			if ( '' !== $wpdb->last_error ) {
 				throw new \RuntimeException( 'Register closure read failed.' );
 			}
 			foreach ( $closure_rows as $closure ) {
-				$latest[ $closure['register_id'] ] = $closure;
+				// The perpetual totals live in the frozen closure document.
+				$document = json_decode( (string) $closure['closure'], true );
+				$latest[ $closure['register_id'] ] = array(
+					'number' => $closure['number'],
+					'perpetual_sales_total' => $document['perpetual_sales_total'] ?? null,
+					'perpetual_refunds_total' => $document['perpetual_refunds_total'] ?? null,
+				);
 			}
 		}
 		return array_map(

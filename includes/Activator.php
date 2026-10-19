@@ -226,7 +226,6 @@ class Activator {
 		( new Register_Store() )->install();
 		( new Register_Session_Store() )->install();
 		( new Cash_Movement_Store() )->install();
-		( new Closure_Store() )->install();
 		( new Register_Store() )->ensure_default();
 		( new Fiscal_Record_Store() )->install();
 	}
@@ -234,7 +233,7 @@ class Activator {
 	/**
 	 * Install the sync store and latch its aggregate schema version after verification.
 	 *
-	 * @throws \RuntimeException On fiscal carry or approval snapshot schema upgrade failure.
+	 * @throws \RuntimeException On fiscal carry, approval snapshot or closure fold upgrade failure.
 	 */
 	public function install_sync_schema(): void {
 		$previous_schema = get_option( Sync_Api::SCHEMA_OPTION, null );
@@ -277,6 +276,10 @@ class Activator {
 					throw new \RuntimeException( 'Approval snapshot column upgrade failed.' );
 				}
 			}
+		}
+
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '10', '<' ) ) {
+			$this->fold_closures_into_sessions();
 		}
 
 		if ( ! Sync_Health::is_healthy() ) {
@@ -340,7 +343,7 @@ class Activator {
 	private function upgrade_business_days(): void {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		foreach ( array( new Register_Session_Store(), new Closure_Store() ) as $store ) {
+		foreach ( array( new Register_Session_Store() ) as $store ) {
 			$table = $store->table_name();
 			dbDelta( $store->schema_sql( $table, $wpdb->get_charset_collate() ) );
 			do {
@@ -365,6 +368,116 @@ class Activator {
 				}
 				$size = count( $rows );
 			} while ( 100 === $size );
+		}
+	}
+
+	/** Schema 10: a closure is its closed session row. Add the closure columns and indexes,
+	 * copy any legacy closures (dev builds of `next` only) and drop their table.
+	 *
+	 * The latch has no transaction and retries until this completes, so every statement
+	 * is guarded and a partial copy resumes where it stopped.
+	 *
+	 * @throws \RuntimeException On schema, read, copy or verification failure; leave the old latch in place.
+	 */
+	private function fold_closures_into_sessions(): void {
+		global $wpdb;
+		$sessions = ( new Register_Session_Store() )->table_name();
+		foreach ( array(
+			'number' => 'BIGINT NULL',
+			'printed_number' => 'BIGINT NULL',
+			'print_count' => 'INT NOT NULL DEFAULT 0',
+			'last_printed_at_gmt' => 'DATETIME NULL',
+			'closure' => 'LONGTEXT NULL',
+		) as $name => $definition ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed column names.
+			$column = $wpdb->get_var( "SHOW COLUMNS FROM {$sessions} LIKE '{$name}'" );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Closure column read failed.' );
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed definitions; DDL runs outside closure transactions.
+			if ( null === $column && false === $wpdb->query( "ALTER TABLE {$sessions} ADD {$name} {$definition}" ) ) {
+				throw new \RuntimeException( 'Closure column upgrade failed.' );
+			}
+		}
+		foreach ( array(
+			'register_number' => 'UNIQUE KEY register_number (register_id, number)',
+			'closure_id' => 'UNIQUE KEY closure_id (closure_id)',
+			'store_closed' => 'KEY store_closed (store_id, closed_at_gmt)',
+		) as $name => $definition ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the key name is prepared.
+			$index = $wpdb->get_var( $wpdb->prepare( "SHOW INDEX FROM {$sessions} WHERE Key_name = %s", $name ) );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Closure index read failed.' );
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed definitions; DDL runs outside closure transactions.
+			if ( null === $index && false === $wpdb->query( "ALTER TABLE {$sessions} ADD {$definition}" ) ) {
+				throw new \RuntimeException( 'Closure index upgrade failed.' );
+			}
+		}
+		$legacy = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
+		if ( ! Sync_Health::table_exists( $legacy ) ) {
+			return;
+		}
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables, fixed predicates.
+		$orphans = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy} c LEFT JOIN {$sessions} s ON s.id = c.session_id WHERE s.id IS NULL" );
+		$mismatches = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy} c INNER JOIN {$sessions} s ON s.id = c.session_id WHERE s.closure_id IS NOT NULL AND s.closure_id <> c.id" );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Closure fold read failed.' );
+		}
+		if ( $orphans || $mismatches ) {
+			// Dev data a human must repair; the latch retries on every upgrade pass until then.
+			Logger::error(
+				'Closure fold refused: legacy closures do not match their sessions',
+				array(
+					'orphans' => $orphans,
+					'mismatches' => $mismatches,
+				)
+			);
+			throw new \RuntimeException( 'Closure fold found orphaned or mismatched closures.' );
+		}
+		do {
+			// Copied rows leave the next batch automatically.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.
+			$rows = $wpdb->get_results( "SELECT c.* FROM {$legacy} c INNER JOIN {$sessions} s ON s.id = c.session_id WHERE s.number IS NULL ORDER BY c.number LIMIT 100", ARRAY_A );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Closure fold read failed.' );
+			}
+			foreach ( $rows as $row ) {
+				foreach ( array( 'expected', 'till_expected', 'counted', 'variance', 'breakdowns', 'findings' ) as $key ) {
+					$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
+				}
+				$document = wp_json_encode( Closure_Store::document( $row ) );
+				if ( false === $document || 1 !== $wpdb->update(
+					$sessions,
+					array(
+						'closure_id' => $row['id'],
+						'number' => $row['number'],
+						'printed_number' => $row['printed_number'],
+						'print_count' => $row['print_count'],
+						'last_printed_at_gmt' => $row['last_printed_at_gmt'],
+						'closure' => $document,
+					),
+					array(
+						'id' => $row['session_id'],
+						'number' => null,
+					)
+				) ) {
+					throw new \RuntimeException( 'Closure fold write failed.' );
+				}
+			}
+			$size = count( $rows );
+		} while ( 100 === $size );
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.
+		$legacy_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy}" );
+		$folded_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$sessions} WHERE number IS NOT NULL" );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( '' !== $wpdb->last_error || null === $legacy_count || $legacy_count !== $folded_count ) {
+			throw new \RuntimeException( 'Closure fold verification failed.' );
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+		if ( false === $wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ) ) {
+			throw new \RuntimeException( 'Closure fold drop failed.' );
 		}
 	}
 

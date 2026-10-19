@@ -30,7 +30,8 @@ final class Api {
 	// 7: device business-day stamps on sessions and closures, with a site-timezone backfill.
 	// 8: fiscal corrections track the closure carrying their perpetual deltas.
 	// 9: sessions bind manager approval to counted and expected snapshots.
-	public const SCHEMA_VERSION  = '9';
+	// 10: closures fold into their session rows; the legacy closures table is copied and dropped.
+	public const SCHEMA_VERSION  = '10';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

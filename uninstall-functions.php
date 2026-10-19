@@ -39,6 +39,8 @@ function woocommerce_pos_uninstall_configuration_table_suffixes(): array {
 		'wcpos_registers',
 		'wcpos_register_sessions',
 		'wcpos_cash_movements',
+		// Legacy: closures live on session rows since sync schema 10. A dev build that
+		// never reached the upgrade still holds this table.
 		'wcpos_closures',
 	);
 }
