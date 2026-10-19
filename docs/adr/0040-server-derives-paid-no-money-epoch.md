@@ -127,9 +127,52 @@ as one small PR. Added: the idempotency triple on the row, the revision check on
 commands, the `is_editable` gate, the refund-record rule. The client's contract-1.3 gate
 (wcpos/monorepo#2702, #2710) is redefined: 1.3 means "the server derives paid, refuses stale
 revisions on payment commands and strips money from pushes", and the reopen UX stops expecting
-money to reset. The wiki pages named above are rewritten, not amended. Fiscal identity for a
-sale amended after close (a new fiscal document in some jurisdictions) was borrowing the epoch;
-the fiscal-records work carries its own sequence from the stamp history instead.
+money to reset. The wiki pages named above are rewritten, not amended, and so are the fiscal-groundwork spokes
+that keyed the sale record on the money epoch (see the fiscal section below).
+
+**Fiscal compliance: two worlds, one bridge.** WCPOS has to satisfy two models that contradict
+each other on the face of it. WooCommerce's order is a living commercial record: merchants reopen
+it, edit lines, change status, refund, and every report and plugin downstream expects that. The
+register regimes WCPOS will meet (France: CGI art. 286 I 3° bis and the NF525 conditions of
+inaltérabilité, sécurisation, conservation and archivage; Spain: VeriFactu, RD 1007/2023, with
+chained, immutable invoicing records corrected by an anulación or a rectificativa; Germany:
+KassenSichV with every transaction signed by the TSE and corrections as new transactions; Italy,
+Portugal and Austria in the same family) say the opposite: once a sale document is issued it is
+done, numbered gaplessly per register, never altered, and any change is a further document that
+points at the one it corrects. The resolution is the one the fiscal-groundwork contract already
+states and the ledger literature backs: **the two worlds never share a record.** The order stays
+WooCommerce's mutable record. The fiscal store holds write-once rows about *events* on the order:
+a sale completing at a register, a refund, a void, a cancellation, a closure. Reopening the order
+touches no issued document; it is a change to the commercial record, not to the fiscal one.
+
+What the fiscal side needs from the money side is only an identity for "which completion", and
+that is what the money epoch had been lent for: the wiki keyed the sale record's write-once
+identity on `(order_id, epoch)`, stamped `_wcpos_epoch_provenance[n]` and fired
+`wcpos_sale_completed( $order, $epoch )`. Under this ADR that identity is the **completion
+number**: each time the server completes the sale (rule 1), it appends an entry to the order's
+completion history, `_wcpos_completions[n]` with the sale time and zone, register, session,
+counter and total of that completion, and `n` is the fiscal sale record's key. Money never reads
+`n`; it is provenance, not a money state. The fiscal writers then behave exactly as the
+groundwork rules them: completion `n` writes `sale` record `n` whose payload names the record it
+supersedes, closure totals take the signed adjustment (new total minus superseded total) through
+the `adjustments` counter so sales and refunds stay monotonic, a cancellation names the current
+completion's record, and a refund names the sale record whose payment rows it reverses. A sale
+reopened and re-completed at the same total still writes record `n+1` superseding `n` with a zero
+adjustment, because the regimes count documents, not differences. The groundwork's "POS-created
+orders only" condition on the sale writer is refined to "completed through a register": the
+hybrid flows above (an online order finished at the counter) are fiscally a sale at that
+register, and the completion stamp carries the register that took the money, whatever door
+created the order.
+
+Where a regime forbids editing an issued ticket at all, the country module (2.1.0, wcpos/roadmap#225)
+presents the reopen of a completed sale as "correct this sale" and produces the same two records
+the model already writes, the superseding sale and any refund, in the regime's own vocabulary
+(annulation and re-issue, rectificativa). Nothing in the money model changes for it, and
+nothing here chooses a hash chain, a signing engine or an export format; those remain the country
+modules' work. The fiscal-groundwork spokes `records-and-closures.md`, `corrections.md` and
+`closure-as-ruled.md` are rewritten to key on the completion number where they say epoch; the
+landed `Fiscal_Record_Store` on `next` has no epoch column and one sale record per order, so the
+change is to unlanded design, not to data.
 
 **Still to decide, in the design that follows this ADR.** Whether the till's `status` for
 in-progress states is honoured as sent or mapped; how a reopened online order that was paid by

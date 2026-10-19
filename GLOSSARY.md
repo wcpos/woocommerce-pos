@@ -31,6 +31,14 @@ A sale with at least one captured tender and a positive balance (`pos-partial`).
 Moving a paid sale back to an open status so its lines can be edited. Every tender keeps counting; the balance after the edit is collected or refunded. Refused only while a tender is in motion.
 _Avoid_: new epoch, void and re-ring (a different, rejected model), amend (the edit that follows the reopen)
 
+**Completion**:
+The server event of a sale reaching paid at a register. Numbered per order (1, 2, …) in the order's completion history; the number is the identity a fiscal sale record is keyed on, and money never reads it.
+_Avoid_: epoch, money epoch, generation
+
+**Fiscal record**:
+A write-once row about an event on a sale: a completion, a refund, a void, a cancellation, a closure, or a correction pointing at one of those. Never edited or deleted; the order it describes stays WooCommerce's mutable record.
+_Avoid_: snapshot (the retired order-meta copy), receipt (the rendering of a record)
+
 **Money command**:
 A request that creates or changes a payment row: record a tender, start or capture a gateway payment, void, refund, cancel. Carries a till-minted row id and the order revision it was built against; the order push lane is not a money command and cannot carry money.
 _Avoid_: payment route (the transport), mutation (the push lane's word)
