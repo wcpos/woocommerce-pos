@@ -471,27 +471,32 @@ class Activator {
 				throw new \RuntimeException( 'Closure fold read failed.' );
 			}
 			foreach ( $rows as $row ) {
+				// A number another session of the register holds proves the row was minted against a
+				// restarted sequence (a recreated table), so its perpetual totals cannot be trusted.
+				// A human repairs the dev data (drop or renumber that table); the latch retries.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values are prepared.
+				$taken = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$sessions} WHERE register_id = %s AND number = %d AND id <> %s", $row['register_id'], $row['number'], $row['session_id'] ) );
+				if ( self::query_failed() ) {
+					throw new \RuntimeException( 'Closure fold read failed.' );
+				}
+				if ( $taken ) {
+					Logger::error(
+						'Closure fold refused: legacy closure number already folded',
+						array(
+							'closure_id' => $row['id'],
+							'register_id' => $row['register_id'],
+							'number' => (int) $row['number'],
+							'session_id' => $row['session_id'],
+						)
+					);
+					throw new \RuntimeException( 'Closure fold found a recreated legacy closure.' );
+				}
 				foreach ( array( 'expected', 'till_expected', 'counted', 'variance', 'breakdowns', 'findings' ) as $key ) {
 					$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
 				}
 				// The row reads the session's timestamps; the till's differing claims stay in the document.
 				foreach ( array( 'opened_at_gmt', 'closed_at_gmt' ) as $key ) {
 					$row[ 'till_' . $key ] = $row[ $key ] === $row[ 'session_' . $key ] ? null : $row[ $key ];
-				}
-				// A table recreated after the rename restarts its sequence: a number another session
-				// of the register holds takes the next one and keeps the claim, as create() does.
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; values are prepared.
-				$taken = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$sessions} WHERE register_id = %s AND number = %d AND id <> %s", $row['register_id'], $row['number'], $row['session_id'] ) );
-				$next = $taken ? $wpdb->get_var( $wpdb->prepare( "SELECT MAX(number) + 1 FROM {$sessions} WHERE register_id = %s", $row['register_id'] ) ) : null;
-				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				if ( self::query_failed() ) {
-					throw new \RuntimeException( 'Closure fold read failed.' );
-				}
-				$claimed = null;
-				if ( $taken ) {
-					$claimed = (int) $row['number'];
-					$row['printed_number'] = $row['printed_number'] ?? $row['number'];
-					$row['number'] = $next;
 				}
 				$document = wp_json_encode( Closure_Store::document( Closure_Store::normalize( $row ) ) );
 				// The copied prints leave the legacy row in the write's transaction, so a concurrent
@@ -519,25 +524,12 @@ class Activator {
 					$wpdb->query( 'ROLLBACK' );
 					throw new \RuntimeException( 'Closure fold write failed.' );
 				}
-				// Logged after the commit, so a rolled-back write never claims a number.
-				if ( null !== $claimed ) {
-					Logger::warning(
-						'Closure fold number already exists: assigned next number',
-						array(
-							'closure_id' => $row['id'],
-							'register_id' => $row['register_id'],
-							'number' => $claimed,
-							'next_number' => (int) $row['number'],
-						)
-					);
-				}
 			}
 			$size = count( $rows );
 		} while ( 100 === $size );
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.
 		$legacy_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy}" );
-		// A reassigned row's number differs from its legacy claim, so the copy is matched on the closure id.
-		$folded_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy} c INNER JOIN {$sessions} s ON s.id = c.session_id AND s.closure_id = c.id AND s.number IS NOT NULL" );
+		$folded_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy} c INNER JOIN {$sessions} s ON s.id = c.session_id AND s.closure_id = c.id AND s.number = c.number" );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( self::query_failed() || null === $legacy_count || $legacy_count !== $folded_count ) {
 			throw new \RuntimeException( 'Closure fold verification failed.' );
