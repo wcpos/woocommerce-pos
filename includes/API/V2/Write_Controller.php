@@ -477,41 +477,58 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$current = $this->document_for( $meta, $id );
-		if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
-			return $current;
-		}
-		$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
-		$current_revision = $this->revision_for( $meta, $id, $current_bare );
-		if ( $m['baseRevision'] !== $current_revision ) {
-			return new WP_REST_Response(
-				array(
-					'code' => 'woo_rxdb_sync_conflict',
-					'message' => 'baseRevision is stale.',
-					'current' => $current->get_data(),
-					'currentRevision' => $current_revision,
-				),
-				409
-			);
-		}
-		if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
-			$late                = $prepared['context_factory']();
-			$prepared['payload']  = $late['payload'];
-			$prepared['context']  = $late['context'];
-		}
+		// The writer's lock spans the current read, the compare, the pre-read and the write, so
+		// nothing it serialises against can land between the compare and the write.
+		$status  = 0;
+		$failure = $writer->with_write_lock(
+			$id,
+			$m['payload'],
+			function () use ( $meta, $id, $m, $writer, $prepared, &$status ) {
+				$current = $this->document_for( $meta, $id );
+				if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
+					return $current;
+				}
+				$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
+				$current_revision = $this->revision_for( $meta, $id, $current_bare );
+				if ( $m['baseRevision'] !== $current_revision ) {
+					return new WP_REST_Response(
+						array(
+							'code' => 'woo_rxdb_sync_conflict',
+							'message' => 'baseRevision is stale.',
+							'current' => $current->get_data(),
+							'currentRevision' => $current_revision,
+						),
+						409
+					);
+				}
+				if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
+					$late = $prepared['context_factory']();
+					if ( is_wp_error( $late ) ) {
+						return $late;
+					}
+					$prepared['payload'] = $late['payload'];
+					$prepared['context'] = $late['context'];
+				}
 
-		$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
-		if ( is_wp_error( $response ) ) {
-			return $response;
+				$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
+				if ( is_wp_error( $response ) ) {
+					return $response;
+				}
+				if ( $response->get_status() >= 400 ) {
+					return new WP_REST_Response( $response->get_data(), $response->get_status() );
+				}
+				$data   = $response->get_data();
+				$status = $response->get_status();
+				$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
+				return null;
+			}
+		);
+		if ( null !== $failure ) {
+			return $failure;
 		}
-		if ( $response->get_status() >= 400 ) {
-			return new WP_REST_Response( $response->get_data(), $response->get_status() );
-		}
-		$data = $response->get_data();
-		$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
 
 		$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] );
-		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
+		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $status );
 		if ( is_wp_error( $finalized ) ) {
 			return $finalized;
 		}

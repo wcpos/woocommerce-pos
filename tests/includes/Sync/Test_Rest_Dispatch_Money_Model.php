@@ -15,6 +15,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact pin scenarios.
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
@@ -333,6 +334,102 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 			'pending'   => array( 'pending' ),
 			'on-hold'   => array( 'on-hold' ),
 			'cancelled' => array( 'cancelled' ),
+		);
+	}
+
+	/** A line-edit push of the order's own lines: its first line one unit up. */
+	protected function quantity_edit( int $order_id, int $delta = 1 ): array {
+		$order   = wc_get_order( $order_id );
+		$item_id = array_key_first( $order->get_items() );
+
+		return array(
+			'line_items' => array(
+				array(
+					'id'       => $item_id,
+					'quantity' => $order->get_item( $item_id )->get_quantity() + $delta,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+	}
+
+	public function test_the_order_lock_is_held_from_the_revision_read_through_the_write(): void {
+		// Arrange: probes that try to take the order lock as another writer would.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$revision = $this->order_revision( $order_id );
+		$probe    = static function () use ( $order_id ): bool {
+			$other = new Order_Lock();
+			$taken = $other->acquire( $order_id );
+			if ( $taken ) {
+				$other->release( $order_id );
+			}
+			return $taken;
+		};
+		$at_write = array();
+		$at_read  = array();
+		$write    = static function ( $order ) use ( $probe, &$at_write ) {
+			$at_write[] = $probe();
+			return $order;
+		};
+		$read     = static function ( $result, $server, $request ) use ( $probe, $order_id, &$at_read ) {
+			if ( 'GET' === $request->get_method() && '/wc/v3/orders/' . $order_id === $request->get_route() ) {
+				$at_read[] = $probe();
+			}
+			return $result;
+		};
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $write, 20 );
+		add_filter( 'rest_pre_dispatch', $read, 10, 3 );
+
+		// Act.
+		try {
+			$response = $this->push_envelope( 'update', $this->quantity_edit( $order_id ), $revision );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $write, 20 );
+			remove_filter( 'rest_pre_dispatch', $read, 10 );
+		}
+
+		// Assert: the revision read (the first inner GET) and the write ran under the lock; it is free after.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( array( false ), $at_write );
+		$this->assertFalse( $at_read[0] );
+		$this->assertTrue( $probe() );
+	}
+
+	/**
+	 * @dataProvider money_sensitive_edits
+	 * @param string $field The money-sensitive field the stale push carries.
+	 */
+	public function test_capture_landing_before_the_push_is_a_revision_conflict( string $field ): void {
+		// Arrange: the till reads the revision, then a cash capture completes the sale.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$revision = $this->order_revision( $order_id );
+		$quantity = wc_get_order( $order_id )->get_item( array_key_first( wc_get_order( $order_id )->get_items() ) )->get_quantity();
+		$recorded = Ledger::instance()->record( wc_get_order( $order_id ), $this->cash_payment( wc_get_order( $order_id )->get_total() ) );
+		$this->assertIsArray( $recorded );
+		$this->assertTrue( wc_get_order( $order_id )->is_paid() );
+		$payload = 'currency' === $field
+			? array(
+				'currency'  => 'EUR',
+				'meta_data' => $this->uuid_meta(),
+			)
+			: $this->quantity_edit( $order_id );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $revision );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $response->get_data()['code'] );
+		$this->assertNotSame( $revision, $response->get_data()['currentRevision'] );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( $quantity, $order->get_item( array_key_first( $order->get_items() ) )->get_quantity() );
+		$this->assertSame( get_woocommerce_currency(), $order->get_currency() );
+	}
+
+	public static function money_sensitive_edits(): array {
+		return array(
+			'line_items' => array( 'line_items' ),
+			'currency'   => array( 'currency' ),
 		);
 	}
 

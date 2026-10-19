@@ -33,6 +33,9 @@ class Order_Writer extends Null_Writer {
 	 */
 	public const PUSHABLE_STATUSES = array( 'pos-open', 'pending', 'on-hold', 'cancelled' );
 
+	/** Payload keys that can move money on the order: a push carrying one is serialised against the money commands. */
+	private const MONEY_SENSITIVE_KEYS = array( 'line_items', 'fee_lines', 'shipping_lines', 'coupon_lines', 'currency', 'status', 'customer_id', 'date_created_gmt' );
+
 	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
 
@@ -126,6 +129,27 @@ class Order_Writer extends Null_Writer {
 		return null;
 	}
 
+	/**
+	 * Hold the order lock (the one the money commands and the ledger keeper hold) from the
+	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b),
+	 * so a capture cannot land between the compare and the write. The Mutation_Store record
+	 * lock is already held; Order_Lock falls back to its option lease on servers that cannot
+	 * nest named locks. A note or address push takes no order lock, as before.
+	 */
+	public function with_write_lock( int $id, array $payload, callable $work ) {
+		if ( ! array_intersect( self::MONEY_SENSITIVE_KEYS, array_keys( $payload ) ) ) {
+			return $work();
+		}
+		if ( ! Order_Lock::instance()->acquire( $id ) ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
+		}
+		try {
+			return $work();
+		} finally {
+			Order_Lock::instance()->release( $id );
+		}
+	}
+
 	/** Forward within the named order hook lifecycle. */
 	public function forward( array $prepared, callable $forward ) {
 		$declared = $prepared['context'];
@@ -134,44 +158,26 @@ class Order_Writer extends Null_Writer {
 		}
 		$payload = $prepared['payload'];
 		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
-		// A cart restart and the payment routes contend for the same order: hold the
-		// payment lock from wc/v3's fresh load through its save, so no payment row can
-		// land between the pre-insert re-check and the write. Held by someone else
-		// means a payment operation is running on this order — then it is not a
-		// restartable cart, and the push goes ahead without the restart (never a 409:
-		// the till's other edits are still good). The Mutation_Store record lock is
-		// already held on this connection; Order_Lock falls back to its option lease
-		// on servers that cannot nest named locks, so that lock is never dropped.
-		$locked = isset( $declared['restart_gmt'] ) && Order_Lock::instance()->acquire( (int) $declared['id'] );
-		if ( isset( $declared['restart_gmt'] ) && ! $locked ) {
-			unset( $declared['restart_gmt'] );
-		}
-		$prepared['context'] = $declared;
+		$prepared['context']          = $declared;
 		if ( isset( $declared['id'] ) ) {
 			Ledger::save_was_refused( (int) $declared['id'] ); // A stale refusal from earlier in this request must not leak.
 		}
-		try {
-			$response = Order_Write_Intent::open(
-				$declared,
-				function () use ( $prepared, $forward ) {
-					return $this->forward_with_reserved_stock( $prepared, $forward );
-				}
-			);
-			$id = 0;
-			if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 ) {
-				$data = $response->get_data();
-				$id   = (int) ( ( is_array( $data ) ? ( $data['id'] ?? null ) : null ) ?? $declared['id'] ?? 0 );
+		$response = Order_Write_Intent::open(
+			$declared,
+			function () use ( $prepared, $forward ) {
+				return $this->forward_with_reserved_stock( $prepared, $forward );
 			}
-			// WooCommerce swallows the keeper's refusal and answers 2xx with nothing written.
-			if ( $id > 0 && Ledger::save_was_refused( $id ) ) {
-				return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order save was refused while its payment ledger was locked; retry shortly.', array( 'status' => 409 ) );
-			}
-			return $response;
-		} finally {
-			if ( $locked ) {
-				Order_Lock::instance()->release( (int) $declared['id'] );
-			}
+		);
+		$id = 0;
+		if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 ) {
+			$data = $response->get_data();
+			$id   = (int) ( ( is_array( $data ) ? ( $data['id'] ?? null ) : null ) ?? $declared['id'] ?? 0 );
 		}
+		// WooCommerce swallows the keeper's refusal and answers 2xx with nothing written.
+		if ( $id > 0 && Ledger::save_was_refused( $id ) ) {
+			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order save was refused while its payment ledger was locked; retry shortly.', array( 'status' => 409 ) );
+		}
+		return $response;
 	}
 
 	/**
@@ -191,8 +197,9 @@ class Order_Writer extends Null_Writer {
 	 * so a push that restarts and closes the cart in one request takes the restart date.
 	 *
 	 * Decided twice on purpose: at the pre-read, and again at pre-insert on the order
-	 * wc/v3 is about to write (under the payment lock), so a payment that completed
-	 * in between wins — the same shape as the provenance re-decision.
+	 * wc/v3 is about to write, so a payment that completed in between wins — the same
+	 * shape as the provenance re-decision. A restart push is money-sensitive (it carries
+	 * date_created_gmt), so both decisions run under the order lock (with_write_lock()).
 	 *
 	 * @param \WC_Order $order       The order as currently loaded.
 	 * @param int|null  $created_gmt Validated client date_created_gmt (UTC timestamp), or null when absent.

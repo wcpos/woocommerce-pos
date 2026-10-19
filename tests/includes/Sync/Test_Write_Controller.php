@@ -229,8 +229,60 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
 	}
 
-	/** A push that leaves the payment ledger alone is not held up by a payment operation on the order. */
-	public function test_order_push_without_ledger_proceeds_while_the_payment_lock_is_held(): void {
+	/**
+	 * A line edit holds the order lock from the revision read through the write (ADR 0040 rule 6b):
+	 * a lock held by a money command answers a retryable 409 with nothing written.
+	 */
+	public function test_line_edit_push_is_refused_409_while_another_writer_holds_the_order_lock(): void {
+		// Arrange: a POS order with a line, and another owner holding its order lock.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$item_id        = array_key_first( $order->get_items() );
+		$quantity       = $order->get_item( $item_id )->get_quantity();
+		$payload        = array(
+			'customer_note' => 'Must wait',
+			'line_items'    => array( array( 'id' => $item_id, 'quantity' => $quantity + 2 ) ),
+		);
+		$store          = new Fake_Mutation_Store();
+		$store->resolve = $order->get_id();
+		$push           = function () use ( $store, $order, $payload ) {
+			$current  = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+			$envelope = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => Order_Serializer::canonical_revision( $current ), 'payload' => $payload ) );
+			return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+		};
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+
+		// Act.
+		try {
+			$refused = $push();
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+
+		// Assert: refused before anything was written, the reservation released for a retry.
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_error_code() );
+		$this->assertSame( 409, $refused->get_error_data()['status'] );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+		$this->assertSame( $quantity, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
+		$this->assertNull( $store->lookup( 'orders', self::MID ) );
+
+		// Act: the same push once the lock is free.
+		$retried = $push();
+
+		// Assert.
+		$this->assertNotInstanceOf( WP_Error::class, $retried );
+		$this->assertLessThan( 300, $retried->get_status() );
+		$this->assertSame( 'Must wait', wc_get_order( $order->get_id() )->get_customer_note() );
+		$this->assertSame( $quantity + 2, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
+	}
+
+	/** A push that moves no money (a note) is not held up by a money command on the order. */
+	public function test_note_only_push_proceeds_while_the_order_lock_is_held(): void {
 		// Arrange.
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$order = OrderHelper::create_order();
