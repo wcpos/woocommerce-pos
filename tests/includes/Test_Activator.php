@@ -1067,6 +1067,113 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** A recreated legacy table restarts its sequence: each colliding number takes the register's next one, keeps the claim as printed_number and is logged. */
+	public function test_closure_fold_with_colliding_recreated_numbers_assigns_next_numbers_and_latches(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$folded = $fixture['legacy'] . '_folded';
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$folded}" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables.
+		$this->create_legacy_table( $fixture['legacy'] );
+		$straggler = $this->add_legacy_closure( $fixture, $folded, 3 );
+		$moved = "'{$fixture['closures'][1]}', '{$straggler}'";
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables, generated UUIDs.
+		$this->assertSame( 2, $wpdb->query( "INSERT INTO {$fixture['legacy']} SELECT * FROM {$folded} WHERE id IN ({$moved})" ) );
+		$this->assertSame( 2, $wpdb->query( "DELETE FROM {$folded} WHERE id IN ({$moved})" ) );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$this->assertSame(
+			1,
+			$wpdb->update(
+				$fixture['legacy'],
+				array(
+					'number' => 1,
+					'printed_number' => null,
+				),
+				array( 'id' => $fixture['closures'][1] )
+			)
+		);
+		$this->assertSame( 1, $wpdb->update( $fixture['legacy'], array( 'number' => 2 ), array( 'id' => $straggler ) ) );
+		$logs = array();
+		$capture = static function ( $enabled, $message ) use ( &$logs ) {
+			if ( 'warning' === \WCPOS\WooCommercePOS\Logger::$log_level ) {
+				$logs[] = $message;
+			}
+			return false;
+		};
+		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
+			$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+			$numbers = array();
+			foreach ( array( $fixture['closures'][0], $fixture['closures'][1], $straggler ) as $id ) {
+				$row = $closures->get( $id );
+				$numbers[] = array( $row['number'], $row['printed_number'] );
+			}
+			$this->assertSame( array( array( 1, null ), array( 2, 1 ), array( 3, 2 ) ), $numbers );
+			$reassigned = array_values(
+				array_filter(
+					$logs,
+					static function ( $message ) {
+						return false !== strpos( $message, 'Closure fold number already exists: assigned next number' );
+					}
+				)
+			);
+			$this->assertCount( 2, $reassigned );
+			$this->assertStringContainsString( '"closure_id":"' . $fixture['closures'][1] . '"', $reassigned[0] );
+			$this->assertStringContainsString( '"number":1,"next_number":2', $reassigned[0] );
+			$this->assertStringContainsString( '"number":2,"next_number":3', $reassigned[1] );
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
+	/** A closure committed to a table recreated during the drop reuses a folded number; the rerun reassigns it and still verifies. */
+	public function test_closure_fold_rerun_with_reassigned_number_passes_verification(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$folded = $fixture['legacy'] . '_folded';
+		$straggler = null;
+		$recreate = function ( $sql ) use ( $fixture, $folded, &$straggler ) {
+			if ( null === $straggler && "DROP TABLE IF EXISTS {$folded}" === $sql ) {
+				$this->create_legacy_table( $fixture['legacy'] );
+				$straggler = $this->add_legacy_closure( $fixture, $fixture['legacy'], 1, $folded );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $recreate );
+		try {
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the recreated table to hold the latch.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure fold found a recreated legacy table.', $error->getMessage() );
+			}
+			remove_filter( 'query', $recreate );
+
+			// Act.
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$row = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $straggler );
+			$this->assertSame( array( 3, 1 ), array( $row['number'], $row['printed_number'] ) );
+		} finally {
+			remove_filter( 'query', $recreate );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
 	/** A copy that fails partway keeps the latch; the next pass finishes it. */
 	public function test_closure_fold_failing_mid_copy_keeps_latch_and_resumes(): void {
 		// Arrange.
@@ -1490,12 +1597,14 @@ class Test_Activator extends WP_UnitTestCase {
 	 * @param array  $fixture From arrange_schema_nine_with_legacy_closures().
 	 * @param string $table Legacy table to insert into.
 	 * @param int    $number Closure number.
+	 * @param string $source Legacy table holding the first fixture closure; defaults to $table.
 	 * @return string Closure id.
 	 */
-	private function add_legacy_closure( array $fixture, string $table, int $number ): string {
+	private function add_legacy_closure( array $fixture, string $table, int $number, string $source = '' ): string {
 		global $wpdb;
 		$session = wp_generate_uuid4();
 		$closure = wp_generate_uuid4();
+		$source = '' === $source ? $table : $source;
 		$this->assertSame(
 			1,
 			$wpdb->insert(
@@ -1515,7 +1624,7 @@ class Test_Activator extends WP_UnitTestCase {
 			)
 		);
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned tables; ids are prepared.
-		$copied = $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} SELECT %s, register_id, %s, store_id, %d, NULL, opened_at_gmt, business_day, closed_at_gmt, opened_by, closed_by, approved_by, expected, till_expected, counted, variance, period_sales_total, period_refunds_total, perpetual_sales_total, perpetual_refunds_total, unsynced_count, unsynced_total, first_sale_counter, last_sale_counter, first_receipt_id, last_receipt_id, software_version, printed_at_gmt, breakdowns, findings, 0, NULL, received_at_gmt FROM {$table} WHERE id = %s", $closure, $session, $number, $fixture['closures'][0] ) );
+		$copied = $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} SELECT %s, register_id, %s, store_id, %d, NULL, opened_at_gmt, business_day, closed_at_gmt, opened_by, closed_by, approved_by, expected, till_expected, counted, variance, period_sales_total, period_refunds_total, perpetual_sales_total, perpetual_refunds_total, unsynced_count, unsynced_total, first_sale_counter, last_sale_counter, first_receipt_id, last_receipt_id, software_version, printed_at_gmt, breakdowns, findings, 0, NULL, received_at_gmt FROM {$source} WHERE id = %s", $closure, $session, $number, $fixture['closures'][0] ) );
 		$this->assertSame( 1, $copied );
 		return $closure;
 	}

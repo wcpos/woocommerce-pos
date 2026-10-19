@@ -231,7 +231,7 @@ final class Closure_Store {
 		return array_map( array( self::class, 'hydrate' ), $rows );
 	}
 
-	/** The latest numbered closure of each register, in one query.
+	/** The latest numbered closure of each register, in one query once folded.
 	 *
 	 * @param string[] $register_ids Register UUIDs.
 	 * @return array<string, array> Closure rows keyed by register id; registers without one are absent.
@@ -254,8 +254,17 @@ final class Closure_Store {
 		if ( self::read_failed() ) {
 			throw new \RuntimeException( 'Register closure read failed.' );
 		}
-		$rows = array_map( array( self::class, 'hydrate' ), $rows );
-		return array_column( $rows, null, 'register_id' );
+		$rows = array_column( array_map( array( self::class, 'hydrate' ), $rows ), null, 'register_id' );
+		// Mid-fold a register's newest closure may still live only in a legacy table.
+		if ( self::migrating_tables() ) {
+			foreach ( $register_ids as $register_id ) {
+				$row = self::with_legacy( $rows[ $register_id ] ?? null, 'register_id', $register_id );
+				if ( null !== $row ) {
+					$rows[ $register_id ] = $row;
+				}
+			}
+		}
+		return $rows;
 	}
 
 	/** The session columns a closure read selects: those ROW maps, plus the document. */

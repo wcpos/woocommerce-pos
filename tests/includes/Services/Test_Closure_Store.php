@@ -687,6 +687,69 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Mid-fold a register's newest closure may live only in a legacy table; once latched, no legacy table is probed. */
+	public function test_latest_for_registers_while_fold_is_pending_returns_newer_legacy_closure(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Closure_Store();
+		$first = $this->closure_session();
+		$this->assertIsArray( $store->create( $this->closure_fields( $first ) ) );
+		$second = $this->closure_session( $first['register_id'] );
+		$folded = $wpdb->prefix . Closure_Store::LEGACY_TABLE . '_folded';
+		$closure_id = wp_generate_uuid4();
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$probes = array();
+		$observe = static function ( $sql ) use ( &$probes ) {
+			if ( false !== stripos( $sql, 'SHOW TABLES' ) || false !== stripos( $sql, 'information_schema' ) || false !== strpos( $sql, Closure_Store::LEGACY_TABLE ) ) {
+				$probes[] = $sql;
+			}
+			return $sql;
+		};
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$folded} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, number BIGINT NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$folded,
+					array(
+						'id' => $closure_id,
+						'register_id' => $second['register_id'],
+						'session_id' => $second['id'],
+						'number' => 2,
+						'expected' => '{"cash":"150.0000"}',
+						'till_expected' => '{"cash":"100.0000"}',
+						'counted' => '{"cash":"101.0000"}',
+						'variance' => '{"cash":"-49.0000"}',
+						'perpetual_sales_total' => '80',
+						'breakdowns' => '{"transaction_count":0}',
+					)
+				)
+			);
+
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			$pending = $store->latest_for_registers( array( $first['register_id'] ) );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			add_filter( 'query', $observe );
+			$latched = $store->latest_for_registers( array( $first['register_id'] ) );
+			remove_filter( 'query', $observe );
+
+			// Assert.
+			$this->assertSame( array( $first['register_id'] ), array_keys( $pending ) );
+			$this->assertSame( $closure_id, $pending[ $first['register_id'] ]['id'] );
+			$this->assertSame( 2, $pending[ $first['register_id'] ]['number'] );
+			$this->assertSame( '80.0000', $pending[ $first['register_id'] ]['perpetual_sales_total'] );
+			$this->assertSame( 1, $latched[ $first['register_id'] ]['number'] );
+			$this->assertSame( array(), $probes );
+		} finally {
+			remove_filter( 'query', $observe );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$folded}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		}
+	}
+
 	/** A number more than 10000 past the register sequence is refused; the edge is accepted. */
 	public function test_number_far_ahead_of_sequence_is_refused(): void {
 		// Arrange.
