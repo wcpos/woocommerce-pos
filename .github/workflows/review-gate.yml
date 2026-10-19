@@ -20,7 +20,7 @@ permissions:
 jobs:
   gate:
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
-    uses: wcpos/.github/.github/workflows/review-gate.yml@d08fcf74d63b8a5848ad3a5a83c0be0e92655f5d # wcpos/.github main, 2026-10-19 (#21: docs-only PRs need no Codex review)
+    uses: wcpos/.github/.github/workflows/review-gate.yml@65f9ad98973a7b6a15b93a0928b7ad198bfac63a # wcpos/.github main, 2026-10-19 (#22: docs-only incl. .mdx)
     with:
       publish: false
       # workflow_dispatch hands a `number` input over as a string, which the reusable workflow's
