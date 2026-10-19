@@ -495,6 +495,72 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( $store->get( $fields['id'] ) );
 	}
 
+	/** Mid-fold, a closure only the legacy table holds is still found; once latched, the legacy table is never read. */
+	public function test_legacy_closure_is_read_only_while_the_fold_is_pending(): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session();
+		$legacy = $wpdb->prefix . Closure_Store::LEGACY_TABLE;
+		$closure_id = wp_generate_uuid4();
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$statements = array();
+		$observe = static function ( $sql ) use ( $legacy, &$statements ) {
+			if ( false !== strpos( $sql, Closure_Store::LEGACY_TABLE ) ) {
+				$statements[] = $sql;
+			}
+			return $sql;
+		};
+		try {
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$legacy} ( id CHAR(36) NOT NULL, register_id CHAR(36) NOT NULL, session_id CHAR(36) NOT NULL, number BIGINT NOT NULL, expected LONGTEXT NOT NULL, till_expected LONGTEXT NOT NULL, counted LONGTEXT NOT NULL, variance LONGTEXT NOT NULL, perpetual_sales_total DECIMAL(19,4) NOT NULL, breakdowns LONGTEXT NOT NULL, findings LONGTEXT NULL, PRIMARY KEY  (id) )" ) );
+			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$legacy,
+					array(
+						'id' => $closure_id,
+						'register_id' => $session['register_id'],
+						'session_id' => $session['id'],
+						'number' => 7,
+						'expected' => '{"cash":"150.0000"}',
+						'till_expected' => '{"cash":"100.0000"}',
+						'counted' => '{"cash":"101.0000"}',
+						'variance' => '{"cash":"-49.0000"}',
+						'perpetual_sales_total' => '80',
+						'breakdowns' => '{"transaction_count":0}',
+					)
+				)
+			);
+			$store = new Closure_Store();
+
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			$pending = $store->for_session( $session['id'] );
+			$pending_last = $store->last( $session['register_id'] );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			add_filter( 'query', $observe );
+			$latched = $store->for_session( $session['id'] );
+			$latched_last = $store->last( $session['register_id'] );
+			remove_filter( 'query', $observe );
+
+			// Assert.
+			$this->assertSame( $closure_id, $pending['id'] );
+			$this->assertSame( $session['id'], $pending['session_id'] );
+			$this->assertSame( array( 'cash' => '150.0000' ), $pending['expected'] );
+			$this->assertSame( '80.0000', $pending['perpetual_sales_total'] );
+			$this->assertSame( 7, $pending_last['number'] );
+			$this->assertNull( $latched );
+			$this->assertNull( $latched_last );
+			$this->assertSame( array(), $statements );
+		} finally {
+			remove_filter( 'query', $observe );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION );
+			$wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		}
+	}
+
 	/** A number more than 10000 past the register sequence is refused; the edge is accepted. */
 	public function test_number_far_ahead_of_sequence_is_refused(): void {
 		// Arrange.

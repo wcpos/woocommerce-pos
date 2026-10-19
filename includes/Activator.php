@@ -399,6 +399,12 @@ class Activator {
 			return;
 		}
 		$this->copy_legacy_closures( $folded, $sessions );
+		// A pre-fold print may have bumped a legacy row after its first copy; keep the later count.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.
+		$wpdb->query( "UPDATE {$sessions} s INNER JOIN {$folded} c ON s.closure_id = c.id SET s.print_count = GREATEST(s.print_count, c.print_count), s.last_printed_at_gmt = COALESCE(GREATEST(s.last_printed_at_gmt, c.last_printed_at_gmt), s.last_printed_at_gmt, c.last_printed_at_gmt)" );
+		if ( self::query_failed() ) {
+			throw new \RuntimeException( 'Closure fold print reconcile failed.' );
+		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
 		if ( false === $wpdb->query( "DROP TABLE IF EXISTS {$folded}" ) ) {
 			throw new \RuntimeException( 'Closure fold drop failed.' );

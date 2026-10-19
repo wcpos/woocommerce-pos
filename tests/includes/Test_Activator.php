@@ -849,6 +849,45 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** A print a pre-fold request records after the first copy still reaches the session row. */
+	public function test_closure_fold_keeps_a_print_recorded_after_the_first_pass(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_nine_with_legacy_closures();
+		$bumped = false;
+		$bump = static function ( $sql ) use ( $fixture, &$bumped ) {
+			if ( ! $bumped && 0 === strpos( $sql, "RENAME TABLE {$fixture['legacy']}" ) ) {
+				$bumped = true;
+				$GLOBALS['wpdb']->update(
+					$fixture['legacy'],
+					array(
+						'print_count' => 3,
+						'last_printed_at_gmt' => '2026-09-11 14:00:00',
+					),
+					array( 'id' => $fixture['closures'][0] )
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $bump );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
+			( new Activator() )->install_sync_schema();
+			remove_filter( 'query', $bump );
+
+			// Assert.
+			$this->assertTrue( $bumped );
+			$this->assertSame( '10', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->get( $fixture['closures'][0] );
+			$this->assertSame( 3, $closure['print_count'] );
+			$this->assertSame( '2026-09-11 14:00:00', $closure['last_printed_at_gmt'] );
+		} finally {
+			remove_filter( 'query', $bump );
+			$this->restore_closure_schema( $fixture );
+		}
+	}
+
 	/** A copy that fails partway keeps the latch; the next pass finishes it. */
 	public function test_closure_fold_failing_mid_copy_keeps_latch_and_resumes(): void {
 		// Arrange.

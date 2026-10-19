@@ -139,7 +139,9 @@ final class Closure_Store {
 	 * @param string $id Session UUID.
 	 */
 	public function for_session( string $id ): ?array {
-		return $this->list( array( 'session_id' => $id ) )[0] ?? null;
+		$row = $this->list( array( 'session_id' => $id ) )[0] ?? null;
+		$legacy = null === $row ? self::migrating_table() : null;
+		return null === $legacy ? $row : self::legacy_row( $legacy, 'session_id', $id );
 	}
 
 	/** Latest numbered document, independently of a till's clock.
@@ -147,13 +149,17 @@ final class Closure_Store {
 	 * @param string $register_id Register UUID.
 	 */
 	public function last( string $register_id ): ?array {
-		return $this->list(
+		$row = $this->list(
 			array(
 				'register_id' => $register_id,
 				'number_order' => true,
 				'per_page' => 1,
 			)
 		)[0] ?? null;
+		// Mid-fold the highest number may still live only in the legacy table.
+		$legacy = self::migrating_table();
+		$legacy = null === $legacy ? null : self::legacy_row( $legacy, 'register_id', $register_id );
+		return null !== $legacy && $legacy['number'] > ( $row['number'] ?? 0 ) ? $legacy : $row;
 	}
 
 	/** Last number, or zero before the first closure.
@@ -422,12 +428,18 @@ final class Closure_Store {
 		return array_map( array( self::class, 'sum' ), $totals );
 	}
 
-	/** Whether either legacy closures table exists (the fold renames it before its drop).
+	/** The legacy closures table still to be folded, or null once the schema-10 latch is set.
 	 *
-	 * @throws \RuntimeException When the probe fails; a close must not assume absence.
+	 * The fold renames the table before its drop, so either name counts. The latch is
+	 * autoloaded: a folded site never probes.
+	 *
+	 * @throws \RuntimeException When the probe fails; a caller must not assume absence.
 	 */
-	private static function legacy_present(): bool {
+	private static function migrating_table(): ?string {
 		global $wpdb;
+		if ( Sync\Api::SCHEMA_VERSION === get_option( Sync\Api::SCHEMA_OPTION, null ) ) {
+			return null;
+		}
 		foreach ( array( self::LEGACY_TABLE, self::LEGACY_TABLE . '_folded' ) as $suffix ) {
 			$exists = Health::table_exists( $wpdb->prefix . $suffix );
 			if ( self::read_failed() ) {
@@ -435,10 +447,37 @@ final class Closure_Store {
 				throw new \RuntimeException( 'Closure storage probe failed.' );
 			}
 			if ( $exists ) {
-				return true;
+				return $wpdb->prefix . $suffix;
 			}
 		}
-		return false;
+		return null;
+	}
+
+	/** The highest-numbered legacy closure matching one column, in the closure row shape.
+	 *
+	 * @param string $table Legacy table.
+	 * @param string $column session_id or register_id.
+	 * @param string $value UUID.
+	 * @throws \RuntimeException On read failure.
+	 */
+	private static function legacy_row( string $table, string $column, string $value ): ?array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table, allowlisted column.
+		$legacy = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$column} = %s ORDER BY number DESC LIMIT 1", $value ), ARRAY_A );
+		if ( self::read_failed() ) {
+			throw new \RuntimeException( 'Closure read failed.' );
+		}
+		if ( ! $legacy ) {
+			return null;
+		}
+		$row = array();
+		foreach ( array_keys( self::ROW ) as $key ) {
+			$row[ $key ] = $legacy[ $key ] ?? null;
+		}
+		foreach ( array( 'expected', 'till_expected', 'counted', 'variance', 'breakdowns', 'findings' ) as $key ) {
+			$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
+		}
+		return self::normalize( $row );
 	}
 
 	/** Whether the last database query failed (read fresh, after any earlier check). */
@@ -527,7 +566,7 @@ final class Closure_Store {
 			$this->log_replay( $existing );
 			return $existing;
 		}
-		if ( Sync\Api::SCHEMA_VERSION !== get_option( Sync\Api::SCHEMA_OPTION, null ) && self::legacy_present() ) {
+		if ( null !== self::migrating_table() ) {
 			// Step 10 has not copied every legacy closure yet: a number minted now could
 			// collide with one only the legacy table holds. The outbox retries the 500.
 			// Once the latch reads the current schema the fold is done and nothing is probed.
