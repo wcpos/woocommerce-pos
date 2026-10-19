@@ -168,6 +168,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		);
 		Ledger::instance()->save( $order, array( $cash ), false );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
+		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
 		try {
 			$paid = wc_get_order( $order->get_id() );
 			$paid->set_date_paid( time() );
@@ -175,6 +176,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 			$paid->save();
 		} finally {
 			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
+			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 );
 		}
 		$store = new Fiscal_Record_Store();
 		$store->ensure_installed();
@@ -280,6 +282,117 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $history );
 		$this->assertSame( self::REGISTER_A, $history[0]['register'] );
 		$this->assertSame( array( 1 ), $this->announced );
+	}
+
+	/**
+	 * The sale record written for the order's single completion.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	protected function only_sale( int $order_id ): array {
+		$history = $this->stored_history( $order_id );
+		$this->assertCount( 1, $history );
+		$sale = ( new Fiscal_Record_Store() )->find_sale( $order_id, $history[0]['id'] );
+		$this->assertIsArray( $sale );
+		return $sale;
+	}
+
+	/** A submit that pays inside its window is stamped after the mint, naming the paying row. */
+	public function test_a_submit_that_pays_in_the_window_stamps_after_the_mint_with_its_row(): void {
+		// Arrange.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+
+		// Act.
+		$response = $this->submit( $order, $attempt, 'wcpos_stamp_paid', $this->provenance( self::REGISTER_A, self::SESSION_A ) );
+
+		// Assert.
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( $attempt ), $history[0]['payment_ids'] );
+		$this->assertSame( array( 1 ), $this->announced );
+		$payments = $this->only_sale( $order->get_id() )['payload']['payments'];
+		$this->assertCount( 1, $payments );
+		$this->assertSame( 'wcpos_stamp_paid', $payments[0]['method_id'] );
+	}
+
+	/** An order-pay gateway that calls payment_complete() in the window is stamped after the webview mint. */
+	public function test_an_order_pay_payment_complete_in_the_window_stamps_after_the_mint(): void {
+		// Arrange.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+
+		// Act.
+		$this->in_pos_request(
+			static function () use ( $order ): void {
+				do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+				try {
+					wc_get_order( $order->get_id() )->payment_complete( 'ch_window' );
+				} finally {
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
+				}
+			}
+		);
+
+		// Assert.
+		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $rows );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
+		$this->assertSame( array( 1 ), $this->announced );
+		$this->assertCount( 1, $this->only_sale( $order->get_id() )['payload']['payments'] );
+	}
+
+	/** An order-pay gateway that only lands a paid status in the window is stamped after the status mint. */
+	public function test_an_order_pay_status_only_gateway_in_the_window_stamps_after_the_mint(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		// Act: the offline gateway lands processing inside the order-pay window.
+		$this->in_pos_request(
+			static function () use ( $order ): void {
+				do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+				try {
+					wc_get_order( $order->get_id() )->update_status( 'processing' );
+				} finally {
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
+				}
+			}
+		);
+
+		// Assert.
+		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $rows );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
+		$this->assertSame( array( 1 ), $this->announced );
+	}
+
+	/** A refused row on the order does not stand in for the tender: the entry names the paying row only. */
+	public function test_a_failed_row_then_a_paying_submit_stamps_with_the_paying_row_only(): void {
+		// Arrange: a cash attempt refused for exceeding the balance.
+		$order   = $this->create_pos_order();
+		$refused = $this->record( $order, '100.00' );
+		$this->assertSame( 400, $refused->get_status() );
+		$this->assertSame( array( 'failed' ), array_column( Ledger::instance()->read( wc_get_order( $order->get_id() ) ), 'status' ) );
+		$attempt = wp_generate_uuid4();
+
+		// Act.
+		$response = $this->submit( $order, $attempt, 'wcpos_stamp_paid', $this->provenance( self::REGISTER_A, self::SESSION_A ) );
+
+		// Assert.
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( $attempt ), $history[0]['payment_ids'] );
 	}
 
 	/** A storefront order paid online has no register origin and is never stamped. */

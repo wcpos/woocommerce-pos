@@ -51,12 +51,15 @@ final class Completion_Stamp {
 	 */
 	private static $attempts = array();
 
-	/** Arm the two completion entry points. */
+	/** Arm the completion entry points. */
 	public static function register_hooks(): void {
-		// Priority 5: before Gateway_Submission clears the awaiting-customer stamp (10) and before
-		// the webview passthrough (10), so the entry exists before every payment-complete listener.
+		// Priority 5: memoise a sent submit's provenance before Gateway_Submission clears the stamp
+		// (10), and mark a reopen.
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 5, 4 );
-		// Priority 15: after Webview_Passthrough has minted an asynchronous order-pay row (10).
+		// Priority 15: stamp a completion after the webview's status-only mint (10), so the entry
+		// names the row; still before every woocommerce_payment_complete listener.
+		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_completed' ), 15, 4 );
+		// Priority 15: after Webview_Passthrough has minted an order-pay row (10).
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 15, 1 );
 	}
 
@@ -117,9 +120,31 @@ final class Completion_Stamp {
 			$completed = self::completed_statuses( $order );
 			if ( in_array( (string) $to, $completed, true ) && ! in_array( (string) $from, $completed, true ) ) {
 				self::memoise( $order );
-				self::stamp( $order );
 			} elseif ( in_array( (string) $to, self::OPEN_STATUSES, true ) && ! in_array( (string) $from, self::OPEN_STATUSES, true ) ) {
 				self::mark_reopened( $order );
+			}
+		} catch ( \Throwable $error ) {
+			Logger::error( sprintf( 'WCPOS completion observer failed on order #%d: %s', (int) $id, $error->getMessage() ), array( 'order_id' => (int) $id ) );
+		}
+	}
+
+	/**
+	 * Stamp a transition into a completed status (priority 15, after the webview's status mint).
+	 *
+	 * @param int           $id    Order ID.
+	 * @param string        $from  Previous status.
+	 * @param string        $to    New status.
+	 * @param WC_Order|null $order Order object.
+	 */
+	public static function on_completed( $id, $from, $to, $order = null ): void {
+		try {
+			$order = $order instanceof WC_Order ? $order : wc_get_order( (int) $id );
+			if ( ! $order instanceof WC_Order ) {
+				return;
+			}
+			$completed = self::completed_statuses( $order );
+			if ( in_array( (string) $to, $completed, true ) && ! in_array( (string) $from, $completed, true ) ) {
+				self::stamp( $order );
 			}
 		} catch ( \Throwable $error ) {
 			Logger::error( sprintf( 'WCPOS completion observer failed on order #%d: %s', (int) $id, $error->getMessage() ), array( 'order_id' => (int) $id ) );
@@ -161,7 +186,8 @@ final class Completion_Stamp {
 		$entry = null;
 		try {
 			$fresh = self::fresh( $id );
-			if ( ! $fresh || ! self::is_paid( $fresh ) || ! self::has_origin( $fresh ) ) {
+			// The window test reads the fresh order: a mint earlier in this save is not on the caller's object.
+			if ( ! $fresh || ! self::is_paid( $fresh ) || ! self::has_origin( $fresh ) || self::awaits_mint( $fresh ) ) {
 				return;
 			}
 			$history = self::read( $fresh );
@@ -357,6 +383,18 @@ final class Completion_Stamp {
 			|| ( Webview_Passthrough::is_paying( $id ) && wcpos_is_pos_order( $order ) )
 			|| isset( self::$attempts[ $id ] )
 			|| self::captured_ids( $order );
+	}
+
+	/**
+	 * Inside a submit or order-pay window the tender's row is minted after the gateway answers: the
+	 * stamp waits for it (the submit stamps after its mint, the webview at payment-complete 15 or
+	 * status-change 15), so the entry and its sale record name the payment.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	private static function awaits_mint( WC_Order $order ): bool {
+		$id = $order->get_id();
+		return ( Gateway_Submission::is_submitting( $id ) || Webview_Passthrough::is_paying( $id ) ) && ! self::captured_ids( $order );
 	}
 
 	/**

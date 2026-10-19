@@ -329,6 +329,10 @@ class Gateway_Submission {
 			$order->add_order_note( sprintf( __( 'Sent via POS: %1$s (%2$s)', 'woocommerce-pos' ), $verb['label'], (string) $destination ) );
 			Ledger::saving( $order->get_id(), fn() => $order->save() );
 		}
+		if ( $paid ) {
+			// The completion waited for this row (Completion_Stamp::awaits_mint()): stamp it now.
+			Completion_Stamp::stamp( wc_get_order( $order->get_id() ) );
+		}
 		$outcome = $paid ? 'recorded' : ( $settled ? 'settled' : 'sent' );
 		Logger::log( sprintf( 'WCPOS gateway attempt %s on order #%d: %s via %s by cashier #%d (verb %s)', $attempt_id, $order->get_id(), $outcome, $descriptor['id'], get_current_user_id(), $verb['kind'] ) );
 		return array(
