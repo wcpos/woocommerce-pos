@@ -10,6 +10,8 @@ namespace WCPOS\WooCommercePOS\Services;
 use WC_Order;
 use WC_Order_Refund;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /** Writes history only; never changes order or payment state. */
@@ -30,7 +32,7 @@ final class Fiscal_Record_Writers {
 	/** Arm observers when the order services become ready. */
 	private function __construct() {
 		$this->store = new Fiscal_Record_Store();
-		add_action( 'woocommerce_payment_complete', array( $this, 'handle_payment_complete' ) );
+		add_action( 'wcpos_sale_completed', array( $this, 'handle_sale_completed' ), 10, 2 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract action.
 		add_action( 'woocommerce_pos_payment_voided', array( $this, 'handle_void' ), 10, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'handle_cancellation' ), 10, 2 );
 		add_action( 'woocommerce_pos_refund_allocated', array( $this, 'handle_allocation' ), 10, 4 );
@@ -50,8 +52,8 @@ final class Fiscal_Record_Writers {
 	 *
 	 * The business transition has already happened when a writer runs, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
-	 * sale row is self-repairing on the next payment_complete; the others are
-	 * surfaced as an order note and an action for a recovery job to pick up.
+	 * sale row is recovered by the next money command on the order (recover());
+	 * every failure is surfaced as an order note and an action for a recovery job.
 	 *
 	 * @param WC_Order $order  Order the record describes.
 	 * @param array    $fields Record fields.
@@ -74,87 +76,160 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * Record POS sales even when payment completes on a storefront webhook.
+	 * Write the sale record for completion n, the one path every completion takes (ADR 0040 rule 1c).
 	 *
-	 * @param int $order_id Order ID.
+	 * @param mixed $order Order, read after the completion entry was stored.
+	 * @param mixed $n     Completion number.
 	 */
-	public function handle_payment_complete( int $order_id ): void {
-		$order = wc_get_order( $order_id );
-		if ( $order && wcpos_is_pos_order( $order ) ) {
-			try {
-				$this->record_sale( $order );
-			} catch ( \Throwable $error ) {
-				Logger::log( 'Fiscal sale record failed: ' . $error->getMessage() );
-				/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
-				$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), 'sale' ) );
-				do_action( 'woocommerce_pos_fiscal_record_failed', 'sale', $order, array() );
+	public function handle_sale_completed( $order, $n ): void {
+		if ( ! $order instanceof WC_Order ) {
+			return;
+		}
+		$completion = null;
+		foreach ( Completion_Stamp::read( $order ) as $entry ) {
+			if ( (int) ( $entry['n'] ?? 0 ) === (int) $n ) {
+				$completion = $entry;
 			}
+		}
+		if ( null !== $completion ) {
+			$this->record_sale_safely( $order, $completion );
 		}
 	}
 
 	/**
-	 * Store the sale once using the record store's minted sequence.
+	 * Write the latest completion's missing sale record, while that completion still stands.
 	 *
-	 * @param WC_Order $order Source order.
+	 * An entry reopened before its row landed is left: the order may have been edited since, so
+	 * its document can no longer be built faithfully, and the failure note already names it.
+	 * Fires no completion event.
+	 *
+	 * @param WC_Order $order Order.
 	 */
-	public function record_sale( WC_Order $order ): void {
-		// Fiscal history belongs only to POS orders, regardless of request lane.
-		if ( wcpos_is_pos_order( $order ) ) {
-			if ( null === $this->store->find_sale( $order->get_id() ) ) {
-				$snapshot = ( new Receipt_Data_Builder() )->build( $order, 'fiscal' );
+	public function recover( WC_Order $order ): void {
+		$history = Completion_Stamp::read( $order );
+		$latest  = end( $history );
+		if ( ! is_array( $latest ) || ! empty( $latest['legacy'] ) || ! empty( $latest['reopened_at_gmt'] ) ) {
+			return;
+		}
+		try {
+			if ( null === $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) ) {
+				$this->record_sale_safely( $order, $latest );
+			}
+		} catch ( \Throwable $error ) {
+			Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
+		}
+	}
+
+	/**
+	 * Record a sale and make a failure visible, never interrupting the caller.
+	 *
+	 * @param WC_Order $order      Order.
+	 * @param array    $completion Completion entry.
+	 */
+	private function record_sale_safely( WC_Order $order, array $completion ): void {
+		try {
+			$this->record_sale( $order, $completion );
+		} catch ( \Throwable $error ) {
+			Logger::log( 'Fiscal sale record failed: ' . $error->getMessage() );
+			/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
+			$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), 'sale' ) );
+			do_action( 'woocommerce_pos_fiscal_record_failed', 'sale', $order, array() );
+		}
+	}
+
+	/**
+	 * Store the sale record of one completion once, using the record store's minted sequence.
+	 *
+	 * Its predecessor is completion n−1: the record names that completion's sale row (when it
+	 * landed), its total, and the signed adjustment from it (ADR 0040, fiscal section).
+	 *
+	 * @param WC_Order   $order      Source order.
+	 * @param array|null $completion Completion entry; null for the latest one.
+	 */
+	public function record_sale( WC_Order $order, ?array $completion = null ): void {
+		$history    = Completion_Stamp::read( $order );
+		$completion = $completion ?? ( end( $history ) ? end( $history ) : null );
+		// Only a completion the server stamped at a register is a fiscal sale; a legacy entry's row already exists.
+		if ( ! is_array( $completion ) || ! empty( $completion['legacy'] ) || ! is_string( $completion['id'] ?? null ) ) {
+			return;
+		}
+		$n = (int) $completion['n'];
+		if ( null === $this->store->find_sale( $order->get_id(), $completion['id'] ) ) {
+			$previous = null;
+			foreach ( $history as $entry ) {
+				if ( (int) ( $entry['n'] ?? 0 ) === $n - 1 ) {
+					$previous = $entry;
+				}
+			}
+			$prior      = $previous ? $this->store->find_sale( $order->get_id(), (string) $previous['id'] ) : null;
+			$supersedes = $previous ? array(
+				'record_id'     => $prior['id'] ?? null,
+				'completion_id' => $previous['id'],
+				'total'         => $previous['total'],
+			) : null;
+			$adjustment = $previous ? Money::format( Money::minor( $completion['total'] ) - Money::minor( $previous['total'] ) ) : null;
+			$snapshot   = ( new Receipt_Data_Builder() )->build( $order, 'fiscal' );
+			$provenance = $this->store->provenance_from_order( $order );
+			$this->write(
+				$order,
+				array(
+					'type' => 'sale',
+					'order_id' => $order->get_id(),
+					'source_id' => strtolower( $completion['id'] ),
+					'corrects_record_id' => $prior['id'] ?? null,
+					'register_id' => $completion['register'] ?? null,
+					'session_id' => $completion['session'] ?? null,
+					'device_time' => $completion['sale_time'] ?? null,
+					'device_tz' => $completion['sale_tz'] ?? null,
+					'store_id' => $provenance['store_id'],
+					'cashier_id' => $provenance['cashier_id'],
+					'payload' => static function ( int $number ) use ( $order, $snapshot, $n, $supersedes, $adjustment ): array {
+						$snapshot['fiscal']['sequence'] = $number;
+						$snapshot['fiscal']['receipt_number'] = (string) $number;
+						$snapshot['fiscal']['immutable_id'] = $order->get_id() . ':' . $number;
+						$snapshot['fiscal']['completion'] = $n;
+						$snapshot['fiscal']['supersedes'] = $supersedes;
+						$snapshot['fiscal']['adjustment'] = $adjustment;
+						unset( $snapshot['i18n'] );
+						/**
+						 * Enrich the numbered, label-free document before storage.
+						 *
+						 * Runs under wcpos_fiscal_sequence_lock (five-second wait,
+						 * shared by all record types): local computation only, no
+						 * network I/O. Submit asynchronously after the row exists.
+						 *
+						 * @param array $snapshot Fiscal document.
+						 * @param int   $order_id Order ID.
+						 */
+						$enriched = apply_filters( 'woocommerce_pos_fiscal_snapshot_enrich', $snapshot, $order->get_id() );
+						return is_array( $enriched ) ? $enriched : $snapshot;
+					},
+				)
+			);
+		}
+		$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
+		$sale = $this->store->find_sale( $order->get_id() );
+		if ( $closure && $sale ) {
+			$rows = Session_Figures::late_legs( $order, $closure );
+			if ( $rows ) {
+				$delta = Session_Figures::tender_totals( $rows );
 				$this->write(
 					$order,
 					array_merge(
 						$this->store->provenance_from_order( $order ),
 						array(
-							'type' => 'sale',
+							'type' => 'late_sale',
 							'order_id' => $order->get_id(),
-							'payload' => static function ( int $number ) use ( $order, $snapshot ): array {
-								$snapshot['fiscal']['sequence'] = $number;
-								$snapshot['fiscal']['receipt_number'] = (string) $number;
-								$snapshot['fiscal']['immutable_id'] = $order->get_id() . ':' . $number;
-								unset( $snapshot['i18n'] );
-								/**
-								 * Enrich the numbered, label-free document before storage.
-								 *
-								 * Runs under wcpos_fiscal_sequence_lock (five-second wait,
-								 * shared by all record types): local computation only, no
-								 * network I/O. Submit asynchronously after the row exists.
-								 *
-								 * @param array $snapshot Fiscal document.
-								 * @param int   $order_id Order ID.
-								 */
-								$enriched = apply_filters( 'woocommerce_pos_fiscal_snapshot_enrich', $snapshot, $order->get_id() );
-								return is_array( $enriched ) ? $enriched : $snapshot;
-							},
+							'closure_id' => $closure['id'],
+							'corrects_record_id' => $sale['id'],
+							'payload' => array(
+								'tender_rows' => $rows,
+								'expected_delta' => $delta,
+								'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
+							),
 						)
 					)
 				);
-			}
-			$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
-			$sale = $this->store->find_sale( $order->get_id() );
-			if ( $closure && $sale ) {
-				$rows = Session_Figures::late_legs( $order, $closure );
-				if ( $rows ) {
-					$delta = Session_Figures::tender_totals( $rows );
-					$this->write(
-						$order,
-						array_merge(
-							$this->store->provenance_from_order( $order ),
-							array(
-								'type' => 'late_sale',
-								'order_id' => $order->get_id(),
-								'closure_id' => $closure['id'],
-								'corrects_record_id' => $sale['id'],
-								'payload' => array(
-									'tender_rows' => $rows,
-									'expected_delta' => $delta,
-									'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
-								),
-							)
-						)
-					);
-				}
 			}
 		}
 	}
@@ -168,7 +243,7 @@ final class Fiscal_Record_Writers {
 	 * @param string   $reason Operator reason.
 	 */
 	public function handle_void( WC_Order $order, array $previous_row, array $applied, string $reason ): void {
-		if ( 'captured' !== $previous_row['status'] || 'voided' !== $applied['status'] || ! wcpos_is_pos_order( $order ) ) {
+		if ( 'captured' !== $previous_row['status'] || 'voided' !== $applied['status'] || ! $this->is_register_sale( $order ) ) {
 			return;
 		}
 		$this->write(
@@ -200,13 +275,18 @@ final class Fiscal_Record_Writers {
 	 * @param WC_Order $order Order.
 	 */
 	public function handle_cancellation( int $order_id, WC_Order $order ): void {
-		if ( ! wcpos_is_pos_order( $order ) ) {
+		if ( ! $this->is_register_sale( $order ) ) {
 			return;
 		}
-		$sale = $this->store->find_sale( $order_id );
+		// The cancellation names the completion it cancels: the latest one, or for an order
+		// completed before the history existed, its legacy sale (named by its row's digest).
+		$history = Completion_Stamp::read( $order );
+		$latest  = end( $history );
+		$sale    = is_array( $latest ) ? $this->store->find_sale( $order_id, (string) $latest['id'] ) : $this->store->find_sale( $order_id );
 		if ( ! $sale ) {
 			return;
 		}
+		$completion_id = is_array( $latest ) ? strtolower( (string) $latest['id'] ) : Fiscal_Record_Store::digest_source_id( 'sale:' . $sale['id'] );
 		$this->write(
 			$order,
 			array_merge(
@@ -214,6 +294,7 @@ final class Fiscal_Record_Writers {
 				array(
 					'type' => 'cancellation',
 					'order_id' => $order_id,
+					'source_id' => $completion_id,
 					'corrects_record_id' => $sale['id'],
 					'payload' => array(
 						'sale' => array(
@@ -239,7 +320,7 @@ final class Fiscal_Record_Writers {
 	public function handle_refund( int $order_id, int $refund_id ): void {
 		$order = wc_get_order( $order_id );
 		$refund = wc_get_order( $refund_id );
-		if ( ! $order instanceof WC_Order || ! wcpos_is_pos_order( $order ) || ! $refund instanceof WC_Order_Refund ) {
+		if ( ! $order instanceof WC_Order || ! $this->is_register_sale( $order ) || ! $refund instanceof WC_Order_Refund ) {
 			return;
 		}
 		$sale = $this->store->find_sale( $order_id );
@@ -273,6 +354,16 @@ final class Fiscal_Record_Writers {
 			// The refund is durable; fiscal bookkeeping must not fail its request, only signal.
 			$this->fail_quietly( 'refund', $order, $refund, $error );
 		}
+	}
+
+	/**
+	 * A sale at a register: a POS order, or any order the server completed at one (an online order
+	 * finished at the counter is a sale at that register).
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private function is_register_sale( WC_Order $order ): bool {
+		return wcpos_is_pos_order( $order ) || array() !== Completion_Stamp::read( $order );
 	}
 
 	/** Log a lost correction and fire the recovery signal without failing the caller.
@@ -387,7 +478,7 @@ final class Fiscal_Record_Writers {
 		}
 		$session_id = $refund->get_meta( '_wcpos_session', true );
 		$closure = Pos_Uuid::is_uuid( $session_id ) ? ( new Closure_Store() )->for_session( strtolower( $session_id ) ) : null;
-		if ( ! wcpos_is_pos_order( $order ) || ! $closure ) {
+		if ( ! $this->is_register_sale( $order ) || ! $closure ) {
 			return;
 		}
 		$record = $this->store->find_refund( $order->get_id(), $refund->get_id() );

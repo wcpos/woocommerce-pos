@@ -27,7 +27,7 @@ class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 		};
 		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		try {
-			\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale( $order );
+			\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		} finally {
 			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}

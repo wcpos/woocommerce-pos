@@ -398,10 +398,9 @@ final class Completion_Stamp {
 	private static function till_tuple( WC_Order $order ): array {
 		$values = array();
 		foreach ( self::PROVENANCE_FIELDS as $field => $keys ) {
-			$value            = $order->get_meta( $keys[1], true );
-			$values[ $field ] = Pos_Order_Audit::is_valid_till_value( $keys[1], $value ) ? (string) $value : null;
+			$values[ $field ] = $order->get_meta( $keys[1], true );
 		}
-		return $values;
+		return array_merge( array_fill_keys( array_keys( self::PROVENANCE_FIELDS ), null ), self::validated( $values, true ) );
 	}
 
 	/**

@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\V1\Receipts_Controller;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
-use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 
 /**
@@ -53,7 +52,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
-		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+		\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
 		$request->set_param( 'mode', 'fiscal' );
@@ -73,7 +72,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
-		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+		\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
 		$request->set_param( 'mode', 'fiscal' );
 		$response = $this->server->dispatch( $request );
@@ -98,7 +97,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
-		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+		\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		$store = new Fiscal_Record_Store();
 		$sale = $store->find_sale( $order->get_id() );
 		$payload = $sale['payload'];
@@ -391,7 +390,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 			$order->set_created_via( 'woocommerce-pos' );
 			$order->save();
 			$store = new Fiscal_Record_Store();
-			Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+			\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 			$snapshot = $store->find_sale( $order->get_id() )['payload'];
 			$route = '/wcpos/v2/receipts/' . $order->get_id();
 			foreach ( array( array( 'print', false, 0, 1 ), array( null, false, 0, 1 ), array( 'print', true, 1, 2 ), array( null, false, 0, 2 ) ) as $case ) {
@@ -428,7 +427,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$template_id = $this->create_receipt_template();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
-		Fiscal_Record_Writers::instance()->handle_payment_complete( $order->get_id() );
+		\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		foreach ( array( 'live', 'fiscal' ) as $index => $mode ) {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() . '/pdf' );
 			$request->set_param( 'template_id', (string) $template_id );

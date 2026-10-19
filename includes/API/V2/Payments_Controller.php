@@ -17,6 +17,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -68,7 +69,13 @@ class Payments_Controller extends WC_REST_Controller {
 										$params     = $request->get_json_params();
 										$params     = is_array( $params ) ? $params : $request->get_body_params();
 										$provenance = is_array( $params['provenance'] ?? null ) ? $params['provenance'] : array();
-										return Completion_Stamp::with_provenance( $provenance, fn() => $this->{$definition[1]}( $request ) );
+										$result     = Completion_Stamp::with_provenance( $provenance, fn() => $this->{$definition[1]}( $request ) );
+										$order      = is_wp_error( $result ) ? null : wc_get_order( (int) $request['id'] );
+										if ( $order instanceof WC_Order ) {
+											// A sale record whose insert failed is written by the next money command (§4.7).
+											Fiscal_Record_Writers::instance()->recover( $order );
+										}
+										return $result;
 									} catch ( Ledger_Persistence_Exception $error ) {
 										// The payment was not stored: a retryable conflict, never an acknowledgement.
 										return new WP_Error( 'woo_rxdb_sync_record_locked', $error->getMessage(), array( 'status' => 409 ) );

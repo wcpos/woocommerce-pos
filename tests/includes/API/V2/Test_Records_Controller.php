@@ -28,7 +28,7 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = wc_create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
-		\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale( $order );
+		\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		$row = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/records/' . $row['id'] ) );
 		$this->assertSame( 200, $response->get_status() );
@@ -52,6 +52,7 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 				array(
 					'order_id' => 123,
 					'number' => 123,
+					'source_id' => wp_generate_uuid4(),
 				)
 			)
 		);
@@ -61,6 +62,7 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 				array(
 					'order_id' => 124,
 					'number' => 124,
+					'source_id' => wp_generate_uuid4(),
 				)
 			)
 		);
@@ -97,6 +99,7 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 		$one = $store->record(
 			array(
 				'type' => 'sale',
+				'source_id' => wp_generate_uuid4(),
 				'order_id' => 125,
 				'number' => 125,
 				'store_id' => 12,
@@ -106,6 +109,7 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 		$store->record(
 			array(
 				'type' => 'sale',
+				'source_id' => wp_generate_uuid4(),
 				'order_id' => 126,
 				'number' => 126,
 				'store_id' => 13,
@@ -149,6 +153,7 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 			$row = ( new Fiscal_Record_Store() )->record(
 				array(
 					'type' => 'sale',
+					'source_id' => wp_generate_uuid4(),
 					'order_id' => null === $store_id ? 128 : 127,
 					'number' => null === $store_id ? 128 : 127,
 					'store_id' => $store_id,
@@ -181,6 +186,7 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 		$row = ( new Fiscal_Record_Store() )->record(
 			array(
 				'type' => 'sale',
+				'source_id' => wp_generate_uuid4(),
 				'order_id' => 123,
 				'number' => 123,
 				'store_id' => null,

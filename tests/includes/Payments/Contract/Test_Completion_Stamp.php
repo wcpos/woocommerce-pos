@@ -247,6 +247,25 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->announced );
 	}
 
+	/** An asynchronous order-pay completion is stamped once the webview row is minted. */
+	public function test_an_async_order_pay_completion_is_stamped_after_the_row_is_minted(): void {
+		// Arrange: a POS order, no order-pay window, no rows.
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+
+		// Act: a webhook in a later request completes the payment.
+		wc_get_order( $order->get_id() )->payment_complete( 'ch_async' );
+
+		// Assert.
+		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $rows );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
+		$this->assertSame( array( 1 ), $this->announced );
+	}
+
 	/** A storefront order paid through the order-pay window is not a register sale. */
 	public function test_a_storefront_order_pay_payment_in_the_window_writes_no_entry(): void {
 		// Arrange.

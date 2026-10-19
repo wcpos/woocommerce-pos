@@ -1419,7 +1419,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->get( 'closures/' . $empty['id'] )->get_data()['corrections'] );
 		$records = new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store();
 		$order = $this->closure_ledger( $session );
-		\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale( $order );
+		\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		$this->assertSame(
 			201,
 			$this->post(
