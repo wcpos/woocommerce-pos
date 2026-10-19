@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 
 /** Owns the registers table; callers validate fields. */
 final class Register_Store {
@@ -25,6 +26,11 @@ final class Register_Store {
 	 */
 	public function lock( string $register_id ): bool {
 		global $wpdb;
+		static $warned = false;
+		if ( ! $warned && ! Order_Lock::supports_multiple_locks() ) {
+			$warned = true;
+			Logger::warning( 'Register lock nesting is unsupported on this database server; a concurrent close and movement may interleave' );
+		}
 		return '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', 'wcpos_register_' . strtolower( $register_id ), self::LOCK_WAIT_SECONDS ) );
 	}
 

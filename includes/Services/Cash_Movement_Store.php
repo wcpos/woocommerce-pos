@@ -92,9 +92,6 @@ final class Cash_Movement_Store {
 			return $existing;
 		}
 		$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
-		if ( $session && ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
-			return new \WP_Error( 'wcpos_session_not_open', __( 'This movement was recorded after counting began.', 'woocommerce-pos' ), array( 'status' => 409 ) );
-		}
 		$register = $session['register_id'] ?? '';
 		$locked = $session && ( new Register_Store() )->lock( $register );
 		if ( $session && ! $locked ) {
@@ -112,6 +109,10 @@ final class Cash_Movement_Store {
 		$sequence_locked = false;
 		$transaction = false;
 		try {
+			$session = ( new Register_Session_Store() )->get( $fields['session_id'] );
+			if ( $session && ! $this->accepts( $session, $fields['created_at_gmt'] ) ) {
+				return new \WP_Error( 'wcpos_session_not_open', __( 'This movement was recorded after counting began.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+			}
 			$closure = ( new Closure_Store() )->for_session( $fields['session_id'] );
 			if ( $closure ) {
 				$fiscal->ensure_installed();

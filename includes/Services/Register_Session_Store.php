@@ -99,7 +99,6 @@ final class Register_Session_Store {
 	 * @throws \RuntimeException On database failure.
 	 */
 	public function create( array $fields ) {
-		global $wpdb;
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
 			// An idempotent replay, not a fault: the outbox retries a write whose response
@@ -108,6 +107,33 @@ final class Register_Session_Store {
 			$this->log_replay( $existing );
 			return $existing;
 		}
+		$registers = new Register_Store();
+		if ( ! $registers->lock( $fields['register_id'] ) ) {
+			Logger::warning(
+				'Session register lock failed.',
+				array(
+					'session_id' => $fields['id'],
+					'register_id' => $fields['register_id'],
+					'user_id' => get_current_user_id(),
+				)
+			);
+			throw new \RuntimeException( 'Session register lock failed.' );
+		}
+		try {
+			return $this->insert_open_session( $fields );
+		} finally {
+			$registers->unlock( $fields['register_id'] );
+		}
+	}
+
+	/** Check uniqueness and insert while create() holds the register lock.
+	 *
+	 * @param array $fields Opening fields.
+	 * @return array|\WP_Error
+	 * @throws \RuntimeException On database failure.
+	 */
+	private function insert_open_session( array $fields ) {
+		global $wpdb;
 		$open = $this->list(
 			array(
 				'register_id' => $fields['register_id'],

@@ -197,7 +197,7 @@ final class Order_Lock {
 	 * MariaDB 10.0.2+). Read once per request; `db_server_info()` reports MariaDB as
 	 * "5.5.5-10.6.12-MariaDB" and MySQL as "8.0.36".
 	 */
-	private static function supports_multiple_locks(): bool {
+	public static function supports_multiple_locks(): bool {
 		if ( null === self::$multi_lock ) {
 			global $wpdb;
 			$info = is_object( $wpdb ) && method_exists( $wpdb, 'db_server_info' ) ? (string) $wpdb->db_server_info() : '';

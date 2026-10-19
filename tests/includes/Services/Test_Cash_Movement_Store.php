@@ -15,6 +15,43 @@ use WP_UnitTestCase;
 class Test_Cash_Movement_Store extends WP_UnitTestCase {
 	use Closure_Test_Fixture;
 
+	/** Lock failure must precede rejection of a movement after the counting cutoff. */
+	public function test_create_register_locked_throws_before_session_rejection(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$store = new Cash_Movement_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $session['id'],
+			'type' => 'paid_in',
+			'amount' => '7',
+			'reason' => 'After counting cutoff',
+			'actor' => get_current_user_id(),
+			'created_at_gmt' => '2026-09-11 12:00:00',
+		);
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$name = 'wcpos_register_' . $session['register_id'];
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK( %s, 0 )', $name ) ) );
+			// Act.
+			try {
+				$store->create( $fields );
+				$this->fail( 'Expected lock failure, not the session-not-open return.' );
+			} catch ( \RuntimeException $error ) {
+				// Assert.
+				$this->assertSame( 'Movement register lock failed.', $error->getMessage() );
+				$this->assertNull( $store->get( $fields['id'] ) );
+			}
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK( %s )', $name ) );
+			$contender->close();
+		}
+		$error = $store->create( $fields );
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_session_not_open', $error->get_error_code() );
+		$this->assertNull( $store->get( $fields['id'] ) );
+	}
+
 	/** Create, replay and stamp without changing the original movement. */
 	public function test_create_void_and_double_void_refused(): void {
 		$store = new Cash_Movement_Store();
