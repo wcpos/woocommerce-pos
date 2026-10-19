@@ -249,7 +249,7 @@ class Test_Settlement extends \WP_UnitTestCase {
 		}
 		Ledger::instance()->save( $order, $rows );
 		$this->assertSame( array_column( $rows, 'id' ), array_values( wp_list_pluck( $order->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
-		Ledger::instance()->save( $order, array( $rows[4] ) );
+		Ledger::instance()->save( $order, array( $rows[4] ), true, array_column( array_slice( $rows, 0, 4 ), 'id' ) );
 		$this->assertSame( array( $rows[4]['id'] ), array_values( wp_list_pluck( $order->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
 	}
 

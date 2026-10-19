@@ -417,7 +417,18 @@ class Write_Controller extends WP_REST_Controller {
 		}
 
 		// A committed create must retain identity even when its money transition must retry.
-		$prepared['context']['preserve_create_identity'] = fn( int $id ) => $this->identity->prove( $meta, $id, $m['recordId'] );
+		$proven_id = 0;
+		$prepared['context']['preserve_create_identity'] = function ( int $id ) use ( $meta, $m, &$proven_id ) {
+			$error = $this->identity->prove( $meta, $id, $m['recordId'] );
+			if ( ! $error ) {
+				$proven_id = $id;
+			}
+			// Failed proof must retain the committed id for the existing poison-recovery lane.
+			if ( $error && ! $this->store->mark_poison( $m['mutationId'], $id, 201 ) ) {
+				$this->store->mark_indeterminate( $m['mutationId'], $id, 201 );
+			}
+			return $error;
+		};
 		$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -432,7 +443,7 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_create_no_id', 'Create returned no server id.', array( 'status' => 502 ) );
 		}
 
-		$stamped = $this->identity->stamp( $meta, $m, $new_id, $response->get_status(), $writer );
+		$stamped = $this->identity->stamp( $meta, $m, $new_id, $response->get_status(), $writer, $new_id === $proven_id );
 		if ( is_wp_error( $stamped ) ) {
 			return $stamped;
 		}

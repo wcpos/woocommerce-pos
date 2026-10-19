@@ -217,14 +217,15 @@ class Order_Writer extends Null_Writer {
 		);
 		if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 && ( 'update' === $declared['operation'] || 201 === $response->get_status() ) ) {
 			$id = (int) ( $response->get_data()['id'] ?? 0 );
-			if ( ! $this->lock( $id ) ) {
-				if ( 'create' === $declared['operation'] && isset( $declared['preserve_create_identity'] ) ) {
-					// UUID-only proof, no finalization: retry must still run the money transition.
-					$error = $declared['preserve_create_identity']( $id );
-					if ( is_wp_error( $error ) ) {
-						return $error;
-					}
+			if ( $id > 0 && 'create' === $declared['operation'] && isset( $declared['preserve_create_identity'] ) ) {
+				// Prove identity before any fallible post-create work, without finalizing:
+				// a retry must find this order and still run its money transition.
+				$error = $declared['preserve_create_identity']( $id );
+				if ( is_wp_error( $error ) ) {
+					return $error;
 				}
+			}
+			if ( ! $this->lock( $id ) ) {
 				return new WP_REST_Response(
 					array(
 						'code' => 'woo_rxdb_sync_record_locked',

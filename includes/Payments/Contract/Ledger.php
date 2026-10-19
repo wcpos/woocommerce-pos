@@ -785,8 +785,8 @@ class Ledger {
 				Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 			} else {
 				$rows = array_filter( $rows, static fn( $saved ) => $saved['id'] !== $row['id'] );
-				// save() rebuilds payment-id and live-leg indexes from the remaining rows.
-				$this->save( $order, $rows, false );
+				// Delete only this refused intent; omitted concurrent rows must survive.
+				$this->save( $order, $rows, false, array( $row['id'] ) );
 			}
 			return $new;
 		}
@@ -1429,9 +1429,10 @@ class Ledger {
 	 * @param WC_Order $order Order object.
 	 * @param array    $rows  Payment rows.
 	 * @param bool     $derive Whether to project payment state (deferred during offline arrival).
+	 * @param array    $deleted_ids Explicitly removed payment ids (a refused intent only).
 	 * @throws Ledger_Persistence_Exception When the ledger cannot be locked or persisted.
 	 */
-	public function save( WC_Order $order, array $rows, bool $derive = true ): void {
+	public function save( WC_Order $order, array $rows, bool $derive = true, array $deleted_ids = array() ): void {
 		$lock = Order_Lock::instance();
 		if ( ! $lock->acquire( $order->get_id() ) ) {
 			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
@@ -1441,24 +1442,45 @@ class Ledger {
 			// content is what is already stored keeps its stored stamp: a write to one leg must not
 			// make every other leg on the order look fresh to Payments_Sweeper.
 			$fresh = wc_get_order( $order->get_id() );
-			$epoch = Money_Epoch::current( $fresh instanceof WC_Order ? $fresh : $order );
+			$fresh = $fresh instanceof WC_Order ? $fresh : $order;
+			$fresh->read_meta_data( true );
+			$epoch = Money_Epoch::current( $fresh );
 			$stored = array();
-			foreach ( $this->read( $order ) as $existing ) {
+			foreach ( $this->stored( $order->get_id(), false )['payments'] ?? array() as $existing ) {
 				if ( is_array( $existing ) && isset( $existing['id'] ) ) {
 					$stored[ strtolower( (string) $existing['id'] ) ] = $existing;
 				}
 			}
+			// Refresh meta ids too: an object loaded before the first row otherwise inserts
+			// a second ledger meta entry on HPOS. Keep meta deliberately staged by adopt's caller.
+			$pending = array_filter( Money_Meta_Guard::raw_meta( $order ), static fn( $meta ) => ! $meta->id || $meta->get_changes() || null === $meta->value );
+			$order->read_meta_data( true );
+			foreach ( $pending as $meta ) {
+				if ( null === $meta->value ) {
+					$order->delete_meta_data_by_mid( $meta->id );
+				} elseif ( $meta->id ) {
+					$order->update_meta_data( $meta->key, $meta->value, $meta->id );
+				} else {
+					$order->add_meta_data( $meta->key, $meta->value, false );
+				}
+			}
 			$normalized = array();
 			foreach ( $rows as $row ) {
-				$row      = $this->normalize_row( $order, $row );
+				$row      = $this->normalize_row( $fresh, $row );
 				$previous = $stored[ $row['id'] ] ?? null;
 				$row['epoch'] = null === $previous ? $epoch : (int) ( $previous['epoch'] ?? 0 );
 				$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
-				if ( null !== $stamp && $this->same_content( $this->normalize_row( $order, $previous ), $row ) ) {
+				if ( null !== $stamp && $this->same_content( $this->normalize_row( $fresh, $previous ), $row ) ) {
 					$row['updated_at_gmt'] = $stamp;
 				}
 				$normalized[] = $row;
+				unset( $stored[ $row['id'] ] );
 			}
+			foreach ( $deleted_ids as $id ) {
+				unset( $stored[ strtolower( $id ) ] );
+			}
+			// Absence is not deletion: a hook may have read before another route appended a leg.
+			$normalized = array_merge( $normalized, array_values( $stored ) );
 			$wire = array_map( array( __CLASS__, 'to_wire' ), $normalized );
 			$order->update_meta_data(
 				self::META_KEY,

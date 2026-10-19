@@ -44,6 +44,47 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** @dataProvider persistence_storage */
+	public function test_stale_webview_save_keeps_a_concurrently_recorded_row( bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$order->set_payment_method( 'pos_cash' );
+			$order->update_meta_data( '_wcpos_test_update', 'old' );
+			$order->update_meta_data( '_wcpos_test_delete', 'old' );
+			$order->save();
+			$stale = wc_get_order( $order->get_id() );
+			$this->assertSame( array(), $ledger->read( $stale ) );
+			$stale->update_meta_data( '_wcpos_test_staged', 'kept' );
+			$stale->update_meta_data( '_wcpos_test_update', 'new' );
+			$stale->delete_meta_data( '_wcpos_test_delete' );
+			$recorded = $ledger->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '5.00' ) );
+
+			$minted = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $stale );
+
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertCount( 2, $ledger->read( $saved ) );
+			$this->assertSame( $recorded, $ledger->find( $saved, $recorded['id'] ) );
+			$this->assertSame( $minted['id'], $ledger->find( $saved, $minted['id'] )['id'] );
+			$this->assertSame( $ledger->read( $saved ), $ledger->read( $stale ) );
+			$this->assertSame( 'kept', $saved->get_meta( '_wcpos_test_staged' ) );
+			$this->assertSame( 'new', $saved->get_meta( '_wcpos_test_update' ) );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_test_delete' ) );
+		} finally {
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
+	/** @dataProvider persistence_storage */
 	public function test_stale_webview_order_uses_locked_money_epoch( bool $hpos ): void {
 		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
 		try {
@@ -836,6 +877,25 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'action', $rows[0]['provider_refs'] );
 		$this->assertSame( 'warning', $rows[0]['events'][0]['level'] );
 		$this->assertSame( 'Provider did not answer: test_timeout', $rows[0]['events'][0]['message'] );
+	}
+
+	public function test_intent_decline_removes_only_its_row_after_another_payment_arrives(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$other = $this->payment( 'pos_cash', '5.00' );
+		$error = new \WP_Error( 'test_declined', 'Declined' );
+		$result = $ledger->intent( $order, $input['id'], $input, array(
+			'error' => $error,
+			'observe' => static function () use ( $order, $ledger, $other ) {
+				$ledger->record( wc_get_order( $order->get_id() ), $other );
+			},
+		) );
+		$this->assertSame( $error, $result );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( array( $other['id'] ), array_column( $ledger->read( $saved ), 'id' ) );
+		$this->assertSame( array( $other['id'] ), array_values( wp_list_pluck( $saved->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
+		$this->assertEmpty( $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
 	}
 
 	public function test_intent_determinate_error_removes_saved_row_and_indexes(): void {

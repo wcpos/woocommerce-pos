@@ -33,10 +33,11 @@ final class Create_Identity {
 	}
 
 	/** @return int|WP_Error Created id after proof and finalization, or the protocol error. */
-	public function stamp( array $meta, array $m, int $new_id, int $response_status, Collection_Writer_Interface $writer ) {
+	public function stamp( array $meta, array $m, int $new_id, int $response_status, Collection_Writer_Interface $writer, bool $already_proven = false ) {
 		$checkpointed = $this->store->mark_poison( $m['mutationId'], $new_id, $response_status );
 		$writer->after_create( $new_id, $m['payload'] );
-		$identity_error = $this->prove( $meta, $new_id, $m['recordId'] );
+		// Only the current create's early proof may skip the second identity save.
+		$identity_error = $already_proven ? null : $this->prove( $meta, $new_id, $m['recordId'] );
 		// Attempt identity even when the checkpoint failed: the known record must retain its UUID.
 		if ( ! $checkpointed ) {
 			$this->store->mark_indeterminate( $m['mutationId'], $new_id, $response_status );
