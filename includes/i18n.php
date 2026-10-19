@@ -26,6 +26,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	private const CDN_BASE_URL = 'https://cdn.jsdelivr.net/gh/wcpos/translations@%s/translations/php/%s/%s-%s.l10n.php';
 	private const MISSING_LOCALE_CACHE_TTL = DAY_IN_SECONDS;
 	private const WRITE_FAILED_CACHE_TTL = HOUR_IN_SECONDS;
+	// An unreachable CDN costs the 10 s request timeout per attempt, so retry at most hourly.
+	private const DOWNLOAD_FAILED_CACHE_TTL = HOUR_IN_SECONDS;
 	private const DOWNLOAD_LOCK_TTL = 30;
 
 	/**
@@ -71,6 +73,13 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * @var bool
 	 */
 	protected bool $last_write_failed = false;
+
+	/**
+	 * Whether the last download attempt never got an HTTP response (timeout, DNS, blocked egress).
+	 *
+	 * @var bool
+	 */
+	protected bool $last_transport_failed = false;
 
 	/**
 	 * Load translations from jsDelivr.
@@ -238,6 +247,16 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return;
 		}
 
+		// Avoid repeated download attempts after any failure that was neither an all-404 nor a final write failure
+		// (transport error, non-404 status, empty or invalid body) — one attempt per hour, see DOWNLOAD_FAILED_CACHE_TTL.
+		if ( get_transient( $this->get_download_failed_transient_key( $requested_locale ) ) === $this->version ) {
+			if ( $stale_file && $stale_locale ) {
+				$this->load_translation_file( $stale_locale, $stale_file );
+			}
+
+			return;
+		}
+
 		// Prevent thundering herd: if another request is already downloading, skip.
 		$download_lock_key = $this->get_download_lock_transient_key( $requested_locale );
 		if ( get_transient( $download_lock_key ) ) {
@@ -264,6 +283,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 					set_transient( $this->transient_key . '_' . $candidate_locale, $this->version, WEEK_IN_SECONDS );
 					delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
 					delete_transient( $this->get_write_failed_transient_key() );
+					delete_transient( $this->get_download_failed_transient_key( $requested_locale ) );
 					$this->load_translation_file( $candidate_locale, $file );
 
 					return;
@@ -272,12 +292,20 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 				if ( 404 !== $this->last_download_status_code ) {
 					$all_candidates_404 = false;
 				}
+
+				// A CDN that never answered for the exact locale will not answer for the base
+				// language either; trying it doubles the stall and delays the back-off write.
+				if ( $this->last_transport_failed ) {
+					break;
+				}
 			}
 
 			if ( $all_candidates_404 ) {
 				set_transient( $this->get_missing_locale_transient_key( $requested_locale ), $this->version, self::MISSING_LOCALE_CACHE_TTL );
 			} elseif ( $this->last_write_failed ) {
 				set_transient( $this->get_write_failed_transient_key(), $this->version, self::WRITE_FAILED_CACHE_TTL );
+			} else {
+				set_transient( $this->get_download_failed_transient_key( $requested_locale ), $this->version, self::DOWNLOAD_FAILED_CACHE_TTL );
 			}
 
 			if ( $stale_file && $stale_locale ) {
@@ -391,6 +419,17 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 */
 	protected function get_write_failed_transient_key(): string {
 		return $this->transient_key . '_write_failed';
+	}
+
+	/**
+	 * Build the transient key used for download-failure caching.
+	 *
+	 * @param string $locale Requested locale.
+	 *
+	 * @return string
+	 */
+	protected function get_download_failed_transient_key( string $locale ): string {
+		return $this->transient_key . '_download_failed_' . $locale;
 	}
 
 	/**
@@ -535,6 +574,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		$url = sprintf( self::CDN_BASE_URL, $this->version, $locale, $this->text_domain, $locale );
 		$this->last_download_status_code = null;
 		$this->last_write_failed         = false;
+		$this->last_transport_failed     = false;
 
 		$response = wp_remote_get(
 			$url,
@@ -544,6 +584,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		);
 
 		if ( is_wp_error( $response ) ) {
+			$this->last_transport_failed = true;
 			Logger::log( sprintf( 'i18n: Failed to download %s translation - HTTP error: %s', $locale, $response->get_error_message() ) );
 
 			return false;
