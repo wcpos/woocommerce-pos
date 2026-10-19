@@ -391,7 +391,7 @@ class Activator {
 		) as $name => $definition ) {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed column names.
 			$column = $wpdb->get_var( "SHOW COLUMNS FROM {$sessions} LIKE '{$name}'" );
-			if ( '' !== $wpdb->last_error ) {
+			if ( self::query_failed() ) {
 				throw new \RuntimeException( 'Closure column read failed.' );
 			}
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed definitions; DDL runs outside closure transactions.
@@ -406,7 +406,7 @@ class Activator {
 		) as $name => $definition ) {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the key name is prepared.
 			$index = $wpdb->get_var( $wpdb->prepare( "SHOW INDEX FROM {$sessions} WHERE Key_name = %s", $name ) );
-			if ( '' !== $wpdb->last_error ) {
+			if ( self::query_failed() ) {
 				throw new \RuntimeException( 'Closure index read failed.' );
 			}
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed definitions; DDL runs outside closure transactions.
@@ -422,7 +422,7 @@ class Activator {
 		$orphans = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy} c LEFT JOIN {$sessions} s ON s.id = c.session_id WHERE s.id IS NULL" );
 		$mismatches = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy} c INNER JOIN {$sessions} s ON s.id = c.session_id WHERE s.closure_id IS NOT NULL AND s.closure_id <> c.id" );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( '' !== $wpdb->last_error ) {
+		if ( self::query_failed() ) {
 			throw new \RuntimeException( 'Closure fold read failed.' );
 		}
 		if ( $orphans || $mismatches ) {
@@ -440,7 +440,7 @@ class Activator {
 			// Copied rows leave the next batch automatically.
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables.
 			$rows = $wpdb->get_results( "SELECT c.* FROM {$legacy} c INNER JOIN {$sessions} s ON s.id = c.session_id WHERE s.number IS NULL ORDER BY c.number LIMIT 100", ARRAY_A );
-			if ( '' !== $wpdb->last_error ) {
+			if ( self::query_failed() ) {
 				throw new \RuntimeException( 'Closure fold read failed.' );
 			}
 			foreach ( $rows as $row ) {
@@ -472,13 +472,23 @@ class Activator {
 		$legacy_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$legacy}" );
 		$folded_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$sessions} WHERE number IS NOT NULL" );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( '' !== $wpdb->last_error || null === $legacy_count || $legacy_count !== $folded_count ) {
+		if ( self::query_failed() || null === $legacy_count || $legacy_count !== $folded_count ) {
 			throw new \RuntimeException( 'Closure fold verification failed.' );
 		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
 		if ( false === $wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ) ) {
 			throw new \RuntimeException( 'Closure fold drop failed.' );
 		}
+	}
+
+	/**
+	 * Whether the last database query failed, read fresh after any earlier check.
+	 *
+	 * @phpstan-impure
+	 */
+	private static function query_failed(): bool {
+		global $wpdb;
+		return '' !== $wpdb->last_error;
 	}
 
 	/**
