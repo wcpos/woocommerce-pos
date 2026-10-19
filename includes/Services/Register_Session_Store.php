@@ -284,8 +284,7 @@ final class Register_Session_Store {
 	 * @return array|\WP_Error
 	 *
 	 * @param array      $session Current row.
-	 * @param array      $fields Transition fields. A callable `closure` receives the approver and
-	 *                           any approval finding and returns the encoded closure document.
+	 * @param array      $fields Transition fields; a close may carry the closure id, number and printed number.
 	 * @param bool       $printed Closure already printed; record missing approval instead of refusing.
 	 * @param array|null $approval_missing Server variance and threshold finding, if any.
 	 * @param bool       $locked_by_caller Caller owns the register lock through commit/rollback.
@@ -383,11 +382,6 @@ final class Register_Session_Store {
 						'approved_expected' => null,
 					);
 				}
-			}
-			if ( isset( $fields['closure'] ) && is_callable( $fields['closure'] ) ) {
-				// Closure_Store writes its document in this same UPDATE; the document records
-				// the approval this write settles, so it is built only now.
-				$fields['closure'] = call_user_func( $fields['closure'], array_key_exists( 'approved_by', $fields ) ? $fields['approved_by'] : $session['approved_by'], $approval_missing );
 			}
 			$where = array(
 				'id' => $session['id'],

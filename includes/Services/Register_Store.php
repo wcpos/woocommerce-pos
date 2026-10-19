@@ -68,8 +68,6 @@ final class Register_Store {
 	 * @throws \RuntimeException When storage fails.
 	 */
 	public function create( array $fields, ?\WP_REST_Request $request = null ): array {
-		global $wpdb;
-		$this->ensure_installed();
 		$id           = wp_generate_uuid4();
 		$fields['id'] = $id;
 		if ( null !== $request ) {
@@ -77,9 +75,32 @@ final class Register_Store {
 			$fields = apply_filters( 'woocommerce_pos_register_upsert_fields', $fields, $request );
 		}
 		$fields['id'] = $id;
+		$row = $this->get( $this->insert_row( $fields ) );
+		Logger::log(
+			'Register created',
+			array(
+				'register_id' => $row['id'],
+				'name' => $row['name'],
+				'default_float' => $row['default_float'],
+				'user_id' => get_current_user_id(),
+			)
+		);
+		return $row;
+	}
+
+	/**
+	 * Insert an active register row, without reading it back.
+	 *
+	 * @param array $fields Validated fields; a missing id is generated.
+	 * @throws \RuntimeException When storage fails.
+	 */
+	private function insert_row( array $fields ): string {
+		global $wpdb;
+		$this->ensure_installed();
+		$id = $fields['id'] ?? wp_generate_uuid4();
 		$now = gmdate( 'Y-m-d H:i:s' );
 		$data = array(
-			'id' => $fields['id'],
+			'id' => $id,
 			'name' => $fields['name'],
 			'store_id' => $fields['store_id'] ?? null,
 			'default_float' => $fields['default_float'] ?? null,
@@ -97,30 +118,20 @@ final class Register_Store {
 			);
 			throw new \RuntimeException( 'Register write failed.' );
 		}
-		$row = $this->get( $fields['id'] );
-		Logger::log(
-			'Register created',
-			array(
-				'register_id' => $row['id'],
-				'name' => $row['name'],
-				'default_float' => $row['default_float'],
-				'user_id' => get_current_user_id(),
-			)
-		);
-		return $row;
+		return $id;
 	}
 
 	/** Seed an active register during activation and upgrade only.
 	 *
-	 * Reads the registers table alone: list() also reads closure counters from session
-	 * columns that a pending sync-schema step may not have added yet.
+	 * Touches the registers table alone: list() and get() also read closure counters from
+	 * session columns that a pending sync-schema step may not have added yet.
 	 */
 	public function ensure_default(): void {
 		global $wpdb;
 		$table = $this->table_name();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table, fixed predicate.
 		if ( null === $wpdb->get_var( "SELECT id FROM {$table} WHERE status = 'active' LIMIT 1" ) ) {
-			$this->create( array( 'name' => __( 'Register', 'woocommerce-pos' ) ) );
+			$this->insert_row( array( 'name' => __( 'Register', 'woocommerce-pos' ) ) );
 		}
 	}
 
@@ -162,32 +173,10 @@ final class Register_Store {
 		$where = implode( ' AND ', $where );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table and prepared predicates.
 		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY name", ARRAY_A );
-		$latest = array_fill_keys( array_column( $rows, 'id' ), array() );
-		if ( $rows ) {
-			$sessions = new Register_Session_Store();
-			$sessions->ensure_installed();
-			$session_table = $sessions->table_name();
-			$placeholders = implode( ', ', array_fill( 0, count( $rows ), '%s' ) );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table and generated placeholders.
-			$sql = $wpdb->prepare( "SELECT closure.register_id, closure.number, closure.closure FROM {$session_table} closure INNER JOIN ( SELECT register_id, MAX(number) AS number FROM {$session_table} WHERE register_id IN ({$placeholders}) AND number IS NOT NULL GROUP BY register_id ) latest_closure ON latest_closure.register_id = closure.register_id AND latest_closure.number = closure.number", array_column( $rows, 'id' ) );
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
-			$closure_rows = $wpdb->get_results( $sql, ARRAY_A );
-			if ( '' !== $wpdb->last_error ) {
-				throw new \RuntimeException( 'Register closure read failed.' );
-			}
-			foreach ( $closure_rows as $closure ) {
-				// The perpetual totals live in the frozen closure document.
-				$document = json_decode( (string) $closure['closure'], true );
-				$latest[ $closure['register_id'] ] = array(
-					'number' => $closure['number'],
-					'perpetual_sales_total' => $document['perpetual_sales_total'] ?? null,
-					'perpetual_refunds_total' => $document['perpetual_refunds_total'] ?? null,
-				);
-			}
-		}
+		$latest = ( new Closure_Store() )->latest_for_registers( array_column( $rows, 'id' ) );
 		return array_map(
 			function ( $row ) use ( $latest ) {
-				return $this->normalize_row( $row, $latest[ $row['id'] ] );
+				return $this->normalize_row( $row, $latest[ $row['id'] ] ?? array() );
 			},
 			$rows
 		);

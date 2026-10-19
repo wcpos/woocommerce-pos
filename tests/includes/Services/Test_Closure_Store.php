@@ -423,6 +423,95 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$session['closure_id'] = $row['id'];
 		$this->assertSame( $session, ( new Register_Session_Store() )->get( $session['id'] ) );
 		$this->assertSame( array( 'cash' => '0.0000' ), $row['variance'] );
+		// The row reads the session's close; the deferred POST's own claim stays in the document.
+		$this->assertSame( '2026-09-11 12:00:00', $row['closed_at_gmt'] );
+		$this->assertSame( '2026-09-11 13:00:00', $row['till_closed_at_gmt'] );
+		$this->assertNull( $row['till_opened_at_gmt'] );
+	}
+
+	/** A deferred closure filters and sorts by its session's close, never the till's later claim. */
+	public function test_deferred_closure_lists_by_session_closed_at(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$session = $this->closure_session( null, 'closed' );
+		$this->assertNull( $session['business_day'] );
+		$fields = $this->closure_fields( $session );
+		$fields['counted'] = array( 'cash' => '100.0000' );
+		$fields['closed_at_gmt'] = '2026-09-11 13:00:00';
+		$deferred = $store->create( $fields );
+		$later = $this->closure_fields( $this->closure_session( $session['register_id'] ), 2 );
+		$later['closed_at_gmt'] = '2026-09-11 12:30:00';
+		$later = $store->create( $later );
+
+		// Act.
+		$after_early = $store->list(
+			array(
+				'register_id' => $session['register_id'],
+				'after' => '2026-09-11 11:30:00',
+			)
+		);
+		$after_late = $store->list(
+			array(
+				'register_id' => $session['register_id'],
+				'after' => '2026-09-11 12:30:00',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array( $later['id'], $deferred['id'] ), array_column( $after_early, 'id' ) );
+		$this->assertSame( array( $later['id'] ), array_column( $after_late, 'id' ) );
+	}
+
+	/** A failed document write rolls the session close back with it. */
+	public function test_failed_document_write_rolls_back_session_close(): void {
+		// Arrange.
+		global $wpdb;
+		$session = $this->closure_session();
+		$store = new Closure_Store();
+		$fields = $this->closure_fields( $session );
+		$table = ( new Register_Session_Store() )->table_name();
+		$fail = static function ( $sql ) use ( $table ) {
+			return 0 === strpos( $sql, "UPDATE {$table} SET closure = " ) ? 'INVALID DOCUMENT WRITE' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		try {
+			// Act.
+			try {
+				$store->create( $fields );
+				$this->fail( 'Expected the document write to fail.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Closure write failed.', $error->getMessage() );
+			}
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+
+		// Assert.
+		$this->assertSame( $session, ( new Register_Session_Store() )->get( $session['id'] ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+		$this->assertSame( array( null, null ), array_values( $wpdb->get_row( $wpdb->prepare( "SELECT closure_id, number FROM {$table} WHERE id = %s", $session['id'] ), ARRAY_A ) ) );
+		$this->assertNull( $store->get( $fields['id'] ) );
+	}
+
+	/** A number more than 10000 past the register sequence is refused; the edge is accepted. */
+	public function test_number_far_ahead_of_sequence_is_refused(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$session = $this->closure_session();
+
+		// Act.
+		$refused = $store->create( $this->closure_fields( $session, 10002 ) );
+		$status = ( new Register_Session_Store() )->get( $session['id'] )['status'];
+		$accepted = $store->create( $this->closure_fields( $session, 10001 ) );
+
+		// Assert.
+		$this->assertWPError( $refused );
+		$this->assertSame( 'wcpos_closure_number_invalid', $refused->get_error_code() );
+		$this->assertSame( 409, $refused->get_error_data()['status'] );
+		$this->assertSame( 'counting', $status );
+		$this->assertSame( 10001, $accepted['number'] );
 	}
 
 	/** A forward jump to four stays four, and its missing three is listed. */

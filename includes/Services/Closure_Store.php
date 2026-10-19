@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Sync;
 use WCPOS\WooCommercePOS\Sync\Health;
 
 /**
@@ -23,6 +24,11 @@ final class Closure_Store {
 	/** Shared cap for list consumers, including the whole-store export. */
 	public const MAX_PER_PAGE = 100;
 
+	/** How far a till's number may run ahead of the register sequence: wide enough for any
+	 * real run of offline closes, narrow enough that a cashier cannot push the sequence
+	 * toward the 18-digit limit. */
+	private const MAX_NUMBER_JUMP = 10000;
+
 	/**
 	 * The closure row shape, in order: each key maps to the session column it is read
 	 * from, or null when it lives in the frozen `closure` document.
@@ -34,9 +40,9 @@ final class Closure_Store {
 		'store_id' => 'store_id',
 		'number' => 'number',
 		'printed_number' => 'printed_number',
-		'opened_at_gmt' => null,
+		'opened_at_gmt' => 'opened_at_gmt',
 		'business_day' => 'business_day',
-		'closed_at_gmt' => null,
+		'closed_at_gmt' => 'closed_at_gmt',
 		'opened_by' => 'opened_by',
 		'closed_by' => null,
 		'approved_by' => null,
@@ -61,7 +67,13 @@ final class Closure_Store {
 		'print_count' => 'print_count',
 		'last_printed_at_gmt' => 'last_printed_at_gmt',
 		'received_at_gmt' => null,
+		// The till's own timestamps when they differ from the session's (a deferred close).
+		'till_opened_at_gmt' => null,
+		'till_closed_at_gmt' => null,
 	);
+
+	/** Integer fields of a closure row, cast on every read. */
+	private const INTEGERS = array( 'number', 'printed_number', 'store_id', 'opened_by', 'closed_by', 'approved_by', 'unsynced_count', 'first_sale_counter', 'last_sale_counter', 'first_receipt_id', 'last_receipt_id', 'print_count' );
 
 	/** Build the frozen document from closure-shaped fields, keeping only document keys.
 	 *
@@ -87,8 +99,18 @@ final class Closure_Store {
 		foreach ( self::ROW as $key => $column ) {
 			$row[ $key ] = null === $column ? ( $document[ $key ] ?? null ) : $session[ $column ];
 		}
-		foreach ( array( 'number', 'printed_number', 'store_id', 'opened_by', 'closed_by', 'approved_by', 'unsynced_count', 'first_sale_counter', 'last_sale_counter', 'first_receipt_id', 'last_receipt_id', 'print_count' ) as $key ) {
-			$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
+		return self::normalize( $row );
+	}
+
+	/** Cast a closure-shaped row's integer fields, leaving absent and null ones alone.
+	 *
+	 * @param array $row Closure row or legacy closure table row.
+	 */
+	public static function normalize( array $row ): array {
+		foreach ( self::INTEGERS as $key ) {
+			if ( isset( $row[ $key ] ) ) {
+				$row[ $key ] = (int) $row[ $key ];
+			}
 		}
 		return $row;
 	}
@@ -198,12 +220,45 @@ final class Closure_Store {
 		if ( 'register_asc' === ( $args['number_order'] ?? null ) ) {
 			$order = 'register_id ASC, number ASC, closure_id ASC';
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, prepared predicates and integer pagination.
-		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY {$order} LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+		$columns = self::columns();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns, prepared predicates and integer pagination.
+		$rows = $wpdb->get_results( "SELECT {$columns} FROM {$table} WHERE {$where} ORDER BY {$order} LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
 		if ( '' !== $wpdb->last_error ) {
 			throw new \RuntimeException( 'Closure read failed.' );
 		}
 		return array_map( array( self::class, 'hydrate' ), $rows );
+	}
+
+	/** The latest numbered closure of each register, in one query.
+	 *
+	 * @param string[] $register_ids Register UUIDs.
+	 * @return array<string, array> Closure rows keyed by register id; registers without one are absent.
+	 * @throws \RuntimeException On read failure.
+	 */
+	public function latest_for_registers( array $register_ids ): array {
+		global $wpdb;
+		if ( ! $register_ids ) {
+			return array();
+		}
+		$sessions = new Register_Session_Store();
+		$sessions->ensure_installed();
+		$table = $sessions->table_name();
+		$columns = self::columns();
+		$placeholders = implode( ', ', array_fill( 0, count( $register_ids ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns and generated placeholders.
+		$sql = $wpdb->prepare( "SELECT {$columns} FROM {$table} INNER JOIN ( SELECT register_id AS latest_register_id, MAX(number) AS latest_number FROM {$table} WHERE register_id IN ({$placeholders}) AND number IS NOT NULL GROUP BY register_id ) latest ON latest_register_id = register_id AND latest_number = number", array_values( $register_ids ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		if ( self::read_failed() ) {
+			throw new \RuntimeException( 'Register closure read failed.' );
+		}
+		$rows = array_map( array( self::class, 'hydrate' ), $rows );
+		return array_column( $rows, null, 'register_id' );
+	}
+
+	/** The session columns a closure read selects: those ROW maps, plus the document. */
+	private static function columns(): string {
+		return implode( ', ', array_unique( array_filter( self::ROW ) ) ) . ', closure';
 	}
 
 	/** Add counts to a page with one grouped fiscal query, never one query per closure.
@@ -367,6 +422,25 @@ final class Closure_Store {
 		return array_map( array( self::class, 'sum' ), $totals );
 	}
 
+	/** Whether either legacy closures table exists (the fold renames it before its drop).
+	 *
+	 * @throws \RuntimeException When the probe fails; a close must not assume absence.
+	 */
+	private static function legacy_present(): bool {
+		global $wpdb;
+		foreach ( array( self::LEGACY_TABLE, self::LEGACY_TABLE . '_folded' ) as $suffix ) {
+			$exists = Health::table_exists( $wpdb->prefix . $suffix );
+			if ( self::read_failed() ) {
+				Logger::warning( 'Register closure refused: closure storage probe failed' );
+				throw new \RuntimeException( 'Closure storage probe failed.' );
+			}
+			if ( $exists ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Whether the last database query failed (read fresh, after any earlier check). */
 	private static function read_failed(): bool {
 		global $wpdb;
@@ -453,9 +527,10 @@ final class Closure_Store {
 			$this->log_replay( $existing );
 			return $existing;
 		}
-		if ( Health::table_exists( $wpdb->prefix . self::LEGACY_TABLE ) ) {
+		if ( Sync\Api::SCHEMA_VERSION !== get_option( Sync\Api::SCHEMA_OPTION, null ) && self::legacy_present() ) {
 			// Step 10 has not copied every legacy closure yet: a number minted now could
 			// collide with one only the legacy table holds. The outbox retries the 500.
+			// Once the latch reads the current schema the fold is done and nothing is probed.
 			Logger::warning(
 				'Register closure refused: closure storage is migrating',
 				array(
@@ -586,6 +661,17 @@ final class Closure_Store {
 				// logger claiming one had.
 				$fields['printed_number'] = $fields['number'];
 				$fields['number'] = $next;
+			} elseif ( $fields['number'] > $next + self::MAX_NUMBER_JUMP ) {
+				$deferred = array(
+					'Register closure refused: number exceeds register sequence',
+					array(
+						'closure_id' => $fields['id'],
+						'register_id' => $session['register_id'],
+						'number' => $fields['number'],
+						'next_number' => $next,
+					),
+				);
+				return new \WP_Error( 'wcpos_closure_number_invalid', __( 'The closure number is too far ahead of the register sequence.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 			} elseif ( $fields['number'] < $next ) {
 				$deferred = array(
 					'Register closure refused: number precedes register sequence',
@@ -665,28 +751,6 @@ final class Closure_Store {
 			}
 			$fields += $receipts;
 			$approval_missing = null;
-			// The document records the approval the session write settles, so the
-			// session store builds it inside that same conditional UPDATE.
-			$document = function ( $approved_by, $finding ) use ( &$fields, &$deferred ) {
-				if ( null !== $finding ) {
-					$fields['findings']['approval_missing'] = $finding;
-				}
-				$fields['approved_by'] = $approved_by;
-				$fields['breakdowns']['labels']['approved_by_name'] = get_userdata( (int) ( $approved_by ?? 0 ) )->display_name ?? '';
-				$encoded = wp_json_encode( self::document( $fields ) );
-				if ( false === $encoded ) {
-					$deferred = array(
-						'Closure JSON encoding failed.',
-						array(
-							'closure_id' => $fields['id'],
-							'session_id' => $fields['session_id'],
-							'field' => 'closure',
-						),
-					);
-					throw new \RuntimeException( 'Closure JSON encoding failed.' );
-				}
-				return $encoded;
-			};
 			try {
 				$result = $sessions->transition(
 					$session,
@@ -695,7 +759,6 @@ final class Closure_Store {
 						'closure_id' => $fields['id'],
 						'number' => $fields['number'],
 						'printed_number' => $fields['printed_number'],
-						'closure' => $document,
 						'counted' => $fields['counted'],
 						'expected' => $fields['expected'],
 					) + ( 'counting' === $session['status'] ? array(
@@ -709,15 +772,13 @@ final class Closure_Store {
 			} catch ( \RuntimeException $error ) {
 				// The session store stays silent on a closure-driven write (see its
 				// transition()); the failure is restated here after the rollback.
-				if ( ! $deferred ) {
-					$deferred = array(
-						'Closure session write failed.',
-						array(
-							'closure_id' => $fields['id'],
-							'session_id' => $fields['session_id'],
-						),
-					);
-				}
+				$deferred = array(
+					'Closure session write failed.',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+					),
+				);
 				throw $error;
 			}
 			if ( is_wp_error( $result ) ) {
@@ -733,7 +794,30 @@ final class Closure_Store {
 				);
 				return $result;
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) {
+			if ( null !== $approval_missing ) {
+				$fields['findings']['approval_missing'] = $approval_missing;
+			}
+			$fields['approved_by'] = $result['approved_by'];
+			$fields['breakdowns']['labels']['approved_by_name'] = get_userdata( (int) ( $result['approved_by'] ?? 0 ) )->display_name ?? '';
+			// The row reads the session's timestamps so filter, sort and display agree; a
+			// deferred close keeps the till's own claims in the document.
+			$fields['till_closed_at_gmt'] = 'counting' === $session['status'] ? null : $fields['closed_at_gmt'];
+			$fields['till_opened_at_gmt'] = $fields['opened_at_gmt'] === $session['opened_at_gmt'] ? null : $fields['opened_at_gmt'];
+			$document = wp_json_encode( self::document( $fields ) );
+			if ( false === $document ) {
+				$deferred = array(
+					'Closure JSON encoding failed.',
+					array(
+						'closure_id' => $fields['id'],
+						'session_id' => $fields['session_id'],
+						'field' => 'closure',
+					),
+				);
+				throw new \RuntimeException( 'Closure JSON encoding failed.' );
+			}
+			$table = $sessions->table_name();
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, prepared values.
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET closure = %s WHERE id = %s AND closure_id = %s", $document, $session['id'], $fields['id'] ) ) || false === $wpdb->query( 'COMMIT' ) ) {
 				$deferred = array(
 					'Closure write failed.',
 					array(
