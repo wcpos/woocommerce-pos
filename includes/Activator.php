@@ -889,8 +889,8 @@ class Activator {
 					if ( $row['id'] !== $keep ) {
 						$retired[ $row['id'] ] = $row;
 					} elseif ( null === $held || $keep !== $held['id'] ) {
-						// Free's register has no store; Pro re-parents from the retired rows that carry one.
-						$option['register'] = array_replace( $row, array( 'store_id' => null ) );
+						// The stored row keeps its store for Pro's adoption; Free reads it with none.
+						$option['register'] = $row;
 					}
 				}
 				$option['retired'] = $retired;

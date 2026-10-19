@@ -10,9 +10,10 @@ namespace WCPOS\WooCommercePOS\Services;
 use WCPOS\WooCommercePOS\Logger;
 
 /**
- * Free holds exactly one register, with no store, in the autoloaded `wcpos_register`
- * option: `{ register: row, retired: { uuid: row } }`. Retired rows keep the names of
- * registers that sessions, closures and receipts still reference.
+ * Free holds exactly one register in the autoloaded `wcpos_register` option:
+ * `{ register: row, retired: { uuid: row } }`. Retired rows keep the names of registers
+ * that sessions, closures and receipts still reference. Free's register has no store on
+ * the wire; a stored `store_id` (schema 12 keeps a dev site's) is only for Pro's adoption.
  */
 final class Option_Register_Repository implements Register_Repository {
 	/** Option name. */
@@ -24,8 +25,8 @@ final class Option_Register_Repository implements Register_Repository {
 	 * @param string $id Register UUID.
 	 */
 	public function get( string $id ): ?array {
-		$row = self::read()['register'] ?? null;
-		return is_array( $row ) && ( $row['id'] ?? null ) === $id ? $row : null;
+		$row = self::register();
+		return null !== $row && $row['id'] === $id ? $row : null;
 	}
 
 	/**
@@ -34,8 +35,8 @@ final class Option_Register_Repository implements Register_Repository {
 	 * @param array $args Filters.
 	 */
 	public function list( array $args ): array {
-		$row = self::read()['register'] ?? null;
-		return is_array( $row ) && self::in_scope( $row, $args ) ? array( $row ) : array();
+		$row = self::register();
+		return null !== $row && self::in_scope( $row, $args ) ? array( $row ) : array();
 	}
 
 	/**
@@ -126,6 +127,12 @@ final class Option_Register_Repository implements Register_Repository {
 		foreach ( array( self::OPTION, 'alloptions', 'notoptions' ) as $key ) {
 			wp_cache_delete( $key, 'options' );
 		}
+	}
+
+	/** The held register as Free serves it: with no store. */
+	private static function register(): ?array {
+		$row = self::read()['register'] ?? null;
+		return is_array( $row ) && isset( $row['id'] ) ? array_replace( $row, array( 'store_id' => null ) ) : null;
 	}
 
 	/** Read the option as an array. */

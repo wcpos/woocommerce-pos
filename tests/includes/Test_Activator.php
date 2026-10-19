@@ -2340,7 +2340,9 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$option = get_option( self::REGISTER_OPTION );
-			$this->assertSame( array_replace( $fixture['rows']['recent'], array( 'store_id' => null ) ), $option['register'] );
+			// The stored row keeps the dev site's store for Pro's adoption; Free serves it with none.
+			$this->assertSame( $fixture['rows']['recent'], $option['register'] );
+			$this->assertSame( 12, $option['register']['store_id'] );
 			$this->assertSame(
 				array(
 					$fixture['rows']['idle']['id'] => $fixture['rows']['idle'],
@@ -2350,6 +2352,7 @@ class Test_Activator extends WP_UnitTestCase {
 			);
 			$registers = new \WCPOS\WooCommercePOS\Services\Register_Store();
 			$this->assertSame( array( $fixture['rows']['recent']['id'] ), array_column( $registers->list( array() ), 'id' ) );
+			$this->assertNull( $registers->get( $fixture['rows']['recent']['id'] )['store_id'] );
 			$this->assertSame( 'Older till', $registers->display_name( $fixture['rows']['older']['id'] ) );
 
 			// Act: a re-run has no table to copy and changes nothing.
@@ -2387,7 +2390,7 @@ class Test_Activator extends WP_UnitTestCase {
 				$option = get_option( self::REGISTER_OPTION );
 				$this->assertSame( $fixture['rows'][ $keep ]['id'], $option['register']['id'], $case );
 				$this->assertSame( 'option holds one' === $case ? 'Renamed by new code' : 'Idle till', $option['register']['name'], $case );
-				$this->assertNull( $option['register']['store_id'], $case );
+				$this->assertSame( $fixture['rows'][ $keep ]['store_id'], $option['register']['store_id'], $case );
 				$this->assertEqualsCanonicalizing( array_diff( array_column( $fixture['rows'], 'id' ), array( $fixture['rows'][ $keep ]['id'] ) ), array_keys( $option['retired'] ), $case );
 				$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ), $case );
 			} finally {
