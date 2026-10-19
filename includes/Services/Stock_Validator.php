@@ -187,7 +187,7 @@ class Stock_Validator {
 			$target_status = isset( $intent['status'] ) ? (string) $intent['status'] : '';
 			if ( '' !== $target_status ) {
 				$order->set_status( $target_status );
-				$order->save();
+				\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::saving( $order->get_id(), fn() => $order->save() );
 			}
 			if ( ! empty( $intent['set_paid'] ) ) {
 				$order->payment_complete( isset( $intent['transaction_id'] ) ? (string) $intent['transaction_id'] : '' );

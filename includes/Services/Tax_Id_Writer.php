@@ -231,7 +231,7 @@ class Tax_Id_Writer {
 			$order->delete_meta_data( self::VERIFIED_META_KEY );
 		}
 
-		$order->save();
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::saving( $order->get_id(), fn() => $order->save() );
 
 		return $plan;
 	}

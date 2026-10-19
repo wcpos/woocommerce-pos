@@ -70,6 +70,120 @@ class Test_Money_Meta_Guard extends Sync_REST_Store_Test_Case {
 		return array_column( $response->get_data()['document']['meta_data'], 'value', 'key' );
 	}
 
+	/** @dataProvider aborted_save_cases */
+	public function test_plugin_save_abort_releases_only_its_keeper_acquisitions( bool $ledger, bool $outer, bool $storage_failure, bool $authorised = false ): void {
+		$order = $this->order();
+		$id = $order->get_id();
+		$guard = Money_Meta_Guard::instance();
+		$keeper = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
+		$lock = Order_Lock::instance();
+		$competitor = new Order_Lock();
+		$order->update_meta_data( $ledger ? '_wcpos_payments' : '_wcpos_money_epoch', $ledger ? $this->cash() : 99 );
+		$store = $order->get_data_store();
+		$property = new \ReflectionProperty( \WC_Data::class, 'data_store' );
+		$property->setAccessible( true );
+		$failed = false;
+		$refuse = static function ( $saving ) use ( $id, &$failed ): void {
+			if ( $saving->get_id() === $id ) {
+				$failed = true;
+				throw new \RuntimeException( 'Injected aborted order save' );
+			}
+		};
+		if ( $storage_failure ) {
+			$property->setValue( $order, new class( $store, $refuse ) {
+				private $store;
+				private $refuse;
+				public function __construct( $store, $refuse ) { $this->store = $store; $this->refuse = $refuse; }
+				public function update( $order ): void { ( $this->refuse )( $order ); }
+				public function __call( $method, $args ) { return $this->store->$method( ...$args ); }
+			} );
+		} else {
+			add_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+		}
+		try {
+			if ( $outer ) { $this->assertTrue( $lock->acquire( $id ) ); }
+			// Exercise an existing plugin save caller, not a test-only cleanup wrapper.
+			if ( $authorised ) {
+				Money_Meta_Guard::authorised( $id, static fn() => $order->save() );
+			} else {
+				( new \WCPOS\WooCommercePOS\Services\Tax_Id_Writer() )->write_for_order( $order, array(), array() );
+			}
+			$this->assertTrue( $failed, 'The injected failure must be reached.' );
+			foreach ( array( array( $guard, 'locks' ), array( $keeper, 'closure_locks' ) ) as [ $owner, $field ] ) {
+				$counts = new \ReflectionProperty( $owner, $field );
+				$counts->setAccessible( true );
+				$this->assertSame( 0, $counts->getValue( $owner )[ $id ] ?? 0, 'Aborted save stranded a keeper acquisition.' );
+			}
+			if ( $outer ) {
+				$this->assertFalse( $competitor->acquire( $id ), 'The enclosing caller must retain its lock.' );
+				$lock->release( $id );
+			}
+			$this->assertTrue( $competitor->acquire( $id ), 'A different request can acquire after the save aborts.' );
+		} finally {
+			$competitor->release( $id );
+			$guard->release_lock( $order );
+			$keeper->release_closure_lock( $order );
+			if ( $outer ) { $lock->release( $id ); }
+			$property->setValue( $order, $store );
+			remove_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+		}
+	}
+
+	public function aborted_save_cases(): array {
+		$cases = array();
+		foreach ( array( false, true ) as $ledger ) {
+			foreach ( array( false, true ) as $outer ) {
+				foreach ( array( false, true ) as $storage ) {
+					$cases[ ( $ledger ? 'ledger' : 'guard' ) . '-' . ( $outer ? 'outer' : 'alone' ) . '-' . ( $storage ? 'store' : 'hook' ) ] = array( $ledger, $outer, $storage );
+				}
+			}
+		}
+		foreach ( array( false, true ) as $outer ) {
+			foreach ( array( false, true ) as $storage ) {
+				$cases[ 'authorised-' . (int) $outer . '-' . (int) $storage ] = array( true, $outer, $storage, true );
+			}
+		}
+		return $cases;
+	}
+
+	public function test_aborted_nested_save_preserves_enclosing_keeper_counts_and_other_orders(): void {
+		$order = $this->order();
+		$other = $this->order();
+		$guard = Money_Meta_Guard::instance();
+		$keeper = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
+		$competitor = new Order_Lock();
+		// Model enclosing saves: each keeper already owns one acquisition on each order.
+		foreach ( array( $order, $other ) as $saving ) {
+			$saving->update_meta_data( '_wcpos_money_epoch', 9 );
+			$saving->update_meta_data( '_wcpos_payments', $this->cash() );
+			$guard->keep_stored( $saving );
+			$keeper->keep_closure_stamps( $saving );
+		}
+		$refuse = static function ( $saving ) use ( $order ): void {
+			if ( $saving->get_id() === $order->get_id() ) { throw new \RuntimeException( 'Nested save aborted' ); }
+		};
+		add_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+		try {
+			$order->update_meta_data( '_wcpos_money_epoch', 10 );
+			( new \WCPOS\WooCommercePOS\Services\Tax_Id_Writer() )->write_for_order( $order, array(), array() );
+			foreach ( array( $order, $other ) as $saving ) {
+				foreach ( array( array( $guard, 'locks' ), array( $keeper, 'closure_locks' ) ) as [ $owner, $field ] ) {
+					$counts = new \ReflectionProperty( $owner, $field );
+					$counts->setAccessible( true );
+					$this->assertSame( 1, $counts->getValue( $owner )[ $saving->get_id() ] ?? 0 );
+				}
+				$this->assertFalse( $competitor->acquire( $saving->get_id() ) );
+			}
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+			foreach ( array( $order, $other ) as $saving ) {
+				$competitor->release( $saving->get_id() );
+				$guard->release_lock( $saving );
+				$keeper->release_closure_lock( $saving );
+			}
+		}
+	}
+
 	public function test_reduced_reopened_sale_cannot_complete_from_retained_capture(): void {
 		$order = $this->order( array( '_wcpos_payments' => $this->cash( '100' ), '_wcpos_completed_at' => self::AT ), '100' );
 		$this->ack_meta( $this->push( $order, $this->reopen(), array( 'expectedEpoch' => 0 ) ) );

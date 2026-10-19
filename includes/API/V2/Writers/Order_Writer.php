@@ -223,7 +223,7 @@ class Order_Writer extends Null_Writer {
 		$response = Order_Write_Intent::open(
 			$declared,
 			function () use ( $prepared, $forward ) {
-				return $this->forward_with_reserved_stock( $prepared, $forward );
+				return Money_Meta_Guard::saving( (int) ( $prepared['context']['id'] ?? 0 ), fn() => $this->forward_with_reserved_stock( $prepared, $forward ) );
 			}
 		);
 		if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 && ( 'update' === $declared['operation'] || 201 === $response->get_status() ) ) {
@@ -813,7 +813,7 @@ class Order_Writer extends Null_Writer {
 			$order->update_meta_data( '_pos_store', (string) $change['_pos_store'] );
 		}
 		if ( $cashier_changed || $store_changed ) {
-			$order->save();
+			Money_Meta_Guard::saving( $order->get_id(), fn() => $order->save() );
 		}
 		if ( 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' ) ) {
 			Order_Notes::add_reopen_note( $order, $current_user, $order->get_meta( '_pos_store' ) );

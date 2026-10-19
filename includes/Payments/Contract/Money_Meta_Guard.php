@@ -40,10 +40,30 @@ final class Money_Meta_Guard {
 	public static function authorised( int $order_id, callable $fn ) {
 		self::$authorised[ $order_id ] = ( self::$authorised[ $order_id ] ?? 0 ) + 1;
 		try {
-			return $fn();
+			return self::saving( $order_id, $fn );
 		} finally {
 			if ( 0 === --self::$authorised[ $order_id ] ) {
 				unset( self::$authorised[ $order_id ] );
+			}
+		}
+	}
+
+	/**
+	 * WC catches save exceptions without an unconditional failure hook. Bound our
+	 * keeper acquisitions to plugin-owned work; third-party saves fall back to shutdown.
+	 * This does not authorise metadata or release an enclosing caller's acquisitions.
+	 */
+	public static function saving( int $order_id, callable $fn ) {
+		$guard = self::instance();
+		$count = $guard->locks[ $order_id ] ?? 0;
+		try {
+			return Ledger::instance()->with_save_lock_cleanup( $order_id, $fn );
+		} finally {
+			while ( ( $guard->locks[ $order_id ] ?? 0 ) > $count ) {
+				Order_Lock::instance()->release( $order_id );
+				if ( 0 === --$guard->locks[ $order_id ] ) {
+					unset( $guard->locks[ $order_id ] );
+				}
 			}
 		}
 	}

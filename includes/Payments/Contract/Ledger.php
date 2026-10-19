@@ -430,6 +430,27 @@ class Ledger {
 		return array_values( $unique );
 	}
 
+	/**
+	 * Clean up skipped after-save hooks without releasing an enclosing save's locks.
+	 *
+	 * @param int      $order_id Order being saved.
+	 * @param callable $work     Plugin-owned save operation.
+	 * @return mixed
+	 */
+	public function with_save_lock_cleanup( int $order_id, callable $work ) {
+		$count = $this->closure_locks[ $order_id ] ?? 0;
+		try {
+			return $work();
+		} finally {
+			while ( ( $this->closure_locks[ $order_id ] ?? 0 ) > $count ) {
+				Order_Lock::instance()->release( $order_id );
+				if ( 0 === --$this->closure_locks[ $order_id ] ) {
+					unset( $this->closure_locks[ $order_id ] );
+				}
+			}
+		}
+	}
+
 	/** Release a keeper acquisition after saving, or all remaining acquisitions on shutdown.
 	 *
 	 * @param mixed $order Saved order, or null at shutdown.
@@ -1401,7 +1422,7 @@ class Ledger {
 					/* translators: 1: payment row uuid, 2: void reason given by the cashier. */
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
-			$order->save();
+			Money_Meta_Guard::saving( $order->get_id(), fn() => $order->save() );
 			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
 			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
 		}

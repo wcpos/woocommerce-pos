@@ -111,6 +111,6 @@ final class Receipt_Print_Counter {
 	 */
 	private function save( WC_Order $order, int $count ): void {
 		$order->update_meta_data( '_wcpos_receipt_print_count', (string) $count );
-		$order->save();
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::saving( $order->get_id(), fn() => $order->save() );
 	}
 }
