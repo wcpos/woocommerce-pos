@@ -174,8 +174,8 @@ trait Provenance_Health_Tests {
 		$this->provenance_order( $id, '7', '2026-09-11T00:42:10+02:00', '' );
 		$report = ( new Provenance_Health() )->report( array( array( 'id' => $id, 'name' => 'Front' ) ), array( $id ) );
 		$this->assertSame( array(
-			array( 'order_id' => $ahead, 'order_number' => (string) $ahead, 'sale_time' => '2026-09-11T00:57:10+02:00', 'received_gmt' => $received, 'skew_seconds' => 900, 'direction' => 'ahead' ),
-			array( 'order_id' => $behind, 'order_number' => (string) $behind, 'sale_time' => '2026-09-10T22:42:10+02:00', 'received_gmt' => $received, 'skew_seconds' => -7200, 'direction' => 'behind' ),
+			array( 'order_id' => $ahead, 'order_number' => (string) $ahead, 'sale_time' => '2026-09-11T00:57:10+02:00', 'received_gmt' => $received, 'skew_seconds' => 900, 'direction' => 'ahead', 'till' => $id ),
+			array( 'order_id' => $behind, 'order_number' => (string) $behind, 'sale_time' => '2026-09-10T22:42:10+02:00', 'received_gmt' => $received, 'skew_seconds' => -7200, 'direction' => 'behind', 'till' => $id ),
 		), $report['registers'][0]['skew'] );
 		$this->assertSame(
 			array(
@@ -184,6 +184,34 @@ trait Provenance_Health_Tests {
 			),
 			$report['registers'][0]['skew_counts']
 		);
+	}
+
+	/** A skew row names the till that made the sale, or the register when the sale carries no valid till. */
+	public function test_health_skew_row_names_its_till_or_falls_back_to_the_register(): void {
+		// Arrange.
+		$id = wp_generate_uuid4();
+		$till = wp_generate_uuid4();
+		$received = '2026-09-10T12:00:00Z';
+		$stamped = wc_get_order( $this->provenance_order( $id, '1', '2026-09-10T12:30:00Z', $received ) );
+		$stamped->update_meta_data( '_wcpos_till', strtoupper( $till ) );
+		$stamped->save();
+		$unstamped = $this->provenance_order( $id, '2', '2026-09-10T10:00:00Z', $received );
+		$invalid = wc_get_order( $this->provenance_order( $id, '3', '2026-09-10T09:00:00Z', $received ) );
+		$invalid->update_meta_data( '_wcpos_till', 'invalid-till' );
+		$invalid->save();
+		$registers = array(
+			array(
+				'id' => $id,
+				'name' => 'Front',
+			),
+		);
+		// Act.
+		$row = ( new Provenance_Health() )->report( $registers, array( $id ) )['registers'][0];
+		// Assert.
+		$tills = array_column( $row['skew'], 'till', 'order_id' );
+		$this->assertSame( $till, $tills[ $stamped->get_id() ] );
+		$this->assertSame( $id, $tills[ $unstamped ] );
+		$this->assertSame( $id, $tills[ $invalid->get_id() ] );
 	}
 
 	public function test_health_unknown_register_lists_sampled_orders(): void {

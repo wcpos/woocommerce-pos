@@ -326,6 +326,7 @@ class Registers_Controller extends WP_REST_Controller {
 											'type' => 'string',
 											'enum' => array( 'ahead', 'behind' ),
 										),
+										'till' => array( 'type' => 'string' ),
 									),
 								),
 							),
