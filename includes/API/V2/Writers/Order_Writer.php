@@ -381,6 +381,14 @@ class Order_Writer extends Null_Writer {
 				$qd->persist( $order );
 			}
 		};
+		// wc/v3 adjusts a set line's stock only on processing/completed/on-hold (and restores a removed
+		// line's reduction itself); a reopened sale is pos-open with its stock still reduced, so after the
+		// save every line is brought to its quantity. An unchanged line is a no-op: `_reduced_stock` matches.
+		$adjust_stock = static function ( $order, $request, $creating ) use ( $context, $prepared ) {
+			if ( ! $creating && $order instanceof \WC_Order && $context['id'] === $order->get_id() && $request->get_route() === $prepared['route'] ) {
+				self::adjust_line_stock( $order );
+			}
+		};
 		$use_filter = array() !== ( $context['fill_provenance'] ?? array() ) || isset( $context['restart_gmt'] );
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
@@ -394,15 +402,37 @@ class Order_Writer extends Null_Writer {
 				return $error;
 			}
 			add_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10, 3 );
+			if ( ! empty( $context['adjust_stock'] ) ) {
+				add_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10, 3 );
+			}
 			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
 		} finally {
 			$qd->clear();
 			remove_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10 );
+			remove_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10 );
 			if ( $use_filter ) {
 				remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10 );
 			}
 			if ( 'create' === $context['operation'] ) {
 				remove_action( 'woocommerce_before_order_object_save', $created_via );
+			}
+		}
+	}
+
+	/**
+	 * Bring every line's stock reduction to its quantity, with wc/v3's own helper and note.
+	 * Skipped when the status change itself restored the order's stock (pending, cancelled).
+	 */
+	private static function adjust_line_stock( \WC_Order $order ): void {
+		if ( ! $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) {
+			return;
+		}
+		require_once WC_ABSPATH . 'includes/admin/wc-admin-functions.php';
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$changed = wc_maybe_adjust_line_item_product_stock( $item );
+			if ( is_array( $changed ) ) {
+				/* translators: %s item name. */
+				$order->add_order_note( sprintf( __( 'Adjusted stock: %s', 'woocommerce' ), sprintf( '%1$s (%2$s&rarr;%3$s)', $item->get_name(), $changed['from'], $changed['to'] ) ), false, true );
 			}
 		}
 	}
@@ -518,11 +548,14 @@ class Order_Writer extends Null_Writer {
 		if ( null !== $restart_gmt ) {
 			$context['restart_gmt'] = $restart_gmt;
 		}
-		$forward = $this->order_payload->for_update( $id, $forward );
-		$refusal = $order ? $this->money_gate( $order, $forward ) : null;
+		$forward       = $this->order_payload->for_update( $id, $forward );
+		$lines_changed = $order && $this->order_payload->lines_changed( $order, $forward );
+		$refusal       = $order ? $this->money_gate( $order, $forward, $lines_changed ) : null;
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
+		// Stock already reduced (a paid or reopened sale): the line edit moves stock by its delta (rule 4b).
+		$context['adjust_stock'] = $lines_changed && (bool) $order->get_data_store()->get_stock_reduced( $id );
 		return array(
 			'payload' => $forward,
 			'context' => $context,
@@ -536,14 +569,15 @@ class Order_Writer extends Null_Writer {
 	 * moves the order into an editable status (D3: reopen and edit are one write); `cancelled`
 	 * never unlocks lines.
 	 *
-	 * @param \WC_Order $order   The order read under the order lock.
-	 * @param array     $forward The forwarded update payload.
+	 * @param \WC_Order $order         The order read under the order lock.
+	 * @param array     $forward       The forwarded update payload.
+	 * @param bool      $lines_changed Whether the forward changes the order's money lines.
 	 */
-	private function money_gate( \WC_Order $order, array $forward ): ?WP_Error {
+	private function money_gate( \WC_Order $order, array $forward, bool $lines_changed ): ?WP_Error {
 		$status   = (string) ( $forward['status'] ?? '' );
 		$editable = $order->is_editable();
 		$reopens  = ! $editable && in_array( $status, array( 'pos-open', 'pending', 'on-hold' ), true );
-		if ( ! $editable && ! $reopens && $this->order_payload->lines_changed( $order, $forward ) ) {
+		if ( ! $editable && ! $reopens && $lines_changed ) {
 			return new WP_Error(
 				'reopen_required',
 				'Reopen the order before changing its lines.',

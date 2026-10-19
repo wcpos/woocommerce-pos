@@ -581,6 +581,123 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 2, $this->first_item( $order_id )->get_quantity() );
 	}
 
+	protected function stock_product( int $quantity ): \WC_Product {
+		return \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product(
+			array(
+				'regular_price'  => '10',
+				'price'          => '10',
+				'manage_stock'   => true,
+				'stock_quantity' => $quantity,
+			)
+		);
+	}
+
+	protected function stock_of( \WC_Product $product ): int {
+		return (int) wc_get_product( $product->get_id() )->get_stock_quantity();
+	}
+
+	/** A paid processing sale of two units of a product stocked at ten: stock 8, `_reduced_stock` 2. */
+	protected function paid_sale_of_two( \WC_Product $product ): int {
+		$order_id = $this->paid_order( 'processing', array( array( $product, 2 ) ) );
+		$this->assertSame( 8, $this->stock_of( $product ) );
+		$this->assertSame( '2', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+
+		return $order_id;
+	}
+
+	public function test_adding_a_line_to_a_reopened_paid_order_reduces_that_product(): void {
+		// Arrange.
+		$first    = $this->stock_product( 10 );
+		$second   = $this->stock_product( 5 );
+		$order_id = $this->paid_sale_of_two( $first );
+		$payload  = array(
+			'status'     => 'pos-open',
+			'line_items' => array(
+				array(
+					'id'       => $this->first_item( $order_id )->get_id(),
+					'quantity' => 2,
+				),
+				array(
+					'product_id' => $second->get_id(),
+					'quantity'   => 1,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 8, $this->stock_of( $first ) );
+		$this->assertSame( 4, $this->stock_of( $second ) );
+		$this->assertCount( 2, wc_get_order( $order_id )->get_items() );
+	}
+
+	public function test_removing_a_line_from_a_reopened_paid_order_restores_its_stock(): void {
+		// Arrange.
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->paid_sale_of_two( $product );
+		$payload  = array(
+			'status'     => 'pos-open',
+			'line_items' => array(
+				array(
+					'id'         => $this->first_item( $order_id )->get_id(),
+					'product_id' => null,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 10, $this->stock_of( $product ) );
+		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
+	}
+
+	public function test_changing_quantity_on_a_reopened_paid_order_moves_stock_by_the_difference(): void {
+		// Arrange.
+		$product           = $this->stock_product( 10 );
+		$order_id          = $this->paid_sale_of_two( $product );
+		$payload           = $this->quantity_edit( $order_id );
+		$payload['status'] = 'pos-open';
+
+		// Act: 2 -> 3 in the reopening push.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 7, $this->stock_of( $product ) );
+		$this->assertSame( '3', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+
+		// Act: 3 -> 1 on the reopened (pos-open, stock reduced) order.
+		$response = $this->push_envelope( 'update', $this->quantity_edit( $order_id, -2 ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 9, $this->stock_of( $product ) );
+		$this->assertSame( '1', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
+	}
+
+	public function test_line_change_on_an_unpaid_open_cart_leaves_stock_alone(): void {
+		// Arrange: an open cart whose stock was never reduced.
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->make_order( 'pos-open', array( array( $product, 2 ) ) );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->quantity_edit( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 10, $this->stock_of( $product ) );
+		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
+	}
+
 	public function test_push_from_a_protocol_2_client_is_refused_426_with_nothing_reserved(): void {
 		// Arrange.
 		$payload = array(
