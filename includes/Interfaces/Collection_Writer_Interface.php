@@ -47,7 +47,7 @@ interface Collection_Writer_Interface {
 	public function after_identity( int $id, array $payload ): void;
 
 	/** On a retry that re-proves a poisoned create's identity, before it is finalized. */
-	public function after_recovery( int $id, array $payload ): void;
+	public function after_recovery( int $id, array $payload, array $money = array() );
 
 	/** After a wc/v3 update succeeded, before the mutation is finalized. */
 	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void;

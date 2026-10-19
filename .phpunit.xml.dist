@@ -21,6 +21,9 @@
 			<directory suffix="_Test.php">./tests/</directory>
 		</testsuite>
 	</testsuites>
+	<listeners>
+		<listener class="WCPOS\WooCommercePOS\Tests\Helpers\Order_Lock_Guard" file="tests/Helpers/Order_Lock_Guard.php" />
+	</listeners>
     <filter>
         <whitelist processUncoveredFilesFromWhitelist="false">
             <directory suffix=".php">includes</directory>

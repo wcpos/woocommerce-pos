@@ -26,14 +26,15 @@ final class Protocol_Gate {
 	 * the caller's decision (`Route_Classifier::is_protocol_exempt()`).
 	 *
 	 * @param WP_REST_Request $request Request to inspect.
+	 * @param array           $details Money-contract refusal details, forcing an update even at protocol 2.
 	 */
-	public static function refusal( WP_REST_Request $request ): ?WP_REST_Response {
-		if ( ! self::is_marked( $request ) ) {
+	public static function refusal( WP_REST_Request $request, array $details = array() ): ?WP_REST_Response {
+		if ( ! $details && ! self::is_marked( $request ) ) {
 			return null;
 		}
 
 		$signal = Client_Signal::read( $request );
-		if ( self::MIN_PROTOCOL <= (int) $signal['protocol'] ) {
+		if ( ! $details && self::MIN_PROTOCOL <= (int) $signal['protocol'] ) {
 			return null;
 		}
 
@@ -41,12 +42,15 @@ final class Protocol_Gate {
 			array(
 				'code'    => self::ERROR_CODE,
 				'message' => __( 'This store requires a newer version of WCPOS.', 'woocommerce-pos' ),
-				'data'    => array(
-					'status'          => 426,
-					'min_protocol'    => self::MIN_PROTOCOL,
-					'server_protocol' => self::SERVER_PROTOCOL,
-					'plugin_version'  => \WCPOS\WooCommercePOS\VERSION,
-					'docs'            => 'https://docs.wcpos.com/error-codes/wcpos_update_required',
+				'data'    => array_merge(
+					$details,
+					array(
+						'status'          => 426,
+						'min_protocol'    => self::MIN_PROTOCOL,
+						'server_protocol' => self::SERVER_PROTOCOL,
+						'plugin_version'  => \WCPOS\WooCommercePOS\VERSION,
+						'docs'            => 'https://docs.wcpos.com/error-codes/wcpos_update_required',
+					)
 				),
 			),
 			426

@@ -28,7 +28,7 @@ final class Create_Identity_Spy_Writer extends Null_Writer implements Collection
 	public function after_identity( int $id, array $payload ): void {
 		$this->record( __FUNCTION__, $id, $payload );
 	}
-	public function after_recovery( int $id, array $payload ): void {
+	public function after_recovery( int $id, array $payload, array $money = array() ) {
 		$this->record( __FUNCTION__, $id, $payload );
 	}
 	public function after_update( int $id, array $payload, array $current, array $response_data, array $context ): void {

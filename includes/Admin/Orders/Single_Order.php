@@ -119,7 +119,7 @@ class Single_Order {
 			// Update meta only if _pos_user has changed.
 			if ( $current_pos_cashier !== $new_pos_cashier ) {
 				$order->update_meta_data( '_pos_user', (string) $new_pos_cashier );
-				$order->save();
+				\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::saving( $order->get_id(), fn() => $order->save() );
 
 				// Add an order note indicating the change.
 				$current_cashier    = get_userdata( $current_pos_cashier );

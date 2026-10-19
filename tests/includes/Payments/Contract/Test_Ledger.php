@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
@@ -18,6 +19,7 @@ use WC_Tax;
 
 /** Payment ledger tests. */
 class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
+	use \Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -39,6 +41,473 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				return $settings;
 			}
 		);
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_failed_ledger_save_releases_keeper_locks_but_preserves_outer_lock( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		$order = $this->create_pos_order();
+		$lock = Order_Lock::instance();
+		$competitor = new Order_Lock();
+		$lease = static fn( $sql ) => 0 === strpos( $sql, 'SELECT GET_LOCK(' ) ? 'SELECT NULL' : $sql;
+		$refuse = static function ( $saving ) use ( $order ): void {
+			if ( $saving->get_id() === $order->get_id() ) { throw new \RuntimeException( 'Save interrupted after keeper acquisition' ); }
+		};
+		add_filter( 'query', $lease );
+		add_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+		try {
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			try {
+				Ledger::instance()->adopt( $order, $this->payment( 'pos_cash', '5' ) );
+				$this->fail( 'Interrupted ledger save returned.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertInstanceOf( \WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception::class, $error );
+			}
+			$this->assertFalse( $competitor->acquire( $order->get_id() ), 'The caller still owns its outer lock.' );
+			$lock->release( $order->get_id() );
+			$this->assertFalse( get_option( 'wcpos_payment_lock_' . $order->get_id() ), 'Failed save leaked an option lease.' );
+			$this->assertTrue( $competitor->acquire( $order->get_id() ), 'Failed save stranded a reentrant acquisition.' );
+		} finally {
+			$competitor->release( $order->get_id() );
+			remove_filter( 'query', $lease );
+			remove_action( 'woocommerce_before_order_object_save', $refuse, PHP_INT_MAX );
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_locked_save_uses_fresh_total_and_refreshes_caller( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$order->set_total( '100' );
+			$attempt = wp_generate_uuid4();
+			$order->update_meta_data( '_wcpos_gateway_attempts', array( $attempt => array( 'state' => 'sent', 'epoch' => 0 ) ) );
+			Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+			$stale = wc_get_order( $order->get_id() );
+			$stale->update_meta_data( '_wcpos_test_staged', 'kept' );
+			$fresh = wc_get_order( $order->get_id() );
+			$fresh->set_total( '200' );
+			$fresh->save();
+
+			$row = $ledger->adopt( $stale, $this->payment( 'pos_cash', '100', array( 'status' => 'captured' ) ) );
+
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertSame( 'pos-partial', $saved->get_status() );
+			$this->assertNull( $saved->get_date_paid() );
+			$this->assertSame( 'sent', $saved->get_meta( '_wcpos_gateway_attempts' )[ $attempt ]['state'] );
+			$this->assertSame( 'kept', $saved->get_meta( '_wcpos_test_staged' ) );
+			$this->assertSame( '200.00', $stale->get_total() );
+			$this->assertSame( $saved->get_status(), $stale->get_status() );
+			$this->assertSame( $row, $ledger->find( $stale, $row['id'] ) );
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	public function test_reopened_projection_selects_current_method_status_and_transaction(): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$ledger->record( $order, $this->payment( 'pos_cash', '92.95', array( 'provider_refs' => array( 'transaction_id' => 'old-cash' ) ) ) );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		$order->set_date_paid( null );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		add_filter( 'woocommerce_pos_payment_gateways_settings', static function ( $settings ) {
+			$settings['gateways']['pos_card']['order_status'] = 'processing';
+			return $settings;
+		} );
+		$ledger->record( $order, $this->payment( 'pos_card', '92.95', array( 'provider_refs' => array( 'transaction_id' => 'new-card' ) ) ) );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos_card', $saved->get_payment_method() );
+		$this->assertSame( 'Card', $saved->get_payment_method_title() );
+		$this->assertSame( 'new-card', $saved->get_transaction_id() );
+		$this->assertSame( 'processing', $saved->get_status() );
+	}
+
+	public function test_reopened_projection_and_summary_count_only_current_payment(): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$ledger->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$ledger->record( $order, $this->payment( 'pos_card', '1' ) );
+		$this->assertSame( 'pos-partial', $order->get_status() );
+		$summary = $ledger->summary( $order );
+		$this->assertSame( '93.95', $summary['paid'] );
+		$this->assertSame( '0.00', $summary['balance'] );
+		$this->assertSame( array( 'epoch' => 1, 'paid' => '1.00', 'balance' => '91.95' ), $summary['current_epoch'] );
+	}
+
+	/** @dataProvider pending_epoch_consumers */
+	public function test_reopened_pending_reservation_is_current_epoch_only( string $consumer ): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '92.95' );
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$order->update_meta_data( '_wcpos_money_epoch', 1 );
+		$order->set_status( 'pos-open' );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		if ( 'derive' === $consumer ) {
+			$ledger->derive( $order, $ledger->read( $order ) );
+			$this->assertSame( 'pos-open', $order->get_status() );
+		} else {
+			$input = $this->payment( 'record' === $consumer ? 'pos_cash' : 'pos_card', '92.95' );
+			$result = 'record' === $consumer ? $ledger->record( $order, $input ) : $ledger->intent( $order, $input['id'], $input, array() );
+			$this->assertNotWPError( $result );
+			$this->assertCount( 2, $ledger->read( $order ) );
+		}
+	}
+
+	public function pending_epoch_consumers(): array {
+		return array( array( 'derive' ), array( 'record' ), array( 'intent' ) );
+	}
+
+	/** @dataProvider current_epoch_captures */
+	public function test_attempt_promotion_requires_current_epoch_coverage( bool $capture ): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$ledger->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pending' );
+		$old = wp_generate_uuid4();
+		$current = wp_generate_uuid4();
+		$stamp = array( 'attempt_id' => $current, 'method_id' => 'bacs' );
+		$order->update_meta_data( '_wcpos_awaiting_customer', $stamp );
+		$order->update_meta_data( '_wcpos_gateway_attempts', array(
+			$old => array( 'state' => 'sent', 'epoch' => 0 ),
+			$current => array( 'state' => 'sent', 'epoch' => 1 ),
+		) );
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$rows = $ledger->read( $order );
+		if ( $capture ) {
+			$rows[] = array_merge( $rows[0], array( 'id' => wp_generate_uuid4(), 'epoch' => 1 ) );
+		}
+		$ledger->save( $order, $rows );
+		$saved = wc_get_order( $order->get_id() );
+		$history = \WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::read_attempts( $saved );
+		$this->assertSame( $capture ? 'paid' : 'sent', $history[ $current ]['state'] );
+		$this->assertSame( 'sent', $history[ $old ]['state'] );
+		if ( ! $capture ) {
+			$this->assertSame( $stamp, $saved->get_meta( '_wcpos_awaiting_customer' ) );
+			$this->assertSame( 'pending', $saved->get_status() );
+		}
+	}
+
+	public function current_epoch_captures(): array {
+		return array( 'retained capture only' => array( false ), 'current capture arrives' => array( true ) );
+	}
+
+	public function test_prior_epoch_projection_preserves_current_invoice(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, $this->payment( 'pos_cash', '10' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$stamp = array( 'attempt_id' => wp_generate_uuid4(), 'method_id' => 'bacs' );
+		$order->update_meta_data( '_wcpos_awaiting_customer', $stamp );
+		$order->set_status( 'pending' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$ledger->derive( $order, $ledger->read( $order ) );
+		$this->assertSame( $stamp, $order->get_meta( '_wcpos_awaiting_customer' ) );
+		$this->assertSame( 'pending', $order->get_status() );
+	}
+
+	/** A late webhook must reconcile history without closing the new money epoch. */
+	public function test_prior_epoch_settlement_keeps_reopened_order_open_and_invoice_stamped(): void {
+		$ledger = Ledger::instance();
+		$order = $this->create_pos_order();
+		$row = $ledger->record( $order, $this->payment( 'pos_cash', '92.95' ) );
+		$order->update_meta_data( '_wcpos_money_epoch', '1' );
+		$order->set_status( 'pos-open' );
+		$order->set_date_paid( null );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
+		$this->assertTrue( \WCPOS\WooCommercePOS\Payments\Contract\Settlement::instance()->settle( $row['id'], array( 'status' => 'captured', 'receipt' => array( 'late' => true ) ) ) );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-open', $saved->get_status() );
+		$this->assertNull( $saved->get_date_paid( 'edit' ) );
+		$this->assertSame( '0.00', $ledger->balance( $saved, $ledger->read( $saved ) ) );
+		$this->assertSame( array( 'late' => true ), $ledger->read( $saved )[0]['receipt'] );
+
+		$stamp = array( 'attempt_id' => wp_generate_uuid4(), 'method_id' => 'bacs' );
+		$saved->update_meta_data( '_wcpos_awaiting_customer', $stamp );
+		$saved->set_status( 'pending' );
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::authorised( $saved->get_id(), static fn() => $saved->save() );
+		$ledger->derive( $saved, $ledger->read( $saved ) );
+		$this->assertSame( $stamp, $saved->get_meta( '_wcpos_awaiting_customer' ) );
+		$this->assertSame( 'pending', $saved->get_status() );
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_stale_mint_rebases_an_existing_provider_updated_row( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$order->set_payment_method( 'pos_cash' );
+			$order->save();
+			$ledger->save( $order, array( $this->payment( 'pos_cash', '20', array( 'status' => 'failed' ) ) ), false );
+			$stale = wc_get_order( $order->get_id() );
+			$rows = $ledger->read( $stale );
+			$rows[0]['status'] = 'captured';
+			$rows[0]['refunded_amount'] = '3.00';
+			$rows[0]['refunds'] = array( array( 'id' => 123, 'status' => 'succeeded', 'amount' => '3.00' ) );
+			$rows[0]['events'] = array( array( 'type' => 'refunded' ) );
+			$rows[0]['seen_events'] = array( 'refund-123' );
+			$rows[0]['provider_refs'] = array( 'transaction_id' => 'fresh' );
+			$lock = Order_Lock::instance();
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			try { $ledger->save( wc_get_order( $order->get_id() ), $rows, false ); }
+			finally { $lock->release( $order->get_id() ); }
+			$fresh_row = $ledger->read( wc_get_order( $order->get_id() ) )[0];
+
+			$minted = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $stale );
+
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertIsArray( $minted );
+			$this->assertCount( 2, $ledger->read( $saved ) );
+			$this->assertSame( $fresh_row, $ledger->find( $saved, $fresh_row['id'] ) );
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_rebase_keeps_caller_edits_and_fresh_server_fields( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$ledger->save( $order, array( $this->payment( 'pos_cash', '20', array( 'status' => 'captured' ) ) ), false );
+			$read_rows = $ledger->read( $order );
+			$fresh = $read_rows;
+			$fresh[0]['refunded_amount'] = '3.00';
+			$fresh[0]['refunds'] = array( array( 'id' => 123, 'status' => 'succeeded', 'amount' => '3.00' ) );
+			$fresh[0]['events'] = array( array( 'type' => 'refunded' ) );
+			$fresh[0]['seen_events'] = array( 'refund-123' );
+			$ledger->save( wc_get_order( $order->get_id() ), $fresh, false );
+			$changed = $read_rows;
+			$changed[0]['receipt'] = array( 'reference' => 'caller edit' );
+
+			$ledger->save( $order, $changed, false, array(), $read_rows );
+
+			$saved = $ledger->read( wc_get_order( $order->get_id() ) )[0];
+			$this->assertSame( $changed[0]['receipt'], $saved['receipt'] );
+			foreach ( array( 'refunded_amount', 'refunds', 'events', 'seen_events', 'epoch' ) as $key ) {
+				$this->assertSame( $fresh[0][ $key ], $saved[ $key ], $key );
+			}
+			// An explicit server-field edit remains authoritative, not overwritten by the rebase.
+			$changed[0]['refunded_amount'] = '4.00';
+			$changed[0]['refunds'][0] = array( 'id' => 124, 'status' => 'succeeded', 'amount' => '4.00' );
+			$ledger->save( $order, $changed, false, array(), $read_rows );
+			$saved = $ledger->read( wc_get_order( $order->get_id() ) )[0];
+			$this->assertSame( '4.00', $saved['refunded_amount'] );
+			$this->assertSame( $changed[0]['refunds'], $saved['refunds'] );
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_stale_webview_save_keeps_a_concurrently_recorded_row( bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+		try {
+			$ledger = Ledger::instance();
+			$order = $this->create_pos_order();
+			$order->set_payment_method( 'pos_cash' );
+			$order->update_meta_data( '_wcpos_test_update', 'old' );
+			$order->update_meta_data( '_wcpos_test_delete', 'old' );
+			$order->save();
+			$stale = wc_get_order( $order->get_id() );
+			$this->assertSame( array(), $ledger->read( $stale ) );
+			$stale->update_meta_data( '_wcpos_test_staged', 'kept' );
+			$stale->update_meta_data( '_wcpos_test_update', 'new' );
+			$stale->delete_meta_data( '_wcpos_test_delete' );
+			$recorded = $ledger->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '5.00' ) );
+
+			$minted = \WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $stale );
+
+			$saved = wc_get_order( $order->get_id() );
+			$this->assertCount( 2, $ledger->read( $saved ) );
+			$this->assertSame( $recorded, $ledger->find( $saved, $recorded['id'] ) );
+			$this->assertSame( $minted['id'], $ledger->find( $saved, $minted['id'] )['id'] );
+			$this->assertSame( $ledger->read( $saved ), $ledger->read( $stale ) );
+			$this->assertSame( 'kept', $saved->get_meta( '_wcpos_test_staged' ) );
+			$this->assertSame( 'new', $saved->get_meta( '_wcpos_test_update' ) );
+			$this->assertSame( '', $saved->get_meta( '_wcpos_test_delete' ) );
+		} finally {
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_stale_webview_order_uses_locked_money_epoch( bool $hpos ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			$order = $this->create_pos_order();
+			$order->set_payment_method( 'pos_cash' );
+			$order->save();
+			$fresh = wc_get_order( $order->get_id() );
+			$fresh->update_meta_data( '_wcpos_money_epoch', 1 );
+			Money_Meta_Guard::authorised( $order->get_id(), static fn() => $fresh->save() );
+			\WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough::mint( $order );
+			$this->assertSame( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) )[0]['epoch'] );
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	/** @dataProvider persistence_storage */
+	public function test_record_refused_save_throws_without_returning_an_unstored_row( bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+		$lock = new Order_Lock();
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$ledger->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$before = $ledger->read( wc_get_order( $order->get_id() ) );
+		$payment = $this->payment( 'pos_cash', '5.00' );
+		try {
+			$this->assertTrue( $lock->acquire( $order->get_id() ) );
+			$error = null;
+			try {
+				$ledger->record( $order, $payment );
+			} catch ( \RuntimeException $caught ) {
+				$error = $caught;
+			}
+			$this->assertSame( $before, $ledger->read( wc_get_order( $order->get_id() ) ) );
+			$this->assertNotNull( $error, 'record() returned despite a refused save.' );
+			$this->assertInstanceOf( \WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception::class, $error );
+			$lock->release( $order->get_id() );
+			$row = $ledger->record( wc_get_order( $order->get_id() ), $payment );
+			$this->assertSame( $payment['id'], $row['id'] );
+			$this->assertCount( 2, $ledger->read( wc_get_order( $order->get_id() ) ) );
+		} finally {
+			$lock->release( $order->get_id() );
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
+	public function persistence_storage(): array {
+		return array( 'CPT' => array( false ), 'HPOS' => array( true ) );
+	}
+
+	public function test_dirty_ledger_save_is_refused_while_another_owner_holds_lock(): void {
+		$order = $this->create_pos_order();
+		Ledger::instance()->record( $order, $this->payment( 'pos_cash', '5.00' ) );
+		$before = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$lock = new Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array() ) );
+			$order->set_customer_note( 'Must wait' );
+			$order->save();
+			$this->assertSame( $before, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+		$order->save();
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( 'Must wait', wc_get_order( $order->get_id() )->get_customer_note() );
+	}
+
+	/** @dataProvider duplicate_order_lanes */
+	public function test_order_save_drops_duplicate_payment_ids( bool $existing ): void {
+		$order = $existing ? wc_create_order() : new \WC_Order();
+		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'status' => 'captured', 'amount' => '50' );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row, array_merge( $row, array( 'amount' => '99' ) ) ) ) );
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( '50', $rows[0]['amount'] );
+		$this->assertSame( '50.00', Ledger::instance()->paid( $rows ) );
+	}
+	public function duplicate_order_lanes(): array {
+		return array( array( false ), array( true ) );
+	}
+	/** @dataProvider duplicate_order_lanes */
+	public function test_order_save_keeps_only_server_refund_allocations( bool $existing ): void {
+		$order = $existing ? wc_create_order() : new \WC_Order();
+		$allocation = array( 'id' => 123, 'amount' => '5.00', 'status' => 'succeeded', 'provider_ref' => null );
+		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'status' => 'captured', 'amount' => '50', 'refunded_amount' => '5.00', 'refunds' => array( $allocation ) );
+		if ( $existing ) {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row ) ) );
+			$order->save_meta_data();
+		}
+		$forged = $row;
+		$forged['refunds'][] = array_merge( $allocation, array( 'id' => 456 ) );
+		$forged['refunded_amount'] = '10.00';
+		$new = $forged;
+		$new['id'] = wp_generate_uuid4();
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $forged, $new ) ) );
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( $existing ? array( $allocation ) : array(), $rows[0]['refunds'] );
+		$this->assertSame( $existing ? '5.00' : '0', $rows[0]['refunded_amount'] );
+		$this->assertSame( array(), $rows[1]['refunds'] );
+		$this->assertSame( '0', $rows[1]['refunded_amount'] );
+	}
+
+	/** @dataProvider duplicate_order_lanes */
+	public function test_order_save_preserves_server_event_history( bool $existing ): void {
+		$order = $existing ? wc_create_order() : new \WC_Order();
+		$row = array( 'id' => wp_generate_uuid4(), 'status' => 'captured', 'amount' => '50', 'seen_events' => array( 'evt_1' ), 'events' => array( array( 'message' => 'Captured' ) ), 'updated_at_gmt' => '2026-10-18T12:00:00Z' );
+		if ( $existing ) {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row ) ) );
+			$order->save_meta_data();
+		}
+		$pushed = array_merge( $row, array( 'seen_events' => array(), 'events' => array(), 'updated_at_gmt' => '2000-01-01T00:00:00Z' ) );
+		$new = $row;
+		$new['id'] = wp_generate_uuid4();
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $pushed, $new ) ) );
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( $existing ? $row['seen_events'] : array(), $rows[0]['seen_events'] );
+		$this->assertSame( $existing ? $row['events'] : array(), $rows[0]['events'] );
+		$this->assertSame( $existing ? $row['updated_at_gmt'] : null, $rows[0]['updated_at_gmt'] ?? null );
+		$this->assertSame( array(), $rows[1]['seen_events'] );
+		$this->assertSame( array(), $rows[1]['events'] );
+		$this->assertArrayNotHasKey( 'updated_at_gmt', $rows[1] );
+	}
+
+	/** @dataProvider duplicate_restore_paths */
+	public function test_order_save_restores_closed_duplicate_rows_only_once( bool $delete ): void {
+		$order = wc_create_order();
+		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'status' => 'captured', 'amount' => '50', 'closure_id' => wp_generate_uuid4() );
+		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row, $row ) ) );
+		$order->save_meta_data(); // Historical duplicates, before the keeper enforced uniqueness.
+		if ( $delete ) {
+			$order->delete_meta_data( Ledger::META_KEY );
+		} else {
+			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array() ) );
+		}
+		$order->save();
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $row['closure_id'], $rows[0]['closure_id'] );
+		$this->assertSame( '50.00', Ledger::instance()->paid( $rows ) );
+	}
+	public function duplicate_restore_paths(): array {
+		return array( array( false ), array( true ) );
 	}
 
 	/** A full till row cannot override server-owned or handler-owned facts. */
@@ -122,7 +591,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		$closure_id = wp_generate_uuid4();
 		for ( $i = 0; $i < 2; ++$i ) {
 			$ledger->stamp_closure( $order, array( $before[0]['id'] ), $closure_id );
@@ -219,6 +688,11 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$index = $this->index_values( $stored );
 		sort( $index );
 		$this->assertSame( array( 'pos_cash', 'stripe' ), $index );
+		foreach ( $value['payments'] as &$row ) {
+			$row['epoch'] = 0;
+			$row['refunded_amount'] = '0';
+		}
+		unset( $row );
 		$this->assertSame( $value, $stored->get_meta( Ledger::META_KEY ) );
 	}
 
@@ -514,7 +988,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 
 		$rows               = $ledger->read( $order );
 		$rows[1]['receipt'] = array(
@@ -669,6 +1143,25 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'action', $rows[0]['provider_refs'] );
 		$this->assertSame( 'warning', $rows[0]['events'][0]['level'] );
 		$this->assertSame( 'Provider did not answer: test_timeout', $rows[0]['events'][0]['message'] );
+	}
+
+	public function test_intent_decline_removes_only_its_row_after_another_payment_arrives(): void {
+		$order = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$input = $this->payment( 'pos_card', '20.00' );
+		$other = $this->payment( 'pos_cash', '5.00' );
+		$error = new \WP_Error( 'test_declined', 'Declined' );
+		$result = $ledger->intent( $order, $input['id'], $input, array(
+			'error' => $error,
+			'observe' => static function () use ( $order, $ledger, $other ) {
+				$ledger->record( wc_get_order( $order->get_id() ), $other );
+			},
+		) );
+		$this->assertSame( $error, $result );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( array( $other['id'] ), array_column( $ledger->read( $saved ), 'id' ) );
+		$this->assertSame( array( $other['id'] ), array_values( wp_list_pluck( $saved->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
+		$this->assertEmpty( $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
 	}
 
 	public function test_intent_determinate_error_removes_saved_row_and_indexes(): void {
@@ -1985,7 +2478,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
-		$order->save();
+		Money_Meta_Guard::authorised( $order->get_id(), static fn() => $order->save() );
 		$events = array();
 		for ( $i = 0; $i < Ledger::EVENTS_MAX + 5; ++$i ) {
 			$events[] = array( 'message' => 'e' . $i );

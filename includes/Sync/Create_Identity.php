@@ -33,10 +33,11 @@ final class Create_Identity {
 	}
 
 	/** @return int|WP_Error Created id after proof and finalization, or the protocol error. */
-	public function stamp( array $meta, array $m, int $new_id, int $response_status, Collection_Writer_Interface $writer ) {
+	public function stamp( array $meta, array $m, int $new_id, int $response_status, Collection_Writer_Interface $writer, bool $already_proven = false ) {
 		$checkpointed = $this->store->mark_poison( $m['mutationId'], $new_id, $response_status );
 		$writer->after_create( $new_id, $m['payload'] );
-		$identity_error = $this->prove( $meta, $new_id, $m['recordId'] );
+		// Only the current create's early proof may skip the second identity save.
+		$identity_error = $already_proven ? null : $this->prove( $meta, $new_id, $m['recordId'] );
 		// Attempt identity even when the checkpoint failed: the known record must retain its UUID.
 		if ( ! $checkpointed ) {
 			$this->store->mark_indeterminate( $m['mutationId'], $new_id, $response_status );
@@ -73,7 +74,11 @@ final class Create_Identity {
 		if ( $identity_error ) {
 			return $identity_error;
 		}
-		$writer->after_recovery( $remote_id, $m['payload'] );
+		// The fingerprint-checked retry carries the original aggregate, even after early proof failed.
+		$recovery_error = $writer->after_recovery( $remote_id, $m['payload'], $meta['money'] ?? array() );
+		if ( is_wp_error( $recovery_error ) ) {
+			return $recovery_error;
+		}
 		if ( ! $this->store->finalize_poison( $m['mutationId'], $remote_id ) ) {
 			return $this->finalize_error();
 		}
@@ -84,7 +89,7 @@ final class Create_Identity {
 	}
 
 	/** Persist the UUID and prove it resolves back to this exact record. */
-	private function prove( array $meta, int $id, string $record_uuid ): ?WP_Error {
+	public function prove( array $meta, int $id, string $record_uuid ): ?WP_Error {
 		if ( ! $this->store->persist_uuid( $meta['id_type'], $id, $record_uuid ) ) {
 			return $this->persistence_error();
 		}

@@ -32,7 +32,7 @@ class Customer_Writer extends Null_Writer {
 	}
 
 	/** Persist customer tax IDs after recovery. */
-	public function after_recovery( int $id, array $payload ): void {
+	public function after_recovery( int $id, array $payload, array $money = array() ) {
 		$this->write_tax_ids( $id, $payload );
 	}
 

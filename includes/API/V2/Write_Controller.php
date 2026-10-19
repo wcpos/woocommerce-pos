@@ -142,6 +142,13 @@ class Write_Controller extends WP_REST_Controller {
 			return $err;
 		}
 
+		$meta['money'] = array(
+			'request' => $request,
+			'mutation_id' => $m['mutationId'],
+			'expectedEpoch' => $m['expectedEpoch'] ?? null,
+			'tillAggregate' => isset( $m['tillAggregate'] ) ? (array) $m['tillAggregate'] : null,
+		);
+
 		// Standard-header MIRROR (ADR 0011) — Idempotency-Key (= mutationId) + If-Match (= baseRevision) are an
 		// optional cross-check over the canonical body; 422 on divergence. Same helper as the orders push path.
 		$mirror = Header_Mirror::assert( $request, $m['mutationId'], $m['baseRevision'] );
@@ -276,8 +283,8 @@ class Write_Controller extends WP_REST_Controller {
 			ksort( $value );
 		}
 		foreach ( $value as $key => $item ) {
-			if ( is_array( $item ) ) {
-				$value[ $key ] = $this->sort_envelope_keys( $item );
+			if ( is_array( $item ) || is_object( $item ) ) {
+				$value[ $key ] = $this->sort_envelope_keys( (array) $item );
 			}
 		}
 		return $value;
@@ -319,6 +326,10 @@ class Write_Controller extends WP_REST_Controller {
 			return null !== $src ? ( $src[ $key ] ?? null ) : $request->get_param( $key );
 		};
 		if ( null !== $src ) {
+			$raw = (array) json_decode( $request->get_body() );
+			if ( is_object( $raw['tillAggregate'] ?? null ) ) {
+				$src['tillAggregate'] = $raw['tillAggregate']; // Preserve {} versus [] for envelope validation.
+			}
 			return $src;
 		}
 		return array(
@@ -332,9 +343,13 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	private function validate_envelope( array $m, string $path_collection ) {
-		$allowed = array( 'mutationId', 'operation', 'collection', 'recordId', 'baseRevision', 'payload', 'force' );
+		$allowed = array( 'mutationId', 'operation', 'collection', 'recordId', 'baseRevision', 'payload', 'force', 'expectedEpoch', 'tillAggregate' );
 		if ( array_diff( array_keys( $m ), $allowed ) ) {
 			return new WP_Error( 'woo_rxdb_sync_bad_envelope', 'Envelope contains unknown properties.', array( 'status' => 400 ) );
+		}
+		if ( ( isset( $m['expectedEpoch'] ) && ( ! is_int( $m['expectedEpoch'] ) || $m['expectedEpoch'] < 0 ) )
+			|| ( isset( $m['tillAggregate'] ) && ! is_object( $m['tillAggregate'] ) && ( ! is_array( $m['tillAggregate'] ) || array_values( $m['tillAggregate'] ) === $m['tillAggregate'] ) ) ) {
+			return new WP_Error( 'woo_rxdb_sync_bad_envelope', 'expectedEpoch must be a non-negative integer or null; tillAggregate must be an object or null.', array( 'status' => 400 ) );
 		}
 		if ( ! isset( $m['mutationId'] ) || ! is_string( $m['mutationId'] ) || ! Pos_Uuid::is_uuid( $m['mutationId'] ) ) {
 			return new WP_Error( 'woo_rxdb_sync_bad_mutation_id', 'mutationId must be a uuid.', array( 'status' => 400 ) );
@@ -402,8 +417,27 @@ class Write_Controller extends WP_REST_Controller {
 			return $this->envelope_document( $this->document_for( $meta, $existing ), $m['recordId'], $meta, $existing, null, $writer );
 		}
 
+		// A committed create must retain identity even when its money transition must retry.
+		$proven_id = 0;
+		$prepared['context']['preserve_create_identity'] = function ( int $id ) use ( $meta, $m, &$proven_id ) {
+			$error = $this->identity->prove( $meta, $id, $m['recordId'] );
+			if ( ! $error ) {
+				$proven_id = $id;
+			}
+			// Failed proof must retain the committed id for the existing poison-recovery lane.
+			if ( $error && ! $this->store->mark_poison( $m['mutationId'], $id, 201 ) ) {
+				$this->store->mark_indeterminate( $m['mutationId'], $id, 201 );
+			}
+			return $error;
+		};
 		$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
 		if ( is_wp_error( $response ) ) {
+			// A create committed before its money transition failed: the poison lane owns the retry.
+			$error_data   = $response->get_error_data();
+			$committed_id = (int) ( is_array( $error_data ) ? ( $error_data['order_id'] ?? 0 ) : 0 );
+			if ( $committed_id > 0 && ! $this->store->mark_poison( $m['mutationId'], $committed_id, 201 ) ) {
+				$this->store->mark_indeterminate( $m['mutationId'], $committed_id, 201 );
+			}
 			return $response;
 		}
 		$data = $response->get_data();
@@ -416,7 +450,7 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_Error( 'woo_rxdb_sync_create_no_id', 'Create returned no server id.', array( 'status' => 502 ) );
 		}
 
-		$stamped = $this->identity->stamp( $meta, $m, $new_id, $response->get_status(), $writer );
+		$stamped = $this->identity->stamp( $meta, $m, $new_id, $response->get_status(), $writer, $new_id === $proven_id );
 		if ( is_wp_error( $stamped ) ) {
 			return $stamped;
 		}
@@ -477,45 +511,64 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$current = $this->document_for( $meta, $id );
-		if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
-			return $current;
-		}
-		$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
-		$current_revision = $this->revision_for( $meta, $id, $current_bare );
-		if ( $m['baseRevision'] !== $current_revision ) {
+		$locked = ! empty( $prepared['context']['prepare_under_lock'] );
+		if ( $locked && ! $writer->lock( $id ) ) {
 			return new WP_REST_Response(
 				array(
-					'code' => 'woo_rxdb_sync_conflict',
-					'message' => 'baseRevision is stale.',
-					'current' => $current->get_data(),
-					'currentRevision' => $current_revision,
+					'code' => 'woo_rxdb_sync_record_locked',
+					'message' => 'Record is being written; retry shortly.',
 				),
 				409
 			);
 		}
-		if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
-			$late                = $prepared['context_factory']();
-			$prepared['payload']  = $late['payload'];
-			$prepared['context']  = $late['context'];
-		}
+		try {
+			$current = $this->document_for( $meta, $id );
+			if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
+				return $current;
+			}
+			$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
+			$current_revision = $this->revision_for( $meta, $id, $current_bare );
+			if ( $m['baseRevision'] !== $current_revision ) {
+				return new WP_REST_Response(
+					array(
+						'code' => 'woo_rxdb_sync_conflict',
+						'message' => 'baseRevision is stale.',
+						'current' => $current->get_data(),
+						'currentRevision' => $current_revision,
+					),
+					409
+				);
+			}
+			if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
+				$late                = $prepared['context_factory']();
+				if ( ! is_array( $late ) ) {
+					return $late;
+				}
+				$prepared['payload']  = $late['payload'];
+				$prepared['context']  = $late['context'];
+			}
 
-		$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-		if ( $response->get_status() >= 400 ) {
-			return new WP_REST_Response( $response->get_data(), $response->get_status() );
-		}
-		$data = $response->get_data();
-		$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
+			$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			if ( $response->get_status() >= 400 ) {
+				return new WP_REST_Response( $response->get_data(), $response->get_status() );
+			}
+			$data = $response->get_data();
+			$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
 
-		$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] );
-		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
-		if ( is_wp_error( $finalized ) ) {
-			return $finalized;
+			$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] );
+			$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
+			if ( is_wp_error( $finalized ) ) {
+				return $finalized;
+			}
+			return $this->envelope_document( $this->document_for( $meta, $id ), $m['recordId'], $meta, $id, null, $writer );
+		} finally {
+			if ( $locked ) {
+				$writer->unlock( $id );
+			}
 		}
-		return $this->envelope_document( $this->document_for( $meta, $id ), $m['recordId'], $meta, $id, null, $writer );
 	}
 
 	private function apply_delete( string $collection, array $meta, array $m ) {

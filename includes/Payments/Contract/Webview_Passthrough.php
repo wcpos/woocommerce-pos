@@ -84,7 +84,7 @@ class Webview_Passthrough {
 		if ( wcpos_is_pos_order( $order ) ) {
 			$live_methods = array();
 			foreach ( Ledger::instance()->read( $order ) as $row ) {
-				if ( in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
+				if ( (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) && in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
 					$live_methods[] = $row['method_id'];
 				}
 			}
@@ -93,7 +93,11 @@ class Webview_Passthrough {
 			}
 		}
 
-		self::mint( $order );
+		try {
+			self::mint( $order );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
+		}
 	}
 
 	/**
@@ -123,7 +127,11 @@ class Webview_Passthrough {
 			return;
 		}
 
-		self::mint( $order );
+		try {
+			self::mint( $order );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
+		}
 	}
 
 	/**
@@ -131,6 +139,7 @@ class Webview_Passthrough {
 	 *
 	 * @param WC_Order $order     Order object.
 	 * @param array    $overrides Submission-specific row values.
+	 * @throws Ledger_Persistence_Exception When the ledger cannot be saved.
 	 */
 	public static function mint( WC_Order $order, array $overrides = array() ): ?array {
 		if ( ! wcpos_is_pos_order( $order ) ) {
@@ -139,7 +148,7 @@ class Webview_Passthrough {
 		$ledger = Ledger::instance();
 		$rows   = $ledger->read( $order );
 		foreach ( $rows as $row ) {
-			if ( in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
+			if ( (int) ( $row['epoch'] ?? 0 ) === Money_Epoch::current( $order ) && in_array( $row['status'] ?? '', Ledger::LIVE_STATUSES, true ) ) {
 				return null;
 			}
 		}
@@ -192,7 +201,40 @@ class Webview_Passthrough {
 			),
 			$overrides
 		);
-		$adopted = $ledger->adopt( $order, $row );
+		try {
+			return self::adopt( $order, $row );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			// WooCommerce already took this money: say so loudly; a human reconciles it.
+			$reference = '' !== (string) $transaction_id ? $transaction_id : $row['id'];
+			Logger::error( sprintf( 'WCPOS payment %s (%s %s) captured but not recorded in the ledger on order #%d; reconcile manually: %s', $reference, $row['amount'], $row['currency'], $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
+			$order->add_order_note( sprintf( 'WCPOS: payment %s (%s %s) captured but not recorded in the ledger; reconcile manually.', $reference, $row['amount'], $row['currency'] ) );
+			throw $error;
+		}
+	}
+
+	/**
+	 * Adopt a captured snapshot with the same locked identity check on first write and retry.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $row   Captured payment snapshot.
+	 */
+	private static function adopt( WC_Order $order, array $row ): ?array {
+		$adopted = Ledger::instance()->adopt(
+			$order,
+			$row,
+			true,
+			static function ( $stored, int $epoch ) use ( $row ): bool {
+				if ( (int) ( $stored['epoch'] ?? 0 ) === $epoch && ( $stored['id'] ?? null ) === $row['id'] ) {
+					return true;
+				}
+				$refs = array_filter( $row['provider_refs'] );
+				if ( $refs ) {
+					return (int) ( $stored['epoch'] ?? 0 ) === $epoch && ( $stored['method_id'] ?? null ) === $row['method_id'] && (bool) array_intersect_assoc( $refs, $stored['provider_refs'] ?? array() );
+				}
+				// A reference-less payment is represented only by a row in the locked epoch.
+				return (int) ( $stored['epoch'] ?? 0 ) === $epoch && 'webview' === ( $stored['source'] ?? null ) && in_array( $stored['status'] ?? '', Ledger::LIVE_STATUSES, true );
+			}
+		);
 		return is_wp_error( $adopted ) ? null : $adopted;
 	}
 }

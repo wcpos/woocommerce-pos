@@ -183,6 +183,7 @@ final class Service_Groups {
 		// deferred order services.
 		Webview_Passthrough::register_hooks();
 		Ledger::register_hooks();
+		\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::register_hooks();
 		Gateway_Submission::register_hooks();
 		Stock_Validator::instance();
 		Order_Write_Intent::register();

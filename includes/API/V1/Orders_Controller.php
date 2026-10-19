@@ -652,7 +652,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		if ( 'billing' == $request['save_to'] ) {
 			$order->set_billing_email( $email );
-			$order->save();
+			\WCPOS\WooCommercePOS\Payments\Contract\Money_Meta_Guard::saving( $order->get_id(), fn() => $order->save() );
 			// translators: %s: email address.
 			$order->add_order_note( \sprintf( __( 'Email address %s added to billing details from WCPOS.', 'woocommerce-pos' ), $email ), 0, true );
 		}

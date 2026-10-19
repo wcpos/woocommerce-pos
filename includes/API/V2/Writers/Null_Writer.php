@@ -54,7 +54,7 @@ class Null_Writer implements Collection_Writer_Interface {
 	}
 
 	/** No-op after recovery for pass-through collections. */
-	public function after_recovery( int $id, array $payload ): void {
+	public function after_recovery( int $id, array $payload, array $money = array() ) {
 	}
 
 	/** No-op after update for pass-through collections. */

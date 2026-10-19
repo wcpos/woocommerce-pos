@@ -73,7 +73,24 @@ final class Payments_Sweeper {
 						if ( $dispatch && in_array( $row['capture_mode'], array( 'manual', 'webview' ), true ) ) {
 							continue;
 						}
-						// An order cancelled or completed since the create was lost takes no new charge. The
+						// Prior-sale authorizations must never be captured for this sale. A pending
+						// cancellation is polled, not sent twice; an unsupported void retires locally.
+						if ( (int) ( $row['epoch'] ?? 0 ) !== Money_Epoch::current( $order ) ) {
+							$closed = empty( $row['void_requested_at'] ) ? $handler->void( $row, 'prior_epoch' ) : $handler->status( $row );
+							if ( is_wp_error( $closed ) && 'wcpos_capture_mode_unsupported' === $closed->get_error_code() ) {
+								Logger::log( sprintf( 'WCPOS payment sweep %s: prior-epoch void unsupported; retiring the ledger row locally.', $row['id'] ) );
+								$closed = array(
+									'status' => 'voided',
+									'failure_reason' => 'prior_epoch_void_unsupported',
+								);
+							}
+							$closed = is_wp_error( $closed ) ? $closed : $ledger->apply_result( $order, $row['id'], $closed, false );
+							if ( is_wp_error( $closed ) ) {
+								Logger::log( sprintf( 'WCPOS payment sweep %s: prior-epoch reconciliation failed: %s', $row['id'], $closed->get_error_message() ) );
+							}
+							continue;
+						}
+						// A closed order takes no new charge. The
 						// provider MAY have accepted that create, so the row is not voided blind: the handler's
 						// void recovers any live action through the idempotent create and cancels it (Pro), or
 						// voids locally when nothing exists at the provider.
@@ -158,7 +175,7 @@ final class Payments_Sweeper {
 					// Reconcile every leg before counting authorizations that may expire this run.
 					$ledger->derive( $order, $ledger->read( $order ) );
 					if ( $order->get_changes() ) {
-						$order->save();
+						Money_Meta_Guard::authorised( $order->get_id(), fn() => $order->save() );
 					}
 				}
 			);

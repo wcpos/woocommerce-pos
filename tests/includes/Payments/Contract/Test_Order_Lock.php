@@ -9,34 +9,35 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 
 class Test_Order_Lock extends \WP_UnitTestCase {
+	// Synthetic IDs stay above real order fixtures, including the full CI suite.
 	public function test_lock_is_reentrant_and_released_after_nested_callback(): void {
 		$lock = Order_Lock::instance();
-		$result = $lock->with_lock( 123, function () use ( $lock ) {
-			return $lock->with_lock( 123, static function () { return 'nested'; } );
+		$result = $lock->with_lock( 10000123, function () use ( $lock ) {
+			return $lock->with_lock( 10000123, static function () { return 'nested'; } );
 		} );
 		$this->assertSame( 'nested', $result );
-		$this->assertSame( 'released', ( new Order_Lock() )->with_lock( 123, static function () { return 'released'; } ) );
+		$this->assertSame( 'released', ( new Order_Lock() )->with_lock( 10000123, static function () { return 'released'; } ) );
 	}
 
 	public function test_second_object_cannot_acquire_held_lock(): void {
 		$first = new Order_Lock();
-		$this->assertTrue( $first->acquire( 123 ) );
+		$this->assertTrue( $first->acquire( 10000123 ) );
 		try {
-			$result = ( new Order_Lock() )->with_lock( 123, function () { $this->fail( 'Contending callback ran.' ); } );
+			$result = ( new Order_Lock() )->with_lock( 10000123, function () { $this->fail( 'Contending callback ran.' ); } );
 			$this->assertSame( 'wcpos_payment_locked', $result->get_error_code() );
 			$this->assertSame( array( 'status' => 409, 'retry_after' => 1 ), $result->get_error_data() );
 		} finally {
-			$first->release( 123 );
+			$first->release( 10000123 );
 		}
 	}
 
 	public function test_callback_exception_releases_lock(): void {
 		try {
-			Order_Lock::instance()->with_lock( 123, static function () { throw new \RuntimeException( 'test' ); } );
+			Order_Lock::instance()->with_lock( 10000123, static function () { throw new \RuntimeException( 'test' ); } );
 		} catch ( \RuntimeException $exception ) {
 			$this->assertSame( 'test', $exception->getMessage() );
 		}
-		$this->assertTrue( ( new Order_Lock() )->with_lock( 123, static function () { return true; } ) );
+		$this->assertTrue( ( new Order_Lock() )->with_lock( 10000123, static function () { return true; } ) );
 	}
 
 	public function test_every_lock_uses_the_option_lease_where_the_server_cannot_hold_two(): void {
@@ -49,23 +50,23 @@ class Test_Order_Lock extends \WP_UnitTestCase {
 		$outer = new Order_Lock();
 		$inner = new Order_Lock();
 		try {
-			$this->assertTrue( $outer->acquire( 501 ) );
-			$this->assertTrue( $inner->acquire( 502 ) );
+			$this->assertTrue( $outer->acquire( 10000501 ) );
+			$this->assertTrue( $inner->acquire( 10000502 ) );
 			// One driver per server: BOTH locks are option leases, so a top-level caller and
 			// a nested one on the same name contend through the same row, and neither
 			// touches GET_LOCK (which would release the other's lock on this server).
-			$this->assertNotEmpty( get_option( 'wcpos_payment_lock_501' ) );
-			$this->assertNotEmpty( get_option( 'wcpos_payment_lock_502' ) );
-			$this->assertSame( '1', (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK(%s)', sprintf( 'wcpos_order_%d_%d', 501, get_current_blog_id() ) ) ) );
-			$this->assertSame( 'wcpos_payment_locked', ( new Order_Lock() )->with_lock( 501, static function () { return 'ran'; } )->get_error_code() );
+			$this->assertNotEmpty( get_option( 'wcpos_payment_lock_10000501' ) );
+			$this->assertNotEmpty( get_option( 'wcpos_payment_lock_10000502' ) );
+			$this->assertSame( '1', (string) $wpdb->get_var( $wpdb->prepare( 'SELECT IS_FREE_LOCK(%s)', sprintf( 'wcpos_order_%d_%d', 10000501, get_current_blog_id() ) ) ) );
+			$this->assertSame( 'wcpos_payment_locked', ( new Order_Lock() )->with_lock( 10000501, static function () { return 'ran'; } )->get_error_code() );
 		} finally {
-			$inner->release( 502 );
-			$outer->release( 501 );
+			$inner->release( 10000502 );
+			$outer->release( 10000501 );
 			remove_filter( 'wcpos_order_lock_supports_multiple_locks', $filter );
 			$reflection->setValue( null, null );
 		}
-		$this->assertFalse( get_option( 'wcpos_payment_lock_502' ) );
-		$this->assertFalse( get_option( 'wcpos_payment_lock_501' ) );
+		$this->assertFalse( get_option( 'wcpos_payment_lock_10000502' ) );
+		$this->assertFalse( get_option( 'wcpos_payment_lock_10000501' ) );
 	}
 
 	public function test_option_fallback_takes_stale_lease_and_preserves_new_owner_on_release(): void {
@@ -73,25 +74,25 @@ class Test_Order_Lock extends \WP_UnitTestCase {
 			return 0 === strpos( $sql, 'SELECT GET_LOCK(' ) ? 'SELECT NULL' : $sql;
 		};
 		add_filter( 'query', $filter );
-		$name = 'wcpos_payment_lock_123';
+		$name = 'wcpos_payment_lock_10000123';
 		add_option( $name, 'old|' . ( time() - 301 ), '', 'no' );
 		$lock = new Order_Lock();
 		try {
-			$this->assertTrue( $lock->acquire( 123 ) );
+			$this->assertTrue( $lock->acquire( 10000123 ) );
 			$this->assertStringNotContainsString( 'old|', get_option( $name ) );
 			update_option( $name, 'replacement|' . time(), false );
 			$owner = get_option( $name );
-			$lock->release( 123 );
+			$lock->release( 10000123 );
 			$this->assertSame( $owner, get_option( $name ) );
 		} finally {
-			$lock->release( 123 );
+			$lock->release( 10000123 );
 			delete_option( $name );
 			remove_filter( 'query', $filter );
 		}
 	}
 	public function test_option_fallback_does_not_overwrite_competing_insert(): void {
 		global $wpdb;
-		$name = 'wcpos_payment_lock_124';
+		$name = 'wcpos_payment_lock_10000124';
 		$competitor = 'competitor|' . time();
 		$inserted = false;
 		$filter = static function ( $sql ) use ( $wpdb, $name, $competitor, &$inserted ) {
@@ -108,10 +109,10 @@ class Test_Order_Lock extends \WP_UnitTestCase {
 		add_filter( 'query', $filter );
 		$lock = new Order_Lock();
 		try {
-			$this->assertFalse( $lock->acquire( 124 ) );
+			$this->assertFalse( $lock->acquire( 10000124 ) );
 			$this->assertSame( $competitor, $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ) );
 		} finally {
-			$lock->release( 124 );
+			$lock->release( 10000124 );
 			delete_option( $name );
 			remove_filter( 'query', $filter );
 		}

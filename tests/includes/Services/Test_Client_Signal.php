@@ -34,6 +34,7 @@ class Test_Client_Signal extends WP_UnitTestCase {
 				'protocol'    => '2',
 				'platform'    => 'electron',
 				'app_version' => '2.0.0',
+				'payments'    => null,
 				'channel'     => 'header',
 			),
 			Client_Signal::read( $request )
@@ -55,6 +56,7 @@ class Test_Client_Signal extends WP_UnitTestCase {
 				'protocol'    => '2',
 				'platform'    => 'web',
 				'app_version' => '2.0.0',
+				'payments'    => null,
 				'channel'     => 'query',
 			),
 			Client_Signal::read( $request )
@@ -68,6 +70,7 @@ class Test_Client_Signal extends WP_UnitTestCase {
 				'protocol'    => null,
 				'platform'    => null,
 				'app_version' => null,
+				'payments'    => null,
 				'channel'     => 'none',
 			),
 			Client_Signal::read( new WP_REST_Request( 'GET', '/wcpos/v2/products' ) )
@@ -84,6 +87,7 @@ class Test_Client_Signal extends WP_UnitTestCase {
 				'protocol'    => null,
 				'platform'    => 'notaclient',
 				'app_version' => null,
+				'payments'    => null,
 				'channel'     => 'query',
 			),
 			Client_Signal::read( $request )
@@ -101,9 +105,30 @@ class Test_Client_Signal extends WP_UnitTestCase {
 				'protocol'    => '12345678',
 				'platform'    => 'platform_12345678901234567890123',
 				'app_version' => 'v1.2.3-beta_12345678901234567890',
+				'payments'    => null,
 				'channel'     => 'header',
 			),
 			Client_Signal::read( $request )
 		);
 	}
+	/** The contract token must not corrupt the app version, on either transport. */
+	public function test_payments_token_and_numeric_comparison(): void {
+		foreach ( array( 'header', 'query' ) as $transport ) {
+			$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
+			if ( 'header' === $transport ) {
+				$request->set_header( 'X-WCPOS-Client', 'ios/2.0.0 ; payments=1.3' );
+			} else {
+				$request->set_query_params( array( 'wcpos_client' => 'ios/2.0.0 PAYMENTS=1.3' ) );
+			}
+			$signal = Client_Signal::read( $request );
+			$this->assertSame( 'ios', $signal['platform'] );
+			$this->assertSame( '2.0.0', $signal['app_version'] );
+			$this->assertSame( '1.3', $signal['payments'] );
+			$this->assertTrue( Client_Signal::payments_at_least( $signal, '1.3' ) );
+			$this->assertFalse( Client_Signal::payments_at_least( $signal, '1.10' ) );
+		}
+		$this->assertFalse( Client_Signal::payments_at_least( array( 'payments' => null ), '1.3' ) );
+		$this->assertTrue( Client_Signal::payments_at_least( array( 'payments' => '2.0' ), '1.99' ) );
+	}
+
 }

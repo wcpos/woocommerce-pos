@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -58,7 +59,38 @@ class Payments_Controller extends WC_REST_Controller {
 						'methods'             => $definition[0],
 						'callback'            => function ( $request ) use ( $definition ) {
 							// Each body fetches its order only after acquiring the lock, including GET status.
-							return Order_Lock::instance()->with_lock( (int) $request['id'], fn() => $this->{$definition[1]}( $request ) );
+							return Order_Lock::instance()->with_lock(
+								(int) $request['id'],
+								function () use ( $request, $definition ) {
+									$order = wc_get_order( (int) $request['id'] );
+									// Every route mutates, including the provider-polling GET status.
+									if ( $order instanceof WC_Order ) {
+										$error = \WCPOS\WooCommercePOS\Payments\Contract\Money_Epoch::gate( $order, $request, null, false );
+										if ( $error ) {
+											return $error;
+										}
+										// Refund allocations may address retained captures; other row commands belong to this sale.
+										if ( in_array( $definition[1], array( 'void_item', 'capture_item', 'intent_item' ), true ) ) {
+											$row = Ledger::instance()->find( $order, (string) $request['uuid'] );
+											if ( $row && (int) ( $row['epoch'] ?? 0 ) !== Money_Epoch::current( $order ) ) {
+												return new WP_Error(
+													'wcpos_invalid_transition',
+													__( 'This payment belongs to a previous money epoch.', 'woocommerce-pos' ),
+													array(
+														'status' => 409,
+														'reason' => 'prior_epoch_row',
+													)
+												);
+											}
+										}
+									}
+									try {
+										return $this->{$definition[1]}( $request );
+									} catch ( \WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception $error ) {
+										return new WP_Error( 'woo_rxdb_sync_record_locked', $error->getMessage(), array( 'status' => 409 ) );
+									}
+								}
+							);
 						},
 						'permission_callback' => array( $this, 'payments_permissions_check' ),
 					),

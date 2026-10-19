@@ -428,6 +428,20 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->reserved );
 	}
 
+	public function test_money_envelope_types_and_unknown_keys(): void {
+		$controller = new Write_Controller( new Fake_Mutation_Store() );
+		$validate = new \ReflectionMethod( $controller, 'validate_envelope' );
+		$validate->setAccessible( true );
+		foreach ( array( array( 'expectedEpoch' => 0, 'tillAggregate' => array( 'total' => '50', 'tax_lines' => array() ) ), array( 'expectedEpoch' => null, 'tillAggregate' => null ) ) as $valid ) {
+			$this->assertNull( $validate->invoke( $controller, $this->envelope( $valid ), 'customers' ) );
+		}
+		foreach ( array( array( 'expectedEpoch' => -1 ), array( 'expectedEpoch' => '1' ), array( 'expectedEpoch' => 1.5 ), array( 'tillAggregate' => '50' ), array( 'tillAggregate' => array( '50' ) ), array( 'unknown' => true ) ) as $invalid ) {
+			$error = $validate->invoke( $controller, $this->envelope( $invalid ), 'customers' );
+			$this->assertSame( 'woo_rxdb_sync_bad_envelope', $error->get_error_code() );
+			$this->assertSame( 400, $error->get_error_data()['status'] );
+		}
+	}
+
 	public function test_validate_rejects_bad_envelope_before_reserving(): void {
 		$store = new Fake_Mutation_Store();
 		$c     = new Write_Controller( $store );
@@ -1756,6 +1770,42 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( $forwards_after_create, \count( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() ) );
 	}
 
+	public function test_order_poison_recovery_completes_money_transitions_before_finalizing(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$store = new Fake_Mutation_Store();
+		$store->persistUuidOk = false;
+		$env = array(
+			'collection' => 'orders',
+			'tillAggregate' => array( 'total' => '10' ),
+			'payload' => array( 'meta_data' => array( array( 'key' => '_wcpos_completed_at', 'value' => '2026-10-19T12:00:00Z' ) ) ),
+		);
+		$first = $this->push( $store, $env );
+		$this->assertSame( 'woo_rxdb_sync_identity_persistence_failed', $first->get_error_code() );
+		$id = $store->poisoned[ self::MID ];
+		$this->assertSame( '', wc_get_order( $id )->get_meta( '_wcpos_money_owner' ) );
+		$this->assertSame( '', wc_get_order( $id )->get_meta( '_wcpos_completed_at' ) );
+		$posts = $this->count_forward_posts();
+		$store->persistUuidOk = true;
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $id ) );
+		try {
+			$blocked = $this->push( $store, $env );
+			$this->assertInstanceOf( WP_Error::class, $blocked );
+			$this->assertSame( 409, $blocked->get_error_data()['status'] );
+			$this->assertSame( 'poison', $store->lookups[ self::MID ]['status'] );
+			$this->assertSame( '', wc_get_order( $id )->get_meta( '_wcpos_money_owner' ) );
+		} finally {
+			$lock->release( $id );
+		}
+		$retry = $this->push( $store, $env );
+		$this->assertSame( 201, $retry->get_status() );
+		$this->assertSame( $posts, $this->count_forward_posts() );
+		$this->assertSame( $id, (int) $retry->get_data()['document']['id'] );
+		$this->assertSame( 'server', wc_get_order( $id )->get_meta( '_wcpos_money_owner' ) );
+		$this->assertSame( '2026-10-19T12:00:00Z', wc_get_order( $id )->get_meta( '_wcpos_completed_at' ) );
+		$this->assertSame( 0, (int) wc_get_order( $id )->get_meta( '_wcpos_completed_epoch' ) );
+	}
+
 	public function test_order_poison_recovery_replays_tax_ids_without_reforwarding(): void {
 		// A create can die after mark_poison() but before the separate tax-ID save. Prove the poison
 		// recovery path replays the create-time tax_ids persistence: reach poison via a failed uuid
@@ -2664,9 +2714,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 	public function test_orders_update_accepts_pull_revision_that_ignores_identity_meta(): void {
 		$store = new Fake_Mutation_Store();
-		$store->resolve = 7001;
+		$order = wc_create_order();
+		$store->resolve = $order->get_id();
 		$payload = array(
-			'id' => 7001,
+			'id' => $order->get_id(),
 			'status' => 'processing',
 			'total' => '10.00',
 		);
@@ -2685,7 +2736,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $result->get_status() );
 		$this->assertSame( $revision, $result->get_data()['currentRevision'] );
-		$this->assertSame( array( self::MID => 7001 ), $store->finalized );
+		$this->assertSame( array( self::MID => $order->get_id() ), $store->finalized );
 		$this->assertSame( 'order', $store->persisted[0]['id_type'] );
 		$this->assertSame( array( 'GET', 'PUT', 'GET' ), array_map( static fn( $request ) => $request->get_method(), $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ) );
 	}
