@@ -86,6 +86,73 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $store->get( $fields['id'] ), $row );
 	}
 
+	/** A same-id session opened and closed while waiting remains a replay. */
+	public function test_create_same_id_closed_at_lock_returns_closed_session(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => null,
+			'counted_float' => '100',
+		);
+		$inserted = null;
+		$race = static function ( $sql ) use ( $wpdb, $store, $fields, &$inserted ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $fields['register_id'] ) ) {
+				$inserted = $wpdb->insert(
+					$store->table_name(),
+					$fields + array(
+						'status' => 'closed',
+						'created_at_gmt' => '2026-09-11 10:00:00',
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$row = $store->create( $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		// Assert.
+		$this->assertSame( 1, $inserted );
+		$this->assertNotWPError( $row );
+		$this->assertSame( $fields['id'], $row['id'] );
+		$this->assertSame( 'closed', $row['status'] );
+		$this->assertCount( 1, $store->list( array( 'register_id' => $fields['register_id'] ) ) );
+		$this->assertSame( $store->get( $fields['id'] ), $row );
+	}
+
+	/** An under-lock refusal must not persist an opening. */
+	public function test_create_under_lock_refusal_returns_error_without_inserting(): void {
+		// Arrange.
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => null,
+			'counted_float' => '100',
+		);
+		$error = new \WP_Error( 'rest_invalid_param', 'Unknown register.' );
+		// Act.
+		$result = $store->create(
+			$fields,
+			static function () use ( $error ) {
+				return $error;
+			}
+		);
+		// Assert.
+		$this->assertSame( $error, $result );
+		$this->assertNull( $store->get( $fields['id'] ) );
+	}
+
 	/** Opening variance, identity replay, non-closed uniqueness and transitions. */
 	public function test_create_uniqueness_and_transitions(): void {
 		$store = new Register_Session_Store();

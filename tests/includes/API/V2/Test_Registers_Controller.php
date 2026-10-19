@@ -203,6 +203,39 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** A register deleted while PATCH waits answers exactly as unknown. */
+	public function test_patch_register_deleted_at_lock_returns_not_found_without_update(): void {
+		// Arrange.
+		global $wpdb;
+		$store = new Register_Store();
+		$row = $store->create( array( 'name' => 'Front' ) );
+		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $row['id'] );
+		$request->set_method( 'PATCH' );
+		$request->set_body_params( array( 'name' => 'Back' ) );
+		$updates = array();
+		$race = static function ( $sql ) use ( $wpdb, $store, $row, &$updates ) {
+			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $row['id'] ) ) {
+				$wpdb->delete( $store->table_name(), array( 'id' => $row['id'] ) );
+			}
+			if ( false !== strpos( $sql, 'UPDATE `' . $store->table_name() . '`' ) ) {
+				$updates[] = $sql;
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			// Act.
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_register_not_found', $response->get_data()['code'] );
+		$this->assertNull( $store->get( $row['id'] ) );
+		$this->assertSame( array(), $updates );
+	}
+
 	/** PATCH locks before the Pro guard and the register write. */
 	public function test_patch_update_filter_and_write_run_after_register_lock(): void {
 		// Arrange.

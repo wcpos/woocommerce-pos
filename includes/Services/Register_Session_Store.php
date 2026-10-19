@@ -95,10 +95,11 @@ final class Register_Session_Store {
 	/** Insert validated opening fields; replay preserves the original.
 	 *
 	 * @return array|\WP_Error
-	 * @param array $fields Opening fields.
+	 * @param array         $fields Opening fields.
+	 * @param callable|null $under_lock Optional opening validation under the register lock.
 	 * @throws \RuntimeException On database failure.
 	 */
-	public function create( array $fields ) {
+	public function create( array $fields, ?callable $under_lock = null ) {
 		$existing = $this->get( $fields['id'] );
 		if ( $existing ) {
 			// An idempotent replay, not a fault: the outbox retries a write whose response
@@ -109,8 +110,8 @@ final class Register_Session_Store {
 		}
 		return ( new Register_Store() )->with_lock(
 			$fields['register_id'],
-			function () use ( $fields ) {
-				return $this->insert_open_session( $fields );
+			function () use ( $fields, $under_lock ) {
+				return $this->insert_open_session( $fields, $under_lock );
 			},
 			'Session register lock failed.',
 			array( 'session_id' => $fields['id'] )
@@ -119,12 +120,25 @@ final class Register_Session_Store {
 
 	/** Check uniqueness and insert while create() holds the register lock.
 	 *
-	 * @param array $fields Opening fields.
+	 * @param array         $fields Opening fields.
+	 * @param callable|null $under_lock Optional opening validation under the register lock.
 	 * @return array|\WP_Error
 	 * @throws \RuntimeException On database failure.
 	 */
-	private function insert_open_session( array $fields ) {
+	private function insert_open_session( array $fields, ?callable $under_lock = null ) {
 		global $wpdb;
+		$existing = $this->get( $fields['id'] );
+		if ( $existing ) {
+			$this->log_replay( $existing );
+			return $existing;
+		}
+		if ( $under_lock ) {
+			$validated = $under_lock( $fields );
+			if ( is_wp_error( $validated ) ) {
+				return $validated;
+			}
+			$fields = is_array( $validated ) ? $validated : $fields;
+		}
 		$open = $this->list(
 			array(
 				'register_id' => $fields['register_id'],
@@ -132,10 +146,6 @@ final class Register_Session_Store {
 			)
 		);
 		if ( $open ) {
-			if ( $open[0]['id'] === $fields['id'] ) {
-				$this->log_replay( $open[0] );
-				return $open[0];
-			}
 			Logger::warning(
 				'Register session opening refused: register already has an open session',
 				array(
