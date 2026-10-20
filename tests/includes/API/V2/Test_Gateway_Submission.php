@@ -1516,6 +1516,50 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 		$this->assertSame( 'sent', $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['outcome'] );
 	}
+	/** A hook that drops the staged command map from every order save, for the storage-miss pins. */
+	private function drop_command_map(): callable {
+		$drop = static function ( $saving ): void {
+			$saving->delete_meta_data( '_wcpos_commands' );
+		};
+		add_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		return $drop;
+	}
+
+	/** Pin 38: a cancel whose entry does not reach storage is answered 409; the cancel itself stands. */
+	public function test_a_cancel_whose_command_entry_is_not_stored_is_a_retryable_conflict(): void {
+		// Arrange: a sent attempt; then every save loses the command map.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$body = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'reason'     => 'Customer changed mind',
+			)
+		);
+		$drop = $this->drop_command_map();
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'cancel', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		}
+		$stored = wc_get_order( $order->get_id() );
+		$notes  = count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+		$again  = $this->gateway_command( $order, 'cancel', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( $stored )[ $attempt ] );
+		$this->assertSame( 'pos-open', $stored->get_status() );
+		$this->assertSame( 409, $again->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $again->get_data()['code'] );
+		$this->assertSame( $notes, count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) ) );
+	}
 }
 
 /** A gateway that sends an invoice, not money. */

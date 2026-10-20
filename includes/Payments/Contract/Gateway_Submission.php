@@ -396,6 +396,7 @@ class Gateway_Submission {
 	 * @param string   $reason     Cashier reason.
 	 * @param array    $command    The till's command; its entry rides the cancel's save.
 	 * @return array|WP_Error
+	 * @throws Ledger_Persistence_Exception When the entry did not reach storage (the cancel stands).
 	 */
 	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason, array $command = array() ) {
 		$rows  = Ledger::instance()->read( $order );
@@ -416,6 +417,10 @@ class Gateway_Submission {
 		self::remember_command( $order, $command, strtolower( $attempt_id ) );
 		/* translators: 1: the payment method title, 2: the cashier's reason. */
 		Ledger::saving( $order->get_id(), fn() => $order->update_status( 'pos-open', trim( sprintf( __( 'Cancelled via POS: %1$s. %2$s', 'woocommerce-pos' ), $descriptor['title'], $reason ) ) ) );
+		if ( ! self::command_kept( $order->get_id(), $command ) ) {
+			Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d: the cancel stood (stamp cleared, attempt cancelled), but its command entry was not stored.', strtolower( $attempt_id ), $order->get_id() ), array( 'order_id' => $order->get_id() ) );
+			throw new Ledger_Persistence_Exception( 'WCPOS gateway command was not persisted.' );
+		}
 		return array( 'order' => Ledger::instance()->summary( $order ) );
 	}
 
