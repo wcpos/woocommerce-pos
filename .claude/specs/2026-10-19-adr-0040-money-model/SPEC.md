@@ -37,7 +37,7 @@ Pro (`woocommerce-pos-pro` at `origin/next`, grep run 2026-10-19, non-empty resu
 | routes | `wcpos_command_conflict` | 422 | same `command_id`, different body; `record`'s mismatched replay too (PR 3) |
 | routes | `wcpos_revision_required` | 428 | a money command without `revision` (PR 3) |
 | routes | `rest_invalid_param` | 400 | `command_id` missing or not a uuid on the seven commands that take one (PR 3) |
-| routes | `wcpos_balance_outstanding` | 409 | `close` on an uncovered or zero-total order (PR 2) |
+| routes | `wcpos_balance_outstanding` | 409 | `close` on an uncovered or negative-total order (PR 2; a zero total completes since #2366) |
 
 422 on the push lane, 409 on the route family: #2312's ruling, kept.
 

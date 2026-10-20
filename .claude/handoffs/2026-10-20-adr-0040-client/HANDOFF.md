@@ -66,7 +66,7 @@ A reopen is a push with `status: pos-open` on an order in a paid status. Every p
 
 What the app must stop doing: refusing to reopen a completed sale against 1.3 (the epoch gate), and expecting money to reset or be re-taken after reopen. The rows are real money; the UI shows them as paid and shows the new balance.
 
-`close` refusals: 409 `wcpos_balance_outstanding` (the balance is not covered, or total is zero; `data.order` carries the summary), 409 `wcpos_payment_in_flight` (a leg in motion), 409 `wcpos_invalid_transition` (not an open status and no standing completion). A `close` on an already-completed sale replays the last completion.
+`close` refusals: 409 `wcpos_balance_outstanding` (the balance is not covered; a zero total completes, #2366; `data.order` carries the summary), 400 `wcpos_insufficient_stock` (prevent-overselling could not hold the sale's stock), 409 `wcpos_payment_in_flight` (a leg in motion), 409 `wcpos_invalid_transition` (not an open status and no standing completion). A `close` on an already-completed sale replays the last completion.
 
 ### 2.6 Refunds (rule 8)
 
