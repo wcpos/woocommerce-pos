@@ -1,0 +1,140 @@
+# Handoff: the WCPOS app under ADR 0040 (payments contract 1.3, sync protocol 3)
+
+Written 2026-10-20 by the agent that finished the server side (wcpos/woocommerce-pos PRs #2349, #2352, #2355, #2362, the PR 5 contract bump; wcpos/woocommerce-pos-pro #686). Server lane: `next`. App lane: the monorepo's `next` (the 2.0 line); the one item marked **both lanes** also goes to `main`.
+
+## Why this exists
+
+ADR 0040 (`docs/adr/0040-server-derives-paid-no-money-epoch.md` in wcpos/woocommerce-pos) replaced the money-epoch design of payments contract 1.3 before it shipped. The server now derives "paid" from its own payment rows, strips every money field from the pushed order document, treats reopen as a status change with every payment still counting, requires `command_id` and `revision` on every money command, and refuses any till below sync protocol 3. The app still speaks protocol 2, carries the owner-stamp residue of the epoch design, sends no `command_id` or `revision` on any money command, carries offline cash inside the pushed document with a client-derived paid status, and pushes `status: completed` at the zero-balance boundary. Against a 2.0.0 plugin from `next` the app is refused with 426 on every gated route today. This handoff lists what the app changes, with the file and line facts read from the monorepo's `origin/next` on 2026-10-20 (section 3) and the server contract it builds against (section 2).
+
+Ground truth goes stale: re-read each cited line before editing it.
+
+## 1. Decisions already made (do not re-ask)
+
+Paul's D1–D6 from the server handoff (`.claude/handoffs/2026-10-19-adr-0040-money-model/HANDOFF.md`), as they bind the app:
+
+- **D1.** 2.0.0 is the protocol boundary. The app's sync protocol version goes to **3**. The legacy cash path (`set_paid: true` with `payment_method: pos_cash` on the push) is deleted on the server; it strips those keys and `_wcpos_payments` from every push and refuses a paid status on the push with 422, which is what the app's offline cash path and zero-balance completion send today (section 3, C2, C3). No `payments=` token is built into `X-WCPOS-Client`; the contract number is read from the `GET payment-methods` envelope only.
+- **D2.** `POST /wcpos/v2/orders/{id}/close` completes a sale whose balance is covered. The till calls it after a reopen-and-edit whose lines still fit the money already taken (nothing to collect), and it is the one way to complete a sale without taking money.
+- **D3.** A reopen and a line edit may ride one push (`status: pos-open` plus the lines) and are applied as one write.
+- **D4.** Pushable statuses are `pos-open`, `pending`, `on-hold`, `cancelled`. `pos-partial` is derived by the server and never pushed; every paid status is server-owned.
+- **D5.** Reopening a sale paid online (a WooCommerce gateway, no ledger row) adopts the original tender as a captured row, with the order's existing refunds as allocations. The app sees it as an ordinary captured row of `source: woocommerce`, `capture_mode: webview`, not voidable, refundable.
+- **D6.** Only `captured` rows count toward paid. An `authorized` row is money in motion, not money.
+- **Spec decisions 16–19** (`.claude/specs/2026-10-19-adr-0040-money-model/SPEC.md` §7): a stranded refund allocation answers the stored row with the allocation `pending` and a 200, never an error; the till shows it as sent and unconfirmed; and the till sends **`api_refund: true`** for an original-method refund (the server handoff said `false`; §6.4 and §7.19 corrected it).
+
+## 2. The server contract the app builds against (as shipped on `next`)
+
+### 2.1 Protocol and contract numbers
+
+- `X-WCPOS-Protocol: 3` (query twin `wcpos_protocol=3` where headers are unproven). Below 3 → 426 `wcpos_update_required` with `data.min_protocol` and `data.server_protocol`, on every gated `wcpos/v2` route. The 426 screen the app already has is the right answer for a merchant on an older plugin pairing; nothing new is needed there.
+- `GET /wcpos/v2/payment-methods` → `{ schema: 1, contract: '1.3', methods: [...] }`. After section 4 item 5 nothing in the app compares against it: a plugin that answers protocol 3 is at 1.3, and the envelope's presence and `schema: 1` are the only gates (section 3, P4).
+
+### 2.2 The pushed order document carries no money (rule 2)
+
+Dropped by the server from every push, create and update, top-level and by `meta_data` key or id: `set_paid`, `date_paid`, `date_paid_gmt`, `transaction_id`, `payment_method`, `payment_method_title`; meta `_wcpos_payments`, its index rows, `_wcpos_commands`, `_wcpos_completed_at`, `_wcpos_completions`, `_wcpos_fiscal_pending`, the gateway attempt history and stamp, `_payment_method`, `_payment_method_title`, `_transaction_id`, `_date_paid`, `_paid_date`. The app may keep these on its local document (they come back on the pull) but must stop treating a push as the way to set any of them. A push whose `status` is outside D4's set → 422 `wcpos_status_not_pushable` (`data.requested`, `data.pushable`).
+
+Refusals on the push lane the app must handle (all 422 unless noted): `reopen_required` (a line change on an order that is not editable: reopen first, or send `status: pos-open` in the same push per D3), `wcpos_money_in_motion` (a reopen or a cancel while a row is `pending`/`authorized`, a gateway attempt is `sent`, or a refund allocation is `pending`; `data.payment_id` / `data.attempt_id` name the leg; the till waits for the leg to settle or cancels it), `wcpos_currency_locked` (a currency change once any money exists), 409 `woo_rxdb_sync_record_locked` (the order lock is held; retry), 409 `woo_rxdb_sync_conflict` (stale `baseRevision`; unchanged).
+
+### 2.3 Every money command carries `command_id` and `revision` (rules 5, 6a)
+
+| Field | Type | Required on | Missing or invalid |
+|---|---|---|---|
+| `command_id` | uuid v4, lower-case, minted per command at enqueue, reused byte-for-byte on every retry of that command | `intent`, `capture`, `void`, `refund`, `cancel`, `submit`, `close` | 400 `rest_invalid_param` |
+| `revision` | the order's current revision string (`sha256:…`), the same value the push lane compares as `baseRevision` | the seven above **and** `record` | 428 `wcpos_revision_required` |
+
+`record` has no `command_id`: the row's `payment.id` is its command id. The status poll (`GET …/payments/{uuid}/status`) carries neither. The webview mint carries neither.
+
+Answers: same id + same body → the stored outcome replays (no provider call; a retry carries the revision it had before its own effect, and the server skips the revision compare on a replay). Same id + different body → 422 `wcpos_command_conflict` (`data.command_id`, `data.kind`), nothing written; `record` with a known `payment.id` and a different body is the same 422 (it was 409 `wcpos_payment_conflict` before). Fresh command with a stale revision → 409 `wcpos_revision_stale` with `data.currentRevision`, `data.current` (the order document) and `data.order` (the summary): the till re-reads, re-decides, re-sends under a **new** `command_id` (the old one never ran). Same id while in flight → 409 `wcpos_payment_locked`: retry after a beat with the same id. A refusal that changed nothing (400/404, the lock, `wcpos_balance_outstanding`, `wcpos_payment_in_flight`, a determinate provider refusal) stores no outcome: the same id may be retried and runs again.
+
+**Every 2xx money answer carries a top-level `revision`** (the canonical revision after the command). The till chains `record` → `close` without a pull by taking the revision from the previous answer.
+
+**Provenance.** `record`, `intent`, `capture`, `submit` and `close` take an optional `provenance` object: `{ register_id, session_id, sale_time, sale_tz, sale_counter }` (the till tuple the app already writes as `_wcpos_register`, `_wcpos_session`, `_wcpos_sale_time`, `_wcpos_sale_tz`, `_wcpos_sale_counter` on the order). It names the register that completed the sale on the completion entry, which matters after a reopen on another register. Invalid values are dropped, never refused. `provenance` is part of the body fingerprint, so a retry must carry the same one.
+
+### 2.4 Cash and every other tender go through the payments route (rule 1)
+
+A cash sale is `POST /wcpos/v2/orders/{id}/payments` (`record`) with the row (`payment.id` uuid minted at the till, `method_id`, `amount`, `tendered` for change, `currency`, `register_id`, `cashier_id`, the fields the route already takes) plus `revision` and `provenance`. The online path already does this (section 3, fact C1); what changes is the envelope, and the **offline path**: a cash row taken offline is held at the till and replayed through `record` with the same `payment.id` when the order is online, never carried inside the pushed order document as `_wcpos_payments` meta with a client-derived paid status (the server strips the meta and refuses the status, so the sale would arrive unpaid and the push 422). The server derives paid on that write: a covering row completes the sale (paid status, `date_paid`, completion entry 1). The answer carries `payment`, `order` (summary: `paid`, `balance`, `refund_due`, `status`) and `revision`. An offline cash row replayed days later with the same `payment.id` is one row (replay by id); an offline row arriving against a stale revision is 409 `wcpos_revision_stale`, and the till re-sends with the **same** `payment.id` after re-reading (one row either way).
+
+The paid balance the app derives locally (`Σ captured − Σ succeeded allocations` against `total`) is a projection for the UI; the server's `order.paid` / `order.balance` / `order.refund_due` in each money answer and in the pulled summary are the truth, and the status the server lands is the status.
+
+### 2.5 Reopen (rules 3, 4, 4b)
+
+A reopen is a push with `status: pos-open` on an order in a paid status. Every payment row stays and keeps counting; `date_paid` stays; nothing is archived or reset; the completion entry is marked reopened. Line edits may ride the same push (D3); the server moves stock by the difference. After the edit:
+
+- lines still covered by the money taken (balance ≤ 0, total > 0) → `POST …/close` with `command_id`, `revision`, `provenance` → completion `n+1` (`refund_due` in the summary when the total shrank; the money to hand back is the cashier's job, and a refund allocation against the row records it);
+- balance > 0 → take the difference with an ordinary money command; the covering write completes the sale again (completion `n+1`) with no `close` call;
+- a reopen while a leg is in motion → 422 `wcpos_money_in_motion` (section 2.2).
+
+What the app must stop doing: refusing to reopen a completed sale against 1.3 (the epoch gate), and expecting money to reset or be re-taken after reopen. The rows are real money; the UI shows them as paid and shows the new balance.
+
+`close` refusals: 409 `wcpos_balance_outstanding` (the balance is not covered, or total is zero; `data.order` carries the summary), 409 `wcpos_payment_in_flight` (a leg in motion), 409 `wcpos_invalid_transition` (not an open status and no standing completion). A `close` on an already-completed sale replays the last completion.
+
+### 2.6 Refunds (rule 8)
+
+The till keeps creating refunds through `POST orders/{id}/refunds` (section 3, fact F1) with `api_refund: true` for an original-method refund; it does not call the row refund route itself. Pro's `woocommerce_create_refund` listener allocates the refund to the ledger legs by calling `Ledger::refund()` per leg inside WooCommerce's refund creation, and the row route (`POST …/payments/{uuid}/refund`, with `refund_id`, `amount`, `command_id`, `revision`) is the same two-save path for a caller that addresses one leg. Either way the server reserves the allocation `pending` before it asks the provider and settles it after. Two answers are new at the refunds route: 409 `woo_rxdb_sync_record_locked` (the reservation could not be verified; nothing was sent to the provider; retry the same request), and a 2xx whose order summary then reads `refund_pending` > 0. An allocation `succeeded` is done. **An allocation still `pending` after a 2xx means sent and unconfirmed**: the provider may have refunded; the server has noted the order; the till shows the refund as pending (the order summary reads `refund_pending`), does not retry the provider, and does not treat it as failed. The status poll (`GET …/payments/{uuid}/status`) or the pulled order shows the allocation `succeeded` once a human confirms and a developer settles it (there is no app action for that in 2.0.0, and no `GET …/payments/{uuid}` route: the poll and the order document are the reads). A `failed` allocation (a 400 from the row route; at the refunds route WooCommerce deletes the refund and the till sees the error) is a definite refusal and may be retried as a new refund.
+
+The WooCommerce refund object the app creates for the merchant's records is created with **`api_refund: true`** for an original-method refund (**both lanes**: the till sends it in `packages/core/src/screens/main/orders/refund/use-refund-mutation.ts` today, which is what ADR 0040 wants and what the server handoff got wrong), because the provider refund belongs to the allocation, and Pro's `woocommerce_create_refund` hook runs one `Ledger::refund()` per leg inside it.
+
+### 2.7 What the till reads
+
+Each money answer's `order` summary carries `status`, `total`, `paid`, `authorized`, `balance`, `refund_due`, `refund_pending`, `payment_method`, `payment_method_title`; the pulled order document carries the rows (`_wcpos_payments` in `meta_data`, as the app already reads them; each row carries a `commands` map there that route answers strip and the app ignores and never sends back) and `_wcpos_completions` (one entry per completed-and-reopened cycle: `{ id, n, at_gmt, sale_time, sale_tz, register, session, counter, total, payment_ids, reopened_at_gmt }`). The receipt names completion `n` and the register on the latest entry; `n > 1` means the sale was reopened and completed again.
+
+## 3. What the app does today, where (read from the monorepo `origin/next`, 2026-10-20)
+
+Read by a Codex read-only run at monorepo `origin/next` `c0d06af6` (sparse clone; two files were unreadable and are marked). Line numbers are as of that commit.
+
+**Protocol and contract signal**
+- P1. `SYNC_PROTOCOL_VERSION = 2` — `packages/utils/src/sync-protocol.ts:7`. Header `X-WCPOS-Protocol` and query twin `wcpos_protocol` built in `packages/utils/src/request-preamble.ts:163–169, 254–256`; web sends headers only when `useProtocolHeaders` is true, else the query twins (`sync-protocol.ts:77–94`).
+- P2. `APP_PAYMENTS_CONTRACT = '1.3'` — `packages/utils/src/payments-contract.ts:2`, advertised as `payments=1.3` in `X-WCPOS-Client` (`sync-protocol.ts:98–99`). The server never reads it; it may go.
+- P3. Update-required detection keys on the body code `wcpos_update_required`, reads `min_protocol`, `server_protocol`, `plugin_version` — `sync-protocol.ts:108, 120–128`; reported through `packages/core/src/screens/main/hooks/use-rest-http-client/index.ts:186–204` and `apps/main/lib/create-app-engine.ts:983–989`; screen `packages/core/src/screens/main/update-required.tsx` (code `SYNC341`), selected in `apps/main/app/(app)/_layout.tsx:334–345`. Nothing to change here.
+- P4. The envelope is fetched from `GET /payment-methods` and stored as extra data — `packages/core/src/screens/main/contexts/extra-data/provider.tsx:83–94`; parsed and compared numerically in `packages/query/src/store-payments-contract.ts:7–21` and `packages/sync-core/src/payments-contract.ts:1–15`. Checkout gates on `schema === 1` only (`packages/core/src/screens/main/hooks/use-payment-methods.ts:78–83`, `pos/checkout/checkout.tsx:74–86`); no `'1.2'` comparison exists.
+
+**Epoch and owner residue (to delete)**
+- E1. `packages/order-math/src/payments/money-owner.ts:11–15`: `_wcpos_money_owner` always counts, `_wcpos_money_owner_hint` counts below 1.3.
+- E2. `packages/core/src/screens/main/pos/commands/money-owner-hint-writer.ts:23–26, 43–49`: writes `_wcpos_money_owner_hint` below 1.3.
+- E3. `packages/core/src/screens/main/pos/commands/settlement-coordinator.ts:67–68`: `serverOwnsMoney(payload.meta_data, …)`; contract plumbed through `apps/main/lib/create-app-engine.ts:975`.
+- E4. `packages/sync-core/src/pos-carrier/carrier.ts:56–74`: protected keys name `_wcpos_money_epoch`, `_wcpos_completed_epoch`, `_wcpos_completed_session`, `_wcpos_reopened_at`, `_wcpos_money_owner`, `_wcpos_money_owner_hint`. None of these exists on the server; the server-owned keys are section 2.2's (`_wcpos_payments`, `_wcpos_commands`, `_wcpos_completed_at`, `_wcpos_completions`, `_wcpos_fiscal_pending`, the attempt history and stamp).
+
+**Cash and completion**
+- C1. Online, a persisted order's cash goes through `POST orders/{id}/payments` with `{ payment: row }` — `packages/core/src/screens/main/pos/checkout/payments/record-manual-payment.ts:136, 185`; the row (`packages/order-math/src/payments/ledger.ts:150–177`) carries `source: 'app'`, `capture_mode: 'manual'`, `status: 'captured'`, cashier/store/register/session ids. No `revision`, no `provenance` object.
+- C2. Offline (or an unpersisted/queued order, a network failure, an HTTP ≥ 500), the row is written into the order's `_wcpos_payments` meta with a client-derived `status` and enqueued on the push — `record-manual-payment.ts:156–169, 233–236`; `use-record-manual-payment.ts:84`; `pos/commands/use-order-ledger-write.ts:11–17`. **This is the gap**: the server strips `_wcpos_payments` from every push and refuses a paid status (422 `wcpos_status_not_pushable`).
+- C3. The zero-balance completion (#2710) writes `status: 'completed'` locally and pushes it — `pos/commands/zero-balance-completion.ts:48–64`, named in `use-order-ledger-write.ts:25–28`; the paid-balance boundary that triggers it is `pos/commands/paid-balance-boundary.ts:34–38` (only on `pos-partial`), committed through `boundary-commit.ts:65–74` and `checkout/commit-sale.ts:83–114`. **Gap**: a pushed paid status is refused; this becomes `POST …/close`.
+- C4. The order editor can send any `status`, `payment_method`, `payment_method_title`, `transaction_id` — `packages/core/src/screens/main/orders/edit/form.tsx:58–69, 148–154`. The money fields are stripped server-side (harmless); a status outside D4's set is a 422 the form must expect or not offer.
+- C5. The local derivation counts `authorized` and `captured` as paid — `packages/order-math/src/payments/derive.ts:10, 30–34`. D6: captured only; an `authorized` row is in motion.
+- C6. The push document is the whole resident payload (`packages/query/src/mutations/push-record.ts:47–57`), sanitised by `packages/sync-engine/src/materialization/sanitize-outbound-order-payload.ts:35–38`, whose money strip (`packages/sync-core/src/woo/orderWriteContract.ts:49–58`) covers the aggregates only (`discount_total`, `discount_tax`, `shipping_total`, `shipping_tax`, `cart_tax`, `total`, `total_tax`, `tax_lines`) and keeps status, payment fields, dates and `_wcpos_*` meta (`:75–80`). The final serializer (`packages/sync-core/src/recordPushAdapter.ts`, `packages/sync-engine/src/write-path/write-drain-lane.ts`) was unreadable in the sparse clone; read it before deciding where the server-owned keys are dropped client-side.
+- C7. `set_paid` is not sent by any checkout writer found; it exists only as a schema field (`packages/database/src/collections/schemas/orders.ts:661–664`).
+
+**Money commands and revision**
+- M1. Routes called today, none with `command_id` or `revision`: `record` (C1); `intent`/`capture`/`void`/`status` from `checkout/payments/server/server-leg.ts:216–233` and `checkout/payments/device/device-leg.ts:132–330`; `void` from `checkout/payments/void-payments.ts:96–103`; `capture` from `packages/core/src/services/terminal-payments/service.ts:218–220`; `submit`/`cancel` from `checkout/payments/submit-gateway-payment.ts:94–97, 196–199`. No caller of `close` or of the row refund route.
+- M2. The order revision is stored: `_rxdb_revision` is adopted into `sync.revision` (`packages/sync-engine/src/write-path/adopt-stamped-revision.ts:14–21`, `materialization/record-materialization.ts:194–207`) and used as `baseRevision` on updates (`write-path/write-intents.ts:445, 579–585`); pointer rows keep it (`change-signal/change-signal-source.ts:400–406`). That is the value every money command sends as `revision`, and the `revision` in each money answer is what the local document adopts next.
+- M3. Provenance today: the row's own `register_id`/`session_id` (C1) and a separate push of the till tuple before a covering payment (`record-manual-payment.ts:171–175`, `use-record-manual-payment.ts:91–98`). The `provenance` body object (section 2.3) is additional and names the register per completion.
+
+**Reopen**
+- R1. Reopen is a local patch to `status: 'pos-open'` keeping `meta_data` and restamping identity — `packages/core/src/screens/main/orders/use-reopen-order.ts:26–41`, `orders/commands/use-order-record.ts:14–18`; menu in `orders/order-menu.tsx:151–168`. Aligned with the server.
+- R2. The tender view reads the ledger from `meta_data` and counts it — `checkout/tender/use-ledger-view.ts:40–55`; no reset, archive or epoch filter exists in `ledger.ts`, `derive.ts` or the reopen hook. Aligned; the UI copy that says money resets, if any, is the only thing to find.
+- R3. Cart restart (#2183) refuses when `date_paid_gmt` or any ledger row exists — `pos/hooks/cart-restart.ts:22–35`. Unchanged.
+
+**Refunds**
+- F1. `POST orders/{id}/refunds` with `amount`, `reason`, `refund_destination`, `api_refund: refundDestination === 'original_method'`, optional `_wcpos_register`/`_wcpos_session` meta and line items, header `X-WCPOS-Idempotency-Key` — `packages/core/src/screens/main/orders/refund/use-refund-mutation.ts:42–72, 108–121`. Pro's `Order_Pay_Gateway::capture_refund` (`woocommerce_create_refund`, priority 5) allocates per leg through `Ledger::refund()`. Aligned on `api_refund`; the new answers are section 2.6's.
+
+**Tests to update** (paths from the facts run): `packages/utils` protocol tests; `packages/query/tests/store-payments-contract.test.ts`; `packages/order-math/src/payments/{money-owner,ledger,derive}.test.ts`; `packages/core/src/screens/main/pos/commands/{money-owner-hint-writer,paid-balance-boundary,boundary-commit,settle-cart-write,settlement-coordinator}.test.ts`; `pos/checkout/payments/{record-manual-payment,use-record-manual-payment,submit-gateway-payment,void-payments}.test.ts`, `server/server-leg.test.ts`, `device/device-leg.test.ts`; `orders/use-reopen-order.test.ts`, `orders/refund/use-refund-mutation.test.ts`; `apps/main/e2e/{pos-checkout,pos-refunds,checkout-terminal}.spec.ts`.
+
+## 4. The changes, in order (each a PR against the monorepo's `next` unless marked)
+
+1. **Protocol 3** (P1). `SYNC_PROTOCOL_VERSION = 3`. Pin: a built request carries `X-WCPOS-Protocol: 3` (and the query twin on web); the `wcpos_update_required` path (P3) is unchanged. Drop the `payments=` token (P2) or leave it; the server ignores it.
+2. **Offline cash replays through `record`** (C2). A row taken offline is kept at the till (the ledger meta on the local document is fine as the till's own record) and sent to `POST orders/{id}/payments` with the same `payment.id` once the order has an id and the site is reachable; the pushed order document never carries `_wcpos_payments` or a client-derived paid status. Replay by `payment.id` makes a double send one row. Pin: an offline cash sale synced later produces one `record` call carrying the original row id and a push whose document has no `_wcpos_payments` entry and a status in D4's set.
+3. **The zero-balance completion calls `close`** (C3). Where the boundary commit pushes `status: 'completed'`, it calls `POST orders/{id}/close` with `command_id`, `revision`, `provenance` and adopts the answer's `order.status` and `revision`; 409 `wcpos_balance_outstanding` means the balance is not covered after all (re-read the summary); 409 `wcpos_payment_in_flight` means a leg is pending. The editor (C4) offers only D4's statuses.
+4. **The command envelope** (M1, M2). Every money command carries `command_id` (minted once per command at enqueue, kept across retries) and `revision` (the local `sync.revision`, or the `revision` from the previous money answer); `provenance` on `record`, `intent`, `capture`, `submit`, `close`. Adopt the `revision` from every 2xx answer onto the local document. Handle 422 `wcpos_command_conflict` (never reuse an id with another body), 409 `wcpos_revision_stale` (re-read `data.current`, re-decide, new id), 428 `wcpos_revision_required`, 409 `wcpos_payment_locked` (retry, same id). One pin per code, and one that a retried command sends the identical body and id.
+5. **Delete the epoch and owner residue** (E1–E4). Remove `money-owner.ts`, the hint writer, `serverOwnsMoney` in the settlement coordinator and the contract plumbing that exists only for them; replace the protected keys in `carrier.ts` with the server-owned keys of section 2.2. Nothing on the app gates on `'1.3'` after this except the existence of the envelope (P4), which already holds.
+6. **Captured only** (C5). `derive.ts` counts `captured` rows as paid; `authorized` is shown as in motion. Pin: an authorized row leaves the balance unpaid.
+7. **Reopen UX** (R1, R2). The reopen stays a `status: 'pos-open'` push; handle 422 `wcpos_money_in_motion` (name the leg from `data.payment_id` / `data.attempt_id`; offer to wait or cancel); after the edit, `close` when covered (item 3) or tender the difference; show `refund_due` from the summary. Remove any copy that promises money resets.
+8. **Refund pending** (F1). After `POST orders/{id}/refunds`, read the order summary: `refund_pending` > 0 shows the refund as sent and unconfirmed; 409 `woo_rxdb_sync_record_locked` retries the same request. Pin that `api_refund: true` is sent for an original-method refund (**both lanes**).
+9. **Receipts and the completion number.** Read `_wcpos_completions` for `n` and the register on the latest entry where the receipt names the sale; `n > 1` is a reopened-and-completed sale.
+
+Rules in force on the app side: failing test first for every item; one Jest/Vitest suite at a time with `--maxWorkers=2`; never commit to `next` or `main` directly; one PR per numbered item unless two are one change; the server spec is the authority on field names and codes. Anything the spec does not say is a question for Paul, not an invention.
+
+## 5. Pointers
+
+- ADR: `docs/adr/0040-server-derives-paid-no-money-epoch.md` (wcpos/woocommerce-pos, `next`).
+- Server spec: `.claude/specs/2026-10-19-adr-0040-money-model/SPEC.md` (§2 error codes, §3 push lane, §4 ledger and `close`, §5 command envelope, §6 refunds, §7 decisions).
+- Route README: `includes/API/V2/README.md` on `next` (the `close` route, the command envelope, the refund two-save).
+- Server PRs: #2349 (push lane, protocol 3), #2352 (ledger, completion stamp, `close`), #2355 (command idempotency, revision), #2362 (refund two-save); Pro #686.
+- Wiki (wcpos/wiki): `architecture/client/payments-contract.md` and its spokes, rewritten for 1.3 in the PR that accompanies this handoff.
+- App PRs this replaces: wcpos/monorepo #2702, #2710, #2688, #2183 (cart restart stays).
