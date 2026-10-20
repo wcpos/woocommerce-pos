@@ -3748,6 +3748,111 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
+	/**
+	 * Edit every payment row of the order's staged ledger on the saves $active() picks.
+	 *
+	 * @param int      $order_id Order id.
+	 * @param callable $active   Whether this save is edited.
+	 * @param callable $edit     Takes and returns a payment row.
+	 */
+	private function edit_staged_rows( int $order_id, callable $active, callable $edit ): \Closure {
+		$hook = static function ( $saving ) use ( $order_id, $active, $edit ): void {
+			if ( ! $saving instanceof \WC_Order || $saving->get_id() !== $order_id || ! $active() ) {
+				return;
+			}
+			$value = json_decode( (string) $saving->get_meta( Ledger::META_KEY, true ), true );
+			$value['payments'] = array_map( $edit, $value['payments'] );
+			$saving->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $hook, PHP_INT_MAX );
+		return $hook;
+	}
+
+	/**
+	 * True for the first $limit saves after the probe gateway was called.
+	 *
+	 * @param int $limit Saves to pick.
+	 */
+	private function first_saves_after_the_call( int $limit ): callable {
+		$picked = 0;
+		return static function () use ( &$picked, $limit ): bool {
+			if ( Refund_Probe_Gateway::$calls > 0 && $picked < $limit ) {
+				++$picked;
+				return true;
+			}
+			return false;
+		};
+	}
+
+	/** #2362 review: a save whose command entry is rewritten (same key, other fingerprint) is a miss, on either save. */
+	public function test_a_save_that_rewrites_the_command_entry_is_not_acknowledged(): void {
+		// Arrange: the settle's two saves land with the entry's fingerprint rewritten.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$command = $this->refund_command();
+		$forge   = static function ( array $payment ) use ( $command ): array {
+			if ( isset( $payment['commands'][ $command['id'] ] ) ) {
+				$payment['commands'][ $command['id'] ]['fp'] = 'sha256:' . str_repeat( 'f', 64 );
+			}
+			return $payment;
+		};
+		$hook = $this->edit_staged_rows( $order->get_id(), $this->first_saves_after_the_call( 2 ), $forge );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $command );
+		remove_action( 'woocommerce_before_order_object_save', $hook, PHP_INT_MAX );
+
+		// Assert: stranded, and the re-persisted reservation carries the entry as written.
+		$stored = $this->stored_row_of( $order->get_id(), $row['id'] );
+		$this->assertSame( 'pending', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $stored, $refund->get_id() ) );
+		$this->assertSame( $command['fp'], $stored['commands'][ $command['id'] ]['fp'] );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+
+		// Arrange: a second refund whose reservation saves all land with the entry rewritten.
+		$second  = $this->refund_of( wc_get_order( $order->get_id() ), '5.00' );
+		$command = $this->refund_command();
+		$forge   = static function ( array $payment ) use ( $command ): array {
+			if ( isset( $payment['commands'][ $command['id'] ] ) ) {
+				$payment['commands'][ $command['id'] ]['fp'] = 'sha256:' . str_repeat( 'f', 64 );
+			}
+			return $payment;
+		};
+		$hook = $this->edit_staged_rows( $order->get_id(), static fn() => true, $forge );
+
+		// Act.
+		$error = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $second->get_id(), '5.00', $command );
+		remove_action( 'woocommerce_before_order_object_save', $hook, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $error->get_error_code() );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+		$this->assertSame( array(), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $second->get_id() ) );
+	}
+
+	/** #2362 review: a settle save that leaves a second allocation for the refund beside the answer is a miss. */
+	public function test_a_save_that_duplicates_the_allocation_is_not_acknowledged(): void {
+		// Arrange: the settle's two saves land with the reservation appended again beside the settled allocation.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$refund_id = $refund->get_id();
+		$duplicate = $this->reservation( $refund_id, '10.00' );
+		$merge     = static function ( array $payment ) use ( $duplicate ): array {
+			$payment['refunds'][] = $duplicate;
+			return $payment;
+		};
+		$hook = $this->edit_staged_rows( $order->get_id(), $this->first_saves_after_the_call( 2 ), $merge );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund_id, '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $hook, PHP_INT_MAX );
+
+		// Assert: stranded, and storage holds exactly the one reservation for the refund.
+		$this->assertSame( array( $this->reservation( $refund_id, '10.00' ) ), $this->allocations_of( $result, $refund_id ) );
+		$this->assertSame( array( $this->reservation( $refund_id, '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund_id ) );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
 		// Arrange: a cash row already projected onto a completed sale, so the derive after the settle moves nothing.

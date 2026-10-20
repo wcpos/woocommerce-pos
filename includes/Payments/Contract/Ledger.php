@@ -1145,7 +1145,7 @@ class Ledger {
 		// No money moved: take the reservation and its entry back out, so the same command runs again (§7.13).
 		$refuse = fn( WP_Error $answer ): WP_Error => $this->withdraw( $order, $rows, $row, $reserve, $entry, $answer );
 		$strand = fn( string $cause ): array => $this->strand( $order, $rows, $held, $reserve, $entry, $cause );
-		if ( ! $this->persist( $order, $rows, $held, false, fn( ?array $stored ) => $this->reserved( $stored, $reserve, $entry ) ) ) {
+		if ( ! $this->persist( $order, $rows, $held, false, fn( ?array $stored ) => $this->reserved( $stored, $reserve, $held, $entry ) ) ) {
 			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch.
 			return $refuse( new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) ) );
 		}
@@ -1184,7 +1184,7 @@ class Ledger {
 		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole, with the command's entry.
 		$answer = current( array_filter( $row['refunds'], static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
 		// Not derived in the same save: a settle attempt that misses must not have completed the sale (rule 3).
-		$settled = fn( ?array $stored ): bool => $this->reserved( $stored, $answer, $entry );
+		$settled = fn( ?array $stored ): bool => $this->reserved( $stored, $answer, $row, $entry );
 		if ( ! $this->persist( $order, $rows, $row, false, $settled ) ) {
 			return $strand( 'its settle did not land' );
 		}
@@ -1303,7 +1303,7 @@ class Ledger {
 	 */
 	private function strand( WC_Order $order, array $rows, array $held, array $reserve, ?string $entry, string $cause ): array {
 		$this->mark( $order, $held, $reserve, $cause . '; the allocation stays pending until it is confirmed with the provider' );
-		$kept = fn( ?array $stored ): bool => $this->reserved( $stored, $reserve, $entry );
+		$kept = fn( ?array $stored ): bool => $this->reserved( $stored, $reserve, $held, $entry );
 		if ( $kept( $this->stored_row( $order->get_id(), $held['id'] ) ) || $this->persist( $order, $rows, $held, false, $kept ) ) {
 			return $this->stored_row( $order->get_id(), $held['id'] ) ?? $held;
 		}
@@ -1312,15 +1312,31 @@ class Ledger {
 	}
 
 	/**
-	 * Whether a stored row holds this allocation whole (the reservation, or the settled answer)
-	 * and, when there is a command, its entry.
+	 * Whether a stored row holds this allocation whole and alone (the reservation, or the settled
+	 * answer) and, when there is a command, its entry as written.
 	 *
 	 * @param array|null  $stored  Stored row.
 	 * @param array       $reserve The allocation.
+	 * @param array       $written The row that was written.
 	 * @param string|null $entry   The command id, if any.
 	 */
-	private function reserved( ?array $stored, array $reserve, ?string $entry ): bool {
-		return $this->same_allocation( $reserve, $stored, (int) $reserve['id'] ) && ( null === $entry || isset( $stored['commands'][ $entry ] ) );
+	private function reserved( ?array $stored, array $reserve, array $written, ?string $entry ): bool {
+		if ( ! $this->same_allocation( $reserve, $stored, (int) $reserve['id'] ) ) {
+			return false;
+		}
+		if ( null === $entry ) {
+			return true;
+		}
+		// The entry as written, not just its key: Command_Log::find() trusts what is stored. at_gmt is not
+		// compared (the settle's entry is minted again, so its stamp may be a second later than the reservation's).
+		$want = $written['commands'][ $entry ] ?? null;
+		$got  = $stored['commands'][ $entry ] ?? null;
+		foreach ( array( 'fp', 'kind', 'ref' ) as $field ) {
+			if ( ! is_array( $want ) || ! is_array( $got ) || ( $want[ $field ] ?? null ) !== ( $got[ $field ] ?? null ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -1331,12 +1347,13 @@ class Ledger {
 	 * @param int        $refund_id  WooCommerce refund ID.
 	 */
 	private function same_allocation( array $allocation, ?array $stored, int $refund_id ): bool {
-		foreach ( $stored['refunds'] ?? array() as $kept ) {
-			if ( (int) ( $kept['id'] ?? 0 ) === $refund_id ) {
-				return ( $allocation['status'] ?? null ) === ( $kept['status'] ?? null ) && (string) ( $allocation['provider_ref'] ?? '' ) === (string) ( $kept['provider_ref'] ?? '' ) && Money::minor( $allocation['amount'] ?? 0 ) === Money::minor( $kept['amount'] ?? 0 );
-			}
+		// Exactly one allocation for the refund: a merged duplicate would keep counting in the caps and refund_pending.
+		$found = array_values( array_filter( (array) ( $stored['refunds'] ?? array() ), static fn( $kept ) => (int) ( $kept['id'] ?? 0 ) === $refund_id ) );
+		if ( 1 !== count( $found ) ) {
+			return false;
 		}
-		return false;
+		$kept = $found[0];
+		return ( $allocation['status'] ?? null ) === ( $kept['status'] ?? null ) && (string) ( $allocation['provider_ref'] ?? '' ) === (string) ( $kept['provider_ref'] ?? '' ) && Money::minor( $allocation['amount'] ?? 0 ) === Money::minor( $kept['amount'] ?? 0 );
 	}
 
 	/**
