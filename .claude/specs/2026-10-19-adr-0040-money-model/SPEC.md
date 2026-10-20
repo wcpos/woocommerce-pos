@@ -523,6 +523,8 @@ Codex pre-build review of §6 (2026-10-20, 7 findings, 4 High), folded above: a 
 
 PR review on #2362 (Codex, two rounds), folded: `strand()` returned whatever storage held, a row with no allocation included (→ `strand()` verifies the reservation and its entry are in storage and re-persists the reserved row when not, answering the reserved row when even that does not land); the settle's read-back ignored the command entry (→ both halves, as save 1); derivation rode the settle attempt (→ its own save after the verified settle, above).
 
+Declined on #2362 (round 5): rolling back a completion when the settle is lost after the derive save. The derive save does not change `_wcpos_payments` and WooCommerce writes only changed meta rows, so it cannot lose a landed settle on its own; and unwinding a completion is what the ADR refuses (rule 1: paid is derived from money that moved; the provider refunded). The remaining `pending` allocation is rule 8's attention marker, blocks reopen (rule 3) and is settled by a human (§7.17).
+
 Adversarial Codex review of the built diff (spec withheld; 3 High), folded: Pro's `Device_Handler::call()` turns an adapter throw into a plain 502 (→ Pro companion PR marks that catch `indeterminate`; Free reads the flag); the stranding path's note and log hooks, and the allocation action, could throw into WooCommerce's deleting catch (→ guarded, #8e); a post-call cap or transition failure withdrew a reservation after the handler reported money moved (→ stranded, #8d). The implementer's own finding: the withdrawal-miss note said "sent" when the provider was never asked (→ its own wording, #8f).
 
 ### 6.7 Verification order for PR 4
