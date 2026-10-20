@@ -46,7 +46,7 @@ class Ledger {
 	 *
 	 * @var string[]
 	 */
-	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'provider_refs', 'receipt' );
+	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'authorized_at_gmt', 'provider_refs', 'receipt' );
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	/** Only captured money pays a sale (ADR 0040 rule 1, D6): an authorization is money in motion. */
@@ -660,6 +660,9 @@ class Ledger {
 		$status = isset( $input['status'] ) ? (string) $input['status'] : 'captured';
 		if ( ! in_array( $status, array( 'captured', 'authorized' ), true ) ) {
 			return $this->invalid( __( 'Recorded payments must be captured or authorized.', 'woocommerce-pos' ) );
+		}
+		if ( 'authorized' !== $status ) {
+			unset( $input['authorized_at_gmt'] ); // The approval time belongs to an authorization; a captured record was never on hold.
 		}
 		$tendered = null;
 		if ( array_key_exists( 'tendered', $input ) && null !== $input['tendered'] ) {
