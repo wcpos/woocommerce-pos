@@ -3444,6 +3444,36 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
+	/** §6.6 pin 8d: a post-call check that fails after the handler reports money moved strands; it never withdraws. */
+	public function test_a_handler_that_refunded_more_than_asked_is_stranded_not_withdrawn(): void {
+		// Arrange: the handler reports 25.00 refunded against a 20.00 refund.
+		list( $order, $row, $refund ) = $this->probed_refundable( 'refund_answer' );
+		Refund_Answer_Handler::$answer = static function ( array $row, int $refund_id ): array {
+			$row['refunds'][] = array(
+				'id'           => $refund_id,
+				'amount'       => '25.00',
+				'status'       => 'succeeded',
+				'provider_ref' => null,
+			);
+			return $row;
+		};
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		$again  = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '10.00' );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $result, $refund->get_id() ) );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$logs = $this->stranded_logs();
+		$this->assertCount( 1, $logs );
+		$this->assertStringContainsString( 'wcpos_refund_not_allocatable', $logs[0] );
+		$this->assertIsArray( $again );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
 		// Arrange: a cash row on a completed sale, so the settle's derive moves nothing.

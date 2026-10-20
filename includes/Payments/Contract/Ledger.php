@@ -1159,9 +1159,12 @@ class Ledger {
 			// The provider may have refunded: the reservation stands, and the answer is the stored row (§7.16).
 			return is_array( $data ) && true === ( $data['indeterminate'] ?? false ) ? $this->strand( $order, $held, $reserve, 'the provider answered indeterminately: ' . $new->get_error_message() ) : $refuse( $new );
 		}
-		$row = $this->apply_transition( $row, $new );
+		// A check that fails once the handler reports money moved (or in motion) strands; only "no money moved" withdraws.
+		$moved = (bool) array_filter( (array) ( $new['refunds'] ?? array() ), static fn( $allocation ) => (int) ( $allocation['id'] ?? 0 ) === $refund_id && in_array( $allocation['status'] ?? '', array( 'succeeded', 'pending' ), true ) );
+		$fail  = fn( WP_Error $error ) => $moved ? $this->strand( $order, $held, $reserve, 'the handler reported it, but ' . $error->get_error_code() . ': ' . $error->get_error_message() ) : $refuse( $error );
+		$row   = $this->apply_transition( $row, $new );
 		if ( is_wp_error( $row ) ) {
-			return $refuse( $row );
+			return $fail( $row );
 		}
 		// A handler may save a different amount than was requested: hold it to the same caps, and it must be positive.
 		$refunded = self::refunded_total( $row );
@@ -1173,7 +1176,7 @@ class Ledger {
 			}
 		}
 		if ( $saved <= 0 || $reserved > Money::minor( $row['amount'] ) || $refund_allocated + $saved > $refund_amount ) {
-			return $refuse( new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) ) );
+			return $fail( new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) ) );
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $this->with_command( $row, $command, $refund_id ) );
