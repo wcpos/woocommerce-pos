@@ -535,6 +535,9 @@ class Payments_Controller extends WC_REST_Controller {
 				unset( $data['payment']['commands'] );
 			}
 			$state = null !== $kind && $response->get_status() < 300 && $order ? Order_Serializer::current_state( $order_id ) : null;
+			if ( is_wp_error( $state ) ) {
+				return $state; // The command's effect stands and its entry is kept: the retry replays it.
+			}
 			if ( is_array( $state ) ) {
 				$data['revision'] = $state['revision'];
 			}

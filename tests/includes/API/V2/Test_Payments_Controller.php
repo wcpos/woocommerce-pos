@@ -1843,6 +1843,39 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 2, $this->stored_meta( $order->get_id(), Ledger::META_KEY )['payments'] );
 	}
 
+	/** Pin 33: a 2xx command whose revision cannot be read answers the read's error; its retry replays. */
+	public function test_a_command_whose_answer_revision_cannot_be_read_is_an_error_and_its_retry_replays(): void {
+		// Arrange: a pending row; the order read fails the second time this request asks.
+		$order   = $this->create_pos_order();
+		$pending = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		Ledger::instance()->save( $order, array( $pending ), false );
+		$body  = $this->envelope( $order, array( 'reason' => 'Customer cancelled' ) );
+		$route = '/wc/v3/orders/' . $order->get_id();
+		$reads = 0;
+		$deny  = static function ( $result, $server, $request ) use ( $route, &$reads ) {
+			if ( $route === $request->get_route() && 2 === ++$reads ) {
+				return new \WP_Error( 'woocommerce_rest_cannot_view', 'Sorry, you cannot view this resource.', array( 'status' => 403 ) );
+			}
+			return $result;
+		};
+		add_filter( 'rest_pre_dispatch', $deny, 10, 3 );
+
+		// Act.
+		try {
+			$voided = $this->command( $this->payment_path( $order, $pending['id'] ) . '/void', $body );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $deny, 10 );
+		}
+		$replayed = $this->command( $this->payment_path( $order, $pending['id'] ) . '/void', $body );
+
+		// Assert.
+		$this->assertSame( 403, $voided->get_status(), wp_json_encode( $voided->get_data() ) );
+		$this->assertSame( 'woocommerce_rest_cannot_view', $voided->get_data()['code'] );
+		$this->assertSame( 'voided', $this->stored_row( $order->get_id(), $pending['id'] )['status'] );
+		$this->assertSame( 200, $replayed->get_status() );
+		$this->assertSame( $this->current_revision( $order ), $replayed->get_data()['revision'] );
+	}
+
 	/** Create an open POS order at the contract total. */
 	/**
 	 * A captured cash row, for seeding without deriving.
