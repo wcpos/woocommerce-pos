@@ -392,7 +392,7 @@ class Payments_Controller extends WC_REST_Controller {
 		$command = array();
 		if ( 'record' !== $kind ) {
 			$id = $params['command_id'] ?? null;
-			if ( ! is_string( $id ) || ! wp_is_uuid( $id ) ) {
+			if ( ! is_string( $id ) || ! wp_is_uuid( strtolower( $id ) ) ) {
 				return new WP_Error( 'rest_invalid_param', __( 'Command ID must be a UUID.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 			}
 			$target  = in_array( $kind, Command_Log::ROW_KINDS, true ) ? (string) $request['uuid'] : (string) $request['method'];
