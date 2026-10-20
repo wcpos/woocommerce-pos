@@ -1197,7 +1197,12 @@ class Ledger {
 		 *
 		 * @hook woocommerce_pos_refund_allocated
 		 */
-		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
+		try {
+			do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
+		} catch ( \Throwable $error ) {
+			// The allocation is stored; a listener's throw must not reach WooCommerce's deleting catch (rule 8).
+			$this->report( $order, sprintf( 'WCPOS refund #%d allocated on order #%d, but a woocommerce_pos_refund_allocated listener threw: %s', $refund_id, $order->get_id(), $error->getMessage() ) );
+		}
 		return $row;
 	}
 
@@ -1216,7 +1221,7 @@ class Ledger {
 			try {
 				$this->replace_and_save( $order, $rows, $replacement, $derive );
 			} catch ( \Throwable $error ) {
-				Logger::warning( sprintf( 'WCPOS refund save on order #%d failed: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
+				$this->report( $order, sprintf( 'WCPOS refund save on order #%d failed: %s', $order->get_id(), $error->getMessage() ), false );
 			}
 			if ( $landed( $this->stored_row( $order->get_id(), $replacement['id'] ) ) ) {
 				return true;
@@ -1299,9 +1304,33 @@ class Ledger {
 	 * @param string   $cause   What happened.
 	 */
 	private function mark( WC_Order $order, array $row, array $reserve, string $cause ): void {
-		Logger::error( sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s; the allocation stays pending until it is confirmed with the provider.', $reserve['id'], $reserve['amount'], $order->get_id(), $row['id'], $cause ), array( 'order_id' => $order->get_id() ) );
-		/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
-		$order->add_order_note( sprintf( __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' ), $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $row['method_id'] ) );
+		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s; the allocation stays pending until it is confirmed with the provider.', $reserve['id'], $reserve['amount'], $order->get_id(), $row['id'], $cause ) );
+		try {
+			/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
+			$order->add_order_note( sprintf( __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' ), $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $row['method_id'] ) );
+		} catch ( \Throwable $error ) {
+			// Note hooks run inside add_order_note(); their throw must not escape refund() (rule 8).
+			$this->report( $order, sprintf( 'WCPOS refund #%d on order #%d: its order note failed: %s', $reserve['id'], $order->get_id(), $error->getMessage() ) );
+		}
+	}
+
+	/**
+	 * Log on the refund path, never throwing: a logger that throws is swallowed.
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param string   $message Message.
+	 * @param bool     $error   Error level, else warning.
+	 */
+	private function report( WC_Order $order, string $message, bool $error = true ): void {
+		try {
+			if ( $error ) {
+				Logger::error( $message, array( 'order_id' => $order->get_id() ) );
+			} else {
+				Logger::warning( $message, array( 'order_id' => $order->get_id() ) );
+			}
+		} catch ( \Throwable $ignored ) {
+			unset( $ignored ); // Nothing left to tell; the refund's answer stands.
+		}
 	}
 
 	/**

@@ -3474,6 +3474,45 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
+	/** §6.6 pin 8e: a throwing note hook while stranding, or a throwing allocation listener after a landed settle, never escapes refund(). */
+	public function test_a_throwing_note_or_allocation_listener_does_not_escape_refund(): void {
+		// Arrange: a stranded refund whose note hook throws.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$force = $this->force_allocation( $order->get_id(), $refund->get_id(), $this->reservation( $refund->get_id(), '10.00' ), static fn() => Refund_Probe_Gateway::$calls > 0 );
+		$note  = static function (): void {
+			throw new \RuntimeException( 'note hook failed' );
+		};
+		add_action( 'woocommerce_order_note_added', $note );
+
+		// Act.
+		$stranded = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_order_note_added', $note );
+		remove_action( 'woocommerce_before_order_object_save', $force, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertIsArray( $stranded );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertNotEmpty( array_filter( $this->refund_logs, static fn( $line ) => false !== strpos( $line, 'note hook failed' ) ) );
+
+		// Arrange: a landed settle whose allocation listener throws.
+		$second   = $this->refund_of( wc_get_order( $order->get_id() ), '5.00' );
+		$listener = static function (): void {
+			throw new \RuntimeException( 'allocation listener failed' );
+		};
+		add_action( 'woocommerce_pos_refund_allocated', $listener );
+
+		// Act.
+		$settled = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $second->get_id(), '5.00', $this->refund_command() );
+		remove_action( 'woocommerce_pos_refund_allocated', $listener );
+
+		// Assert.
+		$this->assertIsArray( $settled );
+		$this->assertSame( 'succeeded', $this->allocations_of( $settled, $second->get_id() )[0]['status'] );
+		$this->assertSame( 'succeeded', $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $second->get_id() )[0]['status'] );
+		$this->assertNotEmpty( array_filter( $this->refund_logs, static fn( $line ) => false !== strpos( $line, 'allocation listener failed' ) ) );
+		$this->assertSame( 2, Refund_Probe_Gateway::$calls );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
 		// Arrange: a cash row on a completed sale, so the settle's derive moves nothing.
