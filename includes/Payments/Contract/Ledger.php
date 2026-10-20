@@ -1289,7 +1289,7 @@ class Ledger {
 	private function withdraw( WC_Order $order, array $rows, array $row, array $reserve, ?string $entry, WP_Error $answer ): WP_Error {
 		$gone = static fn( ?array $stored ): bool => null !== $stored && ! array_filter( $stored['refunds'] ?? array(), static fn( $kept ) => (int) ( $kept['id'] ?? 0 ) === $reserve['id'] ) && ( null === $entry || ! isset( $stored['commands'][ $entry ] ) );
 		if ( ! $this->persist( $order, $rows, $row, false, $gone ) ) {
-			$this->mark( $order, $row, $reserve, 'it was refused (' . $answer->get_error_code() . '), but its reservation could not be withdrawn' );
+			$this->mark( $order, $row, $reserve, 'it was refused (' . $answer->get_error_code() . '), but its reservation could not be withdrawn', false );
 		}
 		return $answer;
 	}
@@ -1302,12 +1302,19 @@ class Ledger {
 	 * @param array    $row     Payment row.
 	 * @param array    $reserve The reservation.
 	 * @param string   $cause   What happened.
+	 * @param bool     $sent    Whether the provider was (or may have been) asked; false for a refusal whose withdrawal did not land.
 	 */
-	private function mark( WC_Order $order, array $row, array $reserve, string $cause ): void {
+	private function mark( WC_Order $order, array $row, array $reserve, string $cause, bool $sent = true ): void {
 		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s; the allocation stays pending until it is confirmed with the provider.', $reserve['id'], $reserve['amount'], $order->get_id(), $row['id'], $cause ) );
-		try {
+		if ( $sent ) {
 			/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
-			$order->add_order_note( sprintf( __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' ), $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $row['method_id'] ) );
+			$note = __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' );
+		} else {
+			/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
+			$note = __( 'WCPOS: refund #%1$d for %2$s was refused by %3$s but its reservation could not be removed; check the payment before retrying.', 'woocommerce-pos' );
+		}
+		try {
+			$order->add_order_note( sprintf( $note, $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $row['method_id'] ) );
 		} catch ( \Throwable $error ) {
 			// Note hooks run inside add_order_note(); their throw must not escape refund() (rule 8).
 			$this->report( $order, sprintf( 'WCPOS refund #%d on order #%d: its order note failed: %s', $reserve['id'], $order->get_id(), $error->getMessage() ) );

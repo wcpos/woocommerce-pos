@@ -3554,6 +3554,25 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->stored_row_of( $order_id, $row['id'] )['commands'] );
 	}
 
+	/** §6.6 pin 8f: the note of a withdrawal that did not land says the refund was refused, not that it was sent. */
+	public function test_a_withdrawal_that_does_not_land_notes_the_refusal_not_a_send(): void {
+		// Arrange: the provider refuses; every save after the call keeps the reservation.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		Refund_Probe_Gateway::$result = false;
+		$force                        = $this->force_allocation( $order->get_id(), $refund->get_id(), $this->reservation( $refund->get_id(), '10.00' ), static fn() => Refund_Probe_Gateway::$calls > 0 );
+
+		// Act.
+		Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $force, PHP_INT_MAX );
+
+		// Assert.
+		$notes = $this->stranded_notes( $order->get_id() );
+		$this->assertSame(
+			array( sprintf( 'WCPOS: refund #%d for 10.00 %s was refused by wcpos_refund_probe but its reservation could not be removed; check the payment before retrying.', $refund->get_id(), $order->get_currency() ) ),
+			$notes
+		);
+	}
+
 	/** §6.6 pin 10: a withdrawal that does not land still answers the refusal, and the order is noted. */
 	public function test_refund_withdrawal_that_does_not_land_answers_the_refusal_and_notes_the_order(): void {
 		// Arrange: the provider refuses; every save after the call keeps the reservation.
