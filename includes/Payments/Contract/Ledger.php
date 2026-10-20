@@ -1153,7 +1153,9 @@ class Ledger {
 			return $this->strand( $order, $held, $reserve, 'the provider call threw ' . get_class( $error ) . ': ' . $error->getMessage() );
 		}
 		if ( is_wp_error( $new ) ) {
-			return $refuse( $new );
+			$data = $new->get_error_data();
+			// The provider may have refunded: the reservation stands, and the answer is the stored row (§7.16).
+			return is_array( $data ) && true === ( $data['indeterminate'] ?? false ) ? $this->strand( $order, $held, $reserve, 'the provider answered indeterminately: ' . $new->get_error_message() ) : $refuse( $new );
 		}
 		$row = $this->apply_transition( $row, $new );
 		if ( is_wp_error( $row ) ) {

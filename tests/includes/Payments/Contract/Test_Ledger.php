@@ -3301,6 +3301,132 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->stranded_notes( $order->get_id() ) );
 	}
 
+	/** §6.6 pin 7: a provider that throws mid-refund leaves the reservation standing; nothing escapes. */
+	public function test_refund_whose_provider_throws_keeps_the_reservation_and_notes_the_order(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		Refund_Probe_Gateway::$result = new \RuntimeException( 'gateway timed out' );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		$again  = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '10.00' );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$logs = $this->stranded_logs();
+		$this->assertCount( 1, $logs );
+		$this->assertStringContainsString( 'gateway timed out', $logs[0] );
+		$this->assertIsArray( $again );
+		$this->assertSame( 'pending', $this->allocations_of( $again, $refund->get_id() )[0]['status'] );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+	}
+
+	/** §6.6 pin 8: an indeterminate provider error leaves the reservation standing, as a throw does. */
+	public function test_refund_with_an_indeterminate_provider_error_keeps_the_reservation(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->probed_refundable( 'refund_answer' );
+		Refund_Answer_Handler::$answer = static fn() => new \WP_Error(
+			'wcpos_provider_error',
+			'provider unreachable',
+			array(
+				'status'        => 502,
+				'indeterminate' => true,
+			)
+		);
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$logs = $this->stranded_logs();
+		$this->assertCount( 1, $logs );
+		$this->assertStringContainsString( 'provider unreachable', $logs[0] );
+	}
+
+	/** §6.6 pin 8b: a settle save that throws is a miss, never an escape; on the reservation it is the 409. */
+	public function test_refund_whose_settle_save_throws_is_stranded_not_escaped(): void {
+		// Arrange: every save after the provider call throws.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$order_id = $order->get_id();
+		$throws   = static function ( $saving ) use ( $order_id ): void {
+			if ( $saving instanceof \WC_Order && $saving->get_id() === $order_id && Refund_Probe_Gateway::$calls > 0 ) {
+				throw new \RuntimeException( 'settle save failed' );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $throws, PHP_INT_MAX );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $throws, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order_id, $row['id'] ), $refund->get_id() ) );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+		$this->assertCount( 1, $this->stranded_notes( $order_id ) );
+		$this->assertCount( 1, $this->stranded_logs() );
+	}
+
+	/** §6.6 pin 8b, reservation half: a reservation save that throws is the 409, and the provider is not asked. */
+	public function test_refund_whose_reservation_save_throws_is_the_retryable_conflict(): void {
+		// Arrange: every save throws.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$order_id = $order->get_id();
+		$throws   = static function ( $saving ) use ( $order_id ): void {
+			if ( $saving instanceof \WC_Order && $saving->get_id() === $order_id ) {
+				throw new \RuntimeException( 'reservation save failed' );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $throws, PHP_INT_MAX );
+
+		// Act.
+		$error = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $throws, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $error->get_error_code() );
+		$this->assertSame( 0, Refund_Probe_Gateway::$calls );
+		$this->assertSame( array(), $this->allocations_of( $this->stored_row_of( $order_id, $row['id'] ), $refund->get_id() ) );
+	}
+
+	/** §6.6 pin 8c: a handler's failed allocation is a definite refusal: the 400, and nothing kept. */
+	public function test_a_handler_answering_a_failed_allocation_withdraws_the_reservation(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->probed_refundable( 'refund_answer' );
+		$command                       = $this->refund_command();
+		Refund_Answer_Handler::$answer = static function ( array $row, int $refund_id, string $amount ): array {
+			$row['refunds'][] = array(
+				'id'           => $refund_id,
+				'amount'       => $amount,
+				'status'       => 'failed',
+				'provider_ref' => 're_declined',
+			);
+			return $row;
+		};
+
+		// Act.
+		$error = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $command );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_refund_not_allocatable', $error->get_error_code() );
+		$this->assertSame( 400, $error->get_error_data()['status'] );
+		$stored = $this->stored_row_of( $order->get_id(), $row['id'] );
+		$this->assertSame( array(), $this->allocations_of( $stored, $refund->get_id() ) );
+		$this->assertArrayNotHasKey( $command['id'], $stored['commands'] );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
 		// Arrange: a cash row on a completed sale, so the settle's derive moves nothing.
