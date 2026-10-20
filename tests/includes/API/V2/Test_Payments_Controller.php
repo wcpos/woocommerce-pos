@@ -665,6 +665,34 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $register, $history[0]['register'] );
 	}
 
+	/** When the new completion cannot be recorded, close reports none rather than the reopened one. */
+	public function test_close_whose_completion_cannot_be_recorded_reports_no_completion(): void {
+		// Arrange: a paid sale reopened (entry 1 marked); writes to the history will fail.
+		$order = $this->create_pos_order();
+		$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_status() );
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$refuse = static function ( $check, $meta_id, $value, $key ) {
+			return Completion_Stamp::META_KEY === $key ? true : $check;
+		};
+		add_filter( 'update_post_metadata_by_mid', $refuse, 10, 4 );
+
+		// Act.
+		try {
+			$response = $this->close( $order );
+		} finally {
+			remove_filter( 'update_post_metadata_by_mid', $refuse, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( $response->get_data()['completion'] );
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+		$this->assertStringContainsString( 'could not be recorded', $notes );
+	}
+
 	/** Close alone may complete an on-hold order its payments cover. */
 	public function test_close_on_an_on_hold_covered_order_completes_it(): void {
 		// Arrange.

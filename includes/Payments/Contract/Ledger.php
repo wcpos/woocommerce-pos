@@ -1475,9 +1475,13 @@ class Ledger {
 		}
 		$this->derive( $order, $rows, true );
 		self::saving( $order->get_id(), fn() => $order->save() );
-		$fresh   = wc_get_order( $order->get_id() );
+		$fresh = wc_get_order( $order->get_id() );
+		$fresh->read_meta_data( true );
 		$history = Completion_Stamp::read( $fresh );
-		return $this->closed( $fresh, $this->read( $fresh ), end( $history ) );
+		$latest  = end( $history );
+		// Only a completion that stands is reported: when the new entry could not be recorded, the
+		// latest is the reopened one (the failure note names the gap), so none is named.
+		return $this->closed( $fresh, $this->read( $fresh ), is_array( $latest ) && empty( $latest['reopened_at_gmt'] ) ? $latest : false );
 	}
 
 	/**
