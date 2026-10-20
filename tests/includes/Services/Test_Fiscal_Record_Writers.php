@@ -329,6 +329,61 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( Fiscal_Record_Store::digest_source_id( 'late_sale:' . $sales[1]['id'] ), $late[1]['source_id'] );
 	}
 
+	/** A later late correction in the same closed session carries only the legs no earlier one carried. */
+	public function test_a_later_late_sale_carries_only_new_legs(): void {
+		// Arrange: session S is already closed.
+		$session = $this->closure_session();
+		( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session ) );
+		$order = $this->order();
+		$order->update_meta_data( '_wcpos_session', $session['id'] );
+		$order->save();
+		$in_session = static function ( \WC_Order $order, callable $work ) use ( $session ): void {
+			Completion_Stamp::with_provenance(
+				array(
+					'register_id' => $session['register_id'],
+					'session_id' => $session['id'],
+				),
+				$work,
+				$order->get_id()
+			);
+		};
+		$cash = static function ( \WC_Order $order, string $amount ) use ( $session ): void {
+			Ledger::instance()->record(
+				wc_get_order( $order->get_id() ),
+				array(
+					'id' => wp_generate_uuid4(),
+					'method_id' => 'pos_cash',
+					'amount' => $amount,
+					'session_id' => $session['id'],
+				)
+			);
+		};
+
+		// Act: completion 1 (100.00), completion 2 adds 20.00, completion 3 adds nothing.
+		$in_session( $order, static fn() => $cash( $order, '100.00' ) );
+		$reopened = $this->reopen( $order );
+		$reopened->set_total( '120.00' );
+		$reopened->save();
+		$in_session( $order, static fn() => $cash( $order, '20.00' ) );
+		$again = $this->reopen( $order );
+		$in_session( $order, static fn() => $again->payment_complete() );
+
+		// Assert.
+		$this->assertCount( 3, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$late = array_reverse(
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'type' => 'late_sale',
+					'order_id' => $order->get_id(),
+				)
+			)
+		);
+		$this->assertCount( 2, $late );
+		$this->assertSame( array( '100.00' ), array_column( $late[0]['payload']['tender_rows'], 'amount' ) );
+		$this->assertSame( array( '20.00' ), array_column( $late[1]['payload']['tender_rows'], 'amount' ) );
+		$this->assertSame( '20.0000', $late[1]['payload']['expected_delta']['cash'] );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.

@@ -221,7 +221,21 @@ final class Fiscal_Record_Writers {
 		// The late correction belongs to this completion's sale record (the latest on the legacy path).
 		$sale = $this->store->find_sale( $order->get_id(), (string) $completion['id'] ) ?? $this->store->find_sale( $order->get_id() );
 		if ( $closure && $sale ) {
-			$rows = Session_Figures::late_legs( $order, $closure );
+			$source_id = Fiscal_Record_Store::digest_source_id( 'late_sale:' . $sale['id'] );
+			// Legs an earlier completion's late correction already carried are not late again.
+			$carried = array();
+			foreach ( $this->store->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type'     => 'late_sale',
+					'per_page' => Fiscal_Record_Store::MAX_PER_PAGE,
+				)
+			) as $earlier ) {
+				if ( $earlier['source_id'] !== $source_id ) {
+					$carried = array_merge( $carried, array_column( (array) ( $earlier['payload']['tender_rows'] ?? array() ), 'id' ) );
+				}
+			}
+			$rows = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => ! in_array( $leg['id'] ?? null, $carried, true ) ) );
 			if ( $rows ) {
 				$delta = Session_Figures::tender_totals( $rows );
 				$this->write(
@@ -231,7 +245,7 @@ final class Fiscal_Record_Writers {
 						array(
 							'type' => 'late_sale',
 							'order_id' => $order->get_id(),
-							'source_id' => Fiscal_Record_Store::digest_source_id( 'late_sale:' . $sale['id'] ),
+							'source_id' => $source_id,
 							'closure_id' => $closure['id'],
 							'corrects_record_id' => $sale['id'],
 							'payload' => array(
