@@ -1181,9 +1181,9 @@ class Ledger {
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $this->with_command( $row, $command, $refund_id ) );
-		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole.
+		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole, with the command's entry.
 		$answer = current( array_filter( $row['refunds'], static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
-		if ( ! $this->persist( $order, $rows, $row, true, fn( ?array $stored ) => $this->same_allocation( $answer, $stored, $refund_id ) ) ) {
+		if ( ! $this->persist( $order, $rows, $row, true, fn( ?array $stored ) => $this->reserved( $stored, $answer, $entry ) ) ) {
 			return $strand( 'its settle did not land' );
 		}
 		/**
@@ -1272,10 +1272,11 @@ class Ledger {
 	}
 
 	/**
-	 * Whether a stored row holds the reservation and, when there is a command, its entry.
+	 * Whether a stored row holds this allocation whole (the reservation, or the settled answer)
+	 * and, when there is a command, its entry.
 	 *
 	 * @param array|null  $stored  Stored row.
-	 * @param array       $reserve The reservation.
+	 * @param array       $reserve The allocation.
 	 * @param string|null $entry   The command id, if any.
 	 */
 	private function reserved( ?array $stored, array $reserve, ?string $entry ): bool {

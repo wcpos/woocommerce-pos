@@ -1411,6 +1411,51 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		return array( $order, $row, $refund, $path, $body, $first );
 	}
 
+	/** #2362 review: a settle that lands without its command entry is a miss, so the command still owns its id. */
+	public function test_a_settle_that_loses_the_command_entry_is_not_acknowledged(): void {
+		// Arrange: the settle's two saves land with every row's command map emptied; later saves land as written.
+		list( $order, $row, $refund ) = $this->refundable();
+		$order_id = $order->get_id();
+		$stripped = 0;
+		$strip    = static function ( $saving ) use ( $order_id, &$stripped ): void {
+			if ( ! $saving instanceof \WC_Order || $saving->get_id() !== $order_id || 0 === Route_Handler::$refunds || $stripped >= 2 ) {
+				return;
+			}
+			++$stripped;
+			$value = json_decode( (string) $saving->get_meta( Ledger::META_KEY, true ), true );
+			foreach ( $value['payments'] as &$payment ) {
+				$payment['commands'] = array();
+			}
+			unset( $payment );
+			$saving->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$path = $this->payment_path( $order, $row['id'] ) . '/refund';
+		$body = $this->envelope(
+			$order,
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount'    => '10.00',
+			)
+		);
+
+		// Act.
+		$first = $this->command( $path, $body );
+		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$stored = $this->stored_row( $order_id, $row['id'] );
+		$other  = $this->command( $path, array_merge( $body, array( 'amount' => '20.00' ) ) );
+
+		// Assert.
+		$this->assertSame( 2, $stripped );
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 'pending', $this->allocations_of( $first->get_data()['payment'], $refund->get_id() )[0]['status'] );
+		$this->assertSame( 'pending', $this->allocations_of( $stored, $refund->get_id() )[0]['status'] );
+		$this->assertArrayHasKey( $body['command_id'], $stored['commands'] );
+		$this->assertSame( 422, $other->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $other->get_data()['code'] );
+		$this->assertSame( 1, Route_Handler::$refunds );
+	}
+
 	/** §6.6 pin 4: a stranded refund retried with its command answers the pending allocation; the provider is not asked again. */
 	public function test_a_stranded_refund_retried_with_the_same_command_does_not_call_the_provider(): void {
 		// Arrange.
