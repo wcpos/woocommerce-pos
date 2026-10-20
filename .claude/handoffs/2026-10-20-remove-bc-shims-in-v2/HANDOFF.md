@@ -12,7 +12,11 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 - Removal of anything a client, Pro, or third-party code reads is a minor/major-only change under the patch-compatibility rule in `CLAUDE.md` (deprecate in `X.Y`, remove in `X.Y+2` at the earliest). v2 satisfies that for everything marked `@deprecated` on 1.x. Items that are *not* yet marked `@deprecated` on `main` (the "kept for compatibility" comments below) should get the tag in a 1.11.x patch first, so the public record shows a deprecation before the removal. That tagging PR targets `main` and syncs into `next`.
 - Pro depends on Free. Remove a Free symbol only after the matching Pro `next` branch no longer references it; open the Pro PR first or in the same batch and link both.
 
-## Procedure per symbol
+## Procedure
+
+0. **Re-run the inventory on `next` before touching anything.** The audit beside this file is a snapshot of Free `main` at `ae0bf692` and a Pro checkout that carried uncommitted staged changes, and it did not inventory public methods declared in traits. Pin a clean Free `origin/next` and Pro `origin/next` commit, re-run the full declaration-and-caller inventory there (classes **and** traits; the prompt that produced the audit is reproduced in `AUDIT-uncalled-public-methods.md`'s method section), and work from that result. A method that had a caller on `main` may have lost it on `next`, and the reverse; the tables here tell you what to expect, not what to delete.
+
+Per symbol:
 
 1. Grep where the consumer lives, not just the plugin repos. For a PHP symbol or a hook: Free `includes/`, `tests/`, `templates/`; Pro `includes/`, `tests/`, `templates/`; and Free + Pro `origin/next`, for the bare name, `->name(`, `::name(`, `'name'`, `"name"` (string hook callbacks and REST `callback` arrays count as callers). For anything a client reads (a REST route, response field such as `preview_html`, header, option, journal op): also the app, `../monorepo`, every package that talks to the plugin, on its current lane. For a hook or filter: also the `wcpos/extensions` catalog and the extension pages on `docs.wcpos.com`. A clean grep of Free and Pro alone does not make a client-facing field dead.
 2. If a caller exists in `next`, migrate the caller to the replacement named in the `@deprecated` tag, in the same PR.
@@ -33,7 +37,7 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 | `includes/API/V1/Product_Variations_Controller.php` 297, 310, 323, 357, 456 | `wcpos_posts_search()`, `wcpos_posts_join_to_posts_search()`, `wcpos_posts_groupby_posts_search()`, `wcpos_posts_where_product_variation_exclude_online_only()`, `wcpos_posts_clauses()` | Collection Rules |
 | `includes/API/V1/Coupons_Controller.php:163` | `wcpos_check_permissions()` | `Permission_Rules::wc_filter()` |
 | `includes/API/V1/Print_Jobs_Controller.php:37` | const `EPSON_SDP_PRINT_TIMEOUT_MS` | `Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS` |
-| `includes/API/V1/Traits/Product_Helpers.php:33` | `wcpos_get_barcode_field()` | none ("no caller remains in this repository") |
+| `includes/API/V1/Traits/Product_Helpers.php:33` | `wcpos_get_barcode_field()` | `Barcode_Field::meta_key()` (named in the tag; "no caller remains in this repository") |
 | `includes/API/V1/Traits/Query_Helpers.php:16` | `wcpos_combine_meta_queries()` | Customers_Controller's private copy |
 | `includes/API/V2/Variations_Controller.php` 414, 462 | `wcpos_posts_clauses()` ("retained for Pro callers" — check Pro `next`), `group_search_results()` | Collection Rules |
 | `includes/API/V2/Write_Controller.php:719` | `wcpos_check_permissions()` | `Permission_Rules::wc_filter()` |
@@ -51,13 +55,20 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 |---|---|---|
 | `includes/Templates.php:765` | `Templates::set_active_template()` | "legacy method for backwards compatibility" |
 | `includes/Admin.php:132` | filter `woocommerce_pos_single_product_admin_class` | "Backwards compatibility for WCPOS Pro 1.4.2 and below" |
-| `includes/Abstracts/Store.php:648` and `includes/Interfaces/StoreInterface.php:376` | `get_tax_id()` | back-compat helper for templates using `{{store.tax_id}}` — receipt templates in the wild may use it; keep unless the template contract drops the key |
 | `includes/API/V1/Settings.php:256` | the cloud-assignment sanitizer on the v1 Settings controller (delegates to `Cloud_Print_Section::sanitize_assignment()`) | kept only because `Settings_CloudPrint_Test` reaches it through `ReflectionMethod`; move the test to the section and drop the delegate |
 | `includes/API/V1/Templates_Controller.php` 967, 1010 | `preview_html` response key | "backward compatibility and diagnostics only" — a response field: a client-facing removal, check the app |
 | `includes/API/V1/Orders_Controller.php:560` | `wcpos_order_item_fee_after_calculate_taxes()` | "preserved for backward compatibility and delegates" |
 | `includes/Services/Stock_Validator.php:663` | non-prefixed public filter | "backward-compatible public filter" — third-party code may hook it; deprecate loudly |
-| `includes/Sync/Augmentation_Pipeline.php:76` | projection callbacks on public filters | "kept for uninstall" — not a shim; leave |
-| `includes/Sync/Sync_Journal.php:661` | `'deleted'` journal op | "kept for wire compatibility" — protocol, not code; governed by the sync protocol, not this list |
+
+### Contracts, not shims (listed so nobody tags or removes them)
+
+These carry "compatibility" comments but are live contracts. They get no `@deprecated` tag and are not part of the v2 removal.
+
+| File | Symbol | Why it stays |
+|---|---|---|
+| `includes/Abstracts/Store.php:648` and `includes/Interfaces/StoreInterface.php:376` | `get_tax_id()` | receipt templates in the wild read `{{store.tax_id}}`; it moves only with the receipt data contract (ADR 0039) |
+| `includes/Sync/Augmentation_Pipeline.php:76` | projection callbacks on public filters | kept for uninstall; not a shim |
+| `includes/Sync/Sync_Journal.php:661` | `'deleted'` journal op | wire compatibility; governed by the sync protocol, not this list |
 
 ## Pro inventory (`includes/`)
 
@@ -107,14 +118,14 @@ The **16 Dead** methods are the ones nobody flagged. Remove in v2 after the grep
 
 `Templates\Validator` is four dead methods in one class: check whether the whole class goes. The audit's **Kept on purpose** table also surfaces two retention comments my grep missed: `Services/Settings.php:219–289`, the six public `get_{id}_settings()` delegates ("Public get_{id}_settings() delegates…"), and `Sync/Order_Serializer.php:120` `augment_order_payload()` ("retained as the named shorthand…; `document()` is the entry point new callers should use"). Both belong in the second Free table above.
 
-Limits the audit states: third-party plugins and customer integrations are unverified by construction; it is not a transitive-reachability analysis (a method called only from another dead method still counts as called); and it did not run anything.
+Limits the audit states or that review found: it is a `main` snapshot plus a Pro checkout with uncommitted staged changes, so step 0 above re-runs it on clean `next`; it inventoried class methods only, so public methods declared in **traits** are outside all three counts (`API/V1/Traits/Product_Helpers::wcpos_pos_only_products_enabled()` has no reference in Free source or tests beyond its declaration and is a candidate the re-run must classify); third-party plugins and customer integrations are unverified by construction; it is not a transitive-reachability analysis (a method called only from another dead method still counts as called); and it did not run anything.
 
-## Suggested skills for the agent that picks this up
+## How to run it (self-contained; nothing here depends on personal tooling)
 
-- `worktree` — one worktree per repo, branched from `origin/next`.
-- `codex-implement` — the removals are mechanical once the caller grep is clean; keep the caller migration and the changelog line in the brief.
-- `pr` — Free and Pro PRs opened together, each linking the other; base `next` on both.
-- `code-review` — spec axis: the inventory above is the spec.
+- One worktree per repo, branched from the lane: `git fetch origin next && git worktree add ../wt-free -b chore/remove-bc-shims-v2 origin/next` (same in Pro). Confirm the lane first with `git rev-list --left-right --count origin/main...origin/next` as `CLAUDE.md` describes.
+- Tests run through wp-env only (`pnpm exec wp-env start`, then the PHPUnit commands in `CLAUDE.md`); run the classes that cover each touched area, and let CI run the matrix.
+- Delegation is fine for the mechanical part once the consumer grep is clean (the caller migration and the changelog line belong in the brief), but the grep and the split of test seams from dead wrappers are judgement calls and stay with the agent that owns the PR.
+- Two PRs, Free and Pro, opened together, each linking the other, base `next` on both, Pro first or in the same batch (Pro references Free symbols). Review them against this document as the spec.
 
 ## Not in scope
 
