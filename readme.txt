@@ -130,6 +130,18 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.11.4 - 2026/10/20 =
+
+- **A failed translation download no longer slows every POS and admin request.** It is retried after an hour instead of on every request -- stores whose host cannot reach the translation CDN were waiting minutes for the POS to load; English stores were not affected.
+- **Checkout and refunds no longer stop working after the browser tab or desktop window wakes with sync requests still in flight.** Every later request to the store failed until the page was reloaded.
+- **A completed order no longer logs "a change on this device clashed with an edit in your store".** The first retry of a save was reported as a conflict even though the order had saved.
+- **Logs and toasts alarm only when there is something for you to do.** A retry the app handles itself is now an information row; a warning names the record, says what happened and links to where it is fixed.
+- **A sale that times out while sending is reported as "still on its way", not as failed, so it is not entered twice.**
+- **A refund whose result could not be confirmed says so and tells you to check the order before trying again.**
+- **A storage error whose text happened to contain "409" or "CONFLICT" is no longer reported as a clash with your store.** The real error is shown instead.
+- **Web: the first download is a fifth smaller.** Error reporting and date-format languages load only when they are needed.
+- Translations updated to 2026.10.7.
+
 = 1.11.3 - 2026/10/17 =
 
 - **Couponed sales no longer come back as "different totals" on stores with tax-inclusive prices or compound tax rates.** Each discount and its tax are now rounded the way WooCommerce rounds them.
