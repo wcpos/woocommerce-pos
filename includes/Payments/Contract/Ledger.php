@@ -1144,7 +1144,12 @@ class Ledger {
 			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch.
 			return $this->withdraw( $order, $rows, $row, $reserve, $entry, new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) ) );
 		}
-		$new = $handler->refund( $row, $refund_id, Money::normalize( $amount ) );
+		try {
+			// The row as it was before the reservation: every handler appends its own allocation.
+			$new = $handler->refund( $row, $refund_id, Money::normalize( $amount ) );
+		} catch ( \Throwable $error ) {
+			return $this->strand( $order, $held, $reserve, 'the provider call threw ' . get_class( $error ) . ': ' . $error->getMessage() );
+		}
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
@@ -1166,7 +1171,11 @@ class Ledger {
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $this->with_command( $row, $command, $refund_id ) );
-		$this->replace_and_save( $order, $rows, $row );
+		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole.
+		$answer = current( array_filter( $row['refunds'], static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
+		if ( ! $this->persist( $order, $rows, $row, true, fn( ?array $stored ) => $this->same_allocation( $answer, $stored, $refund_id ) ) ) {
+			return $this->strand( $order, $held, $reserve, 'its settle did not land' );
+		}
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
 		 * (succeeded or failed) through settle_allocation(). $amount is the allocation's
@@ -1200,16 +1209,40 @@ class Ledger {
 			} catch ( \Throwable $error ) {
 				Logger::warning( sprintf( 'WCPOS refund save on order #%d failed: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
 			}
-			try {
-				$stored = $this->find_in_rows( $this->stored( $order->get_id(), false )['payments'] ?? array(), $replacement['id'] );
-			} catch ( \Throwable $error ) {
-				$stored = null;
-			}
-			if ( $landed( $stored ) ) {
+			if ( $landed( $this->stored_row( $order->get_id(), $replacement['id'] ) ) ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * One row as storage holds it; null when absent or unreadable.
+	 *
+	 * @param int    $order_id Order id.
+	 * @param string $id       Payment ID.
+	 */
+	private function stored_row( int $order_id, string $id ): ?array {
+		try {
+			return $this->find_in_rows( $this->stored( $order_id, false )['payments'] ?? array(), $id );
+		} catch ( \Throwable $error ) {
+			return null;
+		}
+	}
+
+	/**
+	 * A refund the provider was (or may have been) asked for, whose answer is not in storage:
+	 * the reservation stands, marked for a human, and the stored row is the answer, never an
+	 * error (Pro's hook would throw an error and WooCommerce delete the refund; spec §7.16).
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param array    $held    The reserved row.
+	 * @param array    $reserve The reservation.
+	 * @param string   $cause   What happened.
+	 */
+	private function strand( WC_Order $order, array $held, array $reserve, string $cause ): array {
+		$this->mark( $order, $held, $reserve, $cause );
+		return $this->stored_row( $order->get_id(), $held['id'] ) ?? $held;
 	}
 
 	/**

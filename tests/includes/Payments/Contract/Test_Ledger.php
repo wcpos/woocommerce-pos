@@ -3221,6 +3221,103 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
 	}
 
+	/** §6.6 pin 3: a settle that does not land leaves the reservation standing, noted, and the hook silent. */
+	public function test_refund_whose_settle_does_not_land_keeps_the_pending_allocation_and_notes_the_order(): void {
+		// Arrange: every save after the provider call is forced back to the reservation.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$force = $this->force_allocation( $order->get_id(), $refund->get_id(), $this->reservation( $refund->get_id(), '10.00' ), static fn() => Refund_Probe_Gateway::$calls > 0 );
+		$seen  = array();
+		$this->listen_allocated( $refund->get_id(), $seen );
+		$before = Ledger::instance()->summary( wc_get_order( $order->get_id() ) );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $force, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+		$notes = $this->stranded_notes( $order->get_id() );
+		$this->assertCount( 1, $notes );
+		$this->assertStringContainsString( '#' . $refund->get_id(), $notes[0] );
+		$this->assertStringContainsString( '10.00', $notes[0] );
+		$this->assertCount( 1, $this->stranded_logs() );
+		$this->assertSame( array(), $seen );
+		$summary = Ledger::instance()->summary( wc_get_order( $order->get_id() ) );
+		$this->assertSame( '10.00', $summary['refund_pending'] );
+		$this->assertSame( $before['balance'], $summary['balance'] );
+	}
+
+	/** §6.6 pin 3, second case: a later answer's reference is part of the read-back, not only its status. */
+	public function test_refund_whose_pending_answer_loses_its_reference_is_stranded(): void {
+		// Arrange: the handler answers pending with a reference; storage keeps the bare reservation.
+		list( $order, $row, $refund ) = $this->probed_refundable( 'refund_answer' );
+		Refund_Answer_Handler::$answer = static function ( array $row, int $refund_id, string $amount ): array {
+			$row['refunds'][] = array(
+				'id'           => $refund_id,
+				'amount'       => $amount,
+				'status'       => 'pending',
+				'provider_ref' => 're_later',
+			);
+			return $row;
+		};
+		$force = $this->force_allocation( $order->get_id(), $refund->get_id(), $this->reservation( $refund->get_id(), '10.00' ), static fn() => Refund_Answer_Handler::$calls > 0 );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00' );
+		remove_action( 'woocommerce_before_order_object_save', $force, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertNull( $this->allocations_of( $result, $refund->get_id() )[0]['provider_ref'] );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$this->assertCount( 1, $this->stranded_logs() );
+	}
+
+	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
+	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
+		// Arrange: a cash row on a completed sale, so the settle's derive moves nothing.
+		$order = $this->create_pos_order();
+		$row   = $this->payment(
+			'pos_cash',
+			'50.00',
+			array(
+				'status'       => 'captured',
+				'kind'         => 'cash',
+				'capture_mode' => 'manual',
+			)
+		);
+		Ledger::instance()->save( $order, array( $row ), false );
+		$order = wc_get_order( $order->get_id() );
+		$order->set_status( 'completed' );
+		$order->save();
+		$refund   = $this->refund_of( $order, '5.00' );
+		$order    = wc_get_order( $order->get_id() );
+		$order_id = $order->get_id();
+		$saves    = 0;
+		$counter  = static function ( $saving ) use ( $order_id, &$saves ): void {
+			if ( $saving instanceof \WC_Order && $saving->get_id() === $order_id ) {
+				++$saves;
+			}
+		};
+		$seen = array();
+		$this->listen_allocated( $refund->get_id(), $seen );
+		add_action( 'woocommerce_before_order_object_save', $counter );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '5.00' );
+		remove_action( 'woocommerce_before_order_object_save', $counter );
+
+		// Assert.
+		$this->assertSame( 'succeeded', $result['refunds'][0]['status'] );
+		$this->assertSame( 2, $saves );
+		$this->assertSame( array( 'succeeded' ), $seen );
+		$this->assertSame( array(), $this->stored_row_of( $order_id, $row['id'] )['commands'] );
+	}
+
 	/**
 	 * A WooCommerce refund object on the order, with no gateway call.
 	 *
