@@ -38,8 +38,9 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Capture log attempts without writing to disk. */
 	public function setUp(): void {
 		parent::setUp();
-		Route_Handler::$prompt = null;
-		Route_Handler::$answer = null;
+		Route_Handler::$prompt       = null;
+		Route_Handler::$answer       = null;
+		Route_Handler::$refund_error = null;
 		Logger::reset_dedup_state();
 		$this->logged_messages = array();
 		$this->log_filter = function ( $should_log, $message ) {
@@ -1345,6 +1346,221 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Route_Handler::$refunds );
 	}
 
+	/**
+	 * Rewrite the refund's allocation in every staged ledger save of the order while $active() holds:
+	 * null strips it, an array stands in its place (the forced storage miss of spec §6.5).
+	 *
+	 * @param int        $order_id   Order id.
+	 * @param int        $refund_id  Refund id.
+	 * @param array|null $allocation The allocation storage is forced to hold.
+	 * @param callable   $active     Whether this save is rewritten.
+	 */
+	private function force_allocation( int $order_id, int $refund_id, ?array $allocation, callable $active ): \Closure {
+		$hook = static function ( $saving ) use ( $order_id, $refund_id, $allocation, $active ): void {
+			if ( ! $saving instanceof \WC_Order || $saving->get_id() !== $order_id || ! $active() ) {
+				return;
+			}
+			$value = json_decode( (string) $saving->get_meta( Ledger::META_KEY, true ), true );
+			foreach ( $value['payments'] as &$row ) {
+				$row['refunds'] = array_values( array_filter( $row['refunds'] ?? array(), static fn( $existing ) => (int) $existing['id'] !== $refund_id ) );
+				if ( null !== $allocation ) {
+					$row['refunds'][] = $allocation;
+				}
+			}
+			unset( $row );
+			$saving->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $hook, PHP_INT_MAX );
+		return $hook;
+	}
+
+	/**
+	 * A refund's allocations on a stored row.
+	 *
+	 * @param array|null $row       Stored row.
+	 * @param int        $refund_id Refund id.
+	 */
+	private function allocations_of( ?array $row, int $refund_id ): array {
+		return array_values( array_filter( $row['refunds'] ?? array(), static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
+	}
+
+	/**
+	 * A refund stranded through the route: its settle is forced back to the reservation.
+	 *
+	 * @return array{0: \WC_Order, 1: array, 2: \WC_Order_Refund, 3: string, 4: array, 5: \WP_REST_Response}
+	 */
+	private function stranded_refund(): array {
+		list( $order, $row, $refund ) = $this->refundable();
+		$reservation = array(
+			'id'           => $refund->get_id(),
+			'amount'       => '10.00',
+			'status'       => 'pending',
+			'provider_ref' => null,
+		);
+		$force = $this->force_allocation( $order->get_id(), $refund->get_id(), $reservation, static fn() => Route_Handler::$refunds > 0 );
+		$path  = $this->payment_path( $order, $row['id'] ) . '/refund';
+		$body  = $this->envelope(
+			$order,
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount'    => '10.00',
+			)
+		);
+		$first = $this->command( $path, $body );
+		remove_action( 'woocommerce_before_order_object_save', $force, PHP_INT_MAX );
+		return array( $order, $row, $refund, $path, $body, $first );
+	}
+
+	/** #2362 review: a settle that lands without its command entry is a miss, so the command still owns its id. */
+	public function test_a_settle_that_loses_the_command_entry_is_not_acknowledged(): void {
+		// Arrange: the settle's two saves land with every row's command map emptied; later saves land as written.
+		list( $order, $row, $refund ) = $this->refundable();
+		$order_id = $order->get_id();
+		$stripped = 0;
+		$strip    = static function ( $saving ) use ( $order_id, &$stripped ): void {
+			if ( ! $saving instanceof \WC_Order || $saving->get_id() !== $order_id || 0 === Route_Handler::$refunds || $stripped >= 2 ) {
+				return;
+			}
+			++$stripped;
+			$value = json_decode( (string) $saving->get_meta( Ledger::META_KEY, true ), true );
+			foreach ( $value['payments'] as &$payment ) {
+				$payment['commands'] = array();
+			}
+			unset( $payment );
+			$saving->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$path = $this->payment_path( $order, $row['id'] ) . '/refund';
+		$body = $this->envelope(
+			$order,
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount'    => '10.00',
+			)
+		);
+
+		// Act.
+		$first = $this->command( $path, $body );
+		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$stored = $this->stored_row( $order_id, $row['id'] );
+		$other  = $this->command( $path, array_merge( $body, array( 'amount' => '20.00' ) ) );
+
+		// Assert.
+		$this->assertSame( 2, $stripped );
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 'pending', $this->allocations_of( $first->get_data()['payment'], $refund->get_id() )[0]['status'] );
+		$this->assertSame( 'pending', $this->allocations_of( $stored, $refund->get_id() )[0]['status'] );
+		$this->assertArrayHasKey( $body['command_id'], $stored['commands'] );
+		$this->assertSame( 422, $other->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $other->get_data()['code'] );
+		$this->assertSame( 1, Route_Handler::$refunds );
+	}
+
+	/** §6.6 pin 4: a stranded refund retried with its command answers the pending allocation; the provider is not asked again. */
+	public function test_a_stranded_refund_retried_with_the_same_command_does_not_call_the_provider(): void {
+		// Arrange.
+		list( $order, $row, $refund, $path, $body, $first ) = $this->stranded_refund();
+
+		// Act: the same command id and body, on the revision from before the refund.
+		$again = $this->command( $path, $body );
+
+		// Assert.
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 'pending', $this->allocations_of( $first->get_data()['payment'], $refund->get_id() )[0]['status'] );
+		$this->assertSame( 200, $again->get_status() );
+		$this->assertSame( array( 'payment', 'revision' ), array_keys( $again->get_data() ) );
+		$this->assertSame( 'pending', $this->allocations_of( $again->get_data()['payment'], $refund->get_id() )[0]['status'] );
+		$this->assertCount( 1, $this->allocations_of( $this->stored_row( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertSame( 1, Route_Handler::$refunds );
+	}
+
+	/** §6.6 pin 5: a new command for a stranded refund answers it too, and keeps its entry. */
+	public function test_a_stranded_refund_under_a_new_command_does_not_call_the_provider(): void {
+		// Arrange.
+		list( $order, $row, $refund, $path, $body ) = $this->stranded_refund();
+
+		// Act: a new command id, the same refund and amount, on the current revision.
+		$fresh = $this->command(
+			$path,
+			$this->envelope(
+				$order,
+				array(
+					'refund_id' => $refund->get_id(),
+					'amount'    => '10.00',
+				)
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $fresh->get_status() );
+		$stored = $this->stored_row( $order->get_id(), $row['id'] );
+		$this->assertSame( 'pending', $this->allocations_of( $stored, $refund->get_id() )[0]['status'] );
+		$this->assertCount( 1, $this->allocations_of( $stored, $refund->get_id() ) );
+		$this->assertCount( 2, $stored['commands'] );
+		$this->assertArrayHasKey( $body['command_id'], $stored['commands'] );
+		$this->assertSame( 1, Route_Handler::$refunds );
+	}
+
+	/** §6.6 pin 2, route twin: a reservation that does not land is the retryable 409, and nothing is kept. */
+	public function test_a_refund_whose_reservation_does_not_land_is_the_retryable_409(): void {
+		// Arrange: every save strips the allocation and keeps the entry.
+		list( $order, $row, $refund ) = $this->refundable();
+		$strip = $this->force_allocation( $order->get_id(), $refund->get_id(), null, static fn() => true );
+		$path  = $this->payment_path( $order, $row['id'] ) . '/refund';
+		$body  = $this->envelope(
+			$order,
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount'    => '10.00',
+			)
+		);
+
+		// Act.
+		$refused = $this->command( $path, $body );
+		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$stored = $this->stored_row( $order->get_id(), $row['id'] );
+		$retry  = $this->command( $path, array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertSame( array(), $this->allocations_of( $stored, $refund->get_id() ) );
+		$this->assertArrayNotHasKey( $body['command_id'], $stored['commands'] );
+		$this->assertSame( 200, $retry->get_status() );
+		$this->assertSame( 'succeeded', $this->allocations_of( $retry->get_data()['payment'], $refund->get_id() )[0]['status'] );
+		$this->assertSame( 1, Route_Handler::$refunds );
+	}
+
+	/** §6.6 pin 6, route twin: a provider refusal is answered and stores nothing; the same command then runs. */
+	public function test_a_refund_the_provider_refuses_stores_nothing_and_the_same_command_runs_again(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->refundable();
+		Route_Handler::$refund_error  = new \WP_Error( 'wcpos_provider_error', 'declined', array( 'status' => 502 ) );
+		$path                         = $this->payment_path( $order, $row['id'] ) . '/refund';
+		$body                         = $this->envelope(
+			$order,
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount'    => '10.00',
+			)
+		);
+
+		// Act.
+		$refused = $this->command( $path, $body );
+		$stored  = $this->stored_row( $order->get_id(), $row['id'] );
+		Route_Handler::$refund_error = null;
+		$retry = $this->command( $path, array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 502, $refused->get_status() );
+		$this->assertSame( 'wcpos_provider_error', $refused->get_data()['code'] );
+		$this->assertSame( array(), $this->allocations_of( $stored, $refund->get_id() ) );
+		$this->assertArrayNotHasKey( $body['command_id'], $stored['commands'] );
+		$this->assertSame( 200, $retry->get_status() );
+		$this->assertSame( 'succeeded', $this->allocations_of( $retry->get_data()['payment'], $refund->get_id() )[0]['status'] );
+		$this->assertSame( 2, Route_Handler::$refunds );
+	}
+
 	/** Pin 15: an intent retried with its command resumes the leg; another body under it is a 422. */
 	public function test_intent_replay_with_the_same_command_resumes_the_leg_and_a_different_body_is_422(): void {
 		// Arrange.
@@ -2162,7 +2378,14 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	}
 
 	/**
-	 * Count and settle a refund allocation.
+	 * The refusal the next refunds answer, when set.
+	 *
+	 * @var \WP_Error|null
+	 */
+	public static $refund_error = null;
+
+	/**
+	 * Count and settle a refund allocation, or refuse it as set.
 	 *
 	 * @param array  $row       Payment row.
 	 * @param int    $refund_id Refund id.
@@ -2170,7 +2393,7 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	 */
 	public function refund( array $row, int $refund_id, string $amount ) {
 		++self::$refunds;
-		return parent::refund( $row, $refund_id, $amount );
+		return self::$refund_error ?? parent::refund( $row, $refund_id, $amount );
 	}
 }
 
