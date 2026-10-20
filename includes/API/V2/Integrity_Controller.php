@@ -53,9 +53,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 */
 	public const DRIFT_REBUILD_THRESHOLD = 3;
 
-	/** Legacy array option name; retained for callers, no longer read or written. */
-	public const DRIFT_STREAK_OPTION = 'wcpos_integrity_drift_streaks';
-
 	/** 1024 non-autoloaded rows fit ten tills x 26 buckets without rotating progress. */
 	public const DRIFT_STREAK_MAX_BUCKETS = 1024;
 

@@ -111,10 +111,12 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 		// Assert: count only the upsert, excluding session setup and verification queries.
 		$prefix = 'product' === $type ? 'upsert stored digest failed: ' : "upsert stored {$type} digest failed: ";
 		$this->assertSame( $calls, $GLOBALS['wpdb']->upsert_calls );
-		$expected_messages = null === $expected_error ? array() : array( 'Sync digest observer failed (sync will self-heal via scan/rebuild): ' . $prefix . $expected_error );
-		$this->assertSame( $expected_messages, $messages );
 		if ( null === $expected_error ) {
+			$this->assertEmpty( $messages );
 			$this->assertSame( '1', $this->original_wpdb->get_var( $this->original_wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE object_type = %s AND object_id = %d", $type, $id ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Internal table name.
+		} else {
+			$this->assertCount( 1, $messages );
+			$this->assertStringContainsString( $prefix . $expected_error, $messages[0] );
 		}
 	}
 

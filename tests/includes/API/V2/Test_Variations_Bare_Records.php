@@ -20,9 +20,11 @@ use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Sync\Seeds_Stored_Digests;
 
 /** Pins the same bytes on collection, write acknowledgement, resolve, and CAS. */
 class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
+	use Seeds_Stored_Digests;
 	/** Install stores outside the per-test transaction. */
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
@@ -62,8 +64,7 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		$variation->set_stock_quantity( 10 );
 		$variation->save();
 		Pos_Uuid::ensure_uuid( $variation );
-		( new Integrity_Digest() )->record_post_saved( $variation->get_id() );
-		Integrity_Digest::flush_pending_digests();
+		$this->seed_digests( 'variations', $variation->get_id() );
 		return $variation;
 	}
 
@@ -278,8 +279,7 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		$product->set_sku( wp_generate_uuid4() );
 		$product->update_meta_data( 'structured_note', '{"note":"normalized before hashing"}' );
 		$product->save();
-		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
-		Integrity_Digest::flush_pending_digests();
+		$this->seed_digests( 'products', $product->get_id() );
 		// Act.
 		$row = $this->read( 'products', array( 'include' => array( $product->get_id() ) ) )[0];
 		$match = $this->read( 'resolve/barcode', array( 'code' => $product->get_sku() ) )['match'];

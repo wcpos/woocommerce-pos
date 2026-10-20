@@ -101,19 +101,19 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$this->assertSame( $order, $result );
 	}
 
-	/** The exempt-status filter can extend the default statuses. */
-	public function test_exempt_status_filter_is_honoured(): void {
+	/** The legacy exempt-status filter remains part of the public contract. */
+	public function test_legacy_exempt_status_filter_is_honoured(): void {
 		$add_exempt_status = static function ( array $statuses ): array {
 			$statuses[] = 'custom-draft';
 
 			return $statuses;
 		};
-		add_filter( 'wcpos_stock_validation_exempt_statuses', $add_exempt_status );
+		add_filter( 'woocommerce_pos_stock_validation_exempt_statuses', $add_exempt_status );
 
 		try {
 			$this->assertFalse( Stock_Validator::instance()->should_validate_create_payload( 'custom-draft', false ) );
 		} finally {
-			remove_filter( 'wcpos_stock_validation_exempt_statuses', $add_exempt_status );
+			remove_filter( 'woocommerce_pos_stock_validation_exempt_statuses', $add_exempt_status );
 		}
 	}
 

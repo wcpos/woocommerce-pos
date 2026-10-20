@@ -22,10 +22,8 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
-use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
-use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -36,7 +34,6 @@ use WP_REST_Response;
  */
 class Products_Controller extends WC_REST_Products_Controller {
 	use Traits\Product_Helpers;
-	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
@@ -53,13 +50,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @var bool
 	 */
 	protected $allow_decimal_quantities = false;
-
-	/**
-	 * Store the current request object.
-	 *
-	 * @var WP_REST_Request|null
-	 */
-	protected $wcpos_request;
 
 	/**
 	 * Request keys the product Collection Rules plan reads on this lane
@@ -93,8 +83,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return mixed $dispatch_result Dispatch result, will be used if not empty.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
-		$this->wcpos_request = $request;
-
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
 

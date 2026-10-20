@@ -659,10 +659,16 @@ class Stock_Validator {
 	 * @return string[]
 	 */
 	private function exempt_statuses(): array {
+		$statuses = apply_filters(
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Backward-compatible public filter.
+			'woocommerce_pos_stock_validation_exempt_statuses',
+			array( 'pos-open', 'pos-partial', 'pending', 'auto-draft', 'checkout-draft', 'draft', 'cancelled', 'refunded', 'failed', 'trash' )
+		);
+
 		return apply_filters(
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Intentional public WCPOS hook.
 			'wcpos_stock_validation_exempt_statuses',
-			array( 'pos-open', 'pos-partial', 'pending', 'auto-draft', 'checkout-draft', 'draft', 'cancelled', 'refunded', 'failed', 'trash' )
+			$statuses
 		);
 	}
 

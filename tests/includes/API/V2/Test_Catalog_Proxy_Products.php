@@ -11,7 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Products_Proxy_Behavior;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Tests\Sync\Seeds_Stored_Digests;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  * Product rows preserve the replication contract exposed by wcpos/v2.
  */
 class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * Enable v2 routes and the production sync read lane.
 	 *
@@ -120,8 +121,7 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 		// below is pinned PRESENT rather than pinned absent — pinning its absence
 		// is the same "ratify whatever we happen to emit" move these pins exist to
 		// stop (#1717).
-		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
-		Integrity_Digest::flush_pending_digests();
+		$this->seed_digests( 'products', $product->get_id() );
 
 		$rows = $this->read( array( 'include' => array( $product->get_id() ) ) );
 		$row  = $rows[0];

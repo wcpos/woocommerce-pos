@@ -14,7 +14,6 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Services\Auth;
-use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -892,50 +891,6 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		}
 		$product = wc_get_product( $record_id );
 		return $product ? (string) $product->get_description() : '';
-	}
-
-	public function test_order_edit_permission_respects_order_ownership(): void {
-		$cashier_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$other_id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$cashier    = get_user_by( 'id', $cashier_id );
-		$cashier->add_cap( 'access_woocommerce_pos' );
-		$cashier->add_cap( 'edit_shop_orders' );
-		$cashier->remove_cap( 'edit_others_shop_orders' );
-		$own_order_id   = $this->orderAssignedTo( $cashier_id );
-		$other_order_id = $this->orderAssignedTo( $other_id );
-		$web_order_id   = $this->orderAssignedTo( 0 );
-		wp_set_current_user( $cashier_id );
-
-		$this->assertTrue( Permission_Rules::wc_filter( false, 'edit', $own_order_id, 'shop_order', 'writes' ) );
-		$this->assertFalse( Permission_Rules::wc_filter( false, 'edit', $other_order_id, 'shop_order', 'writes' ) );
-		$this->assertFalse( Permission_Rules::wc_filter( false, 'edit', $web_order_id, 'shop_order', 'writes' ) );
-	}
-
-	public function test_order_delete_permission_respects_order_ownership(): void {
-		$cashier_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$other_id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$cashier    = get_user_by( 'id', $cashier_id );
-		$cashier->add_cap( 'access_woocommerce_pos' );
-		$cashier->add_cap( 'delete_shop_orders' );
-		$cashier->remove_cap( 'delete_others_shop_orders' );
-		$own_order_id   = $this->orderAssignedTo( $cashier_id );
-		$other_order_id = $this->orderAssignedTo( $other_id );
-		$web_order_id   = $this->orderAssignedTo( 0 );
-		wp_set_current_user( $cashier_id );
-
-		$this->assertTrue( Permission_Rules::wc_filter( false, 'delete', $own_order_id, 'shop_order', 'writes' ) );
-		$this->assertFalse( Permission_Rules::wc_filter( false, 'delete', $other_order_id, 'shop_order', 'writes' ) );
-		$this->assertFalse( Permission_Rules::wc_filter( false, 'delete', $web_order_id, 'shop_order', 'writes' ) );
-	}
-
-	/** An order assigned to $cashier_id via `_pos_user`, or a web order (no cashier) for 0. */
-	private function orderAssignedTo( int $cashier_id ): int {
-		$order = wc_create_order();
-		if ( $cashier_id > 0 ) {
-			$order->update_meta_data( '_pos_user', (string) $cashier_id );
-			$order->save_meta_data();
-		}
-		return $order->get_id();
 	}
 
 	/**

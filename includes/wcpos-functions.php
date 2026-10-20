@@ -515,14 +515,17 @@ if ( ! \function_exists( 'wcpos_faq_url' ) ) {
 /*
  * Helper function to check whether an order is a POS order.
  *
- * @param \WC_Order|int $order Order object or ID.
+ * @param \WC_Abstract_Order|int $order Order object or ID.
  * @return bool Whether the order is a POS order.
  */
 if ( ! \function_exists( 'wcpos_is_pos_order' ) ) {
 	/**
 	 * Helper function to check whether an order is a POS order.
 	 *
-	 * @param \WC_Order|int $order Order object or ID.
+	 * Accepts any order type: a refund or other non-WC_Order object is never
+	 * a POS order and answers false.
+	 *
+	 * @param \WC_Abstract_Order|int $order Order object or ID.
 	 *
 	 * @return bool Whether the order is a POS order.
 	 */
@@ -617,8 +620,8 @@ if ( ! \function_exists( 'woocommerce_pos_request' ) ) {
 	/**
 	 * Legacy alias for wcpos_request().
 	 *
-	 * @deprecated 2.0.0 Use wcpos_request(). Kept for the Stripe, Mollie and
-	 *             Mercado Pago terminal extensions.
+	 * @deprecated 2.0.0 Use wcpos_request(). Kept for the Stripe, Mollie,
+	 *             Mercado Pago and Windcave terminal extensions.
 	 *
 	 * @param mixed $type The request type.
 	 */

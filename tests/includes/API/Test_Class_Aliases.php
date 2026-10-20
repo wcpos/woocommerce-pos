@@ -17,24 +17,6 @@ class Legacy_Orders_Controller_Test_Double extends \WCPOS\WooCommercePOS\API\Ord
 }
 
 /**
- * Test double for extensions subclassing the legacy customers controller.
- */
-class Legacy_Customers_Controller_Test_Double extends \WCPOS\WooCommercePOS\API\Customers_Controller {
-}
-
-/**
- * Test double for extensions subclassing the legacy products controller.
- */
-class Legacy_Products_Controller_Test_Double extends \WCPOS\WooCommercePOS\API\Products_Controller {
-}
-
-/**
- * Test double for extensions subclassing the legacy variations controller.
- */
-class Legacy_Product_Variations_Controller_Test_Double extends \WCPOS\WooCommercePOS\API\Product_Variations_Controller {
-}
-
-/**
  * Test double matching the Pro pattern of consuming a trait by its old FQCN
  * (e.g. Pro's Order_Refunds_Controller uses API\Traits\WCPOS_REST_API).
  */

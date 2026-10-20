@@ -20,6 +20,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  * @covers \WCPOS\WooCommercePOS\Sync\Integrity_Digest
  */
 class Test_Sync_Observation extends Sync_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	use Sync_Observer_Unhook_Trait;
 
 	/** @var Integrity_Digest */
@@ -157,8 +158,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		global $wpdb;
 
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$this->integrity_digest->record_customer_saved( $user_id );
-		Integrity_Digest::flush_pending_digests();
+		$this->seed_digests( 'customers', $user_id );
 		$stored_digest = $this->digest_index->read_digests( 'customers', array( $user_id ) )[ $user_id ];
 		update_user_meta( $user_id, $wpdb->prefix . 'capabilities', array( 'editor' => true ) );
 		$current_digest = (string) $wpdb->get_var(

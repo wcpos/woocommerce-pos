@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  * @covers \WCPOS\WooCommercePOS\Sync\Integrity_Digest
  */
 class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * Enable sync routes and isolate cron state.
 	 */
@@ -148,9 +149,7 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 	public function test_healthy_stored_table_preserves_aggregate_response(): void {
 		$product    = ProductHelper::create_simple_product();
 		$product_id = $product->get_id();
-		$digest     = new Integrity_Digest();
-		$digest->record_post_saved( $product_id );
-		Integrity_Digest::flush_pending_digests();
+		$this->seed_digests( 'products', $product_id );
 		$stored_digest = ( new Digest_Index() )->read_digests( 'products', array( $product_id ) )[ $product_id ];
 		$bucket        = (int) floor( $product_id / 1000 );
 
@@ -241,14 +240,12 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 	 * (2^-24) without the CAST(... AS UNSIGNED) fix.
 	 */
 	public function test_scan_current_side_does_not_clamp_unsigned_digests(): void {
-		$digest = new Integrity_Digest();
 		$ids    = array();
 		for ( $i = 0; $i < 24; $i++ ) {
 			$product = ProductHelper::create_simple_product();
 			$ids[]   = $product->get_id();
-			$digest->record_post_saved( $product->get_id() );
-			Integrity_Digest::flush_pending_digests();
 		}
+		$this->seed_digests( 'products', ...$ids );
 
 		// Cover EVERY generated product: ids can straddle a 1,000-id bucket
 		// boundary, so dispatch each distinct bucket and require the asserted

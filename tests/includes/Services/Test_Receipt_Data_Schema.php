@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
-use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WP_UnitTestCase;

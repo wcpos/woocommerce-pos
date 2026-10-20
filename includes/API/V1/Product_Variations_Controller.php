@@ -21,9 +21,7 @@ use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
-use WCPOS\WooCommercePOS\Sync\Product_Search;
 use WP_Error;
-use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
@@ -35,7 +33,6 @@ use WP_REST_Server;
  */
 class Product_Variations_Controller extends WC_REST_Product_Variations_Controller {
 	use Traits\Product_Helpers;
-	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 

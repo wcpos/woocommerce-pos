@@ -21,7 +21,6 @@ use WC_Data;
 use WC_Email_Customer_Invoice;
 use WC_Order;
 use WC_Order_Item;
-use WC_Order_Item_Fee;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;

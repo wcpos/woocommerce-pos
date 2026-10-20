@@ -30,8 +30,8 @@ class Test_Receipt_Money_Formatter extends WP_UnitTestCase {
 	 *
 	 * If this assertion ever has to be "fixed" by switching back to in-place
 	 * replacement, please don't — cross-pipeline templates depend on the
-	 * `_display` companion. See the comment block in
-	 * `Receipt_Money_Formatter::format()`.
+	 * `_display` companion. See the class docblock of
+	 * `Receipt_Money_Formatter`.
 	 */
 	public function test_format_uses_presentation_hints(): void {
 		$data = array(

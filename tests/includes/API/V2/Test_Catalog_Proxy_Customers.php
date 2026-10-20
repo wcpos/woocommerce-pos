@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Services\Customer_Meta_Parity;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Tests\Sync\Seeds_Stored_Digests;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WP_REST_Response;
 
@@ -18,6 +18,7 @@ use WP_REST_Response;
  * V2 catalog proxy customer search tests.
  */
 class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * Customer used by each search test.
 	 *
@@ -248,8 +249,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 		// carries no stored digest and `_rxdb_digest` would be absent for a reason
 		// that has nothing to do with the wire contract. Seed one, so the field is
 		// pinned PRESENT rather than pinned absent (#1717).
-		( new Integrity_Digest() )->record_customer_saved( $this->customer->get_id() );
-		Integrity_Digest::flush_pending_digests();
+		$this->seed_digests( 'customers', $this->customer->get_id() );
 
 		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
 		$request->set_query_params( array( 'include' => array( $this->customer->get_id() ) ) );

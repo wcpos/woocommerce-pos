@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\API\V1;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
