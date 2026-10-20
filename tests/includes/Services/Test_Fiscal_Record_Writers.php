@@ -680,6 +680,32 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
+	/** A late correction names the completion's session and register, not the order's write-once ones. */
+	public function test_a_late_sale_carries_the_completions_provenance(): void {
+		// Arrange: the order's write-once session is A (open); B is already closed.
+		$session_a = $this->closure_session( null, 'open' );
+		$session_b = $this->closure_session();
+		( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session_b ) );
+		$order = $this->order();
+		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
+		$order->update_meta_data( '_wcpos_register', $session_a['register_id'] );
+		$order->save();
+
+		// Act: the sale completes in session B.
+		$this->cash_in( $order, $session_b, '100.00' );
+
+		// Assert.
+		$late = ( new Fiscal_Record_Store() )->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $late );
+		$this->assertSame( $session_b['id'], $late[0]['session_id'] );
+		$this->assertSame( $session_b['register_id'], $late[0]['register_id'] );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.

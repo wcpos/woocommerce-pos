@@ -244,10 +244,21 @@ final class Fiscal_Record_Writers {
 			$rows = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => ! in_array( $leg['id'] ?? null, $carried, true ) ) );
 			if ( $rows ) {
 				$delta = Session_Figures::tender_totals( $rows );
+				// Where and when the completion took the money, as the sale row says (the order's write-once
+				// tuple only where the entry names nothing).
+				$provenance = $this->store->provenance_from_order( $order );
+				foreach ( array(
+					'register_id' => 'register',
+					'session_id'  => 'session',
+					'device_time' => 'sale_time',
+					'device_tz'   => 'sale_tz',
+				) as $column => $field ) {
+					$provenance[ $column ] = $completion[ $field ] ?? $provenance[ $column ];
+				}
 				$this->write(
 					$order,
 					array_merge(
-						$this->store->provenance_from_order( $order ),
+						$provenance,
 						array(
 							'type' => 'late_sale',
 							'order_id' => $order->get_id(),
