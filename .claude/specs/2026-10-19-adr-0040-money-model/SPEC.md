@@ -531,9 +531,36 @@ Adversarial Codex review of the built diff (spec withheld; 3 High), folded: Pro'
 
 `Test_Ledger`, `Test_Payments_Controller`, `Test_Payments_Sweeper`, `Test_Gateway_Handler`, `Test_Webview_Handler`, `Test_Gateway_Contract`, `Test_Refund_Session_Binding`, `Test_Fiscal_Record_Writers`, `Test_Session_Figures`, `Test_Ledger_Sole_Writer`, `Test_Write_Controller`, `Test_Order_Writer`, `Test_Gateway_Submission` (+`_HPOS`), `Test_Rest_Dispatch_Money_Model` (+`_HPOS`); then phpcs on `Ledger.php`, phpstan, lane-coverage compare against the `origin/next` baseline, `git diff --check`, the full suite once.
 
-## 6a. PR 5
+## 6a. PR 5 — the contract bump, the wiki rewrite and the client handoff (`feat/adr-0040-5`)
 
-`Descriptor_Builder` reports `contract: '1.3'`; the wiki pages the handoff lists are rewritten; the client handoff (with §7.19) is written by the agent that finishes PR 5.
+Three deliverables, none of them a behaviour change on the server: the number the envelope reports, the pages that describe it, and the brief the app builds against.
+
+### 6a.1 `contract: '1.3'`
+
+`Descriptor_Builder::all()` returns `'contract' => '1.3'` on the `GET /wcpos/v2/payment-methods` envelope. The number is the promise, and what it promises is the union of PRs 1 to 4 (#2349, #2352, #2355, #2362, with Pro #686): the server derives paid from captured rows on every money write (§4.1, §4.2); the pushed order document carries no money and no paid status (§3.3, §3.4); reopen is a status change with every payment still counting, refused while a leg is pending (§3.6, §3.8); every money command carries `command_id` and `revision`, replays answer the stored outcome, a same-id-different-body command is 422 `wcpos_command_conflict`, a stale revision 409 (§5); `close` completes a covered sale (§4.3); the completion stamp and its number are the fiscal identity (§4.4, §4.7); a refund is two verified saves around the provider and a stranded allocation answers `pending` (§6); sync protocol minimum 3 (§3.1). Nothing on the server reads the number: the app gates on it (the wiki's §13 rule, "gate features on the contract rather than the plugin version"), and a 1.2 app against this plugin is already refused by the protocol gate before it reaches the payments family (D1), so the bump changes nothing for any till that can talk to the server.
+
+The epoch mechanism designed for 1.3 and never shipped (`_wcpos_money_epoch`, `_wcpos_money_owner`, `expected_epoch`, the `payments=` token in `X-WCPOS-Client`) is not part of what `1.3` means; the handoff's ground-truth table and §0 record that none of it is on `next`.
+
+Pins (failing first; `assertSame`):
+- `test_get_payment_methods_reports_contract_1_3` in `Test_Payment_Methods_Controller`: `GET /wcpos/v2/payment-methods` → 200, `data['contract'] === '1.3'`.
+- `test_descriptor_envelope_reports_contract_1_3` in `Test_Descriptor_Builder`: `Descriptor_Builder::instance()->all()['contract'] === '1.3'`.
+- The two existing envelope-shape tests that assert `'1.2'` (`test_get_payment_methods_returns_envelope_with_cash_descriptor`, the `all()` envelope test in `Test_Descriptor_Builder`) are updated to `'1.3'` in the same commit; no test anywhere else names the contract number (grep of `includes/` and `tests/` for `'1.2'` on 2026-10-20).
+
+### 6a.2 The wiki rewrite (wcpos/wiki, one PR against `main`)
+
+The pages the handoff lists (`architecture/client/payments-contract.md` §13, `cart-settlement-commands.md`, `cart-settlement-completion-proofs.md`, `cart-settlement-money-holds.md`, `payments-contract/ledger.md`, `ledger-invariants.md`, `ledger-writes.md`, `gateway-mode.md`, `gateway-mode-routes.md`, `sale-completion.md`, `fiscal-groundwork/records-and-closures.md`, `corrections.md`, `closure-as-ruled.md`) are rewritten so no money-epoch mechanism remains and the shipped behaviour above is what they describe, citing the ADR and the four PRs; every other page under `architecture/` and `support/` that carries a money-epoch claim is fixed in the same PR (found by grep, read hit by hit; unrelated uses of "epoch" stay). Written by an Opus 5.5 agent under the wiki's own page rules (frontmatter, 2,500-word ceiling with split-on-touch, `index-sync`, `wiki-lint`), reviewed by the orchestrator against the ADR and this spec, with a Codex read-only accuracy pass, merged by hand. The wiki's "all updates go through a skill" rule is set aside for this one PR by the handoff's explicit instruction (step 3, PR 5); the PR body says so.
+
+### 6a.3 The client handoff
+
+`.claude/handoffs/2026-10-20-adr-0040-client/HANDOFF.md`, on this branch, written from the app's `origin/next` as read on 2026-10-20 (a Codex read-only investigation of the monorepo produces the file-and-line facts; the handoff cites them). It carries: `SYNC_PROTOCOL_VERSION` to 3; the 1.3 gate from monorepo #2702/#2710 redefined (no epoch, no owner stamp, no hint; the app no longer refuses to reopen a completed sale against 1.3 and no longer expects money to reset on reopen); cash recorded through `POST orders/{id}/payments` instead of `set_paid` on the push; `command_id`, `revision` and per-command provenance on every money command; refunds created with `api_refund: true` (§6.4, §7.19, correcting the handoff's `false`); the server-owned keys the push must stop carrying; the error codes the till must handle (§2) and what each means at the till. Because a sandboxed agent cannot read this checkout, the same text is opened as an issue on wcpos/monorepo once this PR is merged; the issue is the brief the app agent acts on, the file is the record.
+
+### 6a.4 Files PR 5 touches and budget
+
+`includes/Payments/Contract/Descriptor_Builder.php` (one line); `tests/includes/API/V2/Test_Payment_Methods_Controller.php`, `tests/includes/Payments/Contract/Test_Descriptor_Builder.php` (two new tests, two assertions updated); this spec; the client handoff. `includes/` budget: 1 line.
+
+### 6a.5 Verification order for PR 5
+
+`Test_Payment_Methods_Controller`, `Test_Descriptor_Builder`; phpcs on the changed files, phpstan, lane-coverage compare against the `origin/next` baseline, `git diff --check`, the full suite once.
 
 ## 7. Decisions this spec makes that Paul should see (not re-asks of D1–D6)
 
