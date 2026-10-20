@@ -162,6 +162,11 @@ final class Fiscal_Record_Writers {
 			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d was not rebuilt: the completion was reopened before its record landed.', $n, $order->get_id() ) );
 			return;
 		}
+		if ( $missing && self::refunded_since( $order, (string) ( $completion['at_gmt'] ?? '' ) ) ) {
+			// A refund since the completion changed what a document built now would say.
+			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d was not rebuilt: the order was refunded before its record landed.', $n, $order->get_id() ) );
+			return;
+		}
 		if ( $missing ) {
 			$previous = null;
 			foreach ( $history as $entry ) {
@@ -423,9 +428,9 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * The sale record a refund corrects: the latest completion's own record, after one recovery
-	 * attempt; none while it is still missing (never completion n−1's). An order without a history
-	 * (completed before it existed) keeps its latest sale.
+	 * The sale record a refund corrects: the latest completion's own record, or none while it is
+	 * missing (never completion n−1's, and never rebuilt from the order the refund just changed). An
+	 * order without a history (completed before it existed) keeps its latest sale.
 	 *
 	 * @param WC_Order $order Parent order.
 	 */
@@ -435,8 +440,24 @@ final class Fiscal_Record_Writers {
 		if ( ! is_array( $latest ) ) {
 			return $this->store->find_sale( $order->get_id() );
 		}
-		$this->recover( $order );
 		return $this->store->find_sale( $order->get_id(), (string) $latest['id'] );
+	}
+
+	/**
+	 * Whether a refund on the order was created after the completion.
+	 *
+	 * @param WC_Order $order  Order.
+	 * @param string   $at_gmt The completion's time.
+	 */
+	private static function refunded_since( WC_Order $order, string $at_gmt ): bool {
+		$at = strtotime( $at_gmt );
+		foreach ( $order->get_refunds() as $refund ) {
+			$created = $refund->get_date_created();
+			if ( false === $at || ( $created && $created->getTimestamp() > $at ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Log a lost correction and fire the recovery signal without failing the caller.
