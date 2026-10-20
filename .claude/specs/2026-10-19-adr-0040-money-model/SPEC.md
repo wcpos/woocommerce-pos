@@ -422,6 +422,11 @@ Codex round 2:
 36. `test_an_intent_replay_resumes_after_the_method_is_disabled` — only a new leg needs the method enabled (`pos_enabled` is checked below the existing-row replay branch, as `submit()` does); a new intent on a new row with the method disabled stays 403.
 37. `Test_Gateway_Submission::test_a_submit_whose_command_entry_is_not_stored_is_refused_before_dispatch` — the pre-dispatch read-back verifies the command entry with the attempt; a miss removes the attempt and answers 409 `woo_rxdb_sync_record_locked` (nothing dispatched); after the `settled` and `recorded` saves a miss is logged and answered 409 (the attempt history still replays by attempt id).
 
+Codex round 3 (`Test_Gateway_Submission`, HPOS twin inherits): every order-level entry writer verifies its write by a fresh read-back and answers 409 `woo_rxdb_sync_record_locked` on a miss, as `Ledger::save()` does for rows:
+
+38. `test_a_cancel_whose_command_entry_is_not_stored_is_a_retryable_conflict` — the cancel stands (stamp cleared, attempt cancelled, `pos-open`); the retry on the current revision answers `wcpos_invalid_transition` as today.
+39. `test_a_history_answer_whose_command_entry_is_not_stored_is_a_retryable_conflict` — a submit answered from the attempt history under a new command id; nothing moved, the retry answers again and stores the entry.
+
 Declined in round 2: stripping the command maps from served order documents (the till already receives the whole ledger meta; a strip would have to run after every revision site or the first push after a money command would 409 falsely).
 
 Also from CodeRabbit: a new order's rows lose a client-seeded `commands` map like their event history (`test_order_save_preserves_server_event_history`, both lanes).
