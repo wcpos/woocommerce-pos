@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Health;
 
 /**
@@ -52,13 +53,31 @@ trait Owned_Table {
 		}
 	}
 
-	/** Create a missing table without changing an existing schema. */
+	/**
+	 * Create a missing table without changing an existing schema.
+	 *
+	 * WordPress's dbDelta() reports nothing when the CREATE fails (a denied CREATE privilege, a
+	 * full disk), and the till tables are outside Sync\Health's required set, so the
+	 * failure would otherwise first surface as a bare insert error at the till. Log
+	 * it here, once per request, with the database's own reason.
+	 */
 	protected function create_table_if_missing(): void {
 		global $wpdb;
-		if ( Health::table_exists( $this->table_name() ) ) {
+		$table = $this->table_name();
+		if ( Health::table_exists( $table ) ) {
 			return;
 		}
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
+		dbDelta( $this->schema_sql( $table, $wpdb->get_charset_collate() ) );
+		$db_error = (string) $wpdb->last_error; // Read before the probe below clears it.
+		if ( ! Health::table_exists( $table ) ) {
+			Logger::error(
+				'Table could not be created',
+				array(
+					'table'    => $table,
+					'db_error' => $db_error,
+				)
+			);
+		}
 	}
 }
