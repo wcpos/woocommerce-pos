@@ -156,3 +156,18 @@ the command, so the till can chain commands without a pull. Entries stay in stor
 wire (`payment.commands` is never answered). `record`'s mismatched replay is 422
 `wcpos_command_conflict` (was 409 `wcpos_payment_conflict`); `wcpos_payment_conflict` remains the
 state conflict (a `submit` of a cancelled or superseded attempt, a live payment on the order).
+
+## Refund allocations: two saves around the provider (2.0.0, ADR 0040 rule 8)
+
+`POST …/payments/{uuid}/refund` (`refund_id`, `amount`) writes the allocation `pending`, with the
+command's entry, **before** the provider is asked, then the provider's answer after. A `pending`
+allocation in a 200 answer means "sent, unconfirmed": the settle did not reach storage, or the
+provider threw or answered indeterminately. It is kept, never deleted; the order carries a note
+("confirm it with the provider before retrying"), the order summary shows it as `refund_pending`
+(never in `balance`), a reopen or cancel is refused while it stands, and a retry under the same or
+a new command id answers it without asking the provider again. A developer settles it with
+`Ledger::settle_allocation()` once a human has confirmed it at the provider.
+
+- 409 `woo_rxdb_sync_record_locked`: the reservation could not be stored; nothing was sent, retry.
+- A definite provider refusal (502 `wcpos_provider_error`, 400 `wcpos_refund_not_allocatable`, …)
+  keeps nothing, so the same command id runs again.
