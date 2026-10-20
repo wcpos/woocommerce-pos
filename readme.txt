@@ -130,6 +130,11 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.11.5 - 2026/10/20 =
+
+- **Web-store sales no longer re-save the product when they reduce stock.** This fixes a checkout error and a doubled stock deduction on bank-transfer orders that a few stores saw, and keeps product descriptions exactly as you wrote them.
+- Developers: the `woocommerce_product_set_stock` / `woocommerce_variation_set_stock` listener and `Products::product_set_stock()` are removed; WooCommerce has bumped the product's modified date on every save since 3.4.0.
+
 = 1.11.4 - 2026/10/20 =
 
 - **A failed translation download no longer slows every POS and admin request.** It is retried after an hour instead of on every request -- stores whose host cannot reach the translation CDN were waiting minutes for the POS to load; English stores were not affected.
