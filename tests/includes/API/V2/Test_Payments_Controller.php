@@ -1728,6 +1728,39 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 0, Route_Handler::$refunds );
 	}
 
+	/** Pin 31: an intent whose resume fails determinately keeps no entry, so its retry is a fresh command. */
+	public function test_an_intent_that_fails_determinately_on_resume_keeps_no_entry(): void {
+		// Arrange: the first answer is lost (indeterminate), the resume is declined.
+		$this->use_route_handler();
+		Route_Handler::$intent_errors = array(
+			new \WP_Error( 'wcpos_provider_timeout', 'No answer', array( 'status' => 504, 'indeterminate' => true ) ),
+			new \WP_Error( 'wcpos_provider_error', 'Declined', array( 'status' => 502 ) ),
+		);
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95' );
+		$path    = $this->payment_path( $order, $payment['id'] ) . '/intent';
+		$body    = $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) );
+
+		// Act.
+		$lost     = $this->command( $path, $body );
+		$entry    = $this->stored_row( $order->get_id(), $payment['id'] )['commands'];
+		$declined = $this->command( $path, $body );
+		$failed   = $this->stored_row( $order->get_id(), $payment['id'] );
+		$stale    = $this->command( $path, $body );
+		$current  = $this->command( $path, array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 504, $lost->get_status() );
+		$this->assertArrayHasKey( $body['command_id'], $entry );
+		$this->assertSame( 502, $declined->get_status() );
+		$this->assertSame( 'failed', $failed['status'] );
+		$this->assertArrayNotHasKey( $body['command_id'], $failed['commands'] );
+		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+		$this->assertSame( 'wcpos_revision_stale', $stale->get_data()['code'] );
+		$this->assertSame( 200, $current->get_status(), wp_json_encode( $current->get_data() ) );
+		$this->assertSame( 'failed', $current->get_data()['payment']['status'] );
+	}
+
 	/** Create an open POS order at the contract total. */
 	/**
 	 * A captured cash row, for seeding without deriving.
@@ -1892,6 +1925,13 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	public static $intents = 0;
 
 	/**
+	 * Errors the next intent calls answer, in order.
+	 *
+	 * @var \WP_Error[]
+	 */
+	public static $intent_errors = array();
+
+	/**
 	 * Return a transient prompt when the provider asks the cashier a question.
 	 *
 	 * @param array $row Payment row.
@@ -1924,6 +1964,9 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	 */
 	public function intent( array $row, array $context ) {
 		++self::$intents;
+		if ( self::$intent_errors ) {
+			return array_shift( self::$intent_errors );
+		}
 		$row['handoff'] = array( 'reader' => $context['reader'] );
 		return $row;
 	}

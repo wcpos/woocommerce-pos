@@ -809,14 +809,18 @@ class Ledger {
 				// side: a determinate refusal on the retry ends it, as the sweeper would, so it
 				// stops reserving the balance. An answered row keeps its provider object.
 				if ( self::is_unanswered( $replayed ) && true !== ( $resumed->get_error_data()['indeterminate'] ?? false ) ) {
-					$this->apply_result(
-						$order,
-						$replayed['id'],
+					$failed = $this->apply_transition(
+						$replayed,
 						array(
 							'status' => 'failed',
 							'failure_reason' => $resumed->get_error_code(),
 						)
 					);
+					if ( ! is_wp_error( $failed ) ) {
+						// The command failed, so it keeps no entry (spec §5.2): its retry is a fresh command.
+						$this->replace_and_save( $order, $rows, $this->normalize_row( $order, Command_Log::without_on_row( $failed, (string) ( $command['id'] ?? '' ) ) ) );
+						$this->release_hold_if_idle( $order );
+					}
 				}
 				return $resumed;
 			}

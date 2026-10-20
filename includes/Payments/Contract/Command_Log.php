@@ -118,6 +118,17 @@ final class Command_Log {
 	}
 
 	/**
+	 * The row without a command's entry (a command that failed keeps none).
+	 *
+	 * @param array  $row        Payment row.
+	 * @param string $command_id Command id; '' removes nothing.
+	 */
+	public static function without_on_row( array $row, string $command_id ): array {
+		unset( $row['commands'][ strtolower( $command_id ) ] );
+		return $row;
+	}
+
+	/**
 	 * Stage an order-level entry; the caller saves.
 	 *
 	 * @param WC_Order $order      Order object.
