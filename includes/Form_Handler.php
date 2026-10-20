@@ -41,7 +41,7 @@ class Form_Handler {
 		global $wp;
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce in the pay form handler.
-		if ( woocommerce_pos_request() && isset( $_POST['woocommerce_pay'], $_GET['key'] ) ) {
+		if ( wcpos_request() && isset( $_POST['woocommerce_pay'], $_GET['key'] ) ) {
 			$order_id  = absint( $wp->query_vars['order-pay'] );
 			$order     = wc_get_order( $order_id );
 
@@ -139,7 +139,7 @@ class Form_Handler {
 		global $wp;
 
 		$is_coupon_request = isset( $_POST['pos_apply_coupon'] ) || isset( $_POST['pos_remove_coupon'] );
-		if ( ! woocommerce_pos_request() || ! $is_coupon_request ) {
+		if ( ! wcpos_request() || ! $is_coupon_request ) {
 			return;
 		}
 

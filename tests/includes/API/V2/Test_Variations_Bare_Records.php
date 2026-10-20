@@ -62,7 +62,8 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		$variation->set_stock_quantity( 10 );
 		$variation->save();
 		Pos_Uuid::ensure_uuid( $variation );
-		( new Integrity_Digest() )->upsert_digest( $variation->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $variation->get_id() );
+		Integrity_Digest::flush_pending_digests();
 		return $variation;
 	}
 
@@ -277,7 +278,8 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		$product->set_sku( wp_generate_uuid4() );
 		$product->update_meta_data( 'structured_note', '{"note":"normalized before hashing"}' );
 		$product->save();
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 		// Act.
 		$row = $this->read( 'products', array( 'include' => array( $product->get_id() ) ) )[0];
 		$match = $this->read( 'resolve/barcode', array( 'code' => $product->get_sku() ) )['match'];

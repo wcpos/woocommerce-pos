@@ -96,7 +96,7 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 	 * @param string $value One of allowed / denied / undecided.
 	 */
 	private function set_consent( string $value ): void {
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = $value;
 		SettingsService::instance()->save_settings( 'general', $settings );
 
@@ -384,7 +384,7 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 
 		// Now change the stored answer WITHOUT clearing the cache — this is what
 		// switch_to_blog() effectively does.
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'denied';
 		SettingsService::instance()->save_settings( 'general', $settings );
 		$this->assertTrue( Analytics::instance()->is_enabled() );
@@ -477,7 +477,7 @@ class Test_Lifecycle_Events extends WP_UnitTestCase {
 
 		// Write the choice the way the REST route does, without clearing the
 		// cached answer — report_consent_granted() must handle that itself.
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 

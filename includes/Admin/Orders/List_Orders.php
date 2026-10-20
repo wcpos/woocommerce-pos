@@ -149,7 +149,7 @@ class List_Orders {
 	 * @return void
 	 */
 	public function pos_orders_list_column_content( string $column_name, int $post_id ): void {
-		if ( 'wcpos' === $column_name && woocommerce_pos_is_pos_order( $post_id ) ) {
+		if ( 'wcpos' === $column_name && wcpos_is_pos_order( $post_id ) ) {
 			echo '<span class="wcpos-icon" title="POS Order"></span>';
 		}
 	}

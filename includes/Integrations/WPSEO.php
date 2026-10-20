@@ -30,7 +30,7 @@ class WPSEO {
 	public function remove_wpseo_rest_api_links( $wpseo_options ) {
 		$wpseo_options['remove_rest_api_links'] = false; // needed for WC API discovery.
 
-		if ( woocommerce_pos_request() ) {
+		if ( wcpos_request() ) {
 			$wpseo_options['remove_rest_api_links'] = true;
 			$wpseo_options['enable_headless_rest_endpoints'] = false;
 			return $wpseo_options;

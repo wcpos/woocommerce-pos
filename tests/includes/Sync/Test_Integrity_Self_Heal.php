@@ -149,7 +149,8 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 		$product    = ProductHelper::create_simple_product();
 		$product_id = $product->get_id();
 		$digest     = new Integrity_Digest();
-		$digest->upsert_digest( $product_id );
+		$digest->record_post_saved( $product_id );
+		Integrity_Digest::flush_pending_digests();
 		$stored_digest = ( new Digest_Index() )->read_digests( 'products', array( $product_id ) )[ $product_id ];
 		$bucket        = (int) floor( $product_id / 1000 );
 
@@ -245,7 +246,8 @@ class Test_Integrity_Self_Heal extends Sync_REST_Store_Test_Case {
 		for ( $i = 0; $i < 24; $i++ ) {
 			$product = ProductHelper::create_simple_product();
 			$ids[]   = $product->get_id();
-			$digest->upsert_digest( $product->get_id() );
+			$digest->record_post_saved( $product->get_id() );
+			Integrity_Digest::flush_pending_digests();
 		}
 
 		// Cover EVERY generated product: ids can straddle a 1,000-id bucket

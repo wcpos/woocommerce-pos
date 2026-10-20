@@ -183,33 +183,6 @@ if ( ! \function_exists( 'wcpos_request' ) ) {
 }
 
 /*
- * Check for POS admin requests.
- *
- * @return mixed Admin request header value or false.
- */
-if ( ! \function_exists( 'wcpos_admin_request' ) ) {
-	/**
-	 * Check for POS admin requests.
-	 *
-	 * @deprecated 2.0.0 No callers; its header lookups never match. Removal pending a maintainer ruling.
-	 * @return mixed Admin request header value or false.
-	 */
-	function wcpos_admin_request() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
-		if ( \function_exists( 'getallheaders' ) ) {
-			$headers = getallheaders();
-			if ( $headers && isset( $headers['X-WC-POS-ADMIN'] ) ) {
-				return $headers['X-WC-POS-ADMIN'];
-			}
-		}
-		if ( isset( $_SERVER['HTTP_X_woocommerce_pos_ADMIN'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_woocommerce_pos_ADMIN'] ) );
-		}
-
-		return false;
-	}
-}
-
-/*
  * Helper function to get WCPOS settings.
  *
  * @param string $id  Settings ID.
@@ -614,68 +587,6 @@ if ( ! \function_exists( 'wcpos_get_woocommerce_template' ) ) {
 	}
 }
 
-/*
- * ============================================================================
- * Legacy Aliases
- * ============================================================================
- *
- * These functions use the old woocommerce_pos_ prefix.
- * They are kept for backwards compatibility but new code should use wcpos_ prefix.
- *
- * @deprecated Use wcpos_* functions instead.
- */
-
-if ( ! \function_exists( 'woocommerce_pos_url' ) ) {
-	/**
-	 * Legacy alias for wcpos_url().
-	 *
-	 * @deprecated Use wcpos_url() instead.
-	 *
-	 * @param mixed $page The page slug.
-	 */
-	function woocommerce_pos_url( $page = '' ): string {
-		return wcpos_url( $page );
-	}
-}
-
-if ( ! \function_exists( 'woocommerce_pos_request' ) ) {
-	/**
-	 * Legacy alias for wcpos_request().
-	 *
-	 * @deprecated Use wcpos_request() instead.
-	 *
-	 * @param mixed $type The request type.
-	 */
-	function woocommerce_pos_request( $type = 'all' ): bool {
-		return wcpos_request( $type );
-	}
-}
-
-if ( ! \function_exists( 'woocommerce_pos_admin_request' ) ) {
-	/**
-	 * Legacy alias for wcpos_admin_request().
-	 *
-	 * @deprecated Use wcpos_admin_request() instead.
-	 */
-	function woocommerce_pos_admin_request() {
-		return wcpos_admin_request();
-	}
-}
-
-if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
-	/**
-	 * Legacy alias for wcpos_get_settings().
-	 *
-	 * @deprecated Use wcpos_get_settings() instead.
-	 *
-	 * @param mixed      $id  The settings ID.
-	 * @param null|mixed $key The settings key.
-	 */
-	function woocommerce_pos_get_settings( $id, $key = null ) {
-		return wcpos_get_settings( $id, $key );
-	}
-}
-
 if ( ! \function_exists( 'woocommerce_pos_get_anon_id' ) ) {
 	/**
 	 * Returns the anonymous analytics id (wcpos_anon_id), creating it on first use.
@@ -690,80 +601,43 @@ if ( ! \function_exists( 'woocommerce_pos_get_anon_id' ) ) {
 	}
 }
 
-if ( ! \function_exists( 'woocommerce_pos_json_encode' ) ) {
+/*
+ * ============================================================================
+ * Deprecated aliases kept for extensions
+ * ============================================================================
+ *
+ * The other woocommerce_pos_* aliases went in 2.0.0. These two stay because
+ * shipped extensions still call them behind function_exists(): a removed
+ * function would not fatal there, it would silently switch the POS code path
+ * off. Each extension has a PR replacing the call; remove the alias in 2.2
+ * at the earliest, once those releases have been out for a minor.
+ */
+
+if ( ! \function_exists( 'woocommerce_pos_request' ) ) {
 	/**
-	 * Legacy alias for wcpos_json_encode().
+	 * Legacy alias for wcpos_request().
 	 *
-	 * @deprecated Use wcpos_json_encode() instead.
+	 * @deprecated 2.0.0 Use wcpos_request(). Kept for the Stripe, Mollie and
+	 *             Mercado Pago terminal extensions.
 	 *
-	 * @param mixed $data The data to encode.
+	 * @param mixed $type The request type.
 	 */
-	function woocommerce_pos_json_encode( $data ) {
-		return wcpos_json_encode( $data );
+	function woocommerce_pos_request( $type = 'all' ): bool {
+		return wcpos_request( $type );
 	}
 }
 
-if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
+if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
 	/**
-	 * Legacy alias for wcpos_locate_template().
+	 * Legacy alias for wcpos_get_settings().
 	 *
-	 * @deprecated Use wcpos_locate_template() instead.
+	 * @deprecated 2.0.0 Use wcpos_get_settings(). Kept for the WPML, Polylang
+	 *             and WP Multilang add-ons.
 	 *
-	 * @param mixed $template The template name.
+	 * @param mixed      $id  The settings ID.
+	 * @param null|mixed $key The settings key.
 	 */
-	function woocommerce_pos_locate_template( $template = '' ) {
-		return wcpos_locate_template( $template );
-	}
-}
-
-if ( ! \function_exists( 'woocommerce_pos_trim_html_string' ) ) {
-	/**
-	 * Legacy alias for wcpos_trim_html_string().
-	 *
-	 * @deprecated Use wcpos_trim_html_string() instead.
-	 *
-	 * @param mixed $str The HTML string.
-	 */
-	function woocommerce_pos_trim_html_string( $str ): string {
-		return wcpos_trim_html_string( $str );
-	}
-}
-
-if ( ! \function_exists( 'woocommerce_pos_doc_url' ) ) {
-	/**
-	 * Legacy alias for wcpos_doc_url().
-	 *
-	 * @deprecated Use wcpos_doc_url() instead.
-	 *
-	 * @param mixed $page The documentation page.
-	 */
-	function woocommerce_pos_doc_url( $page ): string {
-		return wcpos_doc_url( $page );
-	}
-}
-
-if ( ! \function_exists( 'woocommerce_pos_faq_url' ) ) {
-	/**
-	 * Legacy alias for wcpos_faq_url().
-	 *
-	 * @deprecated Use wcpos_faq_url() instead.
-	 *
-	 * @param mixed $page The FAQ page.
-	 */
-	function woocommerce_pos_faq_url( $page ): string {
-		return wcpos_faq_url( $page );
-	}
-}
-
-if ( ! \function_exists( 'woocommerce_pos_is_pos_order' ) ) {
-	/**
-	 * Legacy alias for wcpos_is_pos_order().
-	 *
-	 * @deprecated Use wcpos_is_pos_order() instead.
-	 *
-	 * @param mixed $order The order object or ID.
-	 */
-	function woocommerce_pos_is_pos_order( $order ): bool {
-		return wcpos_is_pos_order( $order );
+	function woocommerce_pos_get_settings( $id, $key = null ) {
+		return wcpos_get_settings( $id, $key );
 	}
 }

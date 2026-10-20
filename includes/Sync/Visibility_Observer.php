@@ -193,7 +193,7 @@ final class Visibility_Observer {
 	 *
 	 * Deleting either source moves the set exactly as writing it does: dropping the visibility option
 	 * reveals every id it listed, and dropping the General option takes the `pos_only_products`
-	 * feature down with it. Both are reachable from `Settings::delete_settings()`.
+	 * feature down with it.
 	 *
 	 * @param string $option Option about to be deleted.
 	 */

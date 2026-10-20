@@ -94,7 +94,7 @@ final class Request_Lane {
 		if ( is_admin() ) {
 			return self::ADMIN;
 		}
-		if ( \function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() ) {
+		if ( \function_exists( 'wcpos_request' ) && wcpos_request() ) {
 			return self::POS;
 		}
 		$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only inspected for a prefix.

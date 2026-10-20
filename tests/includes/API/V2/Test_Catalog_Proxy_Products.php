@@ -120,7 +120,8 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 		// below is pinned PRESENT rather than pinned absent — pinning its absence
 		// is the same "ratify whatever we happen to emit" move these pins exist to
 		// stop (#1717).
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		$rows = $this->read( array( 'include' => array( $product->get_id() ) ) );
 		$row  = $rows[0];
@@ -664,7 +665,7 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_product_orderby_decimal_stock_quantity(): void {
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		foreach ( array( '11.2', '3.5', '20.7' ) as $quantity ) {
 			ProductHelper::create_simple_product(

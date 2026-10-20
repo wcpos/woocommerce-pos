@@ -164,22 +164,6 @@ class Cloud_Print_Relay_Service {
 	}
 
 	/**
-	 * Disable relay use while retaining the deterministic site credentials.
-	 *
-	 * @deprecated The stored flag is no longer consulted; opt out with the
-	 *             `woocommerce_pos_cloud_print_relay_enabled` filter.
-	 *
-	 * @return array Public relay state.
-	 */
-	public static function disable(): array {
-		$stored            = self::settings();
-		$stored['enabled'] = false;
-		update_option( self::OPTION, $stored );
-
-		return array( 'enabled' => false );
-	}
-
-	/**
 	 * Whether the relay service may be used at all.
 	 *
 	 * The relay is on by default — there is no admin toggle. Sites that

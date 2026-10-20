@@ -109,9 +109,9 @@ final class Assembly_Fake_Mutation_Store {
  * The v2 surface shapes an order document three times over:
  *
  *  - PULL      Order_Serializer::serialize_order — prepare_object_for_response,
- *              augment_order_payload, add_pos_links, `woocommerce_pos_sync_serialized_order`.
+ *              document with PULL_AUGMENTATIONS, `woocommerce_pos_sync_serialized_order`.
  *  - PROXY     Catalog_Proxy_Controller::proxy — `woocommerce_pos_sync_proxy_response`,
- *              augment_order_payload, add_pos_links. No serialized_order filter.
+ *              document with V2_AUGMENTATIONS. No serialized_order filter.
  *  - WRITE-ACK Write_Controller::document_for + respond — Meta_Normalizer::normalize,
  *              then Order_Serializer::document with V2_AUGMENTATIONS. Same augmentation
  *              set as pull, minus the pull-only serialized_order filter. The

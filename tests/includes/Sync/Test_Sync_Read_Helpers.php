@@ -56,8 +56,8 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame( array( 4, 8 ), ( new Pos_Visibility() )->online_only_product_ids() );
-		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_variation_ids() );
+		$this->assertSame( array( 4, 8 ), ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::PRODUCTS ) );
+		$this->assertSame( array(), ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::VARIATIONS ) );
 	}
 
 	/**

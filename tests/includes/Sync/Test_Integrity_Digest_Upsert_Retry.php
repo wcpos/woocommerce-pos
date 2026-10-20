@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact regression coverage.
 // phpcs:disable WordPress.WP.GlobalVariablesOverride.Prohibited -- Replace wpdb only for fault injection.
 
-use RuntimeException;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
@@ -43,6 +43,7 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 				)
 			);
 		}
+		Integrity_Digest::reset_request_state();
 		$digest = new Integrity_Digest();
 		$table  = $digest->table_name();
 		$GLOBALS['wpdb'] = new class( $this->original_wpdb, $table, $errors ) extends \wpdb {
@@ -91,18 +92,27 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 			}
 		};
 
-		// Act: exercise each public upsert, not the private retry helper.
-		$error = null;
+		// Act: flush each public recorder through the retry helper and fail-open observer.
+		$messages = array();
+		$capture  = static function ( $enabled, $message ) use ( &$messages ) {
+			$messages[] = $message;
+			return false;
+		};
+		Logger::reset_dedup_state();
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
 		try {
 			$digest->$method( $id );
-		} catch ( RuntimeException $exception ) {
-			$error = $exception->getMessage();
+			Integrity_Digest::flush_pending_digests();
+		} finally {
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			Logger::reset_dedup_state();
 		}
 
 		// Assert: count only the upsert, excluding session setup and verification queries.
 		$prefix = 'product' === $type ? 'upsert stored digest failed: ' : "upsert stored {$type} digest failed: ";
 		$this->assertSame( $calls, $GLOBALS['wpdb']->upsert_calls );
-		$this->assertSame( null === $expected_error ? null : $prefix . $expected_error, $error );
+		$expected_messages = null === $expected_error ? array() : array( 'Sync digest observer failed (sync will self-heal via scan/rebuild): ' . $prefix . $expected_error );
+		$this->assertSame( $expected_messages, $messages );
 		if ( null === $expected_error ) {
 			$this->assertSame( '1', $this->original_wpdb->get_var( $this->original_wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE object_type = %s AND object_id = %d", $type, $id ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Internal table name.
 		}
@@ -181,7 +191,7 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 	public static function upsert_failures(): array {
 		$changed = "Record has changed since last read in table 'wp_wcpos_sync_stored_digest'; try restarting transaction";
 		$cases   = array();
-		foreach ( array( 'product' => 'upsert_digest', 'customer' => 'upsert_customer_digest', 'order' => 'upsert_order_digest' ) as $type => $method ) {
+		foreach ( array( 'product' => 'record_post_saved', 'customer' => 'record_customer_saved', 'order' => 'record_order_saved' ) as $type => $method ) {
 			foreach ( array( $changed, 'Deadlock found', 'Lock wait timeout' ) as $error ) {
 				$cases[ $method . ': ' . $error ] = array( $type, array( $error ), 2, null, $method );
 			}

@@ -230,7 +230,7 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame(
 			'<?xml version="1.0" encoding="utf-8"?>'
 				. '<PrintRequestInfo Version="1.00"><ePOSPrint>'
-				. '<Parameter><devid>local_printer</devid><timeout>' . Print_Jobs_Controller::EPSON_SDP_PRINT_TIMEOUT_MS . '</timeout></Parameter>'
+				. '<Parameter><devid>local_printer</devid><timeout>' . \WCPOS\WooCommercePOS\Services\Providers\Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS . '</timeout></Parameter>'
 				. '<PrintData><epos-print/></PrintData>'
 				. '</ePOSPrint></PrintRequestInfo>',
 			$body

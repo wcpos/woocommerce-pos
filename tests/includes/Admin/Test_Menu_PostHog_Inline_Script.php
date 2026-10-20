@@ -27,7 +27,7 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 		parent::setUp();
 
 		Analytics::reset_instance();
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 
@@ -112,7 +112,7 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 	 * emitted snippet should fall back to the no-op stub.
 	 */
 	public function test_disabled_inline_script_when_consent_not_allowed(): void {
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'denied';
 		SettingsService::instance()->save_settings( 'general', $settings );
 		Analytics::reset_instance();

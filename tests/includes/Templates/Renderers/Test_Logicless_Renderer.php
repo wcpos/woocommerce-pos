@@ -382,7 +382,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 *
 	 * Templates use `_display` for currency rendering and the bare key for
 	 * Mustache section guards / math. Mirrors the JS `formatReceiptData`
-	 * contract — see Receipt_Data_Schema::format_money_fields().
+	 * contract — see Receipt_Money_Formatter::format().
 	 */
 	public function test_money_fields_auto_formatted(): void {
 		$data = array(

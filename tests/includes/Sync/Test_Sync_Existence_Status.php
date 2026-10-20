@@ -114,7 +114,8 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		$product->set_status( 'draft' );
 		$product->save();
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		$this->assertSame( array( $product->get_id() ), array_column( $this->digests( array( $product->get_id() ) ), 'id' ) );
 		$this->assertSame( array(), $this->digests( array( $product->get_id() ), 'products', 'publish' ) );
@@ -133,8 +134,10 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 		$published_variation = (int) $published_parent->get_children()[0];
 		$draft_variation     = (int) $draft_parent->get_children()[0];
 		$digest              = new Integrity_Digest();
-		$digest->upsert_digest( $published_variation );
-		$digest->upsert_digest( $draft_variation );
+		$digest->record_post_saved( $published_variation );
+		Integrity_Digest::flush_pending_digests();
+		$digest->record_post_saved( $draft_variation );
+		Integrity_Digest::flush_pending_digests();
 
 		$this->assertSame( 'publish', get_post_status( $draft_variation ) );
 		$this->assertSame(
@@ -152,7 +155,8 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		$product->set_status( 'draft' );
 		$product->save();
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		$this->assertSame(
 			$this->digests( array( $product->get_id() ) ),
@@ -212,7 +216,8 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_customer_digests_include_non_customer_roles_and_ignore_publish_status(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		( new Integrity_Digest() )->upsert_customer_digest( $user_id );
+		( new Integrity_Digest() )->record_customer_saved( $user_id );
+		Integrity_Digest::flush_pending_digests();
 
 		$this->assertSame(
 			array( $user_id ),

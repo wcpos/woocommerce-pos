@@ -228,24 +228,6 @@ final class Collection_Rules_Plan {
 	}
 
 	/**
-	 * The collection this plan was built for.
-	 *
-	 * @return string
-	 */
-	public function collection(): string {
-		return $this->collection;
-	}
-
-	/**
-	 * The storage dialect this plan targets.
-	 *
-	 * @return string
-	 */
-	public function storage(): string {
-		return $this->storage;
-	}
-
-	/**
 	 * Whether this plan contributes nothing (unknown collection, or nothing claimed).
 	 *
 	 * @return bool

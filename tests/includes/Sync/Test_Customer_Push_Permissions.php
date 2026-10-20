@@ -17,7 +17,6 @@ use WP_REST_Request;
  *
  * @covers \WCPOS\WooCommercePOS\API\V2\Write_Controller
  * @covers \WCPOS\WooCommercePOS\API\V1\Customers_Controller
- * @covers \WCPOS\WooCommercePOS\Services\Customer_Account_Guard
  */
 class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 	/**

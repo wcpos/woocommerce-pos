@@ -248,7 +248,8 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 		// carries no stored digest and `_rxdb_digest` would be absent for a reason
 		// that has nothing to do with the wire contract. Seed one, so the field is
 		// pinned PRESENT rather than pinned absent (#1717).
-		( new Integrity_Digest() )->upsert_customer_digest( $this->customer->get_id() );
+		( new Integrity_Digest() )->record_customer_saved( $this->customer->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
 		$request->set_query_params( array( 'include' => array( $this->customer->get_id() ) ) );

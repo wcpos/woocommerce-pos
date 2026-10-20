@@ -195,7 +195,7 @@ class Activator {
 		// `plugins_loaded` callback hasn't yet instantiated Init on a
 		// fresh install.
 		//
-		// Read the option directly — woocommerce_pos_get_settings() lives in
+		// Read the option directly — wcpos_get_settings() lives in
 		// wcpos-functions.php which Init loads on `plugins_loaded`, but
 		// plugins_loaded has already fired by the time activation runs.
 		$general_settings = get_option( 'woocommerce_pos_settings_general', array() );

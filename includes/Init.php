@@ -423,7 +423,7 @@ class Init {
 	 * Loads the POS API and duck punches the WC REST API.
 	 */
 	public function init_rest_api(): void {
-		$is_wcpos_request = woocommerce_pos_request();
+		$is_wcpos_request = wcpos_request();
 
 		if ( $is_wcpos_request ) {
 			if ( ! wcpos_request( 'header' ) && ! wcpos_request( 'query_var' ) ) {
@@ -558,7 +558,7 @@ class Init {
 	 * @return void
 	 */
 	public function remove_x_frame_options( $wp ): void {
-		if ( woocommerce_pos_request() ) {
+		if ( wcpos_request() ) {
 			if ( ! headers_sent() && \function_exists( 'header_remove' ) ) {
 				header_remove( 'X-Frame-Options' );
 			}

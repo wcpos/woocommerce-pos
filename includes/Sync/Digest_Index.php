@@ -988,8 +988,8 @@ final class Digest_Index {
 				array_map(
 					'intval',
 					array_merge(
-						$this->visibility->online_only_product_ids(),
-						$this->visibility->online_only_variation_ids()
+						$this->visibility->hidden_ids( Pos_Visibility::PRODUCTS ),
+						$this->visibility->hidden_ids( Pos_Visibility::VARIATIONS )
 					)
 				)
 			)

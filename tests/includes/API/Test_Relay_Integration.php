@@ -583,40 +583,6 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It keeps the relay disabled when the admin disables it mid re-registration.
-	 */
-	public function test_reregister_preserves_disable_that_lands_mid_flight(): void {
-		// Arrange: enabled at launch; the admin disables while the outbound
-		// registration request is in flight.
-		$this->store_relay();
-		$this->mock_http(
-			function ( $pre, $args, $url ) {
-				if ( false !== strpos( $url, '/api/register' ) ) {
-					Cloud_Print_Relay_Service::disable();
-
-					return $this->http_response(
-						201,
-						array(
-							'site_key'    => 'abcdef0123456789abcdef0123456789',
-							'hint_secret' => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
-						)
-					);
-				}
-
-				return new WP_Error( 'unexpected', 'unexpected request' );
-			}
-		);
-
-		// Act.
-		( new Cloud_Print_Relay_Service() )->reregister();
-		$saved = get_option( Cloud_Print_Relay_Service::OPTION );
-
-		// Assert: credentials refreshed, but the admin's disable wins.
-		$this->assertFalse( (bool) $saved['enabled'] );
-		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
-	}
-
-	/**
 	 * It clears the per-printer status backoff when re-registration succeeds.
 	 *
 	 * Because status() reads the per-printer negative cache before DOWN_TRANSIENT,

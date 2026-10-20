@@ -869,22 +869,6 @@ class Templates {
 	}
 
 	/**
-	 * Set template as active (legacy method for backwards compatibility).
-	 *
-	 * @param int $template_id Template post ID.
-	 *
-	 * @return bool True on success, false on failure.
-	 */
-	public static function set_active_template( int $template_id ): bool {
-		$template = self::get_template( $template_id );
-		if ( ! $template ) {
-			return false;
-		}
-
-		return self::set_active_template_id( $template_id, $template['type'] );
-	}
-
-	/**
 	 * Get the stored display order for templates of a given type.
 	 *
 	 * @param string $type Template type (receipt, report, display, closure).
@@ -1148,55 +1132,6 @@ class Templates {
 	}
 
 	/**
-	 * One-time migration: move the active template to first position in the order,
-	 * then delete the wcpos_active_template_{type} option.
-	 *
-	 * @deprecated 2.0.0 No callers in WCPOS or WCPOS Pro; removal pending a maintainer ruling.
-	 *
-	 * @param string $type Template type.
-	 */
-	public static function migrate_active_template_to_order( string $type = 'receipt' ): void {
-		$option_key = 'wcpos_active_template_' . $type;
-		$active_id  = get_option( $option_key );
-
-		if ( false === $active_id ) {
-			return; // Nothing to migrate.
-		}
-
-		$order = self::get_template_order( $type );
-
-		if ( ! empty( $order ) ) {
-			// Remove active_id from its current position.
-			$order = array_values(
-				array_filter(
-					$order,
-					function ( $id ) use ( $active_id ) {
-						return (string) $id !== (string) $active_id;
-					}
-				)
-			);
-
-			// Prepend it.
-			array_unshift( $order, $active_id );
-			self::save_template_order( $order, $type );
-		}
-
-		delete_option( $option_key );
-	}
-
-	/**
-	 * Get available starter/example templates.
-	 *
-	 * @deprecated No starter templates ship; the template gallery replaced them. Always returns an empty array.
-	 *
-	 * @deprecated 2.0.0 No callers in WCPOS or WCPOS Pro; removal pending a maintainer ruling.
-	 * @return array Array of starter template definitions.
-	 */
-	public static function get_starter_templates(): array {
-		return array();
-	}
-
-	/**
 	 * Get gallery templates from the templates/gallery/ directory.
 	 *
 	 * @param string|null $type     Filter by type. Null for all.
@@ -1359,20 +1294,6 @@ class Templates {
 		}
 
 		return self::build_gallery_template( $metadata, self::find_gallery_content_file( $key, $metadata ) );
-	}
-
-	/**
-	 * Install a starter template as a custom (database) template.
-	 *
-	 * @deprecated See get_starter_templates().
-	 *
-	 * @param string $starter_key Key from get_starter_templates().
-	 *
-	 * @return int|\WP_Error Post ID on success, WP_Error on failure.
-	 */
-	public static function install_starter_template( string $starter_key ) {
-		unset( $starter_key );
-		return new \WP_Error( 'invalid_starter', __( 'Starter template not found.', 'woocommerce-pos' ) );
 	}
 
 	/**

@@ -560,9 +560,8 @@ class Print_Job_Service {
 				'post_status'    => 'publish',
 				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
 				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
-				// Oldest-first by default: oldest_pending_gmt() reads row zero to
-				// find a printer's longest-waiting job. The queue *view* asks for
-				// DESC instead, where the newest job is the one being looked for.
+				// Oldest-first by default. The queue view requests DESC instead
+				// to show the newest jobs first.
 				'orderby'        => array(
 					'date' => $order,
 					'ID'   => $order,
@@ -673,37 +672,6 @@ class Print_Job_Service {
 		}
 
 		return $summary;
-	}
-
-	/**
-	 * The creation time (GMT, MySQL format) of a printer's oldest waiting job.
-	 *
-	 * Waiting means pending or claimed: a printer that fetched a job and then
-	 * died leaves it claimed forever, and that backlog must still surface.
-	 *
-	 * @param string $printer_id Printer id.
-	 *
-	 * @return string Empty when the printer has no waiting jobs.
-	 */
-	public function oldest_pending_gmt( string $printer_id ): string {
-		$oldest = '';
-		foreach ( array( self::STATUS_PENDING, self::STATUS_CLAIMED ) as $status ) {
-			$rows = $this->query_rows(
-				array(
-					'printer_id' => $printer_id,
-					'status'     => $status,
-					'limit'      => 1,
-				)
-			);
-			if ( ! empty( $rows ) && '' !== (string) $rows[0]['created_gmt'] ) {
-				$created = (string) $rows[0]['created_gmt'];
-				if ( '' === $oldest || $created < $oldest ) {
-					$oldest = $created;
-				}
-			}
-		}
-
-		return $oldest;
 	}
 
 	/**

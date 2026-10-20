@@ -115,7 +115,8 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		foreach ( array( 'till-A', 'till-B', 'till-C' ) as $instance ) {
 			$this->drill( $instance );
 		}
-		( new Integrity_Digest() )->upsert_digest( $this->product_id );
+		( new Integrity_Digest() )->record_post_saved( $this->product_id );
+		Integrity_Digest::flush_pending_digests();
 		$this->drill( 'till-A', false );
 		$this->make_stale( 'Another hookless edit' );
 		$this->drill( 'till-A' );
@@ -149,7 +150,8 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		$ids = array();
 		for ( $i = 0; $i < $count; ++$i ) {
 			$this->product_id = ProductHelper::create_simple_product()->get_id();
-			( new Integrity_Digest() )->upsert_digest( $this->product_id );
+			( new Integrity_Digest() )->record_post_saved( $this->product_id );
+			Integrity_Digest::flush_pending_digests();
 			$this->make_stale();
 			$ids[] = $this->product_id;
 		}

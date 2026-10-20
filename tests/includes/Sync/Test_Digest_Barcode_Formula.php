@@ -108,7 +108,8 @@ class Test_Digest_Barcode_Formula extends Sync_REST_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		add_post_meta( $product->get_id(), $meta_key, 'before' );
 		$digest = new Integrity_Digest();
-		$digest->upsert_digest( $product->get_id() );
+		$digest->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 		$range = array(
 			'bucket_size' => 1,
 			'start' => $product->get_id(),
@@ -148,7 +149,8 @@ class Test_Digest_Barcode_Formula extends Sync_REST_Store_Test_Case {
 	public function test_legacy_default_store_seeds_fingerprint_without_scheduling_rebuild(): void {
 		$this->set_barcode_key( '_global_unique_id' );
 		$product = ProductHelper::create_simple_product();
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		$data = $this->dispatch_scan( $product->get_id() );
 
@@ -166,7 +168,8 @@ class Test_Digest_Barcode_Formula extends Sync_REST_Store_Test_Case {
 	public function test_legacy_custom_key_store_schedules_exactly_one_rebuild(): void {
 		$this->set_barcode_key( '_merchant_barcode' );
 		$product = ProductHelper::create_simple_product();
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		$first = $this->dispatch_scan( $product->get_id() );
 		$event = wp_next_scheduled( Integrity_Digest::REBUILD_HOOK );
@@ -207,7 +210,8 @@ class Test_Digest_Barcode_Formula extends Sync_REST_Store_Test_Case {
 		$this->set_barcode_key( $meta_key );
 		$product = ProductHelper::create_simple_product();
 		add_post_meta( $product->get_id(), $meta_key, 'before' );
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 		$range = array(
 			'bucket_size' => 1,
 			'start' => $product->get_id(),

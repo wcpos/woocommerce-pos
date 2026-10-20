@@ -8,7 +8,8 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\API\Product_Search;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Product_Search;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WP_Query;
 
@@ -311,7 +312,7 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 		$query->query_vars['wcpos_search_phrase'] = "bad\xFF";
 
 		// Act.
-		$search = Product_Search::posts_search( '', $query );
+		$search = Product_Search::posts_search( '', $query->query_vars, Collection_Rules::rules( 'products' )['search'] );
 
 		// Assert.
 		$this->assertSame( ' AND 1=0 ', $search );

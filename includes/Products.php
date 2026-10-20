@@ -227,7 +227,7 @@ class Products {
 	 * Whether the request is a storefront rather than an operator context.
 	 */
 	private function is_storefront_request(): bool {
-		return ! ( is_admin() || woocommerce_pos_request() || $this->is_cli_request() || $this->is_operator_rest_request() );
+		return ! ( is_admin() || wcpos_request() || $this->is_cli_request() || $this->is_operator_rest_request() );
 	}
 
 	/**

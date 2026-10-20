@@ -318,8 +318,10 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		$order_id    = OrderHelper::create_order()->get_id();
 		$digest      = new Integrity_Digest();
 		$index       = new Digest_Index();
-		$digest->upsert_customer_digest( $customer_id );
-		$digest->upsert_order_digest( $order_id );
+		$digest->record_customer_saved( $customer_id );
+		Integrity_Digest::flush_pending_digests();
+		$digest->record_order_saved( $order_id );
+		Integrity_Digest::flush_pending_digests();
 
 		$customer_digest = $index->read_digests( 'customers', array( $customer_id ) )[ $customer_id ];
 		$order_digest    = $index->read_digests( 'orders', array( $order_id ) )[ $order_id ];

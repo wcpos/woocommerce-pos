@@ -95,7 +95,7 @@ class Gateway_Contract {
 	 * @param WC_Payment_Gateway $gateway Gateway object.
 	 */
 	public function is_pos_enabled( WC_Payment_Gateway $gateway ): bool {
-		$settings = woocommerce_pos_get_settings( 'payment_gateways' );
+		$settings = wcpos_get_settings( 'payment_gateways' );
 
 		if ( is_wp_error( $settings ) ) {
 			return wc_string_to_bool( $gateway->enabled );

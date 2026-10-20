@@ -190,21 +190,6 @@ class Receipt_Data_Schema {
 	);
 
 	/**
-	 * Format money fields in receipt data.
-	 *
-	 * Kept for callers outside this plugin; the formatter is Receipt_Money_Formatter::format().
-	 *
-	 * @param array               $data               Receipt data array (or nested sub-array).
-	 * @param string              $currency           WooCommerce currency code.
-	 * @param array<string,mixed> $presentation_hints Receipt presentation hints.
-	 *
-	 * @return array Data with `_display` companions added beside money fields.
-	 */
-	public static function format_money_fields( array $data, string $currency = 'USD', array $presentation_hints = array() ): array {
-		return Receipt_Money_Formatter::format( $data, $currency, $presentation_hints );
-	}
-
-	/**
 	 * Get the field tree for the template editor field picker.
 	 *
 	 * Returns a structured array describing template-picker sections and fields

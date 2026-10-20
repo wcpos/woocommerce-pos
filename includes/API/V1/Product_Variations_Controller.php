@@ -286,65 +286,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	}
 
 	/**
-	 * Filter to adjust the WordPress search SQL query
-	 * - Search for the variation SKU and barcode
-	 * - Do not search variation description.
-	 *
-	 * @param string   $search   Search string.
-	 * @param WP_Query $wp_query WP_Query object.
-	 *
-	 * @return string
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
-		return Product_Search::variation_posts_search( $search, $wp_query->query_vars, Collection_Rules::rules( 'variations' )['search'] );
-	}
-
-	/**
-	 * Filters the JOIN clause of the query.
-	 *
-	 * @param string   $join  The JOIN clause of the query.
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_join_to_posts_search( string $join, WP_Query $query ) {
-		return empty( $query->query_vars['s'] ) ? $join : Product_Search::posts_join( $join, $query->query_vars );
-	}
-
-	/**
-	 * Filters the GROUP BY clause of the query.
-	 *
-	 * @param string   $groupby The GROUP BY clause of the query.
-	 * @param WP_Query $query   The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_groupby_posts_search( string $groupby, WP_Query $query ) {
-		return empty( $query->query_vars['s'] ) ? $groupby : Product_Search::posts_groupby( $groupby, $query->query_vars );
-	}
-
-	/**
-	 * Filters the WHERE clause of the query.
-	 *
-	 * Exclusion set and feature gate both come from Sync\Pos_Visibility, the single POS visibility
-	 * authority.
-	 *
-	 * @param string   $where The WHERE clause of the query.
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_where_product_variation_exclude_online_only( string $where, WP_Query $query ) {
-		global $wpdb;
-
-		return ( new Pos_Visibility() )->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::VARIATIONS );
-	}
-
-	/**
 	 * Returns array of all product ids, name.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -395,34 +336,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		return $this->get_items( $request );
 	}
 
-
-	/**
-	 * Apply the declared POS variation sorts to the SQL clauses.
-	 *
-	 * `posts_clauses` fires for EVERY WP_Query, so the body is guarded by post type and by
-	 * the plan itself — it contributes nothing unless this request claimed one of the
-	 * declared sorts.
-	 *
-	 * @param array    $clauses  Associative array of the clauses for the query.
-	 * @param WP_Query $wp_query The WP_Query instance.
-	 *
-	 * @return array
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
-		if ( ! isset( $this->wcpos_request ) ) {
-			return $clauses;
-		}
-
-		$post_type = $wp_query->query_vars['post_type'] ?? null;
-		if ( 'product_variation' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product_variation', $post_type, true ) ) ) {
-			return $clauses;
-		}
-
-		$plan = Collection_Rules::for_request( 'variations', $this->wcpos_request, self::WCPOS_SORT_PARAM_MAP );
-
-		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
-	}
 
 	/**
 	 * Prepare objects query.

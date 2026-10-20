@@ -67,37 +67,6 @@ class Test_Class_Aliases extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Public controller subclasses retain the inherited meta-query helper.
-	 *
-	 * @dataProvider query_helper_controller_provider
-	 */
-	public function test_legacy_controller_subclass_keeps_inherited_query_helper( string $controller_class ): void {
-		$controller = new $controller_class();
-		$meta_query = array(
-			array(
-				'key'   => 'example',
-				'value' => 'value',
-			),
-		);
-
-		$this->assertTrue( is_callable( array( $controller, 'wcpos_combine_meta_queries' ) ) );
-		$this->assertEquals( $meta_query, $controller->wcpos_combine_meta_queries( array(), $meta_query ) );
-	}
-
-	/**
-	 * Controllers that historically composed Query_Helpers.
-	 *
-	 * @return array<string, array{string}>
-	 */
-	public function query_helper_controller_provider(): array {
-		return array(
-			'customers'          => array( Legacy_Customers_Controller_Test_Double::class ),
-			'products'           => array( Legacy_Products_Controller_Test_Double::class ),
-			'product variations' => array( Legacy_Product_Variations_Controller_Test_Double::class ),
-		);
-	}
-
-	/**
 	 * Extensions can continue consuming traits by their old FQCNs.
 	 */
 	public function test_trait_alias_resolves_for_old_fqcn_consumers(): void {

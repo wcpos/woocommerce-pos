@@ -255,7 +255,8 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		// carries no stored digest and `_rxdb_digest` would be absent for a reason
 		// that has nothing to do with the wire contract. Seed one, so the field is
 		// pinned PRESENT rather than pinned absent (#1717).
-		( new Integrity_Digest() )->upsert_order_digest( $order->get_id() );
+		( new Integrity_Digest() )->record_order_saved( $order->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		return wc_get_order( $order->get_id() );
 	}

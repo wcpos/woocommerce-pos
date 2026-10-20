@@ -14,6 +14,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -904,11 +905,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$other_order_id = $this->orderAssignedTo( $other_id );
 		$web_order_id   = $this->orderAssignedTo( 0 );
 		wp_set_current_user( $cashier_id );
-		$controller = new Write_Controller( new Fake_Mutation_Store() );
 
-		$this->assertTrue( $controller->wcpos_check_permissions( false, 'edit', $own_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $other_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $web_order_id, 'shop_order' ) );
+		$this->assertTrue( Permission_Rules::wc_filter( false, 'edit', $own_order_id, 'shop_order', 'writes' ) );
+		$this->assertFalse( Permission_Rules::wc_filter( false, 'edit', $other_order_id, 'shop_order', 'writes' ) );
+		$this->assertFalse( Permission_Rules::wc_filter( false, 'edit', $web_order_id, 'shop_order', 'writes' ) );
 	}
 
 	public function test_order_delete_permission_respects_order_ownership(): void {
@@ -922,11 +922,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$other_order_id = $this->orderAssignedTo( $other_id );
 		$web_order_id   = $this->orderAssignedTo( 0 );
 		wp_set_current_user( $cashier_id );
-		$controller = new Write_Controller( new Fake_Mutation_Store() );
 
-		$this->assertTrue( $controller->wcpos_check_permissions( false, 'delete', $own_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'delete', $other_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'delete', $web_order_id, 'shop_order' ) );
+		$this->assertTrue( Permission_Rules::wc_filter( false, 'delete', $own_order_id, 'shop_order', 'writes' ) );
+		$this->assertFalse( Permission_Rules::wc_filter( false, 'delete', $other_order_id, 'shop_order', 'writes' ) );
+		$this->assertFalse( Permission_Rules::wc_filter( false, 'delete', $web_order_id, 'shop_order', 'writes' ) );
 	}
 
 	/** An order assigned to $cashier_id via `_pos_user`, or a web order (no cashier) for 0. */

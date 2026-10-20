@@ -1165,19 +1165,6 @@ class Test_Templates extends WP_UnitTestCase {
 
 
 	/**
-	 * Test legacy PHP starter templates are no longer registered.
-	 */
-	public function test_legacy_php_starter_templates_are_not_registered(): void {
-		$starters = Templates::get_starter_templates();
-		$keys     = array_keys( $starters );
-
-		$this->assertNotContains( 'gift-receipt', $keys );
-		$this->assertNotContains( 'minimal-receipt', $keys );
-		$this->assertNotContains( 'thermal-receipt', $keys );
-		$this->assertNotContains( 'simple-receipt', $keys );
-	}
-
-	/**
 	 * Test that template category taxonomy exists.
 	 */
 	public function test_template_category_taxonomy_exists(): void {
@@ -1468,26 +1455,6 @@ class Test_Templates extends WP_UnitTestCase {
 	public function test_install_gallery_template_invalid_key_returns_error(): void {
 		$result = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'nonexistent' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
-	}
-
-	/**
-	 * Test legacy set_active_template method.
-	 */
-	public function test_legacy_set_active_template_method(): void {
-		$post_id = $this->factory->post->create(
-			array(
-				'post_type'   => 'wcpos_template',
-				'post_status' => 'publish',
-				'post_title'  => 'Test',
-			)
-		);
-		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
-
-		// Use legacy method.
-		$result = Templates::set_active_template( $post_id );
-
-		$this->assertTrue( $result );
-		$this->assertTrue( Templates::is_active_template( $post_id, 'receipt' ) );
 	}
 
 	/**

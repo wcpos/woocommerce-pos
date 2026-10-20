@@ -1272,23 +1272,6 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Direct test: generate_token (legacy method).
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Services\Auth::generate_token
-	 */
-	public function test_direct_generate_token_legacy(): void {
-		$result = $this->auth_service->generate_token( $this->test_user );
-
-		// Legacy generate_token now just returns access token string.
-		$this->assertIsString( $result );
-		$this->assertNotEmpty( $result );
-
-		// Verify it's a valid access token.
-		$decoded = $this->auth_service->validate_token( $result, 'access' );
-		$this->assertNotInstanceOf( WP_Error::class, $decoded );
-	}
-
-	/**
 	 * Direct test: refresh_access_token with invalid token.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Services\Auth::refresh_access_token

@@ -101,7 +101,7 @@ class Settings {
 
 	/**
 	 * Constructor is private to prevent direct instantiation.
-	 * Use woocommerce_pos_get_settings() instead.
+	 * Use wcpos_get_settings() instead.
 	 * Or Settings::instance() if you must.
 	 */
 	private function __construct() {
@@ -233,17 +233,6 @@ class Settings {
 	 */
 	public static function sanitize_store_tax_ids( $tax_ids ): array {
 		return General_Section::sanitize_store_tax_ids( $tax_ids );
-	}
-
-	/**
-	 * Get tax IDs settings.
-	 *
-	 * @return array
-	 */
-	public function get_tax_ids_settings(): array {
-		$section = $this->sections()->get( 'tax_ids' );
-
-		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -488,23 +477,6 @@ class Settings {
 	}
 
 	/**
-	 * Delete settings in WP options table.
-	 *
-	 * @deprecated 2.0.0 No callers; removal pending a maintainer ruling.
-	 *
-	 * @param string $id The settings section ID.
-	 *
-	 * @return bool|WP_Error
-	 */
-	public static function delete_settings( $id ) {
-		if ( ! is_super_admin() && ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
-		}
-
-		return delete_option( self::$db_prefix . $id );
-	}
-
-	/**
 	 * Get the database version.
 	 *
 	 * @return string
@@ -624,16 +596,6 @@ class Settings {
 		}
 
 		return '';
-	}
-
-	/**
-	 * Whether the JWT may be passed as a query parameter.
-	 *
-	 * @deprecated The `use_jwt_as_param` setting was removed. `?authorization=` is accepted
-	 *             on REST requests only (Auth::get_auth_header()); this always returns false.
-	 */
-	public function use_jwt_as_param_enabled(): bool {
-		return false;
 	}
 
 	/**

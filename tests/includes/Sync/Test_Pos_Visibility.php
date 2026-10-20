@@ -52,8 +52,8 @@ class Test_Pos_Visibility extends WP_UnitTestCase {
 		$this->assertSame( array( 'post__not_in' => array() ), $visibility->apply_to_wp_query_args( array( 'post__not_in' => array() ), 'products' ) );
 		$this->assertSame( 'WHERE 1=1', $visibility->apply_to_sql_where( 'WHERE 1=1', 'wp_posts.ID', Pos_Visibility::PRODUCTS ) );
 		$this->assertSame( array( 4, 8 ), $visibility->filter_visible_children( array( 4, 8 ) ) );
-		$this->assertSame( array(), $visibility->online_only_product_ids(), 'pos_visibility_with_toggle_disabled_returns_no_exclusions' );
-		$this->assertSame( array(), $visibility->online_only_variation_ids(), 'pos_visibility_with_toggle_disabled_returns_no_exclusions' );
+		$this->assertSame( array(), $visibility->hidden_ids( Pos_Visibility::PRODUCTS ), 'pos_visibility_with_toggle_disabled_returns_no_exclusions' );
+		$this->assertSame( array(), $visibility->hidden_ids( Pos_Visibility::VARIATIONS ), 'pos_visibility_with_toggle_disabled_returns_no_exclusions' );
 	}
 
 	/**
@@ -254,19 +254,6 @@ class Test_Pos_Visibility extends WP_UnitTestCase {
 			array( 7, 9 ),
 			( new Pos_Visibility() )->filter_visible_children( array( '7', 8, 9 ) )
 		);
-	}
-
-	/**
-	 * The legacy accessors still answer, delegating to the new interface.
-	 */
-	public function test_legacy_accessors_delegate_to_hidden_ids(): void {
-		$this->enable_feature( true );
-		$this->store_hidden( array( 4 ), array( 8 ) );
-
-		$visibility = new Pos_Visibility();
-
-		$this->assertSame( array( 4 ), $visibility->online_only_product_ids() );
-		$this->assertSame( array( 8 ), $visibility->online_only_variation_ids() );
 	}
 
 	/**

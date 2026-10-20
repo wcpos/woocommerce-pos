@@ -30,13 +30,6 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
  */
 class Print_Jobs_Controller extends WP_REST_Controller {
 	/**
-	 * Legacy Epson timeout.
-	 *
-	 * @deprecated Use Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS.
-	 */
-	const EPSON_SDP_PRINT_TIMEOUT_MS = \WCPOS\WooCommercePOS\Services\Providers\Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS;
-
-	/**
 	 * Endpoint namespace.
 	 *
 	 * @var string

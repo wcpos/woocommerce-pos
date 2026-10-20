@@ -91,8 +91,10 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$second  = ProductHelper::create_simple_product();
 		$deleted = ProductHelper::create_simple_product();
 		$digest  = new Integrity_Digest();
-		$digest->upsert_digest( $first->get_id() );
-		$digest->upsert_digest( $second->get_id() );
+		$digest->record_post_saved( $first->get_id() );
+		Integrity_Digest::flush_pending_digests();
+		$digest->record_post_saved( $second->get_id() );
+		Integrity_Digest::flush_pending_digests();
 		wp_delete_post( $deleted->get_id(), true );
 
 		$response = ( new Digests_Controller() )->get_digests(
@@ -1258,7 +1260,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$variation_ids = array_map( 'intval', $product->get_children() );
 		$digest        = new Integrity_Digest();
 		foreach ( $variation_ids as $variation_id ) {
-			$digest->upsert_digest( $variation_id );
+			$digest->record_post_saved( $variation_id );
+			Integrity_Digest::flush_pending_digests();
 		}
 
 		$response = ( new Variations_Controller() )->get_variations(
@@ -1517,7 +1520,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$product     = ProductHelper::create_simple_product();
 		$bucket_size = 1000;
 		$bucket      = (int) floor( $product->get_id() / $bucket_size );
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		( new Integrity_Digest() )->record_post_saved( $product->get_id() );
+		Integrity_Digest::flush_pending_digests();
 
 		$response = ( new Integrity_Controller() )->scan(
 			$this->request(

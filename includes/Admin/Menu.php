@@ -68,8 +68,6 @@ class Menu {
 			add_action( 'admin_footer', array( $this, 'print_upgrade_click_tracking_script' ) );
 			add_action( 'admin_init', array( $this, 'redirect_template_list_page' ) );
 		}
-
-		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
 	}
 
 	/**
@@ -108,37 +106,6 @@ class Menu {
 	 */
 	public function display_upgrade_page(): void {
 		include_once 'views/upgrade.php';
-	}
-
-	/**
-	 * Add POS submenu to WooCommerce Analytics menu.
-	 *
-	 * @param array $report_pages The analytics report pages.
-	 */
-	public function analytics_menu_items( array $report_pages ): array {
-		// Find the position of the 'Orders' item.
-		$position = array_search( 'Orders', array_column( $report_pages, 'title' ), true );
-
-		// Use array_splice to add the new item.
-		array_splice(
-			$report_pages,
-			$position + 1,
-			0,
-			array(
-				array(
-					'id'       => 'woocommerce-analytics-pos',
-					'title'    => /* translators: WordPress admin menu label for WCPOS. */ __( 'POS', 'woocommerce-pos' ),
-					'parent'   => 'woocommerce-analytics',
-					'path'     => '/analytics/pos',
-					'nav_args' => array(
-						'order'  => 45,
-						'parent' => 'woocommerce-analytics',
-					),
-				),
-			)
-		);
-
-		return $report_pages;
 	}
 
 	/**
@@ -198,7 +165,7 @@ class Menu {
 			'menu_submenu',
 			admin_url( 'admin.php?page=' . PLUGIN_NAME )
 		);
-		$pos_submenu[1][2] = woocommerce_pos_url();
+		$pos_submenu[1][2] = wcpos_url();
 
 		// The "Upgrade to Pro" submenu link is persistent navigation rendered
 		// on every wp-admin page, so we deliberately do NOT emit an
