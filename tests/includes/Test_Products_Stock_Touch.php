@@ -57,9 +57,34 @@ class Test_Products_Stock_Touch extends WC_Unit_Test_Case {
 		update_option( 'woocommerce_manage_stock', 'yes' );
 
 		// The plugin bootstrap registers the hook; make sure the real hook path is exercised.
-		if ( ! has_action( 'woocommerce_product_set_stock' ) ) {
+		if ( ! $this->products_hook_registered() ) {
 			new Products();
 		}
+		$this->assertTrue( $this->products_hook_registered(), 'Precondition: Products::product_set_stock is hooked.' );
+	}
+
+	/**
+	 * Whether a Products instance listens on woocommerce_product_set_stock.
+	 *
+	 * A bare has_action() would accept any other plugin's listener.
+	 *
+	 * @return bool
+	 */
+	private function products_hook_registered(): bool {
+		global $wp_filter;
+
+		if ( empty( $wp_filter['woocommerce_product_set_stock'] ) ) {
+			return false;
+		}
+		foreach ( $wp_filter['woocommerce_product_set_stock']->callbacks as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				if ( is_array( $callback['function'] ) && $callback['function'][0] instanceof Products ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -130,6 +155,13 @@ class Test_Products_Stock_Touch extends WC_Unit_Test_Case {
 		$modified_ts = strtotime( $modified );
 		$this->assertNotFalse( $modified_ts, 'post_modified should be a valid datetime.' );
 		$this->assertLessThanOrEqual( 60, abs( strtotime( current_time( 'mysql' ) ) - $modified_ts ), 'post_modified should be recent.' );
+
+		// Incremental sync filters on the GMT column, so it must move too.
+		$modified_gmt = get_post( $product_id )->post_modified_gmt;
+		$this->assertNotSame( $backdated, $modified_gmt, 'post_modified_gmt should be bumped.' );
+		$modified_gmt_ts = strtotime( $modified_gmt . ' UTC' );
+		$this->assertNotFalse( $modified_gmt_ts, 'post_modified_gmt should be a valid datetime.' );
+		$this->assertLessThanOrEqual( 60, abs( time() - $modified_gmt_ts ), 'post_modified_gmt should be recent.' );
 	}
 
 	/**
