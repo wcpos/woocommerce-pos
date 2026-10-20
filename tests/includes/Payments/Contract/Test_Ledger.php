@@ -572,8 +572,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsArray( $ledger->record( $order, $input ) );
 		$input['register_id'] = wp_generate_uuid4();
 		$error = $ledger->record( $order, $input );
-		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
-		$this->assertSame( 409, $error->get_error_data()['status'] );
+		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
+		$this->assertSame( 422, $error->get_error_data()['status'] );
 	}
 
 	public function test_record_invalid_provenance_normalizes_to_null(): void {
@@ -920,7 +920,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'handoff', $ledger->find( $order, $input['id'] ) );
 		$this->assertSame( 'pending', $order->get_status() );
 		$error = $ledger->intent( $order, $input['id'], array_merge( $input, array( 'amount' => '21.00' ) ), array() );
-		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
+		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
 	}
 
 	/** @dataProvider capture_confirmations */
@@ -1858,10 +1858,42 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$error = Ledger::instance()->record( $order, array_merge( $input, array( 'amount' => '90.00' ) ) );
 
-		// Assert.
+		// Assert: one code across the command family for the same id with another body (§7 decision 12).
 		$this->assertWPError( $error );
-		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
-		$this->assertSame( 409, $error->get_error_data()['status'] );
+		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
+		$this->assertSame( 422, $error->get_error_data()['status'] );
+	}
+
+	/** Pin 21: Pro's callers pass no command, and its rows keep an empty command map. */
+	public function test_refund_and_void_without_a_command_store_no_entry(): void {
+		// Arrange: a captured cash row, refundable, and a pending one, voidable.
+		$order    = $this->create_pos_order();
+		$captured = $this->payment( 'pos_cash', '50.00', array( 'status' => 'captured', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		$pending  = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		Ledger::instance()->save( $order, array( $captured, $pending ), false );
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => '5.00',
+				'refund_payment' => false,
+			)
+		);
+
+		// Act: called as Pro calls them, with no command.
+		$refunded = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $captured['id'], $refund->get_id(), '5.00' );
+		$voided   = Ledger::instance()->void( wc_get_order( $order->get_id() ), $pending['id'], '' );
+
+		// Assert.
+		$this->assertSame( 'succeeded', $refunded['refunds'][0]['status'] );
+		$this->assertSame( 'voided', $voided['status'] );
+		$stored = wc_get_order( $order->get_id() );
+		foreach ( $stored->get_data_store()->read_meta( $stored ) as $meta ) {
+			if ( Ledger::META_KEY === $meta->meta_key ) {
+				foreach ( json_decode( (string) maybe_unserialize( $meta->meta_value ), true )['payments'] as $row ) {
+					$this->assertSame( array(), $row['commands'] );
+				}
+			}
+		}
 	}
 
 	/** A stored UUID replay does not depend on the gateway's current capture mode. */
@@ -2721,22 +2753,29 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	/** @dataProvider duplicate_order_lanes */
 	public function test_order_save_preserves_server_event_history( bool $existing ): void {
 		$order = $existing ? wc_create_order() : new \WC_Order();
-		$row = array( 'id' => wp_generate_uuid4(), 'status' => 'captured', 'amount' => '50', 'seen_events' => array( 'evt_1' ), 'events' => array( array( 'message' => 'Captured' ) ), 'updated_at_gmt' => '2026-10-18T12:00:00Z' );
+		$command  = wp_generate_uuid4();
+		$commands = array( $command => array( 'fp' => 'sha256:stored', 'kind' => 'capture', 'ref' => null, 'at_gmt' => '2026-10-18T12:00:00Z' ) );
+		$row = array( 'id' => wp_generate_uuid4(), 'status' => 'captured', 'amount' => '50', 'seen_events' => array( 'evt_1' ), 'events' => array( array( 'message' => 'Captured' ) ), 'commands' => $commands, 'updated_at_gmt' => '2026-10-18T12:00:00Z' );
 		if ( $existing ) {
 			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row ) ) );
 			$order->save_meta_data();
 		}
-		$pushed = array_merge( $row, array( 'seen_events' => array(), 'events' => array(), 'updated_at_gmt' => '2000-01-01T00:00:00Z' ) );
+		// A client-seeded command entry would make a later real command a silent replay (ADR 0040 rule 5).
+		$forged = array( wp_generate_uuid4() => array( 'fp' => 'sha256:forged', 'kind' => 'void', 'ref' => null, 'at_gmt' => '2000-01-01T00:00:00Z' ) );
+		$pushed = array_merge( $row, array( 'seen_events' => array(), 'events' => array(), 'commands' => $forged, 'updated_at_gmt' => '2000-01-01T00:00:00Z' ) );
 		$new = $row;
 		$new['id'] = wp_generate_uuid4();
+		$new['commands'] = $forged;
 		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $pushed, $new ) ) );
 		$order->save();
 		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
 		$this->assertSame( $existing ? $row['seen_events'] : array(), $rows[0]['seen_events'] );
 		$this->assertSame( $existing ? $row['events'] : array(), $rows[0]['events'] );
+		$this->assertSame( $existing ? $commands : array(), $rows[0]['commands'] );
 		$this->assertSame( $existing ? $row['updated_at_gmt'] : null, $rows[0]['updated_at_gmt'] ?? null );
 		$this->assertSame( array(), $rows[1]['seen_events'] );
 		$this->assertSame( array(), $rows[1]['events'] );
+		$this->assertSame( array(), $rows[1]['commands'] );
 		$this->assertArrayNotHasKey( 'updated_at_gmt', $rows[1] );
 	}
 

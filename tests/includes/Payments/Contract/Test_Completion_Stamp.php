@@ -13,9 +13,12 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /** One entry per completion at a register, from every completion path, with its own provenance. */
 class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
+	use Money_Route_Envelope;
+
 	private const REGISTER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 	private const REGISTER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 	private const SESSION_A  = 'aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa';
@@ -205,7 +208,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$reopened->save();
 		$synthesised = $this->stored_history( $order->get_id() );
 		$request     = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
-		$request->set_body_params( array( 'provenance' => $this->provenance( self::REGISTER_B, self::SESSION_B ) ) );
+		$request->set_body_params( $this->envelope( $order, array( 'provenance' => $this->provenance( self::REGISTER_B, self::SESSION_B ) ) ) );
 		$response = $this->server->dispatch( $request );
 
 		// Assert.
@@ -620,7 +623,9 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 			$moved->save();
 		}
 		$history = $this->stored_history( $order->get_id() );
-		$closed  = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' ) );
+		$close   = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
+		$close->set_body_params( $this->envelope( $order ) );
+		$closed = $this->server->dispatch( $close );
 
 		// Assert.
 		$this->assertCount( 1, $history );
@@ -906,7 +911,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		if ( null !== $provenance ) {
 			$body['provenance'] = $provenance;
 		}
-		$request->set_body_params( $body );
+		$request->set_body_params( $this->envelope( $order, $body ) );
 		return $this->server->dispatch( $request );
 	}
 
@@ -921,10 +926,13 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 	protected function submit( \WC_Order $order, string $attempt, string $method, array $provenance ): \WP_REST_Response {
 		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/' . $method . '/submit' );
 		$request->set_body_params(
-			array(
-				'attempt_id' => $attempt,
-				'values'     => array(),
-				'provenance' => $provenance,
+			$this->envelope(
+				$order,
+				array(
+					'attempt_id' => $attempt,
+					'values'     => array(),
+					'provenance' => $provenance,
+				)
 			)
 		);
 		return $this->server->dispatch( $request );

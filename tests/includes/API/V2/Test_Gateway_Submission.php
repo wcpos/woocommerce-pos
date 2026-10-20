@@ -11,9 +11,12 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /** Submission reads money from the gateway, not from the verb. */
 class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
+	use Money_Route_Envelope;
+
 	/** Install real test gateways, enabled for the POS, before registering routes. */
 	public function setUp(): void {
 		add_filter( 'woocommerce_payment_gateways', array( $this, 'gateways' ) );
@@ -249,7 +252,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( get_current_user_id(), $stamp['cashier_id'] );
 		$this->assertNotEmpty( $stamp['sent_at_gmt'] );
 		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
-		$this->assertSame( $response->get_data(), $this->submit( $order, $attempt, array() )->get_data() );
+		$this->assertSame( $this->without_revision( $response ), $this->without_revision( $this->submit( $order, $attempt, array() ) ) );
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 
@@ -630,7 +633,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( $data['order']['status'], wc_get_is_paid_statuses() );
 		$this->assertSame( 'wcpos_paid_test', $data['order']['payment_method'] );
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
-		$this->assertSame( array( 'outcome' => 'paid', 'payment' => null, 'order' => $data['order'] ), $this->submit( $order, $attempt, array(), 'wcpos_paid_test' )->get_data() );
+		$this->assertSame( array( 'outcome' => 'paid', 'payment' => null, 'order' => $data['order'] ), $this->without_revision( $this->submit( $order, $attempt, array(), 'wcpos_paid_test' ) ) );
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
 	}
 
@@ -1006,7 +1009,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
 		$this->assertContains( 'Settled via POS: Send invoice on Pending payment', $notes );
 		// A replay answers settled again without calling the gateway; nothing awaits cancelling.
-		$this->assertSame( $response->get_data(), $this->submit( $order, $attempt, array() )->get_data() );
+		$this->assertSame( $this->without_revision( $response ), $this->without_revision( $this->submit( $order, $attempt, array() ) ) );
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 		$this->assertSame( 409, $this->cancel( $order, $attempt )->get_status() );
 	}
@@ -1256,9 +1259,12 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 	private function submit( $order, $attempt, $values, $method = 'wcpos_sent_test' ): \WP_REST_Response {
 		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/' . $method . '/submit' );
 		$request->set_body_params(
-			array(
-				'attempt_id' => $attempt,
-				'values'     => $values,
+			$this->envelope(
+				$order,
+				array(
+					'attempt_id' => $attempt,
+					'values'     => $values,
+				)
 			)
 		);
 		return $this->server->dispatch( $request );
@@ -1277,8 +1283,485 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		if ( null !== $attempt ) {
 			$body['attempt_id'] = $attempt;
 		}
+		$request->set_body_params( $this->envelope( $order, $body ) );
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * An answer without its revision: a replay under a new command id keeps an entry, which moves it.
+	 *
+	 * @param \WP_REST_Response $response Response.
+	 */
+	private function without_revision( \WP_REST_Response $response ): array {
+		$data = $response->get_data();
+		unset( $data['revision'] );
+		return $data;
+	}
+
+	/**
+	 * POST a gateway command body as given (its own command id and revision).
+	 *
+	 * @param \WC_Order $order  Order.
+	 * @param string    $verb   submit or cancel.
+	 * @param array     $body   Body.
+	 * @param string    $method Gateway ID.
+	 */
+	private function gateway_command( \WC_Order $order, string $verb, array $body, string $method = 'wcpos_sent_test' ): \WP_REST_Response {
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payment-methods/' . $method . '/' . $verb );
 		$request->set_body_params( $body );
 		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * The order's command map as storage holds it.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	private function stored_commands( int $order_id ): array {
+		$order = wc_get_order( $order_id );
+		foreach ( $order->get_data_store()->read_meta( $order ) as $meta ) {
+			if ( '_wcpos_commands' === $meta->meta_key ) {
+				return (array) json_decode( (string) maybe_unserialize( $meta->meta_value ), true );
+			}
+		}
+		return array();
+	}
+
+	/** Pin 8: a submit that answered `sent` replays from the command map, even once the attempt history lost it. */
+	public function test_submit_that_returned_sent_replays_sent_from_the_command_map_with_a_stale_revision(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+
+		// Act.
+		$first = $this->gateway_command( $order, 'submit', $body );
+		$again = $this->gateway_command( $order, 'submit', $body );
+		$evict = wc_get_order( $order->get_id() );
+		$evict->delete_meta_data( Gateway_Submission::ATTEMPTS_META_KEY );
+		$evict->save();
+		$after = $this->gateway_command( $order, 'submit', $body );
+
+		// Assert.
+		$this->assertSame( 'sent', $first->get_data()['outcome'] );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'sent', $again->get_data()['outcome'] );
+		$this->assertSame( 200, $after->get_status(), wp_json_encode( $after->get_data() ) );
+		$this->assertSame( 'sent', $after->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$notes = array_filter( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), static fn( $note ) => 0 === strpos( $note->content, 'Sent via POS' ) );
+		$this->assertCount( 1, $notes );
+		$this->assertSame( 'sent', $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['outcome'] );
+	}
+
+	/** Pin 9: the same submit command id with other values is a 422; nothing is sent or stamped again. */
+	public function test_submit_replay_with_a_different_body_is_422(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$this->assertSame( 200, $this->gateway_command( $order, 'submit', $body )->get_status() );
+		$stamp = Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) );
+
+		// Act.
+		$response = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'values' => array( 'invoice_email' => 'other@example.com' ) ) ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $response->get_data()['code'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$this->assertSame( $stamp, Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** Pin 10: a definite gateway failure keeps no command; the attempt stays terminal; a new attempt dispatches. */
+	public function test_a_definite_gateway_failure_stores_no_command_and_leaves_the_attempt_terminal(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$body    = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		Sent_Test_Gateway::$failure = 'failure';
+
+		// Act.
+		$failed = $this->gateway_command( $order, 'submit', $body );
+		Sent_Test_Gateway::$failure = '';
+		$retried = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+		$another = $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+
+		// Assert.
+		$this->assertSame( 502, $failed->get_status() );
+		$this->assertSame( 'wcpos_provider_error', $failed->get_data()['code'] );
+		$this->assertArrayNotHasKey( $body['command_id'], $this->stored_commands( $order->get_id() ) );
+		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) )[ $attempt ] );
+		$this->assertSame( 409, $retried->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $retried->get_data()['code'] );
+		$this->assertSame( 200, $another->get_status() );
+		$this->assertSame( 2, Sent_Test_Gateway::$calls );
+	}
+
+	/** Pin 11: a cancel retried with its command replays from the command map on the revision before it. */
+	public function test_cancel_replays_from_the_command_map(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$body = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'reason'     => 'Customer changed mind',
+			)
+		);
+
+		// Act.
+		$first = $this->gateway_command( $order, 'cancel', $body );
+		$notes = count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+		$again = $this->gateway_command( $order, 'cancel', $body );
+
+		// Assert.
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( array( 'order', 'revision' ), array_keys( $again->get_data() ) );
+		$this->assertSame( 'pos-open', $again->get_data()['order']['status'] );
+		$this->assertSame( $notes, count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) ) );
+		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) )[ $attempt ] );
+		$this->assertSame( $attempt, $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['ref'] );
+	}
+
+	/** Pin 27: a submit retried after its attempt was cancelled or superseded meets the state conflict, not its stored `sent`. */
+	public function test_a_submit_replay_after_the_attempt_was_cancelled_is_the_state_conflict(): void {
+		// Arrange: A sent under c1, then cancelled.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$this->assertSame( 200, $this->gateway_command( $order, 'submit', $body )->get_status() );
+		$this->assertSame( 200, $this->cancel( $order, $body['attempt_id'] )->get_status() );
+
+		// Act.
+		$cancelled = $this->gateway_command( $order, 'submit', $body );
+
+		// Arrange: A2 sent under c3, superseded by B.
+		$other = $this->create_pos_order();
+		$sent  = $this->envelope(
+			$other,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$this->assertSame( 200, $this->gateway_command( $other, 'submit', $sent )->get_status() );
+		$this->assertSame( 200, $this->submit( $other, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+
+		// Act.
+		$superseded = $this->gateway_command( $other, 'submit', $sent );
+
+		// Assert.
+		$this->assertSame( 409, $cancelled->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $cancelled->get_data()['code'] );
+		$this->assertSame( 409, $superseded->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $superseded->get_data()['code'] );
+		$this->assertSame( 3, Sent_Test_Gateway::$calls );
+	}
+	/** Pin 37: a submit whose command entry does not reach storage before dispatch is a retryable conflict; nothing is sent. */
+	public function test_a_submit_whose_command_entry_is_not_stored_is_refused_before_dispatch(): void {
+		// Arrange: every order save loses a staged command map.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$drop = static function ( $saving ): void {
+			$saving->delete_meta_data( '_wcpos_commands' );
+		};
+		add_action( 'woocommerce_before_order_object_save', $drop, 1 );
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		}
+		$attempts = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$sent     = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertArrayNotHasKey( $body['attempt_id'], $attempts );
+		$this->assertSame( 200, $sent->get_status(), wp_json_encode( $sent->get_data() ) );
+		$this->assertSame( 'sent', $sent->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$this->assertSame( 'sent', $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['outcome'] );
+	}
+	/** A hook that drops the staged command map from every order save, for the storage-miss pins. */
+	private function drop_command_map(): callable {
+		$drop = static function ( $saving ): void {
+			$saving->delete_meta_data( '_wcpos_commands' );
+		};
+		add_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		return $drop;
+	}
+
+	/** Pin 38: a cancel whose entry does not reach storage is answered 409; the cancel itself stands. */
+	public function test_a_cancel_whose_command_entry_is_not_stored_is_a_retryable_conflict(): void {
+		// Arrange: a sent attempt; then every save loses the command map.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$body = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'reason'     => 'Customer changed mind',
+			)
+		);
+		$drop = $this->drop_command_map();
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'cancel', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		}
+		$stored = wc_get_order( $order->get_id() );
+		$notes  = count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+		$again  = $this->gateway_command( $order, 'cancel', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( $stored )[ $attempt ] );
+		$this->assertSame( 'pos-open', $stored->get_status() );
+		$this->assertSame( 409, $again->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $again->get_data()['code'] );
+		$this->assertSame( $notes, count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) ) );
+	}
+
+	/** Pin 39: a replay answered from the attempt history under a new command id is 409 when its entry is lost. */
+	public function test_a_history_answer_whose_command_entry_is_not_stored_is_a_retryable_conflict(): void {
+		// Arrange: attempt A sent; a new command id names it while the map cannot be saved.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$body = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$drop = $this->drop_command_map();
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		}
+		$attempts = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$again    = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertSame( 'sent', $attempts[ $attempt ] );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'sent', $again->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$this->assertSame( 'sent', $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['outcome'] );
+	}
+	/** Pin 40: a submit whose attempt did not land keeps no command entry either; the retry dispatches once. */
+	public function test_a_submit_whose_attempt_is_not_stored_keeps_no_command_entry(): void {
+		// Arrange: every save loses a staged attempt history; the command map lands.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$drop = static function ( $saving ): void {
+			$saving->delete_meta_data( Gateway_Submission::ATTEMPTS_META_KEY );
+		};
+		add_action( 'woocommerce_before_order_object_save', $drop, 1 );
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		}
+		$commands = $this->stored_commands( $order->get_id() );
+		$attempts = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$sent     = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertArrayNotHasKey( $body['command_id'], $commands );
+		$this->assertArrayNotHasKey( $body['attempt_id'], $attempts );
+		$this->assertSame( 200, $sent->get_status(), wp_json_encode( $sent->get_data() ) );
+		$this->assertSame( 'sent', $sent->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
+	/** Pin 41: a cancel whose stamp deletion was lost keeps no entry, so its retry runs the cancel again. */
+	public function test_a_cancel_whose_stamp_is_not_cleared_keeps_no_command_entry(): void {
+		// Arrange: a sent attempt; then every save puts the stamp back.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$stamp = Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) );
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'reason'     => 'Customer changed mind',
+			)
+		);
+		$keep = static function ( $saving ) use ( $stamp ): void {
+			if ( null === Gateway_Submission::read_stamp( $saving ) ) {
+				$saving->update_meta_data( Gateway_Submission::STAMP_META_KEY, $stamp );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $keep, 1 );
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'cancel', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $keep, 1 );
+		}
+		$commands  = $this->stored_commands( $order->get_id() );
+		$cancelled = $this->gateway_command( $order, 'cancel', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertArrayNotHasKey( $body['command_id'], $commands );
+		$this->assertSame( 200, $cancelled->get_status(), wp_json_encode( $cancelled->get_data() ) );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( $stored )[ $attempt ] );
+		$this->assertArrayHasKey( $body['command_id'], $this->stored_commands( $order->get_id() ) );
+	}
+	/**
+	 * A hook that keeps the stored attempt history over a staged `cancelled` for the attempt, a number of times.
+	 *
+	 * @param string $attempt Attempt id.
+	 * @param int    $times   How many cleanup saves lose the history write.
+	 */
+	private function lose_cancelled_history( string $attempt, int $times ): callable {
+		$lost = 0;
+		$hook = static function ( $saving ) use ( $attempt, $times, &$lost ): void {
+			if ( 'cancelled' !== ( Gateway_Submission::read_attempts( $saving )[ $attempt ] ?? null ) || $lost >= $times ) {
+				return;
+			}
+			++$lost;
+			$stored = wc_get_order( $saving->get_id() );
+			$stored->read_meta_data( true );
+			$saving->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $stored->get_meta( Gateway_Submission::ATTEMPTS_META_KEY ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $hook, 1 );
+		return $hook;
+	}
+
+	/** Pin 42: a declined attempt's cleanup that lands only half is written again: attempt cancelled, no entry. */
+	public function test_a_declined_attempts_half_landed_cleanup_is_written_again(): void {
+		// Arrange: the gateway declines; the first cleanup save loses the attempt's fate.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		Sent_Test_Gateway::$failure = 'failure';
+		$hook = $this->lose_cancelled_history( $body['attempt_id'], 1 );
+
+		// Act.
+		try {
+			$declined = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $hook, 1 );
+			Sent_Test_Gateway::$failure = '';
+		}
+		$attempts = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$commands = $this->stored_commands( $order->get_id() );
+		$retried  = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 502, $declined->get_status() );
+		$this->assertSame( 'wcpos_provider_error', $declined->get_data()['code'] );
+		$this->assertSame( 'cancelled', $attempts[ $body['attempt_id'] ] );
+		$this->assertArrayNotHasKey( $body['command_id'], $commands );
+		$this->assertSame( 409, $retried->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $retried->get_data()['code'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
+	/** Pin 42: a cleanup that never lands keeps the provider's 502 and says what is left, for a human (no sweeper reads attempts). */
+	public function test_a_declined_attempts_cleanup_that_never_lands_is_logged(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		Sent_Test_Gateway::$failure = 'failure';
+		$hook   = $this->lose_cancelled_history( $body['attempt_id'], PHP_INT_MAX );
+		$logged = array();
+		$log    = static function ( $should_log, $message ) use ( &$logged ) {
+			$logged[] = $message;
+			return false;
+		};
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+
+		// Act.
+		try {
+			$declined = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $hook, 1 );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			Sent_Test_Gateway::$failure = '';
+		}
+
+		// Assert.
+		$this->assertSame( 502, $declined->get_status() );
+		$this->assertSame( 'wcpos_provider_error', $declined->get_data()['code'] );
+		$residual = array_filter( $logged, static fn( $line ) => false !== strpos( (string) $line, 'cleanup did not land' ) );
+		$this->assertCount( 1, $residual );
+		$this->assertStringContainsString( 'attempt cancelled: false', (string) reset( $residual ) );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 }
 

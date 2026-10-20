@@ -13,10 +13,12 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Service_Groups;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /** Fiscal lifecycle observers and immutable corrections. */
 class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
+	use Money_Route_Envelope;
 
 	/** Restore writer hooks between tests. */
 	public function setUp(): void {
@@ -143,7 +145,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 
 	/** Completion 2 at another register names that register in its frozen document as well as its columns. */
 	public function test_a_recompletion_at_another_register_names_it_in_the_payload_and_the_columns(): void {
-		// Arrange: completed at register A (the till tuple), reopened.
+		// Arrange: completed at register A (the till tuple), reopened. Free holds one register.
+		$this->use_multi_register_repository();
 		$registers = new \WCPOS\WooCommercePOS\Services\Register_Store();
 		$a         = $registers->create(
 			array(
@@ -548,12 +551,15 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		try {
 			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 			$request->set_body_params(
-				array(
-					'payment' => array(
-						'id' => wp_generate_uuid4(),
-						'method_id' => 'pos_cash',
-						'amount' => '100.00',
-					),
+				$this->envelope(
+					$order,
+					array(
+						'payment' => array(
+							'id' => wp_generate_uuid4(),
+							'method_id' => 'pos_cash',
+							'amount' => '100.00',
+						),
+					)
 				)
 			);
 			$row = $this->server->dispatch( $request )->get_data()['payment'];
@@ -624,12 +630,15 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			function () use ( $order, &$row ): void {
 				$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 				$request->set_body_params(
-					array(
-						'payment' => array(
-							'id' => wp_generate_uuid4(),
-							'method_id' => 'pos_cash',
-							'amount' => '100.00',
-						),
+					$this->envelope(
+						$order,
+						array(
+							'payment' => array(
+								'id' => wp_generate_uuid4(),
+								'method_id' => 'pos_cash',
+								'amount' => '100.00',
+							),
+						)
 					)
 				);
 				$row = $this->server->dispatch( $request )->get_data()['payment'];
@@ -773,12 +782,15 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		try {
 			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 			$request->set_body_params(
-				array(
-					'payment' => array(
-						'id' => wp_generate_uuid4(),
-						'method_id' => 'pos_cash',
-						'amount' => '100.00',
-					),
+				$this->envelope(
+					$order,
+					array(
+						'payment' => array(
+							'id' => wp_generate_uuid4(),
+							'method_id' => 'pos_cash',
+							'amount' => '100.00',
+						),
+					)
 				)
 			);
 			$recorded = $this->server->dispatch( $request );
@@ -1144,12 +1156,92 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertCount( 1, $records );
 		$this->assertSame( $sale['id'], $records[0]['corrects_record_id'] );
+		unset( $row['commands'], $applied['commands'] ); // The command maps never enter a fiscal payload.
 		$this->assertSame( $row, $records[0]['payload']['row'] );
 		$this->assertSame( $applied, $records[0]['payload']['voided_row'] );
 		$this->assertSame( 'Changed mind', $records[0]['payload']['reason'] );
 		$this->assertSame( get_current_user_id(), $records[0]['payload']['actor_id'] );
 		$this->assertNull( $records[0]['device_time'] );
 		$this->assertNull( $records[0]['device_tz'] );
+	}
+
+	/** Pin 35: a void record's payload carries the rows without their command maps. */
+	public function test_a_void_payload_carries_no_command_entries(): void {
+		// Arrange: a cash row recorded and voided under commands, on a reopened sale.
+		$order = $this->order();
+		$this->seed_completion( $order );
+		Fiscal_Record_Writers::instance()->record_sale( $order );
+		Completion_Fixture::reopen( $order );
+		$id  = wp_generate_uuid4();
+		$row = Ledger::instance()->record(
+			$order,
+			array(
+				'id' => $id,
+				'method_id' => 'pos_cash',
+				'amount' => '20.00',
+			),
+			array(),
+			array( 'id' => $id, 'fp' => 'sha256:record', 'kind' => 'record' )
+		);
+		$this->assertArrayHasKey( $id, $row['commands'] );
+
+		// Act.
+		Ledger::instance()->void( $order, $id, 'Changed mind', array( 'id' => wp_generate_uuid4(), 'fp' => 'sha256:void', 'kind' => 'void' ) );
+
+		// Assert.
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'void',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertArrayNotHasKey( 'commands', $records[0]['payload']['row'] );
+		$this->assertArrayNotHasKey( 'commands', $records[0]['payload']['voided_row'] );
+	}
+
+	/** Pin 35: sale and late-sale payloads built from rows with command entries carry none. */
+	public function test_sale_and_late_sale_payloads_carry_no_command_entries(): void {
+		// Arrange: the closure fixture's rows each carry a command entry.
+		$session = $this->closure_session();
+		$fields  = $this->closure_fields( $session );
+		$fields['counted'] = array(
+			'cash' => '101',
+			'card' => '30',
+		);
+		$closure = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $fields );
+		$order   = $this->closure_ledger( $session );
+		$rows    = array_map(
+			static function ( array $row ): array {
+				$row['commands'] = array( wp_generate_uuid4() => array( 'fp' => 'sha256:x', 'kind' => 'capture', 'ref' => null, 'at_gmt' => gmdate( 'c' ) ) );
+				return $row;
+			},
+			Ledger::instance()->read( $order )
+		);
+		Ledger::instance()->save( $order, $rows, false );
+		global $wpdb;
+		$this->seed_completion( $order );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->record_sale( $order );
+		$store = new Fiscal_Record_Store();
+		$sale  = $store->find_sale( $order->get_id() );
+		$wpdb->update( $store->table_name(), array( 'received_at_gmt' => $closure['received_at_gmt'] ), array( 'id' => $sale['id'] ) );
+		Fiscal_Record_Writers::instance()->record_sale( $order );
+
+		// Assert.
+		$late = $store->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $late );
+		$this->assertNotEmpty( $late[0]['payload']['tender_rows'] );
+		foreach ( $late[0]['payload']['tender_rows'] as $tender ) {
+			$this->assertArrayNotHasKey( 'commands', $tender );
+		}
+		$this->assertStringNotContainsString( '"commands"', (string) wp_json_encode( $store->find_sale( $order->get_id() )['payload'] ) );
 	}
 
 	/** Pending and authorized voids fire action but write no records. */

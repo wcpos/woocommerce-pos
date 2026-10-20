@@ -24,6 +24,7 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WP_REST_Request;
 
 /**
@@ -31,6 +32,8 @@ use WP_REST_Request;
  * @covers \WCPOS\WooCommercePOS\API\V2\Write_Controller
  */
 class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
+	use Money_Route_Envelope;
+
 	protected const REC = '6c0d4e2a-7b1f-4c3d-9e5a-1f2b3c4d5e6f';
 	private $mutation_seq = 0;
 	/** @var string Mutation id of the last push. */
@@ -732,6 +735,53 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		);
 	}
 
+	/**
+	 * POST a money command with a fresh envelope.
+	 *
+	 * @param string $path     Route path.
+	 * @param int    $order_id Order id.
+	 * @param array  $body     Body.
+	 */
+	protected function money_command( string $path, int $order_id, array $body = array() ) {
+		$request = $this->wp_rest_post_request( $path );
+		$request->set_body_params( $this->envelope( $order_id, $body ) );
+		return $this->server->dispatch( $request );
+	}
+
+	/** Pin 5: a money command moves the revision a later push compares against, and both lanes agree on it. */
+	public function test_a_record_moves_the_revision_a_later_push_compares_against(): void {
+		// Arrange: the push lane's revision of an open order, and the money routes' own.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$b0       = $this->order_revision( $order_id );
+		$this->assertSame( $b0, Order_Serializer::current_state( $order_id )['revision'] );
+
+		// Act: cash is recorded; a note push built on b0 follows, then the same push on the new revision.
+		$record = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params(
+			array(
+				'payment'  => $this->cash_payment( '5.00' ),
+				'revision' => $b0,
+			)
+		);
+		$recorded = $this->server->dispatch( $record );
+		$r1       = $recorded->get_data()['revision'];
+		$note     = array(
+			'customer_note' => 'Gift wrap',
+			'meta_data'     => $this->uuid_meta(),
+		);
+		$stale    = $this->push_envelope( 'update', $note, $b0 );
+		$fresh    = $this->push_envelope( 'update', $note, $r1 );
+
+		// Assert.
+		$this->assertSame( 200, $recorded->get_status(), 'Response: ' . wp_json_encode( $recorded->get_data() ) );
+		$this->assertNotSame( $b0, $r1 );
+		$this->assertSame( 409, $stale->get_status(), 'Response: ' . wp_json_encode( $stale->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] );
+		$this->assertSame( $r1, $stale->get_data()['currentRevision'] );
+		$this->assertSame( 200, $fresh->get_status(), 'Response: ' . wp_json_encode( $fresh->get_data() ) );
+		$this->assertSame( 'Gift wrap', wc_get_order( $order_id )->get_customer_note() );
+	}
+
 	protected function assert_money_in_motion( $response, int $order_id, string $status ): void {
 		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( 'wcpos_money_in_motion', $response->get_data()['code'] );
@@ -859,9 +909,12 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$order_id   = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
 		$record     = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
 		$record->set_body_params(
-			array(
-				'payment' => $this->cash_payment( '20.00' ),
-				'provenance' => array( 'register_id' => $register_a ),
+			$this->envelope(
+				$order_id,
+				array(
+					'payment' => $this->cash_payment( '20.00' ),
+					'provenance' => array( 'register_id' => $register_a ),
+				)
 			)
 		);
 		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
@@ -870,7 +923,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		// Act: the push reopens it; register B closes it.
 		$reopen = $this->push_status( $order_id, 'pos-open' );
 		$close  = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' );
-		$close->set_body_params( array( 'provenance' => array( 'register_id' => $register_b ) ) );
+		$close->set_body_params( $this->envelope( $order_id, array( 'provenance' => array( 'register_id' => $register_b ) ) ) );
 		$closed = $this->server->dispatch( $close );
 
 		// Assert.
@@ -992,7 +1045,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 			'total'    => '50.00',
 		);
 		$edit   = $this->push_envelope( 'update', $edit, $this->order_revision( $order_id ) );
-		$closed = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+		$closed = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/close', $order_id );
 
 		// Assert.
 		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
@@ -1013,7 +1066,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$row = Ledger::instance()->read( wc_get_order( $order_id ) )[0];
 
 		// Act.
-		$void   = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments/' . $row['id'] . '/void' ) );
+		$void   = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/payments/' . $row['id'] . '/void', $order_id );
 		$refund = wc_create_refund(
 			array(
 				'order_id' => $order_id,
@@ -1023,9 +1076,12 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		);
 		$allocate = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments/' . $row['id'] . '/refund' );
 		$allocate->set_body_params(
-			array(
-				'refund_id' => $refund->get_id(),
-				'amount' => '10.00',
+			$this->envelope(
+				$order_id,
+				array(
+					'refund_id' => $refund->get_id(),
+					'amount' => '10.00',
+				)
 			)
 		);
 		$allocated = $this->server->dispatch( $allocate );
@@ -1043,7 +1099,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		// Arrange: adopted, closed, reopened again.
 		$order_id = $this->gateway_paid_order();
 		$this->assertSame( 200, $this->push_status( $order_id, 'pos-open' )->get_status() );
-		$closed = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+		$closed = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/close', $order_id );
 		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
 		$before = $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) );
 
@@ -1061,7 +1117,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		// Arrange.
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
 		$record   = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
-		$record->set_body_params( array( 'payment' => $this->cash_payment( '20.00' ) ) );
+		$record->set_body_params( $this->envelope( $order_id, array( 'payment' => $this->cash_payment( '20.00' ) ) ) );
 		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
 		$before = $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) );
 
@@ -1093,7 +1149,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		);
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
 		$record   = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
-		$record->set_body_params( array( 'payment' => $this->cash_payment( '20.00' ) ) );
+		$record->set_body_params( $this->envelope( $order_id, array( 'payment' => $this->cash_payment( '20.00' ) ) ) );
 		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
 		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
 		$this->assertCount( 1, Completion_Stamp::read( wc_get_order( $order_id ) ) );
@@ -1102,7 +1158,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$reopen  = $this->push_status( $order_id, 'pos-open' );
 		$marked  = Completion_Stamp::read( wc_get_order( $order_id ) );
 		$edit    = $this->push_envelope( 'update', $this->quantity_edit( $order_id, -1 ), $this->order_revision( $order_id ) );
-		$closed  = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+		$closed  = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/close', $order_id );
 
 		// Assert.
 		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );

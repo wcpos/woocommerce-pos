@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /** Refunds charge their own session, never the sale's session. */
 class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
@@ -19,6 +20,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		tearDown as fixture_tear_down;
 	}
 	use HPOSToggleTrait;
+	use Money_Route_Envelope;
 
 	/** Orders whose unstamped records need cleanup too.
 	 *
@@ -100,13 +102,16 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		$id = wp_generate_uuid4();
 		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 		$request->set_body_params(
-			array(
-				'payment' => array(
-					'id' => $id,
-					'method_id' => $method,
-					'amount' => '50',
-					'session_id' => $session['id'],
-				),
+			$this->envelope(
+				$order,
+				array(
+					'payment' => array(
+						'id' => $id,
+						'method_id' => $method,
+						'amount' => '50',
+						'session_id' => $session['id'],
+					),
+				)
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -152,9 +157,12 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	private function allocate( \WC_Order $order, string $payment, \WC_Order_Refund $refund, string $amount = '10' ): void {
 		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $payment . '/refund' );
 		$request->set_body_params(
-			array(
-				'refund_id' => $refund->get_id(),
-				'amount' => $amount,
+			$this->envelope(
+				$order,
+				array(
+					'refund_id' => $refund->get_id(),
+					'amount' => $amount,
+				)
 			)
 		);
 		$response = $this->server->dispatch( $request );
