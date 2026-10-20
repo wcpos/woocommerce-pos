@@ -2669,6 +2669,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			$order->save();
 			$this->assertSame( $before, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 			$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+			// Reading the refusal also clears it, so it cannot leak to a later order that reuses this id.
+			$this->assertTrue( Ledger::save_was_refused( $order->get_id() ) );
 		} finally {
 			$lock->release( $order->get_id() );
 		}

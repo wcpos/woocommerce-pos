@@ -18,7 +18,7 @@ trait Session_Expected_Tests {
 	/** Cash-kind gateways share the drawer; other tenders retain their identity. */
 	public function test_expected_counts_every_cash_kind_tender_as_the_drawer(): void {
 		$store = new Register_Session_Store();
-		$register = ( new Register_Store() )->create( array( 'name' => 'Cash kind fixture' ) );
+		$register = ( new Register_Store() )->list( array() )[0];
 		$session = $store->create(
 			array(
 				'id' => wp_generate_uuid4(),
@@ -55,7 +55,7 @@ trait Session_Expected_Tests {
 	/** The seeded contract is also exposed unchanged by the v2 detail resource. */
 	public function test_expected_seeded_ledger_and_distinct_sales_count(): void {
 		$store = new Register_Session_Store();
-		$register = ( new Register_Store() )->create( array( 'name' => 'Expected fixture' ) );
+		$register = ( new Register_Store() )->list( array() )[0];
 		$session = $store->create(
 			array(
 				'id' => wp_generate_uuid4(),
@@ -160,7 +160,6 @@ trait Session_Expected_Tests {
 			global $wpdb;
 			$wpdb->query( 'ROLLBACK' );
 			$wpdb->delete( $store->table_name(), array( 'id' => $session['id'] ) );
-			$wpdb->delete( ( new Register_Store() )->table_name(), array( 'id' => $register['id'] ) );
 			$this->start_transaction();
 		}
 	}

@@ -40,6 +40,11 @@ class Test_Activator extends WP_UnitTestCase {
 	private const ROLE_CAPS_SYNCED_OPTION = 'woocommerce_pos_role_caps_synced';
 
 	/**
+	 * Free's register option.
+	 */
+	private const REGISTER_OPTION = 'wcpos_register';
+
+	/**
 	 * Reset options and hooks before each test.
 	 */
 	public function setUp(): void {
@@ -1423,35 +1428,6 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
-	/** A schema-9 install without an active register is seeded before the fold adds the closure columns. */
-	public function test_schema_nine_install_without_register_seeds_one_and_latches(): void {
-		// Arrange.
-		global $wpdb;
-		$fixture = $this->arrange_schema_nine_with_legacy_closures();
-		$registers = ( new \WCPOS\WooCommercePOS\Services\Register_Store() )->table_name();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
-		$active = $wpdb->get_col( "SELECT id FROM {$registers} WHERE status = 'active'" );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
-		$wpdb->query( "UPDATE {$registers} SET status = 'archived' WHERE status = 'active'" );
-		try {
-			// Act.
-			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
-			( new Activator() )->install_sync_schema();
-
-			// Assert.
-			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
-			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$registers} WHERE status = 'active'" ) );
-		} finally {
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table.
-			$wpdb->query( "DELETE FROM {$registers} WHERE status = 'active'" );
-			foreach ( $active as $id ) {
-				$wpdb->update( $registers, array( 'status' => 'active' ), array( 'id' => $id ) );
-			}
-			$this->restore_closure_schema( $fixture );
-		}
-	}
-
 	/** An orphaned legacy closure stops the fold: latch, table and log say so, and no closure is minted. */
 	public function test_closure_fold_with_orphan_closure_keeps_latch_table_and_logs_error(): void {
 		// Arrange.
@@ -1846,7 +1822,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
@@ -1873,7 +1849,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
 			$this->assertSame( $fixture['expected'][0], $store->list( $fixture['sessions'][0] ) );
@@ -2019,7 +1995,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $folded ) );
 			$listed = $store->list( $fixture['sessions'][0] );
@@ -2347,6 +2323,338 @@ class Test_Activator extends WP_UnitTestCase {
 		$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $fixture['register_id'] ) );
 		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '10' );
 		( new Activator() )->install_sync_schema();
+		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
+		$wpdb->query( 'COMMIT' );
+	}
+
+	/** Schema 12 keeps the register with the most recent session under its UUID, retires the others with full rows, drops the table and latches. */
+	public function test_register_fold_on_schema_eleven_keeps_most_recent_and_retires_others(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$option = get_option( self::REGISTER_OPTION );
+			// The stored row keeps the dev site's store for Pro's adoption; Free serves it with none.
+			$this->assertSame( $fixture['rows']['recent'], $option['register'] );
+			$this->assertSame( 12, $option['register']['store_id'] );
+			$this->assertSame(
+				array(
+					$fixture['rows']['idle']['id'] => $fixture['rows']['idle'],
+					$fixture['rows']['older']['id'] => $fixture['rows']['older'],
+				),
+				$option['retired']
+			);
+			$registers = new \WCPOS\WooCommercePOS\Services\Register_Store();
+			$this->assertSame( array( $fixture['rows']['recent']['id'] ), array_column( $registers->list( array() ), 'id' ) );
+			$this->assertNull( $registers->get( $fixture['rows']['recent']['id'] )['store_id'] );
+			$this->assertSame( 'Older till', $registers->display_name( $fixture['rows']['older']['id'] ) );
+
+			// Act: a re-run has no table to copy and changes nothing.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( $option, get_option( self::REGISTER_OPTION ) );
+		} finally {
+			$this->restore_register_schema( $fixture );
+		}
+	}
+
+	/** Without any session the oldest register is kept; an option register the table also holds is kept instead. */
+	public function test_register_fold_keeps_oldest_without_sessions_and_an_option_register_the_table_holds(): void {
+		global $wpdb;
+		foreach ( array( 'no sessions', 'option holds one' ) as $case ) {
+			// Arrange.
+			$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+			if ( 'no sessions' === $case ) {
+				$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $fixture['rows']['recent']['id'] ) );
+				$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $fixture['rows']['older']['id'] ) );
+				$keep = 'idle';
+			} else {
+				update_option( self::REGISTER_OPTION, array( 'register' => array_replace( $fixture['rows']['older'], array( 'name' => 'Renamed by new code' ) ) ), true );
+				$keep = 'older';
+			}
+			try {
+				// Act.
+				update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+				( new Activator() )->install_sync_schema();
+
+				// Assert.
+				$option = get_option( self::REGISTER_OPTION );
+				$this->assertSame( $fixture['rows'][ $keep ]['id'], $option['register']['id'], $case );
+				$this->assertSame( 'option holds one' === $case ? 'Renamed by new code' : 'Idle till', $option['register']['name'], $case );
+				$this->assertSame( $fixture['rows'][ $keep ]['store_id'], $option['register']['store_id'], $case );
+				$this->assertEqualsCanonicalizing( array_diff( array_column( $fixture['rows'], 'id' ), array( $fixture['rows'][ $keep ]['id'] ) ), array_keys( $option['retired'] ), $case );
+				$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ), $case );
+			} finally {
+				$this->restore_register_schema( $fixture );
+			}
+		}
+	}
+
+	/** A register minted lazily before the step ran, which the table does not hold, is retired rather than lost. */
+	public function test_register_fold_retires_an_option_register_the_table_does_not_hold(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+		$minted = array(
+			'id' => wp_generate_uuid4(),
+			'name' => 'Register',
+			'store_id' => null,
+			'default_float' => null,
+			'created_at_gmt' => '2026-10-19 08:00:00',
+		);
+		update_option( self::REGISTER_OPTION, array( 'register' => $minted ), true );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$option = get_option( self::REGISTER_OPTION );
+			$this->assertSame( $fixture['rows']['recent']['id'], $option['register']['id'] );
+			$this->assertSame( $minted, $option['retired'][ $minted['id'] ] );
+		} finally {
+			$this->restore_register_schema( $fixture );
+		}
+	}
+
+	/** An empty legacy table mints no register: the option stays absent for the lazy default, and the table goes. */
+	public function test_register_fold_with_empty_table_leaves_no_option(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+		$wpdb->query( "DELETE FROM {$fixture['legacy']}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( get_option( self::REGISTER_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+		} finally {
+			$this->restore_register_schema( $fixture );
+		}
+	}
+
+	/** An option that does not read back exactly (unwritten, or one retired name off) stops the step: error logged, old latch and table kept. */
+	public function test_register_fold_with_unverified_option_keeps_latch_and_table_and_logs_error(): void {
+		foreach ( array( 'unwritten', 'renamed' ) as $case ) {
+			// Arrange.
+			$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+			$refuse = static function ( $value, $old_value ) use ( $case, $fixture ) {
+				if ( 'unwritten' === $case ) {
+					return $old_value;
+				}
+				$value['retired'][ $fixture['rows']['older']['id'] ]['name'] = 'Stale name';
+				return $value;
+			};
+			add_filter( 'pre_update_option_' . self::REGISTER_OPTION, $refuse, 10, 2 );
+			$logs = $this->capture_error_logs();
+			try {
+				// Act.
+				update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+				( new Activator() )->install_sync_schema();
+
+				// Assert.
+				$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ), $case );
+				$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] . '_folded' ), $case );
+				$this->assertCount( 1, $logs->entries, $case );
+				$this->assertStringContainsString( 'Register fold refused: the option did not read back', $logs->entries[0], $case );
+			} finally {
+				remove_filter( 'pre_update_option_' . self::REGISTER_OPTION, $refuse, 10 );
+				$logs->stop();
+				$this->restore_register_schema( $fixture );
+			}
+		}
+	}
+
+	/** A run stopped after the rename resumes from the renamed table and latches. */
+	public function test_register_fold_rerun_resumes_from_renamed_table(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+		$this->assertNotFalse( $wpdb->query( "RENAME TABLE {$fixture['legacy']} TO {$fixture['legacy']}_folded" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy tables.
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] . '_folded' ) );
+			$option = get_option( self::REGISTER_OPTION );
+			$this->assertSame( $fixture['rows']['recent'], $option['register'] );
+			$this->assertEqualsCanonicalizing( array( $fixture['rows']['idle']['id'], $fixture['rows']['older']['id'] ), array_keys( $option['retired'] ) );
+		} finally {
+			$this->restore_register_schema( $fixture );
+		}
+	}
+
+	/** The table is renamed before the copy: a pre-fold write after that fails against the missing table rather than landing unseen. */
+	public function test_register_fold_write_after_rename_fails_instead_of_being_lost(): void {
+		// Arrange.
+		global $wpdb;
+		$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+		$late = null;
+		$write = static function ( $sql ) use ( $wpdb, $fixture, &$late ) {
+			if ( null === $late && 0 === strpos( $sql, 'SELECT r.id' ) ) {
+				$late = $wpdb->insert(
+					$fixture['legacy'],
+					array(
+						'id' => wp_generate_uuid4(),
+						'name' => 'Late till',
+						'created_at_gmt' => '2026-09-12 08:00:00',
+						'last_seen_at_gmt' => '2026-09-12 08:00:00',
+					)
+				);
+			}
+			return $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $write );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+			( new Activator() )->install_sync_schema();
+
+			// Assert.
+			$this->assertFalse( $late );
+			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$option = get_option( self::REGISTER_OPTION );
+			$this->assertNotContains( 'Late till', array_merge( array( $option['register']['name'] ), array_column( $option['retired'], 'name' ) ) );
+		} finally {
+			remove_filter( 'query', $write );
+			$wpdb->suppress_errors( $previous );
+			$this->restore_register_schema( $fixture );
+		}
+	}
+
+	/** A registers table recreated before the latch write restores the old latch; the next run copies it and latches. */
+	public function test_register_fold_recreated_between_fold_and_latch_restores_latch_then_completes(): void {
+		// Arrange.
+		$fixture = $this->arrange_schema_eleven_with_legacy_registers();
+		$straggler = null;
+		$recreate = function ( $sql ) use ( $fixture, &$straggler ) {
+			if ( null === $straggler && self::writes_latest_schema_latch( $sql ) ) {
+				$straggler = $this->add_legacy_register( $fixture['legacy'], 'Straggler', null, '2026-09-12 08:00:00', true );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $recreate );
+		try {
+			// Act.
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+			try {
+				( new Activator() )->install_sync_schema();
+				$this->fail( 'Expected the recreated table to restore the latch.' );
+			} catch ( \RuntimeException $error ) {
+				$this->assertSame( 'Register fold found a recreated legacy table.', $error->getMessage() );
+			}
+			remove_filter( 'query', $recreate );
+
+			// Assert.
+			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			( new Activator() )->install_sync_schema();
+			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
+			$option = get_option( self::REGISTER_OPTION );
+			$this->assertSame( $fixture['rows']['recent']['id'], $option['register']['id'] );
+			$this->assertSame( 'Straggler', $option['retired'][ $straggler['id'] ]['name'] );
+			$this->assertArrayHasKey( $fixture['rows']['older']['id'], $option['retired'] );
+		} finally {
+			remove_filter( 'query', $recreate );
+			$this->restore_register_schema( $fixture );
+		}
+	}
+
+	/**
+	 * Shape a schema-11 install: a legacy registers table holding a register whose session opened
+	 * most recently, an older one with an earlier session, and an idle one (oldest, in store 7).
+	 *
+	 * DDL commits the test transaction, so restore_register_schema() undoes all of it.
+	 */
+	private function arrange_schema_eleven_with_legacy_registers(): array {
+		global $wpdb;
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		delete_option( self::REGISTER_OPTION );
+		$legacy = $wpdb->prefix . \WCPOS\WooCommercePOS\Services\Register_Store::LEGACY_TABLE;
+		$fixture = array(
+			'legacy' => $legacy,
+			'sessions_table' => ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->table_name(),
+			'rows' => array(
+				'recent' => $this->add_legacy_register( $legacy, 'Recent till', 12, '2026-09-02 08:00:00', true ),
+				'older' => $this->add_legacy_register( $legacy, 'Older till', null, '2026-09-03 08:00:00' ),
+				'idle' => $this->add_legacy_register( $legacy, 'Idle till', 7, '2026-09-01 08:00:00' ),
+			),
+		);
+		foreach ( array(
+			'recent' => '2026-09-11 08:00:00',
+			'older' => '2026-09-10 08:00:00',
+		) as $key => $opened ) {
+			$this->assertIsArray(
+				( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->create(
+					array(
+						'id' => wp_generate_uuid4(),
+						'register_id' => $fixture['rows'][ $key ]['id'],
+						'opened_at_gmt' => $opened,
+						'opened_by' => 1,
+						'expected_float' => null,
+						'counted_float' => '100',
+					)
+				)
+			);
+		}
+		return $fixture;
+	}
+
+	/** Insert a register into the legacy table as schema 11 stored it, creating the table if asked.
+	 *
+	 * @param string   $table Legacy table.
+	 * @param string   $name Register name.
+	 * @param int|null $store_id Store.
+	 * @param string   $created Creation stamp.
+	 * @param bool     $create Create the table first when missing.
+	 * @return array The row as the option keeps it.
+	 */
+	private function add_legacy_register( string $table, string $name, ?int $store_id, string $created, bool $create = false ): array {
+		global $wpdb;
+		if ( $create ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE IF NOT EXISTS {$table} ( id CHAR(36) NOT NULL, name VARCHAR(191) NOT NULL, store_id BIGINT NULL, default_float DECIMAL(19,4) NULL, platform VARCHAR(16) NOT NULL DEFAULT '', app_version VARCHAR(64) NOT NULL DEFAULT '', status VARCHAR(16) NOT NULL DEFAULT 'active', counters_started_at_gmt DATETIME NULL, created_at_gmt DATETIME NOT NULL, last_seen_at_gmt DATETIME NOT NULL, PRIMARY KEY  (id), KEY store_status (store_id, status) ) {$wpdb->get_charset_collate()}" ) );
+		}
+		$row = array(
+			'id' => wp_generate_uuid4(),
+			'name' => $name,
+			'store_id' => $store_id,
+			'default_float' => '25.0000',
+			'created_at_gmt' => $created,
+		);
+		$this->assertSame( 1, $wpdb->insert( $table, $row + array( 'last_seen_at_gmt' => $created ) ) );
+		return $row;
+	}
+
+	/** Drop the legacy table, the option and fixture sessions, and put the latch back.
+	 *
+	 * @param array $fixture From arrange_schema_eleven_with_legacy_registers().
+	 */
+	private function restore_register_schema( array $fixture ): void {
+		global $wpdb;
+		$wpdb->query( "DROP TABLE IF EXISTS {$fixture['legacy']}, {$fixture['legacy']}_folded" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy tables.
+		foreach ( $fixture['rows'] as $row ) {
+			$wpdb->delete( $fixture['sessions_table'], array( 'register_id' => $row['id'] ) );
+		}
+		delete_option( self::REGISTER_OPTION );
 		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
 		$wpdb->query( 'COMMIT' );
 	}

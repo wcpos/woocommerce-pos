@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Option_Register_Repository;
+use WCPOS\WooCommercePOS\Services\Register_Repository;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Provenance_Health;
@@ -82,6 +84,11 @@ class Registers_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function create_item( $request ) {
+		// Free holds one register; Pro binds a repository that holds more.
+		$repository = apply_filters( 'woocommerce_pos_register_repository', new Option_Register_Repository() );
+		if ( ! $repository instanceof Register_Repository || $repository instanceof Option_Register_Repository ) {
+			return new WP_Error( 'wcpos_registers_pro', __( 'More registers need WCPOS Pro.', 'woocommerce-pos' ), array( 'status' => 403 ) );
+		}
 		foreach ( array( 'id', 'platform', 'app_version' ) as $key ) {
 			if ( $request->has_param( $key ) ) {
 				return $this->invalid( $key );
@@ -99,16 +106,13 @@ class Registers_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * List registers (active by default).
+	 * List registers.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function get_items( $request ) {
-		$args = array( 'status' => $request['status'] ?? 'active' );
-		if ( ! in_array( $args['status'], array( 'active', 'retired', 'all' ), true ) ) {
-			return $this->invalid( 'status' );
-		}
+		$args = array();
 		if ( $request->has_param( 'store_id' ) ) {
 			if ( ! is_scalar( $request['store_id'] ) || ! preg_match( '/^\d+$/D', (string) $request['store_id'] ) ) {
 				return $this->invalid( 'store_id' );
@@ -127,9 +131,9 @@ class Registers_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function get_health( $request ) {
-		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', array( 'status' => 'all' ), $request ) );
+		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', array(), $request ) );
 		$registers = ( new Register_Store() )->list( $args );
-		$known_ids = array_column( ( new Register_Store() )->list( array( 'status' => 'all' ) ), 'id' );
+		$known_ids = ( new Register_Store() )->known_ids();
 		$store_ids = isset( $args['store_id'] ) ? (array) $args['store_id'] : null;
 		try {
 			return new WP_REST_Response( ( new Provenance_Health() )->report( $registers, $known_ids, $store_ids ) );
@@ -200,12 +204,6 @@ class Registers_Controller extends WP_REST_Controller {
 				return $this->invalid( 'name' );
 			}
 			$fields['name'] = sanitize_text_field( $name );
-		}
-		if ( ! $creating && $request->has_param( 'status' ) ) {
-			if ( ! in_array( $request['status'], array( 'active', 'retired' ), true ) ) {
-				return $this->invalid( 'status' );
-			}
-			$fields['status'] = $request['status'];
 		}
 		if ( $request->has_param( 'default_float' ) ) {
 			$value = $request['default_float'];
@@ -401,20 +399,8 @@ class Registers_Controller extends WP_REST_Controller {
 					'perpetual_refunds_total' => array( 'type' => 'string' ),
 				),
 			),
-			'platform' => array(
-				'type' => 'string',
-				'enum' => array( '', 'ios', 'android', 'web', 'electron' ),
-			),
-			'app_version' => array(
-				'type' => 'string',
-				'maxLength' => 64,
-			),
-			'status' => array(
-				'type' => 'string',
-				'enum' => array( 'active', 'retired' ),
-			),
 		);
-		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt', 'last_seen_at_gmt' ) as $key ) {
+		foreach ( array( 'counters_started_at_gmt', 'created_at_gmt' ) as $key ) {
 			$properties[ $key ] = array(
 				'type' => 'counters_started_at_gmt' === $key ? array( 'string', 'null' ) : 'string',
 				'format' => 'date-time',

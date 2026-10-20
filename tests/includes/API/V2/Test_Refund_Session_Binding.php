@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
-use WCPOS\WooCommercePOS\Services\Register_Store;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -212,7 +211,8 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		if ( $hpos ) {
 			$this->enable_hpos();
 		}
-		$register = ( new Register_Store() )->create(
+		$this->use_multi_register_repository();
+		$register = $this->create_register(
 			array(
 				'name' => 'Refund store fixture',
 				'store_id' => 456,

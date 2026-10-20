@@ -7,13 +7,14 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
-use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 
 /** Real database fixtures, including cleanup of committed transactions. */
 trait Closure_Test_Fixture {
+	use Register_Fixture;
+
 	/** Fixture register IDs.
 	 *
 	 * @var array
@@ -29,7 +30,6 @@ trait Closure_Test_Fixture {
 			foreach ( array( new Register_Session_Store(), new Fiscal_Record_Store() ) as $store ) {
 				$wpdb->delete( $store->table_name(), array( 'register_id' => $id ) );
 			}
-			$wpdb->delete( ( new Register_Store() )->table_name(), array( 'id' => $id ) );
 		}
 		$wpdb->query( 'COMMIT' );
 		// The fixtures COMMIT mid-test, which also commits whatever a test did to the site clock
@@ -40,14 +40,15 @@ trait Closure_Test_Fixture {
 		update_option( 'gmt_offset', 0 );
 	}
 
-	/** Create a session.
+	/** Create a session; without a register, a new one in the in-memory repository.
 	 *
 	 * @param string|null $register_id Existing register.
 	 * @param string      $status Desired state.
 	 */
 	private function closure_session( ?string $register_id = null, string $status = 'counting' ): array {
 		if ( null === $register_id ) {
-			$register_id = ( new Register_Store() )->create(
+			$this->use_multi_register_repository();
+			$register_id = $this->create_register(
 				array(
 					'name' => 'Closure fixture',
 					'store_id' => 456,

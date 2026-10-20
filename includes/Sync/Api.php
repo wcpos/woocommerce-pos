@@ -32,7 +32,8 @@ final class Api {
 	// 9: sessions bind manager approval to counted and expected snapshots.
 	// 10: closures fold into their session rows; the legacy closures table is copied and dropped.
 	// 11: cash movements fold into a JSON array on their session rows; the legacy movements table is copied and dropped.
-	public const SCHEMA_VERSION  = '11';
+	// 12: Free's one register moves into the wcpos_register option; the legacy registers table is copied and dropped.
+	public const SCHEMA_VERSION  = '12';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

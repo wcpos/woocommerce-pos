@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
-use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -779,7 +778,8 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_export_formula_register_name_round_trips_safely(): void {
 		// Arrange.
 		$name = '=Café, "North"' . "\nAnnex";
-		$register_id = ( new Register_Store() )->create(
+		$this->use_multi_register_repository();
+		$register_id = $this->create_register(
 			array(
 				'name' => $name,
 				'store_id' => 456,

@@ -11,7 +11,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use WP_Error;
 
-/** Free queries stay on today's explicitly selected register. */
+/** Free queries stay on today; its one register is "all registers". */
 final class Report_Scope_Gate {
 
 	/**
@@ -34,9 +34,6 @@ final class Report_Scope_Gate {
 			}
 		}
 		if ( ! $pro ) {
-			if ( empty( $scope['register_id'] ) ) {
-				return self::locked( __( 'Reports across all registers require WCPOS Pro. Select this register.', 'woocommerce-pos' ) );
-			}
 			$is_today = 'range' === $scope['mode'] ? $scope['from'] === $day && $scope['to'] === $day : $scope['business_day'] === $day;
 			if ( ! $is_today ) {
 				return self::locked( __( 'Reports for earlier days or days other than today require WCPOS Pro.', 'woocommerce-pos' ) );

@@ -58,8 +58,9 @@ final class Report_Scope_Resolver {
 		// another store afterwards (`Register_Store::update()` permits it). Checking the
 		// register's current store would 404 a historical session report for a caller who is
 		// plainly entitled to it — and would contradict the line below, which deliberately keeps
-		// the session's retained store for exactly this reason.
-		if ( null !== $register_id && ! $register ) {
+		// the session's retained store for exactly this reason. A session's register the repository
+		// no longer holds (Pro deactivated) is not absent either: the session row is the provenance.
+		if ( ! $session && null !== $register_id && ! $register ) {
 			return new WP_Error( 'wcpos_report_register_not_found', __( 'Register not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 		if ( ! $session && null !== $register_id && ! $reach->admits( $register['store_id'] ) ) {
@@ -82,7 +83,7 @@ final class Report_Scope_Resolver {
 			$args,
 			array(
 				'store_id' => $store_id,
-				// Keep the requested register until the gate: a session must not fill a missing one for Free.
+				// Keep the requested register; resolve() fills a session's own.
 				'register_id' => $args['register_id'] ?? null,
 				// Authorising a historical session does not authorise reading its register's
 				// *current* details. Once a register moves to a store this caller cannot reach,
@@ -90,8 +91,8 @@ final class Report_Scope_Resolver {
 				// through every replay of the old session. Fall back to the label the closure
 				// captured at the time, which is what the closure builder prints anyway.
 				'register_name' => ( $session && ! $reach->admits( $register['store_id'] ?? null ) )
-					? (string) ( $closure['breakdowns']['labels']['register_name'] ?? '' )
-					: ( $register['name'] ?? '' ),
+					? (string) ( $closure['breakdowns']['labels']['register_name'] ?? __( 'Register', 'woocommerce-pos' ) )
+					: ( $register['name'] ?? ( null === $register_id ? '' : ( new Register_Store() )->display_name( $register_id ) ) ),
 				'timezone' => $timezone->getName(),
 				// `business_day` is nullable and is back-filled in batches by
 				// Activator::upgrade_business_days(), so a legacy session can still be unstamped —

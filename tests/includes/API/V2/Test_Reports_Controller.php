@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
-use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Reports_Registry;
 use WCPOS\WooCommercePOS\Services\Report_Scope_Resolver;
 use WCPOS\WooCommercePOS\Services\Report_Document_Validator;
@@ -289,15 +288,12 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Neither missing register, yesterday, nor an out-of-reach range may execute a Free query. */
+	/** Neither yesterday nor an out-of-reach range may execute a Free query. */
 	public function test_report_free_scope_refusals_never_run_callback(): void {
 		$today = new \DateTimeImmutable( $this->args['from'] );
-		foreach ( array( 1, 93, 0 ) as $days ) {
+		foreach ( array( 1, 93 ) as $days ) {
 			$args = $this->args;
 			$args['from'] = $today->modify( '-' . $days . ' days' )->format( 'Y-m-d' );
-			if ( 0 === $days ) {
-				unset( $args['register_id'] );
-			}
 			$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
 			$request->set_query_params( $args );
 			$response = $this->server->dispatch( $request );
@@ -369,9 +365,8 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * refuses the same row, and this read must not be laxer than the one beside it.
 	 */
 	public function test_report_register_with_no_store_is_refused_under_a_scope(): void {
-		global $wpdb;
 		$session = $this->closure_session();
-		$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => null ), array( 'id' => $session['register_id'] ) );
+		$this->use_multi_register_repository()->update( $session['register_id'], array( 'store_id' => null ) );
 		add_filter(
 			'woocommerce_pos_closures_list_args',
 			static function ( $args ) {
@@ -425,7 +420,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		( new Closure_Store() )->create( $this->closure_fields( $session, 11 ) );
 		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $this->args['from'] ), array( 'id' => $session['id'] ) );
 		// The register is reassigned to a store this caller cannot reach; the session is not.
-		$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => 789 ), array( 'id' => $session['register_id'] ) );
+		$this->use_multi_register_repository()->update( $session['register_id'], array( 'store_id' => 789 ) );
 		add_filter(
 			'woocommerce_pos_closures_list_args',
 			static function ( $args ) {
@@ -455,9 +450,8 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * protect. Validation has to happen before coercion, not after.
 	 */
 	public function test_report_unreadable_store_restriction_denies(): void {
-		global $wpdb;
 		$session = $this->closure_session();
-		$register = ( new Register_Store() )->table_name();
+		$registers = $this->use_multi_register_repository();
 
 		// Each case pairs a malformed restriction with the store the register is put in, chosen so
 		// that a laxer guard would ADMIT the request. `is_numeric()` accepts the coercing shapes
@@ -474,7 +468,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			array( "1\n", 1 ),
 		);
 		foreach ( $cases as list( $bad, $store ) ) {
-			$wpdb->update( $register, array( 'store_id' => $store ), array( 'id' => $session['register_id'] ) );
+			$registers->update( $session['register_id'], array( 'store_id' => $store ) );
 			add_filter(
 				'woocommerce_pos_closures_list_args',
 				static function ( $args ) use ( $bad ) {
@@ -503,13 +497,12 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$session = $this->closure_session();
 		( new Closure_Store() )->create( $this->closure_fields( $session, 12 ) );
 		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'business_day' => $this->args['from'] ), array( 'id' => $session['id'] ) );
-		$wpdb->update(
-			( new Register_Store() )->table_name(),
+		$this->use_multi_register_repository()->update(
+			$session['register_id'],
 			array(
 				'store_id' => 789,
 				'name' => 'Renamed in another store',
-			),
-			array( 'id' => $session['register_id'] )
+			)
 		);
 		add_filter(
 			'woocommerce_pos_closures_list_args',
@@ -530,6 +523,15 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertNotSame( 'Renamed in another store', $this->received['register_name'] );
 		$this->assertNotSame( 'Renamed in another store', $response->get_data()['report']['scope']['register_name'] );
+		// A closure without a label snapshot falls back to the literal, never the current name.
+		$table = ( new Register_Session_Store() )->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table; the id is prepared.
+		$document = json_decode( $wpdb->get_var( $wpdb->prepare( "SELECT closure FROM {$table} WHERE id = %s", $session['id'] ) ), true );
+		unset( $document['breakdowns']['labels'] );
+		$wpdb->update( $table, array( 'closure' => wp_json_encode( $document ) ), array( 'id' => $session['id'] ) );
+		$this->received = null;
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+		$this->assertSame( 'Register', $this->received['register_name'] );
 	}
 
 	/**
@@ -595,7 +597,21 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( $this->received );
 	}
 
-	/** Session identity must not bypass the Free day or explicit-register boundary. */
+	/** Free's one register is "all registers": today's report without a register runs. */
+	public function test_report_free_without_register_runs_for_today(): void {
+		// Arrange.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
+		$request->set_query_params( array_diff_key( $this->args, array( 'register_id' => true ) ) );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( $this->received['register_id'] );
+	}
+
+	/** Session identity must not bypass the Free day boundary. */
 	public function test_report_session_scope_refusals_never_run_callback(): void {
 		global $wpdb;
 		$session = $this->closure_session();
@@ -618,9 +634,9 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
 		$request->set_query_params( array_diff_key( $args, array( 'register_id' => true ) ) );
 		$response = $this->server->dispatch( $request );
-		$this->assertSame( 403, $response->get_status() );
-		$this->assertSame( 'wcpos_report_scope_locked', $response->get_data()['code'] );
-		$this->assertNull( $this->received );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $session['register_id'], $this->received['register_id'] );
+		$this->received = null;
 		$request = $this->wp_rest_get_request( '/wcpos/v2/reports/example' );
 		$request->set_query_params( array_replace( $args, array( 'register_id' => $this->args['register_id'] ) ) );
 		$response = $this->server->dispatch( $request );

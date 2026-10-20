@@ -36,15 +36,17 @@ function woocommerce_pos_uninstall_table_suffixes(): array {
 function woocommerce_pos_uninstall_configuration_table_suffixes(): array {
 	return array(
 		'wcpos_fiscal_records',
-		'wcpos_registers',
 		'wcpos_register_sessions',
-		// Legacy: closures live on session rows since sync schema 10, and movements since
-		// schema 11. A dev build that never reached the upgrade still holds these tables,
-		// or a renamed copy when a fold stopped between the rename and the drop.
+		// Legacy: closures live on session rows since sync schema 10, movements since schema 11,
+		// and the register in the wcpos_register option since schema 12. A dev build that never
+		// reached the upgrade still holds these tables, or a renamed copy when a fold stopped
+		// between the rename and the drop.
 		'wcpos_closures',
 		'wcpos_closures_folded',
 		'wcpos_cash_movements',
 		'wcpos_cash_movements_folded',
+		'wcpos_registers',
+		'wcpos_registers_folded',
 	);
 }
 
@@ -492,6 +494,8 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 				$wpdb->esc_like( 'wcpos_template_order_' ) . '%',
 				$wpdb->esc_like( 'wcpos_disabled_virtual_templates_' ) . '%',
 				$wpdb->esc_like( 'wcpos_fiscal_sequence_' ) . '%',
+				// The register (name, default float, retired names) anchors every sale's provenance.
+				$wpdb->esc_like( 'wcpos_register' ),
 			)
 		);
 	}

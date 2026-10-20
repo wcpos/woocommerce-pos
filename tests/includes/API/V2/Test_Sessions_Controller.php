@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Auth;
-use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
@@ -20,6 +19,7 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 /** Session and movement REST contracts. */
 class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	use \WCPOS\WooCommercePOS\Tests\Services\Session_Expected_Tests;
+	use \WCPOS\WooCommercePOS\Tests\Services\Register_Fixture;
 
 	/** Registers created by this test, including rows committed by void transactions.
 	 *
@@ -34,7 +34,6 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		foreach ( $this->register_ids as $id ) {
 			// Movements live on the session rows, so they go with them.
 			$wpdb->delete( ( new Register_Session_Store() )->table_name(), array( 'register_id' => $id ) );
-			$wpdb->delete( ( new Register_Store() )->table_name(), array( 'id' => $id ) );
 		}
 		$wpdb->query( 'COMMIT' );
 	}
@@ -59,12 +58,13 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		return $this->server->dispatch( $request );
 	}
 
-	/** A valid client opening.
+	/** A valid client opening on a new register in the in-memory repository.
 	 *
 	 * @param int|null $store_id Register's store, or null when unassigned.
 	 */
 	private function fields( ?int $store_id = null ): array {
-		$register_id = ( new Register_Store() )->create(
+		$this->use_multi_register_repository();
+		$register_id = $this->create_register(
 			array(
 				'name' => 'Front',
 				'store_id' => $store_id,
@@ -100,11 +100,11 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Moving the register while opening waits must use the new store. */
 	public function test_session_opening_register_moved_at_lock_stores_fresh_store(): void {
 		// Arrange.
-		global $wpdb;
 		$fields = $this->fields( 456 );
-		$race = static function ( $sql ) use ( $wpdb, $fields ) {
+		$repository = $this->use_multi_register_repository();
+		$race = static function ( $sql ) use ( $repository, $fields ) {
 			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $fields['register_id'] ) ) {
-				$wpdb->update( ( new Register_Store() )->table_name(), array( 'store_id' => 789 ), array( 'id' => $fields['register_id'] ) );
+				$repository->update( $fields['register_id'], array( 'store_id' => 789 ) );
 			}
 			return $sql;
 		};

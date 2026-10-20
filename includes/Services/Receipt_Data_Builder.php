@@ -66,7 +66,9 @@ class Receipt_Data_Builder {
 		// Old closures and live X-reports have no label snapshot.
 		$labels = $row['breakdowns']['labels'] ?? array();
 		$register_id = $row['register_id'] ?? null;
-		$register = is_string( $register_id ) && '' !== $register_id ? ( ( new Register_Store() )->get( $register_id ) ?? array() ) : array();
+		$registers = new Register_Store();
+		// A register its repository no longer holds (Pro deactivated) still prints its last known name.
+		$register = is_string( $register_id ) && '' !== $register_id ? ( $registers->get( $register_id ) ?? array( 'name' => $registers->display_name( $register_id ) ) ) : array();
 		$register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
 		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
@@ -738,17 +740,18 @@ class Receipt_Data_Builder {
 		$tax_summary = $this->get_tax_summary( $order );
 
 		$register_id = (string) $order->get_meta( '_wcpos_register' );
-		$register_row = '' !== $register_id ? ( new Register_Store() )->get( $register_id ) : null;
+		$registers = new Register_Store();
+		$register_row = '' !== $register_id ? $registers->get( $register_id ) : null;
 		$register = array(
 			'id' => $register_row['id'] ?? '',
-			'name' => $register_row['name'] ?? '',
+			'name' => $register_row['name'] ?? ( '' !== $register_id ? $registers->display_name( $register_id ) : '' ),
 		);
 		$software = array(
 			'name'           => 'WCPOS',
 			'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
 			'app_version'    => (string) $order->get_meta( '_wcpos_app_version' ),
 			'app_build'      => (string) $order->get_meta( '_wcpos_app_build' ),
-			'platform'       => $register_row['platform'] ?? '',
+			'platform'       => '',
 		);
 		$sale_tz = (string) $order->get_meta( '_wcpos_sale_tz' );
 		try {
@@ -894,14 +897,15 @@ class Receipt_Data_Builder {
 		$register_id = (string) ( $provenance['register_id'] ?? $refund->get_meta( '_wcpos_register', true ) );
 		if ( Pos_Uuid::is_uuid( $register_id ) ) {
 			global $wpdb;
-			$register_row = ( new Register_Store() )->get( strtolower( $register_id ) );
+			$registers = new Register_Store();
+			$register_row = $registers->get( strtolower( $register_id ) );
 			if ( '' !== $wpdb->last_error ) {
 				throw new \RuntimeException( 'Refund register read failed.' );
 			}
 			// The stamped id stays truthful even when the register row is gone.
 			$data['register'] = array(
 				'id' => $register_row['id'] ?? strtolower( $register_id ),
-				'name' => $register_row['name'] ?? '',
+				'name' => $register_row['name'] ?? $registers->display_name( strtolower( $register_id ) ),
 			);
 		}
 		$display_incl = ! empty( $data['tax']['display_incl'] );

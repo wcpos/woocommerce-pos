@@ -7,17 +7,15 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Option_Register_Repository;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Services\Register_Fixture;
 
-/** Registers routing, permissions and store reach. */
+/** Registers routing, permissions and store reach. Tests of more than one register bind an in-memory repository, as Pro binds its own. */
 class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
-	/** Install register storage before each test. */
-	public function setUp(): void {
-		parent::setUp();
-		( new Register_Store() )->install();
-	}
+	use Register_Fixture;
 
 	/** Create a register through REST.
 	 *
@@ -29,8 +27,42 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		return $this->server->dispatch( $request );
 	}
 
-	/** Managers create server identities with read-only counters. */
+	/** Free holds one register: a manager's create is refused before its body is read, and nothing is stored. */
+	public function test_post_in_free_returns_403_registers_pro(): void {
+		// Arrange.
+		$before = ( new Register_Store() )->list( array() );
+
+		// Act.
+		$responses = array( $this->post_register( array( 'name' => 'Second' ) ), $this->post_register( array( 'name' => '' ) ) );
+
+		// Assert.
+		foreach ( $responses as $response ) {
+			$this->assertSame( 403, $response->get_status() );
+			$this->assertSame( 'wcpos_registers_pro', $response->get_data()['code'] );
+			$this->assertSame( 'More registers need WCPOS Pro.', $response->get_data()['message'] );
+		}
+		$this->assertSame( $before, ( new Register_Store() )->list( array() ) );
+	}
+
+	/** Free lists its one register; a status query is no longer a filter. */
+	public function test_get_items_in_free_lists_the_one_register(): void {
+		// Arrange.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/registers' );
+		$request->set_query_params( array( 'status' => 'retired' ) );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $response->get_data() );
+		$this->assertSame( get_option( Option_Register_Repository::OPTION )['register']['id'], $response->get_data()[0]['id'] );
+		$this->assertNull( $response->get_data()[0]['store_id'] );
+	}
+
+	/** With a repository holding more (Pro), managers create server identities with read-only counters. */
 	public function test_post_manager_creates_server_uuid_and_get_includes_counters(): void {
+		$this->use_multi_register_repository();
 		$first = $this->post_register(
 			array(
 				'name' => 'Front',
@@ -64,6 +96,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/** Create refuses client-owned identity and malformed admin fields. */
 	public function test_post_rejects_till_fields_and_invalid_create_values(): void {
+		$this->use_multi_register_repository();
 		foreach ( array(
 			'id' => wp_generate_uuid4(),
 			'platform' => 'ios',
@@ -79,6 +112,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/** Default floats must fit the backing DECIMAL(19,4) column after normalization. */
 	public function test_default_float_rejects_normalized_overflow_on_create_and_update(): void {
+		$this->use_multi_register_repository();
 		$response = $this->post_register(
 			array(
 				'name' => 'Front',
@@ -100,6 +134,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** A default float keeps its four decimals above 2^53, where floatval() would drop them. */
 	public function test_default_float_keeps_its_fraction_above_float_precision_on_create_and_update(): void {
 		// Arrange / Act.
+		$this->use_multi_register_repository();
 		$created = $this->post_register(
 			array(
 				'name' => 'Front',
@@ -129,6 +164,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/** The Pro filter sees, but cannot replace, the final server identity. */
 	public function test_create_filter_cannot_replace_server_id(): void {
+		$this->use_multi_register_repository();
 		$seen = null;
 		$filter = function ( $fields, $request ) use ( &$seen ) {
 			$seen = $fields['id'];
@@ -149,9 +185,9 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 123, $response->get_data()['store_id'] );
 	}
 
-	/** Patch requires manager and list defaults to active. */
-	public function test_patch_requires_manager_and_list_defaults_to_active(): void {
-		$id = $this->post_register( array( 'name' => 'Front' ) )->get_data()['id'];
+	/** Patch requires a manager and changes only the name and float of Free's register. */
+	public function test_patch_requires_manager_and_ignores_status_and_store(): void {
+		$id = $this->create_register()['id'];
 		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $id );
 		$request->set_method( 'PATCH' );
 		$request->set_body_params(
@@ -170,20 +206,18 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$updated = $this->server->dispatch( $request );
 		$this->assertSame( 200, $updated->get_status() );
 		$this->assertSame( 'Back', $updated->get_data()['name'] );
-		$this->assertSame( 'retired', $updated->get_data()['status'] );
+		$this->assertArrayNotHasKey( 'status', $updated->get_data() );
 		$this->assertSame( '12.5000', $updated->get_data()['default_float'] );
 		$this->assertNull( $updated->get_data()['store_id'] );
 		$list = $this->wp_rest_get_request( '/wcpos/v2/registers' );
-		$this->assertNotContains( $id, array_column( $this->server->dispatch( $list )->get_data(), 'id' ) );
-		$list->set_query_params( array( 'status' => 'all' ) );
-		$this->assertContains( $id, array_column( $this->server->dispatch( $list )->get_data(), 'id' ) );
+		$this->assertSame( array( $id ), array_column( $this->server->dispatch( $list )->get_data(), 'id' ) );
 	}
 
 	/** A competing register lock prevents PATCH from changing the row. */
 	public function test_patch_register_locked_returns_500_without_updating(): void {
 		// Arrange.
 		$store = new Register_Store();
-		$row = $store->create( array( 'name' => 'Front' ) );
+		$row = $this->create_register( array( 'name' => 'Front' ) );
 		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $row['id'] );
 		$request->set_method( 'PATCH' );
 		$request->set_body_params( array( 'name' => 'Back' ) );
@@ -206,19 +240,15 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** A register deleted while PATCH waits answers exactly as unknown. */
 	public function test_patch_register_deleted_at_lock_returns_not_found_without_update(): void {
 		// Arrange.
-		global $wpdb;
+		$repository = $this->use_multi_register_repository();
 		$store = new Register_Store();
-		$row = $store->create( array( 'name' => 'Front' ) );
+		$row = $this->create_register( array( 'name' => 'Front' ) );
 		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $row['id'] );
 		$request->set_method( 'PATCH' );
 		$request->set_body_params( array( 'name' => 'Back' ) );
-		$updates = array();
-		$race = static function ( $sql ) use ( $wpdb, $store, $row, &$updates ) {
+		$race = static function ( $sql ) use ( $repository, $row ) {
 			if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $row['id'] ) ) {
-				$wpdb->delete( $store->table_name(), array( 'id' => $row['id'] ) );
-			}
-			if ( false !== strpos( $sql, 'UPDATE `' . $store->table_name() . '`' ) ) {
-				$updates[] = $sql;
+				$repository->forget( $row['id'] );
 			}
 			return $sql;
 		};
@@ -233,14 +263,14 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'wcpos_register_not_found', $response->get_data()['code'] );
 		$this->assertNull( $store->get( $row['id'] ) );
-		$this->assertSame( array(), $updates );
+		$this->assertSame( array(), $repository->rows );
 	}
 
 	/** PATCH locks before the Pro guard and the register write. */
 	public function test_patch_update_filter_and_write_run_after_register_lock(): void {
 		// Arrange.
-		$store = new Register_Store();
-		$row = $store->create( array( 'name' => 'Front' ) );
+		global $wpdb;
+		$row = $this->create_register( array( 'name' => 'Front' ) );
 		$request = $this->wp_rest_patch_request( '/wcpos/v2/registers/' . $row['id'] );
 		$request->set_method( 'PATCH' );
 		$request->set_body_params( array( 'name' => 'Back' ) );
@@ -269,7 +299,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'Back', $response->get_data()['name'] );
 		$sql = implode( "\n", $queries );
 		$lock = strpos( $sql, $lock_sql );
-		$update = strpos( $sql, 'UPDATE `' . $store->table_name() . '`' );
+		$update = strpos( $sql, "UPDATE `{$wpdb->options}`" );
 		$this->assertNotFalse( $lock );
 		$this->assertNotFalse( $update );
 		$this->assertGreaterThan( $lock, $update );
@@ -316,24 +346,23 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $classifier->is_protocol_exempt( '/wcpos/v2/registers/health' ) );
 	}
 
-	/** Health includes retired registers and applies store scope. */
-	public function test_health_includes_retired_registers_and_applies_store_scope(): void {
-		$store = new Register_Store();
-		$id = $store->create(
+	/** Health applies the store scope to the registers it reports. */
+	public function test_health_applies_store_scope(): void {
+		$this->use_multi_register_repository();
+		$id = $this->create_register(
 			array(
-				'name' => 'Retired',
+				'name' => 'In scope',
 				'store_id' => 123,
 			)
 		)['id'];
-		$store->update( $id, array( 'status' => 'retired' ) );
-		$store->create(
+		$this->create_register(
 			array(
 				'name' => 'Other store',
 				'store_id' => 456,
 			)
 		);
 		$scope = function ( $args, $request ) {
-			$this->assertSame( 'all', $args['status'] );
+			$this->assertSame( array(), $args );
 			$this->assertSame( '/wcpos/v2/registers/health', $request->get_route() );
 			$args['store_id'] = 123;
 			return $args;
@@ -346,6 +375,37 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $id ), array_column( $response->get_data()['registers'], 'id' ) );
+	}
+
+	/** A retired register's orders are provenance the site knows, not unregistered; an unknown id's are. */
+	public function test_health_treats_retired_register_ids_as_known(): void {
+		// Arrange.
+		$retired = wp_generate_uuid4();
+		$unknown = wp_generate_uuid4();
+		( new Register_Store() )->list( array() );
+		$option = get_option( Option_Register_Repository::OPTION );
+		$option['retired'][ $retired ] = array(
+			'id' => $retired,
+			'name' => 'Migrated till',
+			'store_id' => 5,
+			'default_float' => null,
+			'created_at_gmt' => '2026-09-01 08:00:00',
+		);
+		update_option( Option_Register_Repository::OPTION, $option, true );
+		foreach ( array( $retired, $unknown ) as $register ) {
+			$order = new \WC_Order();
+			$order->update_meta_data( '_wcpos_register', $register );
+			$order->save();
+		}
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$unregistered = array_column( $response->get_data()['unregistered'], 'register_id' );
+		$this->assertNotContains( $retired, $unregistered );
+		$this->assertContains( $unknown, $unregistered );
 	}
 
 	/** Health options describes diagnostics not register item. */
@@ -376,14 +436,14 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Health scope keeps global known ids and filters order stores. */
 	public function test_health_scope_keeps_global_known_ids_and_filters_order_stores(): void {
 		$unknown = wp_generate_uuid4();
-		$store = new Register_Store();
-		$id = $store->create(
+		$this->use_multi_register_repository();
+		$id = $this->create_register(
 			array(
 				'name' => 'Front',
 				'store_id' => 1,
 			)
 		)['id'];
-		$other = $store->create(
+		$other = $this->create_register(
 			array(
 				'name' => 'Moved till',
 				'store_id' => 2,
@@ -415,8 +475,9 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Neither GET nor PATCH reveals or edits an unreachable register. */
 	public function test_register_item_outside_store_reach_reads_as_absent(): void {
 		// Arrange.
+		$this->use_multi_register_repository();
 		$store = new Register_Store();
-		$row = $store->create(
+		$row = $this->create_register(
 			array(
 				'name' => 'Original',
 				'store_id' => 456,
@@ -452,9 +513,9 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** The register SQL list accepts the reach's array of allowed stores. */
 	public function test_register_list_is_narrowed_to_store_reach(): void {
 		// Arrange.
-		$store = new Register_Store();
+		$this->use_multi_register_repository();
 		foreach ( array( 456, 789 ) as $store_id ) {
-			$row = $store->create(
+			$row = $this->create_register(
 				array(
 					'name' => 'Store ' . $store_id,
 					'store_id' => $store_id,
@@ -467,9 +528,7 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		add_filter( Store_Reach::FILTER, $filter );
 		try {
 			// Act.
-			$request = $this->wp_rest_get_request( '/wcpos/v2/registers' );
-			$request->set_param( 'status', 'all' );
-			$response = $this->server->dispatch( $request );
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers' ) );
 			// Assert.
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( array( $row['id'] ), array_column( $response->get_data(), 'id' ) );
@@ -480,7 +539,8 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Unassigned register reads, edits and health require the explicit key. */
 	public function test_unassigned_register_is_reachable_only_with_the_unassigned_key(): void {
 		// Arrange.
-		$row = ( new Register_Store() )->create( array( 'name' => 'Unassigned' ) );
+		$this->use_multi_register_repository();
+		$row = $this->create_register( array( 'name' => 'Unassigned' ) );
 		foreach ( array( true, false ) as $unassigned ) {
 			$filter = static function () use ( $unassigned ) {
 				return array( 'store_id' => array( 789 ) ) + ( $unassigned ? array( 'unassigned' => true ) : array() );
@@ -504,12 +564,10 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 				}
 				foreach ( array( '', '/health' ) as $suffix ) {
 					$request = $this->wp_rest_get_request( '/wcpos/v2/registers' . $suffix );
-					$request->set_param( 'status', 'all' );
 					$response = $this->server->dispatch( $request );
 					$this->assertSame( 200, $response->get_status() );
 					$rows = $suffix ? $response->get_data()['registers'] : $response->get_data();
 					$ids  = array_column( $rows, 'id' );
-					// The seeded default register is unassigned too, so the list holds both or neither.
 					if ( $unassigned ) {
 						$this->assertContains( $row['id'], $ids );
 					} else {
