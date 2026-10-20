@@ -9,19 +9,16 @@
  * These tests pin the contract that replaced it: a sale reduces stock exactly
  * once, leaves the product record alone, and still moves the product's
  * modified date, which WooCommerce bumps itself on every product save.
- * `Products::product_set_stock()` stays for callers and is covered directly.
  *
  * @package WCPOS\WooCommercePOS\Tests
  */
 
 namespace WCPOS\WooCommercePOS\Tests;
 
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Simple;
 use WC_Product_Variable;
 use WC_Product_Variation;
 use WC_Unit_Test_Case;
-use WCPOS\WooCommercePOS\Products;
 
 /**
  * Test_Products_Stock_Touch class.
@@ -76,68 +73,6 @@ class Test_Products_Stock_Touch extends WC_Unit_Test_Case {
 		}
 
 		parent::tearDown();
-	}
-
-	/**
-	 * A stock change bumps post_modified without re-running the post save.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::product_set_stock
-	 */
-	public function test_product_set_stock_bumps_modified_date_without_firing_save_post(): void {
-		global $wpdb;
-
-		// Arrange.
-		$products   = new Products();
-		$product    = ProductHelper::create_simple_product();
-		$product_id = $product->get_id();
-		$backdated  = '2020-01-01 00:00:00';
-		// wp_update_post() always stamps post_modified with the current time, so backdate the row directly.
-		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- test fixture; cache cleared below.
-			$wpdb->posts,
-			array(
-				'post_modified'     => $backdated,
-				'post_modified_gmt' => $backdated,
-			),
-			array( 'ID' => $product_id )
-		);
-		clean_post_cache( $product_id );
-		$this->assertSame( $backdated, get_post( $product_id )->post_modified, 'Precondition: post_modified is backdated.' );
-
-		$counts = array(
-			'save_post'      => 0,
-			'post_updated'   => 0,
-			'wp_insert_post' => 0,
-		);
-		foreach ( array_keys( $counts ) as $hook ) {
-			add_action(
-				$hook,
-				function () use ( &$counts, $hook ) {
-					++$counts[ $hook ];
-				}
-			);
-		}
-
-		// Act.
-		$products->product_set_stock( $product );
-
-		// Assert.
-		$this->assertSame( 0, $counts['save_post'], 'save_post must not fire on a stock change.' );
-		$this->assertSame( 0, $counts['post_updated'], 'post_updated must not fire on a stock change.' );
-		$this->assertSame( 0, $counts['wp_insert_post'], 'wp_insert_post must not fire on a stock change.' );
-
-		// No wp_cache_flush(): the post cache must already have been cleared.
-		$modified = get_post( $product_id )->post_modified;
-		$this->assertNotSame( $backdated, $modified, 'post_modified should be bumped and visible through the post cache.' );
-		$modified_ts = strtotime( $modified );
-		$this->assertNotFalse( $modified_ts, 'post_modified should be a valid datetime.' );
-		$this->assertLessThanOrEqual( 60, abs( strtotime( current_time( 'mysql' ) ) - $modified_ts ), 'post_modified should be recent.' );
-
-		// Incremental sync filters on the GMT column, so it must move too.
-		$modified_gmt = get_post( $product_id )->post_modified_gmt;
-		$this->assertNotSame( $backdated, $modified_gmt, 'post_modified_gmt should be bumped.' );
-		$modified_gmt_ts = strtotime( $modified_gmt . ' UTC' );
-		$this->assertNotFalse( $modified_gmt_ts, 'post_modified_gmt should be a valid datetime.' );
-		$this->assertLessThanOrEqual( 60, abs( time() - $modified_gmt_ts ), 'post_modified_gmt should be recent.' );
 	}
 
 	/**

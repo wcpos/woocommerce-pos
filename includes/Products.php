@@ -74,39 +74,6 @@ class Products {
 	}
 
 	/**
-	 * Bump a product's modified date so POS clients that sync on `date_modified`
-	 * pick up a change WooCommerce did not record.
-	 *
-	 * No longer hooked. Until WooCommerce 3.4 a stock change left the product's
-	 * date untouched, so this ran on `woocommerce_product_set_stock`; since 3.4
-	 * every product save bumps the date itself, before that hook fires, and the
-	 * listener only re-ran the whole post save (`wp_update_post()`) in the middle
-	 * of WooCommerce's stock reduction: every `save_post` listener on the site,
-	 * plus kses content filtering for a storefront customer. A listener that
-	 * failed there left the stock decremented but the order unflagged
-	 * (`_order_stock_reduced`), so the next status change deducted it again, and
-	 * a guest checkout rewrote the purchased product's description through kses.
-	 *
-	 * Kept for callers. The row is written directly, the way WooCommerce's own
-	 * product data store records a save, so it never runs the save stack.
-	 *
-	 * @param WC_Product $product The product or variation to touch.
-	 */
-	public function product_set_stock( WC_Product $product ): void {
-		global $wpdb;
-
-		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- must never run the save_post stack; cache cleared below.
-			$wpdb->posts,
-			array(
-				'post_modified'     => current_time( 'mysql' ),
-				'post_modified_gmt' => current_time( 'mysql', true ),
-			),
-			array( 'ID' => $product->get_id() )
-		);
-		clean_post_cache( $product->get_id() );
-	}
-
-	/**
 	 * Remember which REST route is being dispatched.
 	 *
 	 * `pre_get_posts` cannot see the request, and the `rest_route` query var is
