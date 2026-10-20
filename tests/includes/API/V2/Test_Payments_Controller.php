@@ -571,6 +571,49 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'cancelled', wc_get_order( $order->get_id() )->get_status() );
 	}
 
+	/** A completion standing on a configured on-hold status is replayed by close, refund or not. */
+	public function test_close_on_a_standing_on_hold_completion_replays_it(): void {
+		// Arrange: Cash's POS Order Status stored as On hold; completed; 20.00 refunded.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+				),
+			)
+		);
+		$order = $this->create_pos_order();
+		$row   = $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_data()['payment'];
+		$this->assertSame( 'on-hold', wc_get_order( $order->get_id() )->get_status() );
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => '20.00',
+				'refund_payment' => false,
+			)
+		);
+		$this->assertIsArray( Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '20.00' ) );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame(
+			array(
+				'n' => 1,
+				'id' => $history[0]['id'],
+			),
+			$response->get_data()['completion']
+		);
+		$this->assertSame( $history, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Close alone may complete an on-hold order its payments cover. */
 	public function test_close_on_an_on_hold_covered_order_completes_it(): void {
 		// Arrange.

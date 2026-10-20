@@ -1441,14 +1441,13 @@ class Ledger {
 	 */
 	public function close( WC_Order $order ) {
 		$rows = $this->read( $order );
+		// A standing completion is replayed whatever its status (a merchant's POS status may be on-hold).
+		$history = Completion_Stamp::read( $order );
+		if ( $history && Completion_Stamp::stands( $order ) ) {
+			return $this->closed( $order, $rows, end( $history ) );
+		}
 		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'on-hold' ), true ) ) {
-			// Replay only a completion that still stands: a cancel or other reopen marked it.
-			$history = Completion_Stamp::read( $order );
-			$latest  = end( $history );
-			if ( null === $order->get_date_paid( 'edit' ) || ! is_array( $latest ) || ! empty( $latest['reopened_at_gmt'] ) ) {
-				return $this->invalid_transition();
-			}
-			return $this->closed( $order, $rows, $latest );
+			return $this->invalid_transition(); // Never completed, or its completion was reopened (a cancel).
 		}
 		foreach ( $rows as $row ) {
 			$pending_refund = array_filter( (array) ( $row['refunds'] ?? array() ), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );
