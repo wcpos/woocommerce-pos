@@ -54,6 +54,9 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		remove_action( 'wcpos_sale_completed', array( $this, 'announce' ), 10 );
 		remove_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'keep_fixtures_enabled' ), 20 );
+		remove_filter( 'woocommerce_payment_gateways', array( $this, 'gateways' ) );
+		remove_filter( 'wcpos_payment_method_capture_mode', array( $this, 'mode' ), 10 );
+		remove_filter( 'wcpos_payment_method_fields', array( $this, 'fields' ), 10 );
 		Completion_Stamp::reset();
 		parent::tearDown();
 	}
