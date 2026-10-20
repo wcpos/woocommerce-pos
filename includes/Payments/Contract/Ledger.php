@@ -1144,7 +1144,8 @@ class Ledger {
 		$held['refunds'][] = $reserve;
 		// No money moved: take the reservation and its entry back out, so the same command runs again (§7.13).
 		$refuse = fn( WP_Error $answer ): WP_Error => $this->withdraw( $order, $rows, $row, $reserve, $entry, $answer );
-		if ( ! $this->persist( $order, $rows, $held, false, fn( ?array $stored ) => $this->same_allocation( $reserve, $stored, $refund_id ) && ( null === $entry || isset( $stored['commands'][ $entry ] ) ) ) ) {
+		$strand = fn( string $cause ): array => $this->strand( $order, $rows, $held, $reserve, $entry, $cause );
+		if ( ! $this->persist( $order, $rows, $held, false, fn( ?array $stored ) => $this->reserved( $stored, $reserve, $entry ) ) ) {
 			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch.
 			return $refuse( new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) ) );
 		}
@@ -1152,16 +1153,16 @@ class Ledger {
 			// The row as it was before the reservation: every handler appends its own allocation.
 			$new = $handler->refund( $row, $refund_id, Money::normalize( $amount ) );
 		} catch ( \Throwable $error ) {
-			return $this->strand( $order, $held, $reserve, 'the provider call threw ' . get_class( $error ) . ': ' . $error->getMessage() );
+			return $strand( 'the provider call threw ' . get_class( $error ) . ': ' . $error->getMessage() );
 		}
 		if ( is_wp_error( $new ) ) {
 			$data = $new->get_error_data();
 			// The provider may have refunded: the reservation stands, and the answer is the stored row (§7.16).
-			return is_array( $data ) && true === ( $data['indeterminate'] ?? false ) ? $this->strand( $order, $held, $reserve, 'the provider answered indeterminately: ' . $new->get_error_message() ) : $refuse( $new );
+			return is_array( $data ) && true === ( $data['indeterminate'] ?? false ) ? $strand( 'the provider answered indeterminately: ' . $new->get_error_message() ) : $refuse( $new );
 		}
 		// A check that fails once the handler reports money moved (or in motion) strands; only "no money moved" withdraws.
 		$moved = (bool) array_filter( (array) ( $new['refunds'] ?? array() ), static fn( $allocation ) => (int) ( $allocation['id'] ?? 0 ) === $refund_id && in_array( $allocation['status'] ?? '', array( 'succeeded', 'pending' ), true ) );
-		$fail  = fn( WP_Error $error ) => $moved ? $this->strand( $order, $held, $reserve, 'the handler reported it, but ' . $error->get_error_code() . ': ' . $error->get_error_message() ) : $refuse( $error );
+		$fail  = fn( WP_Error $error ) => $moved ? $strand( 'the handler reported it, but ' . $error->get_error_code() . ': ' . $error->get_error_message() ) : $refuse( $error );
 		$row   = $this->apply_transition( $row, $new );
 		if ( is_wp_error( $row ) ) {
 			return $fail( $row );
@@ -1183,7 +1184,7 @@ class Ledger {
 		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole.
 		$answer = current( array_filter( $row['refunds'], static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
 		if ( ! $this->persist( $order, $rows, $row, true, fn( ?array $stored ) => $this->same_allocation( $answer, $stored, $refund_id ) ) ) {
-			return $this->strand( $order, $held, $reserve, 'its settle did not land' );
+			return $strand( 'its settle did not land' );
 		}
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
@@ -1249,14 +1250,36 @@ class Ledger {
 	 * the reservation stands, marked for a human, and the stored row is the answer, never an
 	 * error (Pro's hook would throw an error and WooCommerce delete the refund; spec §7.16).
 	 *
-	 * @param WC_Order $order   Order object.
-	 * @param array    $held    The reserved row.
-	 * @param array    $reserve The reservation.
-	 * @param string   $cause   What happened.
+	 * Storage must still hold the reservation (a settle can land with it stripped): when it does
+	 * not, the reserved row is written again; when that does not land either, the answer is the
+	 * reserved row, so it still says pending.
+	 *
+	 * @param WC_Order    $order   Order object.
+	 * @param array       $rows    Payment rows as read.
+	 * @param array       $held    The reserved row.
+	 * @param array       $reserve The reservation.
+	 * @param string|null $entry   The command id, if any.
+	 * @param string      $cause   What happened.
 	 */
-	private function strand( WC_Order $order, array $held, array $reserve, string $cause ): array {
+	private function strand( WC_Order $order, array $rows, array $held, array $reserve, ?string $entry, string $cause ): array {
 		$this->mark( $order, $held, $reserve, $cause );
-		return $this->stored_row( $order->get_id(), $held['id'] ) ?? $held;
+		$kept = fn( ?array $stored ): bool => $this->reserved( $stored, $reserve, $entry );
+		if ( $kept( $this->stored_row( $order->get_id(), $held['id'] ) ) || $this->persist( $order, $rows, $held, false, $kept ) ) {
+			return $this->stored_row( $order->get_id(), $held['id'] ) ?? $held;
+		}
+		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: storage will not keep the reservation; the provider may have refunded with no allocation stored.', $reserve['id'], $reserve['amount'], $order->get_id(), $held['id'] ) );
+		return $held;
+	}
+
+	/**
+	 * Whether a stored row holds the reservation and, when there is a command, its entry.
+	 *
+	 * @param array|null  $stored  Stored row.
+	 * @param array       $reserve The reservation.
+	 * @param string|null $entry   The command id, if any.
+	 */
+	private function reserved( ?array $stored, array $reserve, ?string $entry ): bool {
+		return $this->same_allocation( $reserve, $stored, (int) $reserve['id'] ) && ( null === $entry || isset( $stored['commands'][ $entry ] ) );
 	}
 
 	/**

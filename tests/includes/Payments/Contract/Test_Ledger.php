@@ -3250,6 +3250,61 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $before['balance'], $summary['balance'] );
 	}
 
+	/** #2362 review: a settle whose saves lose the allocation leaves the reservation re-persisted, never an empty answer. */
+	public function test_a_settle_that_keeps_stripping_the_allocation_re_persists_the_reservation(): void {
+		// Arrange: the two settle saves after the provider call land with the allocation stripped; later saves land as written.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$command  = $this->refund_command();
+		$stripped = 0;
+		$strip    = $this->force_allocation(
+			$order->get_id(),
+			$refund->get_id(),
+			null,
+			static function () use ( &$stripped ): bool {
+				if ( Refund_Probe_Gateway::$calls > 0 && $stripped < 2 ) {
+					++$stripped;
+					return true;
+				}
+				return false;
+			}
+		);
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $command );
+		$stored = $this->stored_row_of( $order->get_id(), $row['id'] );
+		$again  = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertSame( 2, $stripped );
+		$this->assertIsArray( $result );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $result, $refund->get_id() ) );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $stored, $refund->get_id() ) );
+		$this->assertArrayHasKey( $command['id'], $stored['commands'] );
+		$this->assertIsArray( $again );
+		$this->assertSame( 'pending', $this->allocations_of( $again, $refund->get_id() )[0]['status'] );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$this->assertCount( 1, $this->stranded_logs() );
+	}
+
+	/** #2362 review: a reservation storage will not keep is logged on its own line, and the answer still says pending. */
+	public function test_a_reservation_storage_will_not_keep_is_logged_and_answered_pending(): void {
+		// Arrange: every save after the provider call lands with the allocation stripped.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$strip = $this->force_allocation( $order->get_id(), $refund->get_id(), null, static fn() => Refund_Probe_Gateway::$calls > 0 );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $result, $refund->get_id() ) );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+		$this->assertNotEmpty( array_filter( $this->refund_logs, static fn( $line ) => false !== strpos( $line, 'storage will not keep the reservation' ) ) );
+	}
+
 	/** §6.6 pin 3, second case: a later answer's reference is part of the read-back, not only its status. */
 	public function test_refund_whose_pending_answer_loses_its_reference_is_stranded(): void {
 		// Arrange: the handler answers pending with a reference; storage keeps the bare reservation.
