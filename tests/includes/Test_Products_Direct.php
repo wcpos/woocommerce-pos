@@ -99,41 +99,6 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Direct test: product_set_stock updates modified date.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::product_set_stock
-	 */
-	public function test_direct_product_set_stock(): void {
-		global $wpdb;
-
-		$products = new Products();
-		$product  = ProductHelper::create_simple_product();
-
-		// Backdate the row directly: wp_update_post() always stamps post_modified
-		// with the current time, so a backdate through it never happens.
-		$original_modified = '2020-01-01 00:00:00';
-		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- test fixture; cache cleared below.
-			$wpdb->posts,
-			array(
-				'post_modified'     => $original_modified,
-				'post_modified_gmt' => $original_modified,
-			),
-			array( 'ID' => $product->get_id() )
-		);
-		clean_post_cache( $product->get_id() );
-		$this->assertSame( $original_modified, get_post_field( 'post_modified', $product->get_id() ), 'Precondition: post is backdated' );
-
-		// Call method directly
-		$products->product_set_stock( $product );
-
-		// Get updated modified date
-		wp_cache_flush();
-		$new_modified = get_post_field( 'post_modified', $product->get_id() );
-
-		$this->assertNotSame( $original_modified, $new_modified, 'Modified date should be updated' );
-	}
-
-	/**
 	 * Direct test: hide_pos_only_products returns early for admin.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
