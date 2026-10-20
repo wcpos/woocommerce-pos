@@ -433,6 +433,85 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $sale_two['payload']['fiscal']['immutable_id'], $two['payload']['fiscal']['corrects'] );
 	}
 
+	/**
+	 * Take cash on the order in a session, as the till's money command does.
+	 *
+	 * @param \WC_Order $order   Order.
+	 * @param array     $session Session row.
+	 * @param string    $amount  Amount.
+	 * @return array|\WP_Error The row.
+	 */
+	private function cash_in( \WC_Order $order, array $session, string $amount ) {
+		$row = null;
+		Completion_Stamp::with_provenance(
+			array(
+				'register_id' => $session['register_id'],
+				'session_id' => $session['id'],
+			),
+			static function () use ( $order, $session, $amount, &$row ): void {
+				$row = Ledger::instance()->record(
+					wc_get_order( $order->get_id() ),
+					array(
+						'id' => wp_generate_uuid4(),
+						'method_id' => 'pos_cash',
+						'amount' => $amount,
+						'session_id' => $session['id'],
+					)
+				);
+			},
+			$order->get_id()
+		);
+		return $row;
+	}
+
+	/** The late correction waits for its completion's own sale row, and lands when recovery writes it. */
+	public function test_a_late_sale_waits_for_its_completions_sale_row(): void {
+		// Arrange: completion 1 in open session A; session B is already closed.
+		$session_a = $this->closure_session( null, 'open' );
+		$session_b = $this->closure_session();
+		( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session_b ) );
+		$order = $this->order();
+		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
+		$order->save();
+		$this->cash_in( $order, $session_a, '100.00' );
+		$reopened = $this->reopen( $order );
+		$reopened->set_total( '120.00' );
+		$reopened->save();
+		// The sale sequence cannot advance, so record() answers null without throwing.
+		$stuck = static fn( $value, $old ) => $old;
+
+		// Act: completion 2 in B, whose sale insert fails.
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale', $stuck, 10, 2 );
+		try {
+			$leg = $this->cash_in( $order, $session_b, '20.00' );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale', $stuck, 10 );
+		}
+		$store  = new Fiscal_Record_Store();
+		$before = $store->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		// The next money command on the order recovers the sale row.
+		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $leg['id'] . '/status' ) );
+
+		// Assert.
+		$this->assertSame( array(), $before );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$two     = $store->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertIsArray( $two );
+		$late = $store->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $late );
+		$this->assertSame( $two['id'], $late[0]['corrects_record_id'] );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.
