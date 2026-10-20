@@ -79,6 +79,20 @@ final class Completion_Stamp {
 	 */
 	public static function on_pre_payment_complete( $id ): void {
 		self::$completing[ (int) $id ] = true;
+		// WooCommerce's no-op branch (a status payment_complete() refuses) fires
+		// woocommerce_payment_complete_order_status_{status} instead: clear the flag there too.
+		foreach ( array_keys( wc_get_order_statuses() ) as $status ) {
+			add_action( 'woocommerce_payment_complete_order_status_' . ( 'wc-' === substr( $status, 0, 3 ) ? substr( $status, 3 ) : $status ), array( __CLASS__, 'on_payment_completed' ), 15, 1 );
+		}
+	}
+
+	/**
+	 * The order's payment_complete() has finished, whichever branch it took.
+	 *
+	 * @param int $id Order ID.
+	 */
+	public static function on_payment_completed( $id ): void {
+		unset( self::$completing[ (int) $id ] );
 	}
 
 	/**
@@ -204,7 +218,7 @@ final class Completion_Stamp {
 	 * @param int $id Order ID.
 	 */
 	public static function on_payment_complete( $id ): void {
-		unset( self::$completing[ (int) $id ] );
+		self::on_payment_completed( $id );
 		try {
 			$order = wc_get_order( (int) $id );
 			if ( $order instanceof WC_Order ) {

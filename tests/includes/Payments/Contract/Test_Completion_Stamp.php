@@ -333,6 +333,35 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1 ), $this->announced );
 	}
 
+	/** A payment_complete() that takes WooCommerce's no-op branch leaves no flag behind on its order. */
+	public function test_a_no_op_payment_complete_does_not_stop_a_later_paid_status_write_minting(): void {
+		// Arrange: a sent attempt; elsewhere, a payment_complete() on an order already completed.
+		$order    = $this->create_pos_order();
+		$attempt  = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $attempt, 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) )->get_data()['outcome'] );
+		Completion_Stamp::reset();
+		$done = OrderHelper::create_order();
+		$done->set_status( 'completed' );
+		$done->save();
+		wc_get_order( $done->get_id() )->payment_complete();
+		// The same order takes the no-op branch too: payment_complete() refused on its status.
+		$refuse = static fn( $statuses ) => array_diff( $statuses, array( 'pending' ) );
+		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', $refuse, PHP_INT_MAX );
+		try {
+			wc_get_order( $order->get_id() )->payment_complete();
+		} finally {
+			remove_filter( 'woocommerce_valid_order_statuses_for_payment_complete', $refuse, PHP_INT_MAX );
+		}
+		$this->assertSame( 'pending', wc_get_order( $order->get_id() )->get_status() );
+
+		// Act: later in the request, the merchant marks the invoice paid.
+		wc_get_order( $order->get_id() )->update_status( 'processing' );
+
+		// Assert.
+		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( wc_get_order( $order->get_id() ) ), 'id' ) );
+		$this->assertSame( array( array( $attempt ) ), array_column( $this->stored_history( $order->get_id() ), 'payment_ids' ) );
+	}
+
 	/** A gateway that lands a paid status without payment_complete() writes one entry. */
 	public function test_a_gateway_that_only_lands_a_paid_status_writes_one_entry(): void {
 		// Arrange: the stored POS status is WooCommerce's default (completed); the gateway lands processing.
