@@ -137,6 +137,8 @@ final class Completion_Stamp {
 			$completed = self::completed_statuses( $order );
 			if ( in_array( (string) $to, $completed, true ) && ! in_array( (string) $from, $completed, true ) ) {
 				self::memoise( $order );
+			} elseif ( in_array( (string) $to, $completed, true ) ) {
+				return; // Completed to completed (processing to a configured on-hold): the sale still stands.
 			} elseif ( in_array( (string) $to, self::OPEN_STATUSES, true ) && ! in_array( (string) $from, self::OPEN_STATUSES, true ) ) {
 				self::mark_reopened( $order );
 			} elseif ( in_array( (string) $to, self::OPEN_STATUSES, true ) && in_array( (string) $from, $completed, true ) ) {

@@ -512,6 +512,33 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $this->stored_history( $pos->get_id() ) );
 	}
 
+	/** Moving between two completed statuses (processing to a configured on-hold) is no reopen. */
+	public function test_a_move_between_completed_statuses_does_not_reopen_the_sale(): void {
+		// Arrange: Cash's POS Order Status stored as On hold; the sale completes onto it.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$this->configure( array( 'pos_cash' => 'wc-on-hold' ) );
+		$order = $this->create_pos_order();
+		$this->record( $order, '92.95', $this->provenance( self::REGISTER_A, self::SESSION_A ) );
+		$this->assertSame( 'on-hold', wc_get_order( $order->get_id() )->get_status() );
+
+		// Act: wp-admin moves it to processing and back to on-hold, then the till closes it.
+		foreach ( array( 'processing', 'on-hold' ) as $status ) {
+			$moved = wc_get_order( $order->get_id() );
+			$moved->set_status( $status );
+			$moved->save();
+		}
+		$history = $this->stored_history( $order->get_id() );
+		$closed  = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' ) );
+
+		// Assert.
+		$this->assertCount( 1, $history );
+		$this->assertNull( $history[0]['reopened_at_gmt'] );
+		$this->assertSame( 200, $closed->get_status() );
+		$this->assertSame( 1, $closed->get_data()['completion']['n'] );
+		$this->assertCount( 1, $this->stored_history( $order->get_id() ) );
+		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+	}
+
 	/** A storefront order paid online has no register origin and is never stamped. */
 	public function test_a_storefront_order_paid_online_writes_no_entry(): void {
 		// Arrange.
