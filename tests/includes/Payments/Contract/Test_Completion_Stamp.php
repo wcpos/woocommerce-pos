@@ -270,6 +270,31 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1 ), $this->announced );
 	}
 
+	/** A sent attempt completed by a later callback is stamped after the passthrough mints its row. */
+	public function test_a_sent_attempt_callback_stamps_after_the_mint_with_its_row(): void {
+		// Arrange: submit from register B answers sent; the callback is a later request.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order    = $this->create_pos_order();
+		$response = $this->submit( $order, wp_generate_uuid4(), 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) );
+		$this->assertSame( 'sent', $response->get_data()['outcome'] );
+		Completion_Stamp::reset();
+
+		// Act.
+		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
+
+		// Assert.
+		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $rows );
+		$this->assertCount( 1, $history );
+		$this->assertSame( self::REGISTER_B, $history[0]['register'] );
+		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
+		$this->assertSame( array( 1 ), $this->announced );
+		$payments = $this->only_sale( $order->get_id() )['payload']['payments'];
+		$this->assertCount( 1, $payments );
+		$this->assertSame( 'txn_callback', $payments[0]['transaction_id'] );
+	}
+
 	/** A gateway that lands a paid status without payment_complete() writes one entry. */
 	public function test_a_gateway_that_only_lands_a_paid_status_writes_one_entry(): void {
 		// Arrange: the stored POS status is WooCommerce's default (completed); the gateway lands processing.

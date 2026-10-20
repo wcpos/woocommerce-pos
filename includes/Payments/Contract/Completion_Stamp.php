@@ -432,15 +432,16 @@ final class Completion_Stamp {
 	}
 
 	/**
-	 * Inside a submit or order-pay window the tender's row is minted after the gateway answers: the
-	 * stamp waits for it (the submit stamps after its mint, the webview at payment-complete 15 or
-	 * status-change 15), so the entry and its sale record name the payment.
+	 * Inside a submit or order-pay window, or for a sent attempt a later callback completes, the
+	 * tender's row is minted after the status lands: the stamp waits for it (the submit stamps after
+	 * its mint, the webview at payment-complete 15 or status-change 15), so the entry and its sale
+	 * record name the payment.
 	 *
 	 * @param WC_Order $order Order object.
 	 */
 	private static function awaits_mint( WC_Order $order ): bool {
 		$id = $order->get_id();
-		return ( Gateway_Submission::is_submitting( $id ) || Webview_Passthrough::is_paying( $id ) ) && ! self::captured_ids( $order );
+		return ( Gateway_Submission::is_submitting( $id ) || Webview_Passthrough::is_paying( $id ) || isset( self::$attempts[ $id ] ) ) && ! self::captured_ids( $order );
 	}
 
 	/**
