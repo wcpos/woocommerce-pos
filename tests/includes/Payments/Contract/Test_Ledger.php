@@ -3698,6 +3698,56 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
+	/** #2362 review: a settled refund that storage will not keep after the derive save falls back to its reservation. */
+	public function test_a_settled_refund_storage_will_not_keep_falls_back_to_its_reservation(): void {
+		// Arrange: the settle (the first save after the provider call) lands; every later save that carries
+		// the refund's allocation as succeeded has it stripped, and a pending allocation goes through.
+		list( $order, $row, $refund ) = $this->reopened_sale_owing_twenty();
+		$command   = $this->refund_command();
+		$order_id  = $order->get_id();
+		$refund_id = $refund->get_id();
+		$after     = 0;
+		$stripped  = 0;
+		$strip     = static function ( $saving ) use ( $order_id, $refund_id, &$after, &$stripped ): void {
+			if ( ! $saving instanceof \WC_Order || $saving->get_id() !== $order_id || 0 === Refund_Answer_Handler::$calls || 1 === ++$after ) {
+				return;
+			}
+			$value = json_decode( (string) $saving->get_meta( Ledger::META_KEY, true ), true );
+			foreach ( $value['payments'] as &$payment ) {
+				$kept = array_values( array_filter( $payment['refunds'] ?? array(), static fn( $allocation ) => ! ( (int) $allocation['id'] === $refund_id && 'succeeded' === $allocation['status'] ) ) );
+				if ( $kept !== $payment['refunds'] ) {
+					++$stripped;
+					$payment['refunds'] = $kept;
+				}
+			}
+			unset( $payment );
+			$saving->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$seen = array();
+		$this->listen_allocated( $refund_id, $seen );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund_id, '20.00', $command );
+		$lost   = $stripped;
+		$stored = $this->stored_row_of( $order_id, $row['id'] );
+		$again  = Ledger::instance()->refund( wc_get_order( $order_id ), $row['id'], $refund_id, '20.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+
+		// Assert: the derive save and both re-persists of the settled row lost it; the reservation landed.
+		$this->assertSame( 3, $lost );
+		$this->assertSame( array( $this->reservation( $refund_id, '20.00' ) ), $this->allocations_of( $result, $refund_id ) );
+		$this->assertSame( array( $this->reservation( $refund_id, '20.00' ) ), $this->allocations_of( $stored, $refund_id ) );
+		$this->assertArrayHasKey( $command['id'], $stored['commands'] );
+		$logs = $this->stranded_logs();
+		$this->assertCount( 1, $logs );
+		$this->assertStringContainsString( 'the provider settled it, but storage will not keep the settled allocation', $logs[0] );
+		$this->assertCount( 1, $this->stranded_notes( $order_id ) );
+		$this->assertSame( array(), $seen );
+		$this->assertSame( 'pending', $this->allocations_of( $again, $refund_id )[0]['status'] );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
 		// Arrange: a cash row already projected onto a completed sale, so the derive after the settle moves nothing.

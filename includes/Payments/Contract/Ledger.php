@@ -1198,9 +1198,8 @@ class Ledger {
 			return $derived instanceof WC_Order && $derived->get_status() === $order->get_status() ? null : 'the derived status was not stored';
 		};
 		if ( ! $this->after_settle( $order, $rows, $row, $settled, $derive ) ) {
-			// The provider settled it: no hook for an outcome storage does not hold, and a human is told.
-			$this->mark( $order, $row, $reserve, 'the provider settled it, but storage will not keep the settled allocation' );
-			return $row;
+			// No hook and no success storage does not hold: the reservation is the guard, re-persisted (§7.16).
+			return $strand( 'the provider settled it, but storage will not keep the settled allocation' );
 		}
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
