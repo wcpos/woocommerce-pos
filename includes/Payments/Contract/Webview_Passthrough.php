@@ -102,8 +102,10 @@ class Webview_Passthrough {
 			}
 		}
 
+		// A sent attempt this payment answers is the row's id, so Ledger::save() marks the attempt paid.
+		$attempt = Completion_Stamp::attempt( $order->get_id() );
 		try {
-			self::mint( $order );
+			self::mint( $order, $attempt ? array( 'id' => $attempt['attempt_id'] ) : array() );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
 		} catch ( \Throwable $error ) {

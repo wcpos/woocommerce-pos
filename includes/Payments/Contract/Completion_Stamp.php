@@ -142,6 +142,16 @@ final class Completion_Stamp {
 	}
 
 	/**
+	 * The sent attempt remembered for the order in this request (attempt_id, method_id, cashier_id,
+	 * provenance), or null.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public static function attempt( int $order_id ): ?array {
+		return self::$attempts[ $order_id ] ?? null;
+	}
+
+	/**
 	 * Remember the provenance a sent submit left on the order before the stamp is cleared.
 	 *
 	 * @param WC_Order $order Order object.
