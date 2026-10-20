@@ -529,6 +529,27 @@ class Gateway_Submission {
 			}
 		}
 		Ledger::saving( $fresh->get_id(), fn() => $fresh->save() );
+		if ( null === $cancelled_attempt ) {
+			return;
+		}
+		// The decline is the truth: the cleanup is two meta rows, so a half that did not land is written once more.
+		for ( $pass = 0; ; ++$pass ) {
+			$stored = wc_get_order( $order->get_id() );
+			$stored->read_meta_data( true );
+			$fated = 'cancelled' === ( self::read_attempts( $stored )[ $cancelled_attempt ] ?? null );
+			$gone  = null === $command_id || null === Command_Log::find( $stored, array(), $command_id );
+			if ( ( $fated && $gone ) || $pass > 0 ) {
+				break;
+			}
+			self::remember_attempt( $stored, self::read_attempts( $stored ), $cancelled_attempt, 'cancelled' );
+			if ( null !== $command_id ) {
+				Command_Log::forget( $stored, $command_id );
+			}
+			Ledger::saving( $stored->get_id(), fn() => $stored->save() );
+		}
+		if ( ! $fated || ! $gone ) {
+			Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d was declined, but its cleanup did not land (attempt cancelled: %s, command entry removed: %s); the sweeper\'s stranded-attempt path owns the residual.', $cancelled_attempt, $order->get_id(), wp_json_encode( $fated ), wp_json_encode( $gone ) ), array( 'order_id' => $order->get_id() ) );
+		}
 	}
 
 	/**

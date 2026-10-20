@@ -1670,6 +1670,99 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( $stored )[ $attempt ] );
 		$this->assertArrayHasKey( $body['command_id'], $this->stored_commands( $order->get_id() ) );
 	}
+	/**
+	 * A hook that keeps the stored attempt history over a staged `cancelled` for the attempt, a number of times.
+	 *
+	 * @param string $attempt Attempt id.
+	 * @param int    $times   How many cleanup saves lose the history write.
+	 */
+	private function lose_cancelled_history( string $attempt, int $times ): callable {
+		$lost = 0;
+		$hook = static function ( $saving ) use ( $attempt, $times, &$lost ): void {
+			if ( 'cancelled' !== ( Gateway_Submission::read_attempts( $saving )[ $attempt ] ?? null ) || $lost >= $times ) {
+				return;
+			}
+			++$lost;
+			$stored = wc_get_order( $saving->get_id() );
+			$stored->read_meta_data( true );
+			$saving->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $stored->get_meta( Gateway_Submission::ATTEMPTS_META_KEY ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $hook, 1 );
+		return $hook;
+	}
+
+	/** Pin 42: a declined attempt's cleanup that lands only half is written again: attempt cancelled, no entry. */
+	public function test_a_declined_attempts_half_landed_cleanup_is_written_again(): void {
+		// Arrange: the gateway declines; the first cleanup save loses the attempt's fate.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		Sent_Test_Gateway::$failure = 'failure';
+		$hook = $this->lose_cancelled_history( $body['attempt_id'], 1 );
+
+		// Act.
+		try {
+			$declined = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $hook, 1 );
+			Sent_Test_Gateway::$failure = '';
+		}
+		$attempts = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$commands = $this->stored_commands( $order->get_id() );
+		$retried  = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 502, $declined->get_status() );
+		$this->assertSame( 'wcpos_provider_error', $declined->get_data()['code'] );
+		$this->assertSame( 'cancelled', $attempts[ $body['attempt_id'] ] );
+		$this->assertArrayNotHasKey( $body['command_id'], $commands );
+		$this->assertSame( 409, $retried->get_status() );
+		$this->assertSame( 'wcpos_payment_conflict', $retried->get_data()['code'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
+	/** Pin 42: a cleanup that never lands keeps the provider's 502 and says what is left, for the sweeper. */
+	public function test_a_declined_attempts_cleanup_that_never_lands_is_logged(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		Sent_Test_Gateway::$failure = 'failure';
+		$hook   = $this->lose_cancelled_history( $body['attempt_id'], PHP_INT_MAX );
+		$logged = array();
+		$log    = static function ( $should_log, $message ) use ( &$logged ) {
+			$logged[] = $message;
+			return false;
+		};
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+
+		// Act.
+		try {
+			$declined = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $hook, 1 );
+			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			Sent_Test_Gateway::$failure = '';
+		}
+
+		// Assert.
+		$this->assertSame( 502, $declined->get_status() );
+		$this->assertSame( 'wcpos_provider_error', $declined->get_data()['code'] );
+		$residual = array_filter( $logged, static fn( $line ) => false !== strpos( (string) $line, 'cleanup did not land' ) );
+		$this->assertCount( 1, $residual );
+		$this->assertStringContainsString( 'attempt cancelled: false', (string) reset( $residual ) );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
 }
 
 /** A gateway that sends an invoice, not money. */
