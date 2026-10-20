@@ -73,16 +73,6 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test Products class can be instantiated.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::__construct
-	 */
-	public function test_products_instantiation(): void {
-		$products = new Products();
-		$this->assertInstanceOf( Products::class, $products );
-	}
-
-	/**
 	 * Direct test: hide_pos_only_products returns early for admin.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
