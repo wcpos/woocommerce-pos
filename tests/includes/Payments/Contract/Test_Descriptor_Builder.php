@@ -113,8 +113,17 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( array( 'schema', 'contract', 'methods' ), array_keys( $envelope ) );
 		$this->assertSame( 1, $envelope['schema'] );
-		$this->assertSame( '1.2', $envelope['contract'] );
+		$this->assertSame( '1.3', $envelope['contract'] );
 		$this->assertCount( count( $gateways ), $envelope['methods'] );
+	}
+
+	/** The envelope reports payments contract 1.3 (ADR 0040, spec §6a.1). */
+	public function test_descriptor_envelope_reports_contract_1_3(): void {
+		// Act.
+		$envelope = Descriptor_Builder::instance()->all();
+
+		// Assert.
+		$this->assertSame( '1.3', $envelope['contract'] );
 	}
 
 	/** Unknown kind filters are rejected. */
