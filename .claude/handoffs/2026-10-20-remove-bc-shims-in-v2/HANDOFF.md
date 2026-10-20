@@ -4,7 +4,7 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 
 ## Why this exists
 
-#2371 found `Products::product_set_stock()` kept under the repo's "preserve backward compatibility on public methods" rule although nothing in Free, Pro, `next` or the tests called it, and the WooCommerce behaviour it worked around had been fixed in WooCommerce 3.4.0 (woocommerce/woocommerce#19595, May 2018). Paul: *"How many other old functions have we kept with this rule"* and then *"I will leave them in 1.11.x, but they should be removed in v2 for free and pro."* This document is the inventory and the procedure.
+#2371 found `Products::product_set_stock()` kept under the repo's "preserve backward compatibility on public methods" rule although nothing in Free, Pro, `next` or the tests called it, and the WooCommerce behaviour it worked around had been fixed in WooCommerce 3.4.0 (woocommerce/woocommerce#19595, May 2018). **That method, its two hook registrations and its tests were deleted in #2371 itself; they are not part of this v2 work and appear in no table below.** Paul: *"How many other old functions have we kept with this rule"* and then *"I will leave them in 1.11.x, but they should be removed in v2 for free and pro."* This document is the inventory of everything else, and the procedure.
 
 ## Lanes and timing
 
@@ -14,7 +14,7 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 
 ## Procedure per symbol
 
-1. Grep Free `includes/`, `tests/`, `templates/`; Pro `includes/`, `tests/`, `templates/`; and Free + Pro `origin/next` for the bare name, `->name(`, `::name(`, `'name'`, `"name"` (string hook callbacks and REST `callback` arrays count as callers).
+1. Grep where the consumer lives, not just the plugin repos. For a PHP symbol or a hook: Free `includes/`, `tests/`, `templates/`; Pro `includes/`, `tests/`, `templates/`; and Free + Pro `origin/next`, for the bare name, `->name(`, `::name(`, `'name'`, `"name"` (string hook callbacks and REST `callback` arrays count as callers). For anything a client reads (a REST route, response field such as `preview_html`, header, option, journal op): also the app, `../monorepo`, every package that talks to the plugin, on its current lane. For a hook or filter: also the `wcpos/extensions` catalog and the extension pages on `docs.wcpos.com`. A clean grep of Free and Pro alone does not make a client-facing field dead.
 2. If a caller exists in `next`, migrate the caller to the replacement named in the `@deprecated` tag, in the same PR.
 3. Delete the symbol and its direct test. **Do not add a test that the symbol is absent** (Paul, 2026-10-20: *"don't test the hook is absent, that is stupid"*). Keep or write a test of the behaviour the replacement provides.
 4. One line in the changelog's "Developers:" entry naming the removed symbol and its replacement.
@@ -28,7 +28,7 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 | `includes/wcpos-functions.php` 574–720 | `woocommerce_pos_url()`, `woocommerce_pos_request()`, `woocommerce_pos_admin_request()`, `woocommerce_pos_get_settings()`, `woocommerce_pos_json_encode()`, `woocommerce_pos_locate_template()`, `woocommerce_pos_trim_html_string()`, `woocommerce_pos_doc_url()`, `woocommerce_pos_faq_url()`, `woocommerce_pos_is_pos_order()` | the `wcpos_*` function of the same name |
 | `includes/API/Order_Search.php` | whole class `Order_Search` (`terms()` and two more static methods) | `Sync\Collection_Rules` plan |
 | `includes/API/Product_Search.php` | whole class `Product_Search` (`posts_search()` and three more static methods) | `Sync\Collection_Rules` plan |
-| `includes/API/V1/Settings.php:354` | `payment_gateways_settings()` | `Payment_Gateways_Section::free_tier_rule()` (tag already says 2.0.0) |
+| `includes/API/V1/Settings.php:354` | `payment_gateways_settings()` | `Payment_Gateways_Section::free_tier_rule()`. **The tag says `@deprecated 2.0.0`, which would deprecate and remove in the same release.** Retag it `1.11.x` in the 1.11.x tagging PR (it has been dead since the section landed on `main`), so a released version carries the deprecation before v2 removes it; if that PR does not ship before 2.0, defer this one row to 2.2 |
 | `includes/API/V1/Products_Controller.php` 394, 600, 614, 631 | `wcpos_posts_search()`, `wcpos_posts_join_to_products_search()`, `wcpos_posts_groupby_product_search()`, `wcpos_posts_where_product_exclude_online_only()` | Collection Rules installs the behaviour |
 | `includes/API/V1/Product_Variations_Controller.php` 297, 310, 323, 357, 456 | `wcpos_posts_search()`, `wcpos_posts_join_to_posts_search()`, `wcpos_posts_groupby_posts_search()`, `wcpos_posts_where_product_variation_exclude_online_only()`, `wcpos_posts_clauses()` | Collection Rules |
 | `includes/API/V1/Coupons_Controller.php:163` | `wcpos_check_permissions()` | `Permission_Rules::wc_filter()` |
@@ -37,7 +37,7 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 | `includes/API/V1/Traits/Query_Helpers.php:16` | `wcpos_combine_meta_queries()` | Customers_Controller's private copy |
 | `includes/API/V2/Variations_Controller.php` 414, 462 | `wcpos_posts_clauses()` ("retained for Pro callers" — check Pro `next`), `group_search_results()` | Collection Rules |
 | `includes/API/V2/Write_Controller.php:719` | `wcpos_check_permissions()` | `Permission_Rules::wc_filter()` |
-| `includes/Sync/Pos_Visibility.php` 249, 263 | `online_only_product_ids()`, `online_only_variation_ids()` | `hidden_ids( self::PRODUCTS \| self::VARIATIONS, $scope )` |
+| `includes/Sync/Pos_Visibility.php` 249, 263 | `online_only_product_ids()`, `online_only_variation_ids()` | `hidden_ids( self::PRODUCTS, $scope )` and `hidden_ids( self::VARIATIONS, $scope )` respectively; the constants are strings, so never combine them with `\|`, and a real union is `self::CATALOG` |
 | `includes/Sync/Integrity_Digest.php` 349, 480, 548, 558 | `customer_digest_select_sql()`, `upsert_order_digest()`, `upsert_digest()`, `upsert_customer_digest()` | `Digest_Index::customer_digest_select_sql()`, `record_order_saved()`, `record_post_saved()`, `record_customer_saved()` |
 | `includes/Services/Customer_Account_Guard.php` | whole class: `protected_capabilities()`, `can_modify()`, `allow_target_roles()`, `denial()` | `Permission_Rules::*` |
 | `includes/Services/Auth.php` 33, 40, 47 | consts `MAX_SESSIONS_PER_USER`, `SESSION_EVICTION_IDLE_SECONDS`, `MAX_SESSIONS_ROW_BYTES` | `Session_Registry::*` |

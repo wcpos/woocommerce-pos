@@ -28,7 +28,7 @@ Logger::log( 'Session revoked for user: ' . $user_id );
 ```
 
 ## Backwards Compatibility
-Compatibility is owed to consumers, not to code. The consumers are the REST contract the app reads, hooks and filters Pro or a documented extension uses, and public methods Pro calls. Before changing one, grep Free, Pro, `next` and the tests for it. When a consumer exists, add parameters with defaults, deprecate in `X.Y` naming the consumer in the tag, remove in `X.Y+2` at the earliest:
+Compatibility is owed to consumers, not to code. The consumers are the REST contract the app reads, hooks and filters Pro or a documented extension uses, and public methods Pro calls. Before changing one, grep where its consumer lives: Free, Pro and `next` for PHP symbols and hooks; the app (`../monorepo`) for a REST route, field, header or option; the `wcpos/extensions` catalog and `docs.wcpos.com` for anything a documented extension hooks. A grep of the plugin repos alone proves nothing about a client-facing field. When a consumer exists, add parameters with defaults, deprecate in `X.Y` naming the consumer in the tag, remove in `X.Y+2` at the earliest:
 ```php
 public function get_user_data( WP_User $user, bool $is_web_frontend = false ): array {}
 ```
