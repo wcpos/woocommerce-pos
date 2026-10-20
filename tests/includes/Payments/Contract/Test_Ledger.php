@@ -3568,9 +3568,90 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 2, Refund_Probe_Gateway::$calls );
 	}
 
+	/**
+	 * A reopened sale holding more captured money than its reduced total (100.00 captured, total 80.00,
+	 * refund_due 20.00), its row refunded through Refund_Answer_Handler, and a 20.00 refund.
+	 *
+	 * @return array{0: \WC_Order, 1: array, 2: \WC_Order_Refund}
+	 */
+	private function reopened_sale_owing_twenty(): array {
+		list( $order, $row, $lines ) = $this->paid_sale_with_lines( array( '80.00', '20.00' ) );
+		$order->set_status( 'pos-open' );
+		$order->remove_item( $lines[1] );
+		$order->calculate_totals( false );
+		$order->save();
+		Refund_Answer_Handler::$answer = null;
+		Refund_Answer_Handler::$calls  = 0;
+		Capture_Mode_Registry::instance()->register( 'refund_answer', Refund_Answer_Handler::class );
+		$row['capture_mode'] = 'refund_answer';
+		Ledger::instance()->save( wc_get_order( $order->get_id() ), array( $row ), false );
+		$this->refund_logs = array();
+		add_filter(
+			'woocommerce_pos_logging',
+			function ( $should_log, $message ) {
+				$this->refund_logs[] = (string) $message;
+				return false;
+			},
+			10,
+			2
+		);
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-open', $order->get_status() );
+		$this->assertSame( '20.00', Ledger::instance()->summary( $order )['refund_due'] );
+		$this->assertCount( 1, Completion_Stamp::read( $order ) );
+		return array( $order, Ledger::instance()->find( $order, $row['id'] ), $this->refund_of( $order, '20.00' ) );
+	}
+
+	/** #2362 review: a settle that does not land never completes the sale; derivation runs only after it landed. */
+	public function test_a_settle_that_does_not_land_leaves_the_order_uncompleted(): void {
+		// Arrange: every save after the provider call is forced back to the reservation.
+		list( $order, $row, $refund ) = $this->reopened_sale_owing_twenty();
+		$force                        = $this->force_allocation( $order->get_id(), $refund->get_id(), $this->reservation( $refund->get_id(), '20.00' ), static fn() => Refund_Answer_Handler::$calls > 0 );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $force, PHP_INT_MAX );
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pos-open', $stored->get_status() );
+		$this->assertCount( 1, Completion_Stamp::read( $stored ) );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '20.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+	}
+
+	/** #2362 review: a landed settle that covers the signed balance completes the sale once, before the allocated hook. */
+	public function test_a_succeeded_refund_that_covers_the_signed_balance_completes_the_order(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->reopened_sale_owing_twenty();
+		$seen                         = array();
+		$this->listen_allocated( $refund->get_id(), $seen );
+		$paid_when_allocated = null;
+		add_action(
+			'woocommerce_pos_refund_allocated',
+			static function ( $allocated ) use ( &$paid_when_allocated ): void {
+				$paid_when_allocated = wc_get_order( $allocated->get_id() )->is_paid();
+			}
+		);
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00', $this->refund_command() );
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'succeeded', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
+		$this->assertTrue( $stored->is_paid() );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( $stored ), 'n' ) );
+		$this->assertSame( array( 'succeeded' ), $seen );
+		$this->assertTrue( $paid_when_allocated );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
-		// Arrange: a cash row on a completed sale, so the settle's derive moves nothing.
+		// Arrange: a cash row already projected onto a completed sale, so the derive after the settle moves nothing.
 		$order = $this->create_pos_order();
 		$row   = $this->payment(
 			'pos_cash',
@@ -3581,7 +3662,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 				'capture_mode' => 'manual',
 			)
 		);
-		Ledger::instance()->save( $order, array( $row ), false );
+		Ledger::instance()->save( $order, array( $row ) );
 		$order = wc_get_order( $order->get_id() );
 		$order->set_status( 'completed' );
 		$order->save();

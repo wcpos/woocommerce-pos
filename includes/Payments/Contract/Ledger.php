@@ -1183,8 +1183,25 @@ class Ledger {
 		$row = $this->normalize_row( $order, $this->with_command( $row, $command, $refund_id ) );
 		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole, with the command's entry.
 		$answer = current( array_filter( $row['refunds'], static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
-		if ( ! $this->persist( $order, $rows, $row, true, fn( ?array $stored ) => $this->reserved( $stored, $answer, $entry ) ) ) {
+		// Not derived in the same save: a settle attempt that misses must not have completed the sale (rule 3).
+		if ( ! $this->persist( $order, $rows, $row, false, fn( ?array $stored ) => $this->reserved( $stored, $answer, $entry ) ) ) {
 			return $strand( 'its settle did not land' );
+		}
+		$unstored = null;
+		try {
+			// The allocation has landed; derive on its own save, as Payments_Sweeper::run() does.
+			$this->derive( $order, $this->read( $order ) );
+			if ( $order->get_changes() ) {
+				self::saving( $order->get_id(), fn() => $order->save() );
+			}
+			$derived  = wc_get_order( $order->get_id() );
+			$unstored = $derived instanceof WC_Order && $derived->get_status() === $order->get_status() ? null : 'the derived status was not stored';
+		} catch ( \Throwable $error ) {
+			$unstored = $error->getMessage();
+		}
+		if ( null !== $unstored ) {
+			// The refund is settled; the next money command or `close` re-derives (rule 1).
+			$this->report( $order, sprintf( 'WCPOS refund #%d settled on order #%d, but deriving the order failed: %s', $refund_id, $order->get_id(), $unstored ), false );
 		}
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
