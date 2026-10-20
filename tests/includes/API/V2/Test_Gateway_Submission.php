@@ -1629,6 +1629,47 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'sent', $sent->get_data()['outcome'] );
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
+
+	/** Pin 41: a cancel whose stamp deletion was lost keeps no entry, so its retry runs the cancel again. */
+	public function test_a_cancel_whose_stamp_is_not_cleared_keeps_no_command_entry(): void {
+		// Arrange: a sent attempt; then every save puts the stamp back.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$stamp = Gateway_Submission::read_stamp( wc_get_order( $order->get_id() ) );
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'reason'     => 'Customer changed mind',
+			)
+		);
+		$keep = static function ( $saving ) use ( $stamp ): void {
+			if ( null === Gateway_Submission::read_stamp( $saving ) ) {
+				$saving->update_meta_data( Gateway_Submission::STAMP_META_KEY, $stamp );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $keep, 1 );
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'cancel', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $keep, 1 );
+		}
+		$commands  = $this->stored_commands( $order->get_id() );
+		$cancelled = $this->gateway_command( $order, 'cancel', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertArrayNotHasKey( $body['command_id'], $commands );
+		$this->assertSame( 200, $cancelled->get_status(), wp_json_encode( $cancelled->get_data() ) );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( $stored )[ $attempt ] );
+		$this->assertArrayHasKey( $body['command_id'], $this->stored_commands( $order->get_id() ) );
+	}
 }
 
 /** A gateway that sends an invoice, not money. */

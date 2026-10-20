@@ -399,7 +399,7 @@ class Gateway_Submission {
 	 * @param string   $reason     Cashier reason.
 	 * @param array    $command    The till's command; its entry rides the cancel's save.
 	 * @return array|WP_Error
-	 * @throws Ledger_Persistence_Exception When the entry did not reach storage (the cancel stands).
+	 * @throws Ledger_Persistence_Exception When the stamp, the attempt's fate or the entry did not reach storage.
 	 */
 	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason, array $command = array() ) {
 		$rows  = Ledger::instance()->read( $order );
@@ -420,9 +420,20 @@ class Gateway_Submission {
 		self::remember_command( $order, $command, strtolower( $attempt_id ) );
 		/* translators: 1: the payment method title, 2: the cashier's reason. */
 		Ledger::saving( $order->get_id(), fn() => $order->update_status( 'pos-open', trim( sprintf( __( 'Cancelled via POS: %1$s. %2$s', 'woocommerce-pos' ), $descriptor['title'], $reason ) ) ) );
-		if ( ! self::command_kept( $order->get_id(), $command ) ) {
-			Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d: the cancel stood (stamp cleared, attempt cancelled), but its command entry was not stored.', strtolower( $attempt_id ), $order->get_id() ), array( 'order_id' => $order->get_id() ) );
-			throw new Ledger_Persistence_Exception( 'WCPOS gateway command was not persisted.' );
+		// The cancel is three meta rows: it stands only when all three landed.
+		$stored  = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$cleared = null === self::read_stamp( $stored );
+		$fated   = 'cancelled' === ( self::read_attempts( $stored )[ strtolower( $attempt_id ) ] ?? null );
+		$kept    = self::command_kept( $order->get_id(), $command );
+		if ( ! $cleared || ! $fated || ! $kept ) {
+			if ( ! empty( $command['id'] ) ) {
+				// Withdrawn so the retry re-enters cancel() rather than replaying an incomplete one.
+				Command_Log::forget( $stored, $command['id'] );
+				Ledger::saving( $stored->get_id(), fn() => $stored->save() );
+			}
+			Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d: the cancel was not stored whole (stamp cleared: %s, attempt cancelled: %s, command entry: %s).', strtolower( $attempt_id ), $order->get_id(), wp_json_encode( $cleared ), wp_json_encode( $fated ), wp_json_encode( $kept ) ), array( 'order_id' => $order->get_id() ) );
+			throw new Ledger_Persistence_Exception( 'WCPOS gateway cancel was not persisted.' );
 		}
 		return array( 'order' => Ledger::instance()->summary( $order ) );
 	}
