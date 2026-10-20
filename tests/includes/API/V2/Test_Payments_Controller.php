@@ -1910,6 +1910,37 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $this->current_revision( $order ), $replayed->get_data()['revision'] );
 	}
 
+	/** Pin 36: an intent replay resumes its row after the merchant disabled the method; a new intent is still refused. */
+	public function test_an_intent_replay_resumes_after_the_method_is_disabled(): void {
+		// Arrange: intent c1 on the test handler, then the method is switched off for the POS.
+		$this->use_route_handler();
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '40.00' );
+		$path    = $this->payment_path( $order, $payment['id'] ) . '/intent';
+		$body    = $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) );
+		$this->assertSame( 200, $this->command( $path, $body )->get_status() );
+		add_filter(
+			'woocommerce_pos_payment_gateways_settings',
+			static function ( $settings ) {
+				$settings['gateways']['pos_cash']['enabled'] = false;
+				return $settings;
+			},
+			20
+		);
+
+		// Act.
+		$resumed = $this->command( $path, $body );
+		$other   = $this->payment( 'pos_cash', '10.00' );
+		$fresh   = $this->command( $this->payment_path( $order, $other['id'] ) . '/intent', $this->envelope( $order, array( 'payment' => $other, 'context' => array( 'reader' => 'reader-1' ) ) ) );
+
+		// Assert.
+		$this->assertSame( 200, $resumed->get_status(), wp_json_encode( $resumed->get_data() ) );
+		$this->assertSame( array( 'reader' => 'reader-1' ), $resumed->get_data()['handoff'] );
+		$this->assertSame( 403, $fresh->get_status() );
+		$this->assertSame( 'wcpos_payment_method_disabled', $fresh->get_data()['code'] );
+		$this->assertCount( 1, $this->stored_meta( $order->get_id(), Ledger::META_KEY )['payments'] );
+	}
+
 	/** Create an open POS order at the contract total. */
 	/**
 	 * A captured cash row, for seeding without deriving.

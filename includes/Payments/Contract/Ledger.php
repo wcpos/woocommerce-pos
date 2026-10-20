@@ -778,9 +778,6 @@ class Ledger {
 		if ( is_wp_error( $descriptor ) ) {
 			return $descriptor;
 		}
-		if ( ! $descriptor['pos_enabled'] ) {
-			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is disabled.', 'woocommerce-pos' ), array( 'status' => 403 ) );
-		}
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( $row ) {
@@ -837,6 +834,10 @@ class Ledger {
 				'payment' => $applied,
 				'handoff' => $handoff,
 			);
+		}
+		// Only a NEW leg needs the method enabled: a replay or resume above answers what already started.
+		if ( ! $descriptor['pos_enabled'] ) {
+			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is disabled.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
 		$closed = $this->accepts_tender( $order );
 		if ( $closed ) {
