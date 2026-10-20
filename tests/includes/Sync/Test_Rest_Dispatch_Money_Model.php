@@ -889,9 +889,10 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 	/**
 	 * A sale a WooCommerce gateway paid outside the ledger: processing, date_paid, a transaction id.
 	 *
-	 * @param string $price Line price (two units).
+	 * @param string $price  Line price (two units).
+	 * @param string $status The paid status the gateway landed.
 	 */
-	protected function gateway_paid_order( string $price = '50' ): int {
+	protected function gateway_paid_order( string $price = '50', string $status = 'processing' ): int {
 		add_filter( 'woocommerce_payment_gateways', array( $this, 'with_adopt_gateway' ) );
 		\WC_Payment_Gateways::instance()->init();
 		Adopt_Refund_Test_Gateway::$calls = 0;
@@ -900,7 +901,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$order->set_payment_method( 'wcpos_adopt_refund_test' );
 		$order->set_transaction_id( 'txn_1' );
 		$order->set_date_paid( time() - HOUR_IN_SECONDS );
-		$order->set_status( 'processing' );
+		$order->set_status( $status );
 		$order->save();
 		return $order_id;
 	}
@@ -957,6 +958,51 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $date_paid, $order->get_date_paid( 'edit' )->getTimestamp() );
 		$this->assertSame( array(), array_filter( Completion_Stamp::read( $order ), static fn( $entry ) => empty( $entry['legacy'] ) ) );
 		$this->assertSame( '20.00', Ledger::instance()->summary( $order )['balance'] );
+	}
+
+	/** A pre-ledger sale completed onto a configured on-hold status is reopened by a push: adoption, marking, close. */
+	public function test_a_pre_ledger_sale_completed_onto_on_hold_is_reopened_adopted_and_closes_as_completion_2(): void {
+		// Arrange: the gateway's POS Order Status stored as On hold; paid outside the ledger.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash'                => array( 'enabled' => true ),
+					'wcpos_adopt_refund_test' => array(
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+				),
+			)
+		);
+		$order_id = $this->gateway_paid_order( '50', 'on-hold' );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
+		$this->assertNotNull( wc_get_order( $order_id )->get_date_paid( 'edit' ) );
+		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order_id ) ) );
+
+		// Act: reopen, drop a unit, close.
+		$reopen = $this->push_status( $order_id, 'pos-open' );
+		$rows   = Ledger::instance()->read( wc_get_order( $order_id ) );
+		$marked = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$edit   = $this->quantity_edit( $order_id, -1 );
+		// The till sends the line's money with its quantity; wc/v3 does not reprice an updated line.
+		$edit['line_items'][0] += array(
+			'subtotal' => '50.00',
+			'total'    => '50.00',
+		);
+		$edit   = $this->push_envelope( 'update', $edit, $this->order_revision( $order_id ) );
+		$closed = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+
+		// Assert.
+		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
+		$this->assertSame( array( 'woocommerce' ), array_column( $rows, 'source' ) );
+		$this->assertCount( 1, $marked );
+		$this->assertNotNull( $marked[0]['reopened_at_gmt'] );
+		$this->assertSame( 200, $edit->get_status(), 'Response: ' . wp_json_encode( $edit->get_data() ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$this->assertSame( '50.00', $closed->get_data()['order']['refund_due'] );
 	}
 
 	/** The adopted tender cannot be voided from the till and refunds through its gateway. */

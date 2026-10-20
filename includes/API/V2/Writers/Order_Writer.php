@@ -10,6 +10,7 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -434,9 +435,18 @@ class Order_Writer extends Null_Writer {
 		}
 	}
 
-	/** Whether the push moves a non-editable order into an editable status (a reopen, D3). */
+	/**
+	 * Whether the order's lines are locked: WooCommerce's is_editable() refuses them, or a completion
+	 * stands on a status that is_editable() allows (a merchant's POS status stored as on-hold).
+	 */
+	private static function locked( \WC_Order $order ): bool {
+		return ! $order->is_editable() || Completion_Stamp::stands( $order );
+	}
+
+	/** Whether the push moves a locked order into another editable status (a reopen, D3). */
 	private static function reopens( \WC_Order $order, array $forward ): bool {
-		return ! $order->is_editable() && in_array( (string) ( $forward['status'] ?? '' ), array( 'pos-open', 'pending', 'on-hold' ), true );
+		$status = (string) ( $forward['status'] ?? '' );
+		return in_array( $status, array( 'pos-open', 'pending', 'on-hold' ), true ) && $status !== $order->get_status() && self::locked( $order );
 	}
 
 	/**
@@ -746,7 +756,7 @@ class Order_Writer extends Null_Writer {
 		// A non-editable order that is not being reopened keeps its lines and totals: wc/v3 recalculates
 		// whenever lines or an address are posted, which would move a paid order's tax. Its unchanged
 		// lines are not forwarded and its addresses are applied after the write, without a recalculation.
-		if ( $order && ! $order->is_editable() && ! self::reopens( $order, $forward ) && ! $lines_changed ) {
+		if ( $order && self::locked( $order ) && ! self::reopens( $order, $forward ) && ! $lines_changed ) {
 			unset( $forward['line_items'], $forward['fee_lines'], $forward['shipping_lines'], $forward['coupon_lines'] );
 			$context['frozen_addresses'] = array_filter( array_intersect_key( $forward, array_flip( array( 'billing', 'shipping' ) ) ), 'is_array' );
 			unset( $forward['billing'], $forward['shipping'] );
@@ -792,7 +802,7 @@ class Order_Writer extends Null_Writer {
 			return new WP_Error( 'wcpos_currency_locked', 'The currency cannot change once a payment exists on this order.', array( 'status' => 422 ) );
 		}
 		$status   = (string) ( $forward['status'] ?? '' );
-		$editable = $order->is_editable();
+		$editable = ! self::locked( $order );
 		$reopens  = self::reopens( $order, $forward );
 		$cancels  = 'cancelled' === $status && 'cancelled' !== $order->get_status();
 		$motion   = ( $reopens || $cancels ) ? self::money_in_motion( $order ) : null;

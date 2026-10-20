@@ -121,11 +121,11 @@ final class Completion_Stamp {
 			if ( in_array( (string) $to, $completed, true ) && ! in_array( (string) $from, $completed, true ) ) {
 				self::memoise( $order );
 			} elseif ( in_array( (string) $to, self::OPEN_STATUSES, true ) && ! in_array( (string) $from, self::OPEN_STATUSES, true ) ) {
-				self::mark_reopened( $order, true );
+				self::mark_reopened( $order );
 			} elseif ( in_array( (string) $to, self::OPEN_STATUSES, true ) && in_array( (string) $from, $completed, true ) ) {
 				// A completed status that is also open (a merchant's POS status stored as on-hold) is
 				// left for another open status: that is a reopen of the standing completion too.
-				self::mark_reopened( $order, false );
+				self::mark_reopened( $order );
 			}
 		} catch ( \Throwable $error ) {
 			Logger::error( sprintf( 'WCPOS completion observer failed on order #%d: %s', (int) $id, $error->getMessage() ), array( 'order_id' => (int) $id ) );
@@ -283,11 +283,10 @@ final class Completion_Stamp {
 	/**
 	 * Mark the latest entry reopened; synthesise the pre-deploy completion first when there is none.
 	 *
-	 * @param WC_Order $order      Order object.
-	 * @param bool     $synthesise Whether an empty history may take a synthesised legacy entry.
+	 * @param WC_Order $order Order object.
 	 */
-	private static function mark_reopened( WC_Order $order, bool $synthesise ): void {
-		if ( ! self::read( $order ) && ( ! $synthesise || ! self::legacy_candidate( $order ) ) ) {
+	private static function mark_reopened( WC_Order $order ): void {
+		if ( ! self::read( $order ) && ! self::legacy_candidate( $order ) ) {
 			return;
 		}
 		$id   = $order->get_id();
@@ -303,7 +302,7 @@ final class Completion_Stamp {
 			}
 			$history = self::read( $fresh );
 			if ( ! $history ) {
-				if ( ! $synthesise || ! self::legacy_candidate( $fresh ) ) {
+				if ( ! self::legacy_candidate( $fresh ) ) {
 					return;
 				}
 				$history[] = self::synthesise( $fresh );
