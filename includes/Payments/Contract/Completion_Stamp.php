@@ -361,16 +361,20 @@ final class Completion_Stamp {
 		$sale  = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
 		$paid  = $order->get_date_paid( 'edit' );
 		$till  = self::till_tuple( $order );
+		$legs  = self::latest_captured( $order );
 		$total = $sale['payload']['totals']['total_incl'] ?? null;
+		// Per field: the fiscal row, then the till tuple, then (register and session only) the latest
+		// captured leg, so a row that never recorded a session does not blank the one the till sent.
+		$pick = static fn( ...$values ) => array_values( array_filter( $values, static fn( $value ) => null !== $value && '' !== $value ) )[0] ?? null;
 		return array(
 			'id'              => $sale ? Fiscal_Record_Store::digest_source_id( 'sale:' . $sale['id'] ) : wp_generate_uuid4(),
 			'n'               => 1,
 			'legacy'          => true,
 			'at_gmt'          => $sale ? gmdate( 'c', (int) strtotime( $sale['received_at_gmt'] . ' UTC' ) ) : ( $paid ? gmdate( 'c', $paid->getTimestamp() ) : gmdate( 'c' ) ),
-			'sale_time'       => $sale ? $sale['device_time'] : $till['sale_time'],
-			'sale_tz'         => $sale ? $sale['device_tz'] : $till['sale_tz'],
-			'register'        => $sale ? $sale['register_id'] : $till['register'],
-			'session'         => $sale ? $sale['session_id'] : $till['session'],
+			'sale_time'       => $pick( $sale['device_time'] ?? null, $till['sale_time'] ),
+			'sale_tz'         => $pick( $sale['device_tz'] ?? null, $till['sale_tz'] ),
+			'register'        => $pick( $sale['register_id'] ?? null, $till['register'], $legs['register_id'] ?? null ),
+			'session'         => $pick( $sale['session_id'] ?? null, $till['session'], $legs['session_id'] ?? null ),
 			'counter'         => $till['counter'],
 			'total'           => is_numeric( $total ) ? Money::normalize( $total ) : Money::normalize( $order->get_total() ),
 			'payment_ids'     => self::captured_ids( $order ),
@@ -457,15 +461,25 @@ final class Completion_Stamp {
 				return array_merge( $empty, $source );
 			}
 		}
+		$latest            = self::latest_captured( $order );
+		$empty['register'] = $latest['register_id'] ?? null;
+		$empty['session']  = $latest['session_id'] ?? null;
+		return $empty;
+	}
+
+	/**
+	 * The most recently captured row on the order, if any: the register that last took money.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	private static function latest_captured( WC_Order $order ): ?array {
 		$latest = null;
 		foreach ( Ledger::instance()->read( $order ) as $row ) {
 			if ( 'captured' === ( $row['status'] ?? '' ) && ( null === $latest || strcmp( (string) ( $row['captured_at_gmt'] ?? '' ), (string) ( $latest['captured_at_gmt'] ?? '' ) ) >= 0 ) ) {
 				$latest = $row;
 			}
 		}
-		$empty['register'] = $latest['register_id'] ?? null;
-		$empty['session']  = $latest['session_id'] ?? null;
-		return $empty;
+		return $latest;
 	}
 
 	/**

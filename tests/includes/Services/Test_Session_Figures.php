@@ -329,6 +329,50 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, $count );
 	}
 
+	/** A legacy sale row without a session does not blank the session the till tuple carries when the history is synthesised. */
+	public function test_a_reopened_legacy_sale_with_a_sessionless_record_still_counts_one(): void {
+		global $wpdb;
+		// Arrange: captured legs in session A, paid before the history existed, a sale row with no session.
+		$session = $this->closure_session();
+		$order   = $this->closure_ledger( $session );
+		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
+		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
+		try {
+			$paid = wc_get_order( $order->get_id() );
+			$paid->set_date_paid( time() );
+			$paid->set_status( 'completed' );
+			$paid->save();
+		} finally {
+			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
+			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 );
+		}
+		$store = new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store();
+		$store->ensure_installed();
+		$wpdb->insert(
+			$store->table_name(),
+			array(
+				'type' => 'sale',
+				'series' => '',
+				'number' => 700,
+				'order_id' => $order->get_id(),
+				'payload' => '{}',
+				'checksum' => str_repeat( 'a', 64 ),
+				'received_at_gmt' => '2026-09-11 10:00:00',
+			)
+		);
+
+		// Act: reopened, which synthesises the legacy entry.
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+
+		// Assert.
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( $session['id'], $history[0]['session'] );
+		$this->assertSame( 1, Session_Figures::for_session( $session )->sales_count() );
+	}
+
 	/** Period totals separate sale legs, both raw refund forms, and bound refunds. */
 	public function test_period_amounts_split_legs_and_refund_rows(): void {
 		$session = $this->closure_session();
