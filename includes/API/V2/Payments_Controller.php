@@ -447,8 +447,11 @@ class Payments_Controller extends WC_REST_Controller {
 		}
 		if ( 'close' === $kind ) {
 			$completion = null;
-			foreach ( Completion_Stamp::read( $order ) as $completed ) {
-				if ( null !== $entry['ref'] && ( $completed['id'] ?? null ) === $entry['ref'] ) {
+			$history    = Completion_Stamp::read( $order );
+			// A null ref is a close that crashed between its two saves: it names what stands, as close() would.
+			$named = null === $entry['ref'] ? ( Completion_Stamp::stands( $order ) ? end( $history ) : false ) : null;
+			foreach ( $history as $completed ) {
+				if ( ( null !== $entry['ref'] && ( $completed['id'] ?? null ) === $entry['ref'] ) || $completed === $named ) {
 					$completion = array(
 						'n'  => (int) $completed['n'],
 						'id' => (string) $completed['id'],

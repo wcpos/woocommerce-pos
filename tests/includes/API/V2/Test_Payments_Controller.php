@@ -1608,6 +1608,75 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'pending', $this->stored_row( $order->get_id(), $payment['id'] )['status'] );
 	}
 
+	/** Pin 30: a close whose ref was never filled (a crash between its saves) replays the completion that stands. */
+	public function test_a_close_entry_without_its_ref_replays_the_standing_completion(): void {
+		// Arrange: close c4 completes the sale; storage then holds its entry with a null ref.
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$body      = $this->envelope( $order );
+		$path      = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$announced = 0;
+		add_action(
+			'wcpos_sale_completed',
+			static function () use ( &$announced ): void {
+				++$announced;
+			}
+		);
+		$first   = $this->command( $path, $body );
+		$crashed = wc_get_order( $order->get_id() );
+		$map     = json_decode( (string) $crashed->get_meta( '_wcpos_commands' ), true );
+		$map[ $body['command_id'] ]['ref'] = null;
+		$crashed->update_meta_data( '_wcpos_commands', (string) wp_json_encode( $map ) );
+		$crashed->save();
+		$this->assertNull( $this->stored_meta( $order->get_id(), '_wcpos_commands' )[ $body['command_id'] ]['ref'] );
+
+		// Act: the same close, on the revision from before it.
+		$again = $this->command( $path, $body );
+
+		// Assert.
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $again->get_data()['completion'] );
+		$this->assertSame( $first->get_data()['completion'], $again->get_data()['completion'] );
+		$this->assertSame( 1, $announced );
+	}
+
+	/** Pin 30: the close entry rides the completion's own save, so it survives a failed second save. */
+	public function test_a_close_entry_is_stored_with_the_completion_before_its_ref_is_known(): void {
+		// Arrange: every write of the command map that names a completion fails (the second save is lost).
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$body   = $this->envelope( $order );
+		$path   = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$names  = static function ( $value ): bool {
+			$map = json_decode( is_string( $value ) ? $value : '', true );
+			return is_array( $map ) && array_filter( $map, static fn( $entry ) => null !== ( $entry['ref'] ?? null ) );
+		};
+		$refuse_add = static fn( $check, $object_id, $key, $value ) => '_wcpos_commands' === $key && $names( $value ) ? false : $check;
+		$refuse_mid = static fn( $check, $meta_id, $value, $key ) => '_wcpos_commands' === $key && $names( $value ) ? false : $check;
+		add_filter( 'add_post_metadata', $refuse_add, 10, 4 );
+		add_filter( 'update_post_metadata_by_mid', $refuse_mid, 10, 4 );
+
+		// Act.
+		try {
+			$first = $this->command( $path, $body );
+		} finally {
+			remove_filter( 'add_post_metadata', $refuse_add, 10 );
+			remove_filter( 'update_post_metadata_by_mid', $refuse_mid, 10 );
+		}
+		$again = $this->command( $path, $body );
+
+		// Assert.
+		$this->assertSame( 200, $first->get_status() );
+		$stored = $this->stored_meta( $order->get_id(), '_wcpos_commands' );
+		$this->assertArrayHasKey( $body['command_id'], (array) $stored );
+		$this->assertNull( $stored[ $body['command_id'] ]['ref'] );
+		$this->assertSame( 200, $again->get_status() );
+		$this->assertSame( $first->get_data()['completion'], $again->get_data()['completion'] );
+		$this->assertCount( 1, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Create an open POS order at the contract total. */
 	/**
 	 * A captured cash row, for seeding without deriving.

@@ -1500,6 +1500,10 @@ class Ledger {
 				)
 			);
 		}
+		if ( ! empty( $command['id'] ) ) {
+			// Staged before the completion so the entry rides WooCommerce's own save; its ref is filled below.
+			Command_Log::remember( $order, $command['id'], Command_Log::entry( $command['fp'], 'close' ) );
+		}
 		$this->derive( $order, $rows, true );
 		self::saving( $order->get_id(), fn() => $order->save() );
 		$fresh = wc_get_order( $order->get_id() );
