@@ -384,6 +384,55 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '20.0000', $late[1]['payload']['expected_delta']['cash'] );
 	}
 
+	/** A refund names the standing completion's record; while that record is missing it names none, never n−1's. */
+	public function test_a_refund_anchors_to_the_standing_completions_record(): void {
+		// Arrange: completion 1 has a record; completion 2's insert fails.
+		$order = $this->order();
+		$this->pay( $order );
+		$reopened = $this->reopen( $order );
+		$reopened->set_total( '80.00' );
+		$reopened->save();
+		$enrich = static function () {
+			throw new \Error( 'boom' );
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$this->pay( wc_get_order( $order->get_id() ) );
+			$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+			$this->assertCount( 1, $this->sales( $order->get_id() ) );
+
+			// Act: a refund while completion 2's record still cannot be written.
+			$first = wc_create_refund(
+				array(
+					'order_id' => $order->get_id(),
+					'amount' => 5,
+					'refund_payment' => false,
+				)
+			);
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
+		// A second refund once completion 2's record can be recovered.
+		$second = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => 5,
+				'refund_payment' => false,
+			)
+		);
+
+		// Assert.
+		$store = new Fiscal_Record_Store();
+		$one   = $store->find_refund( $order->get_id(), $first->get_id() );
+		$two   = $store->find_refund( $order->get_id(), $second->get_id() );
+		$this->assertNull( $one['corrects_record_id'] );
+		$this->assertNull( $one['payload']['fiscal']['corrects'] );
+		$sale_two = $store->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertIsArray( $sale_two );
+		$this->assertSame( $sale_two['id'], $two['corrects_record_id'] );
+		$this->assertSame( $sale_two['payload']['fiscal']['immutable_id'], $two['payload']['fiscal']['corrects'] );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.

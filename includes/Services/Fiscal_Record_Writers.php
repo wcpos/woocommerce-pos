@@ -349,7 +349,7 @@ final class Fiscal_Record_Writers {
 		if ( ! $order instanceof WC_Order || ! $this->is_register_sale( $order ) || ! $refund instanceof WC_Order_Refund ) {
 			return;
 		}
-		$sale = $this->store->find_sale( $order_id );
+		$sale = $this->sale_for_refund( $order );
 		try {
 			$provenance = $this->refund_provenance( $order, $refund );
 			$this->write(
@@ -419,6 +419,23 @@ final class Fiscal_Record_Writers {
 	 */
 	private function is_register_sale( WC_Order $order ): bool {
 		return wcpos_is_pos_order( $order ) || array() !== Completion_Stamp::read( $order );
+	}
+
+	/**
+	 * The sale record a refund corrects: the latest completion's own record, after one recovery
+	 * attempt; none while it is still missing (never completion n−1's). An order without a history
+	 * (completed before it existed) keeps its latest sale.
+	 *
+	 * @param WC_Order $order Parent order.
+	 */
+	private function sale_for_refund( WC_Order $order ): ?array {
+		$history = Completion_Stamp::read( $order );
+		$latest  = end( $history );
+		if ( ! is_array( $latest ) ) {
+			return $this->store->find_sale( $order->get_id() );
+		}
+		$this->recover( $order );
+		return $this->store->find_sale( $order->get_id(), (string) $latest['id'] );
 	}
 
 	/** Log a lost correction and fire the recovery signal without failing the caller.
