@@ -176,6 +176,13 @@ final class Fiscal_Record_Writers {
 			$this->recover( $order );
 			return;
 		}
+		$latest = end( $history );
+		if ( $missing && ( ! is_array( $latest ) || $latest['id'] !== $completion['id'] || ! empty( $latest['reopened_at_gmt'] ) ) ) {
+			// Only the completion that stands may be built from the live order; any other has its parked
+			// document or nothing (the failure note at its insert names it for a human).
+			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d was not built: the completion no longer stands and nothing is parked.', $n, $order->get_id() ) );
+			return;
+		}
 		if ( $missing ) {
 			$previous = null;
 			foreach ( $history as $entry ) {

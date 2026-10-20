@@ -706,6 +706,30 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $session_b['register_id'], $late[0]['register_id'] );
 	}
 
+	/** A completion that no longer stands is never built from the live order: parked or nothing. */
+	public function test_record_sale_of_a_reopened_completion_with_nothing_parked_writes_nothing(): void {
+		// Arrange: completed while the sale writer was not listening (no row, nothing parked), then reopened.
+		$writers = Fiscal_Record_Writers::instance();
+		$order   = $this->order();
+		remove_action( 'wcpos_sale_completed', array( $writers, 'handle_sale_completed' ), 10 );
+		try {
+			$this->pay( $order );
+		} finally {
+			add_action( 'wcpos_sale_completed', array( $writers, 'handle_sale_completed' ), 10, 2 );
+		}
+		$reopened = $this->reopen( $order );
+		$reopened->set_total( '80.00' );
+		$reopened->save();
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+
+		// Act.
+		$writers->record_sale( wc_get_order( $order->get_id() ), $history[0] );
+
+		// Assert.
+		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.
