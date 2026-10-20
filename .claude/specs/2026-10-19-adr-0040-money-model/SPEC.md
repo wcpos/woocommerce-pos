@@ -427,6 +427,11 @@ Codex round 3 (`Test_Gateway_Submission`, HPOS twin inherits): every order-level
 38. `test_a_cancel_whose_command_entry_is_not_stored_is_a_retryable_conflict` — the cancel stands (stamp cleared, attempt cancelled, `pos-open`); the retry on the current revision answers `wcpos_invalid_transition` as today.
 39. `test_a_history_answer_whose_command_entry_is_not_stored_is_a_retryable_conflict` — a submit answered from the attempt history under a new command id; nothing moved, the retry answers again and stores the entry.
 
+Codex round 4 (partial writes between the separate meta rows):
+
+40. `test_a_submit_whose_attempt_is_not_stored_keeps_no_command_entry` — when either half of the pre-dispatch write is missing, both the attempt and the entry are removed in one save before the 409; a failure after the gateway was called keeps its entry.
+41. `test_a_cancel_whose_stamp_is_not_cleared_keeps_no_command_entry` — a cancel stands only when the stamp is gone, the attempt is `cancelled` and the entry is stored; on any miss the entry is withdrawn and the 409 answered, so the retry re-enters `cancel()`.
+
 Declined in round 2: stripping the command maps from served order documents (the till already receives the whole ledger meta; a strip would have to run after every revision site or the first push after a money command would 409 falsely).
 
 Also from CodeRabbit: a new order's rows lose a client-seeded `commands` map like their event history (`test_order_save_preserves_server_event_history`, both lanes).
