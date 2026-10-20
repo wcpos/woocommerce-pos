@@ -224,12 +224,15 @@ class Gateway_Submission {
 			$persisted->read_meta_data( true );
 			$landed = self::read_attempts( $persisted );
 			if ( 'sent' !== ( $landed[ $attempt_id ] ?? null ) || ! self::command_kept( $order->get_id(), $command, 'sent' ) ) {
+				// One half did not land: nothing was dispatched, so neither the attempt nor its entry may stand.
 				if ( isset( $landed[ $attempt_id ] ) ) {
-					// Its command entry did not land: nothing was dispatched, so the attempt never happened.
 					unset( $landed[ $attempt_id ] );
 					$persisted->update_meta_data( self::ATTEMPTS_META_KEY, $landed );
-					Ledger::saving( $persisted->get_id(), fn() => $persisted->save() );
 				}
+				if ( ! empty( $command['id'] ) ) {
+					Command_Log::forget( $persisted, $command['id'] );
+				}
+				Ledger::saving( $persisted->get_id(), fn() => $persisted->save() );
 				throw new Ledger_Persistence_Exception( 'WCPOS gateway attempt was not persisted.' );
 			}
 			add_action( 'woocommerce_payment_complete', $complete );
