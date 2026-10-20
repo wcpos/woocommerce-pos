@@ -32,7 +32,7 @@ Compatibility is owed to consumers, not to code. The consumers are the REST cont
 ```php
 public function get_user_data( WP_User $user, bool $is_web_frontend = false ): array {}
 ```
-When no consumer exists, the symbol is dead code: delete it and its direct test in the same PR. Do not keep it "for callers" nobody can name, do not mark it `@deprecated` instead of deleting it, and do not add a test that it is absent (test the behaviour the replacement provides). Ruled by Paul on 2026-10-20 after #2371; the 1.11.x leftovers are inventoried in `.claude/handoffs/2026-10-20-remove-bc-shims-in-v2/` for removal in v2.
+When no consumer exists in any of those places, the symbol is dead code: delete it and its direct test in the same PR. A method's own unit test is not a consumer; test seams the suite relies on (reset helpers, injection setters, unregister helpers) are test tooling and stay. Do not keep it "for callers" nobody can name, do not mark it `@deprecated` instead of deleting it, and do not add a test that it is absent (test the behaviour the replacement provides). Ruled by Paul on 2026-10-20 after #2371; the 1.11.x leftovers are inventoried in `.claude/handoffs/2026-10-20-remove-bc-shims-in-v2/` for removal in v2.
 
 ## Common Pitfalls
 

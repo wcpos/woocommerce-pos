@@ -1,6 +1,6 @@
 # Handoff: remove the backward-compatibility shims in v2 (Free and Pro)
 
-Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul's ruling, same day: **everything listed here stays in 1.11.x; it is removed in v2, in both Free and Pro.**
+Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul's ruling, same day: **the backward-compatibility shims stay in 1.11.x and are removed in v2, in both Free and Pro.** The removal scope is the inventory rows below that carry a replacement or a removal note. Rows whose note says keep, leave, or out of scope (`get_tax_id()`, the augmentation projection callbacks kept for uninstall, the `'deleted'` journal op, the Pro update-client payload shapes) are listed so nobody mistakes them for shims; they are contracts and are not removed by this work.
 
 ## Why this exists
 
@@ -81,7 +81,7 @@ A Codex (GPT-6 Astra, read-only) audit on 2026-10-20 tokenised every public clas
 | **Test-only** (only `tests/` calls it) | 45 |
 | **Kept on purpose** (`@deprecated` or a retention comment) | 38 |
 
-The **Test-only** group is mostly deliberate test seams (`reset_request_state()`, `reset_instance()`, `set_*_for_testing()`, `unregister_*()`); the audit explicitly does not recommend deleting them, and neither does this handoff. Judge each on whether a test still needs it.
+The **Test-only** group splits in two, and the audit does not split it for you. Test seams the suite relies on (`reset_request_state()`, `reset_instance()`, `set_*_for_testing()`, `unregister_*()`, `armed()`/`constructed()`) are test tooling and stay. A production method whose only "caller" is its own direct unit test is dead: a method's own test is not a consumer, and it goes with the method. The audit's own example is `Products::filter_category_count_exclude_pos_only()` (`includes/Products.php:315`): its hook registration is commented out at `Products.php:63` and its sole executable use is a direct test, so it belongs in the removal list below. Walk the 45 Test-only rows in `AUDIT-uncalled-public-methods.md` with that distinction; candidates of the second kind at a glance include `Gateways\Cash::payment_details()`, `Abstracts\Store::get_tracking_consent()`, `Services\Analytics::identify()`, `Services\Cashier::has_store_access()` and `update_last_access()`, and `Templates::get_default_template()`, `is_active_template()`, `migrate_active_template_to_order()`; confirm each with the consumer grep before deleting.
 
 The **16 Dead** methods are the ones nobody flagged. Remove in v2 after the grep in the procedure above confirms `next` has not grown a caller:
 
@@ -103,6 +103,7 @@ The **16 Dead** methods are the ones nobody flagged. Remove in v2 after the grep
 | `Templates/Validator.php:112` | `can_edit_templates()` | no matches |
 | `Templates/Validator.php:125` | `log_validation()` | no matches |
 | `Templates.php:1234` | `install_starter_template()` | no matches |
+| `Products.php:315` | `filter_category_count_exclude_pos_only()` | audit filed it Test-only; its hook registration is commented out at `Products.php:63` and the only use is its own direct test, which goes with it |
 
 `Templates\Validator` is four dead methods in one class: check whether the whole class goes. The audit's **Kept on purpose** table also surfaces two retention comments my grep missed: `Services/Settings.php:219–289`, the six public `get_{id}_settings()` delegates ("Public get_{id}_settings() delegates…"), and `Sync/Order_Serializer.php:120` `augment_order_payload()` ("retained as the named shorthand…; `document()` is the entry point new callers should use"). Both belong in the second Free table above.
 
