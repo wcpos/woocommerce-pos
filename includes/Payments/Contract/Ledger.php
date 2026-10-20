@@ -1074,7 +1074,9 @@ class Ledger {
 	}
 
 	/**
-	 * Allocate an existing WooCommerce refund to a payment row.
+	 * Allocate an existing WooCommerce refund to a payment row, in two verified saves around the
+	 * provider (ADR 0040 rule 8): reserved `pending` before the call, the answer after. Nothing
+	 * thrown escapes; an outcome the server cannot know returns the stored, still pending row.
 	 *
 	 * @param WC_Order $order     Order object.
 	 * @param string   $id        Payment ID.

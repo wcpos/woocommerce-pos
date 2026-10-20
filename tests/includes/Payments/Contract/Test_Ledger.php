@@ -3583,6 +3583,7 @@ class Integrity_Handler extends Manual_Handler {
 	}
 }
 
+// phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- Refund fixtures stay with their tests.
 /** A gateway that refunds through process_refund(), counting calls; it can succeed, refuse, or throw. */
 class Refund_Probe_Gateway extends \WC_Payment_Gateway {
 	/**
@@ -3667,3 +3668,4 @@ class Refund_Answer_Handler extends Manual_Handler {
 		return null === self::$answer ? parent::refund( $row, $refund_id, $amount ) : ( self::$answer )( $row, $refund_id, $amount );
 	}
 }
+// phpcs:enable Generic.Files.OneObjectStructurePerFile.MultipleFound
