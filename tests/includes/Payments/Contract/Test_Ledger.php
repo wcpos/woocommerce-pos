@@ -1805,6 +1805,78 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotSame( $approved, $captured['captured_at_gmt'] );
 	}
 
+	/** An offline authorization keeps the device's approval time: a valid caller value wins over the server clock. */
+	public function test_record_of_an_authorized_row_keeps_the_callers_authorized_at_gmt(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment(
+			'pos_card',
+			'92.95',
+			array(
+				'status'            => 'authorized',
+				'authorized_at_gmt' => '2026-10-13T08:00:00Z',
+			)
+		);
+
+		// Act.
+		$row = Ledger::instance()->record( $order, $payment );
+
+		// Assert: the returned row and the stored row carry the device's instant, not a server stamp.
+		$this->assertIsArray( $row );
+		$stored = $this->stored_rows( $order->get_id() );
+		$this->assertCount( 1, $stored );
+		foreach ( array( $row['authorized_at_gmt'], $stored[0]['authorized_at_gmt'] ) as $authorized_at ) {
+			$this->assertIsString( $authorized_at );
+			$this->assertSame( strtotime( '2026-10-13T08:00:00Z' ), strtotime( $authorized_at ) );
+			$this->assertFalse( time() - strtotime( $authorized_at ) <= 60 );
+		}
+	}
+
+	/** An unparseable approval time is not stored; the server stamps the authorization instead. */
+	public function test_record_of_an_authorized_row_with_an_invalid_authorized_at_gmt_is_stamped_by_the_server(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment(
+			'pos_card',
+			'92.95',
+			array(
+				'status'            => 'authorized',
+				'authorized_at_gmt' => 'not-a-time',
+			)
+		);
+
+		// Act.
+		$row = Ledger::instance()->record( $order, $payment );
+
+		// Assert.
+		$this->assertIsArray( $row );
+		$stored = $this->stored_rows( $order->get_id() );
+		$this->assertCount( 1, $stored );
+		foreach ( array( $row['authorized_at_gmt'], $stored[0]['authorized_at_gmt'] ) as $authorized_at ) {
+			$this->assertIsString( $authorized_at );
+			$this->assertNotFalse( strtotime( $authorized_at ) );
+			$this->assertTrue( abs( time() - strtotime( $authorized_at ) ) <= 60 );
+		}
+	}
+
+	/** A captured record was never on hold: a caller's approval time is dropped. */
+	public function test_record_of_a_captured_row_drops_a_caller_authorized_at_gmt(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_card', '92.95', array( 'authorized_at_gmt' => '2026-10-13T08:00:00Z' ) );
+
+		// Act.
+		$row = Ledger::instance()->record( $order, $payment );
+
+		// Assert.
+		$this->assertIsArray( $row );
+		$this->assertSame( 'captured', $row['status'] );
+		$this->assertSame( null, $row['authorized_at_gmt'] );
+		$stored = $this->stored_rows( $order->get_id() );
+		$this->assertCount( 1, $stored );
+		$this->assertSame( null, $stored[0]['authorized_at_gmt'] );
+	}
+
 	/** A paid order records and returns a stable refusal. */
 	public function test_record_refuses_overpay_when_balance_is_zero(): void {
 		// Arrange.

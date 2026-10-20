@@ -191,6 +191,35 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** An offline authorization recorded through the route keeps the device's approval time. */
+	public function test_record_route_keeps_authorized_at_gmt_on_an_authorized_row(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment(
+			'pos_card',
+			'92.95',
+			array(
+				'status'            => 'authorized',
+				'authorized_at_gmt' => '2026-10-13T08:00:00Z',
+			)
+		);
+
+		// Act.
+		$response = $this->record( $order, $payment );
+		$data     = $response->get_data();
+
+		// Assert: the answer and storage carry the device's instant, not a server stamp.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'authorized', $data['payment']['status'] );
+		$stored = $this->stored_row( $order->get_id(), $payment['id'] );
+		$this->assertNotNull( $stored );
+		foreach ( array( $data['payment']['authorized_at_gmt'], $stored['authorized_at_gmt'] ) as $authorized_at ) {
+			$this->assertIsString( $authorized_at );
+			$this->assertSame( strtotime( '2026-10-13T08:00:00Z' ), strtotime( $authorized_at ) );
+			$this->assertFalse( time() - strtotime( $authorized_at ) <= 60 );
+		}
+	}
+
 	/** An identical id replays without duplicating the ledger row. */
 	public function test_record_replay_same_id_returns_same_row_without_duplicate(): void {
 		// Arrange.
