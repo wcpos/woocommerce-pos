@@ -21,10 +21,20 @@ class Test_Payment_Methods_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 1, $data['schema'] );
-		$this->assertSame( '1.2', $data['contract'] );
+		$this->assertSame( '1.3', $data['contract'] );
 		$this->assertSame( 'manual', $cash['capture']['mode'] );
 		$this->assertSame( true, $cash['capabilities']['change'] );
 		$this->assertSame( array(), (array) $cash['provider_data'] );
+	}
+
+	/** The envelope reports payments contract 1.3: paid derived from captured rows, no money on the push, command_id and revision on every money command (ADR 0040, spec §6a.1). */
+	public function test_get_payment_methods_reports_contract_1_3(): void {
+		// Arrange / Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/payment-methods' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '1.3', $response->get_data()['contract'] );
 	}
 
 	public function test_bootstrap_returns_handler_payload(): void {
