@@ -77,21 +77,32 @@ class Products {
 	}
 
 	/**
-	 * Bump modified date on stock change.
-	 * - variation->id = parent id.
+	 * Bump the product's modified date on a stock change, so POS clients that
+	 * sync on `date_modified` pick up the new quantity.
 	 *
-	 * @param WC_Product $product The product object.
+	 * The row is written directly, the way WooCommerce's own product data store
+	 * records a save. `wp_update_post()` re-runs the whole post save in the
+	 * middle of WooCommerce's stock reduction: every `save_post` listener on the
+	 * site, plus kses content filtering when the current user is a storefront
+	 * customer. A listener that fails there leaves the stock decremented but the
+	 * order unflagged (`_order_stock_reduced`), so the next status change
+	 * deducts it again, and a guest checkout rewrote the purchased product's
+	 * description through kses.
+	 *
+	 * @param WC_Product $product The product or variation whose stock changed.
 	 */
 	public function product_set_stock( WC_Product $product ): void {
-		$post_modified     = current_time( 'mysql' );
-		$post_modified_gmt = current_time( 'mysql', true );
-		wp_update_post(
+		global $wpdb;
+
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- must not run the save_post stack mid stock reduction; cache cleared below.
+			$wpdb->posts,
 			array(
-				'ID'                => $product->get_id(),
-				'post_modified'     => $post_modified,
-				'post_modified_gmt' => $post_modified_gmt,
-			)
+				'post_modified'     => current_time( 'mysql' ),
+				'post_modified_gmt' => current_time( 'mysql', true ),
+			),
+			array( 'ID' => $product->get_id() )
 		);
+		clean_post_cache( $product->get_id() );
 	}
 
 	/**
