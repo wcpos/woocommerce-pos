@@ -121,11 +121,36 @@ sale. Retained money above a reduced total still completes and reads as `order.r
   `sale_counter`), validated like the till meta; an invalid field is dropped, never refused.
   The same object on `record`, `intent`, `capture` and `submit` names the register that
   completes the sale, if that command does.
-- 200: `{ order: summary, completion: { n, id } }`. A sale already paid replays its last
-  completion and writes nothing.
+- 200: `{ order: summary, completion: { n, id }, revision }`. A sale already paid replays its
+  last completion and writes nothing but the command's entry.
 - 409 `wcpos_payment_in_flight` (with `payment_id` or `attempt_id`): a row `pending` or
   `authorized`, a refund allocation `pending`, or a gateway attempt sent and unanswered.
 - 409 `wcpos_balance_outstanding` (with `order`): uncovered, or a zero total.
 - 409 `wcpos_invalid_transition`: the order is in no open status and has no standing completion (never completed, or its latest completion was reopened, e.g. by a cancel).
 
-`command_id` and `revision` arrive with the rest of the money routes (PR 3).
+## Money command envelope: `command_id` and `revision` (2.0.0, ADR 0040 rules 5 and 6)
+
+Every body on the payments family except `GET …/payments/{uuid}/status` (a poll, not a command)
+carries the envelope:
+
+| Field | On | Missing or invalid |
+|---|---|---|
+| `command_id` (uuid) | `intent`, `capture`, `void`, `refund`, `submit`, `cancel`, `close` | 400 `rest_invalid_param` |
+| `revision` (`sha256:…`) | the seven above and `record` | 428 `wcpos_revision_required` |
+
+`record` has no `command_id`: its row id is the command id. `revision` is the order revision the
+push lane compares (`baseRevision`, ADR 0033). Under the order lock the server first looks the
+command up, order-wide (every row's `commands` map and the order's `_wcpos_commands`): the same id
+with the same body (route, target and body, keys sorted, values as sent) replays the stored
+outcome **whatever revision it carries**, since a retry carries the revision from before its own
+effect; the same id with another body is 422 `wcpos_command_conflict` (`command_id`, `kind`);
+`record` and `intent` replay by row id. Only a fresh command meets the revision: a stale one is
+409 `wcpos_revision_stale` with `currentRevision`, `current` (the document) and `order`, and
+nothing runs. A failed read of the order (403, 404) is answered as itself.
+
+Every command answered 2xx keeps an entry, never evicted; a refusal keeps none, so its retry runs
+again. Every 2xx answer, replay included, carries top-level `revision`: the order's revision after
+the command, so the till can chain commands without a pull. Entries stay in storage and off the
+wire (`payment.commands` is never answered). `record`'s mismatched replay is 422
+`wcpos_command_conflict` (was 409 `wcpos_payment_conflict`); `wcpos_payment_conflict` remains the
+state conflict (a `submit` of a cancelled or superseded attempt, a live payment on the order).

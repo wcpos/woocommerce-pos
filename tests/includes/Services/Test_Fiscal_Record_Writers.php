@@ -13,10 +13,12 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Service_Groups;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /** Fiscal lifecycle observers and immutable corrections. */
 class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
+	use Money_Route_Envelope;
 
 	/** Restore writer hooks between tests. */
 	public function setUp(): void {
@@ -549,12 +551,15 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		try {
 			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 			$request->set_body_params(
-				array(
-					'payment' => array(
-						'id' => wp_generate_uuid4(),
-						'method_id' => 'pos_cash',
-						'amount' => '100.00',
-					),
+				$this->envelope(
+					$order,
+					array(
+						'payment' => array(
+							'id' => wp_generate_uuid4(),
+							'method_id' => 'pos_cash',
+							'amount' => '100.00',
+						),
+					)
 				)
 			);
 			$row = $this->server->dispatch( $request )->get_data()['payment'];
@@ -625,12 +630,15 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			function () use ( $order, &$row ): void {
 				$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 				$request->set_body_params(
-					array(
-						'payment' => array(
-							'id' => wp_generate_uuid4(),
-							'method_id' => 'pos_cash',
-							'amount' => '100.00',
-						),
+					$this->envelope(
+						$order,
+						array(
+							'payment' => array(
+								'id' => wp_generate_uuid4(),
+								'method_id' => 'pos_cash',
+								'amount' => '100.00',
+							),
+						)
 					)
 				);
 				$row = $this->server->dispatch( $request )->get_data()['payment'];
@@ -774,12 +782,15 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		try {
 			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 			$request->set_body_params(
-				array(
-					'payment' => array(
-						'id' => wp_generate_uuid4(),
-						'method_id' => 'pos_cash',
-						'amount' => '100.00',
-					),
+				$this->envelope(
+					$order,
+					array(
+						'payment' => array(
+							'id' => wp_generate_uuid4(),
+							'method_id' => 'pos_cash',
+							'amount' => '100.00',
+						),
+					)
 				)
 			);
 			$recorded = $this->server->dispatch( $request );

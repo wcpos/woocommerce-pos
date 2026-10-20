@@ -15,9 +15,12 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /** Payments controller tests. */
 class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
+	use Money_Route_Envelope;
+
 	/**
 	 * Captured messages keep audit assertions independent of logger output.
 	 *
@@ -257,8 +260,8 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'order_already_paid', $data['data']['payment']['failure_reason'] );
 	}
 
-	/** A reused id with different money conflicts. */
-	public function test_record_conflicting_replay_returns_409_conflict(): void {
+	/** A reused id with different money is the family's body conflict (spec §7 decision 12). */
+	public function test_record_conflicting_replay_is_422_command_conflict(): void {
 		// Arrange.
 		$order   = $this->create_pos_order();
 		$payment = $this->payment( 'pos_cash', '20.00' );
@@ -268,8 +271,10 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->record( $order, array_merge( $payment, array( 'amount' => '21.00' ) ) );
 
 		// Assert.
-		$this->assertSame( 409, $response->get_status() );
-		$this->assertSame( 'wcpos_payment_conflict', $response->get_data()['code'] );
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $response->get_data()['code'] );
+		$this->assertSame( $payment['id'], $response->get_data()['data']['payment']['id'] );
+		$this->assertSame( '20.00', $response->get_data()['data']['payment']['amount'] );
 	}
 
 	/** Unknown payment methods return the ledger error. */
@@ -760,9 +765,12 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $row['id'] ) . '/refund' );
 		$request->set_body_params(
-			array(
-				'refund_id' => $refund->get_id(),
-				'amount' => '10.00',
+			$this->envelope(
+				$order,
+				array(
+					'refund_id' => $refund->get_id(),
+					'amount' => '10.00',
+				)
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -835,6 +843,10 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 				$path .= '/' . wp_generate_uuid4() . '/' . $action;
 			}
 			$request = 'status' === $action ? $this->wp_rest_get_request( $path ) : $this->wp_rest_post_request( $path );
+			if ( 'status' !== $action ) {
+				// The envelope is present: the held lock answers before any command is looked up.
+				$request->set_body_params( $this->envelope( $order ) );
+			}
 			$response = $this->server->dispatch( $request );
 			$this->assertSame( 409, $response->get_status() );
 			$this->assertSame( 'wcpos_payment_locked', $response->get_data()['code'] );
@@ -893,12 +905,15 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$payment = $this->payment( 'pos_cash', '92.95' );
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/intent' );
 		$request->set_body_params(
-			array(
-				'payment' => $payment,
-				'context' => array(
-					'reader' => 'reader-1',
-					'cashier_id' => 0,
-				),
+			$this->envelope(
+				$order,
+				array(
+					'payment' => $payment,
+					'context' => array(
+						'reader' => 'reader-1',
+						'cashier_id' => 0,
+					),
+				)
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -908,7 +923,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'reader' => 'reader-1' ), $response->get_data()['handoff'] );
 		$this->assertSame( 'pending', $response->get_data()['order']['status'] );
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/capture' );
-		$request->set_body_params( array( 'context' => array( 'amount' => '92.95' ) ) );
+		$request->set_body_params( $this->envelope( $order, array( 'context' => array( 'amount' => '92.95' ) ) ) );
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'captured', $response->get_data()['payment']['status'] );
@@ -928,11 +943,11 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->create_pos_order();
 		$first = $this->payment( 'pos_cash', '92.95' );
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $first['id'] ) . '/intent' );
-		$request->set_body_params( array( 'payment' => $first, 'context' => array() ) );
+		$request->set_body_params( $this->envelope( $order, array( 'payment' => $first, 'context' => array() ) ) );
 		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
 		$second = $this->payment( 'pos_cash', '92.95' );
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $second['id'] ) . '/intent' );
-		$request->set_body_params( array( 'payment' => $second, 'context' => array() ) );
+		$request->set_body_params( $this->envelope( $order, array( 'payment' => $second, 'context' => array() ) ) );
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 409, $response->get_status() );
 		$data = $response->get_data();
@@ -952,14 +967,17 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$refund->save();
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/refund' );
 		$request->set_body_params(
-			array(
-				'refund_id' => $refund->get_id(),
-				'amount' => '5.00',
+			$this->envelope(
+				$order,
+				array(
+					'refund_id' => $refund->get_id(),
+					'amount' => '5.00',
+				)
 			)
 		);
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( array( 'payment' ), array_keys( $response->get_data() ) );
+		$this->assertSame( array( 'payment', 'revision' ), array_keys( $response->get_data() ) );
 		$this->assertSame( '5.00', $response->get_data()['payment']['refunded_amount'] );
 	}
 
@@ -974,15 +992,22 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			$payment = $this->payment( 'pos_cash', '92.95' );
 			$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/intent' );
 			$request->set_body_params(
-				array(
-					'payment' => $payment,
-					'context' => array( 'reader' => 'reader-1' ),
+				$this->envelope(
+					$order,
+					array(
+						'payment' => $payment,
+						'context' => array( 'reader' => 'reader-1' ),
+					)
 				)
 			);
 			$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
 			$request = $this->wp_rest_post_request( $this->payment_path( $order, $payment['id'] ) . '/capture' );
+			$body    = $this->envelope( $order );
+			$request->set_body_params( $body );
 			$response = $this->server->dispatch( $request );
 			$this->assertSame( 502, $response->get_status() );
+			// The failure stored no outcome but its events moved the revision: the retry re-reads it.
+			$request->set_body_params( array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
 			$this->assertSame( 502, $this->server->dispatch( $request )->get_status() );
 			$order = wc_get_order( $order->get_id() );
 			$row = Ledger::instance()->find( $order, $payment['id'] );
@@ -994,6 +1019,564 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'wcpos_payment_method_capture_mode', $mode );
 			$registry->register( 'route_test', Route_Handler::class );
 		}
+	}
+
+	/** Route the till's card-like legs through the counting test handler. */
+	private function use_route_handler(): void {
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		add_filter( 'wcpos_payment_method_capture_mode', static fn() => 'route_test' );
+	}
+
+	/**
+	 * POST a money command body.
+	 *
+	 * @param string $path Route path.
+	 * @param array  $body Body.
+	 */
+	private function command( string $path, array $body ): \WP_REST_Response {
+		$request = $this->wp_rest_post_request( $path );
+		$request->set_body_params( $body );
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * An order meta value as storage holds it, JSON decoded; null when absent.
+	 *
+	 * @param int    $order_id Order id.
+	 * @param string $key      Meta key.
+	 * @return mixed
+	 */
+	private function stored_meta( int $order_id, string $key ) {
+		$order = wc_get_order( $order_id );
+		foreach ( $order->get_data_store()->read_meta( $order ) as $meta ) {
+			if ( $key === $meta->meta_key ) {
+				$value = maybe_unserialize( $meta->meta_value );
+				return is_string( $value ) ? json_decode( $value, true ) : $value;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * A stored ledger row, read from storage.
+	 *
+	 * @param int    $order_id Order id.
+	 * @param string $id       Payment id.
+	 */
+	private function stored_row( int $order_id, string $id ): ?array {
+		foreach ( (array) ( $this->stored_meta( $order_id, Ledger::META_KEY )['payments'] ?? array() ) as $row ) {
+			if ( $id === $row['id'] ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * A pending leg handled by the test handler, intended through the route.
+	 *
+	 * @param \WC_Order $order   Order.
+	 * @param string    $amount  Amount.
+	 */
+	private function intended( \WC_Order $order, string $amount ): array {
+		$payment = $this->payment( 'pos_cash', $amount );
+		$this->assertSame( 200, $this->command( $this->payment_path( $order, $payment['id'] ) . '/intent', $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) ) )->get_status() );
+		return $payment;
+	}
+
+	/** Pin 1: a capture retried with its command and body replays, even on the revision from before it. */
+	public function test_capture_replay_with_the_same_command_and_body_answers_the_captured_row_with_a_stale_revision(): void {
+		// Arrange.
+		$this->use_route_handler();
+		Route_Handler::$captures = 0;
+		$order   = $this->create_pos_order();
+		$payment = $this->intended( $order, '92.95' );
+		$body    = $this->envelope( $order, array( 'context' => array( 'amount' => '92.95' ) ) );
+		$path    = $this->payment_path( $order, $payment['id'] ) . '/capture';
+
+		// Act.
+		$first = $this->command( $path, $body );
+		$again = $this->command( $path, $body );
+
+		// Assert.
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'captured', $again->get_data()['payment']['status'] );
+		$this->assertSame( $first->get_data()['payment']['id'], $again->get_data()['payment']['id'] );
+		$this->assertSame( $first->get_data()['revision'], $again->get_data()['revision'] );
+		$this->assertSame( 1, Route_Handler::$captures );
+		$commands = $this->stored_row( $order->get_id(), $payment['id'] )['commands'];
+		$this->assertSame( 'capture', $commands[ $body['command_id'] ]['kind'] );
+		$this->assertCount( 1, array_filter( $commands, static fn( $entry ) => 'capture' === $entry['kind'] ) );
+	}
+
+	/** Pin 2: the same command id with another body is a 422 and changes nothing. */
+	public function test_capture_replay_with_the_same_command_and_a_different_body_is_422(): void {
+		// Arrange.
+		$this->use_route_handler();
+		Route_Handler::$captures = 0;
+		$order   = $this->create_pos_order();
+		$payment = $this->intended( $order, '92.95' );
+		$body    = $this->envelope( $order, array( 'context' => array( 'amount' => '92.95' ) ) );
+		$path    = $this->payment_path( $order, $payment['id'] ) . '/capture';
+		$this->assertSame( 200, $this->command( $path, $body )->get_status() );
+		$before = $this->stored_row( $order->get_id(), $payment['id'] );
+
+		// Act.
+		$response = $this->command( $path, array_merge( $body, array( 'context' => array( 'amount' => '92.95', 'reader' => 'other' ) ) ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $response->get_data()['code'] );
+		$this->assertSame( $body['command_id'], $response->get_data()['data']['command_id'] );
+		$this->assertSame( 'capture', $response->get_data()['data']['kind'] );
+		$this->assertSame( $before, $this->stored_row( $order->get_id(), $payment['id'] ) );
+		$this->assertSame( 1, Route_Handler::$captures );
+	}
+
+	/** Pin 3: a fresh command built on a stale revision is refused with the current one. */
+	public function test_a_fresh_command_with_a_stale_revision_is_409_with_the_current_revision_and_document(): void {
+		// Arrange: a pending leg, then cash recorded against r0 (which moves the revision).
+		$order   = $this->create_pos_order();
+		$pending = $this->payment( 'pos_cash', '40.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		Ledger::instance()->save( $order, array( $pending ), false );
+		$r0 = $this->current_revision( $order );
+		$this->assertSame( 200, $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/payments', array( 'payment' => $this->payment( 'pos_cash', '20.00' ), 'revision' => $r0 ) )->get_status() );
+		$path = $this->payment_path( $order, $pending['id'] ) . '/void';
+
+		// Act.
+		$stale = $this->command( $path, array( 'command_id' => wp_generate_uuid4(), 'revision' => $r0 ) );
+
+		// Assert.
+		$this->assertSame( 409, $stale->get_status() );
+		$this->assertSame( 'wcpos_revision_stale', $stale->get_data()['code'] );
+		$current = \WCPOS\WooCommercePOS\Sync\Order_Serializer::current_state( $order->get_id() );
+		$this->assertSame( $current['revision'], $stale->get_data()['data']['currentRevision'] );
+		$this->assertSame( $order->get_id(), $stale->get_data()['data']['current']['id'] );
+		$this->assertSame( 'pending', $this->stored_row( $order->get_id(), $pending['id'] )['status'] );
+		$fresh = $this->command( $path, array( 'command_id' => wp_generate_uuid4(), 'revision' => $stale->get_data()['data']['currentRevision'] ) );
+		$this->assertSame( 200, $fresh->get_status() );
+		$this->assertSame( 'voided', $fresh->get_data()['payment']['status'] );
+	}
+
+	/**
+	 * Pin 4: every money command needs a command id (but record) and a revision; nothing is written without.
+	 *
+	 * @param string $kind Command kind.
+	 * @dataProvider money_commands
+	 */
+	public function test_money_commands_require_a_command_id_and_a_revision( string $kind ): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$pending = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		Ledger::instance()->save( $order, array( $pending ), false );
+		$base  = '/wcpos/v2/orders/' . $order->get_id();
+		$paths = array(
+			'record'  => $base . '/payments',
+			'intent'  => $this->payment_path( $order, wp_generate_uuid4() ) . '/intent',
+			'capture' => $this->payment_path( $order, $pending['id'] ) . '/capture',
+			'void'    => $this->payment_path( $order, $pending['id'] ) . '/void',
+			'refund'  => $this->payment_path( $order, $pending['id'] ) . '/refund',
+			'submit'  => $base . '/payment-methods/pos_cash/submit',
+			'cancel'  => $base . '/payment-methods/pos_cash/cancel',
+			'close'   => $base . '/close',
+		);
+		$ledger   = $this->stored_meta( $order->get_id(), Ledger::META_KEY );
+		$revision = $this->current_revision( $order );
+		$answers  = array();
+
+		// Act.
+		if ( 'record' !== $kind ) {
+			$answers['missing id'] = $this->command( $paths[ $kind ], array( 'revision' => $revision ) );
+			$answers['not a uuid'] = $this->command( $paths[ $kind ], array( 'command_id' => 'abc', 'revision' => $revision ) );
+		}
+		$no_revision = $this->command( $paths[ $kind ], array( 'command_id' => wp_generate_uuid4(), 'payment' => $this->payment( 'pos_cash', '5.00' ) ) );
+
+		// Assert.
+		foreach ( $answers as $case => $answer ) {
+			$this->assertSame( 400, $answer->get_status(), $case );
+			$this->assertSame( 'rest_invalid_param', $answer->get_data()['code'], $case );
+		}
+		$this->assertSame( 428, $no_revision->get_status() );
+		$this->assertSame( 'wcpos_revision_required', $no_revision->get_data()['code'] );
+		$this->assertSame( $ledger, $this->stored_meta( $order->get_id(), Ledger::META_KEY ) );
+		$this->assertNull( $this->stored_meta( $order->get_id(), '_wcpos_commands' ) );
+	}
+
+	/** The money commands. */
+	public function money_commands(): array {
+		return array_map( static fn( $kind ) => array( $kind ), array_combine( array( 'record', 'intent', 'capture', 'void', 'refund', 'submit', 'cancel', 'close' ), array( 'record', 'intent', 'capture', 'void', 'refund', 'submit', 'cancel', 'close' ) ) );
+	}
+
+	/** Pin 6: a void of a pending row moves the revision, and its answer carries the new one. */
+	public function test_a_void_of_a_pending_row_moves_the_revision(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$pending = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		Ledger::instance()->save( $order, array( $pending ), false );
+		$before = $this->current_revision( $order );
+
+		// Act.
+		$response = $this->void( $order, $pending['id'] );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+		$after = $this->current_revision( $order );
+		$this->assertNotSame( $before, $after );
+		$this->assertSame( $after, $response->get_data()['revision'] );
+	}
+
+	/** Pin 7: a save that only moves date_modified leaves the revision alone. */
+	public function test_the_revision_excludes_date_modified(): void {
+		// Arrange.
+		$order    = $this->create_pos_order();
+		$revision = $this->current_revision( $order );
+
+		// Act.
+		$touched = wc_get_order( $order->get_id() );
+		$touched->set_date_modified( time() + 60 );
+		$touched->save();
+
+		// Assert.
+		$this->assertSame( $revision, $this->current_revision( $order ) );
+	}
+
+	/** Pin 12: a close retried with its command replays the completion it made, even on a stale revision. */
+	public function test_close_replays_its_completion_with_a_stale_revision(): void {
+		// Arrange: covered without deriving.
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$body      = $this->envelope( $order );
+		$announced = 0;
+		$listener  = static function () use ( &$announced ): void {
+			++$announced;
+		};
+		add_action( 'wcpos_sale_completed', $listener );
+
+		// Act.
+		$first = $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/close', $body );
+		$again = $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/close', $body );
+
+		// Assert.
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 200, $again->get_status() );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $first->get_data()['completion'] );
+		$this->assertSame( $first->get_data()['completion'], $again->get_data()['completion'] );
+		$commands = $this->stored_meta( $order->get_id(), '_wcpos_commands' );
+		$this->assertSame( array( $body['command_id'] ), array_keys( $commands ) );
+		$this->assertSame( $history[0]['id'], $commands[ $body['command_id'] ]['ref'] );
+		$this->assertSame( 1, $announced );
+	}
+
+	/** Pin 13: a fresh close on a stale revision is refused; on the current one it replays the standing completion. */
+	public function test_close_with_a_fresh_command_and_a_stale_revision_is_409(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$r1   = $this->current_revision( $order );
+		$path = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$this->assertSame( 200, $this->command( $path, array( 'command_id' => wp_generate_uuid4(), 'revision' => $r1 ) )->get_status() );
+
+		// Act.
+		$stale = $this->command( $path, array( 'command_id' => wp_generate_uuid4(), 'revision' => $r1 ) );
+		$fresh = $this->command( $path, $this->envelope( $order ) );
+
+		// Assert.
+		$this->assertSame( 409, $stale->get_status() );
+		$this->assertSame( 'wcpos_revision_stale', $stale->get_data()['code'] );
+		$this->assertSame( 200, $fresh->get_status() );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $fresh->get_data()['completion'] );
+	}
+
+	/**
+	 * A captured row the test handler refunds, and a refund object of 20.00 on the order.
+	 *
+	 * @param string $amount Row amount.
+	 * @return array{0: \WC_Order, 1: array, 2: \WC_Order_Refund}
+	 */
+	private function refundable( string $amount = '92.95' ): array {
+		$this->use_route_handler();
+		Route_Handler::$refunds = 0;
+		$order = $this->create_pos_order();
+		$row   = array_merge( $this->captured_row( $amount ), array( 'capture_mode' => 'route_test' ) );
+		Ledger::instance()->save( $order, array( $row ), false );
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => '20.00',
+				'refund_payment' => false,
+			)
+		);
+		return array( wc_get_order( $order->get_id() ), $row, $refund );
+	}
+
+	/** Pin 14: a refund retried with its command allocates once; another amount under it is a 422. */
+	public function test_refund_replay_allocates_once_and_a_different_amount_is_422(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->refundable();
+		$path = $this->payment_path( $order, $row['id'] ) . '/refund';
+		$body = $this->envelope(
+			$order,
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount' => '10.00',
+			)
+		);
+
+		// Act.
+		$first     = $this->command( $path, $body );
+		$again     = $this->command( $path, $body );
+		$other     = $this->command( $path, array_merge( $body, array( 'amount' => '20.00' ) ) );
+		$new_id    = $this->command( $path, $this->envelope( $order, array( 'refund_id' => $refund->get_id(), 'amount' => '10.00' ) ) );
+
+		// Assert.
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 200, $again->get_status() );
+		$this->assertSame( $first->get_data()['payment']['refunds'], $again->get_data()['payment']['refunds'] );
+		$this->assertSame( 422, $other->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $other->get_data()['code'] );
+		$this->assertSame( 200, $new_id->get_status() );
+		$this->assertCount( 1, $this->stored_row( $order->get_id(), $row['id'] )['refunds'] );
+		$this->assertSame( 1, Route_Handler::$refunds );
+	}
+
+	/** Pin 15: an intent retried with its command resumes the leg; another body under it is a 422. */
+	public function test_intent_replay_with_the_same_command_resumes_the_leg_and_a_different_body_is_422(): void {
+		// Arrange.
+		$this->use_route_handler();
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95' );
+		$path    = $this->payment_path( $order, $payment['id'] ) . '/intent';
+		$body    = $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) );
+
+		// Act.
+		$first = $this->command( $path, $body );
+		$again = $this->command( $path, $body );
+		$other = $this->command( $path, array_merge( $body, array( 'payment' => array_merge( $payment, array( 'amount' => '50.00' ) ) ) ) );
+
+		// Assert.
+		$this->assertSame( 200, $first->get_status() );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'pending', $again->get_data()['payment']['status'] );
+		$this->assertSame( array( 'reader' => 'reader-1' ), $again->get_data()['handoff'] );
+		$this->assertSame( 422, $other->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $other->get_data()['code'] );
+		$this->assertCount( 1, $this->stored_meta( $order->get_id(), Ledger::META_KEY )['payments'] );
+	}
+
+	/** Pin 16: offline cash replayed after the revision moved is the same row, never a second. */
+	public function test_an_offline_cash_record_replayed_after_the_revision_moved_creates_one_row(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$cash    = $this->payment( 'pos_cash', '20.00', array( 'recorded_offline' => true ) );
+		$r0      = $this->current_revision( $order );
+		$path    = '/wcpos/v2/orders/' . $order->get_id() . '/payments';
+		$this->assertSame( 200, $this->command( $path, array( 'payment' => $cash, 'revision' => $r0 ) )->get_status() );
+		$edited = wc_get_order( $order->get_id() );
+		$edited->set_customer_note( 'late' );
+		$edited->save();
+
+		// Act.
+		$replayed = $this->command( $path, array( 'payment' => $cash, 'revision' => $r0 ) );
+
+		// Assert.
+		$this->assertSame( 200, $replayed->get_status() );
+		$this->assertSame( $cash['id'], $replayed->get_data()['payment']['id'] );
+		$this->assertCount( 1, $this->stored_meta( $order->get_id(), Ledger::META_KEY )['payments'] );
+	}
+
+	/** Pin 17: a new offline row on a stale revision is refused; re-sent with the current one it lands once. */
+	public function test_a_fresh_offline_cash_record_with_a_stale_revision_is_refused_so_the_till_re_reads(): void {
+		// Arrange.
+		$order  = $this->create_pos_order();
+		$r0     = $this->current_revision( $order );
+		$edited = wc_get_order( $order->get_id() );
+		$edited->set_customer_note( 'late' );
+		$edited->save();
+		$cash = $this->payment( 'pos_cash', '20.00', array( 'recorded_offline' => true ) );
+		$path = '/wcpos/v2/orders/' . $order->get_id() . '/payments';
+
+		// Act.
+		$stale = $this->command( $path, array( 'payment' => $cash, 'revision' => $r0 ) );
+		$fresh = $this->command( $path, array( 'payment' => $cash, 'revision' => $stale->get_data()['data']['currentRevision'] ) );
+
+		// Assert.
+		$this->assertSame( 409, $stale->get_status() );
+		$this->assertSame( 'wcpos_revision_stale', $stale->get_data()['code'] );
+		$this->assertSame( 200, $fresh->get_status() );
+		$rows = $this->stored_meta( $order->get_id(), Ledger::META_KEY )['payments'];
+		$this->assertSame( array( $cash['id'] ), array_column( $rows, 'id' ) );
+	}
+
+	/** Pin 19: the status poll is not a command: no envelope asked, no revision answered. */
+	public function test_the_status_poll_takes_no_envelope(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '20.00' );
+		$this->record( $order, $payment );
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( $this->payment_path( $order, $payment['id'] ) . '/status' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'revision', $response->get_data() );
+	}
+
+	/** Pin 20: the command maps are kept in storage and never answered on the wire. */
+	public function test_command_entries_stay_out_of_the_wire_and_in_storage(): void {
+		// Arrange.
+		$this->use_route_handler();
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95' );
+		$intent  = $this->command( $this->payment_path( $order, $payment['id'] ) . '/intent', $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) ) );
+		$capture = $this->envelope( $order, array( 'context' => array( 'amount' => '92.95' ) ) );
+		$close   = $this->envelope( $order );
+
+		// Act.
+		$captured = $this->command( $this->payment_path( $order, $payment['id'] ) . '/capture', $capture );
+		$replayed = $this->command( $this->payment_path( $order, $payment['id'] ) . '/capture', $capture );
+		$closed   = $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/close', array_merge( $close, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		foreach ( array( $intent, $captured, $replayed ) as $answer ) {
+			$this->assertSame( 200, $answer->get_status() );
+			$this->assertArrayNotHasKey( 'commands', $answer->get_data()['payment'] );
+		}
+		$this->assertSame( 200, $closed->get_status() );
+		$this->assertArrayHasKey( $capture['command_id'], $this->stored_row( $order->get_id(), $payment['id'] )['commands'] );
+		$this->assertArrayHasKey( $close['command_id'], $this->stored_meta( $order->get_id(), '_wcpos_commands' ) );
+	}
+
+	/** Pin 23: a command id is the order's: reused on another row or route it is another body. */
+	public function test_a_command_id_reused_on_another_row_or_route_is_422(): void {
+		// Arrange: rows A and B, refund c6 allocated on A.
+		list( $order, $a, $refund ) = $this->refundable( '50.00' );
+		$b = array_merge( $this->captured_row( '42.95' ), array( 'capture_mode' => 'route_test' ) );
+		Ledger::instance()->save( $order, array( $a, $b ), false );
+		$body = $this->envelope(
+			$order,
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount' => '10.00',
+			)
+		);
+		$this->assertSame( 200, $this->command( $this->payment_path( $order, $a['id'] ) . '/refund', $body )->get_status() );
+
+		// Act.
+		$other_row   = $this->command( $this->payment_path( $order, $b['id'] ) . '/refund', $body );
+		$other_route = $this->command( $this->payment_path( $order, $a['id'] ) . '/void', array( 'command_id' => $body['command_id'], 'revision' => $this->current_revision( $order ) ) );
+
+		// Assert.
+		$this->assertSame( 422, $other_row->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $other_row->get_data()['code'] );
+		$this->assertSame( 422, $other_route->get_status() );
+		$this->assertSame( 1, Route_Handler::$refunds );
+		$this->assertSame( array(), $this->stored_row( $order->get_id(), $b['id'] )['refunds'] );
+	}
+
+	/** Pin 24: a 2xx command that changed nothing else still keeps its entry. */
+	public function test_a_command_that_changed_nothing_still_stores_its_entry(): void {
+		// Arrange: a refund allocated.
+		list( $order, $row, $refund ) = $this->refundable();
+		$path = $this->payment_path( $order, $row['id'] ) . '/refund';
+		$this->assertSame( 200, $this->command( $path, $this->envelope( $order, array( 'refund_id' => $refund->get_id(), 'amount' => '10.00' ) ) )->get_status() );
+		$c8 = $this->envelope( $order, array( 'refund_id' => $refund->get_id(), 'amount' => '10.00' ) );
+
+		// Act + Assert: the refund under a new id.
+		$this->assertSame( 200, $this->command( $path, $c8 )->get_status() );
+		$this->assertArrayHasKey( $c8['command_id'], $this->stored_row( $order->get_id(), $row['id'] )['commands'] );
+		$this->assertSame( 422, $this->command( $path, array_merge( $c8, array( 'amount' => '5.00' ) ) )->get_status() );
+
+		// Act + Assert: a close replaying the standing completion of a covered sale.
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$close = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$this->assertSame( 200, $this->command( $close, $this->envelope( $order ) )->get_status() );
+		$c9       = $this->envelope( $order );
+		$replayed = $this->command( $close, $c9 );
+		$this->assertSame( 200, $replayed->get_status() );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( $history[0]['id'], $this->stored_meta( $order->get_id(), '_wcpos_commands' )[ $c9['command_id'] ]['ref'] );
+		$this->assertSame( 422, $this->command( $close, array_merge( $c9, array( 'provenance' => array( 'register_id' => wp_generate_uuid4() ) ) ) )->get_status() );
+	}
+
+	/** Pin 24 (legacy): a close on a sale paid before the history existed names no completion. */
+	public function test_a_close_on_a_legacy_paid_sale_stores_its_entry_with_no_completion(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$paid  = wc_get_order( $order->get_id() );
+		$paid->set_date_paid( time() );
+		$paid->set_status( 'processing' );
+		$paid->save();
+		$body = $this->envelope( $order );
+
+		// Act.
+		$response = $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/close', $body );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( $body['command_id'], $this->stored_meta( $order->get_id(), '_wcpos_commands' ) );
+		$this->assertNull( $this->stored_meta( $order->get_id(), '_wcpos_commands' )[ $body['command_id'] ]['ref'] );
+	}
+
+	/** Pin 25: a failed inner read refuses the command: nothing is hashed, run or stored. */
+	public function test_a_failed_inner_read_refuses_the_command_and_hashes_nothing(): void {
+		// Arrange.
+		$this->use_route_handler();
+		Route_Handler::$captures = 0;
+		$order   = $this->create_pos_order();
+		$payment = $this->intended( $order, '92.95' );
+		$body    = $this->envelope( $order, array( 'context' => array( 'amount' => '92.95' ) ) );
+		$route   = '/wc/v3/orders/' . $order->get_id();
+		$deny    = static function ( $result, $server, $request ) use ( $route ) {
+			return $route === $request->get_route() ? new \WP_Error( 'woocommerce_rest_cannot_view', 'Sorry, you cannot view this resource.', array( 'status' => 403 ) ) : $result;
+		};
+		add_filter( 'rest_pre_dispatch', $deny, 10, 3 );
+
+		// Act.
+		try {
+			$response = $this->command( $this->payment_path( $order, $payment['id'] ) . '/capture', $body );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $deny, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_rest_cannot_view', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'revision', $response->get_data() );
+		$stored = $this->stored_row( $order->get_id(), $payment['id'] );
+		$this->assertSame( 'pending', $stored['status'] );
+		$this->assertArrayNotHasKey( $body['command_id'], $stored['commands'] );
+		$this->assertSame( 0, Route_Handler::$captures );
+	}
+
+	/** Pin 26: the answer's revision is read after the parked sale record was recovered in the same request. */
+	public function test_the_answers_revision_is_read_after_fiscal_recovery(): void {
+		// Arrange: completed while the sale record could not be inserted, so its document is parked.
+		$order = $this->create_pos_order();
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale', $stuck, 10, 2 );
+		try {
+			$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_status() );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale', $stuck, 10 );
+		}
+		$this->assertNotEmpty( $this->stored_meta( $order->get_id(), '_wcpos_fiscal_pending' ) );
+
+		// Act: any command; close replays the standing completion.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEmpty( $this->stored_meta( $order->get_id(), '_wcpos_fiscal_pending' ) );
+		$this->assertSame( $this->current_revision( $order ), $response->get_data()['revision'] );
 	}
 
 	/** Create an open POS order at the contract total. */
@@ -1050,7 +1633,9 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * @param \WC_Order $order Order.
 	 */
 	private function close( \WC_Order $order ): \WP_REST_Response {
-		return $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' ) );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
+		$request->set_body_params( $this->envelope( $order ) );
+		return $this->server->dispatch( $request );
 	}
 
 	private function create_pos_order(): \WC_Order {
@@ -1090,7 +1675,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function record( \WC_Order $order, array $payment ): \WP_REST_Response {
 		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
-		$request->set_body_params( array( 'payment' => $payment ) );
+		$request->set_body_params( $this->envelope( $order, array( 'payment' => $payment ) ) );
 
 		return $this->server->dispatch( $request );
 	}
@@ -1103,7 +1688,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function void( \WC_Order $order, string $id ): \WP_REST_Response {
 		$request = $this->wp_rest_post_request( $this->payment_path( $order, $id ) . '/void' );
-		$request->set_body_params( array( 'reason' => 'Customer cancelled' ) );
+		$request->set_body_params( $this->envelope( $order, array( 'reason' => 'Customer cancelled' ) ) );
 
 		return $this->server->dispatch( $request );
 	}
@@ -1135,6 +1720,20 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	 * @var array|null
 	 */
 	public static $answer = null;
+
+	/**
+	 * Provider capture calls, for replay pins.
+	 *
+	 * @var int
+	 */
+	public static $captures = 0;
+
+	/**
+	 * Provider refund calls, for replay pins.
+	 *
+	 * @var int
+	 */
+	public static $refunds = 0;
 
 	/**
 	 * Return a transient prompt when the provider asks the cashier a question.
@@ -1178,7 +1777,20 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	 * @param array $context Provider context.
 	 */
 	public function capture( array $row, array $context ) {
+		++self::$captures;
 		return array_merge( array( 'status' => 'captured' ), $context );
+	}
+
+	/**
+	 * Count and settle a refund allocation.
+	 *
+	 * @param array  $row       Payment row.
+	 * @param int    $refund_id Refund id.
+	 * @param string $amount    Amount.
+	 */
+	public function refund( array $row, int $refund_id, string $amount ) {
+		++self::$refunds;
+		return parent::refund( $row, $refund_id, $amount );
 	}
 }
 

@@ -45,10 +45,11 @@ class Gateway_Submission {
 	 * @param array    $descriptor Method descriptor.
 	 * @param string   $attempt_id Attempt UUID; becomes the row id when money is recorded.
 	 * @param array    $values     Declared field values.
+	 * @param array    $command    The till's command (`id`, `fp`, `kind`); its entry rides the attempt's saves.
 	 * @return array|WP_Error
 	 * @throws Ledger_Persistence_Exception When the attempt cannot be persisted before dispatch, or a paid row cannot be recorded.
 	 */
-	public static function submit( WC_Order $order, array $descriptor, string $attempt_id, array $values ) {
+	public static function submit( WC_Order $order, array $descriptor, string $attempt_id, array $values, array $command = array() ) {
 		if ( 'gateway' !== $descriptor['capture']['mode'] ) {
 			return new WP_Error( 'wcpos_capture_mode_unsupported', __( 'Payment capture mode is unsupported.', 'woocommerce-pos' ), array( 'status' => 501 ) );
 		}
@@ -65,6 +66,7 @@ class Gateway_Submission {
 		$history  = self::read_attempts( $order );
 		$recorded = $ledger->find( $order, $attempt_id );
 		if ( $recorded && 'paid' !== ( $history[ $attempt_id ] ?? null ) ) {
+			self::answered( $order, $command, $attempt_id, 'recorded' );
 			return array(
 				'outcome' => 'recorded',
 				'payment' => $recorded,
@@ -73,6 +75,7 @@ class Gateway_Submission {
 		}
 		// A paid attempt is terminal: the gateway took the money, so it is never dispatched again.
 		if ( in_array( $history[ $attempt_id ] ?? null, array( 'sent', 'settled', 'paid' ), true ) ) {
+			self::answered( $order, $command, $attempt_id, $history[ $attempt_id ] );
 			return array(
 				'outcome' => $history[ $attempt_id ],
 				'payment' => null,
@@ -82,6 +85,15 @@ class Gateway_Submission {
 		if ( in_array( $history[ $attempt_id ] ?? null, array( 'cancelled', 'superseded' ), true ) ) {
 			// The till undid or replaced this send; a late retry must not send again.
 			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled or superseded at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		// The history no longer names the attempt (ATTEMPTS_CAP): the command map still answers it.
+		$stored = empty( $command['id'] ) ? null : Command_Log::find( $order, array(), $command['id'] );
+		if ( $stored ) {
+			return array(
+				'outcome' => $stored['outcome'],
+				'payment' => null,
+				'order' => $ledger->summary( $order ),
+			);
 		}
 		// Only a NEW attempt needs the method enabled: a replay above answers what already
 		// happened, even after the merchant has switched the method off.
@@ -204,6 +216,7 @@ class Gateway_Submission {
 			}
 			// Persist the attempt before external money can move: a failed ledger mint must not redispatch.
 			self::remember_attempt( $order, $history, $attempt_id, 'sent' );
+			self::remember_command( $order, $command, $attempt_id, 'sent' );
 			$order->set_payment_method( $gateway->id );
 			$order->set_payment_method_title( (string) $descriptor['title'] );
 			Ledger::saving( $order->get_id(), fn() => $order->save() );
@@ -239,7 +252,7 @@ class Gateway_Submission {
 		$malformed = ! is_array( $result ) || 'success' !== ( $result['result'] ?? null );
 		if ( $malformed && ! $paid ) {
 			// A definite failure (or a throw before dispatch) closes the attempt; a throw after dispatch stays unresolved.
-			self::restore_method( $order, $previous_method, $threw && $dispatch_started ? null : $attempt_id );
+			self::restore_method( $order, $previous_method, $threw && $dispatch_started ? null : $attempt_id, $command['id'] ?? null );
 			$detail = implode( ' ', wp_list_pluck( $notices, 'notice' ) );
 			if ( $threw ) {
 				// A gateway that throws instead of adding a notice still owes the operator a reason.
@@ -259,7 +272,7 @@ class Gateway_Submission {
 		if ( null !== $elsewhere ) {
 			// A hosted checkout: the gateway wants the browser to go somewhere the till cannot
 			// follow. Nothing was sent and nothing was taken, so say so rather than stamp "sent".
-			self::restore_method( $order, $previous_method, $attempt_id );
+			self::restore_method( $order, $previous_method, $attempt_id, $command['id'] ?? null );
 			Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d: %s answered a redirect to %s; refused.', $attempt_id, $order->get_id(), $descriptor['id'], $elsewhere ) );
 			return new WP_Error(
 				'wcpos_provider_error',
@@ -306,6 +319,7 @@ class Gateway_Submission {
 			// Not awaiting the customer: no stamp, and a stale one from an earlier send goes.
 			self::clear_stamp( $order );
 			self::remember_attempt( $order, $history, $attempt_id, 'settled' );
+			self::remember_command( $order, $command, $attempt_id, 'settled' );
 			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the order status the merchant stored for this gateway. */
 			$order->add_order_note( sprintf( __( 'Settled via POS: %1$s on %2$s', 'woocommerce-pos' ), $verb['label'], wc_get_order_status_name( $settled_status ) ) );
 			Ledger::saving( $order->get_id(), fn() => $order->save() );
@@ -332,6 +346,11 @@ class Gateway_Submission {
 		if ( $paid ) {
 			// The completion waited for this row (Completion_Stamp::awaits_mint()): stamp it now.
 			Completion_Stamp::stamp( wc_get_order( $order->get_id() ) );
+			if ( ! empty( $command['id'] ) ) {
+				$recorded = wc_get_order( $order->get_id() );
+				self::remember_command( $recorded, $command, $attempt_id, 'recorded' );
+				Ledger::saving( $recorded->get_id(), fn() => $recorded->save() );
+			}
 		}
 		$outcome = $paid ? 'recorded' : ( $settled ? 'settled' : 'sent' );
 		Logger::log( sprintf( 'WCPOS gateway attempt %s on order #%d: %s via %s by cashier #%d (verb %s)', $attempt_id, $order->get_id(), $outcome, $descriptor['id'], get_current_user_id(), $verb['kind'] ) );
@@ -366,9 +385,10 @@ class Gateway_Submission {
 	 * @param array    $descriptor Method descriptor.
 	 * @param string   $attempt_id The sent attempt the till means to undo.
 	 * @param string   $reason     Cashier reason.
+	 * @param array    $command    The till's command; its entry rides the cancel's save.
 	 * @return array|WP_Error
 	 */
-	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason ) {
+	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason, array $command = array() ) {
 		$rows  = Ledger::instance()->read( $order );
 		$stamp = self::read_stamp( $order );
 		if ( ! $stamp || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) {
@@ -384,6 +404,7 @@ class Gateway_Submission {
 		self::clear_stamp( $order );
 		// The history outlives the stamp: a late retry of this send must never send again.
 		self::remember_attempt( $order, self::read_attempts( $order ), strtolower( $attempt_id ), 'cancelled' );
+		self::remember_command( $order, $command, strtolower( $attempt_id ) );
 		/* translators: 1: the payment method title, 2: the cashier's reason. */
 		Ledger::saving( $order->get_id(), fn() => $order->update_status( 'pos-open', trim( sprintf( __( 'Cancelled via POS: %1$s. %2$s', 'woocommerce-pos' ), $descriptor['title'], $reason ) ) ) );
 		return array( 'order' => Ledger::instance()->summary( $order ) );
@@ -463,8 +484,9 @@ class Gateway_Submission {
 	 * @param WC_Order    $order             Order object (the route's instance; re-read before use).
 	 * @param array|null  $previous          `[ method id, title ]` as they were before this attempt; null when never changed.
 	 * @param string|null $cancelled_attempt Attempt to close after a definite failure; throws after dispatch remain unresolved.
+	 * @param string|null $command_id        The submit's command, whose entry goes with a closed attempt.
 	 */
-	private static function restore_method( WC_Order $order, ?array $previous, ?string $cancelled_attempt ): void {
+	private static function restore_method( WC_Order $order, ?array $previous, ?string $cancelled_attempt, ?string $command_id = null ): void {
 		$fresh = null === $previous ? null : wc_get_order( $order->get_id() );
 		if ( ! $fresh instanceof WC_Order ) {
 			return;
@@ -473,6 +495,10 @@ class Gateway_Submission {
 		$fresh->set_payment_method_title( (string) $previous[1] );
 		if ( null !== $cancelled_attempt ) {
 			self::remember_attempt( $fresh, self::read_attempts( $fresh ), $cancelled_attempt, 'cancelled' );
+			if ( null !== $command_id ) {
+				// The attempt is terminal and the command stored nothing: a retry meets the 409, never a dispatch.
+				Command_Log::forget( $fresh, $command_id );
+			}
 		}
 		Ledger::saving( $fresh->get_id(), fn() => $fresh->save() );
 	}
@@ -500,6 +526,37 @@ class Gateway_Submission {
 		unset( $history[ $attempt_id ] );
 		$history[ $attempt_id ] = $fate;
 		$order->update_meta_data( self::ATTEMPTS_META_KEY, array_slice( $history, - self::ATTEMPTS_CAP, null, true ) );
+	}
+
+	/**
+	 * Keep the entry of a submit answered from the attempt history under a new command id: it
+	 * changed nothing else, but a 2xx command id is never free for another body (spec §5.2).
+	 *
+	 * @param WC_Order $order      Order object.
+	 * @param array    $command    The till's command.
+	 * @param string   $attempt_id The attempt it names.
+	 * @param string   $outcome    The outcome it answered.
+	 */
+	private static function answered( WC_Order $order, array $command, string $attempt_id, string $outcome ): void {
+		if ( empty( $command['id'] ) || Command_Log::find( $order, array(), $command['id'] ) ) {
+			return;
+		}
+		self::remember_command( $order, $command, $attempt_id, $outcome );
+		Ledger::saving( $order->get_id(), fn() => $order->save() );
+	}
+
+	/**
+	 * Stage a submit's or cancel's command entry; the caller saves.
+	 *
+	 * @param WC_Order    $order      Order object.
+	 * @param array       $command    The till's command; empty stores nothing.
+	 * @param string      $attempt_id The attempt it names.
+	 * @param string|null $outcome    A submit's wire outcome.
+	 */
+	private static function remember_command( WC_Order $order, array $command, string $attempt_id, ?string $outcome = null ): void {
+		if ( ! empty( $command['id'] ) ) {
+			Command_Log::remember( $order, $command['id'], Command_Log::entry( $command['fp'], $command['kind'], $attempt_id, $outcome ) );
+		}
 	}
 
 	/**

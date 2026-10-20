@@ -381,7 +381,7 @@ class Ledger {
 			if ( empty( $this->server_saves[ $order_id ] ) ) {
 				// Event history, the change stamp and refund allocations are server-owned, not order-write intent.
 				$previous = $stored_rows[ $id ] ?? null;
-				foreach ( array( 'seen_events', 'events' ) as $field ) {
+				foreach ( array( 'seen_events', 'events', 'commands' ) as $field ) {
 					if ( array_key_exists( $field, $row ) || isset( $previous[ $field ] ) ) {
 						$row[ $field ] = $previous[ $field ] ?? array();
 					}
@@ -762,9 +762,10 @@ class Ledger {
 	 * @param string   $id      Payment ID.
 	 * @param array    $input   Payment input.
 	 * @param array    $context Provider context.
+	 * @param array    $command The till's command (`id`, `fp`, `kind`); empty stores no entry.
 	 * @return array|WP_Error
 	 */
-	public function intent( WC_Order $order, string $id, array $input, array $context ) {
+	public function intent( WC_Order $order, string $id, array $input, array $context, array $command = array() ) {
 		$input['id'] = $id;
 		$validated = $this->validate_input( $order, $input );
 		if ( is_wp_error( $validated ) ) {
@@ -790,6 +791,12 @@ class Ledger {
 			// provider intent — and with it the handoff the app lost when the first
 			// response never arrived. A settled leg has nothing left to hand off.
 			if ( 'pending' !== ( $replayed['status'] ?? '' ) ) {
+				// A new command id on a settled leg changes nothing else, but its entry is still kept.
+				$noted = $this->with_command( $replayed, $command );
+				if ( $noted !== $replayed ) {
+					$this->replace_and_save( $order, $rows, $noted, false );
+					$replayed = $this->find( $order, $replayed['id'] );
+				}
 				return array(
 					'payment' => $replayed,
 					'handoff' => array(),
@@ -816,7 +823,7 @@ class Ledger {
 			$handoff = $resumed['handoff'] ?? array();
 			// A resumed leg can come back captured (the reader finished while the till was
 			// away), so it takes the same verification as capture(), never a bare transition.
-			$applied = $this->apply_result( $order, $replayed['id'], $resumed );
+			$applied = $this->apply_result( $order, $replayed['id'], $resumed, true, $command );
 			if ( is_wp_error( $applied ) ) {
 				return $applied;
 			}
@@ -858,6 +865,8 @@ class Ledger {
 			$order,
 			array(
 				'id' => $id,
+				// The entry rides the save before the provider is asked: a lost answer still holds it.
+				'commands' => $this->with_command( array(), $command )['commands'] ?? array(),
 				'source' => in_array( $input['source'] ?? '', self::SOURCES, true ) ? $input['source'] : 'app',
 				'method_id' => $descriptor['id'],
 				'provider' => $descriptor['capture']['provider'],
@@ -924,9 +933,10 @@ class Ledger {
 	 * @param WC_Order $order   Order object.
 	 * @param string   $id      Payment ID.
 	 * @param array    $context Provider context.
+	 * @param array    $command The till's command; empty stores no entry.
 	 * @return array|WP_Error
 	 */
-	public function capture( WC_Order $order, string $id, array $context ) {
+	public function capture( WC_Order $order, string $id, array $context, array $command = array() ) {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -945,7 +955,7 @@ class Ledger {
 			$this->record_failure_events( $order, $id, $new );
 			return $new;
 		}
-		return $this->apply_result( $order, $id, $new );
+		return $this->apply_result( $order, $id, $new, true, $command );
 	}
 
 	/**
@@ -969,9 +979,10 @@ class Ledger {
 	 * @param string   $id    Payment ID.
 	 * @param array    $new   Provider result.
 	 * @param bool     $derive Project payment state after applying.
+	 * @param array    $command The command this result answers; its entry rides the result's save.
 	 * @return array|WP_Error
 	 */
-	public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true ) {
+	public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true, array $command = array() ) {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -979,7 +990,11 @@ class Ledger {
 		}
 		$event = $new['event_id'] ?? null;
 		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
-			return $row;
+			$noted = $this->with_command( $row, $command );
+			if ( $noted !== $row ) {
+				$this->replace_and_save( $order, $rows, $noted, false );
+			}
+			return $noted;
 		}
 		$refusal = $this->refusal_error( $row, $order );
 		if ( $refusal ) {
@@ -1040,6 +1055,7 @@ class Ledger {
 			$applied['seen_events'][] = $event;
 			$applied['seen_events'] = array_slice( $applied['seen_events'], -self::SEEN_EVENTS_MAX );
 		}
+		$applied = $this->with_command( $applied, $command );
 		if ( $applied !== $row ) {
 			$applied = $this->normalize_row( $order, $applied );
 			$this->replace_and_save( $order, $rows, $applied, $derive );
@@ -1057,9 +1073,10 @@ class Ledger {
 	 * @param string   $id        Payment ID.
 	 * @param int      $refund_id WooCommerce refund ID.
 	 * @param string   $amount    Allocation amount.
+	 * @param array    $command   The till's command; empty (Pro's callers) stores no entry.
 	 * @return array|WP_Error
 	 */
-	public function refund( WC_Order $order, string $id, int $refund_id, string $amount ) {
+	public function refund( WC_Order $order, string $id, int $refund_id, string $amount, array $command = array() ) {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -1070,6 +1087,12 @@ class Ledger {
 		}
 		foreach ( $row['refunds'] ?? array() as $refund ) {
 			if ( (int) $refund['id'] === $refund_id ) {
+				// Already allocated: a new command id changes nothing else, but its entry is kept.
+				$noted = $this->with_command( $row, $command, $refund_id );
+				if ( $noted !== $row ) {
+					$this->replace_and_save( $order, $rows, $noted, false );
+					return $this->find( $order, $row['id'] );
+				}
 				return $row;
 			}
 		}
@@ -1118,7 +1141,7 @@ class Ledger {
 			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
-		$row = $this->normalize_row( $order, $row );
+		$row = $this->normalize_row( $order, $this->with_command( $row, $command, $refund_id ) );
 		$this->replace_and_save( $order, $rows, $row );
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
@@ -1349,11 +1372,12 @@ class Ledger {
 		}
 		foreach ( $requested as $field => $value ) {
 			if ( $comparable[ $field ] !== $value ) {
+				// Same id, another body: one code across the command family (spec §7 decision 12).
 				return new WP_Error(
-					'wcpos_payment_conflict',
+					'wcpos_command_conflict',
 					__( 'Payment id conflicts with an existing payment.', 'woocommerce-pos' ),
 					array(
-						'status' => 409,
+						'status' => 422,
 						'payment' => self::to_wire( $stored ),
 					)
 				);
@@ -1438,16 +1462,19 @@ class Ledger {
 	 * A sale already paid replays its last completion. Refused while money is in motion, and with
 	 * `wcpos_balance_outstanding` when uncovered (a zero total too: derive() never completes one).
 	 *
-	 * @param WC_Order $order Order object, read under the route's order lock.
+	 * @param WC_Order $order   Order object, read under the route's order lock.
+	 * @param array    $command The till's command; its entry names the completion it answered.
 	 * @return array|WP_Error `{ order: summary, completion: { n, id } }`.
 	 */
-	public function close( WC_Order $order ) {
+	public function close( WC_Order $order, array $command = array() ) {
 		$rows = $this->read( $order );
 		// A standing completion is replayed whatever its status (a merchant's POS status may be on-hold).
 		// A sale paid before the history existed stands too: it replays with no completion to name.
 		if ( Completion_Stamp::stands( $order ) ) {
 			$history = Completion_Stamp::read( $order );
-			return $this->closed( $order, $rows, end( $history ) );
+			$latest  = end( $history );
+			$this->remember_close( $order, $command, is_array( $latest ) ? $latest : false );
+			return $this->closed( $order, $rows, $latest );
 		}
 		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'on-hold' ), true ) ) {
 			return $this->invalid_transition(); // Never completed, or its completion was reopened (a cancel).
@@ -1481,7 +1508,36 @@ class Ledger {
 		$latest  = end( $history );
 		// Only a completion that stands is reported: when the new entry could not be recorded, the
 		// latest is the reopened one (the failure note names the gap), so none is named.
-		return $this->closed( $fresh, $this->read( $fresh ), is_array( $latest ) && empty( $latest['reopened_at_gmt'] ) ? $latest : false );
+		$latest = is_array( $latest ) && empty( $latest['reopened_at_gmt'] ) ? $latest : false;
+		// The completion id exists only now, so the entry takes a save of its own (§5.2).
+		$this->remember_close( $fresh, $command, $latest );
+		return $this->closed( $fresh, $this->read( $fresh ), $latest );
+	}
+
+	/**
+	 * Keep a close's command entry, naming the completion it answered (null when none stands).
+	 *
+	 * @param WC_Order    $order   Order object.
+	 * @param array       $command The till's command.
+	 * @param array|false $entry   The completion it answered.
+	 */
+	private function remember_close( WC_Order $order, array $command, $entry ): void {
+		if ( empty( $command['id'] ) ) {
+			return;
+		}
+		Command_Log::remember( $order, $command['id'], Command_Log::entry( $command['fp'], 'close', is_array( $entry ) ? (string) $entry['id'] : null ) );
+		self::saving( $order->get_id(), fn() => $order->save() );
+	}
+
+	/**
+	 * The row with the command's entry, when there is a command and the row does not hold it yet.
+	 *
+	 * @param array $row     Payment row.
+	 * @param array $command The till's command (`id`, `fp`, `kind`); empty for callers without one.
+	 * @param mixed $ref     The refund id a refund allocated.
+	 */
+	private function with_command( array $row, array $command, $ref = null ): array {
+		return empty( $command['id'] ) ? $row : Command_Log::with_on_row( $row, $command['id'], Command_Log::entry( $command['fp'], $command['kind'], $ref ) );
 	}
 
 	/**
@@ -1553,10 +1609,11 @@ class Ledger {
 	 * @param WC_Order $order  Order object.
 	 * @param string   $id     Payment ID.
 	 * @param string   $reason Void reason.
+	 * @param array    $command The till's command; empty (Pro's callers) stores no entry.
 	 *
 	 * @return array|\WP_Error
 	 */
-	public function void( WC_Order $order, string $id, string $reason ) {
+	public function void( WC_Order $order, string $id, string $reason, array $command = array() ) {
 		$rows = $this->read( $order );
 		$row  = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -1576,7 +1633,7 @@ class Ledger {
 		// A server-mode cancel is a request: the handler may answer with the row still
 		// pending (void_requested_at set), or captured if the reader finished first — so
 		// the result takes the same verification and persistence as every other write.
-		$applied = $this->apply_result( $order, $row['id'], $new );
+		$applied = $this->apply_result( $order, $row['id'], $new, true, $command );
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
 		}
@@ -1758,7 +1815,7 @@ class Ledger {
 						$row = $latest;
 					} else {
 						// Carry concurrent server updates unless this writer explicitly edited them.
-						foreach ( array( 'refunded_amount', 'refunds', 'events', 'seen_events' ) as $key ) {
+						foreach ( array( 'refunded_amount', 'refunds', 'events', 'seen_events', 'commands' ) as $key ) {
 							if ( $row[ $key ] === $base[ $key ] ) {
 								$row[ $key ] = $latest[ $key ];
 							}
@@ -2077,6 +2134,8 @@ class Ledger {
 			// in flight so nobody asks the provider twice; events[] is the cashier log.
 			'void_requested_at' => null,
 			'events' => array(),
+			// The commands answered on this row (ADR 0040 rule 5); never evicted, kept off the route wire.
+			'commands' => array(),
 			'provider_refs' => array(),
 			'receipt' => array(),
 			'cashier_id' => 0,
@@ -2117,6 +2176,7 @@ class Ledger {
 		$row['seen_events']      = is_array( $row['seen_events'] ) ? array_values( array_filter( $row['seen_events'], 'is_string' ) ) : array();
 		$row['void_requested_at'] = $this->valid_time( $row['void_requested_at'] );
 		$row['events']           = is_array( $row['events'] ) ? array_slice( array_values( array_filter( $row['events'], 'is_array' ) ), -self::EVENTS_MAX ) : array();
+		$row['commands']         = is_array( $row['commands'] ) ? array_filter( $row['commands'], 'is_array' ) : array();
 		$row['updated_at_gmt']   = $now;
 		return $row;
 	}

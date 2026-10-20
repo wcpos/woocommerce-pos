@@ -572,8 +572,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsArray( $ledger->record( $order, $input ) );
 		$input['register_id'] = wp_generate_uuid4();
 		$error = $ledger->record( $order, $input );
-		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
-		$this->assertSame( 409, $error->get_error_data()['status'] );
+		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
+		$this->assertSame( 422, $error->get_error_data()['status'] );
 	}
 
 	public function test_record_invalid_provenance_normalizes_to_null(): void {
@@ -920,7 +920,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'handoff', $ledger->find( $order, $input['id'] ) );
 		$this->assertSame( 'pending', $order->get_status() );
 		$error = $ledger->intent( $order, $input['id'], array_merge( $input, array( 'amount' => '21.00' ) ), array() );
-		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
+		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
 	}
 
 	/** @dataProvider capture_confirmations */
@@ -1858,10 +1858,42 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$error = Ledger::instance()->record( $order, array_merge( $input, array( 'amount' => '90.00' ) ) );
 
-		// Assert.
+		// Assert: one code across the command family for the same id with another body (§7 decision 12).
 		$this->assertWPError( $error );
-		$this->assertSame( 'wcpos_payment_conflict', $error->get_error_code() );
-		$this->assertSame( 409, $error->get_error_data()['status'] );
+		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
+		$this->assertSame( 422, $error->get_error_data()['status'] );
+	}
+
+	/** Pin 21: Pro's callers pass no command, and its rows keep an empty command map. */
+	public function test_refund_and_void_without_a_command_store_no_entry(): void {
+		// Arrange: a captured cash row, refundable, and a pending one, voidable.
+		$order    = $this->create_pos_order();
+		$captured = $this->payment( 'pos_cash', '50.00', array( 'status' => 'captured', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		$pending  = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
+		Ledger::instance()->save( $order, array( $captured, $pending ), false );
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => '5.00',
+				'refund_payment' => false,
+			)
+		);
+
+		// Act: called as Pro calls them, with no command.
+		$refunded = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $captured['id'], $refund->get_id(), '5.00' );
+		$voided   = Ledger::instance()->void( wc_get_order( $order->get_id() ), $pending['id'], '' );
+
+		// Assert.
+		$this->assertSame( 'succeeded', $refunded['refunds'][0]['status'] );
+		$this->assertSame( 'voided', $voided['status'] );
+		$stored = wc_get_order( $order->get_id() );
+		foreach ( $stored->get_data_store()->read_meta( $stored ) as $meta ) {
+			if ( Ledger::META_KEY === $meta->meta_key ) {
+				foreach ( json_decode( (string) maybe_unserialize( $meta->meta_value ), true )['payments'] as $row ) {
+					$this->assertSame( array(), $row['commands'] );
+				}
+			}
+		}
 	}
 
 	/** A stored UUID replay does not depend on the gateway's current capture mode. */
