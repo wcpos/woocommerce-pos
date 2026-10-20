@@ -3351,6 +3351,23 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringContainsString( 'provider unreachable', $logs[0] );
 	}
 
+	/** §6.6 pin 11, ledger effect: a gateway's indeterminate refund error reaches the ledger through Gateway_Handler. */
+	public function test_refund_with_a_gateways_indeterminate_error_keeps_the_reservation(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		Refund_Probe_Gateway::$result = new \WP_Error( 'timeout', 'gateway did not answer', array( 'indeterminate' => true ) );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+
+		// Assert.
+		$this->assertIsArray( $result );
+		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$this->assertStringContainsString( 'gateway did not answer', $this->stranded_logs()[0] );
+	}
+
 	/** §6.6 pin 8b: a settle save that throws is a miss, never an escape; on the reservation it is the 409. */
 	public function test_refund_whose_settle_save_throws_is_stranded_not_escaped(): void {
 		// Arrange: every save after the provider call throws.

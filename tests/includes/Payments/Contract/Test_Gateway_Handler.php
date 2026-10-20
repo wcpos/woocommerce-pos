@@ -141,6 +141,49 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** §6.6 pin 11: a gateway's indeterminate refund error keeps its flag through the handler; a definite one has none. */
+	public function test_gateway_refund_carries_the_gateways_indeterminate_flag(): void {
+		// Arrange.
+		$filter = static fn( array $gateways ): array => array_merge( $gateways, array( Refunding_Test_Gateway::class ) );
+		add_filter( 'woocommerce_payment_gateways', $filter );
+		\WC_Payment_Gateways::instance()->init();
+		$handler = Capture_Mode_Registry::instance()->get( 'gateway' );
+		$order   = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
+		$row     = array(
+			'order_id'  => $order->get_id(),
+			'method_id' => 'wcpos_refunding_test',
+			'refunds'   => array(),
+		);
+		try {
+			// Act.
+			Refunding_Test_Gateway::$result = new \WP_Error(
+				'timeout',
+				'Provider timed out',
+				array( 'indeterminate' => true )
+			);
+			$unknown                        = $handler->refund( $row, 83, '5.00' );
+			Refunding_Test_Gateway::$result = new \WP_Error( 'declined', 'No funds', array( 'indeterminate' => false ) );
+			$declined                       = $handler->refund( $row, 84, '5.00' );
+
+			// Assert.
+			$this->assertSame( 'wcpos_provider_error', $unknown->get_error_code() );
+			$this->assertSame( 'Provider timed out', $unknown->get_error_message() );
+			$this->assertSame(
+				array(
+					'status'        => 502,
+					'indeterminate' => true,
+				),
+				$unknown->get_error_data()
+			);
+			$this->assertSame( 'wcpos_provider_error', $declined->get_error_code() );
+			$this->assertSame( array( 'status' => 502 ), $declined->get_error_data() );
+		} finally {
+			Refunding_Test_Gateway::$result = true;
+			remove_filter( 'woocommerce_payment_gateways', $filter );
+			\WC_Payment_Gateways::instance()->init();
+		}
+	}
+
 	/** Addendum: specialization uses registration, not a describe filter. */
 	public function test_gateway_second_registration_replaces_handler(): void {
 		// Arrange.

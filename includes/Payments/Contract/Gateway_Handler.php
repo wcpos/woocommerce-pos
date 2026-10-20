@@ -63,7 +63,10 @@ class Gateway_Handler extends Abstract_Capture_Mode_Handler {
 			$reason = $refund instanceof \WC_Order_Refund ? $refund->get_reason() : '';
 			$result = $gateway->process_refund( (int) ( $row['order_id'] ?? 0 ), (float) $amount, $reason );
 			if ( is_wp_error( $result ) ) {
-				return new \WP_Error( 'wcpos_provider_error', $result->get_error_message(), array( 'status' => 502 ) );
+				// A gateway that cannot tell whether it refunded says so; the ledger then keeps the reservation (rule 8).
+				$data = $result->get_error_data();
+				$flag = is_array( $data ) && true === ( $data['indeterminate'] ?? false ) ? array( 'indeterminate' => true ) : array();
+				return new \WP_Error( 'wcpos_provider_error', $result->get_error_message(), array_merge( array( 'status' => 502 ), $flag ) );
 			}
 			// wc_refund_payment() treats any truthy result as success; so does this.
 			if ( ! $result ) {
