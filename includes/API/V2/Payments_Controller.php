@@ -422,8 +422,8 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( $stored && ! in_array( $kind, array( 'intent', 'submit' ), true ) ) {
 			return $this->replay( $order, $kind, $stored );
 		}
-		// record and intent replay by row id: the row is the command's stored outcome.
-		$row_id = 'record' === $kind ? ( is_array( $params['payment'] ?? null ) ? ( $params['payment']['id'] ?? null ) : null ) : ( 'intent' === $kind ? $request['uuid'] : null );
+		// record replays by row id; a new command id on an existing intent row is a fresh command.
+		$row_id = 'record' === $kind && is_array( $params['payment'] ?? null ) ? ( $params['payment']['id'] ?? null ) : null;
 		if ( ! $stored && ! ( is_string( $row_id ) && $ledger->find( $order, $row_id ) ) ) {
 			$stale = $this->stale( $order, $revision );
 			if ( $stale ) {

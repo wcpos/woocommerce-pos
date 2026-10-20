@@ -1579,6 +1579,35 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $this->current_revision( $order ), $response->get_data()['revision'] );
 	}
 
+	/** Pin 29: a new command id on an existing row is a fresh command: a stale revision refuses it before the provider. */
+	public function test_a_fresh_intent_on_an_existing_row_with_a_stale_revision_is_409(): void {
+		// Arrange: intent c1 creates pending row P; the order then changes.
+		$this->use_route_handler();
+		Route_Handler::$intents = 0;
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95' );
+		$path    = $this->payment_path( $order, $payment['id'] ) . '/intent';
+		$body    = $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) );
+		$this->assertSame( 200, $this->command( $path, $body )->get_status() );
+		$old    = $this->current_revision( $order );
+		$edited = wc_get_order( $order->get_id() );
+		$edited->set_customer_note( 'changed' );
+		$edited->save();
+		$c2 = array_merge( $body, array( 'command_id' => wp_generate_uuid4(), 'revision' => $old ) );
+
+		// Act.
+		$stale = $this->command( $path, $c2 );
+		$fresh = $this->command( $path, array_merge( $c2, array( 'revision' => $stale->get_data()['data']['currentRevision'] ?? '' ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+		$this->assertSame( 'wcpos_revision_stale', $stale->get_data()['code'] );
+		$this->assertSame( 200, $fresh->get_status(), wp_json_encode( $fresh->get_data() ) );
+		$this->assertSame( array( 'reader' => 'reader-1' ), $fresh->get_data()['handoff'] );
+		$this->assertSame( 2, Route_Handler::$intents );
+		$this->assertSame( 'pending', $this->stored_row( $order->get_id(), $payment['id'] )['status'] );
+	}
+
 	/** Create an open POS order at the contract total. */
 	/**
 	 * A captured cash row, for seeding without deriving.
@@ -1736,6 +1765,13 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	public static $refunds = 0;
 
 	/**
+	 * Provider intent calls, for replay pins.
+	 *
+	 * @var int
+	 */
+	public static $intents = 0;
+
+	/**
 	 * Return a transient prompt when the provider asks the cashier a question.
 	 *
 	 * @param array $row Payment row.
@@ -1767,6 +1803,7 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	 * @param array $context Provider context.
 	 */
 	public function intent( array $row, array $context ) {
+		++self::$intents;
 		$row['handoff'] = array( 'reader' => $context['reader'] );
 		return $row;
 	}
