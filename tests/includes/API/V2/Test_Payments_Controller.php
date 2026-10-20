@@ -805,13 +805,62 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( $this->stored_meta( $order->get_id(), Completion_Stamp::META_KEY ) );
 	}
 
-	/** An open POS order of one untaxed line at 0.00, no payment rows. */
-	private function zero_total_open_order(): \WC_Order {
-		$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
-		$product->set_regular_price( '0.00' );
-		$product->set_price( '0.00' );
-		$product->set_tax_status( 'none' );
-		$product->save();
+	/** With prevent-overselling on, a zero-total close holds stock like record and intent (§4.8). */
+	public function test_close_on_a_zero_total_order_is_refused_when_stock_is_held_elsewhere(): void {
+		// Arrange: one unit of a free product, two open orders for it.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$announced = 0;
+		$listener  = static function () use ( &$announced ): void {
+			++$announced;
+		};
+		try {
+			$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+			$product->set_regular_price( '0.00' );
+			$product->set_price( '0.00' );
+			$product->set_tax_status( 'none' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$first  = $this->zero_total_open_order( $product );
+			$second = $this->zero_total_open_order( $product );
+			add_action( 'wcpos_sale_completed', $listener );
+
+			// Act.
+			$sold    = $this->close( $first );
+			$refused = $this->close( $second );
+		} finally {
+			remove_action( 'wcpos_sale_completed', $listener );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
+
+		// Assert.
+		$this->assertSame( 200, $sold->get_status(), 'Response: ' . wp_json_encode( $sold->get_data() ) );
+		$this->assertSame( 0, wc_get_product( $product->get_id() )->get_stock_quantity() );
+		$this->assertSame( 400, $refused->get_status(), 'Response: ' . wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'wcpos_insufficient_stock', $refused->get_data()['code'] );
+		$stored = wc_get_order( $second->get_id() );
+		$this->assertSame( 'pos-open', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertNull( $this->stored_meta( $second->get_id(), Completion_Stamp::META_KEY ) );
+		$this->assertSame( 1, $announced );
+	}
+
+	/**
+	 * An open POS order of one line at 0.00, no payment rows.
+	 *
+	 * @param \WC_Product|null $product The line's product; a new untaxed 0.00 product when null.
+	 */
+	private function zero_total_open_order( ?\WC_Product $product = null ): \WC_Order {
+		if ( null === $product ) {
+			$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+			$product->set_regular_price( '0.00' );
+			$product->set_price( '0.00' );
+			$product->set_tax_status( 'none' );
+			$product->save();
+		}
 		$order = wc_create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->set_status( 'pos-open' );
