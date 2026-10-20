@@ -395,6 +395,93 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $attempt ), $history[0]['payment_ids'] );
 	}
 
+	/** The fiscal trigger fires while the completion still holds the order lock. */
+	public function test_the_sale_completed_action_fires_under_the_order_lock(): void {
+		// Arrange.
+		$order    = $this->create_pos_order();
+		$held     = array();
+		$listener = static function ( $completed ) use ( &$held ): void {
+			$other = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+			$taken = $other->acquire( $completed->get_id() );
+			if ( $taken ) {
+				$other->release( $completed->get_id() );
+			}
+			$held[] = ! $taken;
+		};
+		add_action( 'wcpos_sale_completed', $listener, 1 );
+
+		// Act: complete outside any route lock (a webhook's payment_complete()).
+		Ledger::instance()->save( $order, array( $this->cash_row( '92.95' ) ), false );
+		wc_get_order( $order->get_id() )->payment_complete();
+		remove_action( 'wcpos_sale_completed', $listener, 1 );
+
+		// Assert.
+		$this->assertSame( array( true ), $held );
+	}
+
+	/** A listener that throws neither breaks the completion nor leaves the lock held. */
+	public function test_a_throwing_sale_completed_listener_leaves_the_entry_and_releases_the_lock(): void {
+		// Arrange.
+		$order    = $this->create_pos_order();
+		$listener = static function (): void {
+			throw new \RuntimeException( 'listener broke' );
+		};
+		add_action( 'wcpos_sale_completed', $listener, 1 );
+
+		// Act.
+		Ledger::instance()->save( $order, array( $this->cash_row( '92.95' ) ), false );
+		wc_get_order( $order->get_id() )->payment_complete();
+		remove_action( 'wcpos_sale_completed', $listener, 1 );
+
+		// Assert.
+		$this->assertCount( 1, $this->stored_history( $order->get_id() ) );
+		$other = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $other->acquire( $order->get_id() ) );
+		$other->release( $order->get_id() );
+	}
+
+	/** A listener that reopens and edits the order mid-write cannot change record n's document. */
+	public function test_an_edit_during_the_sale_write_does_not_reach_record_n(): void {
+		// Arrange: two lines, 60.00 + 32.95.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		foreach ( array( '60.00', '32.95' ) as $price ) {
+			$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+			$product->set_regular_price( $price );
+			$product->set_price( $price );
+			$product->set_tax_status( 'none' );
+			$product->save();
+			$order->add_product( $product, 1 );
+		}
+		$order->calculate_totals( false );
+		$order->save();
+		$edit = static function ( $snapshot, $order_id ) {
+			$editing = wc_get_order( $order_id );
+			$editing->set_status( 'pos-open' );
+			$lines = array_keys( $editing->get_items() );
+			$editing->remove_item( $lines[1] );
+			$editing->calculate_totals( false );
+			$editing->save();
+			return $snapshot;
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $edit, 10, 2 );
+
+		// Act.
+		try {
+			$this->record( $order, '92.95' );
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $edit, 10 );
+		}
+
+		// Assert: the document is the completed sale's, not the edited order's.
+		$sale = $this->only_sale( $order->get_id() );
+		$this->assertCount( 2, $sale['payload']['lines'] );
+		$this->assertEquals( 92.95, $sale['payload']['totals']['total_incl'] );
+		$this->assertSame( '60.00', wc_get_order( $order->get_id() )->get_total() );
+	}
+
 	/** A storefront order paid online has no register origin and is never stamped. */
 	public function test_a_storefront_order_paid_online_writes_no_entry(): void {
 		// Arrange.
@@ -607,6 +694,22 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		);
 		remove_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'keep_fixtures_enabled' ), 20 );
 		add_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'keep_fixtures_enabled' ), 20 );
+	}
+
+	/**
+	 * A captured cash row for seeding without deriving.
+	 *
+	 * @param string $amount Amount.
+	 */
+	protected function cash_row( string $amount ): array {
+		return array(
+			'id'           => wp_generate_uuid4(),
+			'method_id'    => 'pos_cash',
+			'kind'         => 'cash',
+			'capture_mode' => 'manual',
+			'amount'       => $amount,
+			'status'       => 'captured',
+		);
 	}
 
 	/** An open POS order for 92.95. */

@@ -187,7 +187,6 @@ final class Completion_Stamp {
 			self::failed( $order, __( 'WCPOS: completion could not be recorded; reconcile manually.', 'woocommerce-pos' ) );
 			return;
 		}
-		$entry = null;
 		try {
 			$fresh = self::fresh( $id );
 			// The window test reads the fresh order: a mint earlier in this save is not on the caller's object.
@@ -222,19 +221,23 @@ final class Completion_Stamp {
 			if ( ! self::persist( $fresh, $history, $entry['at_gmt'] ) ) {
 				/* translators: %d: completion number. */
 				self::failed( $fresh, sprintf( __( 'WCPOS: completion %d could not be recorded; reconcile manually.', 'woocommerce-pos' ), $n ) );
-				$entry = null;
+				return;
+			}
+			// Fired under the order lock, so no other writer edits the sale before its record is built.
+			try {
+				/**
+				 * Fires once per new completion entry, after it is persisted and while the order lock
+				 * is held. The fiscal sale writer's trigger.
+				 *
+				 * @param WC_Order $order Order, read after the entry was stored.
+				 * @param int      $n     Completion number.
+				 */
+				do_action( 'wcpos_sale_completed', $fresh, $n ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract action.
+			} catch ( \Throwable $error ) {
+				Logger::error( sprintf( 'WCPOS completion %d listener failed on order #%d: %s', $n, $id, $error->getMessage() ), array( 'order_id' => $id ) );
 			}
 		} finally {
 			$lock->release( $id );
-		}
-		if ( $entry ) {
-			/**
-			 * Fires once per new completion entry, after it is persisted. The fiscal sale writer's trigger.
-			 *
-			 * @param WC_Order $order Order, read after the entry was stored.
-			 * @param int      $n     Completion number.
-			 */
-			do_action( 'wcpos_sale_completed', $fresh, $entry['n'] ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract action.
 		}
 	}
 
