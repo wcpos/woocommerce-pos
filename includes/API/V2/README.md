@@ -126,6 +126,6 @@ sale. Retained money above a reduced total still completes and reads as `order.r
 - 409 `wcpos_payment_in_flight` (with `payment_id` or `attempt_id`): a row `pending` or
   `authorized`, a refund allocation `pending`, or a gateway attempt sent and unanswered.
 - 409 `wcpos_balance_outstanding` (with `order`): uncovered, or a zero total.
-- 409 `wcpos_invalid_transition`: the order is in no open status and was never completed.
+- 409 `wcpos_invalid_transition`: the order is in no open status and has no standing completion (never completed, or its latest completion was reopened, e.g. by a cancel).
 
 `command_id` and `revision` arrive with the rest of the money routes (PR 3).
