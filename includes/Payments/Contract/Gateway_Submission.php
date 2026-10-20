@@ -550,6 +550,7 @@ class Gateway_Submission {
 	 * @param array    $command    The till's command.
 	 * @param string   $attempt_id The attempt it names.
 	 * @param string   $outcome    The outcome it answered.
+	 * @throws Ledger_Persistence_Exception When the entry did not reach storage.
 	 */
 	private static function answered( WC_Order $order, array $command, string $attempt_id, string $outcome ): void {
 		if ( empty( $command['id'] ) || Command_Log::find( $order, array(), $command['id'] ) ) {
@@ -557,6 +558,10 @@ class Gateway_Submission {
 		}
 		self::remember_command( $order, $command, $attempt_id, $outcome );
 		Ledger::saving( $order->get_id(), fn() => $order->save() );
+		if ( ! self::command_kept( $order->get_id(), $command, $outcome ) ) {
+			Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d: a replay under a new command id was not stored; nothing moved, its retry answers again.', $attempt_id, $order->get_id() ), array( 'order_id' => $order->get_id() ) );
+			throw new Ledger_Persistence_Exception( 'WCPOS gateway command was not persisted.' );
+		}
 	}
 
 	/**

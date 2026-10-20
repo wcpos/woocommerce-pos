@@ -1560,6 +1560,40 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_invalid_transition', $again->get_data()['code'] );
 		$this->assertSame( $notes, count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) ) );
 	}
+
+	/** Pin 39: a replay answered from the attempt history under a new command id is 409 when its entry is lost. */
+	public function test_a_history_answer_whose_command_entry_is_not_stored_is_a_retryable_conflict(): void {
+		// Arrange: attempt A sent; a new command id names it while the map cannot be saved.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 200, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		$body = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$drop = $this->drop_command_map();
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		}
+		$attempts = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$again    = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertSame( 'sent', $attempts[ $attempt ] );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'sent', $again->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$this->assertSame( 'sent', $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['outcome'] );
+	}
 }
 
 /** A gateway that sends an invoice, not money. */
