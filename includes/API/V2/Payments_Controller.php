@@ -38,6 +38,14 @@ class Payments_Controller extends WC_REST_Controller {
 	 */
 	protected $rest_base = 'orders';
 
+	/**
+	 * The money commands whose body may carry the completing register's provenance (record, intent,
+	 * capture, submit, close). A status poll, void, refund or cancel completes nothing at a register.
+	 *
+	 * @var string[]
+	 */
+	private const PROVENANCE_HANDLERS = array( 'create_item', 'intent_item', 'capture_item', 'submit_item', 'close_item' );
+
 	/** Register the order payment route family. */
 	public function register_routes(): void {
 		$payment_path = '/' . $this->rest_base . '/(?P<id>[\d]+)/payments';
@@ -66,12 +74,17 @@ class Payments_Controller extends WC_REST_Controller {
 								(int) $request['id'],
 								function () use ( $request, $definition ) {
 									try {
-										// The command's provenance names the register that completes the sale, if it does (rule 1c).
-										$params     = $request->get_json_params();
-										$params     = is_array( $params ) ? $params : $request->get_body_params();
-										$provenance = is_array( $params['provenance'] ?? null ) ? $params['provenance'] : array();
-										$result     = Completion_Stamp::with_provenance( $provenance, fn() => $this->{$definition[1]}( $request ), (int) $request['id'] );
-										$order      = is_wp_error( $result ) ? null : wc_get_order( (int) $request['id'] );
+										$work = fn() => $this->{$definition[1]}( $request );
+										if ( in_array( $definition[1], self::PROVENANCE_HANDLERS, true ) ) {
+											// The command's provenance names the register that completes the sale, if it does (rule 1c).
+											$params     = $request->get_json_params();
+											$params     = is_array( $params ) ? $params : $request->get_body_params();
+											$provenance = is_array( $params['provenance'] ?? null ) ? $params['provenance'] : array();
+											$result     = Completion_Stamp::with_provenance( $provenance, $work, (int) $request['id'] );
+										} else {
+											$result = $work();
+										}
+										$order = is_wp_error( $result ) ? null : wc_get_order( (int) $request['id'] );
 										if ( $order instanceof WC_Order ) {
 											// A sale record whose insert failed is written by the next money command (§4.7).
 											Fiscal_Record_Writers::instance()->recover( $order );

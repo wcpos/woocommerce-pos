@@ -36,6 +36,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 		Route_Handler::$prompt = null;
+		Route_Handler::$answer = null;
 		Logger::reset_dedup_state();
 		$this->logged_messages = array();
 		$this->log_filter = function ( $should_log, $message ) {
@@ -634,6 +635,36 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** A status poll is no money command: its body's provenance is not the completion's. */
+	public function test_a_status_poll_that_completes_the_order_names_the_rows_register_not_its_body(): void {
+		// Arrange: a pending card leg taken at register R.
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		add_filter( 'wcpos_payment_method_capture_mode', static fn() => 'route_test' );
+		$register = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+		$order    = $this->create_pos_order();
+		$leg      = array(
+			'id'           => wp_generate_uuid4(),
+			'method_id'    => 'pos_cash',
+			'capture_mode' => 'route_test',
+			'amount'       => '92.95',
+			'status'       => 'pending',
+			'register_id'  => $register,
+		);
+		Ledger::instance()->save( $order, array( $leg ), false );
+		Route_Handler::$answer = array( 'status' => 'captured' );
+
+		// Act: the poll carries another register's provenance.
+		$request = $this->wp_rest_get_request( $this->payment_path( $order, $leg['id'] ) . '/status' );
+		$request->set_body_params( array( 'provenance' => array( 'register_id' => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' ) ) );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( $register, $history[0]['register'] );
+	}
+
 	/** Close alone may complete an on-hold order its payments cover. */
 	public function test_close_on_an_on_hold_covered_order_completes_it(): void {
 		// Arrange.
@@ -1071,11 +1102,21 @@ class Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handl
 	public static $prompt = null;
 
 	/**
+	 * Fields the provider's status answer carries, when set.
+	 *
+	 * @var array|null
+	 */
+	public static $answer = null;
+
+	/**
 	 * Return a transient prompt when the provider asks the cashier a question.
 	 *
 	 * @param array $row Payment row.
 	 */
 	public function status( array $row ) {
+		if ( null !== self::$answer ) {
+			$row = array_merge( $row, self::$answer );
+		}
 		if ( null !== self::$prompt ) {
 			$row['prompt'] = self::$prompt;
 		}
