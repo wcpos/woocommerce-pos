@@ -540,7 +540,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $two['id'], $late[0]['corrects_record_id'] );
 	}
 
-	/** A completion whose sale row is missing is not rebuilt once a refund has changed the order. */
+	/** A completion whose sale row is missing is recovered by the refund from its completion-time document, never rebuilt. */
 	public function test_a_missing_sale_is_recovered_after_a_refund_with_its_completion_time_document(): void {
 		// Arrange: completion 1's sale insert fails.
 		$order  = $this->order();
@@ -562,13 +562,13 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 					)
 				)
 			);
-			$row = $this->server->dispatch( $request )->get_data()['payment'];
+			$this->server->dispatch( $request );
 		} finally {
 			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}
 		$this->assertSame( array(), $this->sales( $order->get_id() ) );
 
-		// Act: a refund, created after the completion, then the next money command.
+		// Act: a refund, with no money command after it.
 		$refund = wc_create_refund(
 			array(
 				'order_id' => $order->get_id(),
@@ -576,17 +576,51 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'refund_payment' => false,
 			)
 		);
-		$refund->set_date_created( time() + MINUTE_IN_SECONDS );
-		$refund->save();
-		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $row['id'] . '/status' ) );
 
-		// Assert: the parked completion-time document is inserted (no refund in it); the refund, written
-		// while it was missing, names no sale.
+		// Assert: the refund drained the parked completion-time document (no refund in it) and names it.
 		$sales = $this->sales( $order->get_id() );
 		$this->assertCount( 1, $sales );
 		$this->assertSame( array(), $sales[0]['payload']['refunds'] );
 		$this->assertEquals( 100, $sales[0]['payload']['totals']['total_incl'] );
-		$this->assertNull( ( new Fiscal_Record_Store() )->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+		$this->assertSame( $sales[0]['id'], ( new Fiscal_Record_Store() )->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+	}
+
+	/** A wp-admin refund after a failed sale insert recovers the sale first and names it, with no second completion event. */
+	public function test_a_wp_admin_refund_after_a_failed_sale_insert_names_the_recovered_sale(): void {
+		// Arrange: completion 1's sale insert fails.
+		$order     = $this->order();
+		$announced = array();
+		$listener  = static function ( $completed, $n ) use ( &$announced ): void {
+			$announced[] = $n;
+		};
+		$enrich    = static function () {
+			throw new \Error( 'boom' );
+		};
+		add_action( 'wcpos_sale_completed', $listener, 5, 2 );
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$this->pay( $order );
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
+		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+
+		// Act: a wp-admin refund, no money command in between.
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => 5,
+				'refund_payment' => false,
+			)
+		);
+		remove_action( 'wcpos_sale_completed', $listener, 5 );
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( $sales[0]['id'], ( new Fiscal_Record_Store() )->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$this->assertSame( array( 1 ), $announced );
 	}
 
 	/**
