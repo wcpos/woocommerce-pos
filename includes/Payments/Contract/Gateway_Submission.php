@@ -320,8 +320,8 @@ class Gateway_Submission {
 				'cashier_id' => get_current_user_id(),
 			);
 			// A callback that completes the order in a later request still names the register that sent it.
-			if ( Completion_Stamp::provenance() ) {
-				$stamp['provenance'] = Completion_Stamp::provenance();
+			if ( Completion_Stamp::provenance( $order->get_id() ) ) {
+				$stamp['provenance'] = Completion_Stamp::provenance( $order->get_id() );
 			}
 			$order->update_meta_data( self::STAMP_META_KEY, $stamp );
 			self::remember_attempt( $order, $history, $attempt_id, 'sent' );

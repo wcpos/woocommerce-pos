@@ -482,6 +482,33 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '60.00', wc_get_order( $order->get_id() )->get_total() );
 	}
 
+	/** A money command on POS order A is no register origin for storefront order B paid in the same request. */
+	public function test_a_storefront_order_paid_during_another_orders_completion_is_not_stamped(): void {
+		// Arrange.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$pos        = $this->create_pos_order();
+		$storefront = OrderHelper::create_order();
+		$storefront->set_created_via( 'checkout' );
+		$storefront->set_payment_method( 'bacs' );
+		$storefront->save();
+		$listener = static function ( $id ) use ( $pos, $storefront ): void {
+			if ( (int) $id === $pos->get_id() ) {
+				wc_get_order( $storefront->get_id() )->payment_complete( 'txn_elsewhere' );
+			}
+		};
+		add_action( 'woocommerce_payment_complete', $listener, 20 );
+
+		// Act.
+		$this->record( $pos, '92.95', $this->provenance( self::REGISTER_A, self::SESSION_A ) );
+		remove_action( 'woocommerce_payment_complete', $listener, 20 );
+
+		// Assert.
+		$this->assertTrue( wc_get_order( $storefront->get_id() )->is_paid() );
+		$this->assertSame( array(), $this->stored_history( $storefront->get_id() ) );
+		$this->assertNull( ( new Fiscal_Record_Store() )->find_sale( $storefront->get_id() ) );
+		$this->assertCount( 1, $this->stored_history( $pos->get_id() ) );
+	}
+
 	/** A storefront order paid online has no register origin and is never stamped. */
 	public function test_a_storefront_order_paid_online_writes_no_entry(): void {
 		// Arrange.

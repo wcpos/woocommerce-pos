@@ -38,9 +38,9 @@ final class Completion_Stamp {
 	);
 
 	/**
-	 * Validated provenance of the money command running in this request; null outside one.
+	 * The money command running in this request: its order id and validated provenance; null outside one.
 	 *
-	 * @var array|null
+	 * @var array{order_id: int, provenance: array}|null
 	 */
 	private static $context = null;
 
@@ -68,11 +68,15 @@ final class Completion_Stamp {
 	 *
 	 * @param array    $provenance Body `provenance` object (register_id, session_id, sale_time, sale_tz, sale_counter).
 	 * @param callable $work       The command.
+	 * @param int      $order_id   The order the command acts on: the only order it is a register origin for.
 	 * @return mixed
 	 */
-	public static function with_provenance( array $provenance, callable $work ) {
+	public static function with_provenance( array $provenance, callable $work, int $order_id ) {
 		$previous      = self::$context;
-		self::$context = self::validated( $provenance );
+		self::$context = array(
+			'order_id'   => $order_id,
+			'provenance' => self::validated( $provenance ),
+		);
 		try {
 			return $work();
 		} finally {
@@ -80,9 +84,22 @@ final class Completion_Stamp {
 		}
 	}
 
-	/** The validated provenance of the command in flight, entry-shaped; empty outside one. */
-	public static function provenance(): array {
-		return self::$context ?? array();
+	/**
+	 * The validated provenance of the command in flight on this order, entry-shaped; empty otherwise.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public static function provenance( int $order_id ): array {
+		return self::in_command( $order_id ) ? self::$context['provenance'] : array();
+	}
+
+	/**
+	 * Whether a money command on this order is running in this request.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private static function in_command( int $order_id ): bool {
+		return null !== self::$context && 0 !== $order_id && self::$context['order_id'] === $order_id;
 	}
 
 	/** Test seam: forget the request context and the memoised attempt provenance. */
@@ -400,8 +417,8 @@ final class Completion_Stamp {
 	 */
 	private static function has_origin( WC_Order $order ): bool {
 		$id = $order->get_id();
-		return null !== self::$context
-			|| Ledger::is_deriving()
+		return self::in_command( $id )
+			|| Ledger::is_deriving( $id )
 			|| Gateway_Submission::is_submitting( $id )
 			|| ( Webview_Passthrough::is_paying( $id ) && wcpos_is_pos_order( $order ) )
 			|| isset( self::$attempts[ $id ] )
@@ -431,7 +448,7 @@ final class Completion_Stamp {
 	 */
 	private static function resolve_provenance( WC_Order $order, int $n ): array {
 		$empty   = array_fill_keys( array_keys( self::PROVENANCE_FIELDS ), null );
-		$sources = array( self::$context ?? array(), self::$attempts[ $order->get_id() ] ?? array() );
+		$sources = array( self::provenance( $order->get_id() ), self::$attempts[ $order->get_id() ] ?? array() );
 		if ( 1 === $n || Webview_Passthrough::is_paying( $order->get_id() ) ) {
 			$sources[] = array_filter( self::till_tuple( $order ), static fn( $value ) => null !== $value );
 		}

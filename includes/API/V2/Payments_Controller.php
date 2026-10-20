@@ -70,7 +70,7 @@ class Payments_Controller extends WC_REST_Controller {
 										$params     = $request->get_json_params();
 										$params     = is_array( $params ) ? $params : $request->get_body_params();
 										$provenance = is_array( $params['provenance'] ?? null ) ? $params['provenance'] : array();
-										$result     = Completion_Stamp::with_provenance( $provenance, fn() => $this->{$definition[1]}( $request ) );
+										$result     = Completion_Stamp::with_provenance( $provenance, fn() => $this->{$definition[1]}( $request ), (int) $request['id'] );
 										$order      = is_wp_error( $result ) ? null : wc_get_order( (int) $request['id'] );
 										if ( $order instanceof WC_Order ) {
 											// A sale record whose insert failed is written by the next money command (§4.7).

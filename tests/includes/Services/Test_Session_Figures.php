@@ -259,7 +259,8 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 						'session_id' => $session['id'],
 					)
 				);
-			}
+			},
+			$order->get_id()
 		);
 		return wc_get_order( $order->get_id() );
 	}
@@ -280,7 +281,8 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			),
 			static function () use ( $order ): void {
 				wc_get_order( $order->get_id() )->payment_complete();
-			}
+			},
+			$order->get_id()
 		);
 	}
 

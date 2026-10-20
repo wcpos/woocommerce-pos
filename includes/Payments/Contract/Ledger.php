@@ -111,13 +111,18 @@ class Ledger {
 	/**
 	 * Whether order state is currently being derived.
 	 *
-	 * @var bool True while derive() is running payment_complete() — lets hooks skip re-entry.
+	 * @var int The order derive() is running payment_complete() on, 0 when none — lets hooks skip re-entry.
 	 */
-	private static $deriving = false;
+	private static $deriving = 0;
 
-	/** Whether the ledger is currently deriving order state (inside payment_complete()). */
-	public static function is_deriving(): bool {
-		return self::$deriving;
+	/**
+	 * Whether the ledger is deriving order state (inside payment_complete()): for this order when one
+	 * is named, for any order otherwise.
+	 *
+	 * @param int|null $order_id Order ID, or null for any order.
+	 */
+	public static function is_deriving( ?int $order_id = null ): bool {
+		return null === $order_id ? 0 !== self::$deriving : ( 0 !== $order_id && self::$deriving === $order_id );
 	}
 
 	/**
@@ -1920,15 +1925,15 @@ class Ledger {
 		// Covered on the signed balance: a refund allocated after an earlier completion is money
 		// that left, so gross captured money alone does not complete a reopened sale again.
 		if ( $total > 0 && $this->signed_balance( $order, $rows ) <= 0 ) {
-			if ( ! self::$deriving ) {
-				self::$deriving = true;
+			if ( 0 === self::$deriving ) {
+				self::$deriving = $order->get_id();
 				try {
 					// Woo sets date_paid, reduces stock and fires woocommerce_payment_complete;
 					// Orders::payment_complete_order_status() lands the per-gateway status
 					// because payment_method was set above.
 					$order->payment_complete();
 				} finally {
-					self::$deriving = false;
+					self::$deriving = 0;
 				}
 			}
 			return;

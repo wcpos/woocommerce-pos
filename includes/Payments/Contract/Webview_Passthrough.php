@@ -167,7 +167,7 @@ class Webview_Passthrough {
 				return null;
 			}
 		}
-		if ( Ledger::is_deriving() || Gateway_Submission::is_submitting( $order->get_id() ) ) {
+		if ( Ledger::is_deriving( $order->get_id() ) || Gateway_Submission::is_submitting( $order->get_id() ) ) {
 			return null;
 		}
 

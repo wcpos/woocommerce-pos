@@ -66,7 +66,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			array(),
 			static function () use ( $order ): void {
 				$order->payment_complete();
-			}
+			},
+			$order->get_id()
 		);
 	}
 
@@ -172,7 +173,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			),
 			static function () use ( $reopened ): void {
 				$reopened->payment_complete();
-			}
+			},
+			$reopened->get_id()
 		);
 
 		// Assert.
@@ -206,7 +208,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			array( 'register_id' => wp_generate_uuid4() ),
 			static function () use ( $reopened ): void {
 				$reopened->payment_complete();
-			}
+			},
+			$reopened->get_id()
 		);
 		remove_action( 'wcpos_sale_completed', $listener, 20 );
 
@@ -240,7 +243,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 							'session_id' => $session['id'],
 						)
 					);
-				}
+				},
+				$order->get_id()
 			);
 		};
 		$take( $order, $session_a, '100.00' );
