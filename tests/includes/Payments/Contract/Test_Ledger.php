@@ -3568,7 +3568,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$notes = $this->stranded_notes( $order->get_id() );
 		$this->assertSame(
-			array( sprintf( 'WCPOS: refund #%d for 10.00 %s was refused by wcpos_refund_probe but its reservation could not be removed; check the payment before retrying.', $refund->get_id(), $order->get_currency() ) ),
+			array( sprintf( 'WCPOS: refund #%d for 10.00 %s did not go through wcpos_refund_probe but its reservation could not be removed; check the payment before retrying.', $refund->get_id(), $order->get_currency() ) ),
 			$notes
 		);
 	}

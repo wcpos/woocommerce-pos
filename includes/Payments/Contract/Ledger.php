@@ -1311,7 +1311,7 @@ class Ledger {
 			$note = __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' );
 		} else {
 			/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
-			$note = __( 'WCPOS: refund #%1$d for %2$s was refused by %3$s but its reservation could not be removed; check the payment before retrying.', 'woocommerce-pos' );
+			$note = __( 'WCPOS: refund #%1$d for %2$s did not go through %3$s but its reservation could not be removed; check the payment before retrying.', 'woocommerce-pos' );
 		}
 		try {
 			$order->add_order_note( sprintf( $note, $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $row['method_id'] ) );
