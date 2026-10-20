@@ -284,9 +284,9 @@ class Ledger {
 			$before = $value;
 			$value['payments'] = $this->unique_rows( $value['payments'], 0, $warned );
 			foreach ( $value['payments'] as &$row ) {
-				// Server-owned history and refund allocations cannot arrive with a new order.
+				// Server-owned history, command entries and refund allocations cannot arrive with a new order.
 				unset( $row['closure_id'], $row['updated_at_gmt'] );
-				foreach ( array( 'seen_events', 'events' ) as $field ) {
+				foreach ( array( 'seen_events', 'events', 'commands' ) as $field ) {
 					if ( array_key_exists( $field, $row ) ) {
 						$row[ $field ] = array();
 					}

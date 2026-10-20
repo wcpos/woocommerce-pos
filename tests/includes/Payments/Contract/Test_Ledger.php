@@ -2753,22 +2753,29 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	/** @dataProvider duplicate_order_lanes */
 	public function test_order_save_preserves_server_event_history( bool $existing ): void {
 		$order = $existing ? wc_create_order() : new \WC_Order();
-		$row = array( 'id' => wp_generate_uuid4(), 'status' => 'captured', 'amount' => '50', 'seen_events' => array( 'evt_1' ), 'events' => array( array( 'message' => 'Captured' ) ), 'updated_at_gmt' => '2026-10-18T12:00:00Z' );
+		$command  = wp_generate_uuid4();
+		$commands = array( $command => array( 'fp' => 'sha256:stored', 'kind' => 'capture', 'ref' => null, 'at_gmt' => '2026-10-18T12:00:00Z' ) );
+		$row = array( 'id' => wp_generate_uuid4(), 'status' => 'captured', 'amount' => '50', 'seen_events' => array( 'evt_1' ), 'events' => array( array( 'message' => 'Captured' ) ), 'commands' => $commands, 'updated_at_gmt' => '2026-10-18T12:00:00Z' );
 		if ( $existing ) {
 			$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $row ) ) );
 			$order->save_meta_data();
 		}
-		$pushed = array_merge( $row, array( 'seen_events' => array(), 'events' => array(), 'updated_at_gmt' => '2000-01-01T00:00:00Z' ) );
+		// A client-seeded command entry would make a later real command a silent replay (ADR 0040 rule 5).
+		$forged = array( wp_generate_uuid4() => array( 'fp' => 'sha256:forged', 'kind' => 'void', 'ref' => null, 'at_gmt' => '2000-01-01T00:00:00Z' ) );
+		$pushed = array_merge( $row, array( 'seen_events' => array(), 'events' => array(), 'commands' => $forged, 'updated_at_gmt' => '2000-01-01T00:00:00Z' ) );
 		$new = $row;
 		$new['id'] = wp_generate_uuid4();
+		$new['commands'] = $forged;
 		$order->update_meta_data( Ledger::META_KEY, array( 'schema' => 1, 'payments' => array( $pushed, $new ) ) );
 		$order->save();
 		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
 		$this->assertSame( $existing ? $row['seen_events'] : array(), $rows[0]['seen_events'] );
 		$this->assertSame( $existing ? $row['events'] : array(), $rows[0]['events'] );
+		$this->assertSame( $existing ? $commands : array(), $rows[0]['commands'] );
 		$this->assertSame( $existing ? $row['updated_at_gmt'] : null, $rows[0]['updated_at_gmt'] ?? null );
 		$this->assertSame( array(), $rows[1]['seen_events'] );
 		$this->assertSame( array(), $rows[1]['events'] );
+		$this->assertSame( array(), $rows[1]['commands'] );
 		$this->assertArrayNotHasKey( 'updated_at_gmt', $rows[1] );
 	}
 
