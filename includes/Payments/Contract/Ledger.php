@@ -1127,7 +1127,24 @@ class Ledger {
 			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
-		$new = $handler ? $handler->refund( $row, $refund_id, Money::normalize( $amount ) ) : $this->unsupported();
+		if ( ! $handler ) {
+			return $this->unsupported();
+		}
+		// Rule 8, save 1: the allocation is reserved `pending`, with the command's entry, before the provider is asked.
+		$reserve = array(
+			'id'           => $refund_id,
+			'amount'       => Money::normalize( $amount ),
+			'status'       => 'pending',
+			'provider_ref' => null,
+		);
+		$entry   = empty( $command['id'] ) ? null : strtolower( $command['id'] );
+		$held    = $this->with_command( $row, $command, $refund_id );
+		$held['refunds'][] = $reserve;
+		if ( ! $this->persist( $order, $rows, $held, false, fn( ?array $stored ) => $this->same_allocation( $reserve, $stored, $refund_id ) && ( null === $entry || isset( $stored['commands'][ $entry ] ) ) ) ) {
+			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch.
+			return $this->withdraw( $order, $rows, $row, $reserve, $entry, new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) ) );
+		}
+		$new = $handler->refund( $row, $refund_id, Money::normalize( $amount ) );
 		if ( is_wp_error( $new ) ) {
 			return $new;
 		}
@@ -1164,6 +1181,85 @@ class Ledger {
 		 */
 		do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
 		return $row;
+	}
+
+	/**
+	 * Write a refund's row whole and verify it from storage, once more on a miss. A save that
+	 * throws is a miss like one that does not land: nothing escapes refund() (rule 8).
+	 *
+	 * @param WC_Order $order       Order object.
+	 * @param array    $rows        Payment rows as read.
+	 * @param array    $replacement The row to store.
+	 * @param bool     $derive      Project payment state.
+	 * @param callable $landed      Whether the stored row (null when unreadable) is what was written.
+	 */
+	private function persist( WC_Order $order, array $rows, array $replacement, bool $derive, callable $landed ): bool {
+		for ( $try = 0; $try < 2; ++$try ) {
+			try {
+				$this->replace_and_save( $order, $rows, $replacement, $derive );
+			} catch ( \Throwable $error ) {
+				Logger::warning( sprintf( 'WCPOS refund save on order #%d failed: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
+			}
+			try {
+				$stored = $this->find_in_rows( $this->stored( $order->get_id(), false )['payments'] ?? array(), $replacement['id'] );
+			} catch ( \Throwable $error ) {
+				$stored = null;
+			}
+			if ( $landed( $stored ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a stored row holds this allocation for the refund: status, reference and amount.
+	 *
+	 * @param array      $allocation Expected allocation.
+	 * @param array|null $stored     Stored row.
+	 * @param int        $refund_id  WooCommerce refund ID.
+	 */
+	private function same_allocation( array $allocation, ?array $stored, int $refund_id ): bool {
+		foreach ( $stored['refunds'] ?? array() as $kept ) {
+			if ( (int) ( $kept['id'] ?? 0 ) === $refund_id ) {
+				return ( $allocation['status'] ?? null ) === ( $kept['status'] ?? null ) && (string) ( $allocation['provider_ref'] ?? '' ) === (string) ( $kept['provider_ref'] ?? '' ) && Money::minor( $allocation['amount'] ?? 0 ) === Money::minor( $kept['amount'] ?? 0 );
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Take a reservation back out (no money moved): the row as it was before it, without the
+	 * command's entry. A withdrawal that does not land is logged and noted; the answer stands.
+	 *
+	 * @param WC_Order    $order   Order object.
+	 * @param array       $rows    Payment rows as read.
+	 * @param array       $row     The row before the reservation.
+	 * @param array       $reserve The reservation.
+	 * @param string|null $entry   The command id, if any.
+	 * @param WP_Error    $answer  The refusal to answer.
+	 */
+	private function withdraw( WC_Order $order, array $rows, array $row, array $reserve, ?string $entry, WP_Error $answer ): WP_Error {
+		$gone = static fn( ?array $stored ): bool => null !== $stored && ! array_filter( $stored['refunds'] ?? array(), static fn( $kept ) => (int) ( $kept['id'] ?? 0 ) === $reserve['id'] ) && ( null === $entry || ! isset( $stored['commands'][ $entry ] ) );
+		if ( ! $this->persist( $order, $rows, $row, false, $gone ) ) {
+			$this->mark( $order, $row, $reserve, 'it was refused (' . $answer->get_error_code() . '), but its reservation could not be withdrawn' );
+		}
+		return $answer;
+	}
+
+	/**
+	 * Mark a refund allocation that stands `pending` for a human: an error log line and an order
+	 * note (a comment row, written by its own query, so it survives an order save that did not land).
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param array    $row     Payment row.
+	 * @param array    $reserve The reservation.
+	 * @param string   $cause   What happened.
+	 */
+	private function mark( WC_Order $order, array $row, array $reserve, string $cause ): void {
+		Logger::error( sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s; the allocation stays pending until it is confirmed with the provider.', $reserve['id'], $reserve['amount'], $order->get_id(), $row['id'], $cause ), array( 'order_id' => $order->get_id() ) );
+		/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
+		$order->add_order_note( sprintf( __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' ), $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $row['method_id'] ) );
 	}
 
 	/**
