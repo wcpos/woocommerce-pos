@@ -273,7 +273,7 @@ final class Fiscal_Record_Writers {
 							'closure_id' => $closure['id'],
 							'corrects_record_id' => $sale['id'],
 							'payload' => array(
-								'tender_rows' => $rows,
+								'tender_rows' => self::tender_rows( $rows ),
 								'expected_delta' => $delta,
 								'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
 							),
@@ -308,13 +308,29 @@ final class Fiscal_Record_Writers {
 					'device_time' => null,
 					'device_tz' => null,
 					'payload' => array(
-						'row' => $previous_row,
-						'voided_row' => $applied,
+						'row' => self::tender_rows( array( $previous_row ) )[0],
+						'voided_row' => self::tender_rows( array( $applied ) )[0],
 						'reason' => $reason,
 						'actor_id' => get_current_user_id(),
 					),
 				)
 			)
+		);
+	}
+
+	/**
+	 * Tender rows as a fiscal payload keeps them: without the server's command maps, which are
+	 * idempotency bookkeeping (ADR 0040 rule 5), not facts of the sale.
+	 *
+	 * @param array $rows Ledger rows.
+	 */
+	private static function tender_rows( array $rows ): array {
+		return array_map(
+			static function ( array $row ): array {
+				unset( $row['commands'] );
+				return $row;
+			},
+			$rows
 		);
 	}
 
