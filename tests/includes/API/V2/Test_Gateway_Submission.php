@@ -1482,6 +1482,40 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_payment_conflict', $superseded->get_data()['code'] );
 		$this->assertSame( 3, Sent_Test_Gateway::$calls );
 	}
+	/** Pin 37: a submit whose command entry does not reach storage before dispatch is a retryable conflict; nothing is sent. */
+	public function test_a_submit_whose_command_entry_is_not_stored_is_refused_before_dispatch(): void {
+		// Arrange: every order save loses a staged command map.
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$drop = static function ( $saving ): void {
+			$saving->delete_meta_data( '_wcpos_commands' );
+		};
+		add_action( 'woocommerce_before_order_object_save', $drop, 1 );
+
+		// Act.
+		try {
+			$refused = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $drop, 1 );
+		}
+		$attempts = Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) );
+		$sent     = $this->gateway_command( $order, 'submit', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertArrayNotHasKey( $body['attempt_id'], $attempts );
+		$this->assertSame( 200, $sent->get_status(), wp_json_encode( $sent->get_data() ) );
+		$this->assertSame( 'sent', $sent->get_data()['outcome'] );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+		$this->assertSame( 'sent', $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['outcome'] );
+	}
 }
 
 /** A gateway that sends an invoice, not money. */

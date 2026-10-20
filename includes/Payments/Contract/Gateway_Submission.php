@@ -222,7 +222,14 @@ class Gateway_Submission {
 			Ledger::saving( $order->get_id(), fn() => $order->save() );
 			$persisted = wc_get_order( $order->get_id() );
 			$persisted->read_meta_data( true );
-			if ( 'sent' !== ( self::read_attempts( $persisted )[ $attempt_id ] ?? null ) ) {
+			$landed = self::read_attempts( $persisted );
+			if ( 'sent' !== ( $landed[ $attempt_id ] ?? null ) || ! self::command_kept( $order->get_id(), $command, 'sent' ) ) {
+				if ( isset( $landed[ $attempt_id ] ) ) {
+					// Its command entry did not land: nothing was dispatched, so the attempt never happened.
+					unset( $landed[ $attempt_id ] );
+					$persisted->update_meta_data( self::ATTEMPTS_META_KEY, $landed );
+					Ledger::saving( $persisted->get_id(), fn() => $persisted->save() );
+				}
 				throw new Ledger_Persistence_Exception( 'WCPOS gateway attempt was not persisted.' );
 			}
 			add_action( 'woocommerce_payment_complete', $complete );
@@ -323,6 +330,7 @@ class Gateway_Submission {
 			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the order status the merchant stored for this gateway. */
 			$order->add_order_note( sprintf( __( 'Settled via POS: %1$s on %2$s', 'woocommerce-pos' ), $verb['label'], wc_get_order_status_name( $settled_status ) ) );
 			Ledger::saving( $order->get_id(), fn() => $order->save() );
+			self::verify_command( $order->get_id(), $command, $attempt_id, 'settled' );
 		} else {
 			$history     = self::supersede_sent( $order, $history );
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
@@ -350,6 +358,7 @@ class Gateway_Submission {
 				$recorded = wc_get_order( $order->get_id() );
 				self::remember_command( $recorded, $command, $attempt_id, 'recorded' );
 				Ledger::saving( $recorded->get_id(), fn() => $recorded->save() );
+				self::verify_command( $order->get_id(), $command, $attempt_id, 'recorded' );
 			}
 		}
 		$outcome = $paid ? 'recorded' : ( $settled ? 'settled' : 'sent' );
@@ -543,6 +552,40 @@ class Gateway_Submission {
 		}
 		self::remember_command( $order, $command, $attempt_id, $outcome );
 		Ledger::saving( $order->get_id(), fn() => $order->save() );
+	}
+
+	/**
+	 * Whether storage holds the command's entry with its fingerprint (and outcome, when named).
+	 *
+	 * @param int         $order_id Order id.
+	 * @param array       $command  The till's command; empty is always kept.
+	 * @param string|null $outcome  The outcome the entry must hold.
+	 */
+	private static function command_kept( int $order_id, array $command, ?string $outcome = null ): bool {
+		if ( empty( $command['id'] ) ) {
+			return true;
+		}
+		$stored = wc_get_order( $order_id );
+		$stored->read_meta_data( true );
+		$kept = Command_Log::find( $stored, array(), $command['id'] );
+		return $kept && $kept['fp'] === $command['fp'] && ( null === $outcome || $kept['outcome'] === $outcome );
+	}
+
+	/**
+	 * After the money moved: an entry that did not land is logged and the answer refused (409).
+	 *
+	 * @param int    $order_id   Order id.
+	 * @param array  $command    The till's command.
+	 * @param string $attempt_id The attempt.
+	 * @param string $outcome    The outcome it answered.
+	 * @throws Ledger_Persistence_Exception When storage does not hold the entry.
+	 */
+	private static function verify_command( int $order_id, array $command, string $attempt_id, string $outcome ): void {
+		if ( self::command_kept( $order_id, $command, $outcome ) ) {
+			return;
+		}
+		Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d was %s, but its command entry was not stored; the attempt history still answers its replay by attempt id.', $attempt_id, $order_id, $outcome ), array( 'order_id' => $order_id ) );
+		throw new Ledger_Persistence_Exception( 'WCPOS gateway command was not persisted.' );
 	}
 
 	/**
