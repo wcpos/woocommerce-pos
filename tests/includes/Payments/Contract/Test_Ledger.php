@@ -1624,6 +1624,96 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->stored_rows( $order->get_id() ) );
 	}
 
+	/**
+	 * With prevent-overselling on and one unit of stock, run $work with two open POS orders for it.
+	 *
+	 * @param callable $work Receives the two orders (a, b).
+	 */
+	private function with_one_unit_on_two_orders( callable $work ): void {
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		try {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( '10' );
+			$product->set_price( '10' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$orders = array();
+			foreach ( array( 'a', 'b' ) as $key ) {
+				$orders[ $key ] = wc_create_order();
+				$orders[ $key ]->set_created_via( 'woocommerce-pos' );
+				$orders[ $key ]->set_status( 'pos-open' );
+				$orders[ $key ]->add_product( $product, 1 );
+				$orders[ $key ]->calculate_totals( false );
+				$orders[ $key ]->save();
+			}
+			$work( $orders['a'], $orders['b'] );
+		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
+	}
+
+	/**
+	 * Order B's cash record for its total.
+	 *
+	 * @param \WC_Order $order Order B.
+	 * @return array|\WP_Error
+	 */
+	private function record_full( \WC_Order $order ) {
+		$order = wc_get_order( $order->get_id() );
+		return Ledger::instance()->record( $order, $this->payment( 'pos_cash', $order->get_total() ) );
+	}
+
+	/** An intent the provider answers failed leaves nothing live, so the hold goes back to the shelf. */
+	public function test_an_intent_answered_failed_releases_the_hold(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Act.
+				$card = $this->payment( 'pos_card', $a->get_total() );
+				Ledger::instance()->intent( $a, $card['id'], $card, array( 'resume' => array( 'status' => 'failed' ) ) );
+
+				// Assert.
+				$this->assertSame( 'failed', Ledger::instance()->find( wc_get_order( $a->get_id() ), $card['id'] )['status'] );
+				$this->assertIsArray( $this->record_full( $b ) );
+			}
+		);
+	}
+
+	/** A determinate intent error deletes the row and releases the hold. */
+	public function test_a_determinate_intent_error_releases_the_hold(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Act.
+				$card = $this->payment( 'pos_card', $a->get_total() );
+				Ledger::instance()->intent( $a, $card['id'], $card, array( 'error' => new \WP_Error( 'test_declined', 'Declined' ) ) );
+
+				// Assert.
+				$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $a->get_id() ) ) );
+				$this->assertIsArray( $this->record_full( $b ) );
+			}
+		);
+	}
+
+	/** An indeterminate intent error leaves the row pending, and it keeps the hold. */
+	public function test_an_indeterminate_intent_error_keeps_the_hold(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Act.
+				$card = $this->payment( 'pos_card', $a->get_total() );
+				Ledger::instance()->intent( $a, $card['id'], $card, array( 'error' => new \WP_Error( 'test_timeout', 'Timeout', array( 'indeterminate' => true ) ) ) );
+
+				// Assert.
+				$this->assertSame( 'pending', Ledger::instance()->find( wc_get_order( $a->get_id() ), $card['id'] )['status'] );
+				$refused = $this->record_full( $b );
+				$this->assertWPError( $refused );
+				$this->assertSame( 'wcpos_insufficient_stock', $refused->get_error_code() );
+			}
+		);
+	}
+
 	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */
 	public function test_authorized_at_gmt_is_stamped_on_approval_and_kept_through_capture(): void {
 		// Arrange.

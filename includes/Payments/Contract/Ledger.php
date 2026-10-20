@@ -890,6 +890,7 @@ class Ledger {
 				$rows = array_filter( $rows, static fn( $saved ) => $saved['id'] !== $row['id'] );
 				// Delete only this refused intent; omitted concurrent rows must survive.
 				$this->save( $order, $rows, false, array( $row['id'] ) );
+				$this->release_hold_if_idle( $order );
 			}
 			return $new;
 		}
@@ -995,6 +996,7 @@ class Ledger {
 				$applied['failure_reason'] = 'amount_mismatch';
 				$applied = $this->normalize_row( $order, $applied );
 				$this->replace_and_save( $order, $rows, $applied, $derive );
+				$this->release_hold_if_idle( $order );
 				/* translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency. */
 				$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
 				return $this->refusal_error( $applied, $order );
@@ -1034,6 +1036,9 @@ class Ledger {
 		if ( $applied !== $row ) {
 			$applied = $this->normalize_row( $order, $applied );
 			$this->replace_and_save( $order, $rows, $applied, $derive );
+			if ( in_array( $applied['status'], array( 'failed', 'voided' ), true ) ) {
+				$this->release_hold_if_idle( $order );
+			}
 		}
 		return $applied;
 	}
@@ -1572,14 +1577,26 @@ class Ledger {
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
 			self::saving( $order->get_id(), fn() => $order->save() );
-			if ( ! array_filter( $this->read( $order ), static fn( $live ) => in_array( $live['status'] ?? '', self::LIVE_STATUSES, true ) ) ) {
-				// Nothing is paying for the sale any more: its stock hold goes back to the shelf.
-				Stock_Validator::instance()->release_checkout_stock( $order );
-			}
+			$this->release_hold_if_idle( $order );
 			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
 			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
 		}
 		return $applied;
+	}
+
+	/**
+	 * Nothing is paying for the sale any more (no pending, authorized or captured row) and its stock
+	 * was never reduced: the prevent-overselling hold goes back to the shelf.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	private function release_hold_if_idle( WC_Order $order ): void {
+		if ( array_filter( $this->read( $order ), static fn( $live ) => in_array( $live['status'] ?? '', self::LIVE_STATUSES, true ) ) ) {
+			return;
+		}
+		if ( ! $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) {
+			Stock_Validator::instance()->release_checkout_stock( $order );
+		}
 	}
 
 	/**
