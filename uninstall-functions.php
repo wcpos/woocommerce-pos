@@ -46,6 +46,7 @@ function woocommerce_pos_uninstall_configuration_table_suffixes(): array {
 		'wcpos_cash_movements',
 		'wcpos_cash_movements_folded',
 		'wcpos_registers',
+		'wcpos_registers_folded',
 	);
 }
 

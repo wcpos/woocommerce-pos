@@ -87,10 +87,11 @@ final class Register_Store {
 	 *
 	 * @param array                 $fields Validated fields.
 	 * @param \WP_REST_Request|null $request REST create context for the Pro fields filter.
-	 * @throws \RuntimeException When storage fails or refuses another register.
+	 * @throws \RuntimeException When storage fails, refuses another register, or is migrating.
 	 */
 	public function create( array $fields, ?\WP_REST_Request $request = null ): array {
 		$id           = wp_generate_uuid4();
+		self::refuse_while_migrating( $id );
 		$fields['id'] = $id;
 		if ( null !== $request ) {
 			/** Filter initial registration fields; Pro may set store_id. */
@@ -137,7 +138,8 @@ final class Register_Store {
 	 * @throws \RuntimeException When the write fails and no register was minted meanwhile.
 	 */
 	public function ensure_default(): void {
-		if ( $this->repository()->list( array() ) ) {
+		// Never while schema 12 is pending: a register minted now could win the fold over the table's.
+		if ( self::legacy_tables() || $this->repository()->list( array() ) ) {
 			return;
 		}
 		try {
@@ -161,7 +163,7 @@ final class Register_Store {
 	 */
 	public function get( string $id ): ?array {
 		$this->ensure_free_default();
-		$row = $this->repository()->get( $id );
+		$row = $this->row( $id );
 		return $row ? $this->normalize_row( $row ) : null;
 	}
 
@@ -173,7 +175,7 @@ final class Register_Store {
 	 */
 	public function list( array $args ): array {
 		$this->ensure_free_default();
-		$rows = $this->repository()->list( $args );
+		$rows = $this->rows( $args );
 		usort(
 			$rows,
 			static function ( $a, $b ) {
@@ -194,9 +196,10 @@ final class Register_Store {
 	 *
 	 * @param string $id Register UUID.
 	 * @param array  $fields Validated admin fields.
-	 * @throws \RuntimeException When storage fails.
+	 * @throws \RuntimeException When storage fails or is migrating.
 	 */
 	public function update( string $id, array $fields ): ?array {
+		self::refuse_while_migrating( $id );
 		$before = $this->get( $id );
 		if ( ! $before ) {
 			Logger::warning(
@@ -241,13 +244,13 @@ final class Register_Store {
 	 */
 	public function exists( string $id ): bool {
 		$this->ensure_free_default();
-		return $this->repository()->exists( $id );
+		return null !== $this->row( $id );
 	}
 
 	/** Every register id provenance may name: the held registers and the retired ones. */
 	public function known_ids(): array {
 		$this->ensure_free_default();
-		return array_values( array_unique( array_merge( array_column( $this->repository()->list( array() ), 'id' ), $this->repository()->retired_ids() ) ) );
+		return array_values( array_unique( array_merge( array_column( $this->rows( array() ), 'id' ), $this->repository()->retired_ids() ) ) );
 	}
 
 	/**
@@ -256,7 +259,7 @@ final class Register_Store {
 	 * @param string $id Register UUID.
 	 */
 	public function display_name( string $id ): string {
-		$row = $this->repository()->get( $id );
+		$row = $this->row( $id );
 		if ( $row ) {
 			return (string) $row['name'];
 		}
@@ -274,6 +277,80 @@ final class Register_Store {
 			$this->repository = $repository;
 		}
 		return $this->repository;
+	}
+
+	/**
+	 * One register: the repository's, else (while schema 12 is pending) the legacy table's.
+	 *
+	 * @param string $id Register UUID.
+	 * @throws \RuntimeException When a legacy probe or read fails.
+	 */
+	private function row( string $id ): ?array {
+		global $wpdb;
+		return $this->repository()->get( $id ) ?? ( self::legacy_rows( $wpdb->prepare( 'id = %s', $id ) )[ $id ] ?? null );
+	}
+
+	/**
+	 * The repository's registers, plus (while schema 12 is pending) the legacy table's it lacks.
+	 *
+	 * @param array $args Filters.
+	 * @throws \RuntimeException When a legacy probe or read fails.
+	 */
+	private function rows( array $args ): array {
+		$legacy = array_filter(
+			self::legacy_rows(),
+			static function ( $row ) use ( $args ) {
+				return Option_Register_Repository::in_scope( $row, $args );
+			}
+		);
+		return array_values( array_column( $this->repository()->list( $args ), null, 'id' ) + $legacy );
+	}
+
+	/**
+	 * Rows of the legacy registers tables, keyed by id; none once the schema-12 latch is set.
+	 *
+	 * @param string $where Prepared predicate.
+	 * @throws \RuntimeException When a probe or read fails.
+	 */
+	private static function legacy_rows( string $where = '1=1' ): array {
+		global $wpdb;
+		$rows = array();
+		foreach ( self::legacy_tables() as $table ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table; the predicate is prepared.
+			$found = $wpdb->get_results( "SELECT id, name, store_id, default_float, created_at_gmt FROM {$table} WHERE {$where}", ARRAY_A );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Register read failed.' );
+			}
+			$rows += array_column( $found, null, 'id' );
+		}
+		return $rows;
+	}
+
+	/** Legacy registers tables still to be folded by schema 12, or none once its latch is set.
+	 *
+	 * @throws \RuntimeException When a probe fails; a caller must not assume absence.
+	 */
+	private static function legacy_tables(): array {
+		return Legacy_Tables::pending( self::LEGACY_TABLE, '12', 'Register read refused: register storage probe failed', 'Register storage probe failed.' );
+	}
+
+	/**
+	 * Refuse a register write while schema 12 has not folded the legacy table.
+	 *
+	 * @param string $id Register UUID.
+	 * @throws \RuntimeException While the fold is pending.
+	 */
+	private static function refuse_while_migrating( string $id ): void {
+		if ( self::legacy_tables() ) {
+			Logger::warning(
+				'Register write refused: register storage is migrating',
+				array(
+					'register_id' => $id,
+					'user_id' => get_current_user_id(),
+				)
+			);
+			throw new \RuntimeException( 'Register storage is migrating.' );
+		}
 	}
 
 	/** A fresh Free site has its register the first time anything asks. */

@@ -223,6 +223,63 @@ class Test_Register_Store extends WP_UnitTestCase {
 		$this->assertSame( '2026-09-11T08:00:00Z', $registers->list( array() )[0]['counters_started_at_gmt'] );
 	}
 
+	/** While schema 12 is pending, reads come from the legacy table, nothing is minted and writes are refused; the lazy mint resumes once it is gone. */
+	public function test_pending_register_fold_reads_the_legacy_table_mints_nothing_and_refuses_writes(): void {
+		// Arrange.
+		global $wpdb;
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		$legacy = $wpdb->prefix . Register_Store::LEGACY_TABLE;
+		$id = wp_generate_uuid4();
+		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '11' );
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table, fixed DDL.
+			$this->assertNotFalse( $wpdb->query( "CREATE TABLE {$legacy} ( id CHAR(36) NOT NULL, name VARCHAR(191) NOT NULL, store_id BIGINT NULL, default_float DECIMAL(19,4) NULL, created_at_gmt DATETIME NOT NULL, PRIMARY KEY  (id) ) {$wpdb->get_charset_collate()}" ) );
+			$this->assertSame(
+				1,
+				$wpdb->insert(
+					$legacy,
+					array(
+						'id' => $id,
+						'name' => 'Dev till',
+						'store_id' => 3,
+						'created_at_gmt' => '2026-09-01 08:00:00',
+					)
+				)
+			);
+			$store = new Register_Store();
+
+			// Act / Assert: reads.
+			$this->assertSame( array( $id ), array_column( $store->list( array() ), 'id' ) );
+			$this->assertSame( 'Dev till', $store->get( $id )['name'] );
+			$this->assertTrue( $store->exists( $id ) );
+			$this->assertSame( 'Dev till', $store->display_name( $id ) );
+			$this->assertFalse( get_option( Option_Register_Repository::OPTION ) );
+
+			// Act / Assert: writes.
+			foreach ( array( 'create', 'update' ) as $write ) {
+				try {
+					'create' === $write ? $store->create( array( 'name' => 'New' ) ) : $store->update( $id, array( 'name' => 'Renamed' ) );
+					$this->fail( "Expected {$write} to be refused while migrating." );
+				} catch ( \RuntimeException $error ) {
+					$this->assertSame( 'Register storage is migrating.', $error->getMessage(), $write );
+				}
+			}
+
+			// Act / Assert: the table gone, the lazy default mints.
+			$wpdb->query( "DROP TABLE {$legacy}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			$rows = ( new Register_Store() )->list( array() );
+			$this->assertCount( 1, $rows );
+			$this->assertNotSame( $id, $rows[0]['id'] );
+			$this->assertSame( $rows[0]['id'], get_option( Option_Register_Repository::OPTION )['register']['id'] );
+		} finally {
+			$wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned legacy table.
+			delete_option( Option_Register_Repository::OPTION );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
+			$wpdb->query( 'COMMIT' );
+		}
+	}
+
 	/** Many registers (Pro's repository) list by name, filter by store, with one closure query. */
 	public function test_list_with_bound_repository_filters_and_orders_by_name_in_one_closure_query(): void {
 		// Arrange.

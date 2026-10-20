@@ -836,86 +836,114 @@ class Activator {
 	 * `next` only; no release shipped it). An option already holding a register the table also
 	 * holds is kept. Runs under the default-register lock, outside any transaction (DDL commits).
 	 *
+	 * As the closure and movement folds: the table is renamed before the copy, so a pre-fold
+	 * request writing it fails against the missing table instead of landing after the snapshot,
+	 * and an interrupted run resumes from the renamed table.
+	 *
 	 * @return bool False when the option did not read back; the old latch stays.
-	 * @throws \RuntimeException On probe, lock, read, write or drop failure; leave the old latch in place.
+	 * @throws \RuntimeException On probe, lock, rename, read, write or drop failure; leave the old latch in place.
 	 */
 	private function fold_registers_into_option(): bool {
 		global $wpdb;
 		$legacy = $wpdb->prefix . Register_Store::LEGACY_TABLE;
-		if ( ! self::legacy_table_exists( $legacy, 'Register fold' ) ) {
+		$folded = $legacy . '_folded';
+		$pending_folded = self::legacy_table_exists( $folded, 'Register fold' );
+		if ( ! $pending_folded && ! self::legacy_table_exists( $legacy, 'Register fold' ) ) {
 			return true;
 		}
 		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 10 )', Register_Store::DEFAULT_LOCK ) ) ) {
 			throw new \RuntimeException( 'Register fold lock failed.' );
 		}
 		try {
-			$sessions = ( new Register_Session_Store() )->table_name();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables, fixed query.
-			$rows = $wpdb->get_results( "SELECT r.id, r.name, r.store_id, r.default_float, r.created_at_gmt, MAX(s.opened_at_gmt) AS last_opened FROM {$legacy} r LEFT JOIN {$sessions} s ON s.register_id = r.id GROUP BY r.id, r.name, r.store_id, r.default_float, r.created_at_gmt ORDER BY r.created_at_gmt, r.id", ARRAY_A );
-			if ( self::query_failed() ) {
-				throw new \RuntimeException( 'Register fold read failed.' );
+			// An interrupted run left the renamed table: finish it before touching the legacy name.
+			if ( $pending_folded && ! $this->copy_legacy_registers( $folded ) ) {
+				return false;
 			}
-			if ( $rows ) {
-				Option_Register_Repository::forget_cached();
-				$option = get_option( Option_Register_Repository::OPTION, array() );
-				$option = is_array( $option ) ? $option : array();
-				$held = is_array( $option['register'] ?? null ) ? $option['register'] : null;
-				$candidates = $rows;
-				if ( null !== $held && ! in_array( $held['id'], array_column( $rows, 'id' ), true ) ) {
-					// A register already in the option competes on the same rule, so a re-run after a
-					// recreated table keeps it, and a lazily minted one nobody used loses to the table's.
-					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
-					$held['last_opened'] = $wpdb->get_var( $wpdb->prepare( "SELECT MAX(opened_at_gmt) FROM {$sessions} WHERE register_id = %s", $held['id'] ) );
-					if ( self::query_failed() ) {
-						throw new \RuntimeException( 'Register fold read failed.' );
-					}
-					$candidates[] = $held;
-				}
-				// The most recent session wins, else the oldest register; the option's own register when the table holds it.
-				usort(
-					$candidates,
-					static function ( $a, $b ) {
-						return array( null === $a['last_opened'], $b['last_opened'], $a['created_at_gmt'] ) <=> array( null === $b['last_opened'], $a['last_opened'], $b['created_at_gmt'] );
-					}
-				);
-				$keep = null !== $held && in_array( $held['id'], array_column( $rows, 'id' ), true ) ? $held['id'] : $candidates[0]['id'];
-				$retired = is_array( $option['retired'] ?? null ) ? $option['retired'] : array();
-				if ( null !== $held && $held['id'] !== $keep ) {
-					$retired[ $held['id'] ] = $option['register'];
-				}
-				foreach ( $rows as $row ) {
-					unset( $row['last_opened'] );
-					$row['store_id'] = null === $row['store_id'] ? null : (int) $row['store_id'];
-					if ( $row['id'] !== $keep ) {
-						$retired[ $row['id'] ] = $row;
-					} elseif ( null === $held || $keep !== $held['id'] ) {
-						// The stored row keeps its store for Pro's adoption; Free reads it with none.
-						$option['register'] = $row;
-					}
-				}
-				$option['retired'] = $retired;
-				update_option( Option_Register_Repository::OPTION, $option, true );
-				Option_Register_Repository::forget_cached();
-				// Compare the whole value: a filtered or failed write that left a stale name or float must not pass.
-				if ( get_option( Option_Register_Repository::OPTION ) !== $option ) {
-					Logger::error(
-						'Register fold refused: the option did not read back',
-						array(
-							'kept' => $keep,
-							'legacy_table' => $legacy,
-						)
-					);
-					return false;
-				}
+			if ( ! self::legacy_table_exists( $legacy, 'Register fold' ) ) {
+				return true;
 			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
-			if ( false === $wpdb->query( "DROP TABLE IF EXISTS {$legacy}" ) ) {
-				throw new \RuntimeException( 'Register fold drop failed.' );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table names.
+			if ( false === $wpdb->query( "RENAME TABLE {$legacy} TO {$folded}" ) ) {
+				throw new \RuntimeException( 'Register fold rename failed.' );
 			}
-			return true;
+			return $this->copy_legacy_registers( $folded );
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', Register_Store::DEFAULT_LOCK ) );
 		}
+	}
+
+	/** Copy a renamed registers table into the option, verify the whole option, then drop the table.
+	 *
+	 * @param string $table Renamed legacy registers table.
+	 * @return bool False when the option did not read back; the table stays.
+	 * @throws \RuntimeException On read, write or drop failure.
+	 */
+	private function copy_legacy_registers( string $table ): bool {
+		global $wpdb;
+		$sessions = ( new Register_Session_Store() )->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned and known legacy tables, fixed query.
+		$rows = $wpdb->get_results( "SELECT r.id, r.name, r.store_id, r.default_float, r.created_at_gmt, MAX(s.opened_at_gmt) AS last_opened FROM {$table} r LEFT JOIN {$sessions} s ON s.register_id = r.id GROUP BY r.id, r.name, r.store_id, r.default_float, r.created_at_gmt ORDER BY r.created_at_gmt, r.id", ARRAY_A );
+		if ( self::query_failed() ) {
+			throw new \RuntimeException( 'Register fold read failed.' );
+		}
+		if ( $rows ) {
+			Option_Register_Repository::forget_cached();
+			$option = get_option( Option_Register_Repository::OPTION, array() );
+			$option = is_array( $option ) ? $option : array();
+			$held = is_array( $option['register'] ?? null ) ? $option['register'] : null;
+			$candidates = $rows;
+			if ( null !== $held && ! in_array( $held['id'], array_column( $rows, 'id' ), true ) ) {
+				// A register already in the option competes on the same rule, so a re-run after a
+				// recreated table keeps it, and a lazily minted one nobody used loses to the table's.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table; the id is prepared.
+				$held['last_opened'] = $wpdb->get_var( $wpdb->prepare( "SELECT MAX(opened_at_gmt) FROM {$sessions} WHERE register_id = %s", $held['id'] ) );
+				if ( self::query_failed() ) {
+					throw new \RuntimeException( 'Register fold read failed.' );
+				}
+				$candidates[] = $held;
+			}
+			// The most recent session wins, else the oldest register; the option's own register when the table holds it.
+			usort(
+				$candidates,
+				static function ( $a, $b ) {
+					return array( null === $a['last_opened'], $b['last_opened'], $a['created_at_gmt'] ) <=> array( null === $b['last_opened'], $a['last_opened'], $b['created_at_gmt'] );
+				}
+			);
+			$keep = null !== $held && in_array( $held['id'], array_column( $rows, 'id' ), true ) ? $held['id'] : $candidates[0]['id'];
+			$retired = is_array( $option['retired'] ?? null ) ? $option['retired'] : array();
+			if ( null !== $held && $held['id'] !== $keep ) {
+				$retired[ $held['id'] ] = $option['register'];
+			}
+			foreach ( $rows as $row ) {
+				unset( $row['last_opened'] );
+				$row['store_id'] = null === $row['store_id'] ? null : (int) $row['store_id'];
+				if ( $row['id'] !== $keep ) {
+					$retired[ $row['id'] ] = $row;
+				} elseif ( null === $held || $keep !== $held['id'] ) {
+					// The stored row keeps its store for Pro's adoption; Free reads it with none.
+					$option['register'] = $row;
+				}
+			}
+			$option['retired'] = $retired;
+			update_option( Option_Register_Repository::OPTION, $option, true );
+			Option_Register_Repository::forget_cached();
+			// Compare the whole value: a filtered or failed write that left a stale name or float must not pass.
+			if ( get_option( Option_Register_Repository::OPTION ) !== $option ) {
+				Logger::error(
+					'Register fold refused: the option did not read back',
+					array(
+						'kept' => $keep,
+						'legacy_table' => $table,
+					)
+				);
+				return false;
+			}
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known legacy table name.
+		if ( false === $wpdb->query( "DROP TABLE IF EXISTS {$table}" ) ) {
+			throw new \RuntimeException( 'Register fold drop failed.' );
+		}
+		return true;
 	}
 
 	/** Add a column unless it exists; DDL runs outside closure transactions.
