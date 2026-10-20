@@ -614,6 +614,26 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $history, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** A sale paid before the completion history existed stands: close replays it with no completion and writes nothing. */
+	public function test_close_on_a_legacy_paid_sale_replays_with_no_completion(): void {
+		// Arrange: paid, no ledger rows, no history.
+		$order = $this->create_pos_order();
+		$paid  = wc_get_order( $order->get_id() );
+		$paid->set_date_paid( time() );
+		$paid->set_status( 'processing' );
+		$paid->save();
+		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertNull( $response->get_data()['completion'] );
+		$this->assertSame( 'processing', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+	}
+
 	/** Close alone may complete an on-hold order its payments cover. */
 	public function test_close_on_an_on_hold_covered_order_completes_it(): void {
 		// Arrange.

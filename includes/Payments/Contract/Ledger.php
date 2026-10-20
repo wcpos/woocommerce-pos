@@ -1442,8 +1442,9 @@ class Ledger {
 	public function close( WC_Order $order ) {
 		$rows = $this->read( $order );
 		// A standing completion is replayed whatever its status (a merchant's POS status may be on-hold).
-		$history = Completion_Stamp::read( $order );
-		if ( $history && Completion_Stamp::stands( $order ) ) {
+		// A sale paid before the history existed stands too: it replays with no completion to name.
+		if ( Completion_Stamp::stands( $order ) ) {
+			$history = Completion_Stamp::read( $order );
 			return $this->closed( $order, $rows, end( $history ) );
 		}
 		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'on-hold' ), true ) ) {
