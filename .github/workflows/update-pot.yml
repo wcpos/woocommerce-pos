@@ -42,7 +42,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP with tools
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: '7.3'
           tools: composer, wp-cli
@@ -98,7 +98,7 @@ jobs:
       - name: Generate GitHub App token
         if: steps.git-diff.outputs.changes == 'true'
         id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.WCPOS_BOT_APP_ID }}
           private-key: ${{ secrets.WCPOS_BOT_PRIVATE_KEY }}
