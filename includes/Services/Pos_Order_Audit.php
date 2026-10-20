@@ -49,6 +49,7 @@ final class Pos_Order_Audit {
 		'_wcpos_commands',
 		Completion_Stamp::COMPLETED_AT_META_KEY,
 		Completion_Stamp::META_KEY,
+		Fiscal_Record_Writers::PENDING_META_KEY,
 		Gateway_Submission::ATTEMPTS_META_KEY,
 		Gateway_Submission::STAMP_META_KEY,
 		'_payment_method',

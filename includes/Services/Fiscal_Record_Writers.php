@@ -17,6 +17,12 @@ use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 /** Writes history only; never changes order or payment state. */
 final class Fiscal_Record_Writers {
 	/**
+	 * Sale documents whose insert failed, keyed by completion id: built at completion time and
+	 * inserted unchanged by recover(), never rebuilt from the order as it is later. Server-owned.
+	 */
+	public const PENDING_META_KEY = '_wcpos_fiscal_pending';
+
+	/**
 	 * Singleton keeps the order-service listeners armed once.
 	 *
 	 * @var self|null
@@ -58,9 +64,9 @@ final class Fiscal_Record_Writers {
 	 * @param WC_Order $order  Order the record describes.
 	 * @param array    $fields Record fields.
 	 */
-	private function write( WC_Order $order, array $fields ): void {
+	private function write( WC_Order $order, array $fields ): bool {
 		if ( null !== $this->store->record( $fields ) ) {
-			return;
+			return true;
 		}
 		$type = (string) ( $fields['type'] ?? '' );
 		/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
@@ -73,6 +79,7 @@ final class Fiscal_Record_Writers {
 		 * @param array    $fields Record fields as offered to the store.
 		 */
 		do_action( 'woocommerce_pos_fiscal_record_failed', $type, $order, $fields );
+		return false;
 	}
 
 	/**
@@ -97,27 +104,33 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * Write the latest completion's missing sale record, while that completion still stands.
-	 *
-	 * An entry reopened before its row landed is left: the order may have been edited since, so
-	 * its document can no longer be built faithfully, and the failure note already names it.
-	 * Fires no completion event.
+	 * Insert every parked sale document (built at its completion, inserted unchanged), then let the
+	 * completion's late correction follow. Nothing parked, nothing to recover: a document is never
+	 * rebuilt from the order as it is now. Fires no completion event.
 	 *
 	 * @param WC_Order $order Order.
 	 */
 	public function recover( WC_Order $order ): void {
-		$history = Completion_Stamp::read( $order );
-		$latest  = end( $history );
-		// A reopened completion is never rebuilt (record_sale() refuses it); skip the lookup.
-		if ( ! is_array( $latest ) || ! empty( $latest['legacy'] ) || ! empty( $latest['reopened_at_gmt'] ) ) {
+		$parked = self::parked( $order );
+		if ( ! $parked ) {
 			return;
 		}
-		try {
-			if ( null === $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) ) {
-				$this->record_sale_safely( $order, $latest );
+		$history = Completion_Stamp::read( $order );
+		foreach ( $parked as $completion_id => $document ) {
+			try {
+				if ( null === $this->store->record( self::fields_of( $order, (array) $document ) ) ) {
+					Logger::log( sprintf( 'Fiscal sale recovery for completion %s on order #%d failed again.', $completion_id, $order->get_id() ) );
+					continue;
+				}
+				self::unpark( $order, (string) $completion_id );
+				foreach ( $history as $entry ) {
+					if ( ( $entry['id'] ?? null ) === $completion_id ) {
+						$this->record_sale_safely( $order, $entry ); // The row exists now: only its late correction runs.
+					}
+				}
+			} catch ( \Throwable $error ) {
+				Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
 			}
-		} catch ( \Throwable $error ) {
-			Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
 		}
 	}
 
@@ -146,6 +159,7 @@ final class Fiscal_Record_Writers {
 	 *
 	 * @param WC_Order   $order      Source order.
 	 * @param array|null $completion Completion entry; null for the latest one.
+	 * @throws \Throwable Re-thrown after the built document is parked, when the insert throws.
 	 */
 	public function record_sale( WC_Order $order, ?array $completion = null ): void {
 		$history    = Completion_Stamp::read( $order );
@@ -154,17 +168,12 @@ final class Fiscal_Record_Writers {
 		if ( ! is_array( $completion ) || ! empty( $completion['legacy'] ) || ! is_string( $completion['id'] ?? null ) ) {
 			return;
 		}
-		$n = (int) $completion['n'];
+		$n       = (int) $completion['n'];
 		$missing = null === $this->store->find_sale( $order->get_id(), $completion['id'] );
-		if ( $missing && ! empty( $completion['reopened_at_gmt'] ) ) {
-			// The order may have been edited since this completion was reopened: its document can no
-			// longer be built faithfully, so no caller rebuilds it; the failure note names it for a human.
-			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d was not rebuilt: the completion was reopened before its record landed.', $n, $order->get_id() ) );
-			return;
-		}
-		if ( $missing && self::refunded_since( $order, (string) ( $completion['at_gmt'] ?? '' ) ) ) {
-			// A refund since the completion changed what a document built now would say.
-			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d was not rebuilt: the order was refunded before its record landed.', $n, $order->get_id() ) );
+		$parked  = self::parked( $order );
+		if ( $missing && isset( $parked[ $completion['id'] ] ) ) {
+			// Its document was built at the completion and parked when the insert failed: insert that.
+			$this->recover( $order );
 			return;
 		}
 		if ( $missing ) {
@@ -183,42 +192,33 @@ final class Fiscal_Record_Writers {
 			$adjustment = $previous ? Money::format( Money::minor( $completion['total'] ) - Money::minor( $previous['total'] ) ) : null;
 			$snapshot   = ( new Receipt_Data_Builder() )->build( self::as_completed( $order, $completion ), 'fiscal' );
 			$provenance = $this->store->provenance_from_order( $order );
-			$this->write(
-				$order,
-				array(
-					'type' => 'sale',
-					'order_id' => $order->get_id(),
-					'source_id' => strtolower( $completion['id'] ),
-					'corrects_record_id' => $prior['id'] ?? null,
-					'register_id' => $completion['register'] ?? null,
-					'session_id' => $completion['session'] ?? null,
-					'device_time' => $completion['sale_time'] ?? null,
-					'device_tz' => $completion['sale_tz'] ?? null,
-					'store_id' => $provenance['store_id'],
-					'cashier_id' => $provenance['cashier_id'],
-					'payload' => static function ( int $number ) use ( $order, $snapshot, $n, $supersedes, $adjustment ): array {
-						$snapshot['fiscal']['sequence'] = $number;
-						$snapshot['fiscal']['receipt_number'] = (string) $number;
-						$snapshot['fiscal']['immutable_id'] = $order->get_id() . ':' . $number;
-						$snapshot['fiscal']['completion'] = $n;
-						$snapshot['fiscal']['supersedes'] = $supersedes;
-						$snapshot['fiscal']['adjustment'] = $adjustment;
-						unset( $snapshot['i18n'] );
-						/**
-						 * Enrich the numbered, label-free document before storage.
-						 *
-						 * Runs under wcpos_fiscal_sequence_lock (five-second wait,
-						 * shared by all record types): local computation only, no
-						 * network I/O. Submit asynchronously after the row exists.
-						 *
-						 * @param array $snapshot Fiscal document.
-						 * @param int   $order_id Order ID.
-						 */
-						$enriched = apply_filters( 'woocommerce_pos_fiscal_snapshot_enrich', $snapshot, $order->get_id() );
-						return is_array( $enriched ) ? $enriched : $snapshot;
-					},
-				)
+			unset( $snapshot['i18n'] );
+			$document = array(
+				'type'               => 'sale',
+				'order_id'           => $order->get_id(),
+				'source_id'          => strtolower( $completion['id'] ),
+				'corrects_record_id' => $prior['id'] ?? null,
+				'register_id'        => $completion['register'] ?? null,
+				'session_id'         => $completion['session'] ?? null,
+				'device_time'        => $completion['sale_time'] ?? null,
+				'device_tz'          => $completion['sale_tz'] ?? null,
+				'store_id'           => $provenance['store_id'],
+				'cashier_id'         => $provenance['cashier_id'],
+				'n'                  => $n,
+				'supersedes'         => $supersedes,
+				'adjustment'         => $adjustment,
+				'snapshot'           => $snapshot,
 			);
+			try {
+				$written = $this->write( $order, self::fields_of( $order, $document ) );
+			} catch ( \Throwable $error ) {
+				self::park( $order, $completion['id'], $document );
+				throw $error;
+			}
+			if ( ! $written ) {
+				self::park( $order, $completion['id'], $document );
+				return;
+			}
 		}
 		// Late against the closure of the session this completion took its money in.
 		$session = (string) ( $completion['session'] ?? '' );
@@ -444,20 +444,82 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * Whether a refund on the order was created after the completion.
+	 * The store fields of a sale document: the parked columns, and a payload that stamps the minted
+	 * number into the completion-time snapshot and runs the enrich filter.
 	 *
-	 * @param WC_Order $order  Order.
-	 * @param string   $at_gmt The completion's time.
+	 * @param WC_Order $order    Order.
+	 * @param array    $document Built (or parked) document.
 	 */
-	private static function refunded_since( WC_Order $order, string $at_gmt ): bool {
-		$at = strtotime( $at_gmt );
-		foreach ( $order->get_refunds() as $refund ) {
-			$created = $refund->get_date_created();
-			if ( false === $at || ( $created && $created->getTimestamp() > $at ) ) {
-				return true;
-			}
+	private static function fields_of( WC_Order $order, array $document ): array {
+		$fields            = array_intersect_key( $document, array_flip( array( 'type', 'order_id', 'source_id', 'corrects_record_id', 'register_id', 'session_id', 'device_time', 'device_tz', 'store_id', 'cashier_id' ) ) );
+		$order_id          = $order->get_id();
+		$snapshot          = (array) ( $document['snapshot'] ?? array() );
+		$n                 = (int) ( $document['n'] ?? 0 );
+		$supersedes        = $document['supersedes'] ?? null;
+		$adjustment        = $document['adjustment'] ?? null;
+		$fields['payload'] = static function ( int $number ) use ( $order_id, $snapshot, $n, $supersedes, $adjustment ): array {
+			$snapshot['fiscal']['sequence'] = $number;
+			$snapshot['fiscal']['receipt_number'] = (string) $number;
+			$snapshot['fiscal']['immutable_id'] = $order_id . ':' . $number;
+			$snapshot['fiscal']['completion'] = $n;
+			$snapshot['fiscal']['supersedes'] = $supersedes;
+			$snapshot['fiscal']['adjustment'] = $adjustment;
+			/**
+			 * Enrich the numbered, label-free document before storage.
+			 *
+			 * Runs under wcpos_fiscal_sequence_lock (five-second wait,
+			 * shared by all record types): local computation only, no
+			 * network I/O. Submit asynchronously after the row exists.
+			 *
+			 * @param array $snapshot Fiscal document.
+			 * @param int   $order_id Order ID.
+			 */
+			$enriched = apply_filters( 'woocommerce_pos_fiscal_snapshot_enrich', $snapshot, $order_id );
+			return is_array( $enriched ) ? $enriched : $snapshot;
+		};
+		return $fields;
+	}
+
+	/**
+	 * The order's parked sale documents, keyed by completion id.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private static function parked( WC_Order $order ): array {
+		$raw     = $order->get_meta( self::PENDING_META_KEY, true );
+		$decoded = is_string( $raw ) ? json_decode( $raw, true ) : $raw;
+		return is_array( $decoded ) ? $decoded : array();
+	}
+
+	/**
+	 * Park a sale document whose insert failed.
+	 *
+	 * @param WC_Order $order         Order.
+	 * @param string   $completion_id Completion entry id.
+	 * @param array    $document      The built document.
+	 */
+	private static function park( WC_Order $order, string $completion_id, array $document ): void {
+		$parked                                 = self::parked( $order );
+		$parked[ strtolower( $completion_id ) ] = $document;
+		$order->update_meta_data( self::PENDING_META_KEY, wp_json_encode( $parked ) );
+		$order->save_meta_data();
+	}
+
+	/**
+	 * Drop a parked document once its record exists.
+	 *
+	 * @param WC_Order $order         Order.
+	 * @param string   $completion_id Completion entry id.
+	 */
+	private static function unpark( WC_Order $order, string $completion_id ): void {
+		$parked = self::parked( $order );
+		unset( $parked[ $completion_id ] );
+		if ( $parked ) {
+			$order->update_meta_data( self::PENDING_META_KEY, wp_json_encode( $parked ) );
+		} else {
+			$order->delete_meta_data( self::PENDING_META_KEY );
 		}
-		return false;
+		$order->save_meta_data();
 	}
 
 	/** Log a lost correction and fire the recovery signal without failing the caller.

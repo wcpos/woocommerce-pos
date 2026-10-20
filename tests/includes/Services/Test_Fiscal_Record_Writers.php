@@ -538,7 +538,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** A completion whose sale row is missing is not rebuilt once a refund has changed the order. */
-	public function test_a_missing_sale_is_not_rebuilt_after_a_refund(): void {
+	public function test_a_missing_sale_is_recovered_after_a_refund_with_its_completion_time_document(): void {
 		// Arrange: completion 1's sale insert fails.
 		$order  = $this->order();
 		$enrich = static function () {
@@ -574,9 +574,110 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$refund->save();
 		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $row['id'] . '/status' ) );
 
-		// Assert: no document rebuilt from the refunded order; the refund names no sale.
-		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+		// Assert: the parked completion-time document is inserted (no refund in it); the refund, written
+		// while it was missing, names no sale.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( array(), $sales[0]['payload']['refunds'] );
+		$this->assertEquals( 100, $sales[0]['payload']['totals']['total_incl'] );
 		$this->assertNull( ( new Fiscal_Record_Store() )->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+	}
+
+	/**
+	 * Run $work while the sale sequence cannot advance, so record() answers null without throwing.
+	 *
+	 * @param callable $work Work.
+	 */
+	private function with_sale_inserts_failing( callable $work ): void {
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale', $stuck, 10, 2 );
+		try {
+			$work();
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale', $stuck, 10 );
+		}
+	}
+
+	/**
+	 * The parked sale documents on the order, read from storage.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function parked( int $order_id ): array {
+		$order = wc_get_order( $order_id );
+		foreach ( $order->get_data_store()->read_meta( $order ) as $meta ) {
+			if ( '_wcpos_fiscal_pending' === $meta->meta_key ) {
+				return (array) json_decode( (string) maybe_unserialize( $meta->meta_value ), true );
+			}
+		}
+		return array();
+	}
+
+	/** A failed insert parks the completion-time document; recovery inserts it, whatever the order says now. */
+	public function test_a_failed_sale_insert_is_parked_and_recovered_with_its_completion_time_document(): void {
+		// Arrange: completed, but the sale record cannot be inserted.
+		$order = $this->order();
+		$order->set_billing_address_1( 'Old Street 1' );
+		$order->save();
+		$row = null;
+		$this->with_sale_inserts_failing(
+			function () use ( $order, &$row ): void {
+				$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
+				$request->set_body_params(
+					array(
+						'payment' => array(
+							'id' => wp_generate_uuid4(),
+							'method_id' => 'pos_cash',
+							'amount' => '100.00',
+						),
+					)
+				);
+				$row = $this->server->dispatch( $request )->get_data()['payment'];
+			}
+		);
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( array( $history[0]['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
+		// The paid order's address changes afterwards (the push's frozen-address path writes it).
+		$edited = wc_get_order( $order->get_id() );
+		$edited->set_billing_address_1( 'New Street 2' );
+		$edited->save();
+
+		// Act: the next money command.
+		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $row['id'] . '/status' ) );
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( $history[0]['id'], $sales[0]['source_id'] );
+		$this->assertSame( 'Old Street 1', $sales[0]['payload']['customer']['billing_address']['address_1'] );
+		$this->assertSame( (string) $sales[0]['number'], $sales[0]['payload']['fiscal']['receipt_number'] );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** A parked document survives a reopen and an edit, and is inserted unchanged. */
+	public function test_a_parked_document_survives_a_reopen_and_is_inserted_unchanged(): void {
+		// Arrange: completion 1's insert fails; the sale is reopened and its total edited.
+		$order = $this->order();
+		$this->with_sale_inserts_failing(
+			function () use ( $order ): void {
+				$this->pay( $order );
+			}
+		);
+		$history  = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$reopened = $this->reopen( $order );
+		$reopened->set_total( '80.00' );
+		$reopened->save();
+
+		// Act.
+		Fiscal_Record_Writers::instance()->recover( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( $history[0]['id'], $sales[0]['source_id'] );
+		$this->assertEquals( 100, $sales[0]['payload']['totals']['total_incl'] );
+		$this->assertSame( 1, $sales[0]['payload']['fiscal']['completion'] );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
 	/** Replaying completion n returns row n and writes nothing. */
@@ -650,7 +751,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** An entry reopened before its row landed is not rebuilt from the edited order. */
-	public function test_recovery_leaves_an_entry_that_was_reopened_before_its_row_landed(): void {
+	public function test_recovery_inserts_the_parked_document_of_an_entry_reopened_before_its_row_landed(): void {
 		// Arrange.
 		$order  = $this->order();
 		$enrich = static function () {
@@ -668,11 +769,13 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		Fiscal_Record_Writers::instance()->recover( $order );
 
 		// Assert.
-		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( Completion_Stamp::read( $order )[0]['id'], $sales[0]['source_id'] );
 	}
 
 	/** A reopened completion whose record never landed is never rebuilt; completion 2 still names it. */
-	public function test_a_reopened_unrecovered_completion_is_never_rebuilt_and_completion_2_still_names_it(): void {
+	public function test_a_reopened_completion_is_inserted_from_its_parked_document_and_completion_2_still_names_it(): void {
 		// Arrange: completion 1's sale fails; reopened and edited to 80.00; completion 2's lands.
 		$order  = $this->order();
 		$enrich = static function () {
@@ -694,14 +797,18 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		// Act: any caller asks for completion 1's record.
 		Fiscal_Record_Writers::instance()->record_sale( $order, $history[0] );
 
-		// Assert: only completion 2's record, which names completion 1 without a record.
+		// Assert: completion 1's parked document (100.00, as completed) lands after completion 2's record,
+		// which named completion 1 without a record.
 		$sales = $this->sales( $order->get_id() );
-		$this->assertCount( 1, $sales );
+		$this->assertCount( 2, $sales );
 		$this->assertSame( $history[1]['id'], $sales[0]['source_id'] );
 		$this->assertNull( $sales[0]['corrects_record_id'] );
 		$this->assertSame( $history[0]['id'], $sales[0]['payload']['fiscal']['supersedes']['completion_id'] );
 		$this->assertNull( $sales[0]['payload']['fiscal']['supersedes']['record_id'] );
 		$this->assertSame( '-20.00', $sales[0]['payload']['fiscal']['adjustment'] );
+		$this->assertSame( $history[0]['id'], $sales[1]['source_id'] );
+		$this->assertEquals( 100, $sales[1]['payload']['totals']['total_incl'] );
+		$this->assertSame( 1, $sales[1]['payload']['fiscal']['completion'] );
 	}
 
 	/** Each completion's cancellation is its own record (complete, cancel, reopen, complete, cancel). */
