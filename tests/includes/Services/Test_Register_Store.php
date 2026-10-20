@@ -51,7 +51,8 @@ class Test_Register_Store extends WP_UnitTestCase {
 		$this->assertSame( $rows[0]['id'], $option['register']['id'] );
 		$position = static function ( string $needle, string $also = '' ) use ( $queries ) {
 			foreach ( $queries as $index => $sql ) {
-				if ( false !== strpos( $sql, $needle ) && false !== strpos( $sql, $also ) ) {
+				// PHP 7.4 returns false for an empty needle (PHP 8 returns 0), so test it explicitly.
+				if ( false !== strpos( $sql, $needle ) && ( '' === $also || false !== strpos( $sql, $also ) ) ) {
 					return $index;
 				}
 			}
