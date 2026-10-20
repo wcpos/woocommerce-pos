@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-20T12:40:10+00:00\n"
+"POT-Creation-Date: 2026-10-20T14:51:41+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1132,7 +1132,7 @@ msgstr ""
 
 #: includes/API/V2/Payment_Methods_Controller.php:114
 #: includes/Payments/Contract/Gateway_Submission.php:54
-#: includes/Payments/Contract/Ledger.php:2568
+#: includes/Payments/Contract/Ledger.php:2577
 msgid "Payment capture mode is unsupported."
 msgstr ""
 
@@ -1517,7 +1517,7 @@ msgstr ""
 
 #: includes/Payments/Contract/Ledger.php:860
 #: includes/Payments/Contract/Ledger.php:1664
-#: includes/Payments/Contract/Ledger.php:1841
+#: includes/Payments/Contract/Ledger.php:1848
 msgid "Another payment is already in progress on this order."
 msgstr ""
 
@@ -1585,27 +1585,27 @@ msgstr ""
 msgid "Provider-confirmed amount or currency does not match the payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1758
+#: includes/Payments/Contract/Ledger.php:1759
 msgid "The order is not covered by its payments."
 msgstr ""
 
 #. translators: %s: payment row uuid.
-#: includes/Payments/Contract/Ledger.php:1918
+#: includes/Payments/Contract/Ledger.php:1925
 #, php-format
 msgid "WCPOS payment %s voided."
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: void reason given by the cashier.
-#: includes/Payments/Contract/Ledger.php:1920
+#: includes/Payments/Contract/Ledger.php:1927
 #, php-format
 msgid "WCPOS payment %1$s voided: %2$s"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:2563
+#: includes/Payments/Contract/Ledger.php:2572
 msgid "Payment not found."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:2573
+#: includes/Payments/Contract/Ledger.php:2582
 msgid "Payment transition is invalid."
 msgstr ""
 
