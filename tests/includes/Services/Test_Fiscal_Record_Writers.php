@@ -648,9 +648,10 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	public function test_captured_manual_void_records_before_and_after_rows(): void {
 		$order = $this->order();
 		$store = new Fiscal_Record_Store();
-		// A sale anchor on an in-progress order: Ledger refuses voids on completed orders.
+		// A sale anchor on an in-progress order (a reopened sale): Ledger refuses voids on completed orders.
 		$this->seed_completion( $order );
 		Fiscal_Record_Writers::instance()->record_sale( $order );
+		Completion_Fixture::reopen( $order );
 		$sale = $store->find_sale( $order->get_id() );
 		$row = Ledger::instance()->record(
 			$order,

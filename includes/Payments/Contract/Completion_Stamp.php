@@ -250,6 +250,22 @@ final class Completion_Stamp {
 	}
 
 	/**
+	 * Whether the sale's completion stands: its latest entry is not marked reopened, or, before the
+	 * history existed, it is paid in a completed status. A standing sale takes no new tender, whatever
+	 * WooCommerce's is_editable() says of its status (a merchant's POS status stored as on-hold).
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	public static function stands( WC_Order $order ): bool {
+		$history = self::read( $order );
+		$latest  = end( $history );
+		if ( is_array( $latest ) ) {
+			return empty( $latest['reopened_at_gmt'] );
+		}
+		return null !== $order->get_date_paid( 'edit' ) && in_array( $order->get_status(), self::completed_statuses( $order ), true );
+	}
+
+	/**
 	 * Whether a captured row id was counted by any completion (it then leaves only through a refund).
 	 *
 	 * @param WC_Order $order      Order object.
@@ -364,7 +380,7 @@ final class Completion_Stamp {
 	 *
 	 * @param WC_Order $order Order object.
 	 */
-	private static function completed_statuses( WC_Order $order ): array {
+	public static function completed_statuses( WC_Order $order ): array {
 		$statuses   = wc_get_is_paid_statuses();
 		$configured = (string) apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $order->get_id(), $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 		if ( '' !== $configured ) {

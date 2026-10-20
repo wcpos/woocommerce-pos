@@ -1408,10 +1408,11 @@ class Ledger {
 	 * @param WC_Order $order Order object.
 	 */
 	public function accepts_tender( WC_Order $order ): ?WP_Error {
-		if ( $order->is_editable() || in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) || null !== Gateway_Submission::read_stamp( $order ) ) {
+		$stands = Completion_Stamp::stands( $order );
+		if ( ! $stands && ( $order->is_editable() || in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) || null !== Gateway_Submission::read_stamp( $order ) ) ) {
 			return null;
 		}
-		if ( null !== $order->get_date_paid( 'edit' ) ) {
+		if ( $stands || null !== $order->get_date_paid( 'edit' ) ) {
 			return new WP_Error(
 				'wcpos_order_already_paid',
 				__( 'The order is already paid.', 'woocommerce-pos' ),

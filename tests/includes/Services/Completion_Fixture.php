@@ -43,6 +43,18 @@ final class Completion_Fixture {
 	}
 
 	/**
+	 * Mark the latest entry reopened, as a reopen of the sale does.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	public static function reopen( \WC_Order $order ): void {
+		$history = Completion_Stamp::read( $order );
+		$history[ count( $history ) - 1 ]['reopened_at_gmt'] = gmdate( 'c' );
+		$order->update_meta_data( Completion_Stamp::META_KEY, wp_json_encode( $history ) );
+		$order->save_meta_data();
+	}
+
+	/**
 	 * Give the order completion 1 and write its sale record.
 	 *
 	 * @param \WC_Order $order Order.

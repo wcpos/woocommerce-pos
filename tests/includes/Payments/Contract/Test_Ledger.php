@@ -1607,6 +1607,45 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( $paid ), 'n' ) );
 	}
 
+	/** A completion standing on a configured on-hold status refuses a new tender though on-hold is editable. */
+	public function test_a_standing_on_hold_completion_takes_no_new_tender_until_reopened(): void {
+		// Arrange: Cash's POS Order Status stored as On hold; 100.00 cash completes onto it; 20.00 refunded.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+					'pos_card' => array( 'enabled' => true ),
+				),
+			)
+		);
+		list( $order, $row ) = $this->paid_sale_with_lines( array( '100.00' ) );
+		$this->assertSame( 'on-hold', $order->get_status() );
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+
+		// Act.
+		$refused = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '20.00' ) );
+
+		// Assert.
+		$this->assertWPError( $refused );
+		$this->assertSame( 'wcpos_order_already_paid', $refused->get_error_code() );
+		$this->assertSame( 409, $refused->get_error_data()['status'] );
+
+		// Reopened, the 20.00 lands and completes the sale again.
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$taken = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '20.00' ) );
+		$this->assertIsArray( $taken );
+		$this->assertSame( 'captured', $taken['status'] );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
+	}
+
 	/** A cancelled order takes no tender. */
 	public function test_a_cancelled_order_takes_no_tender(): void {
 		// Arrange.
@@ -2823,7 +2862,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$order->calculate_totals( false );
 		$order->save();
 		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', $order->get_total() ) );
-		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		$this->assertNotNull( wc_get_order( $order->get_id() )->get_date_paid( 'edit' ) );
 		return array( wc_get_order( $order->get_id() ), $row, $lines );
 	}
 
