@@ -417,6 +417,13 @@ After PR review (Codex round 1 on #2355), five more pins, all in `Test_Payments_
 34. `test_a_close_whose_entry_is_not_stored_is_a_retryable_conflict` — `remember_close()` re-reads storage and verifies fingerprint and ref, else throws `Ledger_Persistence_Exception` (409 `woo_rxdb_sync_record_locked`); the completion stands and the retry replays it.
 35. `Test_Fiscal_Record_Writers`: tender rows enter fiscal payloads (void `row` / `voided_row`, late-sale `tender_rows`) without `commands`.
 
+Codex round 2:
+
+36. `test_an_intent_replay_resumes_after_the_method_is_disabled` — only a new leg needs the method enabled (`pos_enabled` is checked below the existing-row replay branch, as `submit()` does); a new intent on a new row with the method disabled stays 403.
+37. `Test_Gateway_Submission::test_a_submit_whose_command_entry_is_not_stored_is_refused_before_dispatch` — the pre-dispatch read-back verifies the command entry with the attempt; a miss removes the attempt and answers 409 `woo_rxdb_sync_record_locked` (nothing dispatched); after the `settled` and `recorded` saves a miss is logged and answered 409 (the attempt history still replays by attempt id).
+
+Declined in round 2: stripping the command maps from served order documents (the till already receives the whole ledger meta; a strip would have to run after every revision site or the first push after a money command would 409 falsely).
+
 Also from CodeRabbit: a new order's rows lose a client-seeded `commands` map like their event history (`test_order_save_preserves_server_event_history`, both lanes).
 
 ### 5.7 Verification order for PR 3
