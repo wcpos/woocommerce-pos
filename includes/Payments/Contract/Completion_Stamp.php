@@ -45,11 +45,19 @@ final class Completion_Stamp {
 	private static $context = null;
 
 	/**
-	 * Provenance a sent submit stored on its awaiting-customer stamp, read before the stamp is cleared.
+	 * A sent submit's awaiting-customer stamp, read before the stamp is cleared: its provenance and
+	 * the attempt, method and cashier its row is minted with when no gateway mints one.
 	 *
-	 * @var array<int, array>
+	 * @var array<int, array{provenance: array, attempt_id: string, method_id: string, cashier_id: int}>
 	 */
 	private static $attempts = array();
+
+	/**
+	 * Orders whose payment_complete() is running: the passthrough mints their row at payment-complete 10.
+	 *
+	 * @var array<int, bool>
+	 */
+	private static $completing = array();
 
 	/** Arm the completion entry points. */
 	public static function register_hooks(): void {
@@ -61,6 +69,16 @@ final class Completion_Stamp {
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_completed' ), 15, 4 );
 		// Priority 15: after Webview_Passthrough has minted an order-pay row (10).
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 15, 1 );
+		add_action( 'woocommerce_pre_payment_complete', array( __CLASS__, 'on_pre_payment_complete' ), 10, 1 );
+	}
+
+	/**
+	 * Note that payment_complete() is running on the order (its status changes before its mint).
+	 *
+	 * @param int $id Order ID.
+	 */
+	public static function on_pre_payment_complete( $id ): void {
+		self::$completing[ (int) $id ] = true;
 	}
 
 	/**
@@ -104,8 +122,9 @@ final class Completion_Stamp {
 
 	/** Test seam: forget the request context and the memoised attempt provenance. */
 	public static function reset(): void {
-		self::$context  = null;
-		self::$attempts = array();
+		self::$context    = null;
+		self::$attempts   = array();
+		self::$completing = array();
 	}
 
 	/**
@@ -115,8 +134,13 @@ final class Completion_Stamp {
 	 */
 	public static function memoise( WC_Order $order ): void {
 		$stamp = Gateway_Submission::read_stamp( $order );
-		if ( is_array( $stamp['provenance'] ?? null ) && $stamp['provenance'] ) {
-			self::$attempts[ $order->get_id() ] = self::validated( $stamp['provenance'], true );
+		if ( is_string( $stamp['attempt_id'] ?? null ) && wp_is_uuid( $stamp['attempt_id'] ) ) {
+			self::$attempts[ $order->get_id() ] = array(
+				'provenance' => is_array( $stamp['provenance'] ?? null ) ? self::validated( $stamp['provenance'], true ) : array(),
+				'attempt_id' => strtolower( $stamp['attempt_id'] ),
+				'method_id'  => (string) ( $stamp['method_id'] ?? '' ),
+				'cashier_id' => (int) ( $stamp['cashier_id'] ?? 0 ),
+			);
 		}
 	}
 
@@ -180,6 +204,7 @@ final class Completion_Stamp {
 	 * @param int $id Order ID.
 	 */
 	public static function on_payment_complete( $id ): void {
+		unset( self::$completing[ (int) $id ] );
 		try {
 			$order = wc_get_order( (int) $id );
 			if ( $order instanceof WC_Order ) {
@@ -208,6 +233,9 @@ final class Completion_Stamp {
 		}
 		try {
 			$fresh = self::fresh( $id );
+			if ( $fresh && self::is_paid( $fresh ) && self::mints_attempt( $fresh ) ) {
+				$fresh = self::fresh( $id );
+			}
 			// The window test reads the fresh order: a mint earlier in this save is not on the caller's object.
 			if ( ! $fresh || ! self::is_paid( $fresh ) || ! self::has_origin( $fresh ) || self::awaits_mint( $fresh ) ) {
 				return;
@@ -432,6 +460,44 @@ final class Completion_Stamp {
 	}
 
 	/**
+	 * A sent attempt the merchant (or a provider) marked paid without payment_complete() has no row:
+	 * nothing else will mint one outside a window. Mint it as the submit does for a paying gateway,
+	 * the attempt id as the row id, so the completion names the payment; Ledger::save() marks the
+	 * attempt paid. Inside payment_complete() the passthrough mints at payment-complete 10 instead.
+	 *
+	 * @param WC_Order $order Fresh order, paid, read under the lock.
+	 * @return bool Whether a row was minted.
+	 */
+	private static function mints_attempt( WC_Order $order ): bool {
+		$id      = $order->get_id();
+		$attempt = self::$attempts[ $id ] ?? null;
+		if ( null === $attempt || isset( self::$completing[ $id ] ) || Gateway_Submission::is_submitting( $id ) || Webview_Passthrough::is_paying( $id ) || self::captured_ids( $order ) ) {
+			return false;
+		}
+		$transaction = $order->get_transaction_id();
+		try {
+			$row = Webview_Passthrough::mint(
+				$order,
+				array(
+					'id'            => $attempt['attempt_id'],
+					'source'        => 'app',
+					'capture_mode'  => 'gateway',
+					'method_id'     => '' !== $attempt['method_id'] ? $attempt['method_id'] : $order->get_payment_method(),
+					'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
+					'cashier_id'    => $attempt['cashier_id'],
+				)
+			);
+		} catch ( \Throwable $error ) {
+			$row = null;
+		}
+		if ( null === $row ) {
+			Logger::error( sprintf( 'WCPOS attempt %s on order #%d was marked paid but its row could not be minted; the completion waits for it.', $attempt['attempt_id'], $id ), array( 'order_id' => $id ) );
+			return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Inside a submit or order-pay window, or for a sent attempt a later callback completes, the
 	 * tender's row is minted after the status lands: the stamp waits for it (the submit stamps after
 	 * its mint, the webview at payment-complete 15 or status-change 15), so the entry and its sale
@@ -455,7 +521,7 @@ final class Completion_Stamp {
 	 */
 	private static function resolve_provenance( WC_Order $order, int $n ): array {
 		$empty   = array_fill_keys( array_keys( self::PROVENANCE_FIELDS ), null );
-		$sources = array( self::provenance( $order->get_id() ), self::$attempts[ $order->get_id() ] ?? array() );
+		$sources = array( self::provenance( $order->get_id() ), self::$attempts[ $order->get_id() ]['provenance'] ?? array() );
 		if ( 1 === $n || Webview_Passthrough::is_paying( $order->get_id() ) ) {
 			$sources[] = array_filter( self::till_tuple( $order ), static fn( $value ) => null !== $value );
 		}

@@ -667,6 +667,27 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( $attempt, Gateway_Submission::read_attempts( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** An invoice sent from the till and later marked paid in wp-admin records the attempt as the payment. */
+	public function test_a_sent_invoice_marked_paid_without_payment_complete_records_the_attempt(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $attempt, array( 'invoice_email' => 'customer@example.com' ) )->get_data()['outcome'] );
+		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reset();
+
+		// Act: a later request lands the paid status without payment_complete().
+		wc_get_order( $order->get_id() )->update_status( 'processing' );
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$rows   = Ledger::instance()->read( $stored );
+		$this->assertSame( array( $attempt ), array_column( $rows, 'id' ) );
+		$this->assertSame( 'captured', $rows[0]['status'] );
+		$this->assertSame( array( $attempt => 'paid' ), Gateway_Submission::read_attempts( $stored ) );
+		$this->assertNull( Gateway_Submission::read_stamp( $stored ) );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
 	/** Landing a paid status is also evidence of money. */
 	public function test_submit_paid_status_without_payment_complete_records(): void {
 		// Arrange.

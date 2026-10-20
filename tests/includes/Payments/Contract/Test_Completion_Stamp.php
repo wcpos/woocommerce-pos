@@ -289,10 +289,48 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $history );
 		$this->assertSame( self::REGISTER_B, $history[0]['register'] );
 		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
+		$this->assertSame( 'webview', $rows[0]['source'] ); // The passthrough minted it; the stamp minted nothing.
 		$this->assertSame( array( 1 ), $this->announced );
 		$payments = $this->only_sale( $order->get_id() )['payload']['payments'];
 		$this->assertCount( 1, $payments );
 		$this->assertSame( 'txn_callback', $payments[0]['transaction_id'] );
+	}
+
+	/** A sent attempt the merchant marks paid without payment_complete() mints its own row, then is stamped. */
+	public function test_a_sent_attempt_completed_by_a_paid_status_write_mints_its_row(): void {
+		// Arrange: submit from register B answers sent; the status write is a later request.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order    = $this->create_pos_order();
+		$attempt  = wp_generate_uuid4();
+		$response = $this->submit( $order, $attempt, 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) );
+		$this->assertSame( 'sent', $response->get_data()['outcome'] );
+		Completion_Stamp::reset();
+
+		// Act: wp-admin marks the bank transfer paid.
+		wc_get_order( $order->get_id() )->update_status( 'processing' );
+
+		// Assert.
+		$stored  = wc_get_order( $order->get_id() );
+		$rows    = Ledger::instance()->read( $stored );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $attempt, $rows[0]['id'] );
+		$this->assertSame( 'captured', $rows[0]['status'] );
+		$this->assertSame( 'app', $rows[0]['source'] );
+		$this->assertSame( 'gateway', $rows[0]['capture_mode'] );
+		$this->assertSame( 'wcpos_stamp_sent', $rows[0]['method_id'] );
+		$this->assertSame( array( $attempt => 'paid' ), \WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::read_attempts( $stored ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( self::REGISTER_B, $history[0]['register'] );
+		$this->assertSame( array( $attempt ), $history[0]['payment_ids'] );
+		$this->assertCount( 1, $this->only_sale( $order->get_id() )['payload']['payments'] );
+
+		// Fulfilment afterwards writes nothing more.
+		wc_get_order( $order->get_id() )->update_status( 'completed' );
+		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		$this->assertCount( 1, $this->stored_history( $order->get_id() ) );
+		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+		$this->assertSame( array( 1 ), $this->announced );
 	}
 
 	/** A gateway that lands a paid status without payment_complete() writes one entry. */
