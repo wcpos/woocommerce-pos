@@ -1667,14 +1667,48 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 		$again = $this->command( $path, $body );
 
-		// Assert.
-		$this->assertSame( 200, $first->get_status() );
+		// Assert: the unverified close is a retryable conflict; its staged entry replays the completion.
+		$this->assertSame( 409, $first->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $first->get_data()['code'] );
 		$stored = $this->stored_meta( $order->get_id(), '_wcpos_commands' );
 		$this->assertArrayHasKey( $body['command_id'], (array) $stored );
 		$this->assertNull( $stored[ $body['command_id'] ]['ref'] );
 		$this->assertSame( 200, $again->get_status() );
-		$this->assertSame( $first->get_data()['completion'], $again->get_data()['completion'] );
-		$this->assertCount( 1, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $again->get_data()['completion'] );
+	}
+
+	/** Pin 34: a close whose entry did not reach storage is not acknowledged; the completion stands for the retry. */
+	public function test_a_close_whose_entry_is_not_stored_is_a_retryable_conflict(): void {
+		// Arrange: a covered sale; every write of the command map fails.
+		$order = $this->create_pos_order();
+		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		$path       = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$refuse_add = static fn( $check, $object_id, $key ) => '_wcpos_commands' === $key ? false : $check;
+		$refuse_mid = static fn( $check, $meta_id, $value, $key ) => '_wcpos_commands' === $key ? false : $check;
+		add_filter( 'add_post_metadata', $refuse_add, 10, 3 );
+		add_filter( 'update_post_metadata_by_mid', $refuse_mid, 10, 4 );
+
+		// Act.
+		try {
+			$refused = $this->command( $path, $this->envelope( $order ) );
+		} finally {
+			remove_filter( 'add_post_metadata', $refuse_add, 10 );
+			remove_filter( 'update_post_metadata_by_mid', $refuse_mid, 10 );
+		}
+		$retry = $this->envelope( $order );
+		$again = $this->command( $path, $retry );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( 200, $again->get_status() );
+		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $again->get_data()['completion'] );
+		$this->assertSame( $history[0]['id'], $this->stored_meta( $order->get_id(), '_wcpos_commands' )[ $retry['command_id'] ]['ref'] );
 	}
 
 	/** Pin 28: a record whose row id another command already consumed is a body conflict and creates no row. */

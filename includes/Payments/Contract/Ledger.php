@@ -1530,13 +1530,21 @@ class Ledger {
 	 * @param WC_Order    $order   Order object.
 	 * @param array       $command The till's command.
 	 * @param array|false $entry   The completion it answered.
+	 * @throws Ledger_Persistence_Exception When the entry did not reach storage: never acknowledged, the retry replays.
 	 */
 	private function remember_close( WC_Order $order, array $command, $entry ): void {
 		if ( empty( $command['id'] ) ) {
 			return;
 		}
-		Command_Log::remember( $order, $command['id'], Command_Log::entry( $command['fp'], 'close', is_array( $entry ) ? (string) $entry['id'] : null ) );
+		$ref = is_array( $entry ) ? (string) $entry['id'] : null;
+		Command_Log::remember( $order, $command['id'], Command_Log::entry( $command['fp'], 'close', $ref ) );
 		self::saving( $order->get_id(), fn() => $order->save() );
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$kept = Command_Log::find( $stored, array(), $command['id'] );
+		if ( ! $kept || $kept['fp'] !== $command['fp'] || $kept['ref'] !== $ref ) {
+			throw new Ledger_Persistence_Exception( 'WCPOS close command was not persisted.' );
+		}
 	}
 
 	/**
