@@ -34,7 +34,9 @@ Pro (`woocommerce-pos-pro` at `origin/next`, grep run 2026-10-19, non-empty resu
 | push | `woo_rxdb_sync_conflict` | 409 | stale `baseRevision` (unchanged) |
 | routes | `wcpos_payment_locked` | 409 | order lock held (unchanged) |
 | routes | `wcpos_revision_stale` | 409 | stale `revision` on a fresh command (PR 3) |
-| routes | `wcpos_command_conflict` | 422 | same `command_id`, different body (PR 3) |
+| routes | `wcpos_command_conflict` | 422 | same `command_id`, different body; `record`'s mismatched replay too (PR 3) |
+| routes | `wcpos_revision_required` | 428 | a money command without `revision` (PR 3) |
+| routes | `rest_invalid_param` | 400 | `command_id` missing or not a uuid on the seven commands that take one (PR 3) |
 | routes | `wcpos_balance_outstanding` | 409 | `close` on an uncovered or zero-total order (PR 2) |
 
 422 on the push lane, 409 on the route family: #2312's ruling, kept.
@@ -284,10 +286,123 @@ Pins:
 
 Stack `/Users/kilbot/Projects/woocommerce-pos-worktrees/adr-0040-2` (ports 8900/8901, plugin mapped at `wp-content/plugins/woocommerce-pos`), one phpunit invocation per class: `Test_Completion_Stamp`, `_HPOS`, `Test_Ledger`, `Test_Payments_Controller`, `Test_Rest_Dispatch_Money_Model`, `_HPOS`, `Test_Fiscal_Record_Store`, `Test_Fiscal_Record_Writers`, `Test_Session_Figures`, `_HPOS`, `Test_Gateway_Submission`, `_HPOS`, `Test_Webview_Passthrough`, `Test_Payments_Sweeper`, `Test_Ledger_Sole_Writer`, `Test_Order_Lock`, `Test_Write_Controller`, `Test_Order_Writer`, `Test_Settlement`, `Test_Sessions_Controller`, `Test_Closures_Controller`; then phpcs, phpstan, lane-coverage compare, `git diff --check`, the full suite once. Mutation checks: revert `COUNTING_STATUSES` → §4.1's first pin fails; revert the `$closing` flag → the `on-hold` close pin fails; remove the status-changed entry point → the paid-status-only gateway pin fails; revert `is_voidable()` → §4.6's first pin fails; revert the `source_id` identity → the two-sales pin fails.
 
-## 5. PR 3 — command idempotency and revision (rules 5, 6a)
+## 5. PR 3 — command idempotency and revision (rules 5, 6a; `feat/adr-0040-3`)
 
-- `command_id` (uuid) required on `intent`, `capture`, `void`, `refund`, `cancel`, `submit`, `close`; `record` and the webview mint use the row id. Row-level commands store `commands[id] = { fingerprint, outcome }` on the row, never evicted; row-less commands (`submit`, `cancel`, `close`) store in the order-level `_wcpos_commands` map (already in §3.3's list). Same id + same fingerprint replays the outcome; same id + different body → 422 `wcpos_command_conflict`; same id in flight → 409 `wcpos_payment_locked`.
-- `revision` on every money command = `Order_Serializer::canonical_revision()` of the order document the till holds (the push lane's hash). Replay lookup first; a fresh command with a stale revision → 409 `wcpos_revision_stale` with `currentRevision`. The hash already covers `meta_data` (so `_wcpos_payments` moves it) and `date_paid`/`status`; PR 3 pins that a `record` moves the revision a later push compares against, and that the hash excludes `date_modified` (already true).
+Ground truth read from `origin/next` at `0ccfe87e` (2026-10-20). What exists: `record` replays by row id (`Ledger::replay()` compares `method_id`, `amount` minus tip, `currency`, `register_id` when a uuid; a mismatch is 409 `wcpos_payment_conflict`); `intent` replays by row id and **resumes** a still-pending leg at the provider; `refund` replays by `refund_id` on the row; `submit` replays by `attempt_id` from the attempt history (`sent` / `settled` / `paid` / `recorded`, 409 for `cancelled` / `superseded`), the history capped at `ATTEMPTS_CAP` = 50; `capture`, `void`, `cancel` and `close` have no replay beyond what the row's state refuses (`wcpos_invalid_transition` on a second capture or void, `close` replaying a standing completion); no money route reads a revision. Every route body runs inside `Order_Lock::with_lock()`, which answers 409 `wcpos_payment_locked` when the lock cannot be taken within five seconds. The push lane's revision is `Order_Serializer::canonical_revision()` over the bare wc/v3 document read through `Product_Serializer::dispatched_bare_read( '/wc/v3/orders/{id}', ['dp' => '6'] )` (`Order_Writer::document()`), scoped to the wc/v3 schema keys minus `date_created*` / `date_modified*`, with `meta_data` hashed as an id-less set (`Revision::canonical_meta()`). Pro's `next` calls `Ledger::refund()` (two sites) and `Ledger::void()` (one) with no command; every signature change below is an optional trailing parameter.
+
+### 5.1 The command envelope
+
+Every body on the route family except the status poll carries two more fields:
+
+| Field | Type | Required on | Missing or invalid |
+|---|---|---|---|
+| `command_id` | uuid (lower-cased) | `intent`, `capture`, `void`, `refund`, `cancel`, `submit`, `close` | 400 `rest_invalid_param` |
+| `revision` | string (`sha256:…`) | the seven above **and** `record` | 428 `wcpos_revision_required` (the push lane's `woo_rxdb_sync_revision_required` is 428 too) |
+
+`record` has no `command_id`: its row id is the command id (ADR rule 5); one sent is ignored. The webview mint is not a route and carries neither. `GET …/payments/{uuid}/status` is a poll, not a command: it takes no `command_id` and no `revision`, and nothing it applies is a till command (the provider's answer is the fact). A `provenance` object (PR 2) stays where it is and is part of the body fingerprint.
+
+**Fingerprint.** `Command_Log::fingerprint( array $body ): string` = `'sha256:' . hash( 'sha256', wp_json_encode( Revision::canonicalize( $body minus command_id, revision ) ) )`: sorted keys at every depth, values as sent (a till retries the bytes it sent; `10` and `"10.00"` are different bodies). For `submit`, `attempt_id` and `values` are in the body and so in the fingerprint; for `refund`, `refund_id` and `amount`; for `intent`, `payment` and `context`; for `capture`, `context`; for `void`, `reason`; for `cancel`, `attempt_id` and `reason`; for `close`, `provenance` alone.
+
+### 5.2 Where an outcome is kept (rule 5)
+
+No new table, no new option. Two maps, both already in `Pos_Order_Audit::SERVER_MONEY_META_KEYS` (§3.3) so a push cannot write them:
+
+- **Row-level** (`intent`, `capture`, `void`, `refund`): `row['commands'][ command_id ] = { fp, kind, ref, at_gmt }` where `ref` is the `refund_id` for a refund and `null` otherwise. `normalize_row()` keeps `commands` as an array (default `array()`); `to_wire()` drops it (it is server bookkeeping, not a field the till reads); `RECORD_INPUT_KEYS` already excludes it so a client cannot seed it. **Never evicted** while the row exists: one entry per distinct command id, no `EVENTS_MAX`-style slice.
+- **Order-level** (`submit`, `cancel`, `close`): `_wcpos_commands` = `{ command_id: { fp, kind, ref, outcome, at_gmt } }` where `ref` is the attempt id (`submit`, `cancel`) or the completion id the close produced (`null` when none stood), and `outcome` is the submit's wire outcome (`sent` / `settled` / `recorded`) so the replay survives the attempt history's `ATTEMPTS_CAP` eviction. Never evicted for the order's lifetime; `ATTEMPTS_CAP` stays (the history is a fate index, the map is the command record).
+
+**An entry is written only for a command that changed the order, in the same save as its effect**: the row transition (`capture`, `void`), the allocation (`refund`), the pre-dispatch row save (`intent`: the entry rides the `pending` row persisted before the provider is asked, so a lost answer still records the command and the retry resumes), the attempt's `sent` save before `process_payment()` (`submit`: removed again by `restore_method()` when a definite failure cancels the attempt, in that same save), the cancel's `update_status()` save (`cancel`: staged with `update_meta_data()` before it), and the completion's closing save (`close`: the completion id exists only after `payment_complete()` has run, so `close()` stages the entry on the fresh re-read it already makes and saves it under `Ledger::saving()`; a crash between the two saves leaves a standing completion with no entry, and the retry's fresh command meets the revision check, re-reads, and `close` replays the standing completion as today). A refusal that changed nothing (400/404 validation, 409 lock, `wcpos_balance_outstanding`, `wcpos_payment_in_flight`, a determinate provider refusal that deleted the intent row, a provider error on capture) **stores nothing**: the retry runs again. That is the ADR's consequences paragraph applied: no stored failure can poison a later honest retry, and nothing has to be swept. `record`'s refused-row path (`failed` row with `failure_reason`) is already its own stored outcome and is unchanged.
+
+**Same id, same fingerprint** replays: `capture`, `void` → `{ payment: row, order, revision }` from the row as it now stands; `refund` → `{ payment: row, revision }`; `cancel` → `{ order, revision }`; `close` → `{ order, completion: { n, id } from the history entry whose id is ref (null when ref is null or the entry is gone), revision }`; `submit` → `{ outcome: entry.outcome, payment: the row with id ref or null, order, revision }`; `record` and `intent` are **called through** (their row-id replay is the stored outcome: `record()` compares the immutable fields, `intent()` resumes a pending leg at the provider or returns the settled row, exactly as today). No provider is called by a replay except the intent resume, which is keyed on the row id at the provider (§4.3 of the hardening spec) and is the designed recovery of a lost handoff.
+
+**Same id, different fingerprint** → 422 `wcpos_command_conflict`, data `{ status: 422, command_id, kind }`, nothing written, no provider call. `record`'s mismatched replay moves from 409 `wcpos_payment_conflict` to the same 422 (data keeps `payment`: the stored row), so one code means one thing across the family (§7 decision 12). `submit`'s `cancelled` / `superseded` refusal keeps 409 `wcpos_payment_conflict`: that is a *state* conflict (the till undid the attempt), not a body conflict.
+
+**Same id in flight** → 409 `wcpos_payment_locked`: the route lock, already pinned per route (`test_every_order_route_obeys_lock`). Nothing is persisted as "in flight" (an in-flight marker that outlives a crashed request is the poison lane the ADR rejects); `intent`'s and `submit`'s pre-dispatch saves are the rule-7 two-save shape, not a marker.
+
+A command id is scoped to its order: the same uuid on two orders is two commands.
+
+### 5.3 Revision (rule 6a)
+
+`Order_Serializer::current_state( int $order_id ): array{ document: array, revision: string }` does the bare read `Order_Writer::document()` does (`dispatched_bare_read( '/wc/v3/orders/' . $id, ['dp' => '6'] )` plus `add_pos_links()`) and hashes it with `canonical_revision()`. `Write_Controller::revision_for()` is untouched; a pin proves the two agree (5.6 #5). It is only ever called under the route lock.
+
+Order of checks in `Payments_Controller`, inside `with_lock()` after `get_order()` and before any ledger call:
+
+1. Parse `command_id` (400) and `revision` (428) per 5.1; compute the fingerprint.
+2. **Replay lookup first** (ADR rule 6): `record` → the row with `payment.id` exists; `intent` → the row's map has the id **or** the URL row exists (a new command id on an existing row is still that row's replay, since the row id is what the provider keys on); the other five → the row map or the order map has the id. A hit with the same fingerprint answers per 5.2 and **skips the revision compare** (a retry carries the revision from before its own effect). A hit with another fingerprint is the 422.
+3. **Fresh command**: `current_state()`; `revision !== current.revision` → 409 `wcpos_revision_stale`, data `{ status: 409, currentRevision, current: document, order: summary }` (the push lane's conflict shape plus the summary), nothing written.
+4. Run the command, passing `$command = [ 'id' => …, 'fp' => … ]` to the ledger or submission (optional trailing parameter, default `array()`: Pro's callers and the webview mint pass none and store nothing).
+5. Every 2xx answer, replay included, gains top-level `revision` = `current_state()` after the command, so the till can chain `record` → `close` without a pull. The status poll returns none.
+
+The hash already covers `meta_data` (`_wcpos_payments`, the index rows, the live-leg key, `_wcpos_commands`, `_wcpos_completions`) and `status` / `date_paid` / `payment_method`, and excludes `date_modified*`, so a money command moves the revision a later push compares against (pinned, 5.6 #5 and #6) and a no-op save does not (5.6 #7). An offline cash row recorded against the revision the till held and replayed after an unrelated server-side edit is a replay by row id: one row (5.6 #16). A fresh offline row carrying a stale revision is refused so the till re-reads and re-sends with the same row id (5.6 #17); the cash is in the drawer either way and the row id is the identity, so the re-send creates one row.
+
+### 5.4 Signatures
+
+```php
+// includes/Payments/Contract/Command_Log.php (new, final, static)
+public const ROW_KINDS   = array( 'intent', 'capture', 'void', 'refund' );
+public const ORDER_KINDS = array( 'submit', 'cancel', 'close' );
+public const META_KEY    = '_wcpos_commands';
+public static function fingerprint( array $body ): string;
+public static function entry( string $fp, string $kind, $ref = null, ?string $outcome = null ): array;   // + at_gmt
+public static function on_row( array $row, string $command_id ): ?array;
+public static function with_on_row( array $row, string $command_id, array $entry ): array;              // returns the row
+public static function on_order( WC_Order $order, string $command_id ): ?array;
+public static function remember( WC_Order $order, string $command_id, array $entry ): void;              // stages meta; caller saves
+public static function forget( WC_Order $order, string $command_id ): void;                             // submit's definite failure
+
+// Ledger — optional trailing parameter on each; array() stores nothing
+public function intent( WC_Order $order, string $id, array $input, array $context, array $command = array() );
+public function capture( WC_Order $order, string $id, array $context, array $command = array() );
+public function void( WC_Order $order, string $id, string $reason, array $command = array() );
+public function refund( WC_Order $order, string $id, int $refund_id, string $amount, array $command = array() );
+public function close( WC_Order $order, array $command = array() );
+public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true, array $command = array() ); // capture/void ride the result save
+
+// Gateway_Submission
+public static function submit( WC_Order $order, array $descriptor, string $attempt_id, array $values, array $command = array() );
+public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason, array $command = array() );
+
+// Order_Serializer
+public static function current_state( int $order_id ): array;   // { document, revision }
+```
+
+`Payments_Controller` gains one private `envelope( WP_REST_Request $request, string $kind ): array|WP_Error` (parse + fingerprint), one private `replay( WC_Order $order, string $kind, array $entry, WP_REST_Request $request )` (the 5.2 answers), one private `stale( WC_Order $order, string $revision )` (the compare), and `with_revision( $response, int $order_id )`; every handler calls them in the 5.3 order. The route-level lock, provenance context and fiscal recovery wrapper are unchanged.
+
+### 5.5 Files PR 3 touches and budget
+
+`includes/Payments/Contract/Command_Log.php` (new, ~130), `includes/API/V2/Payments_Controller.php` (~+150), `includes/Payments/Contract/Ledger.php` (~+60: parameters, entry writes in `intent()`'s pre-dispatch save, `apply_result()`, `refund()`'s allocation save, `close()`'s closing save; `to_wire()` strip; `replay()` 422), `includes/Payments/Contract/Gateway_Submission.php` (~+30), `includes/Sync/Order_Serializer.php` (~+20), `includes/API/V2/README.md` (the route table: envelope, codes, `revision` in answers). Budget **≤ 450 lines** in `includes/`. No schema, option, table or column; no new hook.
+
+Tests: `tests/includes/API/V2/Test_Payments_Controller.php` (helpers `record()`, `void()`, `close()` and the intent/capture/refund calls gain `command_id` + a fresh `revision` from `Order_Serializer::current_state()`; new pins below), `tests/includes/API/V2/Test_Gateway_Submission.php` (+`_HPOS`; `submit()` / `cancel()` helpers likewise), `tests/includes/Sync/Test_Rest_Dispatch_Money_Model.php` (+`_HPOS`), `tests/includes/Payments/Contract/Test_Ledger.php`, and every other class that dispatches a money route (`Test_Settlement`, `Test_Completion_Stamp`, `Test_Refund_Session_Binding`, `Test_Fiscal_Record_Writers`): their requests gain the envelope through a shared trait `tests/Helpers/Money_Route_Envelope.php` (`envelope( WC_Order $order, array $body = array() ): array` adding a fresh uuid and the current revision). The existing bodies of those tests do not change meaning.
+
+### 5.6 Pins (failing first; `assertSame`; storage through `read_meta()` on a fresh `wc_get_order()`)
+
+`Test_Payments_Controller` unless stated. `Route_Handler` counts provider `capture()` / `refund()` calls.
+
+1. `test_capture_replay_with_the_same_command_and_body_answers_the_captured_row_with_a_stale_revision` — intent (c0), capture (c1, revision r1 read before the capture) → 200 captured; capture again with c1, same body, r1 → 200, same row id and status, `revision` in both answers equal, provider capture count 1, one `commands` entry on the row in storage.
+2. `test_capture_replay_with_the_same_command_and_a_different_body_is_422` — c1 again with another `context` → 422 `wcpos_command_conflict`, data `command_id` = c1, `kind` = `capture`; row unchanged; provider count 1.
+3. `test_a_fresh_command_with_a_stale_revision_is_409_with_the_current_revision_and_document` — record cash with r0 (moves the revision); void a second pending row with a new command id and r0 → 409 `wcpos_revision_stale`, `currentRevision` === `Order_Serializer::current_state()['revision']`, `current['id']` is the order, row still pending; the same void with `currentRevision` → 200.
+4. `test_money_commands_require_a_command_id_and_a_revision` (data provider over the seven routes + `record` for revision only) — no `command_id` → 400 `rest_invalid_param`; a non-uuid → 400; no `revision` → 428 `wcpos_revision_required`; nothing written for any.
+5. `Test_Rest_Dispatch_Money_Model(+HPOS)::test_a_record_moves_the_revision_a_later_push_compares_against` — `baseRevision` b0 from a pull read (`_rxdb_revision`); record cash → 200 with `revision` r1 ≠ b0; a customer-note push with b0 → 409 `woo_rxdb_sync_conflict`, `currentRevision` === r1; the same push with r1 → 200. (Also proves `current_state()` agrees with `Write_Controller::revision_for()`.)
+6. `test_a_void_of_a_pending_row_moves_the_revision` — status stays `pos-open`; `current_state()['revision']` before ≠ after; the void's answer carries the new one.
+7. `test_the_revision_excludes_date_modified` — read r; `$order->set_date_modified( time() + 60 ); $order->save()`; r unchanged.
+8. `Test_Gateway_Submission(+HPOS)::test_submit_that_returned_sent_replays_sent_from_the_command_map_with_a_stale_revision` — submit c1 r0 → 200 `sent`, gateway `process_payment` count 1; submit c1 same body r0 → 200 `sent`, count 1, one `sent` note; then delete `_wcpos_gateway_attempts` from storage (the eviction case) and submit c1 r0 again → 200 `sent`, count 1.
+9. `Test_Gateway_Submission::test_submit_replay_with_a_different_body_is_422` — c1 with other `values` → 422, count 1, stamp unchanged.
+10. `Test_Gateway_Submission::test_a_definite_gateway_failure_stores_no_command_so_the_retry_dispatches` — gateway refuses (notice) on c2 → 502 `wcpos_provider_error`; `_wcpos_commands` has no c2; c2 again → the gateway runs again (count 2).
+11. `Test_Gateway_Submission::test_cancel_replays_from_the_command_map` — cancel c3 → 200; cancel c3 with r-before-cancel → 200 `{ order, revision }`, status `pos-open`, note count unchanged, history `cancelled`.
+12. `test_close_replays_its_completion_with_a_stale_revision` — close c4 r1 → 200 completion `{1, id}`; close c4 r1 → 200 same `{1, id}`, one history entry, one `_wcpos_commands` entry with `ref` = id; `wcpos_sale_completed` fired once.
+13. `test_close_with_a_fresh_command_and_a_stale_revision_is_409` — close c5 r1 after #12 → 409 `wcpos_revision_stale`; with the current revision → 200 replaying completion 1 (today's standing-completion replay), no new entry.
+14. `test_refund_replay_allocates_once_and_a_different_amount_is_422` — refund c6 `10.00` → one allocation, provider refund count 1; c6 again (stale revision) → 200, same allocation, count 1; c6 with `20.00` → 422; a **new** command id with the same `refund_id` and current revision → 200 the same row, count 1 (the by-refund_id replay stays).
+15. `test_intent_replay_with_the_same_command_resumes_the_leg_and_a_different_body_is_422` — intent c7 → pending + handoff; c7 again, stale revision → 200 with a handoff (resumed), one row; c7 with another `payment.amount` → 422, one row.
+16. `test_an_offline_cash_record_replayed_after_the_revision_moved_creates_one_row` — record row X (`recorded_offline: true`) r0 → 200; `$order->set_customer_note('late'); save` (revision moves); record X again with r0 → 200, same row, `read_meta()` ledger has one row.
+17. `test_a_fresh_offline_cash_record_with_a_stale_revision_is_refused_so_the_till_re_reads` — after the note edit, record row Y with r0 → 409 `wcpos_revision_stale`; no row; record Y with `currentRevision` → 200, one row Y.
+18. `test_record_conflicting_replay_is_422_command_conflict` — renamed from `test_record_conflicting_replay_returns_409_conflict`: same row id, other amount → 422 `wcpos_command_conflict`, data `payment` is the stored row.
+19. `test_the_status_poll_takes_no_envelope` — GET status with neither field → 200, answer has no `revision` key.
+20. `test_command_entries_stay_out_of_the_wire_and_in_storage` — after #1 and #12: no `payment.commands` key in any answer; `read_meta()` shows `commands` on the captured row and `_wcpos_commands` with the close; `Test_Rest_Dispatch_Money_Model`'s every-key push pin (§3.3) already proves a push cannot touch either.
+21. `Test_Ledger::test_refund_and_void_without_a_command_store_no_entry` — `Ledger::instance()->refund( … )` and `->void( … )` called as Pro does (no fifth argument) → the row has `commands` = `[]`.
+22. `test_the_same_command_while_the_order_lock_is_held_is_409_locked` — folded into `order_actions()` of `test_every_order_route_obeys_lock` (adds `close` if absent): the envelope present, a second `Order_Lock` holding → 409 `wcpos_payment_locked`.
+
+### 5.7 Verification order for PR 3
+
+`Test_Payments_Controller`, `Test_Gateway_Submission` (+`_HPOS`), `Test_Rest_Dispatch_Money_Model` (+`_HPOS`), `Test_Ledger`, `Test_Ledger_Sole_Writer`, `Test_Settlement`, `Test_Completion_Stamp` (+`_HPOS`), `Test_Refund_Session_Binding`, `Test_Fiscal_Record_Writers`, `Test_Write_Controller`, `Test_Order_Lock`, `Test_Webview_Passthrough`, `Test_Payments_Sweeper`; then phpcs on every changed `includes/` file, phpstan, lane-coverage compare against the `origin/next` baseline, `git diff --check`, the full suite once.
 
 ## 6. PR 4 and PR 5
 
@@ -306,3 +421,7 @@ PR 4: the refund allocation is written `pending` with its `command_id` before `p
 9. **The sale record's signed adjustment lives in the payload** (§4.7): the closure `adjustments` counters are ruled in the wiki and not built on `next`; building them is a closure-fold item, not PR 2's.
 10. **Pro's `Refund_Processor` reads an authorization-only order as a pre-ledger sale** after D6 (§4.1) and would fall through to its gateway refund dispatch, which the provider refuses on an uncaptured authorization. Nothing is charged; the tidy-up (an `authorized` row means "nothing to refund") is a Pro PR, not this one.
 11. **`wcpos_sale_completed` is the fiscal sale trigger** (§4.7), replacing `woocommerce_payment_complete` in `Fiscal_Record_Writers`. A completion the stamp does not write (a storefront payment) therefore writes no sale, which is the ADR's "completed through a register" condition made mechanical; a fiscal row whose completion was reopened before the row landed is left to the human the failure note already named.
+12. **`record`'s mismatched replay becomes 422 `wcpos_command_conflict`** (§5.2), replacing its 409 `wcpos_payment_conflict`: a same-id-different-body answer is one code across the family. `wcpos_payment_conflict` stays for the state conflicts (`submit` on a cancelled or superseded attempt, a live payment already on the order). No shipped client speaks the 409 (D1).
+13. **A refusal that changed nothing stores no command outcome** (§5.2): a provider decline, a lock timeout, a balance refusal or a validation error leaves no entry, so the same command id retried runs again. The alternative (storing every answer, Stripe-style) would replay a transient provider outage forever and needs an expiry the ADR's consequences paragraph argues against. The one stored refusal is `record`'s failed row, which exists today.
+14. **Every 2xx money answer carries `revision`** (§5.3), the canonical revision after the command, so the till chains `record` → `close` without a pull. It costs one bare wc/v3 read per command on top of the one the compare already needs; the status poll, which is called every few seconds during a card payment, carries neither field and returns no revision.
+15. **`revision` is required on `record` too** (§5.1): an offline cash row arriving against a stale revision is refused and re-sent by the till with the same row id (one row), rather than accepted blind. The ADR's "offline cash rows replay days later and create one row" is the replay-by-row-id case (5.6 #16), which the revision never blocks.
