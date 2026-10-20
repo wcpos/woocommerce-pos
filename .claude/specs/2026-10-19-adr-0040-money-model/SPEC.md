@@ -299,7 +299,7 @@ Every body on the route family except the status poll carries two more fields:
 | `command_id` | uuid (lower-cased) | `intent`, `capture`, `void`, `refund`, `cancel`, `submit`, `close` | 400 `rest_invalid_param` |
 | `revision` | string (`sha256:…`) | the seven above **and** `record` | 428 `wcpos_revision_required` (the push lane's `woo_rxdb_sync_revision_required` is 428 too) |
 
-`record` has no `command_id`: its row id is the command id (ADR rule 5); one sent is ignored. The webview mint is not a route and carries neither. `GET …/payments/{uuid}/status` is a poll, not a command: it takes no `command_id` and no `revision`, and nothing it applies is a till command (the provider's answer is the fact). A `provenance` object (PR 2) stays where it is and is part of the body fingerprint.
+`record` has no `command_id`: its row id is the command id (ADR rule 5) and its whole body is the fingerprint (stored on the row it creates, refused rows included, after PR review); one sent is ignored. The webview mint is not a route and carries neither. `GET …/payments/{uuid}/status` is a poll, not a command: it takes no `command_id` and no `revision`, and nothing it applies is a till command (the provider's answer is the fact). A `provenance` object (PR 2) stays where it is and is part of the body fingerprint.
 
 **Fingerprint.** `Command_Log::fingerprint( string $kind, string $target, array $body ): string` = `'sha256:' . hash( 'sha256', wp_json_encode( Revision::canonicalize( [ 'kind' => $kind, 'target' => $target, 'body' => $body minus command_id, revision ] ) ) )`: the route (`kind`), what it addresses (`target`: the payment uuid for a row command, the method id for `submit` / `cancel`, `''` for `close`), and the body with sorted keys at every depth and values as sent (a till retries the bytes it sent; `10` and `"10.00"` are different bodies). A command id reused on another route or another row is therefore a different fingerprint, and a 422. For `submit`, `attempt_id` and `values` are in the body and so in the fingerprint; for `refund`, `refund_id` and `amount`; for `intent`, `payment` and `context`; for `capture`, `context`; for `void`, `reason`; for `cancel`, `attempt_id` and `reason`; for `close`, `provenance` alone.
 
@@ -408,6 +408,16 @@ Tests: `tests/includes/API/V2/Test_Payments_Controller.php` (helpers `record()`,
 29. `test_a_fresh_intent_on_an_existing_row_with_a_stale_revision_is_409` — intent c1 creates pending P; a customer-note edit; intent on P under new c2 with the old revision → 409 `wcpos_revision_stale`, provider intent count unchanged, P still pending; c2 with `currentRevision` → 200, the resume.
 30. `test_a_close_entry_without_its_ref_replays_the_standing_completion` — close c4 → completion `{1, id}`; the stored entry's `ref` set to null (the crash state); close c4 with the stale revision → 200 naming completion 1, one history entry, one `wcpos_sale_completed`; and `test_a_close_entry_is_stored_with_the_completion_before_its_ref_is_known` — every write of the map that names a completion fails → the entry is stored with `ref` null and its replay names completion 1.
 22. `test_the_same_command_while_the_order_lock_is_held_is_409_locked` — folded into `order_actions()` of `test_every_order_route_obeys_lock` (adds `close` if absent): the envelope present, a second `Order_Lock` holding → 409 `wcpos_payment_locked`.
+
+After PR review (Codex round 1 on #2355), five more pins, all in `Test_Payments_Controller` unless stated:
+
+31. `test_an_intent_that_fails_determinately_on_resume_keeps_no_entry` — first intent indeterminate (entry on the pending row), retry declined outright → row failed and the entry removed in the same save; the same id with the old revision → 409 `wcpos_revision_stale`; with the current one → 200, row failed.
+32. `test_record_with_the_same_row_id_and_another_body_is_422` (+ the `provenance` variant, + a record naming an intent-created row's id with matching money → 422 and the handler not called, + a refused record replayed with the old revision → the same 409 `wcpos_order_already_paid`, one failed row). `Command_Log::find()` answers kind `row` (fp null) only for a row with no entry of its own (gateway mint, webview, adopted, pre-PR-3), so any command reusing such an id is 422.
+33. `test_a_command_whose_answer_revision_cannot_be_read_is_an_error_and_its_retry_replays` — the post-command inner read fails → the command's error is answered, its effect and entry stand; the replay → 200 with `revision`.
+34. `test_a_close_whose_entry_is_not_stored_is_a_retryable_conflict` — `remember_close()` re-reads storage and verifies fingerprint and ref, else throws `Ledger_Persistence_Exception` (409 `woo_rxdb_sync_record_locked`); the completion stands and the retry replays it.
+35. `Test_Fiscal_Record_Writers`: tender rows enter fiscal payloads (void `row` / `voided_row`, late-sale `tender_rows`) without `commands`.
+
+Also from CodeRabbit: a new order's rows lose a client-seeded `commands` map like their event history (`test_order_save_preserves_server_event_history`, both lanes).
 
 ### 5.7 Verification order for PR 3
 
