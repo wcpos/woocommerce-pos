@@ -44,9 +44,6 @@ class Products {
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_action( 'woocommerce_product_set_stock', array( $this, 'product_set_stock' ) );
-		add_action( 'woocommerce_variation_set_stock', array( $this, 'product_set_stock' ) );
-
 		$pos_only_products = Settings::instance()->pos_only_products_enabled();
 
 		if ( $pos_only_products ) {
@@ -74,24 +71,6 @@ class Products {
 			add_filter( 'woocommerce_stock_amount', 'floatval' );
 			add_action( 'woocommerce_before_product_object_save', array( $this, 'save_decimal_quantities' ) );
 		}
-	}
-
-	/**
-	 * Bump modified date on stock change.
-	 * - variation->id = parent id.
-	 *
-	 * @param WC_Product $product The product object.
-	 */
-	public function product_set_stock( WC_Product $product ): void {
-		$post_modified     = current_time( 'mysql' );
-		$post_modified_gmt = current_time( 'mysql', true );
-		wp_update_post(
-			array(
-				'ID'                => $product->get_id(),
-				'post_modified'     => $post_modified,
-				'post_modified_gmt' => $post_modified_gmt,
-			)
-		);
 	}
 
 	/**
