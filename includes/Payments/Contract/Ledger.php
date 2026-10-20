@@ -1184,24 +1184,23 @@ class Ledger {
 		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole, with the command's entry.
 		$answer = current( array_filter( $row['refunds'], static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
 		// Not derived in the same save: a settle attempt that misses must not have completed the sale (rule 3).
-		if ( ! $this->persist( $order, $rows, $row, false, fn( ?array $stored ) => $this->reserved( $stored, $answer, $entry ) ) ) {
+		$settled = fn( ?array $stored ): bool => $this->reserved( $stored, $answer, $entry );
+		if ( ! $this->persist( $order, $rows, $row, false, $settled ) ) {
 			return $strand( 'its settle did not land' );
 		}
-		$unstored = null;
-		try {
-			// The allocation has landed; derive on its own save, as Payments_Sweeper::run() does.
+		// The allocation has landed; derive on its own save, as Payments_Sweeper::run() does.
+		$derive = function () use ( $order ): ?string {
 			$this->derive( $order, $this->read( $order ) );
 			if ( $order->get_changes() ) {
 				self::saving( $order->get_id(), fn() => $order->save() );
 			}
-			$derived  = wc_get_order( $order->get_id() );
-			$unstored = $derived instanceof WC_Order && $derived->get_status() === $order->get_status() ? null : 'the derived status was not stored';
-		} catch ( \Throwable $error ) {
-			$unstored = $error->getMessage();
-		}
-		if ( null !== $unstored ) {
-			// The refund is settled; the next money command or `close` re-derives (rule 1).
-			$this->report( $order, sprintf( 'WCPOS refund #%d settled on order #%d, but deriving the order failed: %s', $refund_id, $order->get_id(), $unstored ), false );
+			$derived = wc_get_order( $order->get_id() );
+			return $derived instanceof WC_Order && $derived->get_status() === $order->get_status() ? null : 'the derived status was not stored';
+		};
+		if ( ! $this->after_settle( $order, $rows, $row, $settled, $derive ) ) {
+			// The provider settled it: no hook for an outcome storage does not hold, and a human is told.
+			$this->mark( $order, $row, $reserve, 'the provider settled it, but storage will not keep the settled allocation' );
+			return $row;
 		}
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
@@ -1249,6 +1248,31 @@ class Ledger {
 	}
 
 	/**
+	 * Every save refund() makes once its settle has landed runs through here: the save inside a
+	 * Throwable guard (a failure is a warning; the next money command or `close` re-derives,
+	 * rule 1), then storage must still hold the settled row, re-persisted with derive off when
+	 * a save lost it.
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param array    $rows    Payment rows as read.
+	 * @param array    $row     The settled row.
+	 * @param callable $settled Whether a stored row holds the settle (allocation whole, entry).
+	 * @param callable $save    The save; returns why it did not land, or null.
+	 * @return bool Whether storage holds the settled row.
+	 */
+	private function after_settle( WC_Order $order, array $rows, array $row, callable $settled, callable $save ): bool {
+		try {
+			$failed = $save();
+		} catch ( \Throwable $error ) {
+			$failed = $error->getMessage();
+		}
+		if ( null !== $failed ) {
+			$this->report( $order, sprintf( 'WCPOS refund settled on order #%d, payment %s, but a save after it failed: %s', $order->get_id(), $row['id'], $failed ), false );
+		}
+		return $settled( $this->stored_row( $order->get_id(), $row['id'] ) ) || $this->persist( $order, $rows, $row, false, $settled );
+	}
+
+	/**
 	 * One row as storage holds it; null when absent or unreadable.
 	 *
 	 * @param int    $order_id Order id.
@@ -1279,7 +1303,7 @@ class Ledger {
 	 * @param string      $cause   What happened.
 	 */
 	private function strand( WC_Order $order, array $rows, array $held, array $reserve, ?string $entry, string $cause ): array {
-		$this->mark( $order, $held, $reserve, $cause );
+		$this->mark( $order, $held, $reserve, $cause . '; the allocation stays pending until it is confirmed with the provider' );
 		$kept = fn( ?array $stored ): bool => $this->reserved( $stored, $reserve, $entry );
 		if ( $kept( $this->stored_row( $order->get_id(), $held['id'] ) ) || $this->persist( $order, $rows, $held, false, $kept ) ) {
 			return $this->stored_row( $order->get_id(), $held['id'] ) ?? $held;
@@ -1330,13 +1354,13 @@ class Ledger {
 	private function withdraw( WC_Order $order, array $rows, array $row, array $reserve, ?string $entry, WP_Error $answer ): WP_Error {
 		$gone = static fn( ?array $stored ): bool => null !== $stored && ! array_filter( $stored['refunds'] ?? array(), static fn( $kept ) => (int) ( $kept['id'] ?? 0 ) === $reserve['id'] ) && ( null === $entry || ! isset( $stored['commands'][ $entry ] ) );
 		if ( ! $this->persist( $order, $rows, $row, false, $gone ) ) {
-			$this->mark( $order, $row, $reserve, 'it was refused (' . $answer->get_error_code() . '), but its reservation could not be withdrawn', false );
+			$this->mark( $order, $row, $reserve, 'it was refused (' . $answer->get_error_code() . '), but its reservation could not be withdrawn; the allocation stays pending until it is confirmed with the provider', false );
 		}
 		return $answer;
 	}
 
 	/**
-	 * Mark a refund allocation that stands `pending` for a human: an error log line and an order
+	 * Mark a refund outcome storage does not hold as it should, for a human: an error log line and an order
 	 * note (a comment row, written by its own query, so it survives an order save that did not land).
 	 *
 	 * @param WC_Order $order   Order object.
@@ -1346,7 +1370,7 @@ class Ledger {
 	 * @param bool     $sent    Whether the provider was (or may have been) asked; false for a refusal whose withdrawal did not land.
 	 */
 	private function mark( WC_Order $order, array $row, array $reserve, string $cause, bool $sent = true ): void {
-		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s; the allocation stays pending until it is confirmed with the provider.', $reserve['id'], $reserve['amount'], $order->get_id(), $row['id'], $cause ) );
+		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s.', $reserve['id'], $reserve['amount'], $order->get_id(), $row['id'], $cause ) );
 		if ( $sent ) {
 			/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
 			$note = __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' );

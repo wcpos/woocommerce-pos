@@ -3649,6 +3649,55 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
+	/** #2362 review: a derive save after a landed settle that strips the allocation and entry is repaired before the hook fires. */
+	public function test_a_derive_save_that_strips_the_settled_allocation_is_repaired(): void {
+		// Arrange: count the order's saves after the provider call; strip the refund and every command entry on the
+		// saves derive() makes (payment_complete() inside Ledger::is_deriving()), leaving the status they carry.
+		list( $order, $row, $refund ) = $this->reopened_sale_owing_twenty();
+		$command   = $this->refund_command();
+		$order_id  = $order->get_id();
+		$refund_id = $refund->get_id();
+		$after     = 0;
+		$stripped  = array();
+		$strip     = static function ( $saving ) use ( $order_id, $refund_id, &$after, &$stripped ): void {
+			if ( ! $saving instanceof \WC_Order || $saving->get_id() !== $order_id || 0 === Refund_Answer_Handler::$calls ) {
+				return;
+			}
+			++$after;
+			if ( ! Ledger::is_deriving( $order_id ) ) {
+				return;
+			}
+			$stripped[] = $after;
+			$value      = json_decode( (string) $saving->get_meta( Ledger::META_KEY, true ), true );
+			foreach ( $value['payments'] as &$payment ) {
+				$payment['refunds']  = array_values( array_filter( $payment['refunds'] ?? array(), static fn( $allocation ) => (int) $allocation['id'] !== $refund_id ) );
+				$payment['commands'] = array();
+			}
+			unset( $payment );
+			$saving->update_meta_data( Ledger::META_KEY, wp_json_encode( $value ) );
+		};
+		add_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$seen = array();
+		$this->listen_allocated( $refund_id, $seen );
+
+		// Act.
+		$result = Ledger::instance()->refund( $order, $row['id'], $refund_id, '20.00', $command );
+		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
+		$stored = $this->stored_row_of( $order_id, $row['id'] );
+		$again  = Ledger::instance()->refund( wc_get_order( $order_id ), $row['id'], $refund_id, '20.00', $this->refund_command() );
+
+		// Assert: save 1 after the call is the settle, save 2 is derive()'s payment_complete() save, save 3 the re-persist.
+		$this->assertSame( array( 2 ), $stripped );
+		$this->assertSame( 3, $after );
+		$this->assertSame( 'succeeded', $this->allocations_of( $result, $refund_id )[0]['status'] );
+		$this->assertSame( 'succeeded', $this->allocations_of( $stored, $refund_id )[0]['status'] );
+		$this->assertArrayHasKey( $command['id'], $stored['commands'] );
+		$this->assertTrue( wc_get_order( $order_id )->is_paid() );
+		$this->assertSame( array( 'succeeded' ), $seen );
+		$this->assertIsArray( $again );
+		$this->assertSame( 1, Refund_Answer_Handler::$calls );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
 		// Arrange: a cash row already projected onto a completed sale, so the derive after the settle moves nothing.
