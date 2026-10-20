@@ -2261,7 +2261,8 @@ class Ledger {
 		$total = Money::minor( $order->get_total() );
 		// Covered on the signed balance: a refund allocated after an earlier completion is money
 		// that left, so gross captured money alone does not complete a reopened sale again.
-		// A close completes a zero total through payment_complete() the way WooCommerce's process_order_without_payment() does; a money write never does.
+		// A close completes a zero total through payment_complete(), the way WooCommerce's
+		// process_order_without_payment() does; a money write never does.
 		if ( ( $total > 0 || $closing ) && $this->signed_balance( $order, $rows ) <= 0 ) {
 			if ( 0 === self::$deriving ) {
 				self::$deriving = $order->get_id();
