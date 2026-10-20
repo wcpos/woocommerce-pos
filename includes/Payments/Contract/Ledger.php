@@ -1722,7 +1722,8 @@ class Ledger {
 	 * Close a sale (ADR 0040 rule 1, D2): move no money, re-derive, and complete it when the signed
 	 * balance covers the total, or the total is zero — the way a reopened sale is completed again
 	 * (completion n+1). A sale already paid replays its last completion. Refused while money is in
-	 * motion, and with `wcpos_balance_outstanding` when uncovered or the total is negative.
+	 * motion, with `wcpos_balance_outstanding` when uncovered or the total is negative, and
+	 * `wcpos_insufficient_stock` when prevent-overselling cannot hold the sale's stock.
 	 *
 	 * @param WC_Order $order   Order object, read under the route's order lock.
 	 * @param array    $command The till's command; its entry names the completion it answered.
@@ -1761,6 +1762,12 @@ class Ledger {
 					'order' => $this->summary( $order, $rows ),
 				)
 			);
+		}
+		// Prevent-overselling holds the sale's stock before it completes, as record and intent do (§4.8);
+		// a paid or stock-reduced order (a reopened sale) is skipped by validate_checkout().
+		$held = Stock_Validator::instance()->validate_checkout( $order );
+		if ( is_wp_error( $held ) ) {
+			return $held;
 		}
 		if ( ! empty( $command['id'] ) ) {
 			// Staged before the completion so the entry rides WooCommerce's own save; its ref is filled below.
