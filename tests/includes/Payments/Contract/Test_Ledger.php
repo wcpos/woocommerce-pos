@@ -3277,6 +3277,30 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $this->stranded_logs() );
 	}
 
+	/** §6.6 pin 6: a definite refusal withdraws the reservation and its entry, so the same command runs again. */
+	public function test_refund_the_provider_refuses_withdraws_the_reservation_and_the_entry(): void {
+		// Arrange.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		$command                      = $this->refund_command();
+		Refund_Probe_Gateway::$result = false;
+
+		// Act.
+		$error  = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $command );
+		$stored = $this->stored_row_of( $order->get_id(), $row['id'] );
+		Refund_Probe_Gateway::$result = true;
+		$retry = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '10.00', $command );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_provider_error', $error->get_error_code() );
+		$this->assertSame( 502, $error->get_error_data()['status'] );
+		$this->assertSame( array(), $this->allocations_of( $stored, $refund->get_id() ) );
+		$this->assertArrayNotHasKey( $command['id'], $stored['commands'] );
+		$this->assertSame( 'succeeded', $retry['refunds'][0]['status'] );
+		$this->assertSame( 2, Refund_Probe_Gateway::$calls );
+		$this->assertSame( array(), $this->stranded_notes( $order->get_id() ) );
+	}
+
 	/** §6.6 pin 9: Pro's shape, no command: two saves, the hook once with the settled allocation. */
 	public function test_refund_without_a_command_takes_two_saves_and_fires_the_hook_once(): void {
 		// Arrange: a cash row on a completed sale, so the settle's derive moves nothing.
@@ -3316,6 +3340,27 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 2, $saves );
 		$this->assertSame( array( 'succeeded' ), $seen );
 		$this->assertSame( array(), $this->stored_row_of( $order_id, $row['id'] )['commands'] );
+	}
+
+	/** §6.6 pin 10: a withdrawal that does not land still answers the refusal, and the order is noted. */
+	public function test_refund_withdrawal_that_does_not_land_answers_the_refusal_and_notes_the_order(): void {
+		// Arrange: the provider refuses; every save after the call keeps the reservation.
+		list( $order, $row, $refund ) = $this->probed_refundable();
+		Refund_Probe_Gateway::$result = false;
+		$force                        = $this->force_allocation( $order->get_id(), $refund->get_id(), $this->reservation( $refund->get_id(), '10.00' ), static fn() => Refund_Probe_Gateway::$calls > 0 );
+
+		// Act.
+		$error = Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '10.00', $this->refund_command() );
+		remove_action( 'woocommerce_before_order_object_save', $force, PHP_INT_MAX );
+
+		// Assert.
+		$this->assertWPError( $error );
+		$this->assertSame( 'wcpos_provider_error', $error->get_error_code() );
+		$this->assertSame( 502, $error->get_error_data()['status'] );
+		$this->assertSame( 'pending', $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() )[0]['status'] );
+		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
+		$this->assertCount( 1, $this->stranded_logs() );
+		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
 	}
 
 	/**

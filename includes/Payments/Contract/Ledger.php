@@ -1140,9 +1140,11 @@ class Ledger {
 		$entry   = empty( $command['id'] ) ? null : strtolower( $command['id'] );
 		$held    = $this->with_command( $row, $command, $refund_id );
 		$held['refunds'][] = $reserve;
+		// No money moved: take the reservation and its entry back out, so the same command runs again (§7.13).
+		$refuse = fn( WP_Error $answer ): WP_Error => $this->withdraw( $order, $rows, $row, $reserve, $entry, $answer );
 		if ( ! $this->persist( $order, $rows, $held, false, fn( ?array $stored ) => $this->same_allocation( $reserve, $stored, $refund_id ) && ( null === $entry || isset( $stored['commands'][ $entry ] ) ) ) ) {
 			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch.
-			return $this->withdraw( $order, $rows, $row, $reserve, $entry, new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) ) );
+			return $refuse( new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) ) );
 		}
 		try {
 			// The row as it was before the reservation: every handler appends its own allocation.
@@ -1151,11 +1153,11 @@ class Ledger {
 			return $this->strand( $order, $held, $reserve, 'the provider call threw ' . get_class( $error ) . ': ' . $error->getMessage() );
 		}
 		if ( is_wp_error( $new ) ) {
-			return $new;
+			return $refuse( $new );
 		}
 		$row = $this->apply_transition( $row, $new );
 		if ( is_wp_error( $row ) ) {
-			return $row;
+			return $refuse( $row );
 		}
 		// A handler may save a different amount than was requested: hold it to the same caps, and it must be positive.
 		$refunded = self::refunded_total( $row );
@@ -1167,7 +1169,7 @@ class Ledger {
 			}
 		}
 		if ( $saved <= 0 || $reserved > Money::minor( $row['amount'] ) || $refund_allocated + $saved > $refund_amount ) {
-			return new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+			return $refuse( new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) ) );
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
 		$row = $this->normalize_row( $order, $this->with_command( $row, $command, $refund_id ) );
