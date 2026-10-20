@@ -112,8 +112,8 @@ and `'deleted'` markers older rows still held.
 `close` is a money command beside the payments family (same `publish_shop_orders`
 permission, same order lock, same `wcpos_payment_locked` / `woo_rxdb_sync_record_locked`
 409s). It moves no money: it re-derives the order from its payment rows and, when the signed
-balance (total − captured rows + succeeded refund allocations) covers a non-zero total, runs
-the paid transition, which writes the next entry of the order's completion history
+balance (total − captured rows + succeeded refund allocations) covers the total, or the total
+is zero, runs the paid transition, which writes the next entry of the order's completion history
 (`_wcpos_completions`). It is how a reopened sale completes again; the push lane cannot close a
 sale. Retained money above a reduced total still completes and reads as `order.refund_due`.
 
@@ -125,7 +125,8 @@ sale. Retained money above a reduced total still completes and reads as `order.r
   last completion and writes nothing but the command's entry.
 - 409 `wcpos_payment_in_flight` (with `payment_id` or `attempt_id`): a row `pending` or
   `authorized`, a refund allocation `pending`, or a gateway attempt sent and unanswered.
-- 409 `wcpos_balance_outstanding` (with `order`): uncovered, or a zero total.
+- 409 `wcpos_balance_outstanding` (with `order`): uncovered. A zero-total open order with nothing in motion is
+  completed through `payment_complete()` with no payment method, as WooCommerce completes a zero-total checkout.
 - 409 `wcpos_invalid_transition`: the order is in no open status and has no standing completion (never completed, or its latest completion was reopened, e.g. by a cancel).
 
 ## Money command envelope: `command_id` and `revision` (2.0.0, ADR 0040 rules 5 and 6)
