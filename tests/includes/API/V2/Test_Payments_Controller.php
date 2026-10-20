@@ -717,6 +717,160 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, $response->get_data()['completion']['n'] );
 	}
 
+	/** A zero-total open order completes on close with no payment, as WooCommerce completes a free checkout. */
+	public function test_close_on_a_zero_total_open_order_completes_it_without_payment(): void {
+		// Arrange: one line at 0.00, no rows.
+		$order     = $this->zero_total_open_order();
+		$register  = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+		$path      = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$announced = array();
+		$listener  = static function ( $completed, $n ) use ( &$announced ): void {
+			$announced[] = $n;
+		};
+		add_action( 'wcpos_sale_completed', $listener, 5, 2 );
+
+		// Act.
+		$response = $this->command( $path, $this->envelope( $order, array( 'provenance' => array( 'register_id' => $register ) ) ) );
+		remove_action( 'wcpos_sale_completed', $listener, 5 );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertContains( $stored->get_status(), wc_get_is_paid_statuses() );
+		$this->assertNotNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertSame( '', $stored->get_payment_method() );
+		$history = $this->stored_meta( $order->get_id(), Completion_Stamp::META_KEY );
+		$this->assertCount( 1, $history );
+		$this->assertSame( 1, $history[0]['n'] );
+		$this->assertSame( array(), $history[0]['payment_ids'] );
+		$this->assertSame( $register, $history[0]['register'] );
+		$this->assertSame( array( 1 ), $announced );
+		$this->assertNotNull( ( new Fiscal_Record_Store() )->find_sale( $order->get_id(), $history[0]['id'] ) );
+		$this->assertSame( 1, $response->get_data()['completion']['n'] );
+		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
+		$this->assertSame( $this->current_revision( $order ), $response->get_data()['revision'] );
+
+		// A second close replays the completion and writes nothing.
+		$again = $this->command( $path, $this->envelope( $order ) );
+		$this->assertSame( 200, $again->get_status() );
+		$this->assertSame( $response->get_data()['completion'], $again->get_data()['completion'] );
+		$this->assertCount( 1, $this->stored_meta( $order->get_id(), Completion_Stamp::META_KEY ) );
+	}
+
+	/** A reopened sale whose lines are all removed completes at 0.00, its retained money read as refund_due. */
+	public function test_close_on_a_reopened_sale_reduced_to_zero_total_completes_with_refund_due(): void {
+		// Arrange: 50.00 cash captured and completed; reopened and the line removed.
+		list( $order ) = $this->paid_sale_of( array( '50.00' ), 1 );
+		$date_paid     = $order->get_date_paid( 'edit' )->getTimestamp();
+		$row_id        = Ledger::instance()->read( $order )[0]['id'];
+		$order->set_status( 'pos-open' );
+		$lines = array_keys( $order->get_items() );
+		$order->remove_item( $lines[0] );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertSame( '0.00', wc_format_decimal( wc_get_order( $order->get_id() )->get_total(), 2 ) );
+
+		// Act.
+		$response = $this->close( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 2, $response->get_data()['completion']['n'] );
+		$this->assertSame( '50.00', $response->get_data()['order']['refund_due'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( $date_paid, $stored->get_date_paid( 'edit' )->getTimestamp() );
+		$history = $this->stored_meta( $order->get_id(), Completion_Stamp::META_KEY );
+		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
+		$this->assertSame( array( $row_id ), $history[1]['payment_ids'] );
+		$two = ( new Fiscal_Record_Store() )->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertSame( '-50.00', $two['payload']['fiscal']['adjustment'] );
+	}
+
+	/** A cancelled zero-total order is never revived by a close (WooCommerce's guard). */
+	public function test_close_on_a_cancelled_zero_total_order_is_refused(): void {
+		// Arrange.
+		$order = $this->zero_total_open_order();
+		$order->set_status( 'cancelled' );
+		$order->save();
+
+		// Act.
+		$response = $this->close( $order );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'cancelled', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertNull( $this->stored_meta( $order->get_id(), Completion_Stamp::META_KEY ) );
+	}
+
+	/** With prevent-overselling on, a zero-total close holds stock like record and intent (§4.8). */
+	public function test_close_on_a_zero_total_order_is_refused_when_stock_is_held_elsewhere(): void {
+		// Arrange: one unit of a free product, two open orders for it.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$announced = 0;
+		$listener  = static function () use ( &$announced ): void {
+			++$announced;
+		};
+		try {
+			$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+			$product->set_regular_price( '0.00' );
+			$product->set_price( '0.00' );
+			$product->set_tax_status( 'none' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$first  = $this->zero_total_open_order( $product );
+			$second = $this->zero_total_open_order( $product );
+			add_action( 'wcpos_sale_completed', $listener );
+
+			// Act.
+			$sold    = $this->close( $first );
+			$refused = $this->close( $second );
+		} finally {
+			remove_action( 'wcpos_sale_completed', $listener );
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
+
+		// Assert.
+		$this->assertSame( 200, $sold->get_status(), 'Response: ' . wp_json_encode( $sold->get_data() ) );
+		$this->assertSame( 0, wc_get_product( $product->get_id() )->get_stock_quantity() );
+		$this->assertSame( 400, $refused->get_status(), 'Response: ' . wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'wcpos_insufficient_stock', $refused->get_data()['code'] );
+		$stored = wc_get_order( $second->get_id() );
+		$this->assertSame( 'pos-open', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertNull( $this->stored_meta( $second->get_id(), Completion_Stamp::META_KEY ) );
+		$this->assertSame( 1, $announced );
+	}
+
+	/**
+	 * An open POS order of one line at 0.00, no payment rows.
+	 *
+	 * @param \WC_Product|null $product The line's product; a new untaxed 0.00 product when null.
+	 */
+	private function zero_total_open_order( ?\WC_Product $product = null ): \WC_Order {
+		if ( null === $product ) {
+			$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+			$product->set_regular_price( '0.00' );
+			$product->set_price( '0.00' );
+			$product->set_tax_status( 'none' );
+			$product->save();
+		}
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertSame( '0.00', wc_format_decimal( $order->get_total(), 2 ) );
+		return wc_get_order( $order->get_id() );
+	}
+
 	/**
 	 * Reopen an order in place, as the push lane's status change does.
 	 *

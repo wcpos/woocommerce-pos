@@ -1506,6 +1506,30 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
 	}
 
+	/** A money write never completes a zero-total order; only close does (§4.3, Paul 2026-10-20). */
+	public function test_a_money_write_never_completes_a_zero_total_order(): void {
+		// Arrange.
+		list( $order ) = $this->open_sale_of( '0.00' );
+		$this->assertSame( '0.00', wc_format_decimal( $order->get_total(), 2 ) );
+
+		// Act: the non-closing path.
+		Ledger::instance()->derive( $order, array(), false );
+		$order->save();
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-open', $stored->get_status() );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
+
+		// Act: the closing path.
+		Ledger::instance()->derive( $stored, array(), true );
+
+		// Assert.
+		$completed = wc_get_order( $order->get_id() );
+		$this->assertTrue( $completed->is_paid() );
+		$this->assertNotNull( $completed->get_date_paid( 'edit' ) );
+	}
+
 	/** With prevent-overselling on, a tender holds the order's stock; a void releases it (§4.8). */
 	public function test_a_tender_holds_stock_against_another_order_until_it_is_voided(): void {
 		// Arrange: one unit of stock, two open POS orders for it.
