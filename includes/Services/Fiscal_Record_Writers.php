@@ -58,7 +58,7 @@ final class Fiscal_Record_Writers {
 	 *
 	 * The business transition has already happened when a writer runs, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
-	 * sale row is recovered by the next money command on the order (recover());
+	 * sale row is recovered by the next money command or refund on the order (recover());
 	 * every failure is surfaced as an order note and an action for a recovery job.
 	 *
 	 * @param WC_Order $order  Order the record describes.
@@ -464,11 +464,15 @@ final class Fiscal_Record_Writers {
 	/**
 	 * The sale record a refund corrects: the latest completion's own record, or none while it is
 	 * missing (never completion n−1's, and never rebuilt from the order the refund just changed). An
-	 * order without a history (completed before it existed) keeps its latest sale.
+	 * order without a history (completed before it existed) keeps its latest sale. A parked sale
+	 * document is drained first, so a refund written after a failed sale insert names the recovered
+	 * sale; Fiscal_Record_Store::record() is idempotent by source_id under the sequence lock, so a
+	 * recovery racing a money command inserts once.
 	 *
 	 * @param WC_Order $order Parent order.
 	 */
 	private function sale_for_refund( WC_Order $order ): ?array {
+		$this->recover( $order );
 		$history = Completion_Stamp::read( $order );
 		$latest  = end( $history );
 		if ( ! is_array( $latest ) ) {

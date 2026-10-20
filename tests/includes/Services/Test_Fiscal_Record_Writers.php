@@ -401,20 +401,20 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( wc_get_order( $order->get_id() ) );
+			$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+			$this->assertCount( 1, $this->sales( $order->get_id() ) );
+
+			// Act: a refund while completion 2's record is missing (the refund's drain runs and fails here).
+			$first = wc_create_refund(
+				array(
+					'order_id' => $order->get_id(),
+					'amount' => 5,
+					'refund_payment' => false,
+				)
+			);
 		} finally {
 			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
-		$this->assertCount( 1, $this->sales( $order->get_id() ) );
-
-		// Act: a refund while completion 2's record is missing.
-		$first = wc_create_refund(
-			array(
-				'order_id' => $order->get_id(),
-				'amount' => 5,
-				'refund_payment' => false,
-			)
-		);
 
 		// Assert: it names no sale, not completion 1's.
 		$store = new Fiscal_Record_Store();
