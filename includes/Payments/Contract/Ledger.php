@@ -1720,9 +1720,9 @@ class Ledger {
 
 	/**
 	 * Close a sale (ADR 0040 rule 1, D2): move no money, re-derive, and complete it when the signed
-	 * balance covers a non-zero total — the way a reopened sale is completed again (completion n+1).
-	 * A sale already paid replays its last completion. Refused while money is in motion, and with
-	 * `wcpos_balance_outstanding` when uncovered (a zero total too: derive() never completes one).
+	 * balance covers the total, or the total is zero — the way a reopened sale is completed again
+	 * (completion n+1). A sale already paid replays its last completion. Refused while money is in
+	 * motion, and with `wcpos_balance_outstanding` when uncovered or the total is negative.
 	 *
 	 * @param WC_Order $order   Order object, read under the route's order lock.
 	 * @param array    $command The till's command; its entry names the completion it answered.
@@ -1752,7 +1752,7 @@ class Ledger {
 		if ( false !== $sent || null !== $stamp ) {
 			return $this->in_flight( $order, array( 'attempt_id' => false !== $sent ? $sent : ( $stamp['attempt_id'] ?? null ) ) );
 		}
-		if ( Money::minor( $order->get_total() ) <= 0 || $this->signed_balance( $order, $rows ) > 0 ) {
+		if ( Money::minor( $order->get_total() ) < 0 || $this->signed_balance( $order, $rows ) > 0 ) {
 			return new WP_Error(
 				'wcpos_balance_outstanding',
 				__( 'The order is not covered by its payments.', 'woocommerce-pos' ),
@@ -2261,7 +2261,8 @@ class Ledger {
 		$total = Money::minor( $order->get_total() );
 		// Covered on the signed balance: a refund allocated after an earlier completion is money
 		// that left, so gross captured money alone does not complete a reopened sale again.
-		if ( $total > 0 && $this->signed_balance( $order, $rows ) <= 0 ) {
+		// A close completes a zero total through payment_complete() the way WooCommerce's process_order_without_payment() does; a money write never does.
+		if ( ( $total > 0 || $closing ) && $this->signed_balance( $order, $rows ) <= 0 ) {
 			if ( 0 === self::$deriving ) {
 				self::$deriving = $order->get_id();
 				try {
