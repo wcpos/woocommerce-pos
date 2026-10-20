@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -177,9 +178,41 @@ final class Session_Figures {
 		return '-' === substr( $amount, 0, 1 ) ? substr( $amount, 1 ) : '-' . $amount;
 	}
 
-	/** Count distinct orders with captured session legs. */
+	/**
+	 * Count the completions in this session (ADR 0040): each completion entry naming the session is
+	 * one sale document, so a sale reopened and completed again in the same session counts twice.
+	 * An order with session legs but no completion history (completed before the history existed)
+	 * counts once, so an open session's earlier sales do not vanish from the count on deploy.
+	 *
+	 * @throws \RuntimeException On read failure.
+	 */
 	public function sales_count(): int {
-		return count( $this->legs() );
+		if ( isset( $this->memo['sales_count'] ) ) {
+			return $this->memo['sales_count'];
+		}
+		global $wpdb;
+		$hpos  = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$key   = $hpos ? 'order_id' : 'post_id';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value LIKE %s", Completion_Stamp::META_KEY, '%' . $wpdb->esc_like( '"session":"' . $this->session['id'] . '"' ) . '%' ) );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Session completion read failed.' );
+		}
+		$count = 0;
+		foreach ( array_unique( array_merge( array_map( 'intval', array_keys( $this->legs() ) ), array_map( 'intval', $ids ) ) ) as $id ) {
+			$order   = wc_get_order( $id );
+			$history = $order ? Completion_Stamp::read( $order ) : array();
+			if ( ! $history ) {
+				$count += isset( $this->legs()[ $id ] ) ? 1 : 0;
+				continue;
+			}
+			foreach ( $history as $entry ) {
+				$count += ( $entry['session'] ?? null ) === $this->session['id'] ? 1 : 0;
+			}
+		}
+		$this->memo['sales_count'] = $count;
+		return $count;
 	}
 
 	/** Order membership of the same captured-leg snapshot used by the figures. */

@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -230,6 +231,146 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			),
 			$reads
 		);
+	}
+
+	/**
+	 * A POS order completed with cash recorded in the session, under that session's provenance.
+	 *
+	 * @param array $session Session row.
+	 */
+	private function completed_in( array $session ): \WC_Order {
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_total( '40.00' );
+		$order->save();
+		Completion_Stamp::with_provenance(
+			array(
+				'register_id' => $session['register_id'],
+				'session_id' => $session['id'],
+			),
+			static function () use ( $order, $session ): void {
+				Ledger::instance()->record(
+					$order,
+					array(
+						'id' => wp_generate_uuid4(),
+						'method_id' => 'pos_cash',
+						'amount' => '40.00',
+						'session_id' => $session['id'],
+					)
+				);
+			},
+			$order->get_id()
+		);
+		return wc_get_order( $order->get_id() );
+	}
+
+	/**
+	 * Reopen the order and close it unchanged from a session.
+	 *
+	 * @param \WC_Order $order   Order.
+	 * @param array     $session Session the re-completion happens in.
+	 */
+	private function recomplete_in( \WC_Order $order, array $session ): void {
+		$order->set_status( 'pos-open' );
+		$order->save();
+		Completion_Stamp::with_provenance(
+			array(
+				'register_id' => $session['register_id'],
+				'session_id' => $session['id'],
+			),
+			static function () use ( $order ): void {
+				wc_get_order( $order->get_id() )->payment_complete();
+			},
+			$order->get_id()
+		);
+	}
+
+	/** A sale reopened and completed again unchanged in one session is two documents there. */
+	public function test_sales_count_counts_a_zero_adjustment_recompletion_in_the_same_session_twice(): void {
+		// Arrange.
+		$session = $this->closure_session( null, 'open' );
+		$order   = $this->completed_in( $session );
+
+		// Act.
+		$this->recomplete_in( $order, $session );
+
+		// Assert.
+		$this->assertCount( 2, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( 2, Session_Figures::for_session( $session )->sales_count() );
+	}
+
+	/** A re-completion in a later session without a new tender counts there once. */
+	public function test_a_recompletion_in_a_new_session_counts_once_there(): void {
+		// Arrange.
+		$first  = $this->closure_session( null, 'open' );
+		$second = $this->closure_session( null, 'open' );
+		$order  = $this->completed_in( $first );
+
+		// Act.
+		$this->recomplete_in( $order, $second );
+
+		// Assert.
+		$this->assertSame( 1, Session_Figures::for_session( $first )->sales_count() );
+		$this->assertSame( 1, Session_Figures::for_session( $second )->sales_count() );
+	}
+
+	/** An order completed before the history existed still counts once in its session. */
+	public function test_a_pre_deploy_sale_without_history_still_counts_one(): void {
+		// Arrange: captured session legs, no completion history.
+		$session = $this->closure_session();
+		$order   = $this->closure_ledger( $session );
+
+		// Act.
+		$count = Session_Figures::for_session( $session )->sales_count();
+
+		// Assert.
+		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( 1, $count );
+	}
+
+	/** A legacy sale row without a session does not blank the session the till tuple carries when the history is synthesised. */
+	public function test_a_reopened_legacy_sale_with_a_sessionless_record_still_counts_one(): void {
+		global $wpdb;
+		// Arrange: captured legs in session A, paid before the history existed, a sale row with no session.
+		$session = $this->closure_session();
+		$order   = $this->closure_ledger( $session );
+		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
+		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
+		try {
+			$paid = wc_get_order( $order->get_id() );
+			$paid->set_date_paid( time() );
+			$paid->set_status( 'completed' );
+			$paid->save();
+		} finally {
+			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
+			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 );
+		}
+		$store = new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store();
+		$store->ensure_installed();
+		$wpdb->insert(
+			$store->table_name(),
+			array(
+				'type' => 'sale',
+				'series' => '',
+				'number' => 700,
+				'order_id' => $order->get_id(),
+				'payload' => '{}',
+				'checksum' => str_repeat( 'a', 64 ),
+				'received_at_gmt' => '2026-09-11 10:00:00',
+			)
+		);
+
+		// Act: reopened, which synthesises the legacy entry.
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+
+		// Assert.
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( $session['id'], $history[0]['session'] );
+		$this->assertSame( 1, Session_Figures::for_session( $session )->sales_count() );
 	}
 
 	/** Period totals separate sale legs, both raw refund forms, and bound refunds. */

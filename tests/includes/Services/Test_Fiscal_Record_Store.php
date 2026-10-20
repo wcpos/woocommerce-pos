@@ -28,6 +28,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 			array(
 				'type' => 'sale',
 				'order_id' => 11,
+				'source_id' => wp_generate_uuid4(),
 				'payload' => array( 'a' => 1 ),
 			)
 		);
@@ -35,6 +36,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 			array(
 				'type' => 'sale',
 				'order_id' => 12,
+				'source_id' => wp_generate_uuid4(),
 				'payload' => array( 'a' => 2 ),
 			)
 		);
@@ -68,6 +70,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 			array(
 				'type' => 'sale',
 				'order_id' => 99,
+				'source_id' => wp_generate_uuid4(),
 				'payload' => array(),
 			)
 		);
@@ -84,6 +87,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 		$fields = array(
 			'type' => 'sale',
 			'order_id' => 123,
+			'source_id' => wp_generate_uuid4(),
 			'number' => 7,
 			'payload' => array(
 				'amount' => '12.00',
@@ -111,8 +115,8 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 		foreach ( array(
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
-			'cancellation' => 'order_id',
-			'late_sale' => 'order_id',
+			'cancellation' => 'source_id',
+			'late_sale' => 'source_id',
 			'late_refund' => 'source_id',
 			'late_movement' => 'source_id',
 			'recount' => 'source_id',
@@ -153,6 +157,62 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 				)
 			)
 		);
+	}
+
+	/** A sale and a cancellation key on their completion (source_id), so one order holds several (§4.7). */
+	public function test_record_keys_sale_and_cancellation_by_source_id(): void {
+		// Arrange.
+		$store  = new Fiscal_Record_Store();
+		$first  = wp_generate_uuid4();
+		$second = wp_generate_uuid4();
+
+		// Act.
+		$one   = $store->record( array( 'type' => 'sale', 'order_id' => 77, 'source_id' => $first, 'payload' => array( 'n' => 1 ) ) );
+		$two   = $store->record( array( 'type' => 'sale', 'order_id' => 77, 'source_id' => $second, 'payload' => array( 'n' => 2 ) ) );
+		$again = $store->record( array( 'type' => 'sale', 'order_id' => 77, 'source_id' => $first, 'payload' => array( 'changed' => true ) ) );
+		$c_one = $store->record( array( 'type' => 'cancellation', 'order_id' => 77, 'source_id' => $first, 'payload' => array() ) );
+		$c_two = $store->record( array( 'type' => 'cancellation', 'order_id' => 77, 'source_id' => $second, 'payload' => array() ) );
+
+		// Assert.
+		$this->assertSame( 1, $one['number'] );
+		$this->assertSame( 2, $two['number'] );
+		$this->assertSame( $one, $again );
+		$this->assertNotSame( $c_one['id'], $c_two['id'] );
+		$this->assertSame( 2, $store->count( array( 'order_id' => 77, 'type' => 'sale' ) ) );
+		$this->assertNull( $store->record( array( 'type' => 'sale', 'order_id' => 77, 'payload' => array() ) ) );
+	}
+
+	/** find_sale() answers the latest sale, a named completion, or a legacy row by its digest. */
+	public function test_find_sale_returns_the_latest_or_the_named_completion(): void {
+		global $wpdb;
+		// Arrange: a legacy sale (no source id), then two completions.
+		$store = new Fiscal_Record_Store();
+		$store->ensure_installed();
+		$wpdb->insert(
+			$store->table_name(),
+			array(
+				'type' => 'sale',
+				'series' => '',
+				'number' => 500,
+				'order_id' => 78,
+				'payload' => '{}',
+				'checksum' => str_repeat( 'a', 64 ),
+				'received_at_gmt' => '2026-01-01 00:00:00',
+			)
+		);
+		$legacy_id = (int) $wpdb->insert_id;
+		$first     = wp_generate_uuid4();
+		$second    = wp_generate_uuid4();
+		$one       = $store->record( array( 'type' => 'sale', 'order_id' => 78, 'source_id' => $first, 'payload' => array() ) );
+		$two       = $store->record( array( 'type' => 'sale', 'order_id' => 78, 'source_id' => $second, 'payload' => array() ) );
+
+		// Act + Assert.
+		$this->assertSame( $two['id'], $store->find_sale( 78 )['id'] );
+		$this->assertSame( $one['id'], $store->find_sale( 78, $first )['id'] );
+		$this->assertSame( $two['id'], $store->find_sale( 78, strtoupper( $second ) )['id'] );
+		$this->assertSame( $legacy_id, $store->find_sale( 78, Fiscal_Record_Store::digest_source_id( 'sale:' . $legacy_id ) )['id'] );
+		$this->assertNull( $store->find_sale( 78, wp_generate_uuid4() ) );
+		$this->assertNull( $store->find_sale( 79, $first ) );
 	}
 
 	/** List filters bounds and paging share count predicates. */
@@ -289,6 +349,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 			array(
 				'type' => 'sale',
 				'order_id' => 901,
+				'source_id' => wp_generate_uuid4(),
 				'number' => 91,
 				'payload' => array(),
 			)
@@ -302,6 +363,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 					array(
 						'type' => 'sale',
 						'order_id' => 902,
+						'source_id' => wp_generate_uuid4(),
 						'number' => 91,
 						'payload' => array(),
 					)

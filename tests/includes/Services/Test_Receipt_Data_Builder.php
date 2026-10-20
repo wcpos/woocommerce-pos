@@ -12,7 +12,6 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
-use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
@@ -165,7 +164,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		};
 		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		try {
-			Fiscal_Record_Writers::instance()->record_sale( $order );
+			Completion_Fixture::sale( $order );
 		} finally {
 			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}

@@ -30,7 +30,7 @@ class Test_Order_Writer extends WP_UnitTestCase {
 	/** Every server-owned top-level field and meta key, with values a till might send. */
 	private function money_payload(): array {
 		$meta = array( $this->public_meta() );
-		foreach ( array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date' ) as $key ) {
+		foreach ( array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_fiscal_pending', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date' ) as $key ) {
 			$meta[] = array(
 				'key'   => $key,
 				'value' => 'x',

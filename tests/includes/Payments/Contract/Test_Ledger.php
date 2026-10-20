@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -952,7 +953,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		} else {
 			$this->assertSame( $confirmed['status'] ?? 'captured', $stored['status'] );
 			$this->assertSame( $confirmed['amount'] ?? '92.95', $stored['amount'] );
-			$this->assertSame( '0.00', $ledger->summary( $order )['balance'] );
+			// An authorization reserves the balance but pays nothing (D6); a capture pays it.
+			$this->assertSame( 'authorized' === ( $confirmed['status'] ?? null ) ? '92.95' : '0.00', $ledger->summary( $order )['balance'] );
 			if ( 'on_reader' === $tips ) {
 				$fees = array_values( $order->get_fees() );
 				$this->assertCount( 1, $fees );
@@ -1342,19 +1344,413 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** Authorized money counts toward the paid total. */
-	public function test_derive_authorized_row_counts_toward_balance(): void {
+	/** A full authorization leaves the sale open, reserves its amount, and only capture completes it (D6). */
+	public function test_full_authorization_leaves_the_order_open_and_reserves_its_amount(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
+		$card  = $this->payment( 'pos_card', '92.95' );
+
+		// Act: the reader approves the whole total.
+		Ledger::instance()->intent( $order, $card['id'], $card, array( 'resume' => array( 'status' => 'authorized' ) ) );
+
+		// Assert: open, nothing paid, the authorization shown beside the balance.
+		$fresh   = wc_get_order( $order->get_id() );
+		$summary = Ledger::instance()->summary( $fresh );
+		$this->assertSame( 'pos-open', $fresh->get_status() );
+		$this->assertSame( '92.95', $summary['authorized'] );
+		$this->assertSame( '0.00', $summary['paid'] );
+		$this->assertSame( '92.95', $summary['balance'] );
+		$this->assertNull( $fresh->get_date_paid( 'edit' ) );
+		$this->assertFalse( (bool) $fresh->get_data_store()->get_stock_reduced( $order->get_id() ) );
+
+		// A second tender against the standing authorization is refused, naming it.
+		$cash  = Ledger::instance()->record( $fresh, $this->payment( 'pos_cash', '92.95' ) );
+		$this->assertWPError( $cash );
+		$this->assertSame( 'wcpos_payment_in_flight', $cash->get_error_code() );
+		$this->assertSame( 409, $cash->get_error_data()['status'] );
+		$this->assertSame( $card['id'], $cash->get_error_data()['payment_id'] );
+		$intent = $this->payment( 'pos_card', '10.00' );
+		$second = Ledger::instance()->intent( wc_get_order( $order->get_id() ), $intent['id'], $intent, array() );
+		$this->assertWPError( $second );
+		$this->assertSame( 'wcpos_payment_in_flight', $second->get_error_code() );
+		$this->assertSame( $card['id'], $second->get_error_data()['payment_id'] );
+
+		// Capture completes it.
+		Ledger::instance()->capture( wc_get_order( $order->get_id() ), $card['id'], array() );
+		$paid = wc_get_order( $order->get_id() );
+		$this->assertTrue( $paid->is_paid() );
+		$this->assertNotNull( $paid->get_date_paid( 'edit' ) );
+		$this->assertCount( 1, Completion_Stamp::read( $paid ) );
+	}
+
+	/** An authorization is money in motion, not money taken: it cannot take a refund allocation. */
+	public function test_authorized_row_is_not_refundable(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = Ledger::instance()->record( $order, $this->payment( 'pos_card', '20.00', array( 'status' => 'authorized' ) ) );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '5.00' );
+		$refund->save();
 
 		// Act.
-		Ledger::instance()->record( $order, $this->payment( 'pos_card', '92.95', array( 'status' => 'authorized' ) ) );
-		$summary = Ledger::instance()->summary( $order );
+		$result = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '5.00' );
 
 		// Assert.
-		$this->assertSame( '92.95', $summary['paid'] );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_invalid_transition', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+	}
+
+	/** An approval for the wrong amount fails the row, though an authorization no longer counts. */
+	public function test_authorization_for_a_different_amount_fails_the_row(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$input = $this->payment( 'pos_card', '92.95' );
+
+		// Act.
+		$result = Ledger::instance()->intent(
+			$order,
+			$input['id'],
+			$input,
+			array(
+				'resume' => array(
+					'status' => 'authorized',
+					'amount' => '90.00',
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertWPError( $result );
+		$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $input['id'] );
+		$this->assertSame( 'failed', $row['status'] );
+		$this->assertSame( 'amount_mismatch', $row['failure_reason'] );
+	}
+
+	/** Captured money above a reduced total is owed back, and reads apart from money still due (§4.2). */
+	public function test_summary_reports_refund_due_when_captured_money_exceeds_a_reduced_total(): void {
+		// Arrange: 100.00 captured on two lines, reopened, the 20.00 line removed.
+		list( $order, $row, $lines ) = $this->paid_sale_with_lines( array( '80.00', '20.00' ) );
+		$order->set_status( 'pos-open' );
+		$order->remove_item( $lines[1] );
+		$order->calculate_totals( false );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '80.00', $order->get_total() );
+
+		// Act + Assert: covered, and 20.00 owed back.
+		$summary = Ledger::instance()->summary( $order );
 		$this->assertSame( '0.00', $summary['balance'] );
-		$this->assertSame( 'completed', $order->get_status() );
+		$this->assertSame( '20.00', $summary['refund_due'] );
+		$this->assertSame( '0.00', $summary['refund_pending'] );
+
+		// A succeeded 20.00 allocation settles what was owed.
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+		$summary = Ledger::instance()->summary( wc_get_order( $order->get_id() ) );
+		$this->assertSame( '0.00', $summary['refund_due'] );
+		$this->assertSame( '0.00', $summary['balance'] );
+	}
+
+	/** A pending allocation is a reservation shown beside the balance, never added to it (rule 1). */
+	public function test_summary_reports_a_pending_allocation_as_refund_pending_not_as_balance(): void {
+		// Arrange.
+		list( $order, $row, $lines ) = $this->paid_sale_with_lines( array( '80.00', '20.00' ) );
+		$order->set_status( 'pos-open' );
+		$order->remove_item( $lines[1] );
+		$order->calculate_totals( false );
+		$order->save();
+		$order  = wc_get_order( $order->get_id() );
+		$refund = $this->refund_of( $order, '20.00' );
+		$stored = Ledger::instance()->find( $order, $row['id'] );
+		$stored['refunds'] = array(
+			array(
+				'id' => $refund->get_id(),
+				'amount' => '20.00',
+				'status' => 'pending',
+				'provider_ref' => null,
+			),
+		);
+		Ledger::instance()->save( $order, array( $stored ), false );
+
+		// Act.
+		$summary = Ledger::instance()->summary( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( '20.00', $summary['refund_due'] );
+		$this->assertSame( '20.00', $summary['refund_pending'] );
+		$this->assertSame( '0.00', $summary['balance'] );
+	}
+
+	/** derive() completes on the signed balance, not on gross captured money (§4.2). */
+	public function test_derive_does_not_complete_a_partly_refunded_reopened_sale_on_gross_captured_money(): void {
+		// Arrange: 100.00 captured, 20.00 refunded and allocated, reopened unchanged.
+		list( $order, $row ) = $this->paid_sale_with_lines( array( '100.00' ) );
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+		$order = wc_get_order( $order->get_id() );
+		$order->set_status( 'pos-open' );
+		$order->save();
+
+		// Act: 10.00 cash leaves 10.00 still due.
+		$first = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '10.00' ) );
+
+		// Assert.
+		$this->assertSame( 'captured', $first['status'] );
+		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+
+		// Another 10.00 covers it and completes the sale again.
+		Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '10.00' ) );
+		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
+	}
+
+	/** With prevent-overselling on, a tender holds the order's stock; a void releases it (§4.8). */
+	public function test_a_tender_holds_stock_against_another_order_until_it_is_voided(): void {
+		// Arrange: one unit of stock, two open POS orders for it.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		try {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( '10' );
+			$product->set_price( '10' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$orders = array();
+			foreach ( array( 'a', 'b' ) as $key ) {
+				$orders[ $key ] = wc_create_order();
+				$orders[ $key ]->set_created_via( 'woocommerce-pos' );
+				$orders[ $key ]->set_status( 'pos-open' );
+				$orders[ $key ]->add_product( $product, 1 );
+				$orders[ $key ]->calculate_totals( false );
+				$orders[ $key ]->save();
+			}
+			$hold = $this->payment( 'pos_card', $orders['a']->get_total() );
+			Ledger::instance()->intent( $orders['a'], $hold['id'], $hold, array( 'resume' => array( 'status' => 'authorized' ) ) );
+			$this->assertSame( 'authorized', Ledger::instance()->find( wc_get_order( $orders['a']->get_id() ), $hold['id'] )['status'] );
+
+			// Act: B tries to take the same unit.
+			$refused = Ledger::instance()->record( wc_get_order( $orders['b']->get_id() ), $this->payment( 'pos_cash', $orders['b']->get_total() ) );
+
+			// Assert.
+			$this->assertWPError( $refused );
+			$this->assertSame( 'wcpos_insufficient_stock', $refused->get_error_code() );
+			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $orders['b']->get_id() ) ) );
+
+			// Voiding A's hold releases the unit.
+			Ledger::instance()->void( wc_get_order( $orders['a']->get_id() ), $hold['id'], 'customer left' );
+			$recorded = Ledger::instance()->record( wc_get_order( $orders['b']->get_id() ), $this->payment( 'pos_cash', $orders['b']->get_total() ) );
+			$this->assertIsArray( $recorded );
+			$this->assertSame( 'captured', $recorded['status'] );
+		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
+	}
+
+	/**
+	 * Payment rows read from storage, not from an order object.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function stored_rows( int $order_id ): array {
+		$order = wc_get_order( $order_id );
+		foreach ( $order->get_data_store()->read_meta( $order ) as $meta ) {
+			if ( Ledger::META_KEY === $meta->meta_key ) {
+				return json_decode( maybe_unserialize( $meta->meta_value ), true )['payments'];
+			}
+		}
+		return array();
+	}
+
+	/** A completed sale owes 20.00 after a refund, yet takes no new tender until it is reopened (§4.2). */
+	public function test_a_completed_sale_with_a_refund_takes_no_new_tender_until_reopened(): void {
+		// Arrange: 100.00 captured completes the sale; 20.00 refunded and allocated.
+		list( $order, $row ) = $this->paid_sale_with_lines( array( '100.00' ) );
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '20.00', Ledger::instance()->summary( $order )['balance'] );
+
+		// Act.
+		$cash   = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+		$card   = $this->payment( 'pos_card', '20.00' );
+		$intent = Ledger::instance()->intent( wc_get_order( $order->get_id() ), $card['id'], $card, array() );
+
+		// Assert.
+		foreach ( array( $cash, $intent ) as $refused ) {
+			$this->assertWPError( $refused );
+			$this->assertSame( 'wcpos_order_already_paid', $refused->get_error_code() );
+			$this->assertSame( 409, $refused->get_error_data()['status'] );
+			$this->assertSame( '20.00', $refused->get_error_data()['order']['balance'] );
+		}
+		// No new money counts: the cash attempt is kept only as the refused row record() always writes
+		// for a paid sale (offline cash may already be in the drawer); the intent writes nothing.
+		$stored = $this->stored_rows( $order->get_id() );
+		$this->assertSame( array( 'captured', 'failed' ), array_column( $stored, 'status' ) );
+		$this->assertSame( 'order_already_paid', $stored[1]['failure_reason'] );
+		$this->assertNotContains( $card['id'], array_column( $stored, 'id' ) );
+		$this->assertSame( '20.00', Ledger::instance()->summary( wc_get_order( $order->get_id() ) )['balance'] );
+
+		// Reopened, the same tender is taken and the sale completes again.
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$taken = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '20.00' ) );
+		$this->assertIsArray( $taken );
+		$this->assertSame( 'captured', $taken['status'] );
+		$paid = wc_get_order( $order->get_id() );
+		$this->assertTrue( $paid->is_paid() );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( $paid ), 'n' ) );
+	}
+
+	/** A completion standing on a configured on-hold status refuses a new tender though on-hold is editable. */
+	public function test_a_standing_on_hold_completion_takes_no_new_tender_until_reopened(): void {
+		// Arrange: Cash's POS Order Status stored as On hold; 100.00 cash completes onto it; 20.00 refunded.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+					'pos_card' => array( 'enabled' => true ),
+				),
+			)
+		);
+		list( $order, $row ) = $this->paid_sale_with_lines( array( '100.00' ) );
+		$this->assertSame( 'on-hold', $order->get_status() );
+		$refund = $this->refund_of( $order, '20.00' );
+		$this->assertIsArray( Ledger::instance()->refund( $order, $row['id'], $refund->get_id(), '20.00' ) );
+
+		// Act.
+		$refused = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '20.00' ) );
+
+		// Assert.
+		$this->assertWPError( $refused );
+		$this->assertSame( 'wcpos_order_already_paid', $refused->get_error_code() );
+		$this->assertSame( 409, $refused->get_error_data()['status'] );
+
+		// Reopened, the 20.00 lands and completes the sale again.
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$taken = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '20.00' ) );
+		$this->assertIsArray( $taken );
+		$this->assertSame( 'captured', $taken['status'] );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
+	}
+
+	/** A cancelled order takes no tender. */
+	public function test_a_cancelled_order_takes_no_tender(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_status( 'cancelled' );
+		$order->save();
+
+		// Act.
+		$result = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '92.95' ) );
+
+		// Assert.
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_invalid_transition', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+		$this->assertSame( array(), $this->stored_rows( $order->get_id() ) );
+	}
+
+	/**
+	 * With prevent-overselling on and one unit of stock, run $work with two open POS orders for it.
+	 *
+	 * @param callable $work Receives the two orders (a, b).
+	 */
+	private function with_one_unit_on_two_orders( callable $work ): void {
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		try {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( '10' );
+			$product->set_price( '10' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$orders = array();
+			foreach ( array( 'a', 'b' ) as $key ) {
+				$orders[ $key ] = wc_create_order();
+				$orders[ $key ]->set_created_via( 'woocommerce-pos' );
+				$orders[ $key ]->set_status( 'pos-open' );
+				$orders[ $key ]->add_product( $product, 1 );
+				$orders[ $key ]->calculate_totals( false );
+				$orders[ $key ]->save();
+			}
+			$work( $orders['a'], $orders['b'] );
+		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
+	}
+
+	/**
+	 * Order B's cash record for its total.
+	 *
+	 * @param \WC_Order $order Order B.
+	 * @return array|\WP_Error
+	 */
+	private function record_full( \WC_Order $order ) {
+		$order = wc_get_order( $order->get_id() );
+		return Ledger::instance()->record( $order, $this->payment( 'pos_cash', $order->get_total() ) );
+	}
+
+	/** An intent the provider answers failed leaves nothing live, so the hold goes back to the shelf. */
+	public function test_an_intent_answered_failed_releases_the_hold(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Act.
+				$card = $this->payment( 'pos_card', $a->get_total() );
+				Ledger::instance()->intent( $a, $card['id'], $card, array( 'resume' => array( 'status' => 'failed' ) ) );
+
+				// Assert.
+				$this->assertSame( 'failed', Ledger::instance()->find( wc_get_order( $a->get_id() ), $card['id'] )['status'] );
+				$this->assertIsArray( $this->record_full( $b ) );
+			}
+		);
+	}
+
+	/** A determinate intent error deletes the row and releases the hold. */
+	public function test_a_determinate_intent_error_releases_the_hold(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Act.
+				$card = $this->payment( 'pos_card', $a->get_total() );
+				Ledger::instance()->intent( $a, $card['id'], $card, array( 'error' => new \WP_Error( 'test_declined', 'Declined' ) ) );
+
+				// Assert.
+				$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $a->get_id() ) ) );
+				$this->assertIsArray( $this->record_full( $b ) );
+			}
+		);
+	}
+
+	/** An indeterminate intent error leaves the row pending, and it keeps the hold. */
+	public function test_an_indeterminate_intent_error_keeps_the_hold(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Act.
+				$card = $this->payment( 'pos_card', $a->get_total() );
+				Ledger::instance()->intent( $a, $card['id'], $card, array( 'error' => new \WP_Error( 'test_timeout', 'Timeout', array( 'indeterminate' => true ) ) ) );
+
+				// Assert.
+				$this->assertSame( 'pending', Ledger::instance()->find( wc_get_order( $a->get_id() ), $card['id'] )['status'] );
+				$refused = $this->record_full( $b );
+				$this->assertWPError( $refused );
+				$this->assertSame( 'wcpos_insufficient_stock', $refused->get_error_code() );
+			}
+		);
 	}
 
 	/** The approval time survives capture; captured_at_gmt alone could not tell them apart. */
@@ -2422,6 +2818,85 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '7.05', $row['tip'] );
 	}
 
+	/** An authorization for more than the leg adds no tip: only the captured amount confirms one. */
+	public function test_an_authorized_on_reader_tip_adds_no_fee_until_capture(): void {
+		// Arrange: a 100.00 sale; the reader takes on-reader tips.
+		list( $order ) = $this->open_sale_of( '100.00' );
+		Integrity_Handler::$tips = 'on_reader';
+		$ledger = Ledger::instance();
+		$first  = $this->payment( 'pos_card', '100.00' );
+
+		// Act: the reader authorizes 110.00.
+		$ledger->intent(
+			$order,
+			$first['id'],
+			$first,
+			array(
+				'resume' => array(
+					'status' => 'authorized',
+					'amount' => '110.00',
+				),
+			)
+		);
+
+		// Assert: tolerated, but no fee and no amount change.
+		$saved = new \WC_Order( $order->get_id() );
+		$row   = $ledger->find( $saved, $first['id'] );
+		$this->assertSame( 'authorized', $row['status'] );
+		$this->assertSame( '100.00', $row['amount'] );
+		$this->assertCount( 0, $saved->get_fees() );
+		$this->assertSame( '100.00', $saved->get_total() );
+
+		// A void leaves the order as it was.
+		$ledger->void( $saved, $first['id'], 'customer left' );
+		$voided = new \WC_Order( $order->get_id() );
+		$this->assertCount( 0, $voided->get_fees() );
+		$this->assertSame( '100.00', $voided->get_total() );
+
+		// A fresh leg authorized at 110.00 and captured at 110.00 takes the 10.00 tip then.
+		$second = $this->payment( 'pos_card', '100.00' );
+		$ledger->intent(
+			$voided,
+			$second['id'],
+			$second,
+			array(
+				'resume' => array(
+					'status' => 'authorized',
+					'amount' => '110.00',
+				),
+			)
+		);
+		$this->assertCount( 0, ( new \WC_Order( $order->get_id() ) )->get_fees() );
+		$ledger->capture( wc_get_order( $order->get_id() ), $second['id'], array( 'amount' => '110.00' ) );
+		$captured = new \WC_Order( $order->get_id() );
+		$fees     = array_values( $captured->get_fees() );
+		$this->assertCount( 1, $fees );
+		$this->assertSame( '10.00', $fees[0]->get_total() );
+		$this->assertSame( '110.00', $ledger->find( $captured, $second['id'] )['amount'] );
+		$this->assertSame( '110.00', $captured->get_total() );
+	}
+
+	/**
+	 * An open POS sale of one untaxed line.
+	 *
+	 * @param string $price Line price.
+	 * @return array{0: \WC_Order}
+	 */
+	private function open_sale_of( string $price ): array {
+		$order   = wc_create_order();
+		$product = ProductHelper::create_simple_product();
+		$product->set_regular_price( $price );
+		$product->set_price( $price );
+		$product->set_tax_status( 'none' );
+		$product->save();
+		$order->add_product( $product );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->calculate_totals( false );
+		$order->save();
+		return array( wc_get_order( $order->get_id() ) );
+	}
+
 	/** A ledger save reloads the order under the lock but keeps items the caller added and has not saved. */
 	public function test_save_carries_unsaved_caller_items(): void {
 		// Arrange: a fee staged on the caller's object, never saved.
@@ -2442,6 +2917,51 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'Tip', $fees[0]->get_name() );
 		$this->assertSame( '7.05', $fees[0]->get_total() );
 		$this->assertCount( 1, Ledger::instance()->read( $saved ) );
+	}
+
+	/**
+	 * A POS sale paid in full in cash, with one simple-product line per price.
+	 *
+	 * @param string[] $prices Line prices.
+	 * @return array{0: \WC_Order, 1: array, 2: int[]} The paid order, its cash row, its line ids.
+	 */
+	private function paid_sale_with_lines( array $prices ): array {
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$lines = array();
+		foreach ( $prices as $price ) {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( $price );
+			$product->set_price( $price );
+			$product->set_tax_status( 'none' );
+			$product->save();
+			$lines[] = $order->add_product( $product );
+		}
+		$order->calculate_totals( false );
+		$order->save();
+		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', $order->get_total() ) );
+		$this->assertNotNull( wc_get_order( $order->get_id() )->get_date_paid( 'edit' ) );
+		return array( wc_get_order( $order->get_id() ), $row, $lines );
+	}
+
+	/**
+	 * A WooCommerce refund object on the order, with no gateway call.
+	 *
+	 * @param \WC_Order $order  Parent order.
+	 * @param string    $amount Refund amount.
+	 */
+	private function refund_of( \WC_Order $order, string $amount ): \WC_Order_Refund {
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => $amount,
+				'refund_payment' => false,
+				'restock_items' => false,
+			)
+		);
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		return $refund;
 	}
 
 	private function create_pos_order(): \WC_Order {

@@ -88,6 +88,11 @@ class Gateway_Submission {
 		if ( empty( $descriptor['pos_enabled'] ) ) {
 			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is not enabled for the POS.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
+		// A new attempt needs an open sale; a replay above has already answered what happened (§4.2).
+		$closed = $ledger->accepts_tender( $order );
+		if ( $closed ) {
+			return $closed;
+		}
 		if ( 0 === Money::minor( $ledger->balance( $order, $rows ) ) ) {
 			return new WP_Error( 'wcpos_order_already_paid', __( 'Order is already paid.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
@@ -307,20 +312,26 @@ class Gateway_Submission {
 		} else {
 			$history     = self::supersede_sent( $order, $history );
 			$destination = null === $destination ? null : sanitize_text_field( $destination );
-			$order->update_meta_data(
-				self::STAMP_META_KEY,
-				array(
-					'method_id' => $descriptor['id'],
-					'destination' => $destination,
-					'attempt_id' => $attempt_id,
-					'sent_at_gmt' => gmdate( 'c' ),
-					'cashier_id' => get_current_user_id(),
-				)
+			$stamp       = array(
+				'method_id' => $descriptor['id'],
+				'destination' => $destination,
+				'attempt_id' => $attempt_id,
+				'sent_at_gmt' => gmdate( 'c' ),
+				'cashier_id' => get_current_user_id(),
 			);
+			// A callback that completes the order in a later request still names the register that sent it.
+			if ( Completion_Stamp::provenance( $order->get_id() ) ) {
+				$stamp['provenance'] = Completion_Stamp::provenance( $order->get_id() );
+			}
+			$order->update_meta_data( self::STAMP_META_KEY, $stamp );
 			self::remember_attempt( $order, $history, $attempt_id, 'sent' );
 			/* translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the destination the cashier entered. */
 			$order->add_order_note( sprintf( __( 'Sent via POS: %1$s (%2$s)', 'woocommerce-pos' ), $verb['label'], (string) $destination ) );
 			Ledger::saving( $order->get_id(), fn() => $order->save() );
+		}
+		if ( $paid ) {
+			// The completion waited for this row (Completion_Stamp::awaits_mint()): stamp it now.
+			Completion_Stamp::stamp( wc_get_order( $order->get_id() ) );
 		}
 		$outcome = $paid ? 'recorded' : ( $settled ? 'settled' : 'sent' );
 		Logger::log( sprintf( 'WCPOS gateway attempt %s on order #%d: %s via %s by cashier #%d (verb %s)', $attempt_id, $order->get_id(), $outcome, $descriptor['id'], get_current_user_id(), $verb['kind'] ) );

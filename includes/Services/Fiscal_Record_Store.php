@@ -128,10 +128,11 @@ final class Fiscal_Record_Store {
 		if ( ! in_array( $type, self::TYPES, true ) ) {
 			return null;
 		}
+		// A sale, its cancellation and its late correction belong to one completion of the order
+		// (ADR 0040: the pair order id + completion number), so their replay identity is source_id.
 		$identity = array(
-			'sale' => 'order_id',
-			'cancellation' => 'order_id',
-			'late_sale' => 'order_id',
+			'sale' => 'source_id',
+			'cancellation' => 'source_id',
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 		)[ $type ] ?? 'source_id';
@@ -260,18 +261,37 @@ final class Fiscal_Record_Store {
 	}
 
 	/**
-	 * Read an order's original sale.
+	 * Read an order's sale for one completion, or its latest sale.
 	 *
-	 * @param int $order_id Order ID.
+	 * A sale written before the completion history existed has no source id; the history names it
+	 * by the digest of its row id (Completion_Stamp's legacy entry), which is matched here too.
+	 *
+	 * @param int         $order_id      Order ID.
+	 * @param string|null $completion_id Completion entry id; null for the latest sale.
 	 */
-	public function find_sale( int $order_id ): ?array {
+	public function find_sale( int $order_id, ?string $completion_id = null ): ?array {
+		global $wpdb;
 		$this->ensure_installed();
-		return $this->find(
-			array(
-				'type' => 'sale',
-				'order_id' => $order_id,
-			)
+		$match = array(
+			'type' => 'sale',
+			'order_id' => $order_id,
 		);
+		if ( null === $completion_id ) {
+			return $this->find( $match, 'DESC' );
+		}
+		$sale = $this->find( $match + array( 'source_id' => strtolower( $completion_id ) ) );
+		if ( $sale ) {
+			return $sale;
+		}
+		$table = $this->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table.
+		$legacy = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE type = 'sale' AND order_id = %d AND source_id IS NULL ORDER BY id", $order_id ), ARRAY_A );
+		foreach ( $legacy as $row ) {
+			if ( self::digest_source_id( 'sale:' . $row['id'] ) === strtolower( $completion_id ) ) {
+				return $this->normalize_row( $row );
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -360,9 +380,10 @@ final class Fiscal_Record_Store {
 	/**
 	 * Resolve an internal equality lookup.
 	 *
-	 * @param array $fields Class-owned column names and values.
+	 * @param array  $fields    Class-owned column names and values.
+	 * @param string $direction `ASC` for the oldest match, `DESC` for the newest.
 	 */
-	private function find( array $fields ): ?array {
+	private function find( array $fields, string $direction = 'ASC' ): ?array {
 		global $wpdb;
 		$table = $this->table_name();
 		$where = array();
@@ -370,9 +391,10 @@ final class Fiscal_Record_Store {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned column name.
 			$where[] = $wpdb->prepare( "{$key} = %s", $value );
 		}
-		$where = implode( ' AND ', $where );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table and prepared predicates.
-		$row = $wpdb->get_row( "SELECT * FROM {$table} WHERE {$where} ORDER BY id LIMIT 1", ARRAY_A );
+		$where     = implode( ' AND ', $where );
+		$direction = 'DESC' === $direction ? 'DESC' : 'ASC';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Class-owned table, prepared predicates and a fixed direction.
+		$row = $wpdb->get_row( "SELECT * FROM {$table} WHERE {$where} ORDER BY id {$direction} LIMIT 1", ARRAY_A );
 		return $row ? $this->normalize_row( $row ) : null;
 	}
 

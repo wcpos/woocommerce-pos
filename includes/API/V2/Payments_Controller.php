@@ -12,10 +12,12 @@ namespace WCPOS\WooCommercePOS\API\V2;
 use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -36,6 +38,14 @@ class Payments_Controller extends WC_REST_Controller {
 	 */
 	protected $rest_base = 'orders';
 
+	/**
+	 * The money commands whose body may carry the completing register's provenance (record, intent,
+	 * capture, submit, close). A status poll, void, refund or cancel completes nothing at a register.
+	 *
+	 * @var string[]
+	 */
+	private const PROVENANCE_HANDLERS = array( 'create_item', 'intent_item', 'capture_item', 'submit_item', 'close_item' );
+
 	/** Register the order payment route family. */
 	public function register_routes(): void {
 		$payment_path = '/' . $this->rest_base . '/(?P<id>[\d]+)/payments';
@@ -44,6 +54,7 @@ class Payments_Controller extends WC_REST_Controller {
 			$method_path . '/submit' => array( WP_REST_Server::CREATABLE, 'submit_item' ),
 			$method_path . '/cancel' => array( WP_REST_Server::CREATABLE, 'cancel_item' ),
 			$payment_path => array( WP_REST_Server::CREATABLE, 'create_item' ),
+			'/' . $this->rest_base . '/(?P<id>[\d]+)/close' => array( WP_REST_Server::CREATABLE, 'close_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/status' => array( WP_REST_Server::READABLE, 'get_status' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/intent' => array( WP_REST_Server::CREATABLE, 'intent_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/capture' => array( WP_REST_Server::CREATABLE, 'capture_item' ),
@@ -63,7 +74,22 @@ class Payments_Controller extends WC_REST_Controller {
 								(int) $request['id'],
 								function () use ( $request, $definition ) {
 									try {
-										return $this->{$definition[1]}( $request );
+										$work = fn() => $this->{$definition[1]}( $request );
+										if ( in_array( $definition[1], self::PROVENANCE_HANDLERS, true ) ) {
+											// The command's provenance names the register that completes the sale, if it does (rule 1c).
+											$params     = $request->get_json_params();
+											$params     = is_array( $params ) ? $params : $request->get_body_params();
+											$provenance = is_array( $params['provenance'] ?? null ) ? $params['provenance'] : array();
+											$result     = Completion_Stamp::with_provenance( $provenance, $work, (int) $request['id'] );
+										} else {
+											$result = $work();
+										}
+										$order = is_wp_error( $result ) ? null : wc_get_order( (int) $request['id'] );
+										if ( $order instanceof WC_Order ) {
+											// A sale record whose insert failed is written by the next money command (§4.7).
+											Fiscal_Record_Writers::instance()->recover( $order );
+										}
+										return $result;
 									} catch ( Ledger_Persistence_Exception $error ) {
 										// The payment was not stored: a retryable conflict, never an acknowledgement.
 										return new WP_Error( 'woo_rxdb_sync_record_locked', $error->getMessage(), array( 'status' => 409 ) );
@@ -123,6 +149,21 @@ class Payments_Controller extends WC_REST_Controller {
 			return $refusal;
 		}
 		return $this->payment_response( $row, $order );
+	}
+
+	/**
+	 * Close a sale: no money moves; a covered order completes (ADR 0040 rule 1, D2).
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function close_item( $request ) {
+		$order = $this->get_order( (int) $request['id'] );
+		if ( is_wp_error( $order ) ) {
+			return $order;
+		}
+		$result = Ledger::instance()->close( $order );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
 	}
 
 	/**

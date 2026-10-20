@@ -303,7 +303,8 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		( new Payments_Sweeper() )->run();
 		$this->assertSame( array(), Sweep_Test_Handler::$captures );
 		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
-		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
+		// An authorization pays nothing (ADR 0040 D6), so the order stays open, not partial.
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
 	}
 
 	public function test_sweeper_does_not_capture_an_authorization_being_cancelled(): void {

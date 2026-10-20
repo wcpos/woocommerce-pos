@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_Error;
@@ -21,9 +22,9 @@ class Ledger {
 	public const INDEX_META_KEY = '_wcpos_payment_method';
 	public const PAYMENT_ID_META_KEY = '_wcpos_payment_id';
 	/**
-	 * One meta row per pending or authorized leg. What the sweep selects orders by: an
-	 * authorization that covers the balance completes the order through payment_complete(),
-	 * so a status filter would lose exactly the leg that most needs reconciling.
+	 * One meta row per pending or authorized leg. What the sweep selects orders by: a status
+	 * filter would lose a leg on an order whose status moved on (a cancel, an earlier
+	 * completion), which is exactly the leg that most needs reconciling.
 	 */
 	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
@@ -48,7 +49,10 @@ class Ledger {
 	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'provider_refs', 'receipt' );
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
-	public const COUNTING_STATUSES = array( 'authorized', 'captured' );
+	/** Only captured money pays a sale (ADR 0040 rule 1, D6): an authorization is money in motion. */
+	public const COUNTING_STATUSES = array( 'captured' );
+	/** Provider answers whose amount and currency are verified against the row before they are applied. */
+	private const VERIFIED_STATUSES = array( 'authorized', 'captured' );
 	public const STATUSES = array( 'pending', 'authorized', 'captured', 'failed', 'voided' );
 
 	/**
@@ -58,7 +62,8 @@ class Ledger {
 	 */
 	public const IN_PROGRESS_STATUSES = array( 'pos-open', 'pos-partial', 'pending', 'failed' );
 	public const KINDS = array( 'cash', 'card', 'stored_value', 'bank_transfer', 'other' );
-	public const SOURCES = array( 'app', 'webview' );
+	/** Who opened a row: the till, a webview mint, or WooCommerce itself (a tender adopted at reopen, D5). */
+	public const SOURCES = array( 'app', 'webview', 'woocommerce' );
 
 	/**
 	 * Shared instance.
@@ -106,13 +111,18 @@ class Ledger {
 	/**
 	 * Whether order state is currently being derived.
 	 *
-	 * @var bool True while derive() is running payment_complete() — lets hooks skip re-entry.
+	 * @var int The order derive() is running payment_complete() on, 0 when none — lets hooks skip re-entry.
 	 */
-	private static $deriving = false;
+	private static $deriving = 0;
 
-	/** Whether the ledger is currently deriving order state (inside payment_complete()). */
-	public static function is_deriving(): bool {
-		return self::$deriving;
+	/**
+	 * Whether the ledger is deriving order state (inside payment_complete()): for this order when one
+	 * is named, for any order otherwise.
+	 *
+	 * @param int|null $order_id Order ID, or null for any order.
+	 */
+	public static function is_deriving( ?int $order_id = null ): bool {
+		return null === $order_id ? 0 !== self::$deriving : ( 0 !== $order_id && self::$deriving === $order_id );
 	}
 
 	/**
@@ -514,7 +524,7 @@ class Ledger {
 	}
 
 	/**
-	 * Sum authorized and captured rows.
+	 * Sum captured rows.
 	 *
 	 * @param array $rows Payment rows.
 	 */
@@ -544,8 +554,23 @@ class Ledger {
 		if ( 0 === $paid && ( $order->is_paid() || $order->get_date_paid() ) ) {
 			return Money::format( 0 );
 		}
-		$balance = Money::minor( $order->get_total() ) - $paid;
-		return Money::format( max( 0, $balance ) );
+		return Money::format( max( 0, $this->signed_balance( $order, $rows ) ) );
+	}
+
+	/**
+	 * The signed balance in minor units (ADR 0040 rule 1): total − Σ captured rows + Σ succeeded
+	 * refund allocations. Positive is still due; negative is owed back to the customer. A pending
+	 * allocation is a reservation shown beside it, never added.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	public function signed_balance( WC_Order $order, array $rows ): int {
+		$refunded = 0;
+		foreach ( $rows as $row ) {
+			$refunded += self::refunded_total( $row );
+		}
+		return Money::minor( $order->get_total() ) - Money::minor( $this->paid( $rows ) ) + $refunded;
 	}
 
 	/**
@@ -556,11 +581,24 @@ class Ledger {
 	 */
 	public function summary( WC_Order $order, ?array $rows = null ): array {
 		$rows = null === $rows ? $this->read( $order ) : $rows;
+		$authorized = 0;
+		$pending    = 0;
+		foreach ( $rows as $row ) {
+			if ( 'authorized' === ( $row['status'] ?? '' ) ) {
+				$authorized += Money::minor( $row['amount'] ?? 0 );
+			}
+			foreach ( $row['refunds'] ?? array() as $allocation ) {
+				$pending += 'pending' === ( $allocation['status'] ?? '' ) ? Money::minor( $allocation['amount'] ?? 0 ) : 0;
+			}
+		}
 		return array(
 			'status'               => $order->get_status(),
 			'total'                => Money::normalize( $order->get_total() ),
 			'paid'                 => $this->paid( $rows ),
+			'authorized'           => Money::format( $authorized ),
 			'balance'              => $this->balance( $order, $rows ),
+			'refund_due'           => Money::format( max( 0, -$this->signed_balance( $order, $rows ) ) ),
+			'refund_pending'       => Money::format( $pending ),
 			'payment_method'       => $order->get_payment_method(),
 			'payment_method_title' => $order->get_payment_method_title(),
 		);
@@ -599,6 +637,12 @@ class Ledger {
 				self::saving( $order->get_id(), fn() => $order->save() );
 			}
 			return $this->find( $order, $stored['id'] );
+		}
+		// A closed sale takes no new tender (§4.2). A paid one keeps the refused-row record below
+		// (offline cash may already be in the drawer); one never paid is refused outright.
+		$closed = $this->accepts_tender( $order );
+		if ( $closed && 'wcpos_order_already_paid' !== $closed->get_error_code() ) {
+			return $closed;
 		}
 
 		$descriptor = $this->validate_method( (string) ( $input['method_id'] ?? '' ) );
@@ -654,7 +698,7 @@ class Ledger {
 			)
 		);
 
-		$balance = Money::minor( $this->balance( $order, $rows ) );
+		$balance = $closed ? 0 : Money::minor( $this->balance( $order, $rows ) );
 		// A provider leg still pending has reserved its share of the balance: cash taken on top
 		// of it would count twice if the terminal later confirms (the money moved both ways).
 		// A leg the till has already asked to cancel does not block cash: the cashier accepted
@@ -681,6 +725,11 @@ class Ledger {
 			return $this->refusal_error( $row, $order );
 		}
 
+		// Prevent-overselling holds the sale's stock before money is taken for it (§7.5).
+		$held = Stock_Validator::instance()->validate_checkout( $order );
+		if ( is_wp_error( $held ) ) {
+			return $held;
+		}
 		$row    = $this->normalize_row( $order, $row );
 		$rows[] = $row;
 		// Index the arrival before consuming its webhook, but do not mark money paid
@@ -776,6 +825,10 @@ class Ledger {
 				'handoff' => $handoff,
 			);
 		}
+		$closed = $this->accepts_tender( $order );
+		if ( $closed ) {
+			return $closed;
+		}
 		$balance = Money::minor( $this->balance( $order, $rows ) );
 		if ( 0 === $balance || Money::minor( $amount ) > $balance ) {
 			return new WP_Error( 0 === $balance ? 'wcpos_order_already_paid' : 'wcpos_amount_exceeds_balance', 0 === $balance ? __( 'The order is already paid.', 'woocommerce-pos' ) : __( 'Payment amount exceeds the order balance.', 'woocommerce-pos' ), array( 'status' => 0 === $balance ? 409 : 400 ) );
@@ -783,7 +836,7 @@ class Ledger {
 		$pending = $this->pending_reserved( $rows );
 		$newest_pending = null;
 		foreach ( $rows as $existing ) {
-			if ( 'pending' === $existing['status'] && ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) ) {
+			if ( in_array( $existing['status'], array( 'pending', 'authorized' ), true ) && ( null === $newest_pending || strtotime( $existing['created_at_gmt'] ) >= strtotime( $newest_pending['created_at_gmt'] ) ) ) {
 				$newest_pending = $existing;
 			}
 		}
@@ -796,6 +849,10 @@ class Ledger {
 					'payment_id' => $newest_pending['id'],
 				)
 			);
+		}
+		$held = Stock_Validator::instance()->validate_checkout( $order );
+		if ( is_wp_error( $held ) ) {
+			return $held;
 		}
 		$row = $this->normalize_row(
 			$order,
@@ -838,6 +895,7 @@ class Ledger {
 				$rows = array_filter( $rows, static fn( $saved ) => $saved['id'] !== $row['id'] );
 				// Delete only this refused intent; omitted concurrent rows must survive.
 				$this->save( $order, $rows, false, array( $row['id'] ) );
+				$this->release_hold_if_idle( $order );
 			}
 			return $new;
 		}
@@ -931,7 +989,7 @@ class Ledger {
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
 		}
-		if ( in_array( $applied['status'], self::COUNTING_STATUSES, true ) ) {
+		if ( in_array( $applied['status'], self::VERIFIED_STATUSES, true ) ) {
 			$confirmed = array_key_exists( 'amount', $new ) ? $new['amount'] : $row['amount'];
 			$valid = is_numeric( $confirmed );
 			$difference = $valid ? Money::minor( $confirmed ) - Money::minor( $row['amount'] ) : 0;
@@ -943,11 +1001,14 @@ class Ledger {
 				$applied['failure_reason'] = 'amount_mismatch';
 				$applied = $this->normalize_row( $order, $applied );
 				$this->replace_and_save( $order, $rows, $applied, $derive );
+				$this->release_hold_if_idle( $order );
 				/* translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency. */
 				$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
 				return $this->refusal_error( $applied, $order );
 			}
-			if ( $tip ) {
+			// An authorization above the leg is tolerated but takes no tip: the hold may yet be voided,
+			// and only the captured amount confirms what the customer paid (the capture adds the fee).
+			if ( $tip && 'captured' === $applied['status'] ) {
 				$fee = new \WC_Order_Item_Fee();
 				$fee->set_name( __( 'Tip', 'woocommerce-pos' ) );
 				$fee->set_tax_status( 'none' );
@@ -982,6 +1043,9 @@ class Ledger {
 		if ( $applied !== $row ) {
 			$applied = $this->normalize_row( $order, $applied );
 			$this->replace_and_save( $order, $rows, $applied, $derive );
+			if ( in_array( $applied['status'], array( 'failed', 'voided' ), true ) ) {
+				$this->release_hold_if_idle( $order );
+			}
 		}
 		return $applied;
 	}
@@ -1326,7 +1390,7 @@ class Ledger {
 			// falling back to a cancelling one only when nothing else is live.
 			$blocking = null;
 			foreach ( $this->read( $order ) as $live ) {
-				if ( 'pending' !== $live['status'] ) {
+				if ( ! in_array( $live['status'], array( 'pending', 'authorized' ), true ) ) {
 					continue;
 				}
 				$live_cancelling     = ! empty( $live['void_requested_at'] );
@@ -1340,6 +1404,111 @@ class Ledger {
 			}
 		}
 		return new WP_Error( 'wcpos_' . $reason, $messages[ $reason ], $data );
+	}
+
+	/**
+	 * A closed sale takes no new tender (spec §4.2): a new row is accepted only while the sale is open
+	 * (editable, in progress, or awaiting a sent submit). A completed sale whose signed balance went
+	 * positive through a refund is reopened first, so the money lands on an open sale and completes it
+	 * again. Replays and the commands on an existing row never ask.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	public function accepts_tender( WC_Order $order ): ?WP_Error {
+		$stands = Completion_Stamp::stands( $order );
+		if ( ! $stands && ( $order->is_editable() || in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) || null !== Gateway_Submission::read_stamp( $order ) ) ) {
+			return null;
+		}
+		if ( $stands || null !== $order->get_date_paid( 'edit' ) ) {
+			return new WP_Error(
+				'wcpos_order_already_paid',
+				__( 'The order is already paid.', 'woocommerce-pos' ),
+				array(
+					'status' => 409,
+					'order'  => $this->summary( $order ),
+				)
+			);
+		}
+		return $this->invalid_transition();
+	}
+
+	/**
+	 * Close a sale (ADR 0040 rule 1, D2): move no money, re-derive, and complete it when the signed
+	 * balance covers a non-zero total — the way a reopened sale is completed again (completion n+1).
+	 * A sale already paid replays its last completion. Refused while money is in motion, and with
+	 * `wcpos_balance_outstanding` when uncovered (a zero total too: derive() never completes one).
+	 *
+	 * @param WC_Order $order Order object, read under the route's order lock.
+	 * @return array|WP_Error `{ order: summary, completion: { n, id } }`.
+	 */
+	public function close( WC_Order $order ) {
+		$rows = $this->read( $order );
+		// A standing completion is replayed whatever its status (a merchant's POS status may be on-hold).
+		// A sale paid before the history existed stands too: it replays with no completion to name.
+		if ( Completion_Stamp::stands( $order ) ) {
+			$history = Completion_Stamp::read( $order );
+			return $this->closed( $order, $rows, end( $history ) );
+		}
+		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'on-hold' ), true ) ) {
+			return $this->invalid_transition(); // Never completed, or its completion was reopened (a cancel).
+		}
+		foreach ( $rows as $row ) {
+			$pending_refund = array_filter( (array) ( $row['refunds'] ?? array() ), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );
+			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || $pending_refund ) {
+				return $this->in_flight( $order, array( 'payment_id' => $row['id'] ) );
+			}
+		}
+		$sent  = array_search( 'sent', Gateway_Submission::read_attempts( $order ), true );
+		$stamp = Gateway_Submission::read_stamp( $order );
+		if ( false !== $sent || null !== $stamp ) {
+			return $this->in_flight( $order, array( 'attempt_id' => false !== $sent ? $sent : ( $stamp['attempt_id'] ?? null ) ) );
+		}
+		if ( Money::minor( $order->get_total() ) <= 0 || $this->signed_balance( $order, $rows ) > 0 ) {
+			return new WP_Error(
+				'wcpos_balance_outstanding',
+				__( 'The order is not covered by its payments.', 'woocommerce-pos' ),
+				array(
+					'status' => 409,
+					'order' => $this->summary( $order, $rows ),
+				)
+			);
+		}
+		$this->derive( $order, $rows, true );
+		self::saving( $order->get_id(), fn() => $order->save() );
+		$fresh = wc_get_order( $order->get_id() );
+		$fresh->read_meta_data( true );
+		$history = Completion_Stamp::read( $fresh );
+		$latest  = end( $history );
+		// Only a completion that stands is reported: when the new entry could not be recorded, the
+		// latest is the reopened one (the failure note names the gap), so none is named.
+		return $this->closed( $fresh, $this->read( $fresh ), is_array( $latest ) && empty( $latest['reopened_at_gmt'] ) ? $latest : false );
+	}
+
+	/**
+	 * The close answer: the order summary and the completion it stands on.
+	 *
+	 * @param WC_Order    $order Order object.
+	 * @param array       $rows  Payment rows.
+	 * @param array|false $entry Latest completion entry, if any.
+	 */
+	private function closed( WC_Order $order, array $rows, $entry ): array {
+		return array(
+			'order'      => $this->summary( $order, $rows ),
+			'completion' => is_array( $entry ) ? array(
+				'n'  => (int) $entry['n'],
+				'id' => (string) $entry['id'],
+			) : null,
+		);
+	}
+
+	/**
+	 * Money in motion refuses a close.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $named The payment or attempt in motion.
+	 */
+	private function in_flight( WC_Order $order, array $named ): WP_Error {
+		return new WP_Error( 'wcpos_payment_in_flight', __( 'Another payment is already in progress on this order.', 'woocommerce-pos' ), array_merge( array( 'status' => 409 ), $named, array( 'order' => $this->summary( $order ) ) ) );
 	}
 
 	/**
@@ -1420,6 +1589,7 @@ class Ledger {
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
 			self::saving( $order->get_id(), fn() => $order->save() );
+			$this->release_hold_if_idle( $order );
 			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
 			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
 		}
@@ -1427,9 +1597,25 @@ class Ledger {
 	}
 
 	/**
+	 * Nothing is paying for the sale any more (no pending, authorized or captured row) and its stock
+	 * was never reduced: the prevent-overselling hold goes back to the shelf.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	private function release_hold_if_idle( WC_Order $order ): void {
+		if ( array_filter( $this->read( $order ), static fn( $live ) => in_array( $live['status'] ?? '', self::LIVE_STATUSES, true ) ) ) {
+			return;
+		}
+		if ( ! $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) {
+			Stock_Validator::instance()->release_checkout_stock( $order );
+		}
+	}
+
+	/**
 	 * Whether a row may be voided: pending or authorized always; captured only when it is a
-	 * manual row on an order still in progress (cancelling a split mid-way). Once the order
-	 * has completed, derive() will not unwind it, so a captured cash leg is refunded instead.
+	 * manual row on an order still in progress (cancelling a split mid-way) that no completion
+	 * has counted. Once a completion counted it, a reopen does not make it voidable again: the
+	 * money leaves only through a linked refund (ADR 0040 rule 3).
 	 *
 	 * @param array    $row   Payment row.
 	 * @param WC_Order $order Order object.
@@ -1441,7 +1627,8 @@ class Ledger {
 		}
 		return 'captured' === $status
 			&& 'manual' === ( $row['capture_mode'] ?? '' )
-			&& in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true );
+			&& in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true )
+			&& ! Completion_Stamp::counted( $order, (string) ( $row['id'] ?? '' ) );
 	}
 
 	/**
@@ -1682,10 +1869,11 @@ class Ledger {
 	/**
 	 * Derive WooCommerce fields without changing the order total.
 	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $rows  Payment rows.
+	 * @param WC_Order $order   Order object.
+	 * @param array    $rows    Payment rows.
+	 * @param bool     $closing Whether `close` asked: only it may complete an editable order outside the projected set (on-hold).
 	 */
-	public function derive( WC_Order $order, array $rows ): void {
+	public function derive( WC_Order $order, array $rows, bool $closing = false ): void {
 		$counting = array_values(
 			array_filter(
 				$rows,
@@ -1716,6 +1904,8 @@ class Ledger {
 		$stamped = null !== Gateway_Submission::read_stamp( $order );
 		// No counting rows: leave payment_method/title untouched (the cart, or every leg voided).
 		if ( $selected ) {
+			// The completion this may cause still names the register a sent submit came from.
+			Completion_Stamp::memoise( $order );
 			Gateway_Submission::clear_stamp( $order );
 			$titles = array();
 			foreach ( $counting as $row ) {
@@ -1733,21 +1923,23 @@ class Ledger {
 
 		// Only the ledger-managed states are projected; a completed/processing/on-hold/refunded
 		// order is never pulled back by a later ledger write (a refused row, a void of a leg).
-		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && ! $stamped ) {
+		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && ! $stamped && ! ( $closing && $order->is_editable() ) ) {
 			return;
 		}
 		$paid  = Money::minor( $this->paid( $rows ) );
 		$total = Money::minor( $order->get_total() );
-		if ( $total > 0 && $paid >= $total ) {
-			if ( ! self::$deriving ) {
-				self::$deriving = true;
+		// Covered on the signed balance: a refund allocated after an earlier completion is money
+		// that left, so gross captured money alone does not complete a reopened sale again.
+		if ( $total > 0 && $this->signed_balance( $order, $rows ) <= 0 ) {
+			if ( 0 === self::$deriving ) {
+				self::$deriving = $order->get_id();
 				try {
 					// Woo sets date_paid, reduces stock and fires woocommerce_payment_complete;
 					// Orders::payment_complete_order_status() lands the per-gateway status
 					// because payment_method was set above.
 					$order->payment_complete();
 				} finally {
-					self::$deriving = false;
+					self::$deriving = 0;
 				}
 			}
 			return;
@@ -1824,7 +2016,7 @@ class Ledger {
 	}
 
 	/**
-	 * Minor units reserved by pending legs: money a provider may still confirm.
+	 * Minor units reserved by pending and authorized legs: money a provider may still confirm or capture.
 	 *
 	 * @param array $rows               Payment rows.
 	 * @param bool  $include_cancelling Whether legs whose cancel is already requested still reserve.
@@ -1832,7 +2024,7 @@ class Ledger {
 	private function pending_reserved( array $rows, bool $include_cancelling = true ): int {
 		$reserved = 0;
 		foreach ( $rows as $row ) {
-			if ( 'pending' === ( $row['status'] ?? '' ) && ( $include_cancelling || empty( $row['void_requested_at'] ) ) ) {
+			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) && ( $include_cancelling || empty( $row['void_requested_at'] ) ) ) {
 				$reserved += Money::minor( $row['amount'] ?? 0 );
 			}
 		}

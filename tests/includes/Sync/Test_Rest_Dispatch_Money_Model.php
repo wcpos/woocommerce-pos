@@ -15,8 +15,11 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact pin scenarios.
 
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
@@ -118,7 +121,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 
 	/** Every server-owned meta key (ADR 0040 rule 2), spelled out so the pin does not trust the constant it pins. */
 	protected function server_money_meta_keys(): array {
-		return array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date' );
+		return array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_fiscal_pending', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date' );
 	}
 
 	/** Every top-level wc/v3 money field, set to a value that would mark the order paid. */
@@ -848,6 +851,270 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertCount( 1, $reopen_notes );
 	}
 
+	/** Completed on register A, reopened by a push and closed on register B: entry 2 names B (§4.4). */
+	public function test_reopen_and_close_on_another_register_writes_entry_2_naming_it(): void {
+		// Arrange: a cash sale completed on register A.
+		$register_a = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+		$register_b = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+		$order_id   = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$record     = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params(
+			array(
+				'payment' => $this->cash_payment( '20.00' ),
+				'provenance' => array( 'register_id' => $register_a ),
+			)
+		);
+		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
+		$first = Completion_Stamp::read( wc_get_order( $order_id ) );
+
+		// Act: the push reopens it; register B closes it.
+		$reopen = $this->push_status( $order_id, 'pos-open' );
+		$close  = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' );
+		$close->set_body_params( array( 'provenance' => array( 'register_id' => $register_b ) ) );
+		$closed = $this->server->dispatch( $close );
+
+		// Assert.
+		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$history = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
+		$this->assertSame( $register_a, $history[0]['register'] );
+		$this->assertSame( $register_b, $history[1]['register'] );
+		$this->assertSame( $first[0]['id'], $history[0]['id'] );
+		$this->assertSame( $first[0]['at_gmt'], $history[0]['at_gmt'] );
+		$this->assertNotNull( $history[0]['reopened_at_gmt'] );
+		$this->assertTrue( wc_get_order( $order_id )->is_paid() );
+	}
+
+	/**
+	 * A sale a WooCommerce gateway paid outside the ledger: processing, date_paid, a transaction id.
+	 *
+	 * @param string $price  Line price (two units).
+	 * @param string $status The paid status the gateway landed.
+	 */
+	protected function gateway_paid_order( string $price = '50', string $status = 'processing' ): int {
+		add_filter( 'woocommerce_payment_gateways', array( $this, 'with_adopt_gateway' ) );
+		\WC_Payment_Gateways::instance()->init();
+		Adopt_Refund_Test_Gateway::$calls = 0;
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product( $price ), 2 ) ) );
+		$order    = wc_get_order( $order_id );
+		$order->set_payment_method( 'wcpos_adopt_refund_test' );
+		$order->set_transaction_id( 'txn_1' );
+		$order->set_date_paid( time() - HOUR_IN_SECONDS );
+		$order->set_status( $status );
+		$order->save();
+		return $order_id;
+	}
+
+	/**
+	 * Register the refund-capable gateway fixture.
+	 *
+	 * @param array $gateways Gateway classes.
+	 */
+	public function with_adopt_gateway( array $gateways ): array {
+		return array_merge( $gateways, array( Adopt_Refund_Test_Gateway::class ) );
+	}
+
+	/** Reopening a gateway-paid sale adopts its tender as a captured row, with its refunds (D5). */
+	public function test_reopen_of_a_gateway_paid_order_adopts_its_tender_as_a_captured_row(): void {
+		// Arrange.
+		$order_id  = $this->gateway_paid_order();
+		$refund    = wc_create_refund(
+			array(
+				'order_id' => $order_id,
+				'amount' => '20.00',
+				'refund_payment' => false,
+			)
+		);
+		$date_paid = wc_get_order( $order_id )->get_date_paid( 'edit' )->getTimestamp();
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert: storage, not the push's object.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$stored = $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) );
+		$this->assertCount( 1, $stored );
+		$rows = json_decode( maybe_unserialize( $stored[0][2] ), true )['payments'];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'woocommerce', $rows[0]['source'] );
+		$this->assertSame( 'captured', $rows[0]['status'] );
+		$this->assertSame( 'webview', $rows[0]['capture_mode'] );
+		$this->assertSame( '100.00', $rows[0]['amount'] );
+		$this->assertSame( 'txn_1', $rows[0]['provider_refs']['transaction_id'] );
+		$this->assertSame(
+			array(
+				array(
+					'id' => $refund->get_id(),
+					'amount' => '20.00',
+					'status' => 'succeeded',
+					'provider_ref' => null,
+				),
+			),
+			$rows[0]['refunds']
+		);
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'pos-open', $order->get_status() );
+		$this->assertSame( $date_paid, $order->get_date_paid( 'edit' )->getTimestamp() );
+		$this->assertSame( array(), array_filter( Completion_Stamp::read( $order ), static fn( $entry ) => empty( $entry['legacy'] ) ) );
+		$this->assertSame( '20.00', Ledger::instance()->summary( $order )['balance'] );
+	}
+
+	/** A pre-ledger sale completed onto a configured on-hold status is reopened by a push: adoption, marking, close. */
+	public function test_a_pre_ledger_sale_completed_onto_on_hold_is_reopened_adopted_and_closes_as_completion_2(): void {
+		// Arrange: the gateway's POS Order Status stored as On hold; paid outside the ledger.
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash'                => array( 'enabled' => true ),
+					'wcpos_adopt_refund_test' => array(
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+				),
+			)
+		);
+		$order_id = $this->gateway_paid_order( '50', 'on-hold' );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
+		$this->assertNotNull( wc_get_order( $order_id )->get_date_paid( 'edit' ) );
+		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order_id ) ) );
+
+		// Act: reopen, drop a unit, close.
+		$reopen = $this->push_status( $order_id, 'pos-open' );
+		$rows   = Ledger::instance()->read( wc_get_order( $order_id ) );
+		$marked = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$edit   = $this->quantity_edit( $order_id, -1 );
+		// The till sends the line's money with its quantity; wc/v3 does not reprice an updated line.
+		$edit['line_items'][0] += array(
+			'subtotal' => '50.00',
+			'total'    => '50.00',
+		);
+		$edit   = $this->push_envelope( 'update', $edit, $this->order_revision( $order_id ) );
+		$closed = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+
+		// Assert.
+		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
+		$this->assertSame( array( 'woocommerce' ), array_column( $rows, 'source' ) );
+		$this->assertCount( 1, $marked );
+		$this->assertNotNull( $marked[0]['reopened_at_gmt'] );
+		$this->assertSame( 200, $edit->get_status(), 'Response: ' . wp_json_encode( $edit->get_data() ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$this->assertSame( '50.00', $closed->get_data()['order']['refund_due'] );
+	}
+
+	/** The adopted tender cannot be voided from the till and refunds through its gateway. */
+	public function test_adopted_tender_is_not_voidable_and_is_refundable(): void {
+		// Arrange.
+		$order_id = $this->gateway_paid_order();
+		$this->assertSame( 200, $this->push_status( $order_id, 'pos-open' )->get_status() );
+		$row = Ledger::instance()->read( wc_get_order( $order_id ) )[0];
+
+		// Act.
+		$void   = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments/' . $row['id'] . '/void' ) );
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order_id,
+				'amount' => '10.00',
+				'refund_payment' => false,
+			)
+		);
+		$allocate = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments/' . $row['id'] . '/refund' );
+		$allocate->set_body_params(
+			array(
+				'refund_id' => $refund->get_id(),
+				'amount' => '10.00',
+			)
+		);
+		$allocated = $this->server->dispatch( $allocate );
+
+		// Assert.
+		$this->assertSame( 409, $void->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $void->get_data()['code'] );
+		$this->assertSame( 200, $allocated->get_status(), 'Response: ' . wp_json_encode( $allocated->get_data() ) );
+		$this->assertSame( 'succeeded', $allocated->get_data()['payment']['refunds'][0]['status'] );
+		$this->assertSame( 1, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** A second reopen finds the adopted row and adopts nothing more. */
+	public function test_a_second_reopen_adopts_nothing_more(): void {
+		// Arrange: adopted, closed, reopened again.
+		$order_id = $this->gateway_paid_order();
+		$this->assertSame( 200, $this->push_status( $order_id, 'pos-open' )->get_status() );
+		$closed = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$before = $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( $before, $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) ) );
+		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order_id ) ) );
+	}
+
+	/** A sale the ledger paid already has its rows: a reopen adopts nothing. */
+	public function test_reopen_of_a_ledger_paid_sale_adopts_nothing(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$record   = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params( array( 'payment' => $this->cash_payment( '20.00' ) ) );
+		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
+		$before = $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) );
+
+		// Act.
+		$response = $this->push_status( $order_id, 'pos-open' );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( $before, $this->stored_meta_rows( $order_id, array( Ledger::META_KEY ) ) );
+		$this->assertSame( array( 'app' ), array_column( Ledger::instance()->read( wc_get_order( $order_id ) ), 'source' ) );
+	}
+
+	/** A sale completed into a configured on-hold status is marked reopened by a push to pos-open, so close writes entry 2. */
+	public function test_a_sale_completed_into_a_configured_on_hold_status_reopens_and_closes_as_completion_2(): void {
+		// Arrange: Cash's POS Order Status stored as On hold; cash covers the sale.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+					'pos_card' => array( 'enabled' => true ),
+				),
+			)
+		);
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$record   = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params( array( 'payment' => $this->cash_payment( '20.00' ) ) );
+		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
+		$this->assertCount( 1, Completion_Stamp::read( wc_get_order( $order_id ) ) );
+
+		// Act: reopen, drop a unit, close.
+		$reopen  = $this->push_status( $order_id, 'pos-open' );
+		$marked  = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$edit    = $this->push_envelope( 'update', $this->quantity_edit( $order_id, -1 ), $this->order_revision( $order_id ) );
+		$closed  = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/close' ) );
+
+		// Assert.
+		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
+		$this->assertNotNull( $marked[0]['reopened_at_gmt'] );
+		$this->assertSame( 200, $edit->get_status(), 'Response: ' . wp_json_encode( $edit->get_data() ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$history = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
+		$this->assertIsArray( ( new Fiscal_Record_Store() )->find_sale( $order_id, $history[1]['id'] ) );
+	}
+
 	public function test_cancel_with_a_pending_row_is_refused_money_in_motion(): void {
 		// Arrange.
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
@@ -1568,5 +1835,35 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'wcpos_update_required', $response->get_data()['code'] );
 		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order_id ) ) );
 		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
+	}
+}
+
+/** A refund-capable gateway that records its calls and contacts no provider. */
+class Adopt_Refund_Test_Gateway extends \WC_Payment_Gateway {
+	/**
+	 * process_refund() calls.
+	 *
+	 * @var int
+	 */
+	public static $calls = 0;
+
+	/** Fixture identity. */
+	public function __construct() {
+		$this->id       = 'wcpos_adopt_refund_test';
+		$this->title    = 'Online card';
+		$this->enabled  = 'yes';
+		$this->supports = array( 'products', 'refunds' );
+	}
+
+	/**
+	 * Refund at the provider.
+	 *
+	 * @param int    $order_id Order ID.
+	 * @param float  $amount   Amount.
+	 * @param string $reason   Reason.
+	 */
+	public function process_refund( $order_id, $amount = null, $reason = '' ) {
+		++self::$calls;
+		return true;
 	}
 }
