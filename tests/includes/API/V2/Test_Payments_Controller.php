@@ -1761,6 +1761,88 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'failed', $current->get_data()['payment']['status'] );
 	}
 
+	/**
+	 * Pin 32: a record's whole body is its fingerprint: the same row id with any other body is a conflict.
+	 *
+	 * @param array $other The body field that differs.
+	 * @dataProvider other_record_bodies
+	 */
+	public function test_a_record_replayed_with_another_body_is_422( array $other ): void {
+		// Arrange: a partial cash row.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '20.00', array( 'tendered' => '20.00' ) );
+		$this->assertSame( 200, $this->record( $order, $payment )->get_status() );
+		$before = $this->stored_meta( $order->get_id(), Ledger::META_KEY );
+
+		// Act.
+		$body = array_merge( array( 'payment' => $payment ), $other );
+		if ( isset( $other['payment'] ) ) {
+			$body['payment'] = array_merge( $payment, $other['payment'] );
+		}
+		$response = $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/payments', array_merge( $body, array( 'revision' => $this->current_revision( $order ) ) ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_command_conflict', $response->get_data()['code'] );
+		$this->assertSame( $payment['id'], $response->get_data()['data']['payment']['id'] );
+		$this->assertSame( $before, $this->stored_meta( $order->get_id(), Ledger::META_KEY ) );
+	}
+
+	/** Record bodies that differ from the first only outside method, amount and currency. */
+	public function other_record_bodies(): array {
+		return array(
+			'tendered'   => array( array( 'payment' => array( 'tendered' => '50.00' ) ) ),
+			'provenance' => array( array( 'provenance' => array( 'register_id' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' ) ) ),
+		);
+	}
+
+	/** Pin 32: a record naming a row another command created is a conflict, even with matching money fields. */
+	public function test_a_record_naming_an_intent_rows_id_is_422(): void {
+		// Arrange: intent row P through the test handler.
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		$mode = static fn() => 'route_test';
+		add_filter( 'wcpos_payment_method_capture_mode', $mode );
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '40.00' );
+		$this->assertSame( 200, $this->command( $this->payment_path( $order, $payment['id'] ) . '/intent', $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) ) )->get_status() );
+		remove_filter( 'wcpos_payment_method_capture_mode', $mode );
+		Route_Handler::$intents = 0;
+		$before = $this->stored_row( $order->get_id(), $payment['id'] );
+
+		// Act: record the same id, method, amount and currency.
+		$response = $this->record( $order, $payment );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_command_conflict', $response->get_data()['code'] );
+		$this->assertSame( 0, Route_Handler::$intents );
+		$this->assertSame( $before, $this->stored_row( $order->get_id(), $payment['id'] ) );
+	}
+
+	/** Pin 32: a refused record replays from its own entry: the same refusal, one failed row. */
+	public function test_a_refused_record_replays_its_refusal_with_a_stale_revision(): void {
+		// Arrange: a paid sale, then cash the order no longer owes.
+		$order = $this->create_pos_order();
+		$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_status() );
+		$late = $this->payment( 'pos_cash', '10.00' );
+		$body = $this->envelope( $order, array( 'payment' => $late ) );
+		$path = '/wcpos/v2/orders/' . $order->get_id() . '/payments';
+
+		// Act.
+		$refused = $this->command( $path, $body );
+		$again   = $this->command( $path, $body );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status() );
+		$this->assertSame( 'wcpos_order_already_paid', $refused->get_data()['code'] );
+		$this->assertSame( 409, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'wcpos_order_already_paid', $again->get_data()['code'] );
+		$row = $this->stored_row( $order->get_id(), $late['id'] );
+		$this->assertSame( 'failed', $row['status'] );
+		$this->assertSame( 'record', $row['commands'][ $late['id'] ]['kind'] );
+		$this->assertCount( 2, $this->stored_meta( $order->get_id(), Ledger::META_KEY )['payments'] );
+	}
+
 	/** Create an open POS order at the contract total. */
 	/**
 	 * A captured cash row, for seeding without deriving.

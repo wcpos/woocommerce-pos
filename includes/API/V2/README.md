@@ -138,13 +138,15 @@ carries the envelope:
 | `command_id` (uuid) | `intent`, `capture`, `void`, `refund`, `submit`, `cancel`, `close` | 400 `rest_invalid_param` |
 | `revision` (`sha256:…`) | the seven above and `record` | 428 `wcpos_revision_required` |
 
-`record` has no `command_id`: its row id is the command id. `revision` is the order revision the
+`record` has no `command_id`: it keeps its row id as the command id and its whole body as the
+fingerprint, and a refused record keeps its refusal as its stored outcome. `revision` is the order revision the
 push lane compares (`baseRevision`, ADR 0033). Under the order lock the server first looks the
 command up, order-wide (every row's `commands` map and the order's `_wcpos_commands`): the same id
 with the same body (route, target and body, keys sorted, values as sent) replays the stored
 outcome **whatever revision it carries**, since a retry carries the revision from before its own
-effect; the same id with another body is 422 `wcpos_command_conflict` (`command_id`, `kind`);
-`record` and `intent` replay by row id. Only a fresh command meets the revision: a stale one is
+effect; the same id with another body is 422 `wcpos_command_conflict` (`command_id`, `kind`, and
+for `record` the stored `payment`). A row with no entry of its own (a gateway mint, a webview or
+adopted tender) owns its id too: a `record` or any command reusing it is the same 422. Only a fresh command meets the revision: a stale one is
 409 `wcpos_revision_stale` with `currentRevision`, `current` (the document) and `order`, and
 nothing runs. A failed read of the order (403, 404) is answered as itself.
 

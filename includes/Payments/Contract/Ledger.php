@@ -610,10 +610,11 @@ class Ledger {
 	 * @param WC_Order $order   Order object.
 	 * @param array    $input   Payment input.
 	 * @param array    $context Payment context.
+	 * @param array    $command The till's command (row id, body fingerprint); its entry rides the row's save.
 	 *
 	 * @return array|\WP_Error
 	 */
-	public function record( WC_Order $order, array $input, array $context = array() ) {
+	public function record( WC_Order $order, array $input, array $context = array(), array $command = array() ) {
 		// The till's row carries server-derived fields too (source, kind, change, refunds…); only these are inputs.
 		$input = array_intersect_key( $input, array_flip( self::RECORD_INPUT_KEYS ) );
 		$validated = $this->validate_input( $order, $input );
@@ -708,7 +709,8 @@ class Ledger {
 			$row['status']          = 'failed';
 			$row['failure_reason']  = 0 === $balance ? 'order_already_paid' : ( Money::minor( $amount ) > $balance ? 'amount_exceeds_balance' : 'payment_in_flight' );
 			$row['captured_at_gmt'] = null;
-			$row                    = $this->normalize_row( $order, $row );
+			// The refusal is the command's stored outcome: its replay answers the same refusal.
+			$row = $this->normalize_row( $order, $this->with_command( $row, $command ) );
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
 			Settlement::instance()->apply_parked( $order, $row['id'] );
@@ -730,7 +732,7 @@ class Ledger {
 		if ( is_wp_error( $held ) ) {
 			return $held;
 		}
-		$row    = $this->normalize_row( $order, $row );
+		$row    = $this->normalize_row( $order, $this->with_command( $row, $command ) );
 		$rows[] = $row;
 		// Index the arrival before consuming its webhook, but do not mark money paid
 		// until a parked provider confirmation has passed capture verification.

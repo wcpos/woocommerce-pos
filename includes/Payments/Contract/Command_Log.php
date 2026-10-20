@@ -71,7 +71,8 @@ final class Command_Log {
 
 	/**
 	 * The stored entry for a command id anywhere on the order: every row's map, then the order map,
-	 * then a row whose id it is (a recorded row's id is its command id: kind `record`, fp null).
+	 * then a row with no entry of its own whose id it is (a gateway mint, webview, adopted or
+	 * earlier row: kind `row`, fp null, so any command reusing that id is a conflict).
 	 * The answer carries `payment_id`, the row that holds it (null for the order map).
 	 *
 	 * @param WC_Order $order      Order object.
@@ -92,7 +93,7 @@ final class Command_Log {
 		}
 		foreach ( $rows as $row ) {
 			if ( strtolower( (string) ( $row['id'] ?? '' ) ) === $command_id ) {
-				$entry               = self::entry( '', 'record' );
+				$entry               = self::entry( '', 'row' );
 				$entry['fp']         = null;
 				$entry['payment_id'] = $command_id;
 				return $entry;

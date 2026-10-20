@@ -143,11 +143,11 @@ class Payments_Controller extends WC_REST_Controller {
 	 * Record money already taken by a manual payment method.
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command Unused: a recorded row's id is its command id.
+	 * @param array           $command The admitted command; its id is the row id.
 	 *
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function create_item( $request, array $command = array() ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- One signature for every command handler.
+	public function create_item( $request, array $command = array() ) {
 		$order = $this->get_order( (int) $request['id'] );
 		if ( is_wp_error( $order ) ) {
 			return $order;
@@ -163,7 +163,7 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( isset( $payment['store_id'] ) ) {
 			$context['store_id'] = (int) $payment['store_id'];
 		}
-		$row = Ledger::instance()->record( $order, $payment, $context );
+		$row = Ledger::instance()->record( $order, $payment, $context, $command );
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
@@ -390,7 +390,14 @@ class Payments_Controller extends WC_REST_Controller {
 		}
 		$params  = $this->params( $request );
 		$command = array();
-		if ( 'record' !== $kind ) {
+		if ( 'record' === $kind && is_array( $params['payment'] ?? null ) && is_string( $params['payment']['id'] ?? null ) ) {
+			// A recorded row's id is its command id (rule 5), and its whole body the fingerprint.
+			$command = array(
+				'id'   => strtolower( $params['payment']['id'] ),
+				'fp'   => Command_Log::fingerprint( 'record', '', $params ),
+				'kind' => 'record',
+			);
+		} elseif ( 'record' !== $kind ) {
 			$id = $params['command_id'] ?? null;
 			if ( ! is_string( $id ) || ! wp_is_uuid( strtolower( $id ) ) ) {
 				return new WP_Error( 'rest_invalid_param', __( 'Command ID must be a UUID.', 'woocommerce-pos' ), array( 'status' => 400 ) );
@@ -406,20 +413,17 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( ! is_string( $revision ) || '' === $revision ) {
 			return new WP_Error( 'wcpos_revision_required', __( 'A payment command needs the order revision it was built against.', 'woocommerce-pos' ), array( 'status' => 428 ) );
 		}
-		// A recorded row's id is its command id (rule 5): it shares the order's one command namespace.
-		$row_id = 'record' === $kind && is_array( $params['payment'] ?? null ) && is_string( $params['payment']['id'] ?? null ) ? strtolower( $params['payment']['id'] ) : null;
-		$id     = $command ? $command['id'] : $row_id;
-		$stored = null === $id ? null : Command_Log::find( $order, Ledger::instance()->read( $order ), $id );
-		if ( $stored && ( $command ? $stored['fp'] !== $command['fp'] : 'record' !== $stored['kind'] ) ) {
-			return new WP_Error(
-				'wcpos_command_conflict',
-				__( 'This command ID was already used with a different request.', 'woocommerce-pos' ),
-				array(
-					'status'     => 422,
-					'command_id' => $id,
-					'kind'       => $kind,
-				)
+		$stored = $command ? Command_Log::find( $order, Ledger::instance()->read( $order ), $command['id'] ) : null;
+		if ( $stored && $stored['fp'] !== $command['fp'] ) {
+			$data = array(
+				'status'     => 422,
+				'command_id' => $command['id'],
+				'kind'       => $kind,
 			);
+			if ( 'record' === $kind && null !== $stored['payment_id'] ) {
+				$data['payment'] = Ledger::to_wire( (array) Ledger::instance()->find( $order, $stored['payment_id'] ) );
+			}
+			return new WP_Error( 'wcpos_command_conflict', __( 'This command ID was already used with a different request.', 'woocommerce-pos' ), $data );
 		}
 		if ( $stored && ! in_array( $kind, array( 'record', 'intent', 'submit' ), true ) ) {
 			return $this->replay( $order, $kind, $stored );
