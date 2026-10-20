@@ -143,15 +143,16 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 
 	/** Completion 2 at another register names that register in its frozen document as well as its columns. */
 	public function test_a_recompletion_at_another_register_names_it_in_the_payload_and_the_columns(): void {
-		// Arrange: completed at register A (the till tuple), reopened.
-		$registers = new \WCPOS\WooCommercePOS\Services\Register_Store();
-		$a         = $registers->create(
+		// Arrange: completed at register A (the till tuple), reopened. Free holds one
+		// register, so two registers come from the in-memory repository on the seam.
+		$this->use_multi_register_repository();
+		$a = $this->create_register(
 			array(
 				'name' => 'Register A',
 				'store_id' => 12,
 			)
 		)['id'];
-		$b         = $registers->create(
+		$b = $this->create_register(
 			array(
 				'name' => 'Register B',
 				'store_id' => 12,
