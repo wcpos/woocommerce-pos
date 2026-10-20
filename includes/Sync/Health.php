@@ -20,6 +20,11 @@ final class Health {
 	/**
 	 * Check whether a database table exists.
 	 *
+	 * Reads the database each call: two calls with the same name can differ (a CREATE
+	 * between them), so the result is never remembered across calls.
+	 *
+	 * @phpstan-impure
+	 *
 	 * @param string $table Fully qualified table name.
 	 */
 	public static function table_exists( string $table ): bool {
