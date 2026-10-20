@@ -2818,6 +2818,85 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '7.05', $row['tip'] );
 	}
 
+	/** An authorization for more than the leg adds no tip: only the captured amount confirms one. */
+	public function test_an_authorized_on_reader_tip_adds_no_fee_until_capture(): void {
+		// Arrange: a 100.00 sale; the reader takes on-reader tips.
+		list( $order ) = $this->open_sale_of( '100.00' );
+		Integrity_Handler::$tips = 'on_reader';
+		$ledger = Ledger::instance();
+		$first  = $this->payment( 'pos_card', '100.00' );
+
+		// Act: the reader authorizes 110.00.
+		$ledger->intent(
+			$order,
+			$first['id'],
+			$first,
+			array(
+				'resume' => array(
+					'status' => 'authorized',
+					'amount' => '110.00',
+				),
+			)
+		);
+
+		// Assert: tolerated, but no fee and no amount change.
+		$saved = new \WC_Order( $order->get_id() );
+		$row   = $ledger->find( $saved, $first['id'] );
+		$this->assertSame( 'authorized', $row['status'] );
+		$this->assertSame( '100.00', $row['amount'] );
+		$this->assertCount( 0, $saved->get_fees() );
+		$this->assertSame( '100.00', $saved->get_total() );
+
+		// A void leaves the order as it was.
+		$ledger->void( $saved, $first['id'], 'customer left' );
+		$voided = new \WC_Order( $order->get_id() );
+		$this->assertCount( 0, $voided->get_fees() );
+		$this->assertSame( '100.00', $voided->get_total() );
+
+		// A fresh leg authorized at 110.00 and captured at 110.00 takes the 10.00 tip then.
+		$second = $this->payment( 'pos_card', '100.00' );
+		$ledger->intent(
+			$voided,
+			$second['id'],
+			$second,
+			array(
+				'resume' => array(
+					'status' => 'authorized',
+					'amount' => '110.00',
+				),
+			)
+		);
+		$this->assertCount( 0, ( new \WC_Order( $order->get_id() ) )->get_fees() );
+		$ledger->capture( wc_get_order( $order->get_id() ), $second['id'], array( 'amount' => '110.00' ) );
+		$captured = new \WC_Order( $order->get_id() );
+		$fees     = array_values( $captured->get_fees() );
+		$this->assertCount( 1, $fees );
+		$this->assertSame( '10.00', $fees[0]->get_total() );
+		$this->assertSame( '110.00', $ledger->find( $captured, $second['id'] )['amount'] );
+		$this->assertSame( '110.00', $captured->get_total() );
+	}
+
+	/**
+	 * An open POS sale of one untaxed line.
+	 *
+	 * @param string $price Line price.
+	 * @return array{0: \WC_Order}
+	 */
+	private function open_sale_of( string $price ): array {
+		$order   = wc_create_order();
+		$product = ProductHelper::create_simple_product();
+		$product->set_regular_price( $price );
+		$product->set_price( $price );
+		$product->set_tax_status( 'none' );
+		$product->save();
+		$order->add_product( $product );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->calculate_totals( false );
+		$order->save();
+		return array( wc_get_order( $order->get_id() ) );
+	}
+
 	/** A ledger save reloads the order under the lock but keeps items the caller added and has not saved. */
 	public function test_save_carries_unsaved_caller_items(): void {
 		// Arrange: a fee staged on the caller's object, never saved.

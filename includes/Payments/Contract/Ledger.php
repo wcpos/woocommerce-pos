@@ -1006,7 +1006,9 @@ class Ledger {
 				$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
 				return $this->refusal_error( $applied, $order );
 			}
-			if ( $tip ) {
+			// An authorization above the leg is tolerated but takes no tip: the hold may yet be voided,
+			// and only the captured amount confirms what the customer paid (the capture adds the fee).
+			if ( $tip && 'captured' === $applied['status'] ) {
 				$fee = new \WC_Order_Item_Fee();
 				$fee->set_name( __( 'Tip', 'woocommerce-pos' ) );
 				$fee->set_tax_status( 'none' );
