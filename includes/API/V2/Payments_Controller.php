@@ -406,25 +406,26 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( ! is_string( $revision ) || '' === $revision ) {
 			return new WP_Error( 'wcpos_revision_required', __( 'A payment command needs the order revision it was built against.', 'woocommerce-pos' ), array( 'status' => 428 ) );
 		}
-		$ledger = Ledger::instance();
-		$stored = $command ? Command_Log::find( $order, $ledger->read( $order ), $command['id'] ) : null;
-		if ( $stored && $stored['fp'] !== $command['fp'] ) {
+		// A recorded row's id is its command id (rule 5): it shares the order's one command namespace.
+		$row_id = 'record' === $kind && is_array( $params['payment'] ?? null ) && is_string( $params['payment']['id'] ?? null ) ? strtolower( $params['payment']['id'] ) : null;
+		$id     = $command ? $command['id'] : $row_id;
+		$stored = null === $id ? null : Command_Log::find( $order, Ledger::instance()->read( $order ), $id );
+		if ( $stored && ( $command ? $stored['fp'] !== $command['fp'] : 'record' !== $stored['kind'] ) ) {
 			return new WP_Error(
 				'wcpos_command_conflict',
 				__( 'This command ID was already used with a different request.', 'woocommerce-pos' ),
 				array(
 					'status'     => 422,
-					'command_id' => $command['id'],
+					'command_id' => $id,
 					'kind'       => $kind,
 				)
 			);
 		}
-		if ( $stored && ! in_array( $kind, array( 'intent', 'submit' ), true ) ) {
+		if ( $stored && ! in_array( $kind, array( 'record', 'intent', 'submit' ), true ) ) {
 			return $this->replay( $order, $kind, $stored );
 		}
-		// record replays by row id; a new command id on an existing intent row is a fresh command.
-		$row_id = 'record' === $kind && is_array( $params['payment'] ?? null ) ? ( $params['payment']['id'] ?? null ) : null;
-		if ( ! $stored && ! ( is_string( $row_id ) && $ledger->find( $order, $row_id ) ) ) {
+		// Only a command that has not run meets the revision; record, intent and submit replays are called through.
+		if ( ! $stored ) {
 			$stale = $this->stale( $order, $revision );
 			if ( $stale ) {
 				return $stale;

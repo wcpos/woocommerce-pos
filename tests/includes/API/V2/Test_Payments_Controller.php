@@ -1677,6 +1677,57 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** Pin 28: a record whose row id another command already consumed is a body conflict and creates no row. */
+	public function test_a_record_reusing_a_command_id_as_its_row_id_is_422(): void {
+		// Arrange: intent c on row P, through the test handler.
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		$mode = static fn() => 'route_test';
+		add_filter( 'wcpos_payment_method_capture_mode', $mode );
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '40.00' );
+		$body    = $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) );
+		$this->assertSame( 200, $this->command( $this->payment_path( $order, $payment['id'] ) . '/intent', $body )->get_status() );
+		remove_filter( 'wcpos_payment_method_capture_mode', $mode );
+
+		// Act: cash recorded under the intent's command id as its row id.
+		$response = $this->record( $order, $this->payment( 'pos_cash', '10.00', array( 'id' => $body['command_id'] ) ) );
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_command_conflict', $response->get_data()['code'] );
+		$this->assertSame( array( $payment['id'] ), array_column( $this->stored_meta( $order->get_id(), Ledger::META_KEY )['payments'], 'id' ) );
+	}
+
+	/** Pin 28: a recorded row's id is its command id: another command reusing it is a body conflict. */
+	public function test_a_command_reusing_a_recorded_rows_id_is_422(): void {
+		// Arrange: cash row R and a refund object.
+		Route_Handler::$refunds = 0;
+		$order = $this->create_pos_order();
+		$row   = $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_data()['payment'];
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => '10.00',
+				'refund_payment' => false,
+			)
+		);
+
+		// Act.
+		$response = $this->command(
+			$this->payment_path( $order, $row['id'] ) . '/refund',
+			array_merge(
+				$this->envelope( $order, array( 'refund_id' => $refund->get_id(), 'amount' => '10.00' ) ),
+				array( 'command_id' => $row['id'] )
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 422, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_command_conflict', $response->get_data()['code'] );
+		$this->assertSame( array(), $this->stored_row( $order->get_id(), $row['id'] )['refunds'] );
+		$this->assertSame( 0, Route_Handler::$refunds );
+	}
+
 	/** Create an open POS order at the contract total. */
 	/**
 	 * A captured cash row, for seeding without deriving.

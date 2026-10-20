@@ -70,7 +70,8 @@ final class Command_Log {
 	}
 
 	/**
-	 * The stored entry for a command id anywhere on the order: every row's map, then the order map.
+	 * The stored entry for a command id anywhere on the order: every row's map, then the order map,
+	 * then a row whose id it is (a recorded row's id is its command id: kind `record`, fp null).
 	 * The answer carries `payment_id`, the row that holds it (null for the order map).
 	 *
 	 * @param WC_Order $order      Order object.
@@ -86,7 +87,18 @@ final class Command_Log {
 			}
 		}
 		$entry = self::read( $order )[ $command_id ] ?? null;
-		return is_array( $entry ) ? array_merge( $entry, array( 'payment_id' => null ) ) : null;
+		if ( is_array( $entry ) ) {
+			return array_merge( $entry, array( 'payment_id' => null ) );
+		}
+		foreach ( $rows as $row ) {
+			if ( strtolower( (string) ( $row['id'] ?? '' ) ) === $command_id ) {
+				$entry               = self::entry( '', 'record' );
+				$entry['fp']         = null;
+				$entry['payment_id'] = $command_id;
+				return $entry;
+			}
+		}
+		return null;
 	}
 
 	/**
