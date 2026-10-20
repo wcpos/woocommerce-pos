@@ -188,6 +188,33 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $a, wc_get_order( $order->get_id() )->get_meta( '_wcpos_register' ) );
 	}
 
+	/** Building completion 2's document leaves the order object the later listeners read untouched. */
+	public function test_the_completion_copy_shares_no_meta_with_the_order(): void {
+		// Arrange.
+		$order    = $this->order();
+		$till     = (string) $order->get_meta( '_wcpos_register' );
+		$this->pay( $order );
+		$reopened = $this->reopen( $order );
+		$seen     = array();
+		$listener = static function ( $completed ) use ( &$seen ): void {
+			$seen[] = (string) $completed->get_meta( '_wcpos_register' );
+		};
+		add_action( 'wcpos_sale_completed', $listener, 20 );
+
+		// Act: completed again at another register, after the sale writer (10) built its document.
+		Completion_Stamp::with_provenance(
+			array( 'register_id' => wp_generate_uuid4() ),
+			static function () use ( $reopened ): void {
+				$reopened->payment_complete();
+			}
+		);
+		remove_action( 'wcpos_sale_completed', $listener, 20 );
+
+		// Assert.
+		$this->assertCount( 2, $this->sales( $order->get_id() ) );
+		$this->assertSame( array( $till ), $seen );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.

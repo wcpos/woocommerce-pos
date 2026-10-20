@@ -374,6 +374,9 @@ final class Fiscal_Record_Writers {
 	 */
 	private static function as_completed( WC_Order $order, array $completion ): WC_Order {
 		$copy = clone $order;
+		// WC_Abstract_Order::__clone() is empty, so a clone shares its meta objects with the order:
+		// give the copy its own before changing any of them.
+		$copy->read_meta_data( true );
 		foreach ( array(
 			'register'  => '_wcpos_register',
 			'session'   => '_wcpos_session',
