@@ -432,6 +432,12 @@ Codex round 4 (partial writes between the separate meta rows):
 40. `test_a_submit_whose_attempt_is_not_stored_keeps_no_command_entry` — when either half of the pre-dispatch write is missing, both the attempt and the entry are removed in one save before the 409; a failure after the gateway was called keeps its entry.
 41. `test_a_cancel_whose_stamp_is_not_cleared_keeps_no_command_entry` — a cancel stands only when the stamp is gone, the attempt is `cancelled` and the entry is stored; on any miss the entry is withdrawn and the 409 answered, so the retry re-enters `cancel()`.
 
+Codex round 5:
+
+42. `test_a_declined_attempts_half_landed_cleanup_is_written_again` / `…cleanup_that_never_lands_is_logged` — after a definite gateway refusal, `restore_method()` verifies the attempt is `cancelled` and the entry gone, writes the cleanup once more on a miss, and logs an error naming the missing half when it still does not land (no sweeper reads attempts: a human reconciles it); the answer stays the provider's 502.
+
+Declined in round 5: the refund two-save (the allocation `pending` with its command id before `process_refund()`) is ADR rule 8, PR 4 (§6), unchanged by this PR.
+
 Declined in round 2: stripping the command maps from served order documents (the till already receives the whole ledger meta; a strip would have to run after every revision site or the first push after a money command would 409 falsely).
 
 Also from CodeRabbit: a new order's rows lose a client-seeded `commands` map like their event history (`test_order_save_preserves_server_event_history`, both lanes).

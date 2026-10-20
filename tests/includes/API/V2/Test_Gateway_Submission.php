@@ -1726,7 +1726,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 
-	/** Pin 42: a cleanup that never lands keeps the provider's 502 and says what is left, for the sweeper. */
+	/** Pin 42: a cleanup that never lands keeps the provider's 502 and says what is left, for a human (no sweeper reads attempts). */
 	public function test_a_declined_attempts_cleanup_that_never_lands_is_logged(): void {
 		// Arrange.
 		$order = $this->create_pos_order();

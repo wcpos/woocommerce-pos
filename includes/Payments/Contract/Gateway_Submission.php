@@ -548,7 +548,7 @@ class Gateway_Submission {
 			Ledger::saving( $stored->get_id(), fn() => $stored->save() );
 		}
 		if ( ! $fated || ! $gone ) {
-			Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d was declined, but its cleanup did not land (attempt cancelled: %s, command entry removed: %s); the sweeper\'s stranded-attempt path owns the residual.', $cancelled_attempt, $order->get_id(), wp_json_encode( $fated ), wp_json_encode( $gone ) ), array( 'order_id' => $order->get_id() ) );
+			Logger::error( sprintf( 'WCPOS gateway attempt %s on order #%d was declined, but its cleanup did not land (attempt cancelled: %s, command entry removed: %s); the attempt needs manual reconciliation before this method is retried on the order.', $cancelled_attempt, $order->get_id(), wp_json_encode( $fated ), wp_json_encode( $gone ) ), array( 'order_id' => $order->get_id() ) );
 		}
 	}
 
