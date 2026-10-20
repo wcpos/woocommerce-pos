@@ -262,6 +262,30 @@ final class Order_Serializer {
 		return self::add_receipt_link( $payload, $order );
 	}
 
+	/**
+	 * The order as the push lane compares it, and its revision: the bare wc/v3 read with POS links
+	 * that `Order_Writer::document()` makes for `Write_Controller::revision_for()`, so a money
+	 * command and a push agree on what "current" means (ADR 0040 rule 6). A failed inner read
+	 * (no read permission, a vanished order) is returned as its error, never hashed.
+	 *
+	 * @param int $order_id Order id.
+	 * @return array{document: array, revision: string}|\WP_Error
+	 */
+	public static function current_state( int $order_id ) {
+		$response = Product_Serializer::dispatched_bare_read( '/wc/v3/orders/' . $order_id, array( 'dp' => '6' ) );
+		$data     = $response->get_data();
+		if ( $response->get_status() >= 400 || ! is_array( $data ) ) {
+			$error = is_array( $data ) ? $data : array();
+			return new \WP_Error( (string) ( $error['code'] ?? 'wcpos_order_unreadable' ), (string) ( $error['message'] ?? '' ), array( 'status' => max( 400, $response->get_status() ) ) );
+		}
+		$order    = wc_get_order( $order_id );
+		$document = $order ? self::add_pos_links( $data, $order ) : $data;
+		return array(
+			'document' => $document,
+			'revision' => self::canonical_revision( $document ),
+		);
+	}
+
 	/*
 	 * canonical_revision() is THE single order revision recipe.
 	 * The pre-1.10.0 versioned recipe list and grace comparer were retired per
