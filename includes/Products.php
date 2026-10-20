@@ -44,9 +44,6 @@ class Products {
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_action( 'woocommerce_product_set_stock', array( $this, 'product_set_stock' ) );
-		add_action( 'woocommerce_variation_set_stock', array( $this, 'product_set_stock' ) );
-
 		$pos_only_products = Settings::instance()->pos_only_products_enabled();
 
 		if ( $pos_only_products ) {
@@ -77,24 +74,28 @@ class Products {
 	}
 
 	/**
-	 * Bump the product's modified date on a stock change, so POS clients that
-	 * sync on `date_modified` pick up the new quantity.
+	 * Bump a product's modified date so POS clients that sync on `date_modified`
+	 * pick up a change WooCommerce did not record.
 	 *
-	 * The row is written directly, the way WooCommerce's own product data store
-	 * records a save. `wp_update_post()` re-runs the whole post save in the
-	 * middle of WooCommerce's stock reduction: every `save_post` listener on the
-	 * site, plus kses content filtering when the current user is a storefront
-	 * customer. A listener that fails there leaves the stock decremented but the
-	 * order unflagged (`_order_stock_reduced`), so the next status change
-	 * deducts it again, and a guest checkout rewrote the purchased product's
-	 * description through kses.
+	 * No longer hooked. Until WooCommerce 3.4 a stock change left the product's
+	 * date untouched, so this ran on `woocommerce_product_set_stock`; since 3.4
+	 * every product save bumps the date itself, before that hook fires, and the
+	 * listener only re-ran the whole post save (`wp_update_post()`) in the middle
+	 * of WooCommerce's stock reduction: every `save_post` listener on the site,
+	 * plus kses content filtering for a storefront customer. A listener that
+	 * failed there left the stock decremented but the order unflagged
+	 * (`_order_stock_reduced`), so the next status change deducted it again, and
+	 * a guest checkout rewrote the purchased product's description through kses.
 	 *
-	 * @param WC_Product $product The product or variation whose stock changed.
+	 * Kept for callers. The row is written directly, the way WooCommerce's own
+	 * product data store records a save, so it never runs the save stack.
+	 *
+	 * @param WC_Product $product The product or variation to touch.
 	 */
 	public function product_set_stock( WC_Product $product ): void {
 		global $wpdb;
 
-		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- must not run the save_post stack mid stock reduction; cache cleared below.
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- must never run the save_post stack; cache cleared below.
 			$wpdb->posts,
 			array(
 				'post_modified'     => current_time( 'mysql' ),

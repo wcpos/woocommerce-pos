@@ -1,11 +1,15 @@
 <?php
 /**
- * Regression tests for the stock-change modified-date bump.
+ * What a web sale does to a product with WCPOS loaded.
  *
- * `Products::product_set_stock()` runs inside WooCommerce's stock reduction,
- * after the quantity is decremented and before the order is flagged as having
- * reduced stock. It must bump `post_modified` without re-running the post save
- * (save_post listeners, kses content filtering for storefront guests).
+ * WCPOS used to listen on `woocommerce_product_set_stock`, which fires inside
+ * WooCommerce's stock reduction after the quantity is decremented and before
+ * the order is flagged as having reduced stock, and re-ran the whole post save
+ * there (save_post listeners, kses content filtering for storefront guests).
+ * These tests pin the contract that replaced it: a sale reduces stock exactly
+ * once, leaves the product record alone, and still moves the product's
+ * modified date, which WooCommerce bumps itself on every product save.
+ * `Products::product_set_stock()` stays for callers and is covered directly.
  *
  * @package WCPOS\WooCommercePOS\Tests
  */
@@ -14,6 +18,8 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Simple;
+use WC_Product_Variable;
+use WC_Product_Variation;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Products;
 
@@ -55,36 +61,6 @@ class Test_Products_Stock_Touch extends WC_Unit_Test_Case {
 		$this->original_manage_stock = get_option( 'woocommerce_manage_stock' );
 		$this->original_user_id      = get_current_user_id();
 		update_option( 'woocommerce_manage_stock', 'yes' );
-
-		// The plugin bootstrap registers the hook; make sure the real hook path is exercised.
-		if ( ! $this->products_hook_registered() ) {
-			new Products();
-		}
-		$this->assertTrue( $this->products_hook_registered(), 'Precondition: Products::product_set_stock is hooked.' );
-	}
-
-	/**
-	 * Whether a Products instance listens on woocommerce_product_set_stock.
-	 *
-	 * A bare has_action() would accept any other plugin's listener.
-	 *
-	 * @return bool
-	 */
-	private function products_hook_registered(): bool {
-		global $wp_filter;
-
-		if ( empty( $wp_filter['woocommerce_product_set_stock'] ) ) {
-			return false;
-		}
-		foreach ( $wp_filter['woocommerce_product_set_stock']->callbacks as $callbacks ) {
-			foreach ( $callbacks as $callback ) {
-				if ( is_array( $callback['function'] ) && $callback['function'][0] instanceof Products ) {
-					return true;
-				}
-			}
-		}
-
-		return false;
 	}
 
 	/**
@@ -165,9 +141,69 @@ class Test_Products_Stock_Touch extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Every stock change moves the modified date of the record whose stock changed.
+	 *
+	 * Incremental sync pulls `modified_after`, so a product or variation whose
+	 * stock changed without its date moving is invisible to every other till.
+	 * WooCommerce bumps the date on the product save inside every stock write;
+	 * this pins that contract for both record types and both write paths.
+	 *
+	 * @dataProvider stock_change_cases
+	 * @coversNothing
+	 *
+	 * @param string $record 'simple' or 'variation'.
+	 * @param string $path   'web_sale' (order to on-hold) or 'direct_set' (wc_update_product_stock).
+	 */
+	public function test_stock_change_bumps_modified_date_of_the_record( string $record, string $path ): void {
+		global $wpdb;
+
+		// Arrange.
+		$product_id = 'variation' === $record ? $this->create_managed_stock_variation() : $this->create_managed_stock_product( '<p>Hello</p>' );
+		$order      = 'web_sale' === $path ? $this->create_bacs_order( $product_id ) : null;
+		$backdated  = '2020-01-01 00:00:00';
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- test fixture; cache cleared below.
+			$wpdb->posts,
+			array(
+				'post_modified'     => $backdated,
+				'post_modified_gmt' => $backdated,
+			),
+			array( 'ID' => $product_id )
+		);
+		clean_post_cache( $product_id );
+		$this->assertSame( $backdated, get_post( $product_id )->post_modified_gmt, 'Precondition: post_modified_gmt is backdated.' );
+
+		// Act.
+		if ( 'web_sale' === $path ) {
+			$order->update_status( 'on-hold' );
+		} else {
+			wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+		}
+
+		// Assert.
+		$this->assertSame( 4, wc_get_product( $product_id )->get_stock_quantity() );
+		$modified_gmt = get_post( $product_id )->post_modified_gmt;
+		$this->assertNotSame( $backdated, $modified_gmt, "post_modified_gmt of the {$record} should move on a {$path} stock change." );
+		$this->assertLessThanOrEqual( 60, abs( time() - strtotime( $modified_gmt . ' UTC' ) ), 'post_modified_gmt should be recent.' );
+	}
+
+	/**
+	 * Record type x stock write path.
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function stock_change_cases(): array {
+		return array(
+			'simple product, web sale'   => array( 'simple', 'web_sale' ),
+			'simple product, direct set' => array( 'simple', 'direct_set' ),
+			'variation, web sale'        => array( 'variation', 'web_sale' ),
+			'variation, direct set'      => array( 'variation', 'direct_set' ),
+		);
+	}
+
+	/**
 	 * A guest checkout reducing stock must not run the product description through kses.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::product_set_stock
+	 * @coversNothing
 	 */
 	public function test_guest_stock_reduction_leaves_product_description_unfiltered(): void {
 		// Arrange.
@@ -194,7 +230,7 @@ class Test_Products_Stock_Touch extends WC_Unit_Test_Case {
 	/**
 	 * A third-party save_post failure must not leave the order unflagged and double-deduct stock.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::product_set_stock
+	 * @coversNothing
 	 */
 	public function test_stock_reduction_with_failing_save_post_listener_reduces_stock_once(): void {
 		// Arrange.
@@ -250,6 +286,26 @@ class Test_Products_Stock_Touch extends WC_Unit_Test_Case {
 		$product->save();
 
 		return $product->get_id();
+	}
+
+	/**
+	 * Create a variation that manages its own stock of 5 under a variable parent.
+	 *
+	 * @return int Variation ID.
+	 */
+	private function create_managed_stock_variation(): int {
+		$parent = new WC_Product_Variable();
+		$parent->set_name( 'Stock Touch Variable Product' );
+		$parent->save();
+
+		$variation = new WC_Product_Variation();
+		$variation->set_parent_id( $parent->get_id() );
+		$variation->set_regular_price( '10' );
+		$variation->set_manage_stock( true );
+		$variation->set_stock_quantity( 5 );
+		$variation->save();
+
+		return $variation->get_id();
 	}
 
 	/**

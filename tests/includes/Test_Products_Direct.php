@@ -83,22 +83,6 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test constructor registers stock change actions.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::__construct
-	 */
-	public function test_constructor_registers_stock_actions(): void {
-		$products = new Products();
-
-		$this->assertNotFalse(
-			has_action( 'woocommerce_product_set_stock', array( $products, 'product_set_stock' ) )
-		);
-		$this->assertNotFalse(
-			has_action( 'woocommerce_variation_set_stock', array( $products, 'product_set_stock' ) )
-		);
-	}
-
-	/**
 	 * Direct test: hide_pos_only_products returns early for admin.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
