@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.4
+Stable tag: 1.11.5
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,11 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.11.5 - 2026/10/20 =
+
+- **Web-store sales no longer re-save the product when they reduce stock.** This fixes a checkout error and a doubled stock deduction on bank-transfer orders that a few stores saw, and keeps product descriptions exactly as you wrote them.
+- Developers: the `woocommerce_product_set_stock` / `woocommerce_variation_set_stock` listener and `Products::product_set_stock()` are removed; WooCommerce has bumped the product's modified date on every save since 3.4.0.
 
 = 1.11.4 - 2026/10/20 =
 
