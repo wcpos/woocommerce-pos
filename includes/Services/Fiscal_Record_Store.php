@@ -128,12 +128,11 @@ final class Fiscal_Record_Store {
 		if ( ! in_array( $type, self::TYPES, true ) ) {
 			return null;
 		}
-		// A sale and a cancellation belong to one completion of the order (ADR 0040: the pair
-		// order id + completion number), so their replay identity is the completion entry's id.
+		// A sale, its cancellation and its late correction belong to one completion of the order
+		// (ADR 0040: the pair order id + completion number), so their replay identity is source_id.
 		$identity = array(
 			'sale' => 'source_id',
 			'cancellation' => 'source_id',
-			'late_sale' => 'order_id',
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 		)[ $type ] ?? 'source_id';

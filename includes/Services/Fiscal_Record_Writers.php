@@ -218,7 +218,8 @@ final class Fiscal_Record_Writers {
 		// Late against the closure of the session this completion took its money in.
 		$session = (string) ( $completion['session'] ?? '' );
 		$closure = ( new Closure_Store() )->for_session( '' !== $session ? $session : (string) $order->get_meta( '_wcpos_session', true ) );
-		$sale = $this->store->find_sale( $order->get_id() );
+		// The late correction belongs to this completion's sale record (the latest on the legacy path).
+		$sale = $this->store->find_sale( $order->get_id(), (string) $completion['id'] ) ?? $this->store->find_sale( $order->get_id() );
 		if ( $closure && $sale ) {
 			$rows = Session_Figures::late_legs( $order, $closure );
 			if ( $rows ) {
@@ -230,6 +231,7 @@ final class Fiscal_Record_Writers {
 						array(
 							'type' => 'late_sale',
 							'order_id' => $order->get_id(),
+							'source_id' => Fiscal_Record_Store::digest_source_id( 'late_sale:' . $sale['id'] ),
 							'closure_id' => $closure['id'],
 							'corrects_record_id' => $sale['id'],
 							'payload' => array(

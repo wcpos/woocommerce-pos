@@ -116,7 +116,7 @@ class Test_Fiscal_Record_Store extends WP_UnitTestCase {
 			'refund' => 'refund_id',
 			'void' => 'payment_id',
 			'cancellation' => 'source_id',
-			'late_sale' => 'order_id',
+			'late_sale' => 'source_id',
 			'late_refund' => 'source_id',
 			'late_movement' => 'source_id',
 			'recount' => 'source_id',

@@ -268,6 +268,67 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '20.0000', $late[0]['payload']['expected_delta']['cash'] );
 	}
 
+	/** Each completion that lands after its session's closure writes its own late_sale. */
+	public function test_each_late_completion_writes_its_own_late_sale(): void {
+		// Arrange: sessions A and B are both already closed.
+		$closures = new \WCPOS\WooCommercePOS\Services\Closure_Store();
+		$session_a = $this->closure_session();
+		$session_b = $this->closure_session();
+		$closure_a = $closures->create( $this->closure_fields( $session_a ) );
+		$closure_b = $closures->create( $this->closure_fields( $session_b ) );
+		$order     = $this->order();
+		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
+		$order->save();
+		$take = static function ( \WC_Order $order, array $session, string $amount ): void {
+			Completion_Stamp::with_provenance(
+				array(
+					'register_id' => $session['register_id'],
+					'session_id' => $session['id'],
+				),
+				static function () use ( $order, $session, $amount ): void {
+					Ledger::instance()->record(
+						wc_get_order( $order->get_id() ),
+						array(
+							'id' => wp_generate_uuid4(),
+							'method_id' => 'pos_cash',
+							'amount' => $amount,
+							'session_id' => $session['id'],
+						)
+					);
+				},
+				$order->get_id()
+			);
+		};
+
+		// Act: completion 1 in A, then reopened and completion 2 in B.
+		$take( $order, $session_a, '100.00' );
+		$reopened = $this->reopen( $order );
+		$reopened->set_total( '120.00' );
+		$reopened->save();
+		$take( $order, $session_b, '20.00' );
+		$order   = wc_get_order( $order->get_id() );
+		$history = Completion_Stamp::read( $order );
+		Fiscal_Record_Writers::instance()->record_sale( $order, $history[1] );
+
+		// Assert.
+		$late  = array_reverse(
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'type' => 'late_sale',
+					'order_id' => $order->get_id(),
+				)
+			)
+		);
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 2, $late );
+		$this->assertNotSame( $late[0]['source_id'], $late[1]['source_id'] );
+		$this->assertSame( $closure_a['id'], $late[0]['closure_id'] );
+		$this->assertSame( $sales[0]['id'], $late[0]['corrects_record_id'] );
+		$this->assertSame( $closure_b['id'], $late[1]['closure_id'] );
+		$this->assertSame( $sales[1]['id'], $late[1]['corrects_record_id'] );
+		$this->assertSame( Fiscal_Record_Store::digest_source_id( 'late_sale:' . $sales[1]['id'] ), $late[1]['source_id'] );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.
