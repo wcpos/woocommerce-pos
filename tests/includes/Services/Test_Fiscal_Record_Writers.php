@@ -215,6 +215,55 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $till ), $seen );
 	}
 
+	/** A re-completion in another session is late against that session's closure, not the first sale's. */
+	public function test_a_recompletion_in_a_closed_session_is_late_against_that_sessions_closure(): void {
+		// Arrange: completed in session A (open, no closure); session B is already closed.
+		$session_a = $this->closure_session( null, 'open' );
+		$session_b = $this->closure_session();
+		$closure_b = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session_b ) );
+		$order     = $this->order();
+		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
+		$order->save();
+		$take = static function ( \WC_Order $order, array $session, string $amount ): void {
+			Completion_Stamp::with_provenance(
+				array(
+					'register_id' => $session['register_id'],
+					'session_id' => $session['id'],
+				),
+				static function () use ( $order, $session, $amount ): void {
+					Ledger::instance()->record(
+						wc_get_order( $order->get_id() ),
+						array(
+							'id' => wp_generate_uuid4(),
+							'method_id' => 'pos_cash',
+							'amount' => $amount,
+							'session_id' => $session['id'],
+						)
+					);
+				}
+			);
+		};
+		$take( $order, $session_a, '100.00' );
+		$reopened = $this->reopen( $order );
+		$reopened->set_total( '120.00' );
+		$reopened->save();
+
+		// Act: the extra 20.00 is taken in session B, after B's closure.
+		$take( $order, $session_b, '20.00' );
+
+		// Assert.
+		$late = ( new Fiscal_Record_Store() )->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 2, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertCount( 1, $late );
+		$this->assertSame( $closure_b['id'], $late[0]['closure_id'] );
+		$this->assertSame( '20.0000', $late[0]['payload']['expected_delta']['cash'] );
+	}
+
 	/** Replaying completion n returns row n and writes nothing. */
 	public function test_replaying_completion_n_returns_row_n(): void {
 		// Arrange.

@@ -215,7 +215,9 @@ final class Fiscal_Record_Writers {
 				)
 			);
 		}
-		$closure = ( new Closure_Store() )->for_session( (string) $order->get_meta( '_wcpos_session', true ) );
+		// Late against the closure of the session this completion took its money in.
+		$session = (string) ( $completion['session'] ?? '' );
+		$closure = ( new Closure_Store() )->for_session( '' !== $session ? $session : (string) $order->get_meta( '_wcpos_session', true ) );
 		$sale = $this->store->find_sale( $order->get_id() );
 		if ( $closure && $sale ) {
 			$rows = Session_Figures::late_legs( $order, $closure );
