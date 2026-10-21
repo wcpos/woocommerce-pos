@@ -195,6 +195,40 @@ final class Register_Store {
 		);
 	}
 
+	/** Retire under the register lock, preserving the repository's history.
+	 *
+	 * @param string        $id Register UUID.
+	 * @param callable|null $under_lock Optional validation of the freshly read row under the lock.
+	 * @throws \RuntimeException When retirement is unsupported or storage fails.
+	 */
+	public function retire( string $id, ?callable $under_lock = null ): ?\WP_Error {
+		return $this->with_lock(
+			$id,
+			function () use ( $id, $under_lock ) {
+				if ( $under_lock ) {
+					$error = $under_lock( $this->get( $id ) );
+					if ( is_wp_error( $error ) ) {
+						return $error;
+					}
+				}
+				$repository = $this->repository();
+				if ( ! $repository instanceof Register_Retirement ) {
+					throw new \RuntimeException( 'Register retirement is not supported.' );
+				}
+				$repository->retire( $id );
+				Logger::log(
+					'Register retired',
+					array(
+						'register_id' => $id,
+						'user_id' => get_current_user_id(),
+					)
+				);
+				return null;
+			},
+			'Register retirement lock failed.'
+		);
+	}
+
 	/**
 	 * Edit admin-owned fields; Pro may explicitly pass store_id.
 	 *

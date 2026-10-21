@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Option_Register_Repository;
 use WCPOS\WooCommercePOS\Services\Register_Repository;
+use WCPOS\WooCommercePOS\Services\Register_Retirement;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Provenance_Health;
@@ -46,6 +47,7 @@ class Registers_Controller extends WP_REST_Controller {
 			'/' . $this->rest_base . '/(?P<id>[0-9a-fA-F-]{36})' => array(
 				'GET' => 'get_item',
 				'PATCH' => 'update_item',
+				'DELETE' => 'delete_item',
 			),
 		) as $route => $methods ) {
 			$endpoints = array();
@@ -73,7 +75,7 @@ class Registers_Controller extends WP_REST_Controller {
 	 * @return bool|WP_Error
 	 */
 	public function registers_permissions_check( $request ) {
-		$capability = in_array( $request->get_method(), array( 'POST', 'PATCH' ), true ) ? 'manage_woocommerce_pos' : 'access_woocommerce_pos';
+		$capability = in_array( $request->get_method(), array( 'POST', 'PATCH', 'DELETE' ), true ) ? 'manage_woocommerce_pos' : 'access_woocommerce_pos';
 		return current_user_can( $capability ) ? true : new WP_Error( 'rest_forbidden', __( 'Sorry, you cannot access registers.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
 	}
 
@@ -151,6 +153,42 @@ class Registers_Controller extends WP_REST_Controller {
 	public function get_item( $request ) {
 		$row = ( new Register_Store() )->get( strtolower( $request['id'] ) );
 		return $row && Store_Reach::for_request( $request )->admits( $row['store_id'] ) ? new WP_REST_Response( $row ) : $this->not_found();
+	}
+
+	/**
+	 * Retire a register through the optional Pro repository contract.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function delete_item( $request ) {
+		$store = new Register_Store();
+		$id = strtolower( $request['id'] );
+		$row = $store->get( $id );
+		if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+			return $this->not_found();
+		}
+		$repository = apply_filters( 'woocommerce_pos_register_repository', new Option_Register_Repository() );
+		if ( ! $repository instanceof Register_Retirement ) {
+			return new WP_Error( 'wcpos_registers_pro', __( 'More registers need WCPOS Pro.', 'woocommerce-pos' ), array( 'status' => 403 ) );
+		}
+		try {
+			$result = $store->retire(
+				$id,
+				function ( $row ) use ( $request ) {
+					if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+						return $this->not_found();
+					}
+					if ( in_array( $row['session']['status'] ?? null, array( 'open', 'counting' ), true ) ) {
+						return new WP_Error( 'wcpos_register_session_open', __( 'Close the register session before retiring it.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+					}
+					return null;
+				}
+			);
+			return is_wp_error( $result ) ? $result : new WP_REST_Response( null, 204 );
+		} catch ( \RuntimeException $error ) {
+			return $this->write_error();
+		}
 	}
 
 	/**

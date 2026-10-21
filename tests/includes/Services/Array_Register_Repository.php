@@ -9,9 +9,10 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Option_Register_Repository;
 use WCPOS\WooCommercePOS\Services\Register_Repository;
+use WCPOS\WooCommercePOS\Services\Register_Retirement;
 
 /** Holds any number of registers for one test, the way Pro's repository does. */
-final class Array_Register_Repository implements Register_Repository {
+final class Array_Register_Repository implements Register_Repository, Register_Retirement {
 	/**
 	 * Rows by id.
 	 *
@@ -91,6 +92,14 @@ final class Array_Register_Repository implements Register_Repository {
 	/** Retired ids. */
 	public function retired_ids(): array {
 		return array_keys( $this->retired );
+	}
+
+	/** Retire a register while retaining its name for history.
+	 *
+	 * @param string $id Register UUID.
+	 */
+	public function retire( string $id ): void {
+		$this->forget( $id, $this->rows[ $id ]['name'] );
 	}
 
 	/**

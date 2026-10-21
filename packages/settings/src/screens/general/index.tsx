@@ -7,6 +7,7 @@ import { type TaxId } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { CloudflareCallout } from './cloudflare-callout';
+import { RegisterSection, type RegisterSectionProps } from './register-section';
 import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
 import { StorefrontReceiptSection } from './storefront-receipt-section';
 import { TaxIdsSection } from './tax-ids-section';
@@ -14,7 +15,7 @@ import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
 import { FormSkeleton, Skeleton } from '../../components/skeleton';
-import { Toggle, Checkbox, TextInput } from '../../components/ui';
+import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { syncConsent } from '../../lib/analytics';
 import { t } from '../../translations';
@@ -28,8 +29,8 @@ export interface StoreDefaults {
 
 export interface GeneralSettingsProps {
 	register_sessions: boolean;
-	variance_threshold: string;
-	expected_close_time: string;
+	variance_threshold: string | null;
+	expected_close_time: string | null;
 	pos_only_products: boolean;
 	decimal_qty: boolean;
 	force_ssl: boolean;
@@ -103,48 +104,18 @@ function General() {
 		[]
 	);
 
+	const ResolvedRegisterSection = React.useMemo(
+		() =>
+			(window.wcpos?.settings?.getComponent?.('general.register_section') ??
+				RegisterSection) as React.ComponentType<RegisterSectionProps>,
+		[]
+	);
+
 	return (
 		<>
 			{/* eslint-disable-next-line react-hooks/static-components -- resolved from the pro registry; identity is stable (memoized above) */}
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
-			<FormSection title={t('settings.register_section_title')} divider>
-				<FormRow>
-					<Toggle
-						checked={!!data?.register_sessions}
-						onChange={(register_sessions: boolean) => mutate({ register_sessions })}
-						label={t('settings.register_sessions')}
-					/>
-				</FormRow>
-				<FormRow
-					label={t('settings.variance_threshold')}
-					description={t('settings.variance_threshold_tip')}
-				>
-					<TextInput
-						key={data?.variance_threshold}
-						defaultValue={data?.variance_threshold ?? ''}
-						pattern="\d+(?:\.\d+)?"
-						onBlur={(event) => {
-							if (event.currentTarget.reportValidity())
-								mutate({ variance_threshold: event.currentTarget.value });
-						}}
-					/>
-				</FormRow>
-				<FormRow
-					label={t('settings.expected_close_time')}
-					description={t('settings.expected_close_time_tip')}
-				>
-					<TextInput
-						key={data?.expected_close_time}
-						defaultValue={data?.expected_close_time ?? ''}
-						placeholder="HH:MM"
-						pattern="(?:[01]\d|2[0-3]):[0-5]\d"
-						onBlur={(event) => {
-							if (event.currentTarget.reportValidity())
-								mutate({ expected_close_time: event.currentTarget.value });
-						}}
-					/>
-				</FormRow>
-			</FormSection>
+			<ResolvedRegisterSection data={data} mutate={mutate} />
 			<FormSection title={t('settings.products_section_title')} divider>
 				<FormRow>
 					<Label tip={t('settings.pos_only_products_tip')}>
