@@ -241,6 +241,59 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The fallback title is written without a second pass through the post save stack.
+	 *
+	 * The fallback used to call wp_update_post() on the template from inside its
+	 * own save_post_wcpos_template handler, re-running revisions, status
+	 * transitions, kses and every other plugin's save_post listeners.
+	 */
+	public function test_admin_save_blank_title_fires_template_save_hook_once(): void {
+		// Arrange: a new template post like post-new.php creates before first save.
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_status'  => 'auto-draft',
+				'post_title'   => '',
+				'post_content' => '',
+			)
+		);
+
+		// phpcs:disable WordPress.Security
+		$_POST['wcpos_template_settings_nonce'] = wp_create_nonce( 'wcpos_template_settings' );
+		$_POST['content']                       = addslashes( $this->sample_xml );
+		$_POST['wcpos_template_engine']         = 'thermal';
+		$_POST['wcpos_template_paper_width']    = '80mm';
+		// phpcs:enable WordPress.Security
+
+		new Single_Template();
+		$saves   = 0;
+		$counter = static function ( $saved_id ) use ( $post_id, &$saves ): void {
+			if ( (int) $saved_id === $post_id ) {
+				++$saves;
+			}
+		};
+		add_action( 'save_post_wcpos_template', $counter );
+
+		// Act: save the post without entering a title.
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_status'  => 'publish',
+				'post_title'   => '',
+				'post_content' => $this->sample_xml,
+			)
+		);
+
+		remove_action( 'save_post_wcpos_template', $counter );
+		$this->cleanup_post_globals();
+
+		// Assert.
+		$this->assertSame( 1, $saves, 'One admin save must run the template save stack exactly once.' );
+		clean_post_cache( $post_id );
+		$this->assertSame( sprintf( 'Thermal Receipt Template (80mm) #%d', $post_id ), get_post( $post_id )->post_title );
+	}
+
+	/**
 	 * Test that saving a thermal (XML) template preserves raw XML content.
 	 */
 	public function test_save_thermal_template_preserves_raw_xml(): void {
