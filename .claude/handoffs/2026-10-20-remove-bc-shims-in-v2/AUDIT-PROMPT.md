@@ -18,11 +18,11 @@ The repo has a rule "preserve backward compatibility when changing public method
 
 ## Task
 
-Produce a list of every **public method** declared in a class under Free `includes/` (excluding `includes/Vendor/`) that has **no caller** anywhere in:
+Produce a list of every **public method** declared in a class or trait under Free `includes/` (excluding `includes/Vendor/`) that has **no production caller**. The input set is methods with no caller in the production paths below; calls from `tests/` do not keep a method out of the set, they only decide whether it is classified **Test-only** rather than **Dead**. The production paths are:
 
 - Free `includes/`, `woocommerce-pos.php`, `templates/`, `assets/` (PHP only)
 - Pro `includes/`, `woocommerce-pos-pro.php`, `templates/`
-- Free and Pro `tests/`
+- (Free and Pro `tests/` are searched too, but only to classify: a method whose only callers are tests is **Test-only**, not out of the set.)
 
 Method of search: for each public method name, grep both repositories for `->name(`, `::name(`, `'name'` and `"name"` (string callbacks in `add_action` / `add_filter` / `register_rest_route` / `array( $this, 'name' )`), and `name` inside `callback` arrays. Treat these as callers:
 
