@@ -693,6 +693,49 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
+	/** recover() reads the history fresh too, so a completion parked after the caller loaded the order keeps its late correction. */
+	public function test_recover_writes_the_late_sale_of_a_completion_parked_after_the_caller_loaded_the_order(): void {
+		// Arrange: completion 1 in open session A and completion 2 in closed session B, both inserts
+		// failing; the caller loaded the order between them.
+		$session_a = $this->closure_session( null, 'open' );
+		$session_b = $this->closure_session();
+		$closure_b = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session_b ) );
+		$order     = $this->order();
+		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
+		$order->save();
+		$stale = null;
+		$this->with_sale_inserts_failing(
+			function () use ( $order, $session_a, $session_b, &$stale ): void {
+				$this->cash_in( $order, $session_a, '100.00' );
+				$stale    = wc_get_order( $order->get_id() );
+				$reopened = $this->reopen( $order );
+				$reopened->set_total( '120.00' );
+				$reopened->save();
+				$this->cash_in( $order, $session_b, '20.00' );
+			}
+		);
+		$this->assertCount( 2, $this->parked( $order->get_id() ) );
+
+		// Act: recovery from the copy loaded before completion 2.
+		Fiscal_Record_Writers::instance()->recover( $stale );
+
+		// Assert: both sales land, and completion 2's late correction names its own row and B's closure.
+		$store   = new Fiscal_Record_Store();
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$two     = $store->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertCount( 2, $this->sales( $order->get_id() ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$late = $store->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $late );
+		$this->assertSame( $two['id'], $late[0]['corrects_record_id'] );
+		$this->assertSame( $closure_b['id'], $late[0]['closure_id'] );
+	}
+
 	/** A sale lookup that throws is contained by the refund writer, like any other fiscal failure. */
 	public function test_a_refund_whose_sale_lookup_throws_fails_quietly(): void {
 		// Arrange: a completed sale and its refund; then every fiscal-record query throws.

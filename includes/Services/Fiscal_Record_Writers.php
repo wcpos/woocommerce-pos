@@ -108,11 +108,11 @@ final class Fiscal_Record_Writers {
 	 * Insert every parked sale document (built at its completion, inserted unchanged), then let the
 	 * completion's late correction follow. Nothing parked, nothing to recover: a document is never
 	 * rebuilt from the order as it is now. Fires no completion event. The drain runs under the order
-	 * lock on a fresh read of the parked map, so a document parked by another request since the
-	 * caller loaded the order is not overwritten; while the lock is held elsewhere it is skipped and
-	 * the next writer recovers.
+	 * lock on a fresh read of the parked map and the history, so a document parked by another request
+	 * since the caller loaded the order is neither overwritten nor left without its late correction;
+	 * while the lock is held elsewhere it is skipped and the next writer recovers.
 	 *
-	 * @param WC_Order $order Order; its till tuple and history feed the rows, its parked map only the pre-check.
+	 * @param WC_Order $order Order; it serves only the pre-check and the id, the drain reads a fresh copy.
 	 */
 	public function recover( WC_Order $order ): void {
 		if ( ! self::parked( $order ) ) {
@@ -129,7 +129,7 @@ final class Fiscal_Record_Writers {
 				return;
 			}
 			$fresh->read_meta_data( true );
-			$history = Completion_Stamp::read( $order );
+			$history = Completion_Stamp::read( $fresh );
 			foreach ( self::parked( $fresh ) as $completion_id => $document ) {
 				try {
 					if ( null === $this->store->record( self::fields_of( $order, (array) $document ) ) ) {
@@ -139,7 +139,7 @@ final class Fiscal_Record_Writers {
 					self::unpark( $fresh, (string) $completion_id );
 					foreach ( $history as $entry ) {
 						if ( ( $entry['id'] ?? null ) === $completion_id ) {
-							$this->record_sale_safely( $order, $entry ); // The row exists now: only its late correction runs.
+							$this->record_sale_safely( $fresh, $entry ); // The row exists now: only its late correction runs.
 						}
 					}
 				} catch ( \Throwable $error ) {
