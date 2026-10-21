@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-20T15:31:38+00:00\n"
+"POT-Creation-Date: 2026-10-21T20:02:40+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1167,18 +1167,18 @@ msgid "More registers need WCPOS Pro."
 msgstr ""
 
 #. translators: %s: register field name.
-#: includes/API/V2/Registers_Controller.php:425
+#: includes/API/V2/Registers_Controller.php:461
 #, php-format
 msgid "Invalid register field: %s."
 msgstr ""
 
-#: includes/API/V2/Registers_Controller.php:430
+#: includes/API/V2/Registers_Controller.php:466
 #: includes/Services/Report_Scope_Resolver.php:64
 #: includes/Services/Report_Scope_Resolver.php:67
 msgid "Register not found."
 msgstr ""
 
-#: includes/API/V2/Registers_Controller.php:435
+#: includes/API/V2/Registers_Controller.php:471
 msgid "Register could not be saved."
 msgstr ""
 
@@ -1683,8 +1683,8 @@ msgid "This session already has a closure; the count was recorded as a recount."
 msgstr ""
 
 #: includes/Services/Closure_Store.php:710
-#: includes/Services/Register_Session_Store.php:296
-#: includes/Services/Register_Session_Store.php:461
+#: includes/Services/Register_Session_Store.php:332
+#: includes/Services/Register_Session_Store.php:497
 msgid "The session state has changed."
 msgstr ""
 
@@ -3062,7 +3062,7 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:1142
 #: includes/Services/Receipt_I18n_Labels.php:273
 #: includes/Services/Register_Store.php:149
-#: includes/Services/Register_Store.php:266
+#: includes/Services/Register_Store.php:270
 #: includes/Services/Reports_Registry.php:188
 #: includes/Services/Report_Scope_Resolver.php:94
 msgid "Register"
@@ -4730,23 +4730,23 @@ msgstr ""
 msgid "POS fiscal receipt snapshot created (receipt #%d)."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:179
+#: includes/Services/Register_Session_Store.php:215
 msgid "This register already has an open session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:245
+#: includes/Services/Register_Session_Store.php:281
 msgid "The cashier who opened this session cannot approve it."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:338
+#: includes/Services/Register_Session_Store.php:374
 msgid "The closure count differs from the closed session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:388
+#: includes/Services/Register_Session_Store.php:424
 msgid "Manager approval is required to close this session."
 msgstr ""
 
-#: includes/Services/Register_Session_Store.php:464
+#: includes/Services/Register_Session_Store.php:500
 msgid "The session approval has changed."
 msgstr ""
 
