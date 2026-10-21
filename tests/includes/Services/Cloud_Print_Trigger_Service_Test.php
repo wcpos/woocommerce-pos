@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 
@@ -218,7 +219,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	/**
 	 * Deleting the job history must not re-arm the assignment.
 	 *
-	 * handle_order() runs again on every later order-status change. While
+	 * The handle_order() method runs again on every later order-status change. While
 	 * dedup counted only job rows, deleting a printed receipt — or one the
 	 * admin had deliberately cancelled — read as never printed and queued a
 	 * second copy. The retention purge deletes those same rows on a timer, so
@@ -621,12 +622,14 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			)
 		);
-		new Cloud_Print_Trigger_Service();
-		$order = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$order   = OrderHelper::create_order();
 		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ), 'Order creation must not print a paid-trigger assignment.' );
 
 		// Act — payment lands, moving the order to a paid status.
 		$order->payment_complete();
+		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ), 'The job must not be created inside the order save.' );
+		$service->flush_deferred();
 
 		// Assert.
 		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
@@ -655,14 +658,17 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			)
 		);
-		new Cloud_Print_Trigger_Service();
-		$order = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$order   = OrderHelper::create_order();
 
 		// Act.
 		$order->payment_complete();
+		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ), 'The job must not be created inside the order save.' );
+		$service->flush_deferred();
 		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
 		$order->set_status( 'completed' );
 		$order->save();
+		$service->flush_deferred();
 
 		// Assert — the completed transition must not print a second copy.
 		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
@@ -692,7 +698,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			)
 		);
-		new Cloud_Print_Trigger_Service();
+		$service    = new Cloud_Print_Trigger_Service();
 		$to_on_hold = static function () {
 			return 'on-hold';
 		};
@@ -703,6 +709,8 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		try {
 			$order->payment_complete();
 			$this->assertTrue( $order->has_status( 'on-hold' ) );
+			$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ), 'The job must not be created inside the order save.' );
+			$service->flush_deferred();
 			$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
 		} finally {
 			remove_filter( 'woocommerce_payment_complete_order_status', $to_on_hold );
@@ -857,20 +865,307 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			)
 		);
-		new Cloud_Print_Trigger_Service();
+		$service = new Cloud_Print_Trigger_Service();
 
 		// Act + Assert — order creation satisfies only the created rule.
 		$order = OrderHelper::create_order();
+		$this->assertEquals( 0, $this->jobs->count( array( 'order_id' => $order->get_id() ) ), 'The job must not be created inside the order save.' );
+		$service->flush_deferred();
 		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
 
 		// Payment satisfies the paid rule despite the existing created job.
 		$order->payment_complete();
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ), 'The job must not be created inside the order save.' );
+		$service->flush_deferred();
 		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
 
 		// A later transition reprints neither rule.
 		$order->set_status( 'completed' );
 		$order->save();
+		$service->flush_deferred();
 		$this->assertEquals( 2, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * Several status changes in one request evaluate the order once, at the flush.
+	 *
+	 * The fired high-water mark makes handle_order() idempotent per rule, so
+	 * one evaluation per order per request is enough however many times the
+	 * order changed status inside it.
+	 */
+	public function test_two_status_changes_in_one_request_evaluate_the_order_once(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'counter',
+					'name'     => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'counter',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'trigger'     => 'paid',
+				),
+			)
+		);
+		$service     = new Cloud_Print_Trigger_Service();
+		$order       = OrderHelper::create_order();
+		$evaluations = 0;
+		$counter     = static function ( $assignments, $evaluated ) use ( $order, &$evaluations ) {
+			if ( $evaluated->get_id() === $order->get_id() ) {
+				++$evaluations;
+			}
+
+			return $assignments;
+		};
+		add_filter( 'woocommerce_pos_cloud_print_assignments', $counter, 10, 2 );
+
+		// Act.
+		try {
+			$order->set_status( 'processing' );
+			$order->save();
+			$order->set_status( 'completed' );
+			$order->save();
+			$this->assertEquals( 0, $this->jobs->count( array( 'order_id' => $order->get_id() ) ), 'The job must not be created inside the order save.' );
+			$this->assertSame( 0, $evaluations );
+			$service->flush_deferred();
+		} finally {
+			remove_filter( 'woocommerce_pos_cloud_print_assignments', $counter, 10 );
+		}
+
+		// Assert — one evaluation, one copy.
+		$this->assertSame( 1, $evaluations );
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * After the shutdown flush has run, a later deferral prints at once.
+	 *
+	 * Nothing would flush a second time, so an order event raised by another
+	 * shutdown handler must not wait in the list. The direct defer_order() call
+	 * stands in for the woocommerce_order_status_changed callback.
+	 */
+	public function test_deferral_after_shutdown_flush_prints_immediately(): void {
+		// Arrange — the order exists before the service, so nothing is pending.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'counter',
+					'name'     => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'counter',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'trigger'     => 'created',
+				),
+			)
+		);
+		$order   = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$service->flush_deferred_at_shutdown();
+		$this->assertEquals( 0, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+
+		// Act.
+		$service->defer_order( $order->get_id() );
+
+		// Assert — printed without another flush.
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * A failure in an immediate evaluation is logged, not thrown into the order save.
+	 */
+	public function test_deferral_after_shutdown_flush_logs_a_failure_instead_of_throwing(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$service->flush_deferred_at_shutdown();
+		$logged = array();
+		$capture = static function ( $should_log, $message ) use ( &$logged ) {
+			$logged[] = $message;
+
+			return false;
+		};
+		$throw = static function () {
+			throw new \RuntimeException( 'assignments exploded' );
+		};
+		Logger::reset_dedup_state();
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'woocommerce_pos_cloud_print_assignments', $throw );
+
+		// Act.
+		try {
+			$service->defer_order( $order->get_id() );
+		} finally {
+			remove_filter( 'woocommerce_pos_cloud_print_assignments', $throw );
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			Logger::reset_dedup_state();
+		}
+
+		// Assert.
+		$this->assertContains(
+			sprintf( 'Cloud print: creating print jobs for order #%d failed: assignments exploded', $order->get_id() ),
+			$logged
+		);
+	}
+
+	/**
+	 * A first order event raised in the last shutdown priority is evaluated at once.
+	 *
+	 * A flush callback added at PHP_INT_MAX while that priority is already
+	 * running would never run, so the event must not wait in the list.
+	 */
+	public function test_first_deferral_in_the_last_shutdown_priority_prints_immediately(): void {
+		// Arrange.
+		$order   = $this->create_order_with_created_rule();
+		$service = new Cloud_Print_Trigger_Service();
+		$inside  = null;
+
+		// Act.
+		$this->run_inside_shutdown(
+			PHP_INT_MAX,
+			function () use ( $service, $order, &$inside ): void {
+				$service->defer_order( $order->get_id() );
+				$inside = $this->jobs->count( array( 'order_id' => $order->get_id() ) );
+			}
+		);
+
+		// Assert — printed inside the callback, without a flush.
+		$this->assertSame( 1, $inside );
+	}
+
+	/**
+	 * A first order event raised in an earlier shutdown priority still waits for the flush.
+	 *
+	 * WordPress runs a callback added at PHP_INT_MAX while priority 10 is
+	 * running, so the event is queued and evaluated by the flush in the same
+	 * shutdown, not inside whatever save raised it.
+	 */
+	public function test_first_deferral_in_an_earlier_shutdown_priority_waits_for_the_flush(): void {
+		// Arrange.
+		$order   = $this->create_order_with_created_rule();
+		$service = new Cloud_Print_Trigger_Service();
+		$inside  = null;
+
+		// Act.
+		$this->run_inside_shutdown(
+			10,
+			function () use ( $service, $order, &$inside ): void {
+				$service->defer_order( $order->get_id() );
+				$inside = $this->jobs->count( array( 'order_id' => $order->get_id() ) );
+			}
+		);
+
+		// Assert — not printed inside the callback, printed by the same shutdown.
+		$this->assertSame( 0, $inside );
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * An order event in the last shutdown priority waits for a flush that is still ahead.
+	 *
+	 * When an earlier event already registered the flush, it runs later in
+	 * the same priority, so a second order raised by a PHP_INT_MAX callback
+	 * that runs first is queued and printed by that flush, not inline.
+	 */
+	public function test_deferral_in_the_last_shutdown_priority_before_a_registered_flush_is_queued(): void {
+		// Arrange.
+		$first   = $this->create_order_with_created_rule();
+		$second  = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$inside  = null;
+
+		// Act — the callback is added before the flush, so it runs first.
+		$this->run_inside_shutdown(
+			PHP_INT_MAX,
+			function () use ( $service, $second, &$inside ): void {
+				$service->defer_order( $second->get_id() );
+				$inside = $this->jobs->count( array( 'order_id' => $second->get_id() ) );
+			},
+			static function () use ( $service, $first ): void {
+				$service->defer_order( $first->get_id() );
+			}
+		);
+
+		// Assert — the second order waited for the flush, which printed both.
+		$this->assertSame( 0, $inside );
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $first->get_id() ) ) );
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $second->get_id() ) ) );
+	}
+
+	/**
+	 * Create an order, then a created-trigger rule that prints it.
+	 *
+	 * The order exists before any service in the test, so nothing is pending.
+	 *
+	 * @return \WC_Order
+	 */
+	private function create_order_with_created_rule(): \WC_Order {
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'counter',
+					'name'     => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'counter',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'trigger'     => 'created',
+				),
+			)
+		);
+
+		return OrderHelper::create_order();
+	}
+
+	/**
+	 * Run one callback as a `shutdown` callback at the given priority.
+	 *
+	 * Dispatches a private `shutdown` hook holding only this callback (and
+	 * whatever it adds), so the real shutdown handlers (the sync journal and
+	 * digest flushes, the logger) never run inside the suite.
+	 *
+	 * @param int           $priority Shutdown priority to run at.
+	 * @param callable      $callback The callback.
+	 * @param callable|null $before   Runs on the private hook before shutdown starts.
+	 */
+	private function run_inside_shutdown( int $priority, callable $callback, ?callable $before = null ): void {
+		global $wp_filter, $wp_current_filter;
+		$saved                 = $wp_filter['shutdown'] ?? null;
+		$wp_filter['shutdown'] = new \WP_Hook(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Isolate the real shutdown handlers.
+		$wp_filter['shutdown']->add_filter( 'shutdown', $callback, $priority, 0 );
+		try {
+			if ( null !== $before ) {
+				$before();
+			}
+			$wp_current_filter[] = 'shutdown'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- What do_action() pushes.
+			try {
+				$wp_filter['shutdown']->do_action( array( '' ) );
+			} finally {
+				array_pop( $wp_current_filter );
+			}
+		} finally {
+			if ( null === $saved ) {
+				unset( $wp_filter['shutdown'] );
+			} else {
+				$wp_filter['shutdown'] = $saved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore.
+			}
+		}
 	}
 
 	/**

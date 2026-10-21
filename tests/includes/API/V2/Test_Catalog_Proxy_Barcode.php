@@ -330,6 +330,45 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A GTIN barcode push saves the product once.
+	 *
+	 * The barcode rides on the object WooCommerce saves, so one push runs the
+	 * product save stack (and fires woocommerce_update_product) exactly once.
+	 */
+	public function test_product_push_with_gtin_barcode_saves_the_product_once(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
+		$record_id  = wp_generate_uuid4();
+		$product    = ProductHelper::create_simple_product();
+		$product_id = $product->get_id();
+		$product->update_meta_data( Pos_Uuid::META_KEY, $record_id );
+		$product->set_global_unique_id( '4006381333931' );
+		$product->save();
+		$updates = 0;
+		$counter = static function ( $id ) use ( $product_id, &$updates ): void {
+			if ( (int) $id === $product_id ) {
+				++$updates;
+			}
+		};
+		add_action( 'woocommerce_update_product', $counter );
+
+		try {
+			$response = $this->push_barcode_update(
+				'products',
+				$record_id,
+				$this->product_revision( $product_id ),
+				'9780201379624',
+				'global_unique_id'
+			);
+		} finally {
+			remove_action( 'woocommerce_update_product', $counter );
+		}
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 1, $updates, 'One push must run the product save stack exactly once.' );
+		$this->assertSame( '9780201379624', wc_get_product( $product_id )->get_global_unique_id() );
+	}
+
+	/**
 	 * Variation barcode meta survives a v2 push and is immediately readable.
 	 */
 	public function test_variation_push_updates_custom_barcode_read_and_resolution(): void {
@@ -366,7 +405,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	 * {@see self::test_variation_push_updates_custom_barcode_read_and_resolution()},
 	 * but the variation + native GTIN combination had no coverage on either lane:
 	 * v1 only ever exercised its own `barcode` request alias
-	 * (API/V1/Product_Variations_Controller::wcpos_insert_product_object), which
+	 * (API/V1/Product_Variations_Controller::wcpos_pre_insert_product_variation_object), which
 	 * the v2 push lane does not have — it forwards the native field to wc/v3's
 	 * NESTED variations resource. `_global_unique_id` is the DEFAULT barcode field
 	 * (Barcode_Field::DEFAULT_FIELD), so this is the stock configuration.
@@ -399,5 +438,49 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 		$this->assertTrue( $resolved->get_data()['found'] );
 		$this->assertSame( $variation->get_id(), $resolved->get_data()['match']['id'] );
 		$this->assertSame( 'variation', $resolved->get_data()['match']['type'] );
+	}
+
+	/**
+	 * A GTIN barcode push saves the variation once.
+	 *
+	 * The barcode rides on the object WooCommerce saves, so one push runs the
+	 * variation save stack (and fires woocommerce_update_product_variation)
+	 * exactly once.
+	 */
+	public function test_variation_push_with_gtin_barcode_saves_the_variation_once(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
+		$record_id    = wp_generate_uuid4();
+		$variation    = $this->create_variation();
+		$variation_id = $variation->get_id();
+		$variation->update_meta_data( Pos_Uuid::META_KEY, $record_id );
+		$variation->set_global_unique_id( '4006381333931' );
+		$variation->save();
+		$before  = $this->read_variation( $variation_id );
+		$updates = 0;
+		$counter = static function ( $id ) use ( $variation_id, &$updates ): void {
+			if ( (int) $id === $variation_id ) {
+				++$updates;
+			}
+		};
+		add_action( 'woocommerce_update_product_variation', $counter );
+
+		try {
+			$response = $this->push_barcode_update(
+				'variations',
+				$record_id,
+				$before['_rxdb_revision'],
+				'9780201379624',
+				'global_unique_id'
+			);
+		} finally {
+			remove_action( 'woocommerce_update_product_variation', $counter );
+		}
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 1, $updates, 'One push must run the variation save stack exactly once.' );
+		$this->assertSame(
+			'9780201379624',
+			( new WC_Product_Variation( $variation_id ) )->get_global_unique_id()
+		);
 	}
 }

@@ -1177,8 +1177,6 @@ class Orders {
 			// Clear taxes entirely when the fee's tax_status is 'none'.
 			$fee_item->set_taxes( array() );
 		}
-
-		$fee_item->save();
 	}
 
 	/**

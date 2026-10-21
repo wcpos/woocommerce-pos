@@ -49,6 +49,14 @@ class Order_Postmeta_Guard {
 	private static $watched_dir = '';
 
 	/**
+	 * Further policed directories added with `also_watch()`, in the same form as
+	 * `$watched_dir`. A host plugin's suite (Pro) adds its own `includes/` here.
+	 *
+	 * @var string[]
+	 */
+	private static $extra_dirs = array();
+
+	/**
 	 * Hook the four post-meta filters. Call once from the bootstrap after WP has loaded;
 	 * WP_UnitTestCase snapshots hooks per test, so filters present at bootstrap survive
 	 * every test's hook restore.
@@ -67,15 +75,72 @@ class Order_Postmeta_Guard {
 	 * Police a different directory. Returns the previous one so a self-test can
 	 * point the guard at a fixture and restore `includes/` afterwards.
 	 *
+	 * This replaces the primary directory and also forgets every directory added with
+	 * `also_watch()`, so a self-test that re-points the guard and restores it leaves only
+	 * the restored directory watched. A suite that watches extra directories adds them
+	 * again after any `watch_directory()` call.
+	 *
 	 * @param string $dir Directory to police.
 	 *
 	 * @return string Previously watched directory.
 	 */
 	public static function watch_directory( string $dir ): string {
 		$previous          = self::$watched_dir;
-		$resolved          = realpath( $dir );
-		self::$watched_dir = rtrim( false === $resolved ? $dir : $resolved, '/' ) . '/';
+		self::$watched_dir = self::normalize_dir( $dir );
+		self::$extra_dirs  = array();
 		return $previous;
+	}
+
+	/**
+	 * Police one more directory as well as the primary one, e.g. a second plugin's
+	 * `includes/` when that plugin's suite installs this guard. While any extra directory
+	 * is watched, reported paths carry the plugin directory name
+	 * (`woocommerce-pos-pro/includes/Foo.php:12`) so the two plugins can be told apart.
+	 *
+	 * @param string $dir Directory to police.
+	 */
+	public static function also_watch( string $dir ): void {
+		$dir = self::normalize_dir( $dir );
+		if ( $dir !== self::$watched_dir && ! \in_array( $dir, self::$extra_dirs, true ) ) {
+			self::$extra_dirs[] = $dir;
+		}
+	}
+
+	/**
+	 * A directory as the backtrace reports it: realpath()'d, with one trailing slash.
+	 *
+	 * @param string $dir Directory.
+	 *
+	 * @return string
+	 */
+	private static function normalize_dir( string $dir ): string {
+		$resolved = realpath( $dir );
+		return rtrim( false === $resolved ? $dir : $resolved, '/' ) . '/';
+	}
+
+	/**
+	 * The path to report for a file under a watched directory, or null when it is under none.
+	 *
+	 * The deepest matching directory wins. The path is relative to that directory's parent
+	 * (`includes/Foo.php`), or to its grandparent while extra directories are watched
+	 * (`woocommerce-pos/includes/Foo.php`).
+	 *
+	 * @param string $file Absolute file path from a backtrace frame.
+	 *
+	 * @return null|string
+	 */
+	private static function watched_path( string $file ): ?string {
+		$match = '';
+		foreach ( array_merge( array( self::$watched_dir ), self::$extra_dirs ) as $dir ) {
+			if ( '' !== $dir && \strlen( $dir ) > \strlen( $match ) && 0 === strpos( $file, $dir ) ) {
+				$match = $dir;
+			}
+		}
+		if ( '' === $match ) {
+			return null;
+		}
+		$base = empty( self::$extra_dirs ) ? \dirname( $match ) : \dirname( $match, 2 );
+		return substr( $file, \strlen( $base ) + 1 );
 	}
 
 	/**
@@ -213,9 +278,10 @@ class Order_Postmeta_Guard {
 			if ( __FILE__ === $file || 0 === strpos( $file, $wp_includes ) ) {
 				continue;
 			}
-			if ( 0 === strpos( $file, self::$watched_dir ) ) {
+			$path = self::watched_path( $file );
+			if ( null !== $path ) {
 				return array(
-					'file' => substr( $file, \strlen( \dirname( self::$watched_dir ) ) + 1 ),
+					'file' => $path,
 					'line' => (int) ( $frame['line'] ?? 0 ),
 				);
 			}

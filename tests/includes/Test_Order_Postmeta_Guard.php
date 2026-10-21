@@ -15,6 +15,8 @@ use WP_UnitTestCase;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\offender_read;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\offender_read_all;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\offender_write;
+use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\First_Plugin\first_plugin_read_order_meta;
+use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\Second_Plugin\second_plugin_read_order_meta;
 
 /**
  * The guard must fire for plugin code addressing an order through the post-meta API,
@@ -40,6 +42,8 @@ class Test_Order_Postmeta_Guard extends WP_UnitTestCase {
 	public function setUp(): void {
 		parent::setUp();
 		require_once __DIR__ . '/../Helpers/fixtures/order-postmeta-offender.php';
+		require_once __DIR__ . '/../Helpers/fixtures/first-plugin/includes/offenders.php';
+		require_once __DIR__ . '/../Helpers/fixtures/second-plugin/includes/offenders.php';
 		$this->previous_dir = Order_Postmeta_Guard::watch_directory( __DIR__ . '/../Helpers/fixtures' );
 	}
 
@@ -117,6 +121,73 @@ class Test_Order_Postmeta_Guard extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertSame( 'ok', $value );
+	}
+
+	/**
+	 * A second plugin directory added with also_watch() is policed too, and its paths carry the plugin directory name.
+	 */
+	public function test_guard_also_watch_second_directory_offender_throws_naming_plugin_directory(): void {
+		// Arrange.
+		Order_Postmeta_Guard::also_watch( __DIR__ . '/../Helpers/fixtures/second-plugin/includes' );
+		$order = wc_create_order();
+
+		// Act.
+		$message = '';
+		try {
+			second_plugin_read_order_meta( $order->get_id(), '_pos_cash_change' );
+		} catch ( LogicException $e ) {
+			$message = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringStartsWith( 'second-plugin/includes/offenders.php:', $message );
+		$this->assertStringContainsString( 'get_post_meta()', $message );
+	}
+
+	/**
+	 * With a primary directory that does not contain the extra one (the Pro shape: Free's
+	 * `includes/` primary, Pro's beside it), offenders in both trip and each is named by
+	 * its own plugin directory.
+	 */
+	public function test_guard_also_watch_disjoint_from_primary_offenders_throw_naming_their_plugin_directory(): void {
+		// Arrange.
+		Order_Postmeta_Guard::watch_directory( __DIR__ . '/../Helpers/fixtures/first-plugin/includes' );
+		Order_Postmeta_Guard::also_watch( __DIR__ . '/../Helpers/fixtures/second-plugin/includes' );
+		$order = wc_create_order();
+
+		// Act.
+		$second = '';
+		try {
+			second_plugin_read_order_meta( $order->get_id(), '_pos_cash_change' );
+		} catch ( LogicException $e ) {
+			$second = $e->getMessage();
+		}
+		$first = '';
+		try {
+			first_plugin_read_order_meta( $order->get_id(), '_pos_cash_change' );
+		} catch ( LogicException $e ) {
+			$first = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringStartsWith( 'second-plugin/includes/offenders.php:', $second );
+		$this->assertStringStartsWith( 'first-plugin/includes/offenders.php:', $first );
+	}
+
+	/**
+	 * Re-pointing the guard with watch_directory() forgets every directory added with also_watch().
+	 */
+	public function test_guard_watch_directory_forgets_also_watched_directory(): void {
+		// Arrange.
+		Order_Postmeta_Guard::also_watch( __DIR__ . '/../Helpers/fixtures/second-plugin/includes' );
+		Order_Postmeta_Guard::watch_directory( $this->previous_dir );
+		$order = wc_create_order();
+
+		// Act.
+		$value = second_plugin_read_order_meta( $order->get_id(), '_wcpos_guard_probe' );
+
+		// Assert.
+		$this->assertSame( '', $value );
 	}
 
 	/**
