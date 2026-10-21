@@ -24,6 +24,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\V1\Products_Controller;
+use WCPOS\WooCommercePOS\Services\Barcode_Field;
 
 /**
  * @internal
@@ -414,6 +415,62 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$this->assertEquals( '12345', $data['barcode'] );
+	}
+
+	/**
+	 * The three barcode field modes: the SKU, the default GTIN field, and a custom meta key.
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function barcode_field_modes(): array {
+		return array(
+			'sku'        => array( '_sku', 'POS-SKU-4006381' ),
+			'gtin'       => array( '_global_unique_id', '4006381333931' ),
+			'custom key' => array( '_alg_ean', 'CUSTOM-4006381' ),
+		);
+	}
+
+	/**
+	 * A barcode on a v1 product update is persisted by WooCommerce's own save.
+	 *
+	 * The barcode used to be written from woocommerce_rest_insert_product_object,
+	 * which fires after WooCommerce has saved the product, by a second full
+	 * save() that re-ran the whole product save stack for every POS write.
+	 *
+	 * @dataProvider barcode_field_modes
+	 *
+	 * @param string $barcode_field The barcode field setting.
+	 * @param string $barcode       The barcode value sent.
+	 */
+	public function test_product_update_barcode_fires_update_hook_once( string $barcode_field, string $barcode ): void {
+		// Arrange.
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () use ( $barcode_field ) {
+				return array(
+					'barcode_field' => $barcode_field,
+				);
+			}
+		);
+		$product_id = ProductHelper::create_simple_product()->get_id();
+		$updates    = 0;
+		$counter    = function ( $id ) use ( $product_id, &$updates ): void {
+			if ( (int) $id === $product_id ) {
+				++$updates;
+			}
+		};
+		add_action( 'woocommerce_update_product', $counter );
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/products/' . $product_id );
+		$request->set_body_params( array( 'barcode' => $barcode ) );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+		remove_action( 'woocommerce_update_product', $counter );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 1, $updates, 'One REST update must run the product save stack exactly once.' );
+		$this->assertSame( $barcode, Barcode_Field::read( wc_get_product( $product_id ) ) );
 	}
 
 	/**

@@ -366,7 +366,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 	 * {@see self::test_variation_push_updates_custom_barcode_read_and_resolution()},
 	 * but the variation + native GTIN combination had no coverage on either lane:
 	 * v1 only ever exercised its own `barcode` request alias
-	 * (API/V1/Product_Variations_Controller::wcpos_insert_product_object), which
+	 * (API/V1/Product_Variations_Controller::wcpos_pre_insert_product_variation_object), which
 	 * the v2 push lane does not have — it forwards the native field to wc/v3's
 	 * NESTED variations resource. `_global_unique_id` is the DEFAULT barcode field
 	 * (Barcode_Field::DEFAULT_FIELD), so this is the stock configuration.
