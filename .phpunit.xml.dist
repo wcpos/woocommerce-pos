@@ -7,6 +7,9 @@
 	convertNoticesToExceptions="true"
 	convertWarningsToExceptions="true"
 	>
+	<extensions>
+		<extension class="WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard_Reset" file="tests/Helpers/Save_Reentry_Guard_Reset.php" />
+	</extensions>
 	<testsuites>
 		<testsuite name="default">
 			<directory prefix="test-" suffix=".php">./tests/</directory>

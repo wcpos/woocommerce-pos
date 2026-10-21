@@ -80,8 +80,11 @@ class Save_Reentry_Guard {
 		'before_delete_post',
 		'wp_trash_post',
 
-		// WooCommerce object saves driven by the product edit screen.
-		'woocommerce_process_product_meta',
+		// Product edit screen staging hooks: they hand over the object BEFORE WooCommerce's
+		// own save, so a save here is a double save. The meta-box persistence hooks
+		// (woocommerce_process_product_meta, woocommerce_process_shop_order_meta) are not
+		// listed: WooCommerce's own meta boxes save the object inside them, so a handler
+		// saving the data it owns there follows WooCommerce's contract.
 		'woocommerce_admin_process_product_object',
 		'woocommerce_admin_process_variation_object',
 
@@ -210,6 +213,16 @@ class Save_Reentry_Guard {
 		// wp_delete_post() hands attachments to wp_delete_attachment(), which fires this instead.
 		add_filter( 'pre_delete_attachment', array( __CLASS__, 'on_pre_delete_post' ), 1, 2 );
 		add_action( 'wp_trash_post', array( __CLASS__, 'on_trash_post' ), 1, 1 );
+	}
+
+	/**
+	 * Forget per-test state. Called before every test by `Save_Reentry_Guard_Reset`, the
+	 * PHPUnit extension registered in the suite config: the hook restore at the end of a
+	 * test clears the leftovers `$tripped_stack` describes, and a stale copy would hide a
+	 * genuine trip in the next test whose live stack happens to equal it.
+	 */
+	public static function reset(): void {
+		self::$tripped_stack = array();
 	}
 
 	/**
@@ -364,8 +377,8 @@ class Save_Reentry_Guard {
 	 * complete, order saves), every hook it unwound stays on the stack until the test's hook
 	 * restore, and the next plugin save in that test would be blamed on them. While the
 	 * stack recorded at the trip is still a prefix of the live stack, it is dropped; once it
-	 * is not, the hook restore has cleared it and it is forgotten. A caught trip still fails
-	 * its test through the `_doing_it_wrong()` notice.
+	 * is not, it is forgotten, and `reset()` forgets it at every test boundary. A caught
+	 * trip still fails its test through the `_doing_it_wrong()` notice.
 	 *
 	 * @return string[]
 	 */

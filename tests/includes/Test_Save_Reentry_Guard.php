@@ -158,6 +158,41 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * After a trip and a test boundary, the same offender on the same hook stack trips again.
+	 *
+	 * The boundary is simulated the way WP_UnitTestCase does it: the hook stack goes back to
+	 * what it was, then the per-test reset runs. Without the reset, the stack saved at the
+	 * first trip equals the live one and the second trip is dropped.
+	 */
+	public function test_guard_reset_after_trip_still_catches_identical_trip(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		$product_id = $this->create_managed_stock_product();
+		add_action( 'woocommerce_product_set_stock', self::TOUCH_HANDLER );
+		$product      = wc_get_product( $product_id );
+		$stack_before = $GLOBALS['wp_current_filter'];
+		try {
+			do_action( 'woocommerce_product_set_stock', $product ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- fires WooCommerce's stock hook directly, so no other save runs in between.
+		} catch ( LogicException $e ) {
+			$first = $e->getMessage();
+		}
+		$this->assertNotEmpty( $first ?? '', 'Precondition: the first stock hook trips.' );
+		$GLOBALS['wp_current_filter'] = $stack_before; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP_UnitTestCase's hook restore.
+		Save_Reentry_Guard::reset();
+
+		// Act.
+		$message = '';
+		try {
+			do_action( 'woocommerce_product_set_stock', $product ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- same hook stack as the first trip.
+		} catch ( LogicException $e ) {
+			$message = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
+	}
+
+	/**
 	 * The same wp_update_post() from a request context (no save hook running) passes.
 	 */
 	public function test_guard_update_post_from_request_context_passes(): void {
