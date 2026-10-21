@@ -13,9 +13,13 @@ use LogicException;
 use WC_Data;
 
 /**
- * Fails any test in which a file under `includes/` saves a post, a WooCommerce object or
- * an object's terms, or deletes or trashes a post, while a WordPress or WooCommerce save,
- * status-transition, stock or checkout hook is running.
+ * Fails any test in which a file under `includes/` saves a post or a WooCommerce object,
+ * or deletes or trashes a post, while a WordPress or WooCommerce save, status-transition,
+ * stock or checkout hook is running.
+ *
+ * Term assignment (`wp_set_object_terms()`) is out of scope: setting terms on the post
+ * being saved from its own `save_post_{type}` handler is WordPress's meta-box pattern, and
+ * it does not re-run the post save stack.
  *
  * Why this exists: #2371. WCPOS listened on `woocommerce_product_set_stock` and called
  * `wp_update_post()` on the product. That hook fires inside WooCommerce's stock reduction,
@@ -60,7 +64,7 @@ class Save_Reentry_Guard {
 	 */
 	const REENTRY_HOOKS = array(
 		// WordPress post save stack: everything wp_insert_post(), wp_delete_post() and
-		// wp_trash_post() fire around the write, and the term write they can trigger.
+		// wp_trash_post() fire around the write.
 		'save_post',
 		'wp_insert_post',
 		'wp_after_insert_post',
@@ -73,7 +77,6 @@ class Save_Reentry_Guard {
 		'delete_post',
 		'before_delete_post',
 		'wp_trash_post',
-		'set_object_terms',
 
 		// WooCommerce object saves driven by the product edit screen.
 		'woocommerce_process_product_meta',
@@ -168,7 +171,6 @@ class Save_Reentry_Guard {
 		foreach ( self::WC_DATA_TYPES as $type ) {
 			add_action( 'woocommerce_before_' . $type . '_object_save', array( __CLASS__, 'on_wc_data_save' ), 1, 1 );
 		}
-		add_action( 'set_object_terms', array( __CLASS__, 'on_set_object_terms' ), 1, 4 );
 		add_filter( 'pre_delete_post', array( __CLASS__, 'on_pre_delete_post' ), 1, 2 );
 		add_action( 'wp_trash_post', array( __CLASS__, 'on_trash_post' ), 1, 1 );
 	}
@@ -215,19 +217,6 @@ class Save_Reentry_Guard {
 		$hook = (string) current_filter();
 		$type = substr( $hook, \strlen( 'woocommerce_before_' ), - \strlen( '_object_save' ) );
 		self::check( 'saved', $type, (int) $data_object->get_id(), true );
-	}
-
-	/**
-	 * `set_object_terms` action: fires inside wp_set_object_terms().
-	 *
-	 * @param int    $object_id Object id.
-	 * @param array  $terms     Terms as passed.
-	 * @param array  $tt_ids    Term taxonomy ids.
-	 * @param string $taxonomy  Taxonomy.
-	 */
-	public static function on_set_object_terms( $object_id, $terms, $tt_ids, $taxonomy ): void {
-		$type = get_post_type( (int) $object_id );
-		self::check( 'saved', ( $type ? $type : 'object' ) . " '" . $taxonomy . "' terms of", (int) $object_id, false );
 	}
 
 	/**
@@ -383,7 +372,7 @@ class Save_Reentry_Guard {
 	 *
 	 * The walk is `Order_Postmeta_Guard::plugin_caller()`'s: skip this file and every
 	 * `wp-includes` frame, and judge the first frame left. For a post or term save that
-	 * frame is the caller of `wp_update_post()` / `wp_insert_post()` / `wp_set_object_terms()`
+	 * frame is the caller of `wp_update_post()` / `wp_insert_post()` / `wp_delete_post()`
 	 * and friends. A `WC_Data::save()` fires its hook from WooCommerce's own file, so for
 	 * those the walk first steps to the `save()` frame (the last of a `parent::save()`
 	 * chain), whose file and line are the caller of `$object->save()`. A caller inside

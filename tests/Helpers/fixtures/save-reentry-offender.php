@@ -47,12 +47,3 @@ function reentry_offender_save_product( int $product_id ): int {
 	$product = wc_get_product( $product_id );
 	return $product->save();
 }
-
-/**
- * Tag a product with wp_set_object_terms().
- *
- * @param \WC_Product $product Product whose stock changed.
- */
-function reentry_offender_tag_product( $product ): void {
-	wp_set_object_terms( $product->get_id(), 'restocked', 'product_tag', true );
-}

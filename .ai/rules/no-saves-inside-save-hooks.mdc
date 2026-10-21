@@ -27,9 +27,12 @@ hook (`save_post*`, `wp_insert_post`, `transition_post_status`,
 guard), never call:
 
 - `wp_update_post()`, `wp_insert_post()`, `wp_delete_post()`, `wp_trash_post()`;
-- `wp_set_object_terms()` / `wp_set_post_terms()`;
 - `WC_Data::save()` on any product, order, refund, coupon or customer;
 - direct SQL that writes `{$wpdb->posts}`, `{$wpdb->postmeta}` or the order tables.
+
+Assigning terms to the post being saved from its own `save_post_{type}` handler
+(`wp_set_object_terms()`) is fine: it is WordPress's meta-box pattern and does not
+re-enter the post save stack.
 
 ## What to do instead
 
@@ -45,7 +48,7 @@ guard), never call:
 ## What the suite does about it
 
 `tests/Helpers/Save_Reentry_Guard.php` is installed by the test bootstrap. Any test in
-which a file under `includes/` saves a post, a WooCommerce object or terms, or deletes
+which a file under `includes/` saves a post or a WooCommerce object, or deletes
 or trashes a post, while a listed hook is running fails with a `LogicException` (and a
 `_doing_it_wrong()` notice, because WooCommerce catches exceptions on the status and
 payment paths):

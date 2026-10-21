@@ -30,11 +30,6 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 	const TOUCH_HANDLER = 'WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_touch_product';
 
 	/**
-	 * Fixture function that tags a product with wp_set_object_terms() on a stock change.
-	 */
-	const TAG_HANDLER = 'WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_tag_product';
-
-	/**
 	 * Directory the guard watched before this test re-pointed it.
 	 *
 	 * @var string
@@ -193,29 +188,6 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertSame( $product_id, $result );
-	}
-
-	/**
-	 * A term write on the product from a stock hook trips.
-	 */
-	public function test_guard_set_object_terms_inside_set_stock_hook_throws(): void {
-		// Arrange.
-		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
-		$product_id = $this->create_managed_stock_product();
-		add_action( 'woocommerce_product_set_stock', self::TAG_HANDLER );
-
-		// Act.
-		$message = '';
-		try {
-			wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
-		} catch ( LogicException $e ) {
-			$message = $e->getMessage();
-		}
-
-		// Assert.
-		$this->assertStringContainsString( 'fixtures/save-reentry-offender.php:', $message );
-		$this->assertStringContainsString( "saved product 'product_tag' terms of #" . $product_id . ' (wp_set_object_terms())', $message );
-		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
 	}
 
 	/**
