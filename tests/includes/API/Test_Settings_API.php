@@ -1201,6 +1201,7 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( $value, $read[ $key ], $key );
 		}
 		foreach ( array( '', null ) as $off ) {
+			$this->assertSame( 200, $this->post_settings( $route, $fields )->get_status() );
 			$response = $this->post_settings( $route, array( 'variance_threshold' => $off, 'expected_close_time' => $off ) );
 			$this->assertSame( 200, $response->get_status() );
 			$read = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();

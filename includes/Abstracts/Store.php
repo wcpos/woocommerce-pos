@@ -175,7 +175,7 @@ class Store extends \WC_Data {
 		$this->set_prop( 'default_customer', Settings::instance()->default_customer_id() );
 		$this->set_prop( 'default_customer_is_cashier', Settings::instance()->default_customer_is_cashier() );
 		$general = Settings::instance()->get_general_settings();
-		$this->set_prop( 'register_sessions', (bool) $general['register_sessions'] );
+		$this->set_prop( 'register_sessions', (bool) ( $general['register_sessions'] ?? false ) );
 		$this->set_prop( 'variance_threshold', $general['variance_threshold'] ?? '' );
 		$this->set_prop( 'expected_close_time', $general['expected_close_time'] ?? '' );
 		$this->set_prop( 'prevent_overselling', Settings::instance()->prevent_overselling_enabled() );

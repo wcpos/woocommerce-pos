@@ -79,6 +79,85 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 404, $response->get_status() );
 	}
 
+	/** DELETE removes the register from REST but preserves its historical name. */
+	public function test_delete_supported_register_returns_204_and_keeps_name(): void {
+		$repository = $this->use_multi_register_repository();
+		$row = $this->create_register( array( 'name' => 'Front desk' ) );
+
+		$response = $this->delete_register( $row['id'] );
+
+		$this->assertSame( 204, $response->get_status() );
+		$list = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers' ) );
+		$this->assertSame( 200, $list->get_status() );
+		$this->assertNotContains( $row['id'], array_column( $list->get_data(), 'id' ) );
+		$this->assertNull( ( new Register_Store() )->get( $row['id'] ) );
+		$this->assertSame( 'Front desk', $repository->retired_name( $row['id'] ) );
+	}
+
+	/** Open/counting sessions block retirement, including one opened while DELETE waits for the lock. */
+	public function test_delete_active_session_returns_409_before_and_at_lock(): void {
+		$repository = $this->use_multi_register_repository();
+		foreach ( array( 'open', 'counting' ) as $status ) {
+			foreach ( array( false, true ) as $at_lock ) {
+				$row = $this->create_register();
+				$this->closure_registers[] = $row['id'];
+				$race = function ( $sql ) use ( $row, $status, &$race ) {
+					if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $row['id'] ) ) {
+						remove_filter( 'query', $race );
+						$this->closure_session( $row['id'], $status );
+					}
+					return $sql;
+				};
+				if ( $at_lock ) {
+					add_filter( 'query', $race );
+				} else {
+					$this->closure_session( $row['id'], $status );
+				}
+				try {
+					$response = $this->delete_register( $row['id'] );
+				} finally {
+					remove_filter( 'query', $race );
+				}
+				$this->assertSame( 409, $response->get_status(), $status . ( $at_lock ? ' at lock' : ' before lock' ) );
+				$this->assertSame( 'wcpos_register_session_open', $response->get_data()['code'] );
+				$this->assertNotNull( ( new Register_Store() )->get( $row['id'] ) );
+				$this->assertNull( $repository->retired_name( $row['id'] ) );
+			}
+		}
+	}
+
+	/** DELETE hides unreachable registers, including a reassignment while it waits for the lock. */
+	public function test_delete_outside_store_reach_returns_404_before_and_at_lock(): void {
+		$repository = $this->use_multi_register_repository();
+		$scope = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $scope );
+		try {
+			foreach ( array( false, true ) as $at_lock ) {
+				$row = $this->create_register( array( 'store_id' => $at_lock ? 789 : 456 ) );
+				$race = static function ( $sql ) use ( $repository, $row ) {
+					if ( false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $row['id'] ) ) {
+						$repository->update( $row['id'], array( 'store_id' => 456 ) );
+					}
+					return $sql;
+				};
+				add_filter( 'query', $race );
+				try {
+					$response = $this->delete_register( $row['id'] );
+				} finally {
+					remove_filter( 'query', $race );
+				}
+				$this->assertSame( 404, $response->get_status() );
+				$this->assertSame( 'wcpos_register_not_found', $response->get_data()['code'] );
+				$this->assertNotNull( ( new Register_Store() )->get( $row['id'] ) );
+				$this->assertNull( $repository->retired_name( $row['id'] ) );
+			}
+		} finally {
+			remove_filter( Store_Reach::FILTER, $scope );
+		}
+	}
+
 	/** Free lists its one register; a status query is no longer a filter. */
 	public function test_get_items_in_free_lists_the_one_register(): void {
 		// Arrange.

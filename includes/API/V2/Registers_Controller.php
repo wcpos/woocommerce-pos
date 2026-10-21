@@ -172,12 +172,20 @@ class Registers_Controller extends WP_REST_Controller {
 		if ( ! $repository instanceof Register_Retirement ) {
 			return new WP_Error( 'wcpos_registers_pro', __( 'More registers need WCPOS Pro.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
-		if ( in_array( $row['session']['status'] ?? null, array( 'open', 'counting' ), true ) ) {
-			return new WP_Error( 'wcpos_register_session_open', __( 'Close the register session before retiring it.', 'woocommerce-pos' ), array( 'status' => 409 ) );
-		}
 		try {
-			$store->retire( $id );
-			return new WP_REST_Response( null, 204 );
+			$result = $store->retire(
+				$id,
+				function ( $row ) use ( $request ) {
+					if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+						return $this->not_found();
+					}
+					if ( in_array( $row['session']['status'] ?? null, array( 'open', 'counting' ), true ) ) {
+						return new WP_Error( 'wcpos_register_session_open', __( 'Close the register session before retiring it.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+					}
+					return null;
+				}
+			);
+			return is_wp_error( $result ) ? $result : new WP_REST_Response( null, 204 );
 		} catch ( \RuntimeException $error ) {
 			return $this->write_error();
 		}

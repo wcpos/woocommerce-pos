@@ -1,6 +1,7 @@
 ---
 description: Settings and admin forms follow rule 11 of the monorepo's CODING_STANDARDS § Design
 globs: ["packages/settings/**", "packages/ui/**"]
+alwaysApply: false
 ---
 
 1. A setting is a sentence the owner would say; the control sits where the value goes in the sentence.

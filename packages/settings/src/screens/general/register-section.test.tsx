@@ -63,9 +63,11 @@ describe('General Register section', () => {
 
 	it('shows float, approval and reminder values when on', async () => {
 		renderSection();
-		expect(await screen.findByDisplayValue('50.0000')).toBeInTheDocument();
+		expect(await screen.findByDisplayValue('50.00')).toBeInTheDocument();
 		expect(screen.getAllByRole('switch')).toHaveLength(3);
 		expect(screen.getByDisplayValue('5.00')).toBeInTheDocument();
+		expect(screen.getByText(en['settings.ask_manager_help'])).toBeInTheDocument();
+		expect(screen.getByText(en['settings.close_reminder_help'])).toBeInTheDocument();
 		expect(screen.getByDisplayValue('17:30')).toHaveAttribute('type', 'time');
 		expect(apiFetchMock).toHaveBeenCalledWith({
 			path: '/wcpos/v2/registers',
@@ -87,6 +89,8 @@ describe('General Register section', () => {
 		['Remind the cashier to close', 'expected_close_time', '17:30'],
 	])('turns %s on with its default and off with null', (label, key, value) => {
 		const first = renderSection({ ...off, register_sessions: true });
+		expect(screen.queryByText(en['settings.ask_manager_help'])).not.toBeInTheDocument();
+		expect(screen.queryByText(en['settings.close_reminder_help'])).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole('switch', { name: label }));
 		expect(first.mutate).toHaveBeenCalledWith({ [key]: value });
 		first.unmount();
@@ -102,7 +106,7 @@ describe('General Register section', () => {
 			.mockResolvedValueOnce(updated)
 			.mockResolvedValue([updated]);
 		renderSection();
-		const input = await screen.findByDisplayValue('50.0000');
+		const input = await screen.findByDisplayValue('50.00');
 		fireEvent.change(input, { target: { value: '25.50' } });
 		fireEvent.blur(input);
 		await waitFor(() =>
@@ -137,12 +141,17 @@ describe('General Register section', () => {
 
 	it('never saves blank or invalid fields, but saves valid policy edits', async () => {
 		const { mutate } = renderSection();
-		const float = await screen.findByDisplayValue('50.0000');
+		const float = await screen.findByDisplayValue('50.00');
 		const approval = screen.getByDisplayValue('5.00');
 		const reminder = screen.getByDisplayValue('17:30');
-		for (const input of [float, approval, reminder]) {
+		for (const [input, stored] of [
+			[float, '50.00'],
+			[approval, '5.00'],
+			[reminder, '17:30'],
+		] as const) {
 			fireEvent.change(input, { target: { value: '' } });
 			fireEvent.blur(input);
+			expect(input).toHaveValue(stored);
 		}
 		fireEvent.change(approval, { target: { value: '-1' } });
 		fireEvent.blur(approval);
@@ -158,7 +167,7 @@ describe('General Register section', () => {
 
 	it('Enter blurs the float and saves it', async () => {
 		renderSection();
-		const input = await screen.findByDisplayValue('50.0000');
+		const input = await screen.findByDisplayValue('50.00');
 		input.focus();
 		fireEvent.change(input, { target: { value: '30' } });
 		fireEvent.keyDown(input, { key: 'Enter' });
@@ -175,7 +184,7 @@ describe('General Register section', () => {
 	it('surfaces save errors', async () => {
 		apiFetchMock.mockResolvedValueOnce([register]).mockRejectedValueOnce(new Error('Save failed'));
 		renderSection();
-		const input = await screen.findByDisplayValue('50.0000');
+		const input = await screen.findByDisplayValue('50.00');
 		fireEvent.change(input, { target: { value: '20' } });
 		fireEvent.blur(input);
 		expect(await screen.findByText('Save failed')).toBeInTheDocument();

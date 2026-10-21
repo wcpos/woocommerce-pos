@@ -19,6 +19,9 @@ const DEFAULT_CLOSE_TIME = '17:30';
 const DEFAULT_OPENING_FLOAT = '200.00';
 const UPGRADE_URL = 'https://wcpos.com/pro';
 const sentence = 'wcpos:flex wcpos:flex-wrap wcpos:items-center wcpos:gap-2 wcpos:text-sm';
+// The register stores the float with four decimals; the control shows the store's price decimals.
+const formatFloat = (value: string) =>
+	Number(value).toFixed(window.wcpos?.settings?.currencyDecimals ?? 2);
 
 export interface RegisterSectionProps {
 	data?: Partial<GeneralSettingsProps>;
@@ -62,11 +65,17 @@ function OpeningFloat({
 						symbol={symbol}
 						required
 						key={register?.default_float}
-						defaultValue={register?.default_float ?? DEFAULT_OPENING_FLOAT}
+						defaultValue={formatFloat(register?.default_float ?? DEFAULT_OPENING_FLOAT)}
 						disabled={!register || pending}
 						onKeyDown={blurOnEnter}
 						onBlur={(event) => {
-							if (register && event.currentTarget.value && event.currentTarget.reportValidity())
+							if (!event.currentTarget.value) {
+								event.currentTarget.value = formatFloat(
+									register?.default_float ?? DEFAULT_OPENING_FLOAT
+								);
+								return;
+							}
+							if (register && event.currentTarget.reportValidity())
 								save(register, event.currentTarget.value);
 						}}
 					/>
@@ -94,7 +103,7 @@ export function RegisterSection({ data, mutate }: RegisterSectionProps) {
 		onError: reportError,
 	});
 	const saveFloat = (register: Register, value: string) => {
-		if (value !== register.default_float)
+		if (Number(value) !== Number(register.default_float))
 			mutation.mutate({ id: register.id, default_float: value });
 	};
 
@@ -137,12 +146,19 @@ export function RegisterSection({ data, mutate }: RegisterSectionProps) {
 							defaultValue: data[key] ?? defaultValue,
 							onKeyDown: blurOnEnter,
 							onBlur: (event: React.FocusEvent<HTMLInputElement>) => {
-								if (event.currentTarget.value && event.currentTarget.reportValidity())
+								if (!event.currentTarget.value) {
+									event.currentTarget.value = data[key] ?? defaultValue;
+									return;
+								}
+								if (event.currentTarget.reportValidity())
 									mutate({ [key]: event.currentTarget.value });
 							},
 						};
 						return (
-							<FormRow key={key} description={t('settings.' + label + '_help')}>
+							<FormRow
+								key={key}
+								description={data[key] != null ? t('settings.' + label + '_help') : undefined}
+							>
 								<div className={sentence}>
 									<Toggle
 										checked={data[key] != null}
