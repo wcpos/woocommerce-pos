@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.5
+Stable tag: 1.11.6
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -128,6 +128,20 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.11.6 - 2026/10/21 =
+
+- **Thermal receipts no longer break words in the middle** ("devolucione / s") when printed through the print dialog, as a PDF, or as a full-receipt image. Text now wraps at word boundaries, as it does on a receipt printer.
+- **Receipts open sooner after payment on sites with a heavy theme.** The payment window's "paid" signal no longer waits for the theme's styles and scripts to load.
+- **Saving a product barcode, a cloud-print order, a negative fee's tax or a receipt template no longer saves the record twice.** Each write now runs once inside WooCommerce's own save, so other plugins' save hooks fire once, and a cloud print problem no longer leaves an "Error during status transition" note on the order.
+- **The receipt screen warns when what prints will differ from the template you chose.** A thermal template with no receipt printer prints its on-screen preview through the print dialog; an HTML template on a receipt printer prints the built-in layout; an HTML template on a Star CloudPRNT or Epson cloud printer prints nothing.
+- **Automatic receipt printing no longer waits for the on-screen preview to load when the printer does not use it**: receipt printers, cloud printers and already-rendered templates.
+- **Card terminals and other non-cash gateways open the receipt as soon as the payment completes**, instead of waiting for the order to sync.
+- **A receipt that could not be downloaded in time is reported as that**, not as a printer that did not answer.
+- **Desktop: Epson network printers on port 9100 start printing up to 16 s sooner.**
+- **Guest sales on a store that taxes by shipping address are taxed at the till again.** With no shipping address the till now falls back to the billing address, then to the shop address, as WooCommerce does.
+- **The login screen says the app needs updating when the store's plugin no longer supports it**, instead of offering "Re-authenticate" and "No stores found".
+- **Logs: a catalogue change the store refused is always reported, and switching store mid-sync no longer leaves a row in the other store's log.**
+- Translations updated to 2026.10.8.
 = 1.11.5 - 2026/10/20 =
 
 - **Web-store sales no longer re-save the product when they reduce stock.** This fixes a checkout error and a doubled stock deduction on bank-transfer orders that a few stores saw, and keeps product descriptions exactly as you wrote them.
