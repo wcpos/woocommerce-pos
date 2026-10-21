@@ -25,6 +25,17 @@ describe("renderThermalPreview canonical parity", () => {
 		expect(html).toContain("flex: 0 0 14ch");
 	});
 
+	it("wraps at word boundaries, like the ESC/POS encoder", () => {
+		const html = renderThermalPreview(
+			"<receipt><text>devoluciones de los artículos</text></receipt>",
+			{},
+		);
+
+		// break-all split words at any character ("devolucione / s").
+		expect(root(html).style.wordBreak).not.toBe("break-all");
+		expect(html).toContain("overflow-wrap: anywhere");
+	});
+
 	it("falls back when numeric attributes are empty or whitespace", () => {
 		const html = renderThermalPreview(
 			'<receipt paper-width=""><image src="https://example.test/logo.png" width=" "/></receipt>',

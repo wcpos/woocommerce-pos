@@ -74,6 +74,27 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The receipt wrapper wraps at word boundaries, like the ESC/POS encoder.
+	 *
+	 * `word-break: break-all` split words at any character ("devolucione / s")
+	 * on every PDF; `overflow-wrap: anywhere` splits a word only when it is wider
+	 * than its box on its own.
+	 *
+	 * @return void
+	 */
+	public function test_receipt_wrapper_wraps_at_word_boundaries(): void {
+		// Arrange.
+		$ast = $this->receipt( array(), 42 );
+
+		// Act.
+		$html = $this->emitter->emit( $ast );
+
+		// Assert.
+		$this->assertStringNotContainsString( 'break-all', $html );
+		$this->assertStringContainsString( 'overflow-wrap: anywhere', $html );
+	}
+
+	/**
 	 * The base font scales so the character grid fills the given paper width.
 	 *
 	 * 80mm paper is 302.36 CSS px; minus 2 × 12px side padding the printable

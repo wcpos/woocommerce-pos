@@ -132,7 +132,7 @@ class Html_Thermal_Emitter {
 		return '<div style="font-family: \'Courier New\', Courier, monospace; '
 			. 'font-size: ' . $this->format_float( $font_px ) . 'px; line-height: 1.4; background: #fff; color: #000; '
 			. 'padding: ' . $this->format_float( self::PADDING_Y_PX ) . 'px ' . $this->format_float( self::PADDING_X_PX ) . 'px; '
-			. 'overflow: hidden; white-space: pre-wrap; word-break: break-all;">' . $inner . '</div>';
+			. 'overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere;">' . $inner . '</div>';
 	}
 
 	/**
