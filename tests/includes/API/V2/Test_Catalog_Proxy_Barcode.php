@@ -468,7 +468,7 @@ class Test_Catalog_Proxy_Barcode extends Sync_REST_Store_Test_Case {
 			$response = $this->push_barcode_update(
 				'variations',
 				$record_id,
-				$before['payload']['date_modified_gmt'],
+				$before['_rxdb_revision'],
 				'9780201379624',
 				'global_unique_id'
 			);
