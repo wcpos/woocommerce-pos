@@ -1020,15 +1020,65 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A first order event raised while shutdown is running is evaluated at once.
+	 * A first order event raised in the last shutdown priority is evaluated at once.
 	 *
-	 * A shutdown callback added at PHP_INT_MAX while shutdown is already
-	 * dispatching would never run, so the event must not wait in the list.
-	 * Pushing 'shutdown' onto the hook stack stands in for running inside it.
+	 * A flush callback added at PHP_INT_MAX while that priority is already
+	 * running would never run, so the event must not wait in the list.
 	 */
-	public function test_first_deferral_during_shutdown_prints_immediately(): void {
+	public function test_first_deferral_in_the_last_shutdown_priority_prints_immediately(): void {
 		// Arrange.
-		global $wp_current_filter;
+		$order   = $this->create_order_with_created_rule();
+		$service = new Cloud_Print_Trigger_Service();
+		$inside  = null;
+
+		// Act.
+		$this->run_inside_shutdown(
+			PHP_INT_MAX,
+			function () use ( $service, $order, &$inside ): void {
+				$service->defer_order( $order->get_id() );
+				$inside = $this->jobs->count( array( 'order_id' => $order->get_id() ) );
+			}
+		);
+
+		// Assert — printed inside the callback, without a flush.
+		$this->assertSame( 1, $inside );
+	}
+
+	/**
+	 * A first order event raised in an earlier shutdown priority still waits for the flush.
+	 *
+	 * WordPress runs a callback added at PHP_INT_MAX while priority 10 is
+	 * running, so the event is queued and evaluated by the flush in the same
+	 * shutdown, not inside whatever save raised it.
+	 */
+	public function test_first_deferral_in_an_earlier_shutdown_priority_waits_for_the_flush(): void {
+		// Arrange.
+		$order   = $this->create_order_with_created_rule();
+		$service = new Cloud_Print_Trigger_Service();
+		$inside  = null;
+
+		// Act.
+		$this->run_inside_shutdown(
+			10,
+			function () use ( $service, $order, &$inside ): void {
+				$service->defer_order( $order->get_id() );
+				$inside = $this->jobs->count( array( 'order_id' => $order->get_id() ) );
+			}
+		);
+
+		// Assert — not printed inside the callback, printed by the same shutdown.
+		$this->assertSame( 0, $inside );
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * Create an order, then a created-trigger rule that prints it.
+	 *
+	 * The order exists before any service in the test, so nothing is pending.
+	 *
+	 * @return \WC_Order
+	 */
+	private function create_order_with_created_rule(): \WC_Order {
 		$tid = $this->create_thermal_template();
 		$this->set_cloud_print(
 			array(
@@ -1047,19 +1097,36 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			)
 		);
-		$order   = OrderHelper::create_order();
-		$service = new Cloud_Print_Trigger_Service();
 
-		// Act.
-		$wp_current_filter[] = 'shutdown'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulate running inside shutdown without dispatching it.
+		return OrderHelper::create_order();
+	}
+
+	/**
+	 * Run one callback as a `shutdown` callback at the given priority.
+	 *
+	 * Dispatches a private `shutdown` hook holding only this callback (and
+	 * whatever it adds), so the real shutdown handlers (the sync journal and
+	 * digest flushes, the logger) never run inside the suite.
+	 *
+	 * @param int      $priority Shutdown priority to run at.
+	 * @param callable $callback The callback.
+	 */
+	private function run_inside_shutdown( int $priority, callable $callback ): void {
+		global $wp_filter, $wp_current_filter;
+		$saved                 = $wp_filter['shutdown'] ?? null;
+		$wp_filter['shutdown'] = new \WP_Hook(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Isolate the real shutdown handlers.
+		$wp_filter['shutdown']->add_filter( 'shutdown', $callback, $priority, 0 );
+		$wp_current_filter[] = 'shutdown'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- What do_action() pushes.
 		try {
-			$service->defer_order( $order->get_id() );
+			$wp_filter['shutdown']->do_action( array( '' ) );
 		} finally {
 			array_pop( $wp_current_filter );
+			if ( null === $saved ) {
+				unset( $wp_filter['shutdown'] );
+			} else {
+				$wp_filter['shutdown'] = $saved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore.
+			}
 		}
-
-		// Assert — printed without a flush.
-		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
 	}
 
 	/**

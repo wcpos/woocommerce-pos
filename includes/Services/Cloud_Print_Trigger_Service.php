@@ -114,11 +114,7 @@ class Cloud_Print_Trigger_Service {
 	public function defer_order( $order_id ): void {
 		$order_id = (int) $order_id;
 
-		// Nothing flushes twice: an event raised after the shutdown flush (by
-		// another shutdown handler) is evaluated at once. So is a first event
-		// raised while shutdown is already running: a callback added at
-		// PHP_INT_MAX during that priority would never run.
-		if ( $this->shutdown_flushed || doing_action( 'shutdown' ) ) {
+		if ( $this->evaluates_now() ) {
 			$this->evaluate( $order_id );
 			return;
 		}
@@ -190,6 +186,33 @@ class Cloud_Print_Trigger_Service {
 		} catch ( \Throwable $e ) {
 			Logger::log( sprintf( 'Cloud print: creating print jobs for order #%d failed: %s', $order_id, $e->getMessage() ) );
 		}
+	}
+
+	/**
+	 * Whether an order event must be evaluated now instead of queued.
+	 *
+	 * - After the shutdown flush: nothing flushes twice, so an event raised
+	 *   by a later shutdown handler is evaluated at once.
+	 * - In the last shutdown priority: a callback added at PHP_INT_MAX while
+	 *   that priority is running never runs. At an earlier priority (WooCommerce
+	 *   saves the customer at 10, the session at 20) WordPress still runs it,
+	 *   so the event is queued as usual.
+	 * - Under WP-CLI: the pre-deferral behaviour. A CLI process has no guest
+	 *   or kses exposure, the operator sees the output, and receipts must not
+	 *   wait for a long importer to finish.
+	 */
+	private function evaluates_now(): bool {
+		if ( $this->shutdown_flushed || ( \defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return true;
+		}
+		if ( ! doing_action( 'shutdown' ) ) {
+			return false;
+		}
+
+		global $wp_filter;
+		$priority = isset( $wp_filter['shutdown'] ) ? $wp_filter['shutdown']->current_priority() : false;
+
+		return false === $priority || PHP_INT_MAX === $priority;
 	}
 
 	/**
