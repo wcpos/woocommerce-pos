@@ -276,13 +276,17 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * barcode and fires the update hooks once. Writing it after that save
 	 * (on woocommerce_rest_insert_*) took a second full save.
 	 *
-	 * @param WC_Data         $object   The object about to be saved.
-	 * @param WP_REST_Request $request  Request object.
-	 * @param bool            $creating True when creating object, false when updating.
+	 * @param WC_Data|WP_Error $object   The object about to be saved, or an earlier callback's error.
+	 * @param WP_REST_Request  $request  Request object.
+	 * @param bool             $creating True when creating object, false when updating.
 	 *
-	 * @return WC_Data
+	 * @return WC_Data|WP_Error
 	 */
-	public function wcpos_pre_insert_product_variation_object( WC_Data $object, WP_REST_Request $request, $creating ): WC_Data {
+	public function wcpos_pre_insert_product_variation_object( $object, WP_REST_Request $request, $creating ) {
+		if ( is_wp_error( $object ) || ! $object instanceof WC_Data ) {
+			return $object;
+		}
+
 		if ( $request->has_param( 'barcode' ) ) {
 			Barcode_Field::stage( $object, $request->get_param( 'barcode' ) );
 		}
