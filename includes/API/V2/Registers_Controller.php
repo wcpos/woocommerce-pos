@@ -390,6 +390,42 @@ class Registers_Controller extends WP_REST_Controller {
 				'readonly' => true,
 			),
 			'default_float' => array( 'type' => array( 'string', 'null' ) ),
+			'session' => array(
+				'type' => array( 'object', 'null' ),
+				'readonly' => true,
+				'properties' => array(
+					'id' => array(
+						'type' => 'string',
+						'format' => 'uuid',
+					),
+					'status' => array(
+						'type' => 'string',
+						'enum' => array( 'open', 'counting' ),
+					),
+					'opened_at_gmt' => array(
+						'type' => 'string',
+						'format' => 'date-time',
+					),
+					'opened_by' => array(
+						'type' => 'object',
+						'properties' => array(
+							'id' => array( 'type' => 'integer' ),
+							'name' => array( 'type' => 'string' ),
+						),
+					),
+				),
+			),
+			'last_closure' => array(
+				'type' => array( 'object', 'null' ),
+				'readonly' => true,
+				'properties' => array(
+					'number' => array( 'type' => 'integer' ),
+					'closed_at_gmt' => array(
+						'type' => 'string',
+						'format' => 'date-time',
+					),
+				),
+			),
 			'counters' => array(
 				'type' => 'object',
 				'readonly' => true,

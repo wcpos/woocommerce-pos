@@ -7,15 +7,17 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Option_Register_Repository;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
-use WCPOS\WooCommercePOS\Tests\Services\Register_Fixture;
+use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 
 /** Registers routing, permissions and store reach. Tests of more than one register bind an in-memory repository, as Pro binds its own. */
 class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
-	use Register_Fixture;
+	use Closure_Test_Fixture;
 
 	/** Create a register through REST.
 	 *
@@ -58,6 +60,159 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $response->get_data() );
 		$this->assertSame( get_option( Option_Register_Repository::OPTION )['register']['id'], $response->get_data()[0]['id'] );
 		$this->assertNull( $response->get_data()[0]['store_id'] );
+	}
+
+	/** Registers without activity explicitly return nullable live-state fields. */
+	public function test_list_without_session_or_closure_returns_nulls(): void {
+		// Arrange.
+		$this->create_register();
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'session', $response->get_data()[0] );
+		$this->assertArrayHasKey( 'last_closure', $response->get_data()[0] );
+		$this->assertSame( null, $response->get_data()[0]['session'] );
+		$this->assertSame( null, $response->get_data()[0]['last_closure'] );
+	}
+
+	/** Open and counting sessions expose their opener and UTC opening, not session internals. */
+	public function test_list_current_session_returns_status_opening_and_actor(): void {
+		// Arrange.
+		$register = $this->create_register()['id'];
+		wp_update_user( array( 'ID' => $this->user, 'display_name' => 'Amy Okafor' ) );
+		$session = $this->closure_session( $register, 'open' );
+		$sessions = new Register_Session_Store();
+		foreach ( array( 'open', 'counting' ) as $status ) {
+			if ( 'counting' === $status ) {
+				$session = $sessions->transition( $session, array( 'status' => 'counting' ) );
+			}
+
+			// Act.
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers' ) );
+
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame(
+				array(
+					'id' => $session['id'],
+					'status' => $status,
+					'opened_at_gmt' => '2026-09-11T08:00:00Z',
+					'opened_by' => array( 'id' => $this->user, 'name' => 'Amy Okafor' ),
+				),
+				$response->get_data()[0]['session']
+			);
+			$this->assertSame( null, $response->get_data()[0]['last_closure'] );
+			$this->assertSame( $response->get_data()[0]['session'], ( new Register_Store() )->get( $register )['session'] );
+		}
+
+		// A removed opener still has an identity, but no display name.
+		global $wpdb;
+		$wpdb->update( $sessions->table_name(), array( 'opened_by' => 0 ), array( 'id' => $session['id'] ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers' ) );
+		$this->assertSame( array( 'id' => 0, 'name' => '' ), $response->get_data()[0]['session']['opened_by'] );
+	}
+
+	/** A numbered close removes the live session and retains the latest closure beside counters. */
+	public function test_list_closed_session_returns_latest_numbered_closure(): void {
+		// Arrange.
+		$register = $this->create_register()['id'];
+		$this->closure_registers[] = $register; // Closure writes commit; the shared fixture removes them.
+		foreach ( array( 1, 2 ) as $number ) {
+			$session = $this->closure_session( $register );
+			$closure = ( new Closure_Store() )->create( $this->closure_fields( $session, $number ) );
+			$this->assertIsArray( $closure );
+
+			// Act.
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers' ) );
+
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$row = $response->get_data()[0];
+			$this->assertSame( null, $row['session'] );
+			$this->assertSame( array( 'number' => $number, 'closed_at_gmt' => '2026-09-11T12:00:00Z' ), $row['last_closure'] );
+			$this->assertSame( $row['counters']['last_closure_number'], $row['last_closure']['number'] );
+			$this->assertSame( $row['last_closure'], ( new Register_Store() )->get( $register )['last_closure'] );
+		}
+	}
+
+	/** Batch lookup takes one query, keeps the newest non-closed row and excludes unrelated registers. */
+	public function test_open_for_registers_batches_and_keys_current_sessions(): void {
+		// Arrange: fabricate IDs rather than requiring Pro to create two registers.
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$store->ensure_installed();
+		$registers = array( wp_generate_uuid4(), wp_generate_uuid4(), wp_generate_uuid4() );
+		$ids = array();
+		foreach ( array(
+			array( $registers[0], 'open', '2026-09-11 08:00:00' ),
+			array( $registers[0], 'counting', '2026-09-11 09:00:00' ),
+			array( $registers[0], 'closed', '2026-09-11 10:00:00' ),
+			array( $registers[1], 'open', '2026-09-11 08:00:00' ),
+			array( $registers[2], 'closed', '2026-09-11 08:00:00' ),
+			array( wp_generate_uuid4(), 'open', '2026-09-11 08:00:00' ),
+		) as list( $register, $status, $opened ) ) {
+			$ids[] = $id = wp_generate_uuid4();
+			$this->assertSame( 1, $wpdb->insert( $store->table_name(), array(
+				'id' => $id,
+				'register_id' => $register,
+				'store_id' => 456,
+				'status' => $status,
+				'opened_at_gmt' => $opened,
+				'opened_by' => $this->user,
+				'counted_float' => '100',
+				'counted' => '{"cash":"100"}',
+				'created_at_gmt' => $opened,
+			) ) );
+		}
+
+		// Act.
+		$before = get_num_queries();
+		$rows = $store->open_for_registers( $registers );
+		$queries = get_num_queries() - $before;
+
+		// Assert.
+		$this->assertSame( 1, $queries );
+		$this->assertCount( 2, $rows );
+		$this->assertSame( $ids[1], $rows[ $registers[0] ]['id'] );
+		$this->assertSame( 'counting', $rows[ $registers[0] ]['status'] );
+		$this->assertSame( $ids[3], $rows[ $registers[1] ]['id'] );
+		$this->assertSame( 'open', $rows[ $registers[1] ]['status'] );
+		$this->assertSame( 456, $rows[ $registers[0] ]['store_id'] );
+		$this->assertSame( $this->user, $rows[ $registers[0] ]['opened_by'] );
+		$this->assertSame( null, $rows[ $registers[0] ]['closed_by'] );
+		$this->assertSame( array( 'cash' => '100' ), $rows[ $registers[0] ]['counted'] );
+		$before = get_num_queries();
+		$this->assertSame( array(), $store->open_for_registers( array() ) );
+		$this->assertSame( $before, get_num_queries() );
+	}
+
+	/** Clients can discover the nullable, read-only live-state contract. */
+	public function test_register_schema_describes_session_and_last_closure(): void {
+		// Arrange.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/registers' );
+		$request->set_method( 'OPTIONS' );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$properties = $response->get_data()['schema']['properties'];
+		foreach ( array( 'session', 'last_closure' ) as $key ) {
+			$this->assertSame( true, $properties[ $key ]['readonly'] );
+			$this->assertSame( array( 'object', 'null' ), $properties[ $key ]['type'] );
+		}
+		$session = $properties['session']['properties'];
+		$this->assertSame( 'uuid', $session['id']['format'] );
+		$this->assertSame( array( 'open', 'counting' ), $session['status']['enum'] );
+		$this->assertSame( 'date-time', $session['opened_at_gmt']['format'] );
+		$this->assertSame( 'integer', $session['opened_by']['properties']['id']['type'] );
+		$this->assertSame( 'string', $session['opened_by']['properties']['name']['type'] );
+		$this->assertSame( 'integer', $properties['last_closure']['properties']['number']['type'] );
+		$this->assertSame( 'date-time', $properties['last_closure']['properties']['closed_at_gmt']['format'] );
 	}
 
 	/** With a repository holding more (Pro), managers create server identities with read-only counters. */

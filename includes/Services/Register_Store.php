@@ -183,9 +183,10 @@ final class Register_Store {
 			}
 		);
 		$latest = ( new Closure_Store() )->latest_for_registers( array_column( $rows, 'id' ) );
+		$sessions = ( new Register_Session_Store() )->open_for_registers( array_column( $rows, 'id' ) );
 		return array_map(
-			function ( $row ) use ( $latest ) {
-				return $this->normalize_row( $row, $latest[ $row['id'] ] ?? array() );
+			function ( $row ) use ( $latest, $sessions ) {
+				return $this->normalize_row( $row, $latest[ $row['id'] ] ?? array(), $sessions[ $row['id'] ] ?? array() );
 			},
 			$rows
 		);
@@ -365,9 +366,11 @@ final class Register_Store {
 	 *
 	 * @param array      $row Repository row.
 	 * @param null|array $closure Preloaded latest closure; null loads it here.
+	 * @param null|array $session Preloaded current session; null loads it here.
 	 */
-	private function normalize_row( array $row, ?array $closure = null ): array {
+	private function normalize_row( array $row, ?array $closure = null, ?array $session = null ): array {
 		$closure = null === $closure ? ( ( new Closure_Store() )->latest_for_registers( array( $row['id'] ) )[ $row['id'] ] ?? array() ) : $closure;
+		$session = null === $session ? ( ( new Register_Session_Store() )->open_for_registers( array( $row['id'] ) )[ $row['id'] ] ?? array() ) : $session;
 		$row['store_id'] = null === ( $row['store_id'] ?? null ) ? null : (int) $row['store_id'];
 		$row['default_float'] = null === ( $row['default_float'] ?? null ) ? null : (string) $row['default_float'];
 		// Derived: the opening of the register's first numbered session, null before its first closure.
@@ -380,6 +383,19 @@ final class Register_Store {
 			'perpetual_sales_total' => $closure['perpetual_sales_total'] ?? '0',
 			'perpetual_refunds_total' => $closure['perpetual_refunds_total'] ?? '0',
 		);
+		$row['session'] = $session ? array(
+			'id' => $session['id'],
+			'status' => $session['status'],
+			'opened_at_gmt' => str_replace( ' ', 'T', $session['opened_at_gmt'] ) . 'Z',
+			'opened_by' => array(
+				'id' => (int) $session['opened_by'],
+				'name' => get_userdata( $session['opened_by'] )->display_name ?? '',
+			),
+		) : null;
+		$row['last_closure'] = $closure ? array(
+			'number' => (int) $closure['number'],
+			'closed_at_gmt' => str_replace( ' ', 'T', $closure['closed_at_gmt'] ) . 'Z',
+		) : null;
 		return $row;
 	}
 }
