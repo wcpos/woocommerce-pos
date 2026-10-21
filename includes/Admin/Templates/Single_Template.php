@@ -432,11 +432,13 @@ class Single_Template {
 			(string) get_post_meta( $post_id, '_template_paper_width', true )
 		);
 
+		$title = sanitize_post_field( 'post_title', $title, $post_id, 'db' );
+
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- See the docblock; the post cache is cleared below.
 		$result = $wpdb->update(
 			$wpdb->posts,
-			array( 'post_title' => sanitize_post_field( 'post_title', $title, $post_id, 'db' ) ),
+			array( 'post_title' => $title ),
 			array( 'ID' => $post_id ),
 			array( '%s' ),
 			array( '%d' )
@@ -447,6 +449,8 @@ class Single_Template {
 		}
 
 		clean_post_cache( $post_id );
+		// Later save_post listeners in this save are handed this same object.
+		$post->post_title = $title;
 	}
 
 	/**

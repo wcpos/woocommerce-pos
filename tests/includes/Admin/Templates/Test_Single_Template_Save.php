@@ -273,6 +273,13 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 			}
 		};
 		add_action( 'save_post_wcpos_template', $counter );
+		$seen_title = null;
+		$later      = static function ( $saved_id, $saved_post ) use ( $post_id, &$seen_title ): void {
+			if ( (int) $saved_id === $post_id ) {
+				$seen_title = $saved_post->post_title;
+			}
+		};
+		add_action( 'save_post_wcpos_template', $later, 20, 2 );
 
 		// Act: save the post without entering a title.
 		wp_update_post(
@@ -285,10 +292,12 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		);
 
 		remove_action( 'save_post_wcpos_template', $counter );
+		remove_action( 'save_post_wcpos_template', $later, 20 );
 		$this->cleanup_post_globals();
 
 		// Assert.
 		$this->assertSame( 1, $saves, 'One admin save must run the template save stack exactly once.' );
+		$this->assertSame( sprintf( 'Thermal Receipt Template (80mm) #%d', $post_id ), $seen_title, 'A later save_post listener must be handed the stored title.' );
 		clean_post_cache( $post_id );
 		$this->assertSame( sprintf( 'Thermal Receipt Template (80mm) #%d', $post_id ), get_post( $post_id )->post_title );
 	}
