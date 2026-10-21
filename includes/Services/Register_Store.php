@@ -184,6 +184,9 @@ final class Register_Store {
 		);
 		$latest = ( new Closure_Store() )->latest_for_registers( array_column( $rows, 'id' ) );
 		$sessions = ( new Register_Session_Store() )->open_for_registers( array_column( $rows, 'id' ) );
+		if ( $sessions ) {
+			cache_users( array_values( array_unique( array_map( 'intval', array_column( $sessions, 'opened_by' ) ) ) ) );
+		}
 		return array_map(
 			function ( $row ) use ( $latest, $sessions ) {
 				return $this->normalize_row( $row, $latest[ $row['id'] ] ?? array(), $sessions[ $row['id'] ] ?? array() );
@@ -394,7 +397,7 @@ final class Register_Store {
 		) : null;
 		$row['last_closure'] = $closure ? array(
 			'number' => (int) $closure['number'],
-			'closed_at_gmt' => str_replace( ' ', 'T', $closure['closed_at_gmt'] ) . 'Z',
+			'closed_at_gmt' => null === $closure['closed_at_gmt'] ? null : str_replace( ' ', 'T', $closure['closed_at_gmt'] ) . 'Z',
 		) : null;
 		return $row;
 	}

@@ -105,6 +105,7 @@ final class Register_Session_Store {
 	/** Current (not closed) sessions keyed by register id; one query for the whole list.
 	 *
 	 * @param string[] $register_ids Register UUIDs.
+	 * @throws \RuntimeException On read failure.
 	 */
 	public function open_for_registers( array $register_ids ): array {
 		global $wpdb;
@@ -119,6 +120,9 @@ final class Register_Session_Store {
 		$sql = $wpdb->prepare( "SELECT {$columns} FROM {$table} WHERE register_id IN ({$placeholders}) AND status != 'closed' ORDER BY opened_at_gmt DESC, id DESC", array_values( $register_ids ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Register session read failed.' );
+		}
 		$sessions = array();
 		foreach ( $rows as $row ) {
 			if ( ! isset( $sessions[ $row['register_id'] ] ) ) {

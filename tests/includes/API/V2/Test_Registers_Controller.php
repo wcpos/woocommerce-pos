@@ -106,6 +106,10 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 			);
 			$this->assertSame( null, $response->get_data()[0]['last_closure'] );
 			$this->assertSame( $response->get_data()[0]['session'], ( new Register_Store() )->get( $register )['session'] );
+			$item = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/' . $register ) );
+			$this->assertSame( 200, $item->get_status() );
+			$this->assertSame( $response->get_data()[0]['session'], $item->get_data()['session'] );
+			$this->assertSame( $response->get_data()[0]['last_closure'], $item->get_data()['last_closure'] );
 		}
 
 		// A removed opener still has an identity, but no display name.
@@ -135,7 +139,47 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( array( 'number' => $number, 'closed_at_gmt' => '2026-09-11T12:00:00Z' ), $row['last_closure'] );
 			$this->assertSame( $row['counters']['last_closure_number'], $row['last_closure']['number'] );
 			$this->assertSame( $row['last_closure'], ( new Register_Store() )->get( $register )['last_closure'] );
+			$item = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/' . $register ) );
+			$this->assertSame( 200, $item->get_status() );
+			$this->assertSame( $row['session'], $item->get_data()['session'] );
+			$this->assertSame( $row['last_closure'], $item->get_data()['last_closure'] );
 		}
+	}
+
+	/** Listing more registers batches session, closure and cold opener reads. */
+	public function test_list_multiple_open_sessions_uses_constant_query_count(): void {
+		// Arrange.
+		$this->use_multi_register_repository();
+		$users = array();
+		$queries = array();
+		foreach ( array( 1, 3 ) as $count ) {
+			while ( count( $users ) < $count ) {
+				$register = $this->create_register()['id'];
+				$user = self::factory()->user->create();
+				$users[] = $user;
+				wp_set_current_user( $user );
+				$this->closure_session( $register, 'open' );
+				wp_set_current_user( $this->user );
+			}
+			// Warm route setup, but leave each distinct opener uncached for the measurement.
+			$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers' ) );
+			foreach ( $users as $user ) {
+				clean_user_cache( $user );
+				wp_cache_delete( $user, 'user_meta' );
+			}
+			$request = $this->wp_rest_get_request( '/wcpos/v2/registers' );
+
+			// Act.
+			$before = get_num_queries();
+			$response = $this->server->dispatch( $request );
+			$queries[ $count ] = get_num_queries() - $before;
+
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertCount( $count, $response->get_data() );
+			$this->assertCount( $count, array_filter( array_column( $response->get_data(), 'session' ) ) );
+		}
+		$this->assertSame( $queries[1], $queries[3], 'One and three registers must use the same number of queries.' );
 	}
 
 	/** Batch lookup takes one query, keeps the newest non-closed row and excludes unrelated registers. */
