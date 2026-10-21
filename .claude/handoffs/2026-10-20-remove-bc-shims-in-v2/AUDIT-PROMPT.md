@@ -20,8 +20,8 @@ The repo has a rule "preserve backward compatibility when changing public method
 
 Produce a list of every **public method** declared in a class or trait under Free `includes/` (excluding `includes/Vendor/`) that has **no production caller**. The input set is methods with no caller in the production paths below; calls from `tests/` do not keep a method out of the set, they only decide whether it is classified **Test-only** rather than **Dead**. The production paths are:
 
-- Free `includes/`, `woocommerce-pos.php`, `templates/`, `assets/` (PHP only)
-- Pro `includes/`, `woocommerce-pos-pro.php`, `templates/`
+- Free `includes/`, `templates/`, `assets/` (PHP only), and every root PHP file (`woocommerce-pos.php`, `uninstall.php`, any other `*.php` at the repository root)
+- Pro `includes/`, `templates/`, and every root PHP file (`woocommerce-pos-pro.php`, `uninstall.php`, any other `*.php` at the repository root)
 - (Free and Pro `tests/` are searched too, but only to classify: a method whose only callers are tests is **Test-only**, not out of the set.)
 
 Method of search: for each public method name, grep both repositories for `->name(`, `::name(`, `'name'` and `"name"` (string callbacks in `add_action` / `add_filter` / `register_rest_route` / `array( $this, 'name' )`), and `name` inside `callback` arrays. Treat these as callers:
@@ -34,8 +34,8 @@ Method of search: for each public method name, grep both repositories for `->nam
 
 Classify each method with no caller into one of:
 
-1. **Dead** — no caller, no override relationship, no mention anywhere but its own declaration (and possibly its own test).
-2. **Test-only** — its only callers are under `tests/`.
+1. **Dead** — no caller anywhere, tests included, no override relationship, no mention but its own declaration.
+2. **Test-only** — its only callers are under `tests/` (its own direct unit test counts here, so a method with a direct test is never Dead; the handoff decides which Test-only rows are suite seams and which are dead wrappers).
 3. **Kept on purpose** — it carries `@deprecated`, or a comment saying it is kept for backward compatibility / third-party / Pro, or it is a documented extension point (a hook callback name mentioned in docs, a public API surface declared in `.ai/rules/` or `CLAUDE.md`). Quote the comment.
 
 ## Output
