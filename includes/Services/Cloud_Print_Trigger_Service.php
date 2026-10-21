@@ -69,14 +69,118 @@ class Cloud_Print_Trigger_Service {
 	private $registry;
 
 	/**
+	 * Orders waiting for the end-of-request evaluation, in event order.
+	 *
+	 * Keyed by blog and order id, so an order changing status several times in
+	 * one request is evaluated once, on the blog it belongs to.
+	 *
+	 * @var array<string, array{0: int, 1: int}> [ blog id, order id ] by key.
+	 */
+	private $deferred = array();
+
+	/**
+	 * Whether the shutdown flush has run on this request.
+	 *
+	 * @var bool
+	 */
+	private $shutdown_flushed = false;
+
+	/**
 	 * Constructor — hook order events.
+	 *
+	 * The order hooks fire inside WC_Order::save(), so they only record the
+	 * order; the jobs are created at shutdown. Creating them inline ran a
+	 * WP_Query, a wp_insert_post() per job (every plugin's save_post
+	 * listeners), the relay hint and an order meta save inside the order's
+	 * own save, where any throw became an "Error during status transition"
+	 * order note.
 	 */
 	public function __construct() {
 		$this->jobs     = new Print_Job_Service();
 		$this->registry = new Cloud_Print_Registry();
-		add_action( 'woocommerce_new_order', array( $this, 'handle_order' ), 20, 1 );
-		add_action( 'woocommerce_order_status_changed', array( $this, 'handle_order' ), 20, 1 );
-		add_action( 'woocommerce_payment_complete', array( $this, 'handle_paid_order' ), 20, 1 );
+		add_action( 'woocommerce_new_order', array( $this, 'defer_order' ), 20, 1 );
+		add_action( 'woocommerce_order_status_changed', array( $this, 'defer_order' ), 20, 1 );
+		add_action( 'woocommerce_payment_complete', array( $this, 'defer_paid_order' ), 20, 1 );
+	}
+
+	/**
+	 * Record an order event; the order is evaluated at shutdown.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function defer_order( $order_id ): void {
+		$order_id = (int) $order_id;
+
+		// Nothing flushes twice: an event raised after the shutdown flush (by
+		// another shutdown handler) is evaluated at once.
+		if ( $this->shutdown_flushed ) {
+			$this->handle_order( $order_id );
+			return;
+		}
+
+		$blog_id = get_current_blog_id();
+		$key     = $blog_id . ':' . $order_id;
+		if ( ! isset( $this->deferred[ $key ] ) ) {
+			$this->deferred[ $key ] = array( $blog_id, $order_id );
+		}
+
+		// LAST on shutdown, like the sync journal: WooCommerce saves the
+		// customer at 10 and the session at 20, and an order event those raise
+		// must still find the list open. Zero accepted args: do_action(
+		// 'shutdown' ) passes an empty string otherwise.
+		if ( false === has_action( 'shutdown', array( $this, 'flush_deferred_at_shutdown' ) ) ) {
+			add_action( 'shutdown', array( $this, 'flush_deferred_at_shutdown' ), PHP_INT_MAX, 0 );
+		}
+	}
+
+	/**
+	 * Record a payment completing; the order is evaluated at shutdown.
+	 *
+	 * The paid signal is remembered now, so the shutdown evaluation sees it.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function defer_paid_order( $order_id ): void {
+		$this->payment_completed[ (int) $order_id ] = true;
+		$this->defer_order( $order_id );
+	}
+
+	/**
+	 * Evaluate every deferred order, in event order.
+	 *
+	 * Idempotent: the list is emptied before any evaluation, so a throw or an
+	 * order event raised while printing cannot replay an entry. One order's
+	 * failure is logged and does not stop the next.
+	 */
+	public function flush_deferred(): void {
+		$deferred       = $this->deferred;
+		$this->deferred = array();
+
+		foreach ( $deferred as $entry ) {
+			list( $blog_id, $order_id ) = $entry;
+			$switch                     = is_multisite() && get_current_blog_id() !== $blog_id;
+			if ( $switch ) {
+				switch_to_blog( $blog_id );
+			}
+			try {
+				$this->handle_order( $order_id );
+			} catch ( \Throwable $e ) {
+				Logger::log( sprintf( 'Cloud print: creating print jobs for order #%d failed: %s', $order_id, $e->getMessage() ) );
+			} finally {
+				if ( $switch ) {
+					restore_current_blog();
+				}
+			}
+		}
+	}
+
+	/**
+	 * Shutdown flush: evaluate the deferred orders, then evaluate any later
+	 * event at once.
+	 */
+	public function flush_deferred_at_shutdown(): void {
+		$this->shutdown_flushed = true;
+		$this->flush_deferred();
 	}
 
 	/**
