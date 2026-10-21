@@ -193,10 +193,12 @@ class Cloud_Print_Trigger_Service {
 	 *
 	 * - After the shutdown flush: nothing flushes twice, so an event raised
 	 *   by a later shutdown handler is evaluated at once.
-	 * - In the last shutdown priority: a callback added at PHP_INT_MAX while
-	 *   that priority is running never runs. At an earlier priority (WooCommerce
-	 *   saves the customer at 10, the session at 20) WordPress still runs it,
-	 *   so the event is queued as usual.
+	 * - In the last shutdown priority with no flush registered yet: a callback
+	 *   added at PHP_INT_MAX while that priority is running never runs. A
+	 *   flush registered before it started is still ahead (the latch is not
+	 *   set), so the event is queued for it. At an earlier priority (WooCommerce
+	 *   saves the customer at 10, the session at 20) WordPress still runs a
+	 *   flush added late, so the event is queued as usual.
 	 * - Under WP-CLI: the pre-deferral behaviour. A CLI process has no guest
 	 *   or kses exposure, the operator sees the output, and receipts must not
 	 *   wait for a long importer to finish.
@@ -211,8 +213,14 @@ class Cloud_Print_Trigger_Service {
 
 		global $wp_filter;
 		$priority = isset( $wp_filter['shutdown'] ) ? $wp_filter['shutdown']->current_priority() : false;
+		if ( false === $priority ) {
+			return true;
+		}
+		if ( PHP_INT_MAX !== $priority ) {
+			return false;
+		}
 
-		return false === $priority || PHP_INT_MAX === $priority;
+		return false === has_action( 'shutdown', array( $this, 'flush_deferred_at_shutdown' ) );
 	}
 
 	/**
@@ -231,20 +239,6 @@ class Cloud_Print_Trigger_Service {
 	public function flush_deferred_at_shutdown(): void {
 		$this->shutdown_flushed = true;
 		$this->flush_deferred();
-	}
-
-	/**
-	 * Handle payment completing for an order.
-	 *
-	 * Runs after WC_Order::payment_complete() has moved the order to its
-	 * post-payment status, which a status-changed callback may have already
-	 * seen as a non-paid status. Remember the paid signal, then re-evaluate.
-	 *
-	 * @param int $order_id Order ID.
-	 */
-	public function handle_paid_order( $order_id ): void {
-		$this->payment_completed[ self::order_key( (int) $order_id ) ] = true;
-		$this->handle_order( $order_id );
 	}
 
 	/**

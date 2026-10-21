@@ -1072,6 +1072,38 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An order event in the last shutdown priority waits for a flush that is still ahead.
+	 *
+	 * When an earlier event already registered the flush, it runs later in
+	 * the same priority, so a second order raised by a PHP_INT_MAX callback
+	 * that runs first is queued and printed by that flush, not inline.
+	 */
+	public function test_deferral_in_the_last_shutdown_priority_before_a_registered_flush_is_queued(): void {
+		// Arrange.
+		$first   = $this->create_order_with_created_rule();
+		$second  = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$inside  = null;
+
+		// Act — the callback is added before the flush, so it runs first.
+		$this->run_inside_shutdown(
+			PHP_INT_MAX,
+			function () use ( $service, $second, &$inside ): void {
+				$service->defer_order( $second->get_id() );
+				$inside = $this->jobs->count( array( 'order_id' => $second->get_id() ) );
+			},
+			static function () use ( $service, $first ): void {
+				$service->defer_order( $first->get_id() );
+			}
+		);
+
+		// Assert — the second order waited for the flush, which printed both.
+		$this->assertSame( 0, $inside );
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $first->get_id() ) ) );
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $second->get_id() ) ) );
+	}
+
+	/**
 	 * Create an order, then a created-trigger rule that prints it.
 	 *
 	 * The order exists before any service in the test, so nothing is pending.
@@ -1108,19 +1140,26 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	 * whatever it adds), so the real shutdown handlers (the sync journal and
 	 * digest flushes, the logger) never run inside the suite.
 	 *
-	 * @param int      $priority Shutdown priority to run at.
-	 * @param callable $callback The callback.
+	 * @param int           $priority Shutdown priority to run at.
+	 * @param callable      $callback The callback.
+	 * @param callable|null $before   Runs on the private hook before shutdown starts.
 	 */
-	private function run_inside_shutdown( int $priority, callable $callback ): void {
+	private function run_inside_shutdown( int $priority, callable $callback, ?callable $before = null ): void {
 		global $wp_filter, $wp_current_filter;
 		$saved                 = $wp_filter['shutdown'] ?? null;
 		$wp_filter['shutdown'] = new \WP_Hook(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Isolate the real shutdown handlers.
 		$wp_filter['shutdown']->add_filter( 'shutdown', $callback, $priority, 0 );
-		$wp_current_filter[] = 'shutdown'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- What do_action() pushes.
 		try {
-			$wp_filter['shutdown']->do_action( array( '' ) );
+			if ( null !== $before ) {
+				$before();
+			}
+			$wp_current_filter[] = 'shutdown'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- What do_action() pushes.
+			try {
+				$wp_filter['shutdown']->do_action( array( '' ) );
+			} finally {
+				array_pop( $wp_current_filter );
+			}
 		} finally {
-			array_pop( $wp_current_filter );
 			if ( null === $saved ) {
 				unset( $wp_filter['shutdown'] );
 			} else {
