@@ -263,6 +263,12 @@ class Bootstrap {
 		// test naming the file, line and hook. #2371 double-reduced stock this way.
 		require_once $this->plugin_dir . '/tests/Helpers/Save_Reentry_Guard.php';
 		\WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard::install();
+		// next only (Paul, 2026-10-21, option A on the 1.11.6 sync #2387): the Contract payments
+		// ledger saves the order inside woocommerce_payment_complete / woocommerce_order_status_changed
+		// at six sites (Ledger.php, Gateway_Submission.php). They are exempted until the ledger is
+		// reworked to persist after the outer save; #2389 removes this line. Every other directory
+		// under includes/ stays policed.
+		\WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard::except( $this->plugin_dir . '/includes/Payments/Contract' );
 	}
 
 	/**
