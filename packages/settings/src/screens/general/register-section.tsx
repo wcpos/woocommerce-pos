@@ -102,8 +102,10 @@ export function RegisterSection({ data, mutate }: RegisterSectionProps) {
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: ['registers'] }),
 		onError: reportError,
 	});
+	// Compare against what the control showed, not the four-decimal stored value: an untouched
+	// blur on a float finer than the store's price decimals must not round it away.
 	const saveFloat = (register: Register, value: string) => {
-		if (Number(value) !== Number(register.default_float))
+		if (register.default_float === null || value !== formatFloat(register.default_float))
 			mutation.mutate({ id: register.id, default_float: value });
 	};
 
