@@ -171,10 +171,20 @@ class Test_Web_Order_Lifecycle_Canary extends WC_Unit_Test_Case {
 		$this->assertSame( 4, $this->stock_of( $this->simple_id ), 'Simple product stock after processing.' );
 		$this->assertSame( 4, $this->stock_of( $this->variation_id ), 'Variation stock after processing.' );
 
-		// Act: completed, a full refund with restock, cancelled.
+		// Act + Assert: completed. Stock stays reduced once.
 		$order->update_status( 'completed' );
+
+		$this->assertSame( 4, $this->stock_of( $this->simple_id ), 'Simple product stock after completed.' );
+		$this->assertSame( 4, $this->stock_of( $this->variation_id ), 'Variation stock after completed.' );
+
+		// Act + Assert: a full refund with restock puts the stock back.
 		$order = wc_get_order( $order_id );
 		$this->refund_everything( $order );
+
+		$this->assertSame( 5, $this->stock_of( $this->simple_id ), 'Simple product stock after the restocking refund.' );
+		$this->assertSame( 5, $this->stock_of( $this->variation_id ), 'Variation stock after the restocking refund.' );
+
+		// Act: cancelled.
 		$order = wc_get_order( $order_id );
 		$order->update_status( 'cancelled' );
 
