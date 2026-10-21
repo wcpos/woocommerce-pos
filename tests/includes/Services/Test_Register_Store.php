@@ -280,8 +280,8 @@ class Test_Register_Store extends WP_UnitTestCase {
 		}
 	}
 
-	/** Many registers (Pro's repository) list by name, filter by store, with one closure query. */
-	public function test_list_with_bound_repository_filters_and_orders_by_name_in_one_closure_query(): void {
+	/** Many registers (Pro's repository) list by name, filter by store, with one closure query and one current-session query, never one per register. */
+	public function test_list_with_bound_repository_filters_and_orders_by_name_in_one_query_per_kind(): void {
 		// Arrange.
 		$this->use_multi_register_repository();
 		$b = $this->create_register(
@@ -314,7 +314,8 @@ class Test_Register_Store extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( array( $a['id'], $b['id'] ), array_column( $listed, 'id' ) );
 		$this->assertSame( 987, $listed[0]['store_id'] );
-		$this->assertCount( 1, $closure_queries );
+		// The latest closures and the current sessions both live in the session table: one SELECT each.
+		$this->assertCount( 2, $closure_queries );
 		$this->assertSame( array( 'Unassigned' ), array_column( $store->list( array( 'store_id' => array( null ) ) ), 'name' ) );
 		$this->assertSame( array(), $store->list( array( 'store_id' => 988 ) ) );
 		$this->assertFalse( get_option( Option_Register_Repository::OPTION ) );
