@@ -258,7 +258,7 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/Helpers/Order_Postmeta_Guard.php';
 		\WCPOS\WooCommercePOS\Tests\Helpers\Order_Postmeta_Guard::install();
 
-		// Tripwire: plugin code saving a post, a WooCommerce object or terms from inside a
+		// Tripwire: plugin code saving a post or a WooCommerce object from inside a
 		// WordPress or WooCommerce save, status-transition, stock or checkout hook fails the
 		// test naming the file, line and hook. #2371 double-reduced stock this way.
 		require_once $this->plugin_dir . '/tests/Helpers/Save_Reentry_Guard.php';
