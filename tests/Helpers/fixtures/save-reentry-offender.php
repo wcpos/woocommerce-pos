@@ -21,17 +21,18 @@ function reentry_offender_touch_product( $product ): void {
 /**
  * Re-save a post through wp_update_post().
  *
- * @param int $post_id Post id.
+ * @param int   $post_id Post id.
+ * @param array $fields  Extra post fields to write.
  *
  * @return int|\WP_Error
  */
-function reentry_offender_update_post( int $post_id ) {
+function reentry_offender_update_post( int $post_id, array $fields = array() ) {
 	return wp_update_post(
 		array(
 			'ID'                => $post_id,
 			'post_modified'     => current_time( 'mysql' ),
 			'post_modified_gmt' => current_time( 'mysql', true ),
-		)
+		) + $fields
 	);
 }
 

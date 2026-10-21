@@ -134,6 +134,20 @@ class Save_Reentry_Guard {
 	private static $watched_dir = '';
 
 	/**
+	 * The hook stack at the last trip, guard's own hook included, while it is still a
+	 * prefix of the live stack. See `live_stack()`.
+	 *
+	 * @var string[]
+	 */
+	private static $tripped_stack = array();
+
+	/**
+	 * Global functions that dispatch a hook. In a backtrace, a frame for one of these
+	 * marks a hook firing; its file is the code that fired it.
+	 */
+	const DISPATCH_FUNCTIONS = array( 'apply_filters', 'apply_filters_ref_array', 'do_action', 'do_action_ref_array' );
+
+	/**
 	 * Per-hook-name answer to "is this on the re-entry list", so the stack test is a
 	 * lookup after the first sighting of each name.
 	 *
@@ -283,6 +297,15 @@ class Save_Reentry_Guard {
 		// notice fails the test after it ends even when the exception below is caught.
 		_doing_it_wrong( self::NOTICE, $message, '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- test-only tripwire, never rendered.
 
+		// A swallowed exception usually aborts the plugin handler, so the test then fails on
+		// a downstream assertion before WP_UnitTestCase reports the notice. Say it here too.
+		fwrite( STDERR, "\n[Save_Reentry_Guard] " . $message . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- test-only tripwire.
+
+		// The exception unwinds the hooks between here and whoever catches it without
+		// popping them from $wp_current_filter. Remember the stack so later checks in the
+		// same test can tell those leftovers from hooks that are really running.
+		self::$tripped_stack = $GLOBALS['wp_current_filter'] ?? array();
+
 		throw new LogicException( $message );
 	}
 
@@ -293,7 +316,7 @@ class Save_Reentry_Guard {
 	 * @return null|string
 	 */
 	private static function running_reentry_hook(): ?string {
-		$stack = $GLOBALS['wp_current_filter'] ?? array();
+		$stack = self::live_stack();
 		for ( $i = \count( $stack ) - 2; $i >= 0; $i-- ) {
 			$name = (string) $stack[ $i ];
 			if ( ! isset( self::$is_reentry_hook[ $name ] ) ) {
@@ -304,6 +327,32 @@ class Save_Reentry_Guard {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * `$wp_current_filter` without the entries a previous trip left behind.
+	 *
+	 * WordPress pops a hook from `$wp_current_filter` only when its callbacks return. When
+	 * the guard throws and WooCommerce catches the exception (status transitions, payment
+	 * complete, order saves), every hook it unwound stays on the stack until the test's hook
+	 * restore, and the next plugin save in that test would be blamed on them. While the
+	 * stack recorded at the trip is still a prefix of the live stack, it is dropped; once it
+	 * is not, the hook restore has cleared it and it is forgotten. A caught trip still fails
+	 * its test through the `_doing_it_wrong()` notice.
+	 *
+	 * @return string[]
+	 */
+	private static function live_stack(): array {
+		$stack = $GLOBALS['wp_current_filter'] ?? array();
+		if ( empty( self::$tripped_stack ) ) {
+			return $stack;
+		}
+		$length = \count( self::$tripped_stack );
+		if ( \array_slice( $stack, 0, $length ) === self::$tripped_stack ) {
+			return \array_slice( $stack, $length );
+		}
+		self::$tripped_stack = array();
+		return $stack;
 	}
 
 	/**
@@ -340,6 +389,12 @@ class Save_Reentry_Guard {
 	 * chain), whose file and line are the caller of `$object->save()`. A caller inside
 	 * WooCommerce, another plugin or `tests/` is not ours to police and yields null.
 	 *
+	 * One addition: if the walk crosses a hook dispatch inside `wp-includes` other than the
+	 * one that ran this guard, the save was made by a core hook callback (for example
+	 * `wp_save_post_revision()` on `post_updated`, inside a plugin's own `wp_update_post()`),
+	 * so its caller is core and the walk yields null. The plugin's outer save is judged by
+	 * its own check.
+	 *
 	 * @param bool $wc_data_save Whether the save came through WC_Data::save().
 	 *
 	 * @return null|array{file:string,line:int,function:string}
@@ -348,8 +403,11 @@ class Save_Reentry_Guard {
 		$wp_includes = ABSPATH . WPINC . '/';
 		$frames      = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 40 ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- test-only tripwire.
 
+		// The guard's own hook dispatch is in the frames unless the walk starts at save().
+		$dispatches_left = 1;
 		if ( $wc_data_save ) {
-			$frames = self::from_wc_data_save_frame( $frames );
+			$frames          = self::from_wc_data_save_frame( $frames );
+			$dispatches_left = 0;
 		}
 
 		foreach ( $frames as $frame ) {
@@ -357,7 +415,13 @@ class Save_Reentry_Guard {
 				continue;
 			}
 			$file = $frame['file'];
-			if ( __FILE__ === $file || 0 === strpos( $file, $wp_includes ) ) {
+			if ( __FILE__ === $file ) {
+				continue;
+			}
+			if ( 0 === strpos( $file, $wp_includes ) ) {
+				if ( ! isset( $frame['class'] ) && \in_array( $frame['function'], self::DISPATCH_FUNCTIONS, true ) && --$dispatches_left < 0 ) {
+					return null;
+				}
 				continue;
 			}
 			if ( 0 === strpos( $file, self::$watched_dir ) ) {

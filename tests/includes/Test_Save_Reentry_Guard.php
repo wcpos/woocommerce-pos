@@ -139,6 +139,49 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * After a trip WooCommerce swallowed, a plugin save from request context in the same test passes.
+	 *
+	 * The swallowed exception leaves the unwound hooks on `$wp_current_filter`; the guard
+	 * must not blame the next, legitimate save on them.
+	 */
+	public function test_guard_request_save_after_swallowed_trip_passes(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		$product_id = $this->create_managed_stock_product();
+		$order      = wc_create_order();
+		$order->add_product( wc_get_product( $product_id ), 1 );
+		$order->save();
+		add_action(
+			'woocommerce_order_status_on-hold',
+			function () use ( $product_id ) {
+				reentry_offender_save_product( $product_id );
+			}
+		);
+		$order->update_status( 'on-hold' );
+
+		// Act.
+		$result = reentry_offender_update_post( $product_id );
+
+		// Assert.
+		$this->assertSame( $product_id, $result );
+	}
+
+	/**
+	 * A revision WordPress core saves inside a plugin's own request-context wp_update_post() is core's save and passes.
+	 */
+	public function test_guard_core_revision_inside_plugin_update_post_passes(): void {
+		// Arrange.
+		$post_id = self::factory()->post->create( array( 'post_content' => 'Before' ) );
+
+		// Act.
+		$result = reentry_offender_update_post( $post_id, array( 'post_content' => 'After' ) );
+
+		// Assert.
+		$this->assertSame( $post_id, $result );
+		$this->assertCount( 1, wp_get_post_revisions( $post_id ) );
+	}
+
+	/**
 	 * The same WC_Data save from a request context passes.
 	 */
 	public function test_guard_product_save_from_request_context_passes(): void {
