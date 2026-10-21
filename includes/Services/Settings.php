@@ -236,6 +236,17 @@ class Settings {
 	}
 
 	/**
+	 * Get tax IDs settings.
+	 *
+	 * @return array
+	 */
+	public function get_tax_ids_settings(): array {
+		$section = $this->sections()->get( 'tax_ids' );
+
+		return $section ? $section->read() : array();
+	}
+
+	/**
 	 * Get checkout settings.
 	 *
 	 * @return array
