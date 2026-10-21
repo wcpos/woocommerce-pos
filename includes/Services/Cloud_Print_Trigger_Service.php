@@ -57,7 +57,10 @@ class Cloud_Print_Trigger_Service {
 	 * Orders::payment_complete_order_status), which may not be one of
 	 * wc_get_is_paid_statuses() — e.g. on-hold for account sales.
 	 *
-	 * @var array<int, bool>
+	 * Keyed like the deferred list (blog and order id), so a paid signal on
+	 * one blog cannot mark an order with the same id on another blog as paid.
+	 *
+	 * @var array<string, bool>
 	 */
 	private $payment_completed = array();
 
@@ -112,16 +115,17 @@ class Cloud_Print_Trigger_Service {
 		$order_id = (int) $order_id;
 
 		// Nothing flushes twice: an event raised after the shutdown flush (by
-		// another shutdown handler) is evaluated at once.
-		if ( $this->shutdown_flushed ) {
-			$this->handle_order( $order_id );
+		// another shutdown handler) is evaluated at once. So is a first event
+		// raised while shutdown is already running: a callback added at
+		// PHP_INT_MAX during that priority would never run.
+		if ( $this->shutdown_flushed || doing_action( 'shutdown' ) ) {
+			$this->evaluate( $order_id );
 			return;
 		}
 
-		$blog_id = get_current_blog_id();
-		$key     = $blog_id . ':' . $order_id;
+		$key = self::order_key( $order_id );
 		if ( ! isset( $this->deferred[ $key ] ) ) {
-			$this->deferred[ $key ] = array( $blog_id, $order_id );
+			$this->deferred[ $key ] = array( get_current_blog_id(), $order_id );
 		}
 
 		// LAST on shutdown, like the sync journal: WooCommerce saves the
@@ -141,7 +145,7 @@ class Cloud_Print_Trigger_Service {
 	 * @param int $order_id Order ID.
 	 */
 	public function defer_paid_order( $order_id ): void {
-		$this->payment_completed[ (int) $order_id ] = true;
+		$this->payment_completed[ self::order_key( (int) $order_id ) ] = true;
 		$this->defer_order( $order_id );
 	}
 
@@ -163,15 +167,38 @@ class Cloud_Print_Trigger_Service {
 				switch_to_blog( $blog_id );
 			}
 			try {
-				$this->handle_order( $order_id );
-			} catch ( \Throwable $e ) {
-				Logger::log( sprintf( 'Cloud print: creating print jobs for order #%d failed: %s', $order_id, $e->getMessage() ) );
+				$this->evaluate( $order_id );
 			} finally {
 				if ( $switch ) {
 					restore_current_blog();
 				}
 			}
 		}
+	}
+
+	/**
+	 * Evaluate one order outside its save; a failure is logged, never thrown.
+	 *
+	 * Nothing propagates out of a shutdown handler anyway, and one order's
+	 * failure must not stop the next; the log line is what support needs.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function evaluate( int $order_id ): void {
+		try {
+			$this->handle_order( $order_id );
+		} catch ( \Throwable $e ) {
+			Logger::log( sprintf( 'Cloud print: creating print jobs for order #%d failed: %s', $order_id, $e->getMessage() ) );
+		}
+	}
+
+	/**
+	 * Request-scoped key for an order: blog and order id.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private static function order_key( int $order_id ): string {
+		return get_current_blog_id() . ':' . $order_id;
 	}
 
 	/**
@@ -193,7 +220,7 @@ class Cloud_Print_Trigger_Service {
 	 * @param int $order_id Order ID.
 	 */
 	public function handle_paid_order( $order_id ): void {
-		$this->payment_completed[ (int) $order_id ] = true;
+		$this->payment_completed[ self::order_key( (int) $order_id ) ] = true;
 		$this->handle_order( $order_id );
 	}
 
@@ -495,7 +522,7 @@ class Cloud_Print_Trigger_Service {
 		}
 
 		return $order->is_paid()
-			|| ! empty( $this->payment_completed[ $order->get_id() ] )
+			|| ! empty( $this->payment_completed[ self::order_key( $order->get_id() ) ] )
 			|| null !== $order->get_date_paid();
 	}
 

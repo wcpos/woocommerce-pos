@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 
@@ -978,6 +979,86 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		$service->defer_order( $order->get_id() );
 
 		// Assert — printed without another flush.
+		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * A failure in an immediate evaluation is logged, not thrown into the order save.
+	 */
+	public function test_deferral_after_shutdown_flush_logs_a_failure_instead_of_throwing(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+		$service->flush_deferred_at_shutdown();
+		$logged = array();
+		$capture = static function ( $should_log, $message ) use ( &$logged ) {
+			$logged[] = $message;
+
+			return false;
+		};
+		$throw = static function () {
+			throw new \RuntimeException( 'assignments exploded' );
+		};
+		Logger::reset_dedup_state();
+		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'woocommerce_pos_cloud_print_assignments', $throw );
+
+		// Act.
+		try {
+			$service->defer_order( $order->get_id() );
+		} finally {
+			remove_filter( 'woocommerce_pos_cloud_print_assignments', $throw );
+			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			Logger::reset_dedup_state();
+		}
+
+		// Assert.
+		$this->assertContains(
+			sprintf( 'Cloud print: creating print jobs for order #%d failed: assignments exploded', $order->get_id() ),
+			$logged
+		);
+	}
+
+	/**
+	 * A first order event raised while shutdown is running is evaluated at once.
+	 *
+	 * A shutdown callback added at PHP_INT_MAX while shutdown is already
+	 * dispatching would never run, so the event must not wait in the list.
+	 * Pushing 'shutdown' onto the hook stack stands in for running inside it.
+	 */
+	public function test_first_deferral_during_shutdown_prints_immediately(): void {
+		// Arrange.
+		global $wp_current_filter;
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'counter',
+					'name'     => 'Counter',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'counter',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+					'trigger'     => 'created',
+				),
+			)
+		);
+		$order   = OrderHelper::create_order();
+		$service = new Cloud_Print_Trigger_Service();
+
+		// Act.
+		$wp_current_filter[] = 'shutdown'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Simulate running inside shutdown without dispatching it.
+		try {
+			$service->defer_order( $order->get_id() );
+		} finally {
+			array_pop( $wp_current_filter );
+		}
+
+		// Assert — printed without a flush.
 		$this->assertEquals( 1, $this->jobs->count( array( 'order_id' => $order->get_id() ) ) );
 	}
 
