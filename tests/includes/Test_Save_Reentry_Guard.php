@@ -12,6 +12,7 @@ use WC_Product_Simple;
 use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
 use WP_UnitTestCase;
 
+use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_delete_post;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_save_product;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_update_post;
 
@@ -85,6 +86,40 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'saved product #' . $product_id . ' (wp_update_post())', $message );
 		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
 		$this->assertStringContainsString( '.ai/rules/no-saves-inside-save-hooks.mdc', $message );
+	}
+
+	/**
+	 * Deleting a related post from a pre_delete_post handler re-enters the delete stack and trips.
+	 */
+	public function test_guard_delete_post_inside_pre_delete_post_hook_throws_naming_caller_and_hook(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		$post_id    = self::factory()->post->create();
+		$related_id = self::factory()->post->create();
+		add_filter(
+			'pre_delete_post',
+			function ( $delete, $post ) use ( $post_id, $related_id ) {
+				if ( $post_id === $post->ID ) {
+					reentry_offender_delete_post( $related_id );
+				}
+				return $delete;
+			},
+			10,
+			2
+		);
+
+		// Act.
+		$message = '';
+		try {
+			wp_delete_post( $post_id, true );
+		} catch ( LogicException $e ) {
+			$message = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringContainsString( 'fixtures/save-reentry-offender.php:', $message );
+		$this->assertStringContainsString( 'deleted post #' . $related_id . ' (wp_delete_post())', $message );
+		$this->assertStringContainsString( "inside 'pre_delete_post'", $message );
 	}
 
 	/**

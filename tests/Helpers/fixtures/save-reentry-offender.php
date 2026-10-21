@@ -37,6 +37,17 @@ function reentry_offender_update_post( int $post_id, array $fields = array() ) {
 }
 
 /**
+ * Delete a post through wp_delete_post().
+ *
+ * @param int $post_id Post id.
+ *
+ * @return mixed
+ */
+function reentry_offender_delete_post( int $post_id ) {
+	return wp_delete_post( $post_id, true );
+}
+
+/**
  * Re-save a product through WC_Data::save().
  *
  * @param int $product_id Product id.

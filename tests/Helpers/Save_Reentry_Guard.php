@@ -74,6 +74,7 @@ class Save_Reentry_Guard {
 		'transition_post_status',
 		'wp_insert_post_data',
 		'content_save_pre',
+		'pre_delete_post',
 		'delete_post',
 		'before_delete_post',
 		'wp_trash_post',
