@@ -1,13 +1,18 @@
 # Audit: public methods kept with no caller
 
-Read-only investigation. Do not modify any file.
+FREE_CHECKOUT: <absolute path to the Free worktree to audit, pinned to the commit under study>
+PRO_CHECKOUT: <absolute path to the Pro worktree to audit, pinned to the commit under study>
+
+Read-only investigation. Do not modify any file. Put the full report in your final message; do not write a file.
 
 ## Context
 
-The WCPOS WordPress plugin lives in two repositories on this machine:
+The WCPOS WordPress plugin lives in two repositories, at the two paths above:
 
-- Free: `/Users/kilbot/Projects/woocommerce-pos` (production code under `includes/`, tests under `tests/`; ignore `vendor/`, `vendor_prefixed/`, `node_modules/`, `.claude/`, `.wiki/`, `includes/Vendor/`)
-- Pro: `/Users/kilbot/Projects/woocommerce-pos-pro` (same layout; it extends Free and may call Free's public methods)
+- Free: `FREE_CHECKOUT` (production code under `includes/`, tests under `tests/`; ignore `vendor/`, `vendor_prefixed/`, `node_modules/`, `.claude/`, `.wiki/`, `includes/Vendor/`)
+- Pro: `PRO_CHECKOUT` (same layout; it extends Free and may call Free's public methods)
+
+Inventory public methods declared in classes **and in traits**. Include the root entry files (`woocommerce-pos.php`, `woocommerce-pos-pro.php`, `uninstall.php`, any other root `*.php`) in every caller search; `woocommerce-pos.php` is where WP-CLI commands are registered.
 
 The repo has a rule "preserve backward compatibility when changing public methods". We just found a public method (`Products::product_set_stock()`) that had been kept under that rule although nothing in Free, Pro or the tests called it, and the hook that used to call it had been redundant for years. The owner asks: how many other public methods are being kept like that?
 
@@ -35,7 +40,7 @@ Classify each method with no caller into one of:
 
 ## Output
 
-Write the report to `/private/tmp/claude-501/-Users-kilbot-Projects-woocommerce-pos/fbde2fc0-d2fb-406a-91b5-126f677df0e5/scratchpad/AUDIT-dead-public-methods-REPORT.md` with:
+Put the report in your final message (the run is read-only; the operator saves it beside the handoff as `AUDIT-uncalled-public-methods.md`) with:
 
 1. A one-paragraph headline: counts of public methods scanned, Dead, Test-only, Kept on purpose.
 2. A table per class for Dead and Test-only: `file:line | method | classification | evidence (the grep you ran and what it returned, in one line)`.

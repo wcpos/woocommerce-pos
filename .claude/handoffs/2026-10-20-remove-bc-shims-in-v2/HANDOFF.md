@@ -14,7 +14,7 @@ Written 2026-10-20 by the session that shipped wcpos/woocommerce-pos#2371. Paul'
 
 ## Procedure
 
-0. **Re-run the inventory on `next` before touching anything.** The audit beside this file is a snapshot of Free `main` at `ae0bf692` and a Pro checkout that carried uncommitted staged changes, and it did not inventory public methods declared in traits. Pin a clean Free `origin/next` and Pro `origin/next` commit and re-run the exact prompt checked in as `AUDIT-PROMPT.md` (read-only Codex run, `codex exec -m gpt-6-astra -s read-only --skip-git-repo-check -C /Users/kilbot/Projects "Read <path to AUDIT-PROMPT.md> and carry out the task it describes"`, or any agent with the same instructions) with three additions written into the prompt before running: inventory public methods declared in **traits** as well as classes; include the root entry files (`woocommerce-pos.php`, `woocommerce-pos-pro.php`, `uninstall.php`, any other root `*.php`) in every caller search; and point it at the pinned `next` worktrees instead of the `main` checkouts. Work from that result. A method that had a caller on `main` may have lost it on `next`, and the reverse; the tables here tell you what to expect, not what to delete.
+0. **Re-run the inventory on `next` before touching anything.** The audit beside this file is a snapshot of Free `main` at `ae0bf692` and a Pro checkout that carried uncommitted staged changes, and it did not inventory public methods declared in traits. Pin a clean Free `origin/next` and Pro `origin/next` commit and re-run the exact prompt checked in as `AUDIT-PROMPT.md` (read-only Codex run from a directory that contains both worktrees, `codex exec -m gpt-6-astra -s read-only --skip-git-repo-check -C <parent dir of both worktrees> "Read <absolute path to AUDIT-PROMPT.md> and carry out the task it describes"`, or any agent with the same instructions; the prompt takes the two worktree paths as its first two lines, fill them in before running) with three additions written into the prompt before running: inventory public methods declared in **traits** as well as classes; include the root entry files (`woocommerce-pos.php`, `woocommerce-pos-pro.php`, `uninstall.php`, any other root `*.php`) in every caller search; and point it at the pinned `next` worktrees instead of the `main` checkouts. Work from that result. A method that had a caller on `main` may have lost it on `next`, and the reverse; the tables here tell you what to expect, not what to delete.
 
 Per symbol:
 
@@ -91,7 +91,7 @@ A Codex (GPT-6 Astra, read-only) audit on 2026-10-20 tokenised every public clas
 
 | class | count |
 |---|---|
-| **Dead** (no caller anywhere, no retention comment) | 16 |
+| **Dead** (no caller anywhere, no retention comment) | 16, plus one Test-only row promoted below, so the removal table has 17 rows |
 | **Test-only** (only `tests/` calls it) | 45 |
 | **Kept on purpose** (`@deprecated` or a retention comment) | 38 |
 
