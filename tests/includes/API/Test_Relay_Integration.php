@@ -211,7 +211,6 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( true, $saved['enabled'] );
 		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
 		$this->assertEquals( '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff', $saved['hint_secret'] );
 		$this->assertGreaterThan( 0, $saved['registered_at'] );

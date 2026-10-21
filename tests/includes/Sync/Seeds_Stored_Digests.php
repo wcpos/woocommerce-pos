@@ -24,7 +24,8 @@ trait Seeds_Stored_Digests {
 			$digest->{$methods[ $collection ]}( $id );
 		}
 		Integrity_Digest::flush_pending_digests();
-		$rows = ( new Digest_Index() )->read_digests( $collection, $ids );
+		// Variation digests live in the products id-space (object types product and variation).
+		$rows = ( new Digest_Index() )->read_digests( 'variations' === $collection ? 'products' : $collection, $ids );
 		foreach ( $ids as $id ) {
 			$this->assertArrayHasKey( $id, $rows, "Missing seeded {$collection} digest for {$id}" );
 		}
