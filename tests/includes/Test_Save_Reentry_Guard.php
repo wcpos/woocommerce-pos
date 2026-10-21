@@ -1,0 +1,216 @@
+<?php
+/**
+ * Self-test for the re-entrant save tripwire installed by the bootstrap.
+ *
+ * @package WCPOS\WooCommercePOS\Tests
+ */
+
+namespace WCPOS\WooCommercePOS\Tests;
+
+use LogicException;
+use WC_Product_Simple;
+use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
+use WP_UnitTestCase;
+
+use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_save_product;
+use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_update_post;
+
+/**
+ * The guard must fire for plugin code saving from inside a save or transition hook, and
+ * stay silent for everything else, or a green suite proves nothing about #2371.
+ *
+ * @internal
+ *
+ * @coversNothing
+ */
+class Test_Save_Reentry_Guard extends WP_UnitTestCase {
+	/**
+	 * Fixture function that re-saves a product with wp_update_post() on a stock change.
+	 */
+	const TOUCH_HANDLER = 'WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_touch_product';
+
+	/**
+	 * Fixture function that tags a product with wp_set_object_terms() on a stock change.
+	 */
+	const TAG_HANDLER = 'WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_tag_product';
+
+	/**
+	 * Directory the guard watched before this test re-pointed it.
+	 *
+	 * @var string
+	 */
+	private $previous_dir = '';
+
+	/**
+	 * Original woocommerce_manage_stock option.
+	 *
+	 * @var mixed
+	 */
+	private $original_manage_stock;
+
+	/**
+	 * Point the guard at the fixture directory so its functions count as plugin code.
+	 */
+	public function setUp(): void {
+		parent::setUp();
+		require_once __DIR__ . '/../Helpers/fixtures/save-reentry-offender.php';
+		$this->previous_dir          = Save_Reentry_Guard::watch_directory( __DIR__ . '/../Helpers/fixtures' );
+		$this->original_manage_stock = get_option( 'woocommerce_manage_stock' );
+		update_option( 'woocommerce_manage_stock', 'yes' );
+	}
+
+	/**
+	 * Restore `includes/` as the policed directory.
+	 */
+	public function tearDown(): void {
+		Save_Reentry_Guard::watch_directory( $this->previous_dir );
+		update_option( 'woocommerce_manage_stock', $this->original_manage_stock );
+		parent::tearDown();
+	}
+
+	/**
+	 * The #2371 shape: wp_update_post() on the product from a stock hook fails the test and names everything.
+	 */
+	public function test_guard_update_post_inside_set_stock_hook_throws_naming_caller_object_and_hook(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		$product_id = $this->create_managed_stock_product();
+		add_action( 'woocommerce_product_set_stock', self::TOUCH_HANDLER );
+
+		// Act.
+		$message = '';
+		try {
+			wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+		} catch ( LogicException $e ) {
+			$message = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringContainsString( 'fixtures/save-reentry-offender.php:', $message );
+		$this->assertStringContainsString( 'saved product #' . $product_id . ' (wp_update_post())', $message );
+		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
+		$this->assertStringContainsString( '.ai/rules/no-saves-inside-save-hooks.mdc', $message );
+	}
+
+	/**
+	 * The same wp_update_post() from a request context (no save hook running) passes.
+	 */
+	public function test_guard_update_post_from_request_context_passes(): void {
+		// Arrange.
+		$product_id = $this->create_managed_stock_product();
+
+		// Act.
+		$result = reentry_offender_update_post( $product_id );
+
+		// Assert.
+		$this->assertSame( $product_id, $result );
+	}
+
+	/**
+	 * A WC_Data save from inside an order status hook trips even though WooCommerce swallows the exception.
+	 *
+	 * `WC_Order::status_transition()` catches every exception and turns it into an order
+	 * note, so the guard's `_doing_it_wrong()` notice is what fails the test.
+	 */
+	public function test_guard_product_save_inside_order_status_hook_reports_through_swallowing_transition(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		$product_id = $this->create_managed_stock_product();
+		$order      = wc_create_order();
+		$order->add_product( wc_get_product( $product_id ), 1 );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+		add_action(
+			'woocommerce_order_status_on-hold',
+			function () use ( $product_id ) {
+				reentry_offender_save_product( $product_id );
+			}
+		);
+
+		// Act.
+		$order->update_status( 'on-hold' );
+
+		// Assert.
+		$this->assertArrayHasKey( Save_Reentry_Guard::NOTICE, $this->caught_doing_it_wrong );
+		$notice = $this->caught_doing_it_wrong[ Save_Reentry_Guard::NOTICE ];
+		$this->assertStringContainsString( 'fixtures/save-reentry-offender.php:', $notice );
+		$this->assertStringContainsString( 'saved product #' . $product_id . ' (WC_Product::save())', $notice );
+		$this->assertStringContainsString( "inside 'woocommerce_order_status_on-hold'", $notice );
+	}
+
+	/**
+	 * The same WC_Data save from a request context passes.
+	 */
+	public function test_guard_product_save_from_request_context_passes(): void {
+		// Arrange.
+		$product_id = $this->create_managed_stock_product();
+
+		// Act.
+		$result = reentry_offender_save_product( $product_id );
+
+		// Assert.
+		$this->assertSame( $product_id, $result );
+	}
+
+	/**
+	 * A term write on the product from a stock hook trips.
+	 */
+	public function test_guard_set_object_terms_inside_set_stock_hook_throws(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		$product_id = $this->create_managed_stock_product();
+		add_action( 'woocommerce_product_set_stock', self::TAG_HANDLER );
+
+		// Act.
+		$message = '';
+		try {
+			wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+		} catch ( LogicException $e ) {
+			$message = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringContainsString( 'fixtures/save-reentry-offender.php:', $message );
+		$this->assertStringContainsString( "saved product 'product_tag' terms of #" . $product_id . ' (wp_set_object_terms())', $message );
+		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
+	}
+
+	/**
+	 * Test code saving inside a save hook is not plugin code and passes.
+	 */
+	public function test_guard_test_code_saving_inside_set_stock_hook_passes(): void {
+		// Arrange.
+		$product_id = $this->create_managed_stock_product();
+		$saves      = 0;
+		add_action(
+			'woocommerce_product_set_stock',
+			function ( $product ) use ( &$saves ) {
+				wp_update_post( array( 'ID' => $product->get_id() ) );
+				++$saves;
+			}
+		);
+
+		// Act.
+		wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+
+		// Assert.
+		$this->assertSame( 1, $saves );
+		$this->assertSame( 4, wc_get_product( $product_id )->get_stock_quantity() );
+	}
+
+	/**
+	 * Create a simple product with managed stock of 5.
+	 *
+	 * @return int Product ID.
+	 */
+	private function create_managed_stock_product(): int {
+		$product = new WC_Product_Simple();
+		$product->set_name( 'Save Reentry Guard Product' );
+		$product->set_regular_price( '10' );
+		$product->set_manage_stock( true );
+		$product->set_stock_quantity( 5 );
+		$product->save();
+
+		return $product->get_id();
+	}
+}

@@ -226,6 +226,12 @@ class Bootstrap {
 		// in wc_orders_meta on HPOS, where the post-meta API silently reads nothing.
 		require_once $this->plugin_dir . '/tests/Helpers/Order_Postmeta_Guard.php';
 		\WCPOS\WooCommercePOS\Tests\Helpers\Order_Postmeta_Guard::install();
+
+		// Tripwire: plugin code saving a post, a WooCommerce object or terms from inside a
+		// WordPress or WooCommerce save, status-transition, stock or checkout hook fails the
+		// test naming the file, line and hook. #2371 double-reduced stock this way.
+		require_once $this->plugin_dir . '/tests/Helpers/Save_Reentry_Guard.php';
+		\WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard::install();
 	}
 
 	/**
