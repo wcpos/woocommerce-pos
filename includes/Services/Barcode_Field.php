@@ -21,7 +21,7 @@ namespace WCPOS\WooCommercePOS\Services;
  * meant editing the same `elseif` in three files.
  *
  * This class is the single owner of the decision. Everything else asks it a
- * question — which meta key, what is this product's barcode, write this value,
+ * question — which meta key, what is this product's barcode, stage this value,
  * which keys does search cover, which key does `orderby=barcode` sort on — and
  * never re-derives the answer.
  *
@@ -37,10 +37,12 @@ namespace WCPOS\WooCommercePOS\Services;
  *   only exist from WC 9.1, so both the read and the write path fall back to the
  *   raw `_global_unique_id` postmeta — the same key WooCommerce itself uses — on
  *   older versions.
- * - THE SAVE-PATH SPLIT. The GTIN and SKU paths call `save()` while the custom
- *   meta path calls `save_meta_data()`. This is NOT an oversight to be unified:
- *   the full save exists so product update hooks fire and the sync lane observes
- *   the change.
+ * - NO SAVE OF ITS OWN. A barcode is staged on the object WooCommerce is about
+ *   to save (the V1 controllers call stage() from
+ *   `woocommerce_rest_pre_insert_*`), so WooCommerce's single save persists it
+ *   and fires the product update hooks the sync lane observes. It used to be
+ *   written after WooCommerce's save by a second full `save()`, which re-ran
+ *   the whole product save stack for every POS product write.
  *
  * Not owned here: how a barcode meta key is NAMED ON THE WIRE for the sync
  * client (`sku` / `global_unique_id` / `meta_data:<key>`, gated on WC 9.2 REST
@@ -105,20 +107,21 @@ final class Barcode_Field {
 	}
 
 	/**
-	 * Write a barcode onto a product and persist it.
+	 * Stage a barcode on a product without persisting it.
 	 *
-	 * The SKU and GTIN paths take a FULL save (not `save_meta_data()`) so product
-	 * update hooks fire for sync.
+	 * Sets the SKU or GTIN property, or the custom meta key, on the object;
+	 * the caller's save writes it. Called on the object WooCommerce is about
+	 * to save, so its one save persists the barcode and fires the product
+	 * update hooks once.
 	 *
 	 * @param \WC_Data $product The product or variation object.
 	 * @param mixed    $value   The barcode value.
 	 */
-	public static function write( $product, $value ): void {
+	public static function stage( $product, $value ): void {
 		$barcode_field = self::meta_key();
 
 		if ( '_sku' === $barcode_field ) {
 			$product->set_sku( $value );
-			$product->save();
 		} elseif ( self::DEFAULT_FIELD === $barcode_field ) {
 			if ( method_exists( $product, 'set_global_unique_id' ) ) {
 				$product->set_global_unique_id( $value );
@@ -126,11 +129,8 @@ final class Barcode_Field {
 				// WC < 9.1 has no GTIN setter — write the same postmeta key it uses.
 				$product->update_meta_data( $barcode_field, $value );
 			}
-			// Full save (not save_meta_data) so product update hooks fire for sync.
-			$product->save();
 		} else {
 			$product->update_meta_data( $barcode_field, $value );
-			$product->save_meta_data();
 		}
 	}
 

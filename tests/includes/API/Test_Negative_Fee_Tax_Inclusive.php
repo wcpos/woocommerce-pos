@@ -110,6 +110,54 @@ class Test_Negative_Fee_Tax_Inclusive extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '20.00', wc_format_decimal( $order->get_total_tax(), 2 ) );
 	}
 
+	public function test_pos_negative_taxable_fee_override_persists_with_the_order(): void {
+		// The handler only stages the fee's taxes; WooCommerce's own order save
+		// persists them. A reduced class tells the override (5%) from stock (20%).
+		$reduced_rate_id = WC_Tax::_insert_tax_rate(
+			array(
+				'tax_rate_country'  => 'GB',
+				'tax_rate'          => '5.0000',
+				'tax_rate_name'     => 'Reduced VAT',
+				'tax_rate_priority' => 1,
+				'tax_rate_order'    => 0,
+				'tax_rate_class'    => 'reduced-rate',
+			)
+		);
+		try {
+			$order = $this->create_order();
+			$order->set_created_via( 'woocommerce-pos' );
+			$order->save();
+			$fee = new WC_Order_Item_Fee();
+			$fee->set_name( 'Discount' );
+			$fee->set_total( -10 );
+			$fee->set_tax_status( 'taxable' );
+			$fee->set_tax_class( 'reduced-rate' );
+			$order->add_item( $fee );
+			$override = WC_Tax::calc_tax(
+				-10.0,
+				WC_Tax::find_rates(
+					array(
+						'country'   => 'GB',
+						'state'     => '',
+						'postcode'  => '',
+						'city'      => '',
+						'tax_class' => 'reduced-rate',
+					)
+				)
+			);
+
+			$order->calculate_totals();
+			wp_cache_flush();
+			$stored_fees = array_values( wc_get_order( $order->get_id() )->get_items( 'fee' ) );
+
+			$this->assertCount( 1, $stored_fees );
+			$this->assertSame( '-0.50', wc_format_decimal( array_sum( $override ), 2 ) );
+			$this->assertSame( '-0.50', wc_format_decimal( $stored_fees[0]->get_total_tax(), 2 ) );
+		} finally {
+			WC_Tax::_delete_tax_rate( $reduced_rate_id );
+		}
+	}
+
 	public function test_fixed_cart_virtual_coupon_gets_both_numbers_right(): void {
 		$order  = $this->create_order();
 		$coupon = $this->create_virtual_coupon( 'fixed_cart', 10 );

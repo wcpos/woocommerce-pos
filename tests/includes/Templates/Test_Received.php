@@ -75,6 +75,31 @@ class Test_Received extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The success signal runs before wp_head(), so the till moves on without
+	 * waiting for the theme's render-blocking head styles and scripts (a heavy
+	 * theme such as Divi otherwise delays every sale's receipt).
+	 */
+	public function test_received_script_runs_before_theme_head_assets(): void {
+		$order  = OrderHelper::create_order( array( 'status' => 'processing' ) );
+		$marker = static function () {
+			echo '<!-- wcpos-test-wp-head -->';
+		};
+		add_action( 'wp_head', $marker, 1 );
+
+		try {
+			$output = $this->render_received( $order );
+		} finally {
+			remove_action( 'wp_head', $marker, 1 );
+		}
+
+		$signal = strpos( $output, "action: 'wcpos-payment-received'" );
+		$head   = strpos( $output, '<!-- wcpos-test-wp-head -->' );
+		$this->assertNotFalse( $signal );
+		$this->assertNotFalse( $head );
+		$this->assertLessThan( $head, $signal );
+	}
+
+	/**
 	 * An async gateway can redirect to the received page before the provider
 	 * confirms — the order is still `pending`. Emitting here would let the app
 	 * adopt an unpaid order as a successful payment.

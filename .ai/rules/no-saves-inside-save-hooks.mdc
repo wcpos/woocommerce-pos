@@ -1,0 +1,75 @@
+---
+description: No saves from inside a WordPress or WooCommerce save, status-transition, stock or checkout hook — the nested write re-runs the whole save stack inside the original one
+globs: includes/**/*.php
+alwaysApply: true
+---
+
+# No saves inside save hooks
+
+A handler on a save or transition hook runs in the middle of someone else's write. If it
+saves again, the whole post-save stack (`save_post`, kses, every other plugin's
+listeners) runs a second time, nested inside the first, in whatever user context the
+original request had.
+
+#2371: WCPOS called `wp_update_post()` on the product from `woocommerce_product_set_stock`,
+which fires inside the stock reduction inside `WC_Order::update_status()` at web checkout.
+A third-party `save_post` listener threw, WooCommerce swallowed it before writing the
+`_reduced_stock` stamps, and the next status change reduced stock a second time.
+
+## The rule
+
+From a handler on a WordPress or WooCommerce save, status-transition, stock or checkout
+hook (`save_post*`, `wp_insert_post`, `transition_post_status`,
+`woocommerce_before/after_*_object_save`, `woocommerce_new_{object}` /
+`woocommerce_update_{object}`, `woocommerce_order_status_*`, `woocommerce_payment_complete`,
+`woocommerce_product_set_stock`, `woocommerce_reduce_order_stock`, the checkout
+order-creation hooks, `woocommerce_rest_insert_*`, and the rest of the list in the guard),
+never call anything that re-enters the save stack: `wp_insert_post()`, `wp_update_post()`,
+`wp_delete_post()`, `wp_trash_post()`, `WC_Data::save()` on any product, order, refund,
+coupon or customer, or any other function that runs a save from the top.
+
+The forbidden thing is re-running the save stack, not touching the row. When a write
+genuinely cannot move out of the hook, the last resort is a direct `$wpdb->update()` of
+the one column you need plus `clean_post_cache()` (or WooCommerce's cache clear for that
+object), with a comment saying why it has to happen there. That is the pattern WooCommerce
+itself uses for `post_modified`, and the one `includes/Sync/Coupon_Modified_Date.php` uses
+for the coupon timestamp.
+
+Assigning terms to the post being saved from its own `save_post_{type}` handler
+(`wp_set_object_terms()`) is fine: it is WordPress's meta-box pattern and does not
+re-enter the post save stack.
+
+## What to do instead
+
+- **Write at the request entry point.** Our REST callbacks, `admin_post_*`, `wp_ajax_*`,
+  WP-CLI commands and cron actions are not inside anyone's save: do the write there.
+- **Defer it.** Schedule an action (`as_enqueue_async_action()`), or set the props on
+  the object WooCommerce is already saving and let that one save write them.
+- **Record the fact in your own table** instead of re-saving someone else's object.
+- **If WooCommerce already does it, do nothing.** The #2371 handler existed to bump the
+  product's modified date on a stock change; WooCommerce's own product save inside every
+  stock write already moves it (`Test_Products_Stock_Touch` pins that).
+
+## What the suite does about it
+
+`tests/Helpers/Save_Reentry_Guard.php` is installed by the test bootstrap. Any test in
+which a file under `includes/` saves a post or a WooCommerce object, or deletes
+or trashes a post, while a listed hook is running fails with a `LogicException` (and a
+`_doing_it_wrong()` notice, because WooCommerce catches exceptions on the status and
+payment paths):
+
+```
+includes/Products.php:79 saved product #10 (wp_update_post()) inside 'woocommerce_product_set_stock'.
+A save inside a WooCommerce or WordPress save or transition hook re-runs ...
+```
+
+The guard watches the save entry points and does not see SQL, on purpose: the narrow
+`$wpdb->update()` above is the sanctioned alternative, not a loophole.
+
+There is no exemption list. Move the write; do not catch the exception, narrow the hook
+list, or route the save through a WooCommerce helper so the caller looks like core.
+
+`tests/includes/Test_Web_Order_Lifecycle_Canary.php` drives a guest web order through
+on-hold, payment, completion, a restocking refund and cancellation, and fails on its own
+if WCPOS code is on the stack of any product save, if stock is reduced twice, or if kses
+touches the product description. It does not depend on the guard.

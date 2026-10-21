@@ -557,7 +557,7 @@ function renderCol(node: ColNode, width: number, columns: number): string {
 function renderHtml(ast: ReceiptNode): string {
 	const width = ast.paperWidth;
 	const inner = renderNodes(ast.children, ast.paperWidth);
-	return `<div style="width: ${width}ch; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; background: #fff; color: #000; padding: 16px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin: 0 auto; overflow: hidden; white-space: pre-wrap; word-break: break-all; box-sizing: content-box">${inner}</div>`;
+	return `<div style="width: ${width}ch; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; background: #fff; color: #000; padding: 16px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin: 0 auto; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; box-sizing: content-box">${inner}</div>`;
 }
 
 // -- Public API --
