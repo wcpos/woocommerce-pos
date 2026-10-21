@@ -15,6 +15,8 @@ use WP_UnitTestCase;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_delete_post;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_save_product;
 use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\reentry_offender_update_post;
+use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\First_Plugin\first_plugin_update_post;
+use function WCPOS\WooCommercePOS\Tests\Helpers\Fixtures\Second_Plugin\second_plugin_update_post;
 
 /**
  * The guard must fire for plugin code saving from inside a save or transition hook, and
@@ -50,6 +52,8 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 	public function setUp(): void {
 		parent::setUp();
 		require_once __DIR__ . '/../Helpers/fixtures/save-reentry-offender.php';
+		require_once __DIR__ . '/../Helpers/fixtures/first-plugin/includes/offenders.php';
+		require_once __DIR__ . '/../Helpers/fixtures/second-plugin/includes/offenders.php';
 		$this->previous_dir          = Save_Reentry_Guard::watch_directory( __DIR__ . '/../Helpers/fixtures' );
 		$this->original_manage_stock = get_option( 'woocommerce_manage_stock' );
 		update_option( 'woocommerce_manage_stock', 'yes' );
@@ -190,6 +194,97 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
+	}
+
+	/**
+	 * A second plugin directory added with also_watch() is policed too, and its paths carry the plugin directory name.
+	 */
+	public function test_guard_also_watch_second_directory_offender_throws_naming_plugin_directory(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		Save_Reentry_Guard::also_watch( __DIR__ . '/../Helpers/fixtures/second-plugin/includes' );
+		$product_id = $this->create_managed_stock_product();
+		add_action(
+			'woocommerce_product_set_stock',
+			function ( $product ) {
+				second_plugin_update_post( $product->get_id() );
+			}
+		);
+
+		// Act.
+		$message = '';
+		try {
+			wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+		} catch ( LogicException $e ) {
+			$message = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringStartsWith( 'second-plugin/includes/offenders.php:', $message );
+		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
+	}
+
+	/**
+	 * With a primary directory that does not contain the extra one (the Pro shape: Free's
+	 * `includes/` primary, Pro's beside it), offenders in both trip and each is named by
+	 * its own plugin directory.
+	 */
+	public function test_guard_also_watch_disjoint_from_primary_offenders_throw_naming_their_plugin_directory(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		Save_Reentry_Guard::watch_directory( __DIR__ . '/../Helpers/fixtures/first-plugin/includes' );
+		Save_Reentry_Guard::also_watch( __DIR__ . '/../Helpers/fixtures/second-plugin/includes' );
+		$product_id = $this->create_managed_stock_product();
+		$second_handler = function ( $product ) {
+			second_plugin_update_post( $product->get_id() );
+		};
+		$first_handler  = function ( $product ) {
+			first_plugin_update_post( $product->get_id() );
+		};
+
+		// Act.
+		add_action( 'woocommerce_product_set_stock', $second_handler );
+		$second = '';
+		try {
+			wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+		} catch ( LogicException $e ) {
+			$second = $e->getMessage();
+		}
+		remove_action( 'woocommerce_product_set_stock', $second_handler );
+		add_action( 'woocommerce_product_set_stock', $first_handler );
+		$first = '';
+		try {
+			wc_update_product_stock( wc_get_product( $product_id ), 3, 'set' );
+		} catch ( LogicException $e ) {
+			$first = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringStartsWith( 'second-plugin/includes/offenders.php:', $second );
+		$this->assertStringStartsWith( 'first-plugin/includes/offenders.php:', $first );
+	}
+
+	/**
+	 * Re-pointing the guard with watch_directory() forgets every directory added with also_watch().
+	 */
+	public function test_guard_watch_directory_forgets_also_watched_directory(): void {
+		// Arrange.
+		Save_Reentry_Guard::also_watch( __DIR__ . '/../Helpers/fixtures/second-plugin/includes' );
+		Save_Reentry_Guard::watch_directory( $this->previous_dir );
+		$product_id = $this->create_managed_stock_product();
+		$result     = null;
+		add_action(
+			'woocommerce_product_set_stock',
+			function ( $product ) use ( &$result ) {
+				$result = second_plugin_update_post( $product->get_id() );
+			}
+		);
+
+		// Act.
+		wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+
+		// Assert.
+		$this->assertSame( $product_id, $result );
 	}
 
 	/**
