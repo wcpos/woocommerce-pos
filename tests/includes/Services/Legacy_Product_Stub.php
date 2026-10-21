@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 /**
  * A product-like object with NO global-unique-id accessors, which is exactly what
  * the method_exists() guards in Barcode_Field branch on. It also records how it
- * was persisted so tests can pin the save() vs save_meta_data() split.
+ * was persisted so tests can pin that Barcode_Field::stage() persists nothing.
  *
  * @internal
  */

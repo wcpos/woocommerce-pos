@@ -158,94 +158,102 @@ class Test_Barcode_Field extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `_sku` writes the SKU property and takes a full save.
+	 * `_sku` stages the SKU property and leaves persisting it to the caller's save.
 	 */
-	public function test_write_sku_field_sets_product_sku(): void {
+	public function test_stage_sku_field_sets_sku_without_saving(): void {
 		$this->set_barcode_field( '_sku' );
-		$product = ProductHelper::create_simple_product();
+		$product    = ProductHelper::create_simple_product();
+		$stored_sku = $product->get_sku();
 
-		Barcode_Field::write( $product, 'SKU-WRITE-1' );
+		Barcode_Field::stage( $product, 'SKU-STAGE-1' );
 
-		$this->assertSame( 'SKU-WRITE-1', wc_get_product( $product->get_id() )->get_sku() );
+		$this->assertSame( 'SKU-STAGE-1', $product->get_sku() );
+		$this->assertSame( $stored_sku, wc_get_product( $product->get_id() )->get_sku() );
 	}
 
 	/**
-	 * `_global_unique_id` writes through the GTIN setter on WC 9.1+.
+	 * `_global_unique_id` stages through the GTIN setter on WC 9.1+.
 	 */
-	public function test_write_gtin_field_sets_global_unique_id(): void {
+	public function test_stage_gtin_field_sets_global_unique_id_without_saving(): void {
 		$this->set_barcode_field( '_global_unique_id' );
 		$product = ProductHelper::create_simple_product();
 
-		Barcode_Field::write( $product, '4006381333931' );
+		Barcode_Field::stage( $product, '4006381333931' );
 
-		$this->assertSame( '4006381333931', wc_get_product( $product->get_id() )->get_global_unique_id() );
+		$this->assertSame( '4006381333931', $product->get_global_unique_id() );
+		$this->assertSame( '', wc_get_product( $product->get_id() )->get_global_unique_id() );
 	}
 
 	/**
-	 * A custom key writes postmeta.
+	 * A custom key stages meta, written by the caller's save.
 	 */
-	public function test_write_custom_field_writes_postmeta(): void {
+	public function test_stage_custom_field_sets_meta_without_saving(): void {
 		$this->set_barcode_field( '_alg_ean' );
 		$product = ProductHelper::create_simple_product();
 
-		Barcode_Field::write( $product, 'CUSTOM-WRITE-1' );
+		Barcode_Field::stage( $product, 'CUSTOM-STAGE-1' );
 
-		$this->assertSame( 'CUSTOM-WRITE-1', get_post_meta( $product->get_id(), '_alg_ean', true ) );
+		$this->assertSame( 'CUSTOM-STAGE-1', $product->get_meta( '_alg_ean' ) );
+		$this->assertSame( '', get_post_meta( $product->get_id(), '_alg_ean', true ) );
+
+		$product->save();
+
+		$this->assertSame( 'CUSTOM-STAGE-1', get_post_meta( $product->get_id(), '_alg_ean', true ) );
 	}
 
 	/**
-	 * WC 9.1 GUARD (write). Without set_global_unique_id() the GTIN path writes
-	 * the same postmeta key, and still takes a FULL save so update hooks fire.
+	 * WC 9.1 GUARD (write). Without set_global_unique_id() the GTIN path stages
+	 * the same postmeta key, and saves nothing itself.
 	 */
-	public function test_write_gtin_field_falls_back_to_postmeta_without_setter(): void {
+	public function test_stage_gtin_field_falls_back_to_postmeta_without_setter(): void {
 		$this->set_barcode_field( '_global_unique_id' );
 		$stub = new Legacy_Product_Stub();
 
-		Barcode_Field::write( $stub, '9780201379624' );
+		Barcode_Field::stage( $stub, '9780201379624' );
 
 		$this->assertSame( array( '_global_unique_id' => '9780201379624' ), $stub->meta );
-		$this->assertEquals( 1, $stub->saves );
-		$this->assertEquals( 0, $stub->meta_saves );
+		$this->assertSame( 0, $stub->saves );
+		$this->assertSame( 0, $stub->meta_saves );
 	}
 
 	/**
-	 * SAVE-PATH SPLIT (preserved). The custom-meta path persists with
-	 * save_meta_data(), NOT a full save.
+	 * No mode persists: the custom-meta path saves nothing itself.
 	 */
-	public function test_write_custom_field_uses_meta_save_only(): void {
+	public function test_stage_custom_field_saves_nothing(): void {
 		$this->set_barcode_field( '_alg_ean' );
 		$stub = new Legacy_Product_Stub();
 
-		Barcode_Field::write( $stub, 'CUSTOM-WRITE-2' );
+		Barcode_Field::stage( $stub, 'CUSTOM-STAGE-2' );
 
-		$this->assertSame( array( '_alg_ean' => 'CUSTOM-WRITE-2' ), $stub->meta );
-		$this->assertEquals( 0, $stub->saves );
-		$this->assertEquals( 1, $stub->meta_saves );
+		$this->assertSame( array( '_alg_ean' => 'CUSTOM-STAGE-2' ), $stub->meta );
+		$this->assertSame( 0, $stub->saves );
+		$this->assertSame( 0, $stub->meta_saves );
 	}
 
 	/**
-	 * SAVE-PATH SPLIT (preserved). The SKU path takes a full save.
+	 * No mode persists: the SKU path saves nothing itself.
 	 */
-	public function test_write_sku_field_uses_full_save(): void {
+	public function test_stage_sku_field_saves_nothing(): void {
 		$this->set_barcode_field( '_sku' );
 		$stub = new Legacy_Product_Stub();
 
-		Barcode_Field::write( $stub, 'SKU-WRITE-2' );
+		Barcode_Field::stage( $stub, 'SKU-STAGE-2' );
 
-		$this->assertSame( 'SKU-WRITE-2', $stub->sku );
-		$this->assertEquals( 1, $stub->saves );
-		$this->assertEquals( 0, $stub->meta_saves );
+		$this->assertSame( 'SKU-STAGE-2', $stub->sku );
+		$this->assertSame( 0, $stub->saves );
+		$this->assertSame( 0, $stub->meta_saves );
 	}
 
 	/**
 	 * REGRESSION PIN for the deliberate blank-setting fix: a blank barcode field
 	 * used to write postmeta under an EMPTY meta key. It now writes the GTIN.
 	 */
-	public function test_write_blank_setting_writes_gtin_not_empty_meta_key(): void {
+	public function test_stage_blank_setting_writes_gtin_not_empty_meta_key(): void {
 		$this->set_barcode_field( '' );
 		$product = ProductHelper::create_simple_product();
 
-		Barcode_Field::write( $product, '4006381333931' );
+		Barcode_Field::stage( $product, '4006381333931' );
+		$product->save();
 
 		global $wpdb;
 		$empty_key_rows = (int) $wpdb->get_var(
@@ -254,7 +262,7 @@ class Test_Barcode_Field extends WP_UnitTestCase {
 
 		$stored = wc_get_product( $product->get_id() );
 		$this->assertSame( '4006381333931', $stored->get_global_unique_id() );
-		$this->assertEquals( 0, $empty_key_rows );
+		$this->assertSame( 0, $empty_key_rows );
 	}
 
 	/**

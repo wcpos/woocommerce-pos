@@ -94,7 +94,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$this->wcpos_request = $request;
 
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
-		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
+		add_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'wcpos_pre_insert_product_object' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
 
 		/*
@@ -366,17 +366,28 @@ class Products_Controller extends WC_REST_Products_Controller {
 	}
 
 	/**
-	 * Fires after a single object is created or updated via the REST API.
+	 * Stage the request's barcode on the product before WooCommerce saves it.
 	 *
-	 * @param WC_Data         $object   Inserted object.
-	 * @param WP_REST_Request $request  Request object.
-	 * @param bool            $creating True when creating object, false when updating.
+	 * Runs on the pre-insert filter so WooCommerce's own save persists the
+	 * barcode and fires the update hooks once. Writing it after that save
+	 * (on woocommerce_rest_insert_*) took a second full save.
+	 *
+	 * @param WC_Data|WP_Error $object   The object about to be saved, or an earlier callback's error.
+	 * @param WP_REST_Request  $request  Request object.
+	 * @param bool             $creating True when creating object, false when updating.
+	 *
+	 * @return WC_Data|WP_Error
 	 */
-	public function wcpos_insert_product_object( WC_Data $object, WP_REST_Request $request, $creating ): void {
-		// Update the barcode if it is set in the request.
-		if ( $request->has_param( 'barcode' ) ) {
-			Barcode_Field::write( $object, $request->get_param( 'barcode' ) );
+	public function wcpos_pre_insert_product_object( $object, WP_REST_Request $request, $creating ) {
+		if ( is_wp_error( $object ) || ! $object instanceof WC_Data ) {
+			return $object;
 		}
+
+		if ( $request->has_param( 'barcode' ) ) {
+			Barcode_Field::stage( $object, $request->get_param( 'barcode' ) );
+		}
+
+		return $object;
 	}
 
 	/**

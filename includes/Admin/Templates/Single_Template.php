@@ -407,6 +407,11 @@ class Single_Template {
 	/**
 	 * Ensure templates saved without a title still have a readable POS label.
 	 *
+	 * Writes the column directly, as save_raw_content() does for post_content:
+	 * this runs inside the template's own save_post, and a wp_update_post()
+	 * here re-ran the whole post save stack (revision, status transition,
+	 * kses, every other plugin's save_post listeners) nested inside it.
+	 *
 	 * @param int      $post_id Post ID.
 	 * @param \WP_Post $post    Post object from the current save.
 	 *
@@ -427,14 +432,27 @@ class Single_Template {
 			(string) get_post_meta( $post_id, '_template_paper_width', true )
 		);
 
-		remove_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10 );
-		wp_update_post(
-			array(
-				'ID'         => $post_id,
-				'post_title' => $title,
-			)
+		// Sanitize the way wp_insert_post() does: the db filters (kses for a user
+		// without unfiltered_html) expect slashed data; the column takes it unslashed.
+		$title = wp_unslash( sanitize_post_field( 'post_title', wp_slash( $title ), $post_id, 'db' ) );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- See the docblock; the post cache is cleared below.
+		$result = $wpdb->update(
+			$wpdb->posts,
+			array( 'post_title' => $title ),
+			array( 'ID' => $post_id ),
+			array( '%s' ),
+			array( '%d' )
 		);
-		add_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10, 2 );
+		if ( false === $result ) {
+			Logger::log( sprintf( 'Failed to save the fallback title for template %d', $post_id ) );
+			return;
+		}
+
+		clean_post_cache( $post_id );
+		// Later save_post listeners in this save are handed this same object.
+		$post->post_title = $title;
 	}
 
 	/**

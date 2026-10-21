@@ -57,7 +57,10 @@ class Cloud_Print_Trigger_Service {
 	 * Orders::payment_complete_order_status), which may not be one of
 	 * wc_get_is_paid_statuses() — e.g. on-hold for account sales.
 	 *
-	 * @var array<int, bool>
+	 * Keyed like the deferred list (blog and order id), so a paid signal on
+	 * one blog cannot mark an order with the same id on another blog as paid.
+	 *
+	 * @var array<string, bool>
 	 */
 	private $payment_completed = array();
 
@@ -69,28 +72,173 @@ class Cloud_Print_Trigger_Service {
 	private $registry;
 
 	/**
+	 * Orders waiting for the end-of-request evaluation, in event order.
+	 *
+	 * Keyed by blog and order id, so an order changing status several times in
+	 * one request is evaluated once, on the blog it belongs to.
+	 *
+	 * @var array<string, array{0: int, 1: int}> [ blog id, order id ] by key.
+	 */
+	private $deferred = array();
+
+	/**
+	 * Whether the shutdown flush has run on this request.
+	 *
+	 * @var bool
+	 */
+	private $shutdown_flushed = false;
+
+	/**
 	 * Constructor — hook order events.
+	 *
+	 * The order hooks fire inside WC_Order::save(), so they only record the
+	 * order; the jobs are created at shutdown. Creating them inline ran a
+	 * WP_Query, a wp_insert_post() per job (every plugin's save_post
+	 * listeners), the relay hint and an order meta save inside the order's
+	 * own save, where any throw became an "Error during status transition"
+	 * order note.
 	 */
 	public function __construct() {
 		$this->jobs     = new Print_Job_Service();
 		$this->registry = new Cloud_Print_Registry();
-		add_action( 'woocommerce_new_order', array( $this, 'handle_order' ), 20, 1 );
-		add_action( 'woocommerce_order_status_changed', array( $this, 'handle_order' ), 20, 1 );
-		add_action( 'woocommerce_payment_complete', array( $this, 'handle_paid_order' ), 20, 1 );
+		add_action( 'woocommerce_new_order', array( $this, 'defer_order' ), 20, 1 );
+		add_action( 'woocommerce_order_status_changed', array( $this, 'defer_order' ), 20, 1 );
+		add_action( 'woocommerce_payment_complete', array( $this, 'defer_paid_order' ), 20, 1 );
 	}
 
 	/**
-	 * Handle payment completing for an order.
-	 *
-	 * Runs after WC_Order::payment_complete() has moved the order to its
-	 * post-payment status, which a status-changed callback may have already
-	 * seen as a non-paid status. Remember the paid signal, then re-evaluate.
+	 * Record an order event; the order is evaluated at shutdown.
 	 *
 	 * @param int $order_id Order ID.
 	 */
-	public function handle_paid_order( $order_id ): void {
-		$this->payment_completed[ (int) $order_id ] = true;
-		$this->handle_order( $order_id );
+	public function defer_order( $order_id ): void {
+		$order_id = (int) $order_id;
+
+		if ( $this->evaluates_now() ) {
+			$this->evaluate( $order_id );
+			return;
+		}
+
+		$key = self::order_key( $order_id );
+		if ( ! isset( $this->deferred[ $key ] ) ) {
+			$this->deferred[ $key ] = array( get_current_blog_id(), $order_id );
+		}
+
+		// LAST on shutdown, like the sync journal: WooCommerce saves the
+		// customer at 10 and the session at 20, and an order event those raise
+		// must still find the list open. Zero accepted args: do_action(
+		// 'shutdown' ) passes an empty string otherwise.
+		if ( false === has_action( 'shutdown', array( $this, 'flush_deferred_at_shutdown' ) ) ) {
+			add_action( 'shutdown', array( $this, 'flush_deferred_at_shutdown' ), PHP_INT_MAX, 0 );
+		}
+	}
+
+	/**
+	 * Record a payment completing; the order is evaluated at shutdown.
+	 *
+	 * The paid signal is remembered now, so the shutdown evaluation sees it.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function defer_paid_order( $order_id ): void {
+		$this->payment_completed[ self::order_key( (int) $order_id ) ] = true;
+		$this->defer_order( $order_id );
+	}
+
+	/**
+	 * Evaluate every deferred order, in event order.
+	 *
+	 * Idempotent: the list is emptied before any evaluation, so a throw or an
+	 * order event raised while printing cannot replay an entry. One order's
+	 * failure is logged and does not stop the next.
+	 */
+	public function flush_deferred(): void {
+		$deferred       = $this->deferred;
+		$this->deferred = array();
+
+		foreach ( $deferred as $entry ) {
+			list( $blog_id, $order_id ) = $entry;
+			$switch                     = is_multisite() && get_current_blog_id() !== $blog_id;
+			if ( $switch ) {
+				switch_to_blog( $blog_id );
+			}
+			try {
+				$this->evaluate( $order_id );
+			} finally {
+				if ( $switch ) {
+					restore_current_blog();
+				}
+			}
+		}
+	}
+
+	/**
+	 * Evaluate one order outside its save; a failure is logged, never thrown.
+	 *
+	 * Nothing propagates out of a shutdown handler anyway, and one order's
+	 * failure must not stop the next; the log line is what support needs.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function evaluate( int $order_id ): void {
+		try {
+			$this->handle_order( $order_id );
+		} catch ( \Throwable $e ) {
+			Logger::log( sprintf( 'Cloud print: creating print jobs for order #%d failed: %s', $order_id, $e->getMessage() ) );
+		}
+	}
+
+	/**
+	 * Whether an order event must be evaluated now instead of queued.
+	 *
+	 * - After the shutdown flush: nothing flushes twice, so an event raised
+	 *   by a later shutdown handler is evaluated at once.
+	 * - In the last shutdown priority with no flush registered yet: a callback
+	 *   added at PHP_INT_MAX while that priority is running never runs. A
+	 *   flush registered before it started is still ahead (the latch is not
+	 *   set), so the event is queued for it. At an earlier priority (WooCommerce
+	 *   saves the customer at 10, the session at 20) WordPress still runs a
+	 *   flush added late, so the event is queued as usual.
+	 * - Under WP-CLI: the pre-deferral behaviour. A CLI process has no guest
+	 *   or kses exposure, the operator sees the output, and receipts must not
+	 *   wait for a long importer to finish.
+	 */
+	private function evaluates_now(): bool {
+		if ( $this->shutdown_flushed || ( \defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return true;
+		}
+		if ( ! doing_action( 'shutdown' ) ) {
+			return false;
+		}
+
+		global $wp_filter;
+		$priority = isset( $wp_filter['shutdown'] ) ? $wp_filter['shutdown']->current_priority() : false;
+		if ( false === $priority ) {
+			return true;
+		}
+		if ( PHP_INT_MAX !== $priority ) {
+			return false;
+		}
+
+		return false === has_action( 'shutdown', array( $this, 'flush_deferred_at_shutdown' ) );
+	}
+
+	/**
+	 * Request-scoped key for an order: blog and order id.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private static function order_key( int $order_id ): string {
+		return get_current_blog_id() . ':' . $order_id;
+	}
+
+	/**
+	 * Shutdown flush: evaluate the deferred orders, then evaluate any later
+	 * event at once.
+	 */
+	public function flush_deferred_at_shutdown(): void {
+		$this->shutdown_flushed = true;
+		$this->flush_deferred();
 	}
 
 	/**
@@ -391,7 +539,7 @@ class Cloud_Print_Trigger_Service {
 		}
 
 		return $order->is_paid()
-			|| ! empty( $this->payment_completed[ $order->get_id() ] )
+			|| ! empty( $this->payment_completed[ self::order_key( $order->get_id() ) ] )
 			|| null !== $order->get_date_paid();
 	}
 
