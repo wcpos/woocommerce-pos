@@ -75,6 +75,7 @@ class Save_Reentry_Guard {
 		'wp_insert_post_data',
 		'content_save_pre',
 		'pre_delete_post',
+		'pre_delete_attachment',
 		'delete_post',
 		'before_delete_post',
 		'wp_trash_post',
@@ -206,6 +207,8 @@ class Save_Reentry_Guard {
 			add_action( 'woocommerce_before_' . $type . '_object_save', array( __CLASS__, 'on_wc_data_save' ), 1, 1 );
 		}
 		add_filter( 'pre_delete_post', array( __CLASS__, 'on_pre_delete_post' ), 1, 2 );
+		// wp_delete_post() hands attachments to wp_delete_attachment(), which fires this instead.
+		add_filter( 'pre_delete_attachment', array( __CLASS__, 'on_pre_delete_post' ), 1, 2 );
 		add_action( 'wp_trash_post', array( __CLASS__, 'on_trash_post' ), 1, 1 );
 	}
 
@@ -254,7 +257,8 @@ class Save_Reentry_Guard {
 	}
 
 	/**
-	 * `pre_delete_post` filter: fires inside wp_delete_post().
+	 * `pre_delete_post` filter, fired inside wp_delete_post(), and `pre_delete_attachment`,
+	 * fired inside wp_delete_attachment() (where wp_delete_post() sends attachments).
 	 *
 	 * @param mixed    $delete Short-circuit value.
 	 * @param \WP_Post $post   Post being deleted.

@@ -123,6 +123,41 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Deleting an attachment from inside a stock hook trips: wp_delete_post() hands it to
+	 * wp_delete_attachment(), which fires pre_delete_attachment, not pre_delete_post.
+	 */
+	public function test_guard_attachment_delete_inside_set_stock_hook_throws_naming_caller(): void {
+		// Arrange.
+		$this->setExpectedIncorrectUsage( Save_Reentry_Guard::NOTICE );
+		$product_id    = $this->create_managed_stock_product();
+		$attachment_id = self::factory()->attachment->create_object(
+			array(
+				'file'           => 'save-reentry-guard.jpg',
+				'post_mime_type' => 'image/jpeg',
+			)
+		);
+		add_action(
+			'woocommerce_product_set_stock',
+			function () use ( $attachment_id ) {
+				reentry_offender_delete_post( $attachment_id );
+			}
+		);
+
+		// Act.
+		$message = '';
+		try {
+			wc_update_product_stock( wc_get_product( $product_id ), 4, 'set' );
+		} catch ( LogicException $e ) {
+			$message = $e->getMessage();
+		}
+
+		// Assert.
+		$this->assertStringContainsString( 'fixtures/save-reentry-offender.php:', $message );
+		$this->assertStringContainsString( 'deleted attachment #' . $attachment_id . ' (wp_delete_post())', $message );
+		$this->assertStringContainsString( "inside 'woocommerce_product_set_stock'", $message );
+	}
+
+	/**
 	 * The same wp_update_post() from a request context (no save hook running) passes.
 	 */
 	public function test_guard_update_post_from_request_context_passes(): void {
