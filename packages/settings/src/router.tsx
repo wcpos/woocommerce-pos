@@ -17,7 +17,6 @@ import ExtensionsPage from './screens/extensions';
 import GeneralPage from './screens/general';
 import LicensePage from './screens/license';
 import LogsPage from './screens/logs';
-import RegistersPage from './screens/registers';
 import SessionsPage from './screens/sessions';
 
 // Root route — renders the full-page layout with sidebar navigation.
@@ -82,12 +81,6 @@ const sessionsRoute = createRoute({
 	// No loader — sessions uses different API endpoints
 });
 
-const registersRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: '/registers',
-	component: RegistersPage,
-});
-
 const exportClosuresRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/export-closures',
@@ -128,7 +121,6 @@ const routeTree = rootRoute.addChildren([
 	cloudPrintRoute,
 	accessRoute,
 	sessionsRoute,
-	registersRoute,
 	exportClosuresRoute,
 	extensionsRoute,
 	logsRoute,

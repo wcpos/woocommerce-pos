@@ -1,10 +1,5 @@
 {
 	"settings.register_section_title": "Register",
-	"settings.register_sessions": "Register sessions",
-	"settings.variance_threshold": "Variance threshold",
-	"settings.variance_threshold_tip": "Leave blank for no threshold.",
-	"settings.expected_close_time": "Expected close time",
-	"settings.expected_close_time_tip": "HH:MM. Leave blank for none.",
 	"cloudflare.title": "Your store is behind Cloudflare",
 	"cloudflare.body": "Cloudflare's security checks (Bot Fight Mode, Under Attack Mode and WAF challenges) can stop the WCPOS app from reaching your store's REST API. If the app reports \"This store's hosting setup is blocking the app\" (HOST121) or opens a security-check window, the fix is in your Cloudflare dashboard: a WAF Skip rule for /wp-json/, or turning off Bot Fight Mode, which no rule can bypass.",
 	"cloudflare.plugin_note": "The Cloudflare WordPress plugin does not manage these rules. They live in the Cloudflare dashboard.",
@@ -361,10 +356,16 @@
 	"cloud_print.trigger_created": "as soon as it's created",
 	"cloud_print.rule_copies_suffix": ".",
 	"cloud_print.add_rule": "+ Add rule",
-	"registers.registers": "Registers",
-	"registers.name": "Name",
-	"registers.default_float": "Default float",
-	"registers.empty": "No registers have connected yet.",
-	"registers.one_register": "One register per site. Two devices share it; more registers need WCPOS Pro.",
-	"registers.save_failed": "Register could not be saved."
+	"settings.open_close_register": "Open and close the register",
+	"settings.open_close_register_help": "Cashiers open with a float, record cash in and out, and count the drawer at close.",
+	"settings.opening_float": "Opening float",
+	"settings.opening_float_help": "Pre-filled when the register is opened. The cashier can type what is actually in the drawer.",
+	"settings.ask_manager": "Ask a manager when the count is out",
+	"settings.by_more_than": "by more than",
+	"settings.ask_manager_help": "Short or over by more than this at close needs a manager's code before the register closes.",
+	"settings.close_reminder": "Remind the cashier to close",
+	"settings.close_at": "at",
+	"settings.close_reminder_help": "After this time the bar shows Overdue, and Checkout becomes Close register when the cart is empty.",
+	"settings.more_registers_pro": "More registers and stores with Pro",
+	"settings.register_save_failed": "Register could not be saved."
 }

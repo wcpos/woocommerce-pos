@@ -1181,8 +1181,8 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		$route = '/wcpos/v2/settings/general';
 		$defaults = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
 		$this->assertFalse( $defaults['register_sessions'] );
-		$this->assertSame( '', $defaults['variance_threshold'] );
-		$this->assertSame( '', $defaults['expected_close_time'] );
+		$this->assertNull( $defaults['variance_threshold'] );
+		$this->assertNull( $defaults['expected_close_time'] );
 		foreach ( array(
 			'expected_close_time' => '25:00',
 			'variance_threshold' => '-5',
@@ -1200,15 +1200,18 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		foreach ( $fields as $key => $value ) {
 			$this->assertSame( $value, $read[ $key ], $key );
 		}
-		$blank = $this->post_settings(
-			$route,
-			array(
-				'variance_threshold' => '',
-				'expected_close_time' => '',
-			)
-		);
-		$this->assertSame( 200, $blank->get_status() );
-		$this->assertSame( '', $blank->get_data()['variance_threshold'] );
-		$this->assertSame( '', $blank->get_data()['expected_close_time'] );
+		foreach ( array( '', null ) as $off ) {
+			$response = $this->post_settings( $route, array( 'variance_threshold' => $off, 'expected_close_time' => $off ) );
+			$this->assertSame( 200, $response->get_status() );
+			$read = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
+			foreach ( array( 'variance_threshold', 'expected_close_time' ) as $key ) {
+				$this->assertNull( $response->get_data()[ $key ] );
+				$this->assertNull( $read[ $key ] );
+			}
+		}
+		update_option( 'woocommerce_pos_settings_general', array( 'variance_threshold' => '', 'expected_close_time' => '' ) );
+		$read = $this->server->dispatch( $this->wp_rest_get_request( $route ) )->get_data();
+		$this->assertNull( $read['variance_threshold'] );
+		$this->assertNull( $read['expected_close_time'] );
 	}
 }

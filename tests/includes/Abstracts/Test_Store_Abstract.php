@@ -50,6 +50,17 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 	private $original_pos_store_email;
 	private $original_pos_refund_returns_policy;
 
+	/** The Free till receives General's policy, using strings for disabled limits. */
+	public function test_register_policy_reaches_store_record(): void {
+		foreach ( array( array( true, '5.00', '17:30' ), array( false, null, null ), array( true, '', '' ) ) as $values ) {
+			update_option( 'woocommerce_pos_settings_general', array_combine( array( 'register_sessions', 'variance_threshold', 'expected_close_time' ), $values ) );
+			$record = ( new Store() )->get_data();
+			$this->assertSame( $values[0], $record['register_sessions'] );
+			$this->assertSame( $values[1] ?? '', $record['variance_threshold'] );
+			$this->assertSame( $values[2] ?? '', $record['expected_close_time'] );
+		}
+	}
+
 	public function setUp(): void {
 		parent::setUp();
 		$this->original_tax_based_on = get_option( 'woocommerce_tax_based_on', null );
@@ -115,6 +126,9 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'timezone',
 			'default_customer',
 			'default_customer_is_cashier',
+			'register_sessions',
+			'variance_threshold',
+			'expected_close_time',
 			'tracking_consent',
 			'store_address',
 			'store_address_2',

@@ -138,8 +138,8 @@ class Test_General_Section extends WP_UnitTestCase {
 		$section = new General_Section();
 		$defaults = $section->defaults();
 		$this->assertFalse( $defaults['register_sessions'] );
-		$this->assertSame( '', $defaults['variance_threshold'] );
-		$this->assertSame( '', $defaults['expected_close_time'] );
+		$this->assertNull( $defaults['variance_threshold'] );
+		$this->assertNull( $defaults['expected_close_time'] );
 		$args = $section->endpoint_args();
 		foreach ( array(
 			array( 'register_sessions', true, true ),
@@ -147,11 +147,28 @@ class Test_General_Section extends WP_UnitTestCase {
 			array( 'expected_close_time', '25:00', false ),
 			array( 'expected_close_time', '18:30', true ),
 			array( 'expected_close_time', '', true ),
+			array( 'expected_close_time', null, true ),
 			array( 'variance_threshold', '-5', false ),
 			array( 'variance_threshold', '5.00', true ),
 			array( 'variance_threshold', '', true ),
+			array( 'variance_threshold', null, true ),
 		) as list( $key, $value, $valid ) ) {
 			$this->assertSame( $valid, $args[ $key ]['validate_callback']( $value, null, $key ), $key );
+		}
+	}
+
+	/** Legacy blanks read as off without rewriting the option, and writes persist null. */
+	public function test_register_policy_blanks_normalize_on_read_and_write(): void {
+		$section = new General_Section();
+		$blank = array( 'variance_threshold' => '', 'expected_close_time' => '' );
+		update_option( 'woocommerce_pos_settings_general', $blank );
+		foreach ( array_keys( $blank ) as $key ) {
+			$this->assertNull( $section->read()[ $key ] );
+			$this->assertSame( '', get_option( 'woocommerce_pos_settings_general' )[ $key ] );
+		}
+		$section->write( $blank );
+		foreach ( array_keys( $blank ) as $key ) {
+			$this->assertNull( get_option( 'woocommerce_pos_settings_general' )[ $key ] );
 		}
 	}
 }

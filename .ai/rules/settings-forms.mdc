@@ -1,0 +1,15 @@
+---
+description: Settings and admin forms follow rule 11 of the monorepo's CODING_STANDARDS § Design
+globs: ["packages/settings/**", "packages/ui/**"]
+---
+
+1. A setting is a sentence the owner would say; the control sits where the value goes in the sentence.
+2. Every value carries its unit inside the control: a currency symbol in a money field, a time picker for a time.
+3. Optional behaviour is a switch, and its value appears when the switch is on. "Leave blank for none" is a bug.
+4. The help line says what happens at the till, in one sentence. Never the format, never the label again.
+5. Plain words: float, drawer, count, short or over, close. Never variance, threshold, session, expected.
+6. The common case is one switch; everything that only matters when it is on is hidden while it is off.
+7. Inherited or customised is shown on the field, never implied by blank.
+8. Defaults are prefilled and visible in the control, not described in a tip.
+
+The long form with examples: `docs/design/ui-design-guidelines.md` section 11 in wcpos/roadmap.

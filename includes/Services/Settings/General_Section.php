@@ -36,8 +36,8 @@ class General_Section extends Abstract_Section {
 	public function defaults(): array {
 		return array(
 			'register_sessions'           => false,
-			'variance_threshold'          => '',
-			'expected_close_time'         => '',
+			'variance_threshold'          => null,
+			'expected_close_time'         => null,
 			'pos_only_products'           => false,
 			'decimal_qty'                 => false,
 			'force_ssl'                   => true,
@@ -112,6 +112,12 @@ class General_Section extends Abstract_Section {
 	 * @param array $settings Merged settings.
 	 */
 	protected function compose( array $settings ): array {
+		foreach ( array( 'variance_threshold', 'expected_close_time' ) as $key ) {
+			if ( '' === ( $settings[ $key ] ?? null ) ) {
+				$settings[ $key ] = null;
+			}
+		}
+
 		$settings['store_tax_ids']  = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
 		$settings['store_defaults'] = Store_Defaults::fallbacks();
 
@@ -124,6 +130,12 @@ class General_Section extends Abstract_Section {
 	 * @param array $settings General settings.
 	 */
 	protected function sanitize( array $settings ): array {
+		foreach ( array( 'variance_threshold', 'expected_close_time' ) as $key ) {
+			if ( '' === ( $settings[ $key ] ?? null ) ) {
+				$settings[ $key ] = null;
+			}
+		}
+
 		if ( \array_key_exists( 'store_tax_ids', $settings ) ) {
 			$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
 		}
@@ -195,12 +207,12 @@ class General_Section extends Abstract_Section {
 			),
 			'variance_threshold'         => array(
 				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^\d+(?:\.\d+)?$/D', $param ) );
+					return null === $param || ( \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^\d+(?:\.\d+)?$/D', $param ) ) );
 				},
 			),
 			'expected_close_time'        => array(
 				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $param ) );
+					return null === $param || ( \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $param ) ) );
 				},
 			),
 			'pos_only_products'          => array(
