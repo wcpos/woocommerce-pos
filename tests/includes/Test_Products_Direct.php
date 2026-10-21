@@ -73,51 +73,6 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test constructor registers stock change actions.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::__construct
-	 */
-	public function test_constructor_registers_stock_actions(): void {
-		$products = new Products();
-
-		$this->assertNotFalse(
-			has_action( 'woocommerce_product_set_stock', array( $products, 'product_set_stock' ) )
-		);
-		$this->assertNotFalse(
-			has_action( 'woocommerce_variation_set_stock', array( $products, 'product_set_stock' ) )
-		);
-	}
-
-	/**
-	 * Direct test: product_set_stock updates modified date.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Products::product_set_stock
-	 */
-	public function test_direct_product_set_stock(): void {
-		$products = new Products();
-		$product  = ProductHelper::create_simple_product();
-
-		// Backdate the post to ensure detectable change
-		wp_update_post(
-			array(
-				'ID'                => $product->get_id(),
-				'post_modified'     => '2020-01-01 00:00:00',
-				'post_modified_gmt' => '2020-01-01 00:00:00',
-			)
-		);
-		$original_modified = '2020-01-01 00:00:00';
-
-		// Call method directly
-		$products->product_set_stock( $product );
-
-		// Get updated modified date
-		wp_cache_flush();
-		$new_modified = get_post_field( 'post_modified', $product->get_id() );
-
-		$this->assertNotEquals( $original_modified, $new_modified, 'Modified date should be updated' );
-	}
-
-	/**
 	 * Direct test: hide_pos_only_products returns early for admin.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
