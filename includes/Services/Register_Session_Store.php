@@ -99,15 +99,51 @@ final class Register_Session_Store {
 		$columns = self::COLUMNS;
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns, prepared predicates, integer pagination.
 		$rows = $wpdb->get_results( "SELECT {$columns} FROM {$table} WHERE {$where} ORDER BY opened_at_gmt DESC, id DESC LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
-		foreach ( $rows as &$row ) {
-			foreach ( array( 'store_id', 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
-				$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
-			}
-			foreach ( array( 'counted', 'approved_counted', 'approved_expected' ) as $key ) {
-				$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
+		return array_map( array( self::class, 'normalize_row' ), $rows );
+	}
+
+	/** Current (not closed) sessions keyed by register id; one query for the whole list.
+	 *
+	 * @param string[] $register_ids Register UUIDs.
+	 * @throws \RuntimeException On read failure.
+	 */
+	public function open_for_registers( array $register_ids ): array {
+		global $wpdb;
+		if ( ! $register_ids ) {
+			return array();
+		}
+		$this->ensure_installed();
+		$table = $this->table_name();
+		$columns = self::COLUMNS;
+		$placeholders = implode( ', ', array_fill( 0, count( $register_ids ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns and generated placeholders.
+		$sql = $wpdb->prepare( "SELECT {$columns} FROM {$table} WHERE register_id IN ({$placeholders}) AND status != 'closed' ORDER BY opened_at_gmt DESC, id DESC", array_values( $register_ids ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared immediately above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Register session read failed.' );
+		}
+		$sessions = array();
+		foreach ( $rows as $row ) {
+			if ( ! isset( $sessions[ $row['register_id'] ] ) ) {
+				$sessions[ $row['register_id'] ] = self::normalize_row( $row );
 			}
 		}
-		return $rows;
+		return $sessions;
+	}
+
+	/** Cast stored session types consistently for single and batch reads.
+	 *
+	 * @param array $row Raw session row.
+	 */
+	private static function normalize_row( array $row ): array {
+		foreach ( array( 'store_id', 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
+			$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
+		}
+		foreach ( array( 'counted', 'approved_counted', 'approved_expected' ) as $key ) {
+			$row[ $key ] = null === $row[ $key ] ? null : json_decode( $row[ $key ], true );
+		}
+		return $row;
 	}
 
 	/** Insert validated opening fields; replay preserves the original.
