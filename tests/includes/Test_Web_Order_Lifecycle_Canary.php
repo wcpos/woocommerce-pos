@@ -190,11 +190,19 @@ class Test_Web_Order_Lifecycle_Canary extends WC_Unit_Test_Case {
 			$this->assertStringNotContainsString( 'Unable to restore stock', $note->content );
 		}
 
-		// Assert: plugin code never sat on the stack of a save of either product.
+		// Assert: plugin code never sat on the stack of a save of any product the counters
+		// saw, the variable parent included.
 		foreach ( array( $this->simple_id, $this->variation_id ) as $product_id ) {
 			$this->assertGreaterThan( 0, $this->product_save_counts[ $product_id ]['total'] ?? 0, "Precondition: WooCommerce saved #{$product_id} during the sale, so the counter is live." );
-			$this->assertSame( 0, $this->save_post_counts[ $product_id ]['from_plugin'] ?? 0, "save_post on #{$product_id} with WCPOS code on the stack." );
-			$this->assertSame( 0, $this->product_save_counts[ $product_id ]['from_plugin'] ?? 0, "WC_Data save of #{$product_id} with WCPOS code on the stack." );
+		}
+		foreach ( $this->product_save_counts as $product_id => $counts ) {
+			$this->assertSame( 0, $counts['from_plugin'], "WC_Data save of product #{$product_id} with WCPOS code on the stack." );
+		}
+		foreach ( $this->save_post_counts as $post_id => $counts ) {
+			if ( ! \in_array( get_post_type( $post_id ), array( 'product', 'product_variation' ), true ) ) {
+				continue;
+			}
+			$this->assertSame( 0, $counts['from_plugin'], "save_post on product #{$post_id} with WCPOS code on the stack." );
 		}
 
 		// Assert: kses never ran over the admin-saved description.

@@ -191,6 +191,28 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A settings save is a request entry point, not an object save: a post save from a
+	 * handler on woocommerce_update_options_{tab} passes.
+	 */
+	public function test_guard_update_post_inside_update_options_hook_passes(): void {
+		// Arrange.
+		$product_id = $this->create_managed_stock_product();
+		$result     = null;
+		add_action(
+			'woocommerce_update_options_general',
+			function () use ( $product_id, &$result ) {
+				$result = reentry_offender_update_post( $product_id );
+			}
+		);
+
+		// Act.
+		do_action( 'woocommerce_update_options_general' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- fires WooCommerce's settings-save hook.
+
+		// Assert.
+		$this->assertSame( $product_id, $result );
+	}
+
+	/**
 	 * Test code saving inside a save hook is not plugin code and passes.
 	 */
 	public function test_guard_test_code_saving_inside_set_stock_hook_passes(): void {

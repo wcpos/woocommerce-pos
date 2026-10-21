@@ -20,15 +20,20 @@ A third-party `save_post` listener threw, WooCommerce swallowed it before writin
 
 From a handler on a WordPress or WooCommerce save, status-transition, stock or checkout
 hook (`save_post*`, `wp_insert_post`, `transition_post_status`,
-`woocommerce_before/after_*_object_save`, `woocommerce_new_*` / `woocommerce_update_*`,
-`woocommerce_order_status_*`, `woocommerce_payment_complete`,
-`woocommerce_product_set_stock`, `woocommerce_reduce_order_stock`,
-`woocommerce_checkout_*`, `woocommerce_rest_insert_*`, and the rest of the list in the
-guard), never call:
+`woocommerce_before/after_*_object_save`, `woocommerce_new_{object}` /
+`woocommerce_update_{object}`, `woocommerce_order_status_*`, `woocommerce_payment_complete`,
+`woocommerce_product_set_stock`, `woocommerce_reduce_order_stock`, the checkout
+order-creation hooks, `woocommerce_rest_insert_*`, and the rest of the list in the guard),
+never call anything that re-enters the save stack: `wp_insert_post()`, `wp_update_post()`,
+`wp_delete_post()`, `wp_trash_post()`, `WC_Data::save()` on any product, order, refund,
+coupon or customer, or any other function that runs a save from the top.
 
-- `wp_update_post()`, `wp_insert_post()`, `wp_delete_post()`, `wp_trash_post()`;
-- `WC_Data::save()` on any product, order, refund, coupon or customer;
-- direct SQL that writes `{$wpdb->posts}`, `{$wpdb->postmeta}` or the order tables.
+The forbidden thing is re-running the save stack, not touching the row. When a write
+genuinely cannot move out of the hook, the last resort is a direct `$wpdb->update()` of
+the one column you need plus `clean_post_cache()` (or WooCommerce's cache clear for that
+object), with a comment saying why it has to happen there. That is the pattern WooCommerce
+itself uses for `post_modified`, and the one `includes/Sync/Coupon_Modified_Date.php` uses
+for the coupon timestamp.
 
 Assigning terms to the post being saved from its own `save_post_{type}` handler
 (`wp_set_object_terms()`) is fine: it is WordPress's meta-box pattern and does not
@@ -57,6 +62,9 @@ payment paths):
 includes/Products.php:79 saved product #10 (wp_update_post()) inside 'woocommerce_product_set_stock'.
 A save inside a WooCommerce or WordPress save or transition hook re-runs ...
 ```
+
+The guard watches the save entry points and does not see SQL, on purpose: the narrow
+`$wpdb->update()` above is the sanctioned alternative, not a loophole.
 
 There is no exemption list. Move the write; do not catch the exception, narrow the hook
 list, or route the save through a WooCommerce helper so the caller looks like core.

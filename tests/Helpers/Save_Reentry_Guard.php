@@ -99,6 +99,41 @@ class Save_Reentry_Guard {
 		'woocommerce_checkout_create_order',
 		'woocommerce_checkout_update_order_meta',
 		'woocommerce_checkout_order_created',
+
+		// Checkout order creation: the item and customer writes WC_Checkout makes while it
+		// builds the order. Listed one by one; the non-write checkout filters
+		// (woocommerce_checkout_fields and friends) stay off.
+		'woocommerce_checkout_create_order_line_item',
+		'woocommerce_checkout_create_order_fee_item',
+		'woocommerce_checkout_create_order_shipping_item',
+		'woocommerce_checkout_create_order_tax_item',
+		'woocommerce_checkout_create_order_coupon_item',
+		'woocommerce_checkout_update_customer',
+
+		// WooCommerce data store create/update events, per object type. Exact names, not a
+		// woocommerce_new_ / woocommerce_update_ prefix: that would also catch settings saves
+		// (woocommerce_update_options_{tab}, woocommerce_update_option), which run at a
+		// request entry point.
+		'woocommerce_new_product',
+		'woocommerce_update_product',
+		'woocommerce_new_product_variation',
+		'woocommerce_update_product_variation',
+		'woocommerce_new_order',
+		'woocommerce_update_order',
+		'woocommerce_new_order_refund',
+		'woocommerce_update_order_refund',
+		'woocommerce_new_order_item',
+		'woocommerce_update_order_item',
+		'woocommerce_new_coupon',
+		'woocommerce_update_coupon',
+		'woocommerce_new_customer',
+		'woocommerce_update_customer',
+		'woocommerce_new_webhook',
+		'woocommerce_update_webhook',
+		'woocommerce_new_payment_token',
+		'woocommerce_update_payment_token',
+		'woocommerce_new_shipping_zone',
+		'woocommerce_update_shipping_zone',
 	);
 
 	/**
@@ -109,11 +144,9 @@ class Save_Reentry_Guard {
 		// WordPress post save stack: the per-type save action.
 		array( 'save_post_', '' ),
 
-		// WooCommerce object saves: WC_Data::save() and the data stores' create/update events.
+		// WooCommerce object saves: WC_Data::save() and the data stores' updated-props event.
 		array( 'woocommerce_before_', '_object_save' ),
 		array( 'woocommerce_after_', '_object_save' ),
-		array( 'woocommerce_new_', '' ),
-		array( 'woocommerce_update_', '' ),
 		array( 'woocommerce_', '_object_updated_props' ),
 
 		// Order life-cycle: every status pair, woocommerce_order_status_changed, and the
