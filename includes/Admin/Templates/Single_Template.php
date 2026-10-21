@@ -432,7 +432,9 @@ class Single_Template {
 			(string) get_post_meta( $post_id, '_template_paper_width', true )
 		);
 
-		$title = sanitize_post_field( 'post_title', $title, $post_id, 'db' );
+		// Sanitize the way wp_insert_post() does: the db filters (kses for a user
+		// without unfiltered_html) expect slashed data; the column takes it unslashed.
+		$title = wp_unslash( sanitize_post_field( 'post_title', wp_slash( $title ), $post_id, 'db' ) );
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- See the docblock; the post cache is cleared below.

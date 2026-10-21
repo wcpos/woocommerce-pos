@@ -303,6 +303,68 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A fallback title with an apostrophe is stored without a slash for a user without unfiltered_html.
+	 *
+	 * Without unfiltered_html the title passes through kses, which works on
+	 * slashed data; the direct write must store the unslashed value, as
+	 * wp_insert_post() would.
+	 */
+	public function test_admin_save_fallback_title_with_apostrophe_is_stored_unslashed(): void {
+		// Arrange.
+		$this->remove_unfiltered_html();
+		$localise = static function ( $translation, $text ) {
+			return 'Thermal Receipt Template (%1$s) #%2$d' === $text ? 'Kitchen\'s Receipt (%1$s) #%2$d' : $translation;
+		};
+		add_filter( 'gettext', $localise, 10, 2 );
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_status'  => 'auto-draft',
+				'post_title'   => '',
+				'post_content' => '',
+			)
+		);
+
+		// phpcs:disable WordPress.Security
+		$_POST['wcpos_template_settings_nonce'] = wp_create_nonce( 'wcpos_template_settings' );
+		$_POST['content']                       = addslashes( $this->sample_xml );
+		$_POST['wcpos_template_engine']         = 'thermal';
+		$_POST['wcpos_template_paper_width']    = '80mm';
+		// phpcs:enable WordPress.Security
+
+		new Single_Template();
+		$seen_title = null;
+		$later      = static function ( $saved_id, $saved_post ) use ( $post_id, &$seen_title ): void {
+			if ( (int) $saved_id === $post_id ) {
+				$seen_title = $saved_post->post_title;
+			}
+		};
+		add_action( 'save_post_wcpos_template', $later, 20, 2 );
+
+		// Act.
+		try {
+			wp_update_post(
+				array(
+					'ID'           => $post_id,
+					'post_status'  => 'publish',
+					'post_title'   => '',
+					'post_content' => $this->sample_xml,
+				)
+			);
+		} finally {
+			remove_action( 'save_post_wcpos_template', $later, 20 );
+			remove_filter( 'gettext', $localise, 10 );
+			$this->cleanup_post_globals();
+		}
+
+		// Assert.
+		$expected = sprintf( "Kitchen's Receipt (80mm) #%d", $post_id );
+		clean_post_cache( $post_id );
+		$this->assertSame( $expected, get_post( $post_id )->post_title );
+		$this->assertSame( $expected, $seen_title );
+	}
+
+	/**
 	 * Test that saving a thermal (XML) template preserves raw XML content.
 	 */
 	public function test_save_thermal_template_preserves_raw_xml(): void {
