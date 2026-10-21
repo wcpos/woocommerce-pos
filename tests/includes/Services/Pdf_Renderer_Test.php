@@ -510,7 +510,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 		// Arrange.
 		$html = '<div style="font-family: \'Courier New\', Courier, monospace; '
 			. 'font-size: 13px; line-height: 1.4; background: #fff; color: #000; '
-			. 'padding: 16px 12px; overflow: hidden; white-space: pre-wrap; word-break: break-all;">Σύνολο</div>';
+			. 'padding: 16px 12px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere;">Σύνολο</div>';
 
 		// Act.
 		$pdf = $this->renderer->render_html(
