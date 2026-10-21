@@ -13,4 +13,4 @@ alwaysApply: false
 7. Inherited or customised is shown on the field, never implied by blank.
 8. Defaults are prefilled and visible in the control, not described in a tip.
 
-The long form with examples: `docs/design/ui-design-guidelines.md` section 11 in wcpos/roadmap.
+The long form with examples: [docs/design/ui-design-guidelines.md, section 11](https://github.com/wcpos/roadmap/blob/main/docs/design/ui-design-guidelines.md) in wcpos/roadmap.
