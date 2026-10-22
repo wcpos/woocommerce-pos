@@ -124,7 +124,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 
 	/** Every server-owned meta key (ADR 0040 rule 2), spelled out so the pin does not trust the constant it pins. */
 	protected function server_money_meta_keys(): array {
-		return array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_fiscal_pending', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date' );
+		return array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_fiscal_pending', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date', '_wcpos_checkout_state' );
 	}
 
 	/** Every top-level wc/v3 money field, set to a value that would mark the order paid. */
@@ -2044,6 +2044,162 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
 	}
 
+
+	/** The stored rows (id, key, value) of a line's storage keys and stock baseline, read from the table. */
+	protected function stored_item_meta_rows( int $item_id ): array {
+		global $wpdb;
+		$keys = array_merge( ( new \WC_Order_Item_Product() )->get_data_store()->get_internal_meta_keys(), array( '_reduced_stock' ) );
+		$rows = array();
+		foreach ( $wpdb->get_results( $wpdb->prepare( "SELECT meta_id, meta_key, meta_value FROM {$wpdb->prefix}woocommerce_order_itemmeta WHERE order_item_id = %d", $item_id ) ) as $row ) {
+			if ( in_array( $row->meta_key, $keys, true ) ) {
+				$rows[] = array( (int) $row->meta_id, $row->meta_key, $row->meta_value );
+			}
+		}
+		sort( $rows );
+
+		return $rows;
+	}
+
+	/** Every form of entry naming a stored row: by id under its key and under another key, and as id tombstones with and without a key. */
+	protected function entries_naming_rows( array $rows ): array {
+		$entries = array();
+		foreach ( $rows as $row ) {
+			$entries[] = array(
+				'id'    => $row[0],
+				'key'   => $row[1],
+				'value' => '7',
+			);
+			$entries[] = array(
+				'id'    => $row[0],
+				'key'   => 'harmless',
+				'value' => '7',
+			);
+			$entries[] = array(
+				'id'    => $row[0],
+				'key'   => $row[1],
+				'value' => null,
+			);
+			$entries[] = array(
+				'id'    => $row[0],
+				'value' => null,
+			);
+			$entries[] = array(
+				'id'    => $row[0],
+				'value' => '7',
+			);
+		}
+
+		return $entries;
+	}
+
+	/** Each key by key and as a key tombstone. */
+	protected function entries_naming_keys( array $keys ): array {
+		$entries = array();
+		foreach ( $keys as $key ) {
+			$entries[] = array(
+				'key'   => $key,
+				'value' => '7',
+			);
+			$entries[] = array(
+				'key'   => $key,
+				'value' => null,
+			);
+		}
+
+		return $entries;
+	}
+
+	public static function push_operations(): array {
+		return array(
+			'create' => array( 'create' ),
+			'update' => array( 'update' ),
+		);
+	}
+
+	/**
+	 * I-c8: a push leaves every server-owned row, the payment fields and the status alone in every entry form,
+	 * with the before-save keeper unhooked, so the push lane relies on nothing the keeper restores.
+	 *
+	 * @dataProvider push_operations
+	 */
+	public function test_push_naming_every_server_owned_key_in_every_form_writes_none_of_them_without_the_keeper( string $operation ): void {
+		// Arrange: on update, a pos-open order holding a captured row, attempts, a stamp and a line with a stock baseline.
+		$order_keys = array_values( array_unique( array_merge( $this->server_money_meta_keys(), ( new \WC_Order() )->get_data_store()->get_internal_meta_keys() ) ) );
+		$product    = $this->product();
+		$order_id   = 0;
+		$item_id    = 0;
+		$before     = array();
+		$line_rows  = array();
+		if ( 'update' === $operation ) {
+			$order_id = $this->make_order( 'pos-open', array( array( $product, 1 ) ) );
+			Ledger::instance()->save( wc_get_order( $order_id ), array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
+			$order = wc_get_order( $order_id );
+			$order->update_meta_data( '_wcpos_gateway_attempts', array( wp_generate_uuid4() => 'cancelled' ) );
+			$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
+			$order->update_meta_data( '_wcpos_checkout_state', array( 'status' => 'failed' ) );
+			$item_id = (int) array_key_first( $order->get_items() );
+			$order->save();
+			$item = \WC_Order_Factory::get_order_item( $item_id );
+			$item->update_meta_data( '_reduced_stock', '1' );
+			$item->save();
+			$before    = $this->stored_meta_rows( $order_id, $order_keys );
+			$line_rows = $this->stored_item_meta_rows( $item_id );
+			$this->assertGreaterThanOrEqual( 5, count( $before ), 'the ledger, its index, the attempts, the stamp and the checkout state are stored' );
+			$this->assertContains( '_reduced_stock', array_column( $line_rows, 1 ) );
+		}
+		$paid_before = 'update' === $operation ? wc_get_order( $order_id )->get_date_paid( 'edit' ) : null;
+		$line        = array(
+			'quantity'  => 1,
+			'meta_data' => array_merge( $this->entries_naming_keys( array( '_reduced_stock', '_qty' ) ), $this->entries_naming_rows( $line_rows ) ),
+		);
+		$line       += 'update' === $operation ? array( 'id' => $item_id ) : array( 'product_id' => $product->get_id() );
+		$payload     = $this->server_money_fields() + array(
+			'customer_note' => 'The push was applied',
+			'line_items'    => array( $line ),
+			'meta_data'     => array_merge( $this->uuid_meta(), $this->entries_naming_keys( $order_keys ), $this->entries_naming_rows( $before ) ),
+		);
+		$completed   = 0;
+		$counter     = static function () use ( &$completed ): void {
+			++$completed;
+		};
+		$keeper      = array( Ledger::instance(), 'keep_closure_stamps' );
+		remove_action( 'woocommerce_before_order_object_save', $keeper, 10 );
+		add_action( 'woocommerce_payment_complete', $counter );
+
+		// Act.
+		try {
+			$response = 'create' === $operation
+				? $this->push_envelope( 'create', $payload )
+				: $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+		} finally {
+			add_action( 'woocommerce_before_order_object_save', $keeper, 10, 1 );
+			remove_action( 'woocommerce_payment_complete', $counter );
+		}
+
+		// Assert.
+		$this->assertSame( 'create' === $operation ? 201 : 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$order_id = 'create' === $operation ? (int) $response->get_data()['document']['id'] : $order_id;
+		$order    = wc_get_order( $order_id );
+		$item_id  = 'create' === $operation ? (int) array_key_first( $order->get_items() ) : $item_id;
+		$stored   = $this->stored_meta_rows( $order_id, $order_keys );
+		if ( 'create' === $operation ) {
+			$this->assertSame( array(), $this->stored_meta_rows( $order_id, $this->server_money_meta_keys() ) );
+			$this->assertNotContains( '7', array_column( $stored, 2 ), 'no data-store row holds a pushed value' );
+			$this->assertSame( array( '_qty' ), array_values( array_intersect( array( '_qty', '_reduced_stock' ), array_column( $this->stored_item_meta_rows( $item_id ), 1 ) ) ) );
+			$this->assertSame( 1, $order->get_item( $item_id )->get_quantity() );
+		} else {
+			$this->assertSame( $before, $stored );
+			$this->assertSame( $line_rows, $this->stored_item_meta_rows( $item_id ) );
+		}
+		$this->assertEquals( $paid_before, $order->get_date_paid( 'edit' ) );
+		$this->assertSame( '', $order->get_payment_method( 'edit' ) );
+		$this->assertSame( '', $order->get_payment_method_title( 'edit' ) );
+		$this->assertSame( '', $order->get_transaction_id( 'edit' ) );
+		$this->assertSame( 'create' === $operation ? 'pending' : 'pos-open', $order->get_status() );
+		$this->assertSame( 'The push was applied', $order->get_customer_note() );
+		$this->assertSame( '', $order->get_meta( 'harmless' ) );
+		$this->assertSame( 0, $completed );
+	}
 	/** A captured full-total row stamped by a closure: what a forged ledger would claim. */
 	protected function forged_ledger( string $amount ): string {
 		$row = $this->cash_payment( $amount ) + array(
