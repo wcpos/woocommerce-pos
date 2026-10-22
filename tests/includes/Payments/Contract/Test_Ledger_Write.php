@@ -594,28 +594,6 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( array(), $written->completion['payment_ids'] );
 	}
 
-	/** Is writing only while a write on that order runs. */
-	public function test_is_writing_is_true_only_inside_write_on_that_order(): void {
-		// Arrange.
-		$order  = $this->create_pos_order();
-		$inside = null;
-		$other  = null;
-
-		// Act.
-		Ledger::instance()->write(
-			$order,
-			function () use ( $order, &$inside, &$other ): void {
-				$inside = Ledger::is_writing( $order->get_id() );
-				$other  = Ledger::is_writing( $order->get_id() + 1 );
-			}
-		);
-
-		// Assert.
-		$this->assertTrue( $inside );
-		$this->assertFalse( $other );
-		$this->assertFalse( Ledger::is_writing( $order->get_id() ) );
-	}
-
 	/**
 	 * Make one step of the next write fail.
 	 *

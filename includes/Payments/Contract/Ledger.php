@@ -108,13 +108,6 @@ class Ledger {
 	 */
 	private static $refused = array();
 
-	/**
-	 * Writes in progress, by order id; a nested write counts.
-	 *
-	 * @var array<int, int>
-	 */
-	private static $writing = array();
-
 	/** Get the shared ledger. */
 	public static function instance(): self {
 		if ( null === self::$instance ) {
@@ -2184,7 +2177,6 @@ class Ledger {
 		if ( ! $lock->acquire( $id ) ) {
 			throw Ledger_Persistence_Exception::at( 'lock', 'WCPOS payment ledger is locked.' );
 		}
-		self::$writing[ $id ] = ( self::$writing[ $id ] ?? 0 ) + 1;
 		try {
 			$written = $this->locked_write( $id, $change, $mode );
 			if ( null !== $change ) {
@@ -2192,20 +2184,8 @@ class Ledger {
 			}
 			return $written;
 		} finally {
-			if ( 0 === --self::$writing[ $id ] ) {
-				unset( self::$writing[ $id ] );
-			}
 			$lock->release( $id );
 		}
-	}
-
-	/**
-	 * Whether a write on this order is running in this request.
-	 *
-	 * @param int $order_id Order id.
-	 */
-	public static function is_writing( int $order_id ): bool {
-		return isset( self::$writing[ $order_id ] );
 	}
 
 	/**
