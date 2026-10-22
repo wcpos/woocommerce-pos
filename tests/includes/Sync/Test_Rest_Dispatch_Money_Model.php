@@ -15,7 +15,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact pin scenarios.
 
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -918,7 +918,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 			)
 		);
 		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
-		$first = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$first = Completion_History::of( wc_get_order( $order_id ) )->entries();
 
 		// Act: the push reopens it; register B closes it.
 		$reopen = $this->push_status( $order_id, 'pos-open' );
@@ -929,7 +929,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
 		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
-		$history = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$history = Completion_History::of( wc_get_order( $order_id ) )->entries();
 		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
 		$this->assertSame( $register_a, $history[0]['register'] );
 		$this->assertSame( $register_b, $history[1]['register'] );
@@ -1009,7 +1009,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$order = wc_get_order( $order_id );
 		$this->assertSame( 'pos-open', $order->get_status() );
 		$this->assertSame( $date_paid, $order->get_date_paid( 'edit' )->getTimestamp() );
-		$this->assertSame( array(), array_filter( Completion_Stamp::read( $order ), static fn( $entry ) => empty( $entry['legacy'] ) ) );
+		$this->assertSame( array(), array_filter( Completion_History::of( $order )->entries(), static fn( $entry ) => empty( $entry['legacy'] ) ) );
 		$this->assertSame( '20.00', Ledger::instance()->summary( $order )['balance'] );
 	}
 
@@ -1032,12 +1032,12 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$order_id = $this->gateway_paid_order( '50', 'on-hold' );
 		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
 		$this->assertNotNull( wc_get_order( $order_id )->get_date_paid( 'edit' ) );
-		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order_id ) ) );
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $order_id ) )->entries() );
 
 		// Act: reopen, drop a unit, close.
 		$reopen = $this->push_status( $order_id, 'pos-open' );
 		$rows   = Ledger::instance()->read( wc_get_order( $order_id ) );
-		$marked = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$marked = Completion_History::of( wc_get_order( $order_id ) )->entries();
 		$edit   = $this->quantity_edit( $order_id, -1 );
 		// The till sends the line's money with its quantity; wc/v3 does not reprice an updated line.
 		$edit['line_items'][0] += array(
@@ -1152,11 +1152,11 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$record->set_body_params( $this->envelope( $order_id, array( 'payment' => $this->cash_payment( '20.00' ) ) ) );
 		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
 		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
-		$this->assertCount( 1, Completion_Stamp::read( wc_get_order( $order_id ) ) );
+		$this->assertCount( 1, Completion_History::of( wc_get_order( $order_id ) )->entries() );
 
 		// Act: reopen, drop a unit, close.
 		$reopen  = $this->push_status( $order_id, 'pos-open' );
-		$marked  = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$marked  = Completion_History::of( wc_get_order( $order_id ) )->entries();
 		$edit    = $this->push_envelope( 'update', $this->quantity_edit( $order_id, -1 ), $this->order_revision( $order_id ) );
 		$closed  = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/close', $order_id );
 
@@ -1166,7 +1166,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $edit->get_status(), 'Response: ' . wp_json_encode( $edit->get_data() ) );
 		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
 		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
-		$history = Completion_Stamp::read( wc_get_order( $order_id ) );
+		$history = Completion_History::of( wc_get_order( $order_id ) )->entries();
 		$this->assertSame( array( 1, 2 ), array_column( $history, 'n' ) );
 		$this->assertIsArray( ( new Fiscal_Record_Store() )->find_sale( $order_id, $history[1]['id'] ) );
 	}

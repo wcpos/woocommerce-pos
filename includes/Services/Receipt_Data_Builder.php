@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WC_Abstract_Order;
@@ -432,10 +432,11 @@ class Receipt_Data_Builder {
 	 *
 	 * @param WC_Abstract_Order $order     Receipt order.
 	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
+	 * @param array|null        $till      A completion's till tuple (Completion_History::till()); null reads the order's till meta.
 	 *
 	 * @return array
 	 */
-	private function build_data( WC_Abstract_Order $order, $pos_store = null ): array {
+	private function build_data( WC_Abstract_Order $order, $pos_store = null, ?array $till = null ): array {
 		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
 		$status_label = '';
 		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
@@ -740,7 +741,7 @@ class Receipt_Data_Builder {
 
 		$tax_summary = $this->get_tax_summary( $order );
 
-		$register_id = (string) $order->get_meta( '_wcpos_register' );
+		$register_id = (string) ( null === $till ? $order->get_meta( '_wcpos_register' ) : $till['register'] );
 		$registers = new Register_Store();
 		$register_row = '' !== $register_id ? $registers->get( $register_id ) : null;
 		$register = array(
@@ -754,15 +755,15 @@ class Receipt_Data_Builder {
 			'app_build'      => (string) $order->get_meta( '_wcpos_app_build' ),
 			'platform'       => '',
 		);
-		$sale_tz = (string) $order->get_meta( '_wcpos_sale_tz' );
+		$sale_tz = (string) ( null === $till ? $order->get_meta( '_wcpos_sale_tz' ) : $till['sale_tz'] );
 		try {
 			$sale_timezone = '' !== $sale_tz ? new DateTimeZone( $sale_tz ) : $date_timezone;
 		} catch ( \Exception $e ) {
 			$sale_timezone = $date_timezone;
 		}
-		$sale_time = strtotime( (string) $order->get_meta( '_wcpos_sale_time' ) );
+		$sale_time = strtotime( (string) ( null === $till ? $order->get_meta( '_wcpos_sale_time' ) : $till['sale_time'] ) );
 		$received_at = strtotime( (string) $order->get_meta( '_wcpos_sale_received_gmt' ) );
-		$sale_counter = $order->get_meta( '_wcpos_sale_counter' );
+		$sale_counter = null === $till ? $order->get_meta( '_wcpos_sale_counter' ) : (string) $till['counter'];
 
 		$fiscal = Receipt_Payload_Assembler::fiscal(
 			array(
@@ -818,19 +819,21 @@ class Receipt_Data_Builder {
 	 * @param object|null       $pos_store POS store override.
 	 */
 	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		// A re-completed sale's live receipt names the completion that stands (its register, counter,
-		// sale time and record), as its fiscal record does, not the till tuple completion 1 was taken
-		// under; a first completion reads the order as before (ADR 0040 rule 1c).
+		// A fiscal document is built for the completion that stands (Fiscal_Record_Writers::record_sale())
+		// and carries its till tuple. A re-completed sale's live receipt names that completion too (its
+		// register, counter, sale time and record), not the tuple completion 1 was taken under; a first
+		// completion's live receipt reads the order's till meta (ADR 0040 rule 1c).
 		$standing = null;
-		$source   = $order;
-		if ( 'live' === $mode && $order instanceof \WC_Order ) {
-			$latest = Completion_Stamp::standing( $order );
-			if ( null !== $latest && (int) ( $latest['n'] ?? 0 ) >= 2 ) {
+		$till     = null;
+		if ( ( 'live' === $mode || 'fiscal' === $mode ) && $order instanceof \WC_Order ) {
+			$history = Completion_History::of( $order );
+			$latest  = $history->standing();
+			if ( 'fiscal' === $mode || (int) ( $latest['n'] ?? 0 ) >= 2 ) {
 				$standing = $latest;
-				$source   = Completion_Stamp::as_completed( $order, $latest );
+				$till     = $history->till();
 			}
 		}
-		$data = $this->build_data( $source, $pos_store );
+		$data = $this->build_data( $order, $pos_store, $till );
 
 		/**
 		 * Filters the canonical receipt data before it is rendered or snapshotted.

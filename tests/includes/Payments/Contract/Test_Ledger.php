@@ -8,7 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -1380,7 +1380,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$paid = wc_get_order( $order->get_id() );
 		$this->assertTrue( $paid->is_paid() );
 		$this->assertNotNull( $paid->get_date_paid( 'edit' ) );
-		$this->assertCount( 1, Completion_Stamp::read( $paid ) );
+		$this->assertCount( 1, Completion_History::of( $paid )->entries() );
 	}
 
 	/** An authorization is money in motion, not money taken: it cannot take a refund allocation. */
@@ -1503,7 +1503,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Another 10.00 covers it and completes the sale again.
 		Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '10.00' ) );
 		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
-		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_History::of( wc_get_order( $order->get_id() ) )->entries(), 'n' ) );
 	}
 
 	/** A money write never completes a zero-total order; only close does (§4.3, Paul 2026-10-20). */
@@ -1628,7 +1628,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'captured', $taken['status'] );
 		$paid = wc_get_order( $order->get_id() );
 		$this->assertTrue( $paid->is_paid() );
-		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( $paid ), 'n' ) );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_History::of( $paid )->entries(), 'n' ) );
 	}
 
 	/** A completion standing on a configured on-hold status refuses a new tender though on-hold is editable. */
@@ -1667,7 +1667,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$taken = Ledger::instance()->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '20.00' ) );
 		$this->assertIsArray( $taken );
 		$this->assertSame( 'captured', $taken['status'] );
-		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( wc_get_order( $order->get_id() ) ), 'n' ) );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_History::of( wc_get_order( $order->get_id() ) )->entries(), 'n' ) );
 	}
 
 	/** A cancelled order takes no tender. */
@@ -3694,7 +3694,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$order = wc_get_order( $order->get_id() );
 		$this->assertSame( 'pos-open', $order->get_status() );
 		$this->assertSame( '20.00', Ledger::instance()->summary( $order )['refund_due'] );
-		$this->assertCount( 1, Completion_Stamp::read( $order ) );
+		$this->assertCount( 1, Completion_History::of( $order )->entries() );
 		return array( $order, Ledger::instance()->find( $order, $row['id'] ), $this->refund_of( $order, '20.00' ) );
 	}
 
@@ -3712,7 +3712,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$stored = wc_get_order( $order->get_id() );
 		$this->assertIsArray( $result );
 		$this->assertSame( 'pos-open', $stored->get_status() );
-		$this->assertCount( 1, Completion_Stamp::read( $stored ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
 		$this->assertSame( array( $this->reservation( $refund->get_id(), '20.00' ) ), $this->allocations_of( $this->stored_row_of( $order->get_id(), $row['id'] ), $refund->get_id() ) );
 		$this->assertCount( 1, $this->stranded_notes( $order->get_id() ) );
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
@@ -3739,7 +3739,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$stored = wc_get_order( $order->get_id() );
 		$this->assertSame( 'succeeded', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
 		$this->assertTrue( $stored->is_paid() );
-		$this->assertSame( array( 1, 2 ), array_column( Completion_Stamp::read( $stored ), 'n' ) );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_History::of( $stored )->entries(), 'n' ) );
 		$this->assertSame( array( 'succeeded' ), $seen );
 		$this->assertTrue( $paid_when_allocated );
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );

@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -190,26 +190,16 @@ final class Session_Figures {
 		if ( isset( $this->memo['sales_count'] ) ) {
 			return $this->memo['sales_count'];
 		}
-		global $wpdb;
-		$hpos  = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$key   = $hpos ? 'order_id' : 'post_id';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value LIKE %s", Completion_Stamp::META_KEY, '%' . $wpdb->esc_like( '"session":"' . $this->session['id'] . '"' ) . '%' ) );
-		if ( '' !== $wpdb->last_error ) {
-			throw new \RuntimeException( 'Session completion read failed.' );
-		}
+		$ids   = Completion_History::orders_in_session( (string) $this->session['id'] );
 		$count = 0;
-		foreach ( array_unique( array_merge( array_map( 'intval', array_keys( $this->legs() ) ), array_map( 'intval', $ids ) ) ) as $id ) {
+		foreach ( array_unique( array_merge( array_map( 'intval', array_keys( $this->legs() ) ), $ids ) ) as $id ) {
 			$order   = wc_get_order( $id );
-			$history = $order ? Completion_Stamp::read( $order ) : array();
-			if ( ! $history ) {
+			$history = $order instanceof \WC_Order ? Completion_History::of( $order ) : null;
+			if ( null === $history || $history->is_empty() ) {
 				$count += isset( $this->legs()[ $id ] ) ? 1 : 0;
 				continue;
 			}
-			foreach ( $history as $entry ) {
-				$count += ( $entry['session'] ?? null ) === $this->session['id'] ? 1 : 0;
-			}
+			$count += $history->in_session( (string) $this->session['id'] );
 		}
 		$this->memo['sales_count'] = $count;
 		return $count;

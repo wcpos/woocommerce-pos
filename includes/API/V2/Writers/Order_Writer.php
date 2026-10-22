@@ -10,7 +10,7 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -443,7 +443,7 @@ class Order_Writer extends Null_Writer {
 	 * stands on a status that is_editable() allows (a merchant's POS status stored as on-hold).
 	 */
 	private static function locked( \WC_Order $order ): bool {
-		return ! $order->is_editable() || Completion_Stamp::stands( $order );
+		return ! $order->is_editable() || Completion_History::of( $order )->stands();
 	}
 
 	/** Whether the push moves a locked order into another editable status (a reopen, D3). */

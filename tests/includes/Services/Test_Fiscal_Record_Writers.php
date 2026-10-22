@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -122,7 +123,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$sales   = $this->sales( $order->get_id() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 2, $sales );
 		$this->assertNotSame( $sales[0]['number'], $sales[1]['number'] );
 		$this->assertSame( $history[0]['id'], $sales[0]['source_id'] );
@@ -266,7 +267,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'order_id' => $order->get_id(),
 			)
 		);
-		$this->assertCount( 2, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertCount( 2, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 		$this->assertCount( 1, $late );
 		$this->assertSame( $closure_b['id'], $late[0]['closure_id'] );
 		$this->assertSame( '20.0000', $late[0]['payload']['expected_delta']['cash'] );
@@ -311,7 +312,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$reopened->save();
 		$take( $order, $session_b, '20.00' );
 		$order   = wc_get_order( $order->get_id() );
-		$history = Completion_Stamp::read( $order );
+		$history = Completion_History::of( $order )->entries();
 		Fiscal_Record_Writers::instance()->record_sale( $order, $history[1] );
 
 		// Assert.
@@ -373,7 +374,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$in_session( $order, static fn() => $again->payment_complete() );
 
 		// Assert.
-		$this->assertCount( 3, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertCount( 3, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 		$late = array_reverse(
 			( new Fiscal_Record_Store() )->list(
 				array(
@@ -402,7 +403,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( wc_get_order( $order->get_id() ) );
-			$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+			$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 			$this->assertCount( 1, $this->sales( $order->get_id() ) );
 
 			// Act: a refund while completion 2's record is missing (the refund's drain runs and fails here).
@@ -442,7 +443,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}
 		Fiscal_Record_Writers::instance()->recover( wc_get_order( $order->get_id() ) );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 
 		// Act.
 		$refund = wc_create_refund(
@@ -528,7 +529,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( array(), $before );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$two     = $store->find_sale( $order->get_id(), $history[1]['id'] );
 		$this->assertIsArray( $two );
 		$late = $store->list(
@@ -688,7 +689,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		Fiscal_Record_Writers::instance()->recover( $stale );
 
 		// Assert: both completions' documents are inserted and nothing stays parked.
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertSame( array( $history[0]['id'], $history[1]['id'] ), array_column( $this->sales( $order->get_id() ), 'source_id' ) );
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
@@ -721,7 +722,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert: both sales land, and completion 2's late correction names its own row and B's closure.
 		$store   = new Fiscal_Record_Store();
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$two     = $store->find_sale( $order->get_id(), $history[1]['id'] );
 		$this->assertCount( 2, $this->sales( $order->get_id() ) );
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
@@ -829,7 +830,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				$row = $this->server->dispatch( $request )->get_data()['payment'];
 			}
 		);
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertSame( array( $history[0]['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
 		// The paid order's address changes afterwards (the push's frozen-address path writes it).
 		$edited = wc_get_order( $order->get_id() );
@@ -857,7 +858,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				$this->pay( $order );
 			}
 		);
-		$history  = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history  = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$reopened = $this->reopen( $order );
 		$reopened->set_total( '80.00' );
 		$reopened->save();
@@ -914,7 +915,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$reopened = $this->reopen( $order );
 		$reopened->set_total( '80.00' );
 		$reopened->save();
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 
 		// Act.
@@ -931,7 +932,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->pay( $order );
 		$this->pay( $this->reopen( $order ) );
 		$order   = wc_get_order( $order->get_id() );
-		$history = Completion_Stamp::read( $order );
+		$history = Completion_History::of( $order )->entries();
 		$before  = $this->sales( $order->get_id() );
 
 		// Act.
@@ -993,7 +994,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $status->get_status() );
 		$sales = $this->sales( $order->get_id() );
 		$this->assertCount( 1, $sales );
-		$this->assertSame( Completion_Stamp::read( wc_get_order( $order->get_id() ) )[0]['id'], $sales[0]['source_id'] );
+		$this->assertSame( Completion_History::of( wc_get_order( $order->get_id() ) )->entries()[0]['id'], $sales[0]['source_id'] );
 		$this->assertSame( array( 1 ), $announced );
 	}
 
@@ -1018,7 +1019,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$sales = $this->sales( $order->get_id() );
 		$this->assertCount( 1, $sales );
-		$this->assertSame( Completion_Stamp::read( $order )[0]['id'], $sales[0]['source_id'] );
+		$this->assertSame( Completion_History::of( $order )->entries()[0]['id'], $sales[0]['source_id'] );
 	}
 
 	/** A reopened completion whose record never landed is never rebuilt; completion 2 still names it. */
@@ -1039,7 +1040,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$reopened->save();
 		$this->pay( wc_get_order( $order->get_id() ) );
 		$order   = wc_get_order( $order->get_id() );
-		$history = Completion_Stamp::read( $order );
+		$history = Completion_History::of( $order )->entries();
 
 		// Act: any caller asks for completion 1's record.
 		Fiscal_Record_Writers::instance()->record_sale( $order, $history[0] );
@@ -1068,7 +1069,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		wc_get_order( $order->get_id() )->update_status( 'cancelled' );
 
 		// Assert.
-		$history       = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history       = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$sales         = $this->sales( $order->get_id() );
 		$cancellations = array_reverse(
 			( new Fiscal_Record_Store() )->list(
