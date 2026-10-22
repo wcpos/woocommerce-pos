@@ -530,6 +530,44 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** The pay page's manual gateways compare against the order total too, so a partly paid sale refuses them. */
+	public function test_order_pay_on_a_partial_sale_refuses_the_pos_cash_gateway(): void {
+		// Arrange: pos_cash is offered on a POS sale's pay page, and the customer tenders the full total.
+		$order = $this->create_partial_sale();
+		$open = $this->create_order( true );
+		$this->in_pos_request(
+			function () use ( $open ): void {
+				$this->assertArrayHasKey( 'pos_cash', $this->on_pay_page( $open, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_cash is offered' );
+			}
+		);
+		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
+		$_POST['pos-cash-tendered']            = '100.00';
+		$completed                             = did_action( 'woocommerce_payment_complete' );
+		$redirect                              = static function () {
+			throw new \RuntimeException( 'redirected' ); // WooCommerce's success branch exits after the redirect.
+		};
+		add_filter( 'wp_redirect', $redirect );
+
+		// Act.
+		try {
+			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_cash' ) );
+		} catch ( \RuntimeException $exception ) {
+			$this->assertSame( 'redirected', $exception->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $redirect );
+			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
+			wc_clear_notices();
+		}
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( $completed, did_action( 'woocommerce_payment_complete' ), 'The sale is not marked paid.' );
+		$this->assertCount( 1, Ledger::instance()->read( $fresh ) );
+		$this->assertSame( 'pos-partial', $fresh->get_status() );
+		$this->assertContains( 'This sale has a payment recorded at the till. Finish it at the till.', $errors );
+	}
+
 	/** A server-mode gateway (Pro's terminal panel) charges the balance, so order-pay keeps it. */
 	public function test_order_pay_on_a_partial_sale_with_a_server_mode_gateway_proceeds(): void {
 		// Arrange.
