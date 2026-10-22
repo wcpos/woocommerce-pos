@@ -594,6 +594,79 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( array(), $written->completion['payment_ids'] );
 	}
 
+	/** A sent gateway sale left on-hold with its awaiting stamp completes on its covering row; the stamp goes in S3. */
+	public function test_write_stamped_on_hold_sale_covered_completes_and_clears_stamp(): void {
+		// Arrange.
+		$id  = $this->create_stamped_on_hold_order();
+		$row = $this->row( '92.95' );
+
+		// Act.
+		$written = Ledger::instance()->write( $id, fn( Ledger_Draft $draft ) => $draft->put( $row ) );
+
+		// Assert.
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$this->assertSame( 1, (int) $written->completion['n'] );
+		$this->assertNull( Gateway_Submission::read_stamp( $this->fresh( $id ) ) );
+	}
+
+	/**
+	 * A stamped on-hold sale whose write failed after S1 or after S2 is completed by replaying it, once.
+	 *
+	 * @dataProvider stamped_failures
+	 *
+	 * @param string $stage The step that fails once.
+	 */
+	public function test_write_stamped_on_hold_sale_failing_at_stage_then_replayed_completes_once( string $stage ): void {
+		// Arrange.
+		$id     = $this->create_stamped_on_hold_order();
+		$row    = $this->row( '92.95' );
+		$undo   = $this->inject( $stage, $id );
+		$caught = null;
+
+		// Act.
+		try {
+			$this->pay( $id, $row );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$undo();
+		}
+		$this->pay( $id, $row );
+
+		// Assert.
+		$this->assertSame( $stage, $caught ? $caught->stage : null );
+		$saved = $this->fresh( $id );
+		$this->assertSame( 'completed', $saved->get_status() );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+	}
+
+	/** Failures after S1 (the paid transition) and after S2 (the completion). */
+	public function stamped_failures(): array {
+		return array(
+			'after S1' => array( 'paid' ),
+			'after S2' => array( 'completion' ),
+		);
+	}
+
+	/** A POS order a sent gateway submit left on-hold, awaiting the customer, with no paid date. */
+	private function create_stamped_on_hold_order(): int {
+		$order = $this->create_pos_order();
+		$order->set_status( 'on-hold' );
+		$order->save();
+		$order->update_meta_data(
+			Gateway_Submission::STAMP_META_KEY,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'method_id'  => 'pos_cash',
+				'cashier_id' => 1,
+			)
+		);
+		$order->save_meta_data();
+		$this->assertNull( $this->fresh( $order->get_id() )->get_date_paid( 'edit' ), 'Precondition: unpaid.' );
+		return $order->get_id();
+	}
+
 	/**
 	 * Make one step of the next write fail.
 	 *

@@ -2277,11 +2277,8 @@ class Ledger {
 		$id     = $order->get_id();
 		$wire   = json_decode( (string) wp_json_encode( array_map( array( __CLASS__, 'to_wire' ), $rows ) ), true );
 		$staged = $wire !== $stored;
-		$clears = null !== $projection['method'] && null !== Gateway_Submission::read_stamp( $order );
+		// The awaiting-customer stamp stays until S3: storage keeps saying POS-owned until the sale completes.
 		if ( null !== $projection['method'] ) {
-			// The completion this may cause still names the register a sent submit came from.
-			Completion_Stamp::memoise( $order );
-			Gateway_Submission::clear_stamp( $order );
 			$order->set_payment_method( $projection['method'] );
 			$order->set_payment_method_title( (string) $projection['title'] );
 			$order->set_transaction_id( (string) $projection['txn'] );
@@ -2289,7 +2286,7 @@ class Ledger {
 		if ( null !== $projection['status'] ) {
 			$order->set_status( $projection['status'] );
 		}
-		if ( ! $changed && ! $staged && ! $clears && ! $order->get_changes() ) {
+		if ( ! $changed && ! $staged && ! $order->get_changes() ) {
 			return true;
 		}
 		$props = $order->get_changes();
@@ -2331,7 +2328,7 @@ class Ledger {
 	}
 
 	/**
-	 * S2, the paid transition carrying no ledger meta (I1, I2), then S3, the completion.
+	 * S2, the paid transition carrying no ledger meta (I1, I2), then S3.
 	 *
 	 * @param WC_Order $order Order as S1 stored it.
 	 * @throws Ledger_Persistence_Exception When the paid status or the completion does not reach storage.
@@ -2343,20 +2340,14 @@ class Ledger {
 		self::$deriving = $id;
 		try {
 			$order->payment_complete();
-			$order = $this->fresh( $id );
-			if ( ! self::paid_now( $order ) ) {
-				throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid transition was not persisted.' );
-			}
-			// Idempotent: a completion listener inside payment_complete() may have stamped already.
-			Completion_Stamp::stamp( $order );
 		} finally {
 			self::$deriving = $previous;
 		}
 		$order = $this->fresh( $id );
-		if ( null === Completion_History::of( $order )->standing() ) {
-			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
+		if ( ! self::paid_now( $order ) ) {
+			throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid transition was not persisted.' );
 		}
-		return $order;
+		return $this->finish( $order );
 	}
 
 	/**
@@ -2366,24 +2357,43 @@ class Ledger {
 	 * @param WC_Order $order    Fresh order.
 	 * @param bool     $ledgered Whether the ledger has stored this order (WCPOS 1.x never did).
 	 * @return bool Whether it healed.
-	 * @throws Ledger_Persistence_Exception When the completion still does not reach storage.
 	 */
 	private function heal( WC_Order $order, bool $ledgered ): bool {
 		if ( ! $ledgered || ! wcpos_is_pos_order( $order ) || ! self::paid_now( $order ) || null !== Completion_History::of( $order )->standing() ) {
 			return false;
 		}
 		wc_maybe_reduce_stock_levels( $order->get_id() );
-		$previous       = self::$deriving;
-		self::$deriving = $order->get_id();
+		$this->finish( $order );
+		return true;
+	}
+
+	/**
+	 * S3: the completion (idempotent: a listener inside S2 may have stamped it), then the awaiting-customer
+	 * stamp cleared beside it, each read back.
+	 *
+	 * @param WC_Order $order Paid order.
+	 * @throws Ledger_Persistence_Exception When either does not reach storage.
+	 */
+	private function finish( WC_Order $order ): WC_Order {
+		$id       = $order->get_id();
+		$previous = self::$deriving;
+		self::$deriving = $id;
 		try {
+			Completion_Stamp::memoise( $order ); // The completion names the register a sent submit came from.
 			Completion_Stamp::stamp( $order );
 		} finally {
 			self::$deriving = $previous;
 		}
-		if ( null === Completion_History::of( $this->fresh( $order->get_id() ) )->standing() ) {
+		$order = $this->fresh( $id );
+		if ( null !== Completion_History::of( $order )->standing() && null !== Gateway_Submission::read_stamp( $order ) ) {
+			Gateway_Submission::clear_stamp( $order );
+			self::saving( $id, fn() => $order->save_meta_data() );
+			$order = $this->fresh( $id );
+		}
+		if ( null === Completion_History::of( $order )->standing() || null !== Gateway_Submission::read_stamp( $order ) ) {
 			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
 		}
-		return true;
+		return $order;
 	}
 
 	/**
