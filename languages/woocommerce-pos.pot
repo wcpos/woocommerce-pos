@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-22T03:02:38+00:00\n"
+"POT-Creation-Date: 2026-10-22T04:46:15+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1231,7 +1231,7 @@ msgid "The session request could not be completed."
 msgstr ""
 
 #. translators: 1: line name, 2: units.
-#: includes/API/V2/Writers/Order_Writer.php:633
+#: includes/API/V2/Writers/Order_Writer.php:636
 #, php-format
 msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
 msgstr ""
@@ -1389,8 +1389,8 @@ msgstr ""
 msgid "WCPOS: completion %d could not be recorded; reconcile manually."
 msgstr ""
 
-#: includes/Payments/Contract/Completion_Stamp.php:369
-#: includes/Payments/Contract/Completion_Stamp.php:391
+#: includes/Payments/Contract/Completion_Stamp.php:410
+#: includes/Payments/Contract/Completion_Stamp.php:432
 msgid "WCPOS: the reopen could not be recorded on the completion history; reconcile manually."
 msgstr ""
 
@@ -1807,7 +1807,7 @@ msgstr ""
 #. translators: Customer name shown in an order note for a guest checkout.
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Services/Order_Notes.php:42
-#: includes/Services/Receipt_Data_Builder.php:508
+#: includes/Services/Receipt_Data_Builder.php:509
 #: includes/Templates/Payment.php:359
 #: tests/includes/Templates/Test_Receipt_Renderers.php:267
 msgid "Guest"
@@ -1817,8 +1817,8 @@ msgstr ""
 #. translators: %d: Historical POS store ID that no longer exists.
 #. translators: %d: store ID.
 #: includes/Services/Order_Notes.php:61
-#: includes/Services/Receipt_Data_Builder.php:488
-#: includes/Services/Receipt_Data_Builder.php:895
+#: includes/Services/Receipt_Data_Builder.php:489
+#: includes/Services/Receipt_Data_Builder.php:909
 #: tests/includes/Services/Test_Receipt_Data_Builder.php:1579
 #, php-format
 msgid "Store #%d"
@@ -2031,19 +2031,19 @@ msgid "Quick discount code \"%s\" belongs to a store coupon. Use another code."
 msgstr ""
 
 #. translators: %s: closed session number.
-#: includes/Services/Receipt_Data_Builder.php:231
+#: includes/Services/Receipt_Data_Builder.php:232
 #, php-format
 msgid "Session %s"
 msgstr ""
 
 #. translators: Receipt label for discount amount or discount line.
-#: includes/Services/Receipt_Data_Builder.php:649
+#: includes/Services/Receipt_Data_Builder.php:650
 #: includes/Services/Receipt_I18n_Labels.php:186
 msgid "Discount"
 msgstr ""
 
 #. translators: %s: Discount percentage.
-#: includes/Services/Receipt_Data_Builder.php:651
+#: includes/Services/Receipt_Data_Builder.php:652
 #, php-format
 msgid "Discount (%s%%)"
 msgstr ""
