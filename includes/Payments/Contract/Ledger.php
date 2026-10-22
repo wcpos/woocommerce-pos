@@ -1036,7 +1036,8 @@ class Ledger {
 			// An authorization above the leg is tolerated but takes no tip: the hold may yet be voided,
 			// and only the captured amount confirms what the customer paid (the capture adds the fee).
 			if ( $tip && 'captured' === $applied['status'] ) {
-				// update_taxes() and calculate_totals() save the fee before the row: a retry after a failed row save finds it.
+				// update_taxes() and calculate_totals() each save the order before the row: a retry after a
+				// failed row save finds the fee and adds none, but still recalculates (either save may have failed).
 				$tipped = array_filter( $order->get_fees(), static fn( $item ) => $row['id'] === $item->get_meta( self::TIP_FEE_META_KEY ) );
 				$fee = new \WC_Order_Item_Fee();
 				$fee->set_name( __( 'Tip', 'woocommerce-pos' ) );
@@ -1061,9 +1062,9 @@ class Ledger {
 				}
 				if ( ! $tipped ) {
 					$order->add_item( $fee );
-					$order->update_taxes();
-					$order->calculate_totals( false );
 				}
+				$order->update_taxes();
+				$order->calculate_totals( false );
 				$applied['amount'] = Money::normalize( $confirmed );
 				$applied['tip'] = Money::format( $difference );
 			}
