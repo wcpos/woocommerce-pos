@@ -52,10 +52,10 @@ class Webview_Passthrough {
 	 * @param WC_Payment_Gateway|null $gateway Chosen gateway; null when unknown.
 	 */
 	private static function refuses( WC_Order $order, ?WC_Payment_Gateway $gateway ): bool {
-		if ( ( $gateway && in_array( Descriptor_Builder::resolve_mode( $gateway ), array( 'server', 'device' ), true ) ) || ! wcpos_is_pos_order( $order ) ) {
-			return false;
-		}
-		return (bool) array_filter( Ledger::instance()->read( $order ), static fn( $row ) => in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) );
+		$counting = wcpos_is_pos_order( $order ) ? array_filter( Ledger::instance()->read( $order ), static fn( $row ) => in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) ) : array();
+		// The descriptor carries the effective mode: provider-scoped, and webview when no handler serves the filtered one.
+		$mode = $counting && $gateway ? ( Descriptor_Builder::instance()->get( $gateway->id )['capture']['mode'] ?? '' ) : '';
+		return $counting && ! in_array( $mode, array( 'server', 'device' ), true );
 	}
 
 	/** The order whose pay page this request renders, or null off the order-pay endpoint. */
