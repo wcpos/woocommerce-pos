@@ -843,6 +843,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 			array( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 ),
 			array( 'woocommerce_payment_complete', array( Completion_Stamp::class, 'on_payment_complete' ), 15, 1 ),
 			array( 'woocommerce_order_status_processing', 'wc_maybe_reduce_stock_levels', 10, 1 ),
+			array( 'woocommerce_order_status_completed', 'wc_maybe_reduce_stock_levels', 10, 1 ),
 			array( 'woocommerce_payment_complete', 'wc_maybe_reduce_stock_levels', 10, 1 ),
 		);
 		foreach ( $listeners as $listener ) {
