@@ -1868,9 +1868,10 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	}
 }
 
+// phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- A fixture stays with its tests, as Test_Ledger keeps its handlers.
 /** A recordable card leg whose reader takes tips. */
 class Tip_Test_Handler extends Manual_Handler {
- // phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- A fixture for this class's tests, as Test_Ledger keeps its handlers.
+
 	/**
 	 * The manual descriptor, tipping on the reader.
 	 *
