@@ -9,6 +9,8 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -568,13 +570,19 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( 'This sale has a payment recorded at the till. Finish it at the till.', $errors );
 	}
 
-	/** A server-mode gateway (Pro's terminal panel) charges the balance, so order-pay keeps it. */
-	public function test_order_pay_on_a_partial_sale_with_a_server_mode_gateway_proceeds(): void {
+	/**
+	 * A server or device gateway (Pro's terminal panel) charges the balance, so order-pay keeps it.
+	 *
+	 * @dataProvider balance_modes
+	 *
+	 * @param string $mode Capture mode the filter answers, with a handler registered for it.
+	 */
+	public function test_order_pay_on_a_partial_sale_with_a_server_mode_gateway_proceeds( string $mode ): void {
 		// Arrange.
 		$order = $this->create_partial_sale();
 		$this->with_order_pay_gateway(
 			'wcpos_test_terminal',
-			'server',
+			$mode,
 			function ( $gateway ) use ( $order ): void {
 				// Act.
 				$this->pay_on_order_pay( $order, $gateway->id );
@@ -583,6 +591,33 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( 1, $gateway->calls );
 				$this->assertArrayHasKey( $gateway->id, $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ) );
 			}
+		);
+	}
+
+	/** Capture modes that charge the balance: bare, and provider-scoped. */
+	public function balance_modes(): array {
+		return array(
+			'server'        => array( 'server' ),
+			'device:stripe' => array( 'device:stripe' ),
+		);
+	}
+
+	/** A filtered server mode with no registered handler is described as webview, so order-pay refuses it. */
+	public function test_order_pay_on_a_partial_sale_refuses_a_server_mode_without_a_handler(): void {
+		// Arrange.
+		$order = $this->create_partial_sale();
+		$this->with_order_pay_gateway(
+			'wcpos_test_unhandled',
+			'server',
+			function ( $gateway ) use ( $order ): void {
+				// Act.
+				$this->pay_on_order_pay( $order, $gateway->id );
+
+				// Assert.
+				$this->assertSame( 0, $gateway->calls );
+				$this->assertArrayNotHasKey( $gateway->id, $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ) );
+			},
+			false
 		);
 	}
 
@@ -631,8 +666,9 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 	 * @param string   $id       Gateway id.
 	 * @param string   $mode     Capture mode the wcpos_payment_method_capture_mode filter resolves.
 	 * @param callable $callback Receives the gateway.
+	 * @param bool     $handled  Register a handler for a mode Free does not ship (Pro registers server and device).
 	 */
-	private function with_order_pay_gateway( string $id, string $mode, callable $callback ): void {
+	private function with_order_pay_gateway( string $id, string $mode, callable $callback, bool $handled = true ): void {
 		$gateway = new class( $id ) extends \WC_Payment_Gateway {
 			/**
 			 * Calls to process_payment().
@@ -671,6 +707,20 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'wcpos_payment_method_capture_mode', $resolve, 10, 2 );
 		$registry->payment_gateways = array();
 		$registry->init();
+		if ( $handled && ! Capture_Mode_Registry::instance()->has( $mode ) ) {
+			// A handler that describes nothing, standing in for Pro's: the descriptor keeps the filtered mode.
+			$handler = new class() extends Abstract_Capture_Mode_Handler {
+				/**
+				 * Describe nothing.
+				 *
+				 * @param \WC_Payment_Gateway $gateway Gateway instance.
+				 */
+				public function describe( \WC_Payment_Gateway $gateway ): array {
+					return array();
+				}
+			};
+			Capture_Mode_Registry::instance()->register( $mode, get_class( $handler ) );
+		}
 
 		try {
 			$callback( $gateway );
@@ -680,6 +730,10 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			$registry->payment_gateways = array();
 			$registry->init();
 			wc_clear_notices();
+			// Rebuild the process-global registry with Free's built-in modes only.
+			$instance = new \ReflectionProperty( Capture_Mode_Registry::class, 'instance' );
+			$instance->setAccessible( true );
+			$instance->setValue( null, null );
 		}
 	}
 
