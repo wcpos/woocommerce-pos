@@ -191,9 +191,16 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		$before = Order_Serializer::current_state( $order->get_id() );
 		$this->assertIsArray( $before );
 
-		// Act: a v1 read of the order, then the till's own v2 read.
-		$v1  = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() ) );
-		$row = $this->read_order_row( $order );
+		// Act: a v1 read of the order, then the till's own v2 read in a later request.
+		// The v1 dispatch registers its response filters for the rest of the PHP
+		// request; restoring the hooks ends that request, as it ends in production.
+		$hooks = array();
+		foreach ( $GLOBALS['wp_filter'] as $name => $hook ) {
+			$hooks[ $name ] = clone $hook;
+		}
+		$v1                   = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() ) );
+		$GLOBALS['wp_filter'] = $hooks; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- End the v1 request's hooks.
+		$row                  = $this->read_order_row( $order );
 
 		// Assert.
 		$this->assertSame( 200, $v1->get_status() );
