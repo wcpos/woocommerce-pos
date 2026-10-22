@@ -503,6 +503,80 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 0, $saves );
 	}
 
+	/** An index row lost in S1's save is caught by the read-back: S1 retries, and the write acknowledges only once it is stored. */
+	public function test_write_lost_payment_index_retries_s1_until_read_back(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->row( '20.00', 'pending', array( 'capture_mode' => 'gateway' ) );
+		$runs  = 0;
+		$lost  = 0;
+		$lose  = static function ( $sql ) use ( &$lost ) {
+			if ( 0 === $lost && is_string( $sql ) && preg_match( '/^\s*INSERT/i', $sql ) && false !== strpos( $sql, "'" . Ledger::PAYMENT_ID_META_KEY . "'" ) ) {
+				++$lost;
+				return 'SELECT 0';
+			}
+			return $sql;
+		};
+		add_filter( 'query', $lose );
+
+		// Act.
+		try {
+			Ledger::instance()->write(
+				$order,
+				function ( Ledger_Draft $draft ) use ( $row, &$runs ): void {
+					++$runs;
+					$draft->put( $row );
+				}
+			);
+		} finally {
+			remove_filter( 'query', $lose );
+		}
+
+		// Assert.
+		$this->assertSame( 1, $lost );
+		$this->assertSame( 2, $runs );
+		$saved = $this->fresh( $order->get_id() );
+		$this->assertSame( array( $row['id'] ), array_map( static fn( $meta ) => $meta->value, $saved->get_meta( Ledger::PAYMENT_ID_META_KEY, false ) ) );
+		$this->assertSame( array( $row['id'] ), array_map( static fn( $meta ) => $meta->value, $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
+	}
+
+	/** A paid status that landed without its paid date (a crash inside S2) is repaired by the replay: date, stock, completion, once. */
+	public function test_write_replay_repairs_paid_status_without_date_paid_once(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$this->seed_rows( $id, array( $this->row( '92.95' ) ) );
+		$paid = $this->fresh( $id );
+		$paid->set_status( 'completed' );
+		$this->as_if_paid_hooks_never_ran( fn() => $paid->save() );
+		$undated = $this->fresh( $id );
+		$undated->set_date_paid( null );
+		$this->as_if_paid_hooks_never_ran( fn() => $undated->save() );
+		$this->assertNull( $this->fresh( $id )->get_date_paid( 'edit' ), 'Precondition: the paid date was lost.' );
+		$this->assertSame( 10, wc_get_product( $this->product->get_id() )->get_stock_quantity(), 'Precondition: stock was never reduced.' );
+
+		// Act.
+		$written = Ledger::instance()->write( $id );
+		$dated   = $this->fresh( $id )->get_date_paid( 'edit' );
+		$saves   = 0;
+		add_action(
+			'woocommerce_before_order_object_save',
+			function () use ( &$saves ): void {
+				++$saves;
+			}
+		);
+		$again = Ledger::instance()->write( $id );
+
+		// Assert.
+		$this->assertNotNull( $dated );
+		$this->assertSame( 1, (int) $written->completion['n'] );
+		$this->assertSame( 9, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
+		$this->assertSame( 0, $saves, 'A replay on a fully paid order saves nothing.' );
+		$this->assertSame( $written->completion['id'], $again->completion['id'] );
+		$this->assertSame( $dated->getTimestamp(), $this->fresh( $id )->get_date_paid( 'edit' )->getTimestamp() );
+		$this->assertCount( 1, Completion_History::of( $this->fresh( $id ) )->entries() );
+	}
+
 	/** A paid sale whose completion never landed (a crash after S2) is completed by the next write on it. */
 	public function test_write_on_paid_sale_without_completion_heals_it(): void {
 		// Arrange.
