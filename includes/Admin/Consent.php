@@ -444,30 +444,30 @@ class Consent {
 		// PostHog only if this user goes on to allow tracking.
 		( new Lifecycle_Events() )->record_consent_prompt_viewed( $show_modal ? 'modal' : 'callout' );
 
-		// Append the WCPOS request flag so the bundle's REST calls register the
-		// now-gated consent routes (see register_routes / Init::init_rest_api).
+		/**
+		 * Filters the consent-prompt copy overrides.
+		 *
+		 * Keys (all optional; the consent UI keeps its built-in string for
+		 * any missing key): 'title', 'body', 'fields_intro', 'allow_label',
+		 * 'deny_label', 'privacy_note'. Used by the landing-experiments
+		 * consent-ask test (exp-202607) to vary the prompt without a
+		 * plugin release. Every claim in override copy must be literally
+		 * true about what is read and where it goes.
+		 *
+		 * @since x.x.x  (replace with the next release version at release time)
+		 *
+		 * @param array $copy Copy overrides, default empty.
+		 */
 		$copy = apply_filters( 'wcpos_consent_copy', array() );
 		$copy = apply_filters_deprecated( 'woocommerce_pos_consent_copy', array( $copy ), '2.0.0', 'wcpos_consent_copy' );
+		// Append the WCPOS request flag so the bundle's REST calls register the
+		// now-gated consent routes (see register_routes / Init::init_rest_api).
 		$config = array(
 			'restUrl'     => esc_url_raw( add_query_arg( 'wcpos', '1', rest_url( SHORT_NAME . '/v1/consent' ) ) ),
 			'dismissUrl'  => esc_url_raw( add_query_arg( 'wcpos', '1', rest_url( SHORT_NAME . '/v1/consent/dismiss' ) ) ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'showModal'   => $show_modal,
 			'showCallout' => true,
-			/**
-			 * Filters the consent-prompt copy overrides.
-			 *
-			 * Keys (all optional; the consent UI keeps its built-in string for
-			 * any missing key): 'title', 'body', 'fields_intro', 'allow_label',
-			 * 'deny_label', 'privacy_note'. Used by the landing-experiments
-			 * consent-ask test (exp-202607) to vary the prompt without a
-			 * plugin release. Every claim in override copy must be literally
-			 * true about what is read and where it goes.
-			 *
-			 * @since x.x.x  (replace with the next release version at release time)
-			 *
-			 * @param array $copy Copy overrides, default empty.
-			 */
 			'copy'        => (object) $copy,
 		);
 

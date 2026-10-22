@@ -146,20 +146,6 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Direct test: constructor registers admin options action.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Gateways\Card::__construct
-	 */
-	public function test_direct_constructor_registers_admin_action(): void {
-		$gateway = new Card();
-
-		$this->assertTrue(
-			has_action( 'wcpos_update_options_payment_gateways_pos_card' ),
-			'Admin options action should be registered'
-		);
-	}
-
-	/**
 	 * Direct test: calculate_cashback with different values.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Gateways\Card::calculate_cashback

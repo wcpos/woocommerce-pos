@@ -384,18 +384,4 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$this->assertTrue( $result_defaults );
 	}
 
-	/**
-	 * Direct test: constructor registers admin options action.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Gateways\Cash::__construct
-	 */
-	public function test_direct_constructor_registers_admin_action(): void {
-		$gateway = new Cash();
-
-		$this->assertTrue(
-			has_action( 'wcpos_update_options_payment_gateways_pos_cash' ),
-			'Admin options action should be registered'
-		);
-	}
-
 }

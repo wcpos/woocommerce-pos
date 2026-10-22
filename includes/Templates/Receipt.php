@@ -49,6 +49,17 @@ class Receipt {
 
 		add_filter( 'show_admin_bar', '__return_false' );
 		add_action( 'wcpos_receipt_head', array( $this, 'receipt_head' ) );
+		// Saved PHP templates fire the 1.x name themselves; a template is
+		// merchant data, so the bridge lives on the listener side (ADR 0041).
+		add_action( 'woocommerce_pos_receipt_head', array( $this, 'legacy_receipt_head' ) );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_receipt_head` (1.x) as `wcpos_receipt_head`.
+	 */
+	public function legacy_receipt_head(): void {
+		_deprecated_hook( 'woocommerce_pos_receipt_head', '2.0.0', 'wcpos_receipt_head' );
+		do_action( 'wcpos_receipt_head' );
 	}
 
 	/**

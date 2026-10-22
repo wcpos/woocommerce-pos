@@ -23,6 +23,24 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt extends WC_REST_Unit_Test_Case {
+	public function test_legacy_receipt_head_action_name_still_prints_the_print_listener(): void {
+		$this->setExpectedDeprecated( 'woocommerce_pos_receipt_head' );
+		$order   = wc_create_order();
+		$receipt = new Receipt( $order->get_id() );
+
+		ob_start();
+		do_action( 'woocommerce_pos_receipt_head' );
+		$legacy = ob_get_clean();
+
+		ob_start();
+		do_action( 'wcpos_receipt_head' );
+		$current = ob_get_clean();
+
+		$this->assertStringContainsString( 'wcpos-print-receipt', $legacy );
+		$this->assertSame( $current, $legacy );
+		unset( $receipt );
+	}
+
 	/**
 	 * Every receipt must identify the refund without labelling sales as corrections.
 	 *

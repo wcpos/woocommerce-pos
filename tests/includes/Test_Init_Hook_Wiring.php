@@ -82,6 +82,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'woocommerce_new_product',
 		'woocommerce_new_product_variation',
 		'wcpos_invalidate',
+		'woocommerce_pos_invalidate',
 		'wcpos_sync_order_pull_payloads',
 		'wcpos_sync_proxy_response',
 		'wcpos_sync_serialized_order',

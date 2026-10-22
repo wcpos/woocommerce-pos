@@ -44,6 +44,15 @@ follow the same two-call pattern with `wcpos_{$id}` as the replacement. A hook i
 fired under two names without the deprecated wrapper; the silent-twin pattern in
 `Stock_Validator` is retired by this ADR.
 
+**Hooks that others fire.** The two-call pattern covers hooks the plugin fires. A few hooks
+are fired by code we do not ship and the plugin listens: `woocommerce_pos_invalidate` (an
+extension announcing an out-of-band change, documented since 1.10.3), `woocommerce_pos_receipt_head`
+(a merchant's saved PHP receipt template and the editor's starter shell) and `woocommerce_pos_head`
+/ `woocommerce_pos_footer` (a theme's `pos.php` override). A template is merchant data, so the
+bridge for these lives on the listener side: the plugin keeps a listener on the old name that
+calls `_deprecated_hook()` and re-fires the new name, and the shipped templates fire the new name
+only, so nothing runs twice. Those listeners go in 2.2 with the rest.
+
 **Who subscribes to what.**
 
 - *Free, Pro and both test suites* attach to the `wcpos_` name only. Pro 2.0 ships its own

@@ -71,6 +71,10 @@ class Frontend {
 		// add head & footer actions.
 		add_action( 'wcpos_head', array( $this, 'head' ) );
 		add_action( 'wcpos_footer', array( $this, 'footer' ) );
+		// A theme's pos.php override fires the 1.x names itself; the bridge
+		// lives on the listener side (ADR 0041).
+		add_action( 'woocommerce_pos_head', array( $this, 'legacy_head' ) );
+		add_action( 'woocommerce_pos_footer', array( $this, 'legacy_footer' ) );
 
 		// Generate user credentials BEFORE including template to ensure cookies can be set.
 		// The set_web_session_cookie() call in Auth::get_user_data() requires headers not yet sent.
@@ -100,6 +104,22 @@ class Frontend {
 	 */
 	public function login_url( $login_url ) {
 		return add_query_arg( SHORT_NAME, '1', $login_url );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_head` (1.x) as `wcpos_head`.
+	 */
+	public function legacy_head(): void {
+		_deprecated_hook( 'woocommerce_pos_head', '2.0.0', 'wcpos_head' );
+		do_action( 'wcpos_head' );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_footer` (1.x) as `wcpos_footer`.
+	 */
+	public function legacy_footer(): void {
+		_deprecated_hook( 'woocommerce_pos_footer', '2.0.0', 'wcpos_footer' );
+		do_action( 'wcpos_footer' );
 	}
 
 	/**

@@ -289,6 +289,20 @@ final class Sync_Journal {
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_cot_order_untrashed' ), 10, 1 );
 		add_action( 'wcpos_invalidate', array( $this, 'record_invalidation' ), 10, 2 );
+		// Extensions fire this one, so the bridge lives on the listener side
+		// (ADR 0041): the 1.x name re-fires the 2.0 name until 2.2.
+		add_action( 'woocommerce_pos_invalidate', array( $this, 'record_legacy_invalidation' ), 10, 2 );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_invalidate` (1.x) as `wcpos_invalidate`.
+	 *
+	 * @param string $object_type Canonical (singular) journal object type.
+	 * @param int    $object_id   Changed object ID.
+	 */
+	public function record_legacy_invalidation( $object_type = '', $object_id = 0 ): void {
+		_deprecated_hook( 'woocommerce_pos_invalidate', '2.0.0', 'wcpos_invalidate' );
+		do_action( 'wcpos_invalidate', $object_type, $object_id );
 	}
 
 	/**

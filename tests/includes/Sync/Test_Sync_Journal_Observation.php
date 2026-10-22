@@ -84,6 +84,18 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$this->assert_order_row( $this->latest_row( 'order', $order->get_id(), $cursor ), 'invalidate', false );
 	}
 
+	public function test_legacy_invalidation_action_name_still_records_the_change(): void {
+		$this->setExpectedDeprecated( 'woocommerce_pos_invalidate' );
+		$product = ProductHelper::create_simple_product();
+		$cursor  = $this->journal->head_sequence();
+
+		do_action( 'woocommerce_pos_invalidate', 'product', $product->get_id() );
+
+		$product_row = $this->latest_row( 'product', $product->get_id(), $cursor );
+		$this->assertSame( 'product', $product_row['object_type'] );
+		$this->assertSame( 'invalidate', $product_row['origin'] );
+	}
+
 	public function test_customer_invalidation_is_not_deduplicated_with_a_profile_update(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
 		wp_update_user(

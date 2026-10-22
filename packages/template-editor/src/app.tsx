@@ -125,7 +125,7 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? get_
 <head>
 	<meta charset="utf-8">
 	<title>Receipt</title>
-	<?php do_action( 'woocommerce_pos_receipt_head' ); ?>
+	<?php do_action( 'wcpos_receipt_head' ); ?>
 </head>
 <body style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; margin: 0; padding: 32px 36px;">
 

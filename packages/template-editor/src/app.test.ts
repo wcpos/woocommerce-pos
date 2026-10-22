@@ -177,7 +177,7 @@ describe('starter shells', () => {
 		expect(shell).toContain("$i18n['total']");
 		expect(shell).toContain("$i18n['thank_you_purchase']");
 		// Includes the print hook so the receipt actually prints.
-		expect(shell).toContain("do_action( 'woocommerce_pos_receipt_head' )");
+		expect(shell).toContain("do_action( 'wcpos_receipt_head' )");
 		// Does not call WC_Order methods directly.
 		expect(shell).not.toContain('$order->');
 	});
