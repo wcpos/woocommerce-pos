@@ -13,6 +13,7 @@ use WC_Order;
 use WC_Order_Item_Fee;
 use WC_REST_Orders_Controller;
 use WC_Tax;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Tests\Sync\Seeds_Stored_Digests;
 
 /**
@@ -32,6 +33,7 @@ use WCPOS\WooCommercePOS\Tests\Sync\Seeds_Stored_Digests;
  */
 trait Catalog_Proxy_Order_Payload_Tests {
 	use Seeds_Stored_Digests;
+
 	/**
 	 * An order row carries WooCommerce's ORDER shape plus the v2 additions.
 	 */
@@ -170,6 +172,49 @@ trait Catalog_Proxy_Order_Payload_Tests {
 				);
 			}
 		}
+	}
+
+	/**
+	 * A read never stamps a tax line, so it never moves the order revision.
+	 *
+	 * The frozen v1 lane, still read by 1.11.x tills and by the e2e credential
+	 * probe (`GET /wcpos/v1/orders?per_page=1`), stamps item uuids on read through
+	 * a `woocommerce_order_get_items` filter that stays registered for the rest of
+	 * the request. A tax line's meta is inside the revision, so a stamp on one
+	 * moved the revision with no edit, and the till's next money command answered
+	 * 409 `wcpos_revision_stale` (live run wcpos/monorepo 39770381792).
+	 */
+	public function test_order_reads_never_stamp_a_tax_line_or_move_the_revision(): void {
+		// Arrange.
+		$order = $this->create_field_set_order();
+		$this->assertNotEmpty( $order->get_items( 'tax' ), 'the fixture must carry a tax line, or this pin asserts nothing' );
+		$before = Order_Serializer::current_state( $order->get_id() );
+		$this->assertIsArray( $before );
+
+		// Act: a v1 read of the order, then the till's own v2 read in a later request.
+		// The v1 dispatch registers its response filters for the rest of the PHP
+		// request; restoring the hooks ends that request, as it ends in production.
+		$hooks = array();
+		foreach ( $GLOBALS['wp_filter'] as $name => $hook ) {
+			$hooks[ $name ] = clone $hook;
+		}
+		$v1                   = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() ) );
+		$GLOBALS['wp_filter'] = $hooks; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- End the v1 request's hooks.
+		$row                  = $this->read_order_row( $order );
+
+		// Assert.
+		$this->assertSame( 200, $v1->get_status() );
+		foreach ( $row['tax_lines'] as $index => $tax_line ) {
+			$this->assertNotContains( '_woocommerce_pos_uuid', array_column( $tax_line['meta_data'], 'key' ), "tax_lines[{$index}] is never uuid-stamped" );
+		}
+		foreach ( wc_get_order( $order->get_id() )->get_items( 'tax' ) as $tax_item ) {
+			$this->assertSame( '', wc_get_order_item_meta( $tax_item->get_id(), '_woocommerce_pos_uuid', true ) );
+		}
+		$after = Order_Serializer::current_state( $order->get_id() );
+		$this->assertIsArray( $after );
+		// The canonical forms first, so a failure names the field that moved.
+		$this->assertSame( Order_Serializer::canonical_form( $before['document'] ), Order_Serializer::canonical_form( $after['document'] ) );
+		$this->assertSame( $before['revision'], $after['revision'] );
 	}
 
 	/**

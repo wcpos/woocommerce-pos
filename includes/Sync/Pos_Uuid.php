@@ -220,13 +220,22 @@ class Pos_Uuid {
 	/**
 	 * Ensure the WC_Order_Item has a valid UUID.
 	 *
+	 * Callers run this on READS (the v1 `woocommerce_order_get_items` filter, the v2
+	 * serializer), so a first stamp persists from a read. That is safe only where the
+	 * order revision cannot see the stamp: `Order_Serializer::canonical_form()` strips
+	 * item uuids from line, shipping, fee and coupon lines, the ones clients pair by
+	 * uuid. A tax line is never stamped. WooCommerce derives it from the taxable lines,
+	 * it is readonly in wc/v3, no client pairs it by uuid, and its meta is inside the
+	 * revision. A stamp on it would move the revision with no edit, and the next money
+	 * command built on the read would answer 409 `wcpos_revision_stale`.
+	 *
 	 * @param WC_Order_Item $item The order item object.
 	 * @return void
 	 */
 	public static function ensure_order_item_uuid( WC_Order_Item $item ): void {
 		global $wpdb;
 
-		if ( self::is_uuid( $item->get_meta( self::META_KEY ) ) ) {
+		if ( 'tax' === $item->get_type() || self::is_uuid( $item->get_meta( self::META_KEY ) ) ) {
 			return;
 		}
 

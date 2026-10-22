@@ -147,7 +147,7 @@ final class Order_Serializer {
 	 * Mirror each served line/shipping/fee/coupon item's POS uuid into its
 	 * `meta_data`, stamping the order item first when it has none.
 	 *
-	 * Coupon lines are load-bearing here (v1 stamped ALL item types —
+	 * Coupon lines are load-bearing here (v1 stamps every item type but tax —
 	 * V1/Orders_Controller::wcpos_order_get_items): the client pairs pushed
 	 * vs acked lines strictly by uuid with no positional fallback, so a
 	 * served coupon line WITHOUT a uuid can never be paired — a server-side
