@@ -23,13 +23,13 @@ An architecture review of the ADR 0040 money model on `next` (2026-10-22, after 
 
 | # | Defect | Status | PR |
 |---|---|---|---|
-| D1 | A `sent` attempt stranded by a throw after dispatch is never resolved; `cancel` needs a stamp it never got; close/reopen/cancel refused forever | confirmed | defects-ledger (cancel path); sweeper index in c5 |
+| D1 | A `sent` attempt stranded by a throw after dispatch is never resolved; `cancel` needs a stamp it never got; close/reopen/cancel refused forever | confirmed; cancel path fixed in #2396 (refuses when the order shows paid facts the rows do not cover) | resolver in c5; variant: invoice sent then order cancelled by staff leaves `sent` with no way to clear → c5 |
 | D2 | Push-lane delete has no money gate and no order lock | confirmed | c1 |
 | D3 | Order-pay on a `pos-partial` POS sale marks it paid with no row for the new tender (and order-pay charges the full total) | confirmed; product decision with Paul | — |
 | D4 | `Ledger::stored()` throws `RuntimeException`; the route catches only `Ledger_Persistence_Exception` → 500 instead of a retryable 409 | confirmed | defects-ledger |
 | D5 | On-reader tip fee is saved before its row; a failed row save then a retry adds a second fee; the "carry unsaved items" block in `save()` is unreachable | confirmed | defects-ledger |
 | D6 | Same-id `submit` replay answers `paid`/`payment: null` where the first answer was `recorded` with the row | ruled 2026-10-22: a replay whose first answer was `recorded` replays `recorded` with its row (ADR rule 5); `paid` stays for attempts first answered `sent` | defects-ledger |
-| D7 | Fiscal sale record may precede the ledger read-back throwing | probe test; fix with D4 if red | defects-ledger |
+| D7 | On the capture path, a ledger write that fails after `payment_complete()` leaves the money taken, the order completed, the row `pending`, a sale record naming no payment, and the retry refused as stale | confirmed red by probe in PR #2396 (test kept in scratchpad `d7-probe-test.php`) | c2-3 (write-then-verify ordering is the fix); probe becomes a c2 test |
 | D8 | Live and reprinted receipts for completion n≥2 print completion 1's register/counter/time | confirmed | defects-lanes |
 | D9 | Sweeper captures an authorization on an order its captured tenders already cover | confirmed | defects-ledger |
 | D10 | Address-only pushes skip the order lock though wc/v3 recalculates totals on them | confirmed | defects-lanes |
@@ -40,10 +40,10 @@ An architecture review of the ADR 0040 money model on `next` (2026-10-22, after 
 
 ## PR sequence
 
-1. `fix(payments)`: defects-ledger — D1 (cancel path), D4, D5, D6, D9; D7 probe
-2. `fix`: defects-lanes — D8, D10, D11
-3. c7
-4. c1 (+ D2)
+1. `fix(payments)`: defects-ledger — D1 (cancel path), D4, D5, D6, D9 — **PR #2396**
+2. `fix`: defects-lanes — D8, D10 (D11 was already done by #2376) — **PR #2397, merged 2026-10-22 as f7fd4d9b**
+3. c7 — **PR #2398**
+4. c1 (+ D2) — in implementation
 5. c2 slices 1–3 (design chosen from three alternatives; spec beside this plan)
 6. c3 (needs c2-3 and c7), then c2 slices 4–6
 7. c4 (c4-1 may run after PR 2, independent of c2; c4-2 after c2-5), c5, c8, c6; then the #2378 retry PR

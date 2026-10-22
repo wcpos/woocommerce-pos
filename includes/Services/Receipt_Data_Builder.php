@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WC_Abstract_Order;
@@ -817,7 +818,19 @@ class Receipt_Data_Builder {
 	 * @param object|null       $pos_store POS store override.
 	 */
 	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		$data = $this->build_data( $order, $pos_store );
+		// A re-completed sale's live receipt names the completion that stands (its register, counter,
+		// sale time and record), as its fiscal record does, not the till tuple completion 1 was taken
+		// under; a first completion reads the order as before (ADR 0040 rule 1c).
+		$standing = null;
+		$source   = $order;
+		if ( 'live' === $mode && $order instanceof \WC_Order ) {
+			$latest = Completion_Stamp::standing( $order );
+			if ( null !== $latest && (int) ( $latest['n'] ?? 0 ) >= 2 ) {
+				$standing = $latest;
+				$source   = Completion_Stamp::as_completed( $order, $latest );
+			}
+		}
+		$data = $this->build_data( $source, $pos_store );
 
 		/**
 		 * Filters the canonical receipt data before it is rendered or snapshotted.
@@ -851,7 +864,8 @@ class Receipt_Data_Builder {
 		// (`woocommerce_pos_fiscal_snapshot_enrich`). Order details and provenance
 		// stay live. A 1.3 snapshot without a key keeps the live value.
 		if ( 'live' === $mode ) {
-			$snapshot = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload'] ?? null;
+			$records  = new Fiscal_Record_Store();
+			$snapshot = ( null === $standing ? $records->find_sale( $order->get_id() ) : $records->find_sale( $order->get_id(), (string) $standing['id'] ) )['payload'] ?? null;
 			if ( null !== $snapshot ) {
 				foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
 					if ( array_key_exists( $key, $snapshot['fiscal'] ?? array() ) ) {
