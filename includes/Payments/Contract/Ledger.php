@@ -67,8 +67,9 @@ class Ledger {
 	public const KINDS = array( 'cash', 'card', 'stored_value', 'bank_transfer', 'other' );
 	/** Who opened a row: the till, a webview mint, or WooCommerce itself (a tender adopted at reopen, D5). */
 	public const SOURCES = array( 'app', 'webview', 'woocommerce' );
-	/** Write modes: project and maybe complete; or close (may complete zero or on-hold). */
+	/** Write modes: project and maybe complete; stage only; or close (may complete zero or on-hold). */
 	public const MODE_AUTO  = 'auto';
+	public const MODE_HOLD  = 'hold';
 	public const MODE_CLOSE = 'close';
 
 	/**
@@ -105,6 +106,27 @@ class Ledger {
 	 * @var array<int, bool>
 	 */
 	private static $refused = array();
+
+	/**
+	 * Writes in progress, by order id; a nested write counts.
+	 *
+	 * @var array<int, int>
+	 */
+	private static $writing = array();
+
+	/**
+	 * Deferred work by order id: [ work, label ] pairs.
+	 *
+	 * @var array<int, array<int, array{0: callable, 1: string}>>
+	 */
+	private static $deferred = array();
+
+	/**
+	 * Depth of save_meta() calls.
+	 *
+	 * @var int
+	 */
+	private static $meta_only = 0;
 
 	/** Get the shared ledger. */
 	public static function instance(): self {
@@ -2153,13 +2175,13 @@ class Ledger {
 
 	/**
 	 * The one write of payment rows: lock, fresh read, heal, the change, the rows (S1), the paid transition
-	 * (S2), the completion (S3), unlock. S2 and S3 are functions of storage, so a retry of the same command
+	 * (S2), the completion (S3), deferred work, unlock. S2 and S3 are functions of storage, so a retry of the same command
 	 * heals a crash between them (ADR 0040, amended). A change breaking a row's invariants (I5) is a LogicException.
 	 *
 	 * @param WC_Order|int  $order  Order or order id; the write reads its own.
 	 * @param callable|null $change fn( Ledger_Draft $draft ): mixed. Pure: no provider call, no save, no hook; it may
 	 *                              run twice. Null is a replay or a sweep: it may complete a sale its rows cover.
-	 * @param string        $mode   MODE_AUTO or MODE_CLOSE (may complete zero or on-hold).
+	 * @param string        $mode   MODE_AUTO, MODE_HOLD (stage only) or MODE_CLOSE (may complete zero or on-hold).
 	 * @throws Ledger_Persistence_Exception Retryable; `stage` names the step that failed.
 	 */
 	public function write( $order, ?callable $change = null, string $mode = self::MODE_AUTO ): Ledger_Written {
@@ -2172,15 +2194,92 @@ class Ledger {
 		if ( ! $lock->acquire( $id ) ) {
 			throw Ledger_Persistence_Exception::at( 'lock', 'WCPOS payment ledger is locked.' );
 		}
+		self::$writing[ $id ] = ( self::$writing[ $id ] ?? 0 ) + 1;
 		try {
 			$written = $this->locked_write( $id, $change, $mode );
+			if ( 1 === self::$writing[ $id ] && self::flush( $id ) ) {
+				$fresh   = $this->fresh( $id );
+				$written = new Ledger_Written( $fresh, $this->read( $fresh ), $written->answer, Completion_History::of( $fresh )->standing() );
+			}
 			if ( null !== $change ) {
 				$this->release_hold_if_idle( $written->order );
 			}
 			return $written;
 		} finally {
+			if ( 0 === --self::$writing[ $id ] ) {
+				unset( self::$writing[ $id ] );
+			}
 			$lock->release( $id );
 		}
+	}
+
+	/**
+	 * Whether a write on this order is running in this request.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	public static function is_writing( int $order_id ): bool {
+		return isset( self::$writing[ $order_id ] );
+	}
+
+	/**
+	 * Run work for an order outside every hook: after the outermost write on it, at order-pay's
+	 * successful result, or at shutdown. For listeners that must write the ledger (I3). A failure
+	 * is logged and noted on the order under its label.
+	 *
+	 * @param int      $order_id Order id.
+	 * @param callable $work     The work.
+	 * @param string   $label    What it is for, as a merchant reads it in the note.
+	 */
+	public static function defer( int $order_id, callable $work, string $label ): void {
+		self::$deferred[ $order_id ][] = array( $work, $label );
+		if ( ! has_action( 'shutdown', array( __CLASS__, 'flush_all' ) ) ) {
+			add_action( 'shutdown', array( __CLASS__, 'flush_all' ), 10, 0 );
+			add_filter( 'woocommerce_payment_successful_result', array( __CLASS__, 'flush_result' ), 10, 2 );
+		}
+	}
+
+	/** Run every order's deferred work (shutdown). */
+	public static function flush_all(): void {
+		foreach ( array_keys( self::$deferred ) as $order_id ) {
+			self::flush( $order_id );
+		}
+	}
+
+	/**
+	 * Run an order's deferred work when order-pay hands back its result.
+	 *
+	 * @param mixed $result   Gateway result.
+	 * @param mixed $order_id Order id.
+	 * @return mixed The result, unchanged.
+	 */
+	public static function flush_result( $result, $order_id ) {
+		self::flush( (int) $order_id );
+		return $result;
+	}
+
+	/**
+	 * Save only an order's meta (H2). On HPOS a meta change runs a full order save, and every save
+	 * and transition listener with it, whenever date_modified is older than now and no prop changed.
+	 *
+	 * @param WC_Order $order Order whose staged meta to save.
+	 */
+	public static function save_meta( WC_Order $order ): void {
+		if ( 0 === self::$meta_only++ ) {
+			add_filter( 'woocommerce_orders_table_datastore_should_save_after_meta_change', array( __CLASS__, 'meta_only' ), PHP_INT_MAX );
+		}
+		try {
+			$order->save_meta_data();
+		} finally {
+			if ( 0 === --self::$meta_only ) {
+				remove_filter( 'woocommerce_orders_table_datastore_should_save_after_meta_change', array( __CLASS__, 'meta_only' ), PHP_INT_MAX );
+			}
+		}
+	}
+
+	/** The filter answer save_meta() owns: no full save after a meta change. */
+	public static function meta_only(): bool {
+		return false;
 	}
 
 	/**
@@ -2205,7 +2304,7 @@ class Ledger {
 			$draft  = new Ledger_Draft( $order, $stored );
 			$answer = null === $change ? null : $change( $draft );
 			$rows   = $this->settle( $order, $stored, $draft->rows() );
-			if ( $this->store_rows( $order, $stored, $rows, $this->project( $order, $rows, $mode ), null !== $change ) ) {
+			if ( $this->store_rows( $order, $stored, $rows, $draft, $this->project( $order, $rows, $mode ), null !== $change ) ) {
 				break;
 			}
 			if ( 0 < $try ) {
@@ -2218,7 +2317,7 @@ class Ledger {
 		// A sale its rows already covered completes only on a replay, a sweep or a close (rule 3: a
 		// reopened sale its rows still cover is covered and open, and stays open under other writes).
 		if ( $after['completes'] && ( ! $before['completes'] || null === $change || self::MODE_CLOSE === $mode ) ) {
-			$order = $this->complete( $order );
+			$order = $this->complete( $order, $draft->commands() );
 		}
 		return new Ledger_Written( $order, $this->read( $order ), $answer, Completion_History::of( $order )->standing() );
 	}
@@ -2262,16 +2361,17 @@ class Ledger {
 	 * S1: one save carrying the draft and the projection that does not complete; true once storage
 	 * holds the rows and every staged server-owned key. A replay that changes nothing saves nothing.
 	 *
-	 * @param WC_Order $order      Fresh order, with whatever the change staged on it.
-	 * @param array    $stored     Stored rows.
-	 * @param array    $rows       Settled rows.
-	 * @param array    $projection Projection of the settled rows.
-	 * @param bool     $changed    Whether a change ran.
+	 * @param WC_Order     $order      Fresh order, with whatever the change staged on it.
+	 * @param array        $stored     Stored rows.
+	 * @param array        $rows       Settled rows.
+	 * @param Ledger_Draft $draft      The draft.
+	 * @param array        $projection Projection of the settled rows.
+	 * @param bool         $changed    Whether a change ran.
 	 */
-	private function store_rows( WC_Order $order, array $stored, array $rows, array $projection, bool $changed ): bool {
+	private function store_rows( WC_Order $order, array $stored, array $rows, Ledger_Draft $draft, array $projection, bool $changed ): bool {
 		$id     = $order->get_id();
 		$wire   = json_decode( (string) wp_json_encode( array_map( array( __CLASS__, 'to_wire' ), $rows ) ), true );
-		$staged = $wire !== $stored;
+		$staged = $draft->attempts() || $draft->commands() || $wire !== $stored;
 		// The awaiting-customer stamp stays until S3: storage keeps saying POS-owned until the sale completes.
 		if ( null !== $projection['method'] ) {
 			$order->set_payment_method( $projection['method'] );
@@ -2286,6 +2386,17 @@ class Ledger {
 			return true;
 		}
 		$props = $order->get_changes();
+		if ( $draft->attempts() ) {
+			$history = Gateway_Submission::read_attempts( $order );
+			foreach ( $draft->attempts() as $attempt_id => $fate ) {
+				unset( $history[ $attempt_id ] );
+				$history[ $attempt_id ] = $fate;
+			}
+			$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array_slice( $history, - Gateway_Submission::ATTEMPTS_CAP, null, true ) );
+		}
+		foreach ( $draft->commands() as $command_id => $entry ) {
+			Command_Log::remember( $order, $command_id, $entry );
+		}
 		$this->stage( $order, $rows );
 		// What storage must hold afterwards, as sets (HPOS reuses meta ids): taken now, as the save re-reads the meta.
 		$values = static function ( WC_Order $read, string $key ): array {
@@ -2293,7 +2404,7 @@ class Ledger {
 			sort( $list );
 			return $list;
 		};
-		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY );
+		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY, Command_Log::META_KEY );
 		$want   = array_map( static fn( $key ) => $values( $order, $key ), $keys );
 		$this->server_saves[ $id ] = ( $this->server_saves[ $id ] ?? 0 ) + 1;
 		try {
@@ -2331,12 +2442,13 @@ class Ledger {
 	}
 
 	/**
-	 * S2, the paid transition carrying no ledger meta (I1, I2), then S3.
+	 * S2, the paid transition carrying no ledger meta (I1, I2), then S3 and the completion a close command answered.
 	 *
-	 * @param WC_Order $order Order as S1 stored it.
+	 * @param WC_Order $order    Order as S1 stored it.
+	 * @param array    $commands The order-level command entries this write staged.
 	 * @throws Ledger_Persistence_Exception When the paid status or the completion does not reach storage.
 	 */
-	private function complete( WC_Order $order ): WC_Order {
+	private function complete( WC_Order $order, array $commands ): WC_Order {
 		$id       = $order->get_id();
 		$previous = self::$deriving;
 		// The completion is the ledger's, so it has a register origin (Completion_Stamp::has_origin()).
@@ -2350,7 +2462,19 @@ class Ledger {
 		if ( ! self::paid_now( $order ) ) {
 			throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid transition was not persisted.' );
 		}
-		return $this->finish( $order );
+		$order    = $this->finish( $order );
+		$standing = Completion_History::of( $order )->standing();
+		$closes   = array_filter( $commands, static fn( $entry ) => 'close' === ( $entry['kind'] ?? '' ) );
+		if ( $closes ) {
+			foreach ( $closes as $command_id => $entry ) {
+				Command_Log::remember( $order, $command_id, array_merge( $entry, array( 'ref' => (string) $standing['id'] ) ) );
+			}
+			self::save_meta( $order );
+			if ( $this->fresh( $id )->get_meta( Command_Log::META_KEY ) !== $order->get_meta( Command_Log::META_KEY ) ) {
+				throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS close command was not persisted.' );
+			}
+		}
+		return $order;
 	}
 
 	/**
@@ -2466,6 +2590,32 @@ class Ledger {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Run an order's deferred work, including work deferred while it runs.
+	 *
+	 * @param int $order_id Order id.
+	 * @return bool Whether any ran.
+	 */
+	private static function flush( int $order_id ): bool {
+		$ran = false;
+		while ( ! empty( self::$deferred[ $order_id ] ) ) {
+			list( $work, $label ) = array_shift( self::$deferred[ $order_id ] );
+			$ran                  = true;
+			try {
+				$work();
+			} catch ( \Throwable $error ) {
+				Logger::error( sprintf( 'WCPOS deferred "%s" failed on order #%d: %s', $label, $order_id, $error->getMessage() ), array( 'order_id' => $order_id ) );
+				$order = wc_get_order( $order_id );
+				if ( $order instanceof WC_Order ) {
+					/* translators: %s: what the deferred work was for. */
+					$order->add_order_note( sprintf( __( 'WCPOS: %s did not complete; reconcile manually.', 'woocommerce-pos' ), $label ) );
+				}
+			}
+		}
+		unset( self::$deferred[ $order_id ] );
+		return $ran;
 	}
 
 	/**

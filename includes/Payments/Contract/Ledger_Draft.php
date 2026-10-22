@@ -31,6 +31,20 @@ final class Ledger_Draft {
 	private $rows = array();
 
 	/**
+	 * Attempt fates to stage, by lowercase attempt id.
+	 *
+	 * @var array<string, string>
+	 */
+	private $attempts = array();
+
+	/**
+	 * Order-level command entries to stage, by lowercase command id.
+	 *
+	 * @var array<string, array>
+	 */
+	private $commands = array();
+
+	/**
 	 * Build the draft from the locked read.
 	 *
 	 * @param WC_Order $order Fresh order.
@@ -70,5 +84,44 @@ final class Ledger_Draft {
 	public function put( array $row ): void {
 		$row['id']                = strtolower( (string) ( $row['id'] ?? '' ) );
 		$this->rows[ $row['id'] ] = $row;
+	}
+
+	/**
+	 * Remove a row: only a refused intent may vanish (`Ledger::write()` enforces it).
+	 *
+	 * @param string $id Payment id.
+	 */
+	public function drop( string $id ): void {
+		unset( $this->rows[ strtolower( $id ) ] );
+	}
+
+	/**
+	 * Stage an attempt's fate.
+	 *
+	 * @param string $id   Attempt id.
+	 * @param string $fate `sent`, `settled`, `paid`, `cancelled` or `superseded`.
+	 */
+	public function attempt( string $id, string $fate ): void {
+		$this->attempts[ strtolower( $id ) ] = $fate;
+	}
+
+	/**
+	 * Stage an order-level command entry (`Command_Log::ORDER_KINDS`); a row's entry rides the row.
+	 *
+	 * @param string $id    Command id.
+	 * @param array  $entry `Command_Log::entry()`.
+	 */
+	public function command( string $id, array $entry ): void {
+		$this->commands[ strtolower( $id ) ] = $entry;
+	}
+
+	/** The staged attempt fates, by attempt id. */
+	public function attempts(): array {
+		return $this->attempts;
+	}
+
+	/** The staged order-level command entries, by command id. */
+	public function commands(): array {
+		return $this->commands;
 	}
 }
