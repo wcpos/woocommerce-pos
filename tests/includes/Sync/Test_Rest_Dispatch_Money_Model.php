@@ -24,6 +24,7 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Tests\Helpers\Adopt_Refund_Test_Gateway;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WP_REST_Request;
 
@@ -2595,35 +2596,5 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertCount( 1, $rows );
 		$this->assertSame( '1.00', $rows[0]['amount'] );
 		$this->assertSame( 'pos-partial', wc_get_order( $order_id )->get_status() );
-	}
-}
-
-/** A refund-capable gateway that records its calls and contacts no provider. */
-class Adopt_Refund_Test_Gateway extends \WC_Payment_Gateway {
-	/**
-	 * process_refund() calls.
-	 *
-	 * @var int
-	 */
-	public static $calls = 0;
-
-	/** Fixture identity. */
-	public function __construct() {
-		$this->id       = 'wcpos_adopt_refund_test';
-		$this->title    = 'Online card';
-		$this->enabled  = 'yes';
-		$this->supports = array( 'products', 'refunds' );
-	}
-
-	/**
-	 * Refund at the provider.
-	 *
-	 * @param int    $order_id Order ID.
-	 * @param float  $amount   Amount.
-	 * @param string $reason   Reason.
-	 */
-	public function process_refund( $order_id, $amount = null, $reason = '' ) {
-		++self::$calls;
-		return true;
 	}
 }

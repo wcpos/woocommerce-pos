@@ -251,6 +251,7 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/Helpers/EmailHelper.php';
 		require_once $this->plugin_dir . '/tests/Helpers/FakeMutationStore.php';
 		require_once $this->plugin_dir . '/tests/Helpers/Money_Route_Envelope.php';
+		require_once $this->plugin_dir . '/tests/Helpers/Adopt_Refund_Test_Gateway.php';
 
 		// Tripwire: plugin code touching ORDER meta via get/update/add/delete_post_meta()
 		// fails the test with a LogicException naming the file and line. Order meta lives
