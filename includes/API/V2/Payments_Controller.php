@@ -506,9 +506,11 @@ class Payments_Controller extends WC_REST_Controller {
 	/**
 	 * Finish a route answer: keep the command maps out of the wire, recover a parked sale record,
 	 * and give every 2xx command answer the revision after it, read once recovery has run (§5.3).
+	 * The status poll's answer carries it too, so a void or capture after a poll that settled the
+	 * row goes out under the current revision instead of meeting a stale 409 and re-sending.
 	 *
 	 * @param mixed       $result   Handler, refusal or replay answer.
-	 * @param string|null $kind     Command kind; null for the status poll.
+	 * @param string|null $kind     Command kind; null for the status poll, whose failed read answers no revision.
 	 * @param int         $order_id Order id.
 	 * @return \WP_REST_Response|WP_Error
 	 */
@@ -532,8 +534,8 @@ class Payments_Controller extends WC_REST_Controller {
 			if ( is_array( $data['payment'] ?? null ) ) {
 				unset( $data['payment']['commands'] );
 			}
-			$state = null !== $kind && $response->get_status() < 300 && $order ? Order_Serializer::current_state( $order_id ) : null;
-			if ( is_wp_error( $state ) ) {
+			$state = $response->get_status() < 300 && $order ? Order_Serializer::current_state( $order_id ) : null;
+			if ( is_wp_error( $state ) && null !== $kind ) {
 				return $state; // The command's effect stands and its entry is kept: the retry replays it.
 			}
 			if ( is_array( $state ) ) {
