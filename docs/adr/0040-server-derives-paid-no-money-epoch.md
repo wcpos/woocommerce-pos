@@ -200,6 +200,47 @@ an online gateway shows its original tender in the ledger (a synthetic row from
 `_transaction_id`, as the webview passthrough already does for order-pay); and the exact
 refusal codes, which stay 422 on the push lane and 409 on the route family (#2312's ruling).
 
+**Offline tenders: status (2026-10-23).** This is the section the app's code points at as
+"ADR 0040 §offline" (`OFFLINE_TENDERS_QUEUE` in core's `checkout/tender/tiles.ts`, the SumUp
+driver and module in `apps/main`). Today a tender the store cannot hear is refused: every tile is
+disabled with the `offline` reason while the till is offline or the order's save is queued, and
+nothing starts a SumUp offline session. That is sequencing, not product intent: offline card
+payments on the Solo readers and offline cash are merchant features; they wait on the *offline
+tender outbox*, the design that lets a tender be journaled on the till and sent when the store is
+back. What already exists and what is still missing:
+
+- *Exists, server:* rule 5 above. A `record` is keyed on its row id and replayed from its stored
+  outcome, so one sent days later creates exactly one row; a command built on a stale revision is
+  refused with the current document (rule 6) and the till re-sends it once. Nothing on this side
+  needs to change for the outbox.
+- *Exists, till:* the money command journal (`packages/query/src/store-local/money-commands.ts`)
+  survives reloads, claims and leases its entries, and the recovery path re-sends unanswered
+  commands on reconnect with `RECOVERY_RETRY_DELAYS_MS`; the completion journal and the receipt
+  barrier (`residentHoldsAnswer`) already hold a sale "awaiting adoption" until the store's
+  document arrives.
+- *Exists, SumUp:* the driver's session query, upload-before-checkout, reconnect sync and the
+  `authorized` outcome for a checkout taken inside a session, and the native module's four
+  offline methods, validated on a physical Solo in wcpos/monorepo#2495. Kept dormant on purpose
+  (wcpos/monorepo#2847 closed unmerged, Paul 2026-10-23); Pro settles the uploaded rows.
+- *Missing 1, the product decision:* what the cashier sees for a sale the store has not heard (a
+  provisional receipt and open-orders chip; the close held until the record is answered; the
+  drawer still opens for cash), and the one failed story when the store later refuses the record,
+  for example an order another till paid or voided meanwhile. This is Paul's call and the reason
+  the outbox is parked; nothing below should be built before it is written here.
+- *Missing 2:* a tender journals while offline instead of being refused: `OFFLINE_TENDERS_QUEUE`
+  true, the manual record path and the terminal service journal instead of throwing
+  (`record-manual-payment.ts`, `use-terminal-payments-service.ts`, `void-payments.ts` each carry a
+  "do not queue" refusal today), device tiles stay gated by their own connectivity.
+- *Missing 3:* the provisional state on the till (receipt stage, chip, close) and the recovery
+  bridge finishing the sale when the answer lands; most of it is the existing awaiting-adoption
+  path with a new entry.
+- *Missing 4:* a live e2e spec that cuts the network mid-tender and reconnects.
+- *Missing 5, SumUp:* the leg starts a session when the till is offline and the method opts in
+  (`capabilities.offline === 'queue'`), then one day on a physical Solo.
+
+Estimate: three to four slice PRs for cash and manual tenders once *Missing 1* is written, one
+more slice and a hardware day for SumUp.
+
 **Amendment: the order of the ledger write.** The Consequences' "there is no second phase when the status transition happens inside the ledger save" is unsafe under WooCommerce's save mechanics: `WC_Abstract_Order::save()` catches a failed save and `WC_Order::save()` still runs `status_transition()`, which fires the paid hooks (stock, email, the fiscal sale), so rows riding the paid save can half-land while those effects go out. Amended 2026-10-22: the ledger lands its rows in their own save and verifies them before it runs `payment_complete()`, and stamps the completion after it. Each step is a function of storage and idempotent, and a retry of the same command heals a crash between them. This is not the money epoch returning: no row is filtered or archived; it is the order in which one write reaches storage.
 
 Research: `.claude/research/2026-10-19-pos-money-state-models/RESEARCH.md`, committed beside this
