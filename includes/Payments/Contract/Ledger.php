@@ -2384,7 +2384,13 @@ class Ledger {
 		$id     = $order->get_id();
 		$wire   = json_decode( (string) wp_json_encode( array_map( array( __CLASS__, 'to_wire' ), $rows ) ), true );
 		$staged = $draft->attempts() || $draft->commands() || $wire !== $stored;
-		// The awaiting-customer stamp stays until S3: storage keeps saying POS-owned until the sale completes.
+		// The awaiting-customer stamp stays until S3 on a completing write: storage keeps saying POS-owned until
+		// the sale completes. Money that does not complete it projects the sale back into progress, so it goes now.
+		$unstamped = null !== $projection['method'] && ! $projection['completes'] && null !== Gateway_Submission::read_stamp( $order );
+		if ( $unstamped ) {
+			Completion_Stamp::memoise( $order ); // A later completion in this request still names the sent submit's register.
+			Gateway_Submission::clear_stamp( $order );
+		}
 		if ( null !== $projection['method'] ) {
 			$order->set_payment_method( $projection['method'] );
 			$order->set_payment_method_title( (string) $projection['title'] );
@@ -2394,7 +2400,7 @@ class Ledger {
 			$order->set_status( $projection['status'] );
 		}
 		// A completing write always stores its ledger (empty rows too): heal's marker lands before the paid transition.
-		if ( ! $changed && ! $staged && ! $projection['completes'] && ! $order->get_changes() ) {
+		if ( ! $changed && ! $staged && ! $unstamped && ! $projection['completes'] && ! $order->get_changes() ) {
 			return true;
 		}
 		$props = $order->get_changes();
