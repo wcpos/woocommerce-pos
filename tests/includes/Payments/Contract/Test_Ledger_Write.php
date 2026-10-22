@@ -501,8 +501,8 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 1, $lost );
 		$this->assertSame( 2, $runs );
 		$saved = $this->fresh( $order->get_id() );
-		$this->assertSame( array( $row['id'] ), array_map( static fn( $meta ) => $meta->value, $saved->get_meta( Ledger::PAYMENT_ID_META_KEY, false ) ) );
-		$this->assertSame( array( $row['id'] ), array_map( static fn( $meta ) => $meta->value, $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
+		$this->assertSame( array( $row['id'] ), array_values( array_map( static fn( $meta ) => $meta->value, $saved->get_meta( Ledger::PAYMENT_ID_META_KEY, false ) ) ) );
+		$this->assertSame( array( $row['id'] ), array_values( array_map( static fn( $meta ) => $meta->value, $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) ) );
 	}
 
 	/** A paid status that landed without its paid date (a crash inside S2) is repaired by the replay: date, stock, completion, once. */

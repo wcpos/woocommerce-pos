@@ -2290,6 +2290,14 @@ class Ledger {
 		}
 		$props = $order->get_changes();
 		$this->stage( $order, $rows );
+		// What storage must hold afterwards, as sets (HPOS reuses meta ids): taken now, as the save re-reads the meta.
+		$values = static function ( WC_Order $read, string $key ): array {
+			$list = array_map( static fn( $meta ) => $meta->value, $read->get_meta( $key, false ) );
+			sort( $list );
+			return $list;
+		};
+		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY );
+		$want   = array_map( static fn( $key ) => $values( $order, $key ), $keys );
 		$this->server_saves[ $id ] = ( $this->server_saves[ $id ] ?? 0 ) + 1;
 		try {
 			self::saving( $id, fn() => $order->save() );
@@ -2299,15 +2307,9 @@ class Ledger {
 			}
 		}
 		// The rows, their three indexes, the attempt fates their coverage settled, and every order property staged.
-		$check  = $this->fresh( $id );
-		$kept   = $this->stored( $id, true );
-		$values = static fn( WC_Order $read, string $key ) => array_map( static fn( $meta ) => $meta->value, $read->get_meta( $key, false ) );
-		foreach ( array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY ) as $key ) {
-			if ( $values( $check, $key ) !== $values( $order, $key ) ) {
-				return false;
-			}
-		}
-		return null !== $kept && $kept['payments'] === $wire && self::holds( $check->get_data(), $props );
+		$check = $this->fresh( $id );
+		$kept  = $this->stored( $id, true );
+		return array_map( static fn( $key ) => $values( $check, $key ), $keys ) === $want && null !== $kept && $kept['payments'] === $wire && self::holds( $check->get_data(), $props );
 	}
 
 	/**
