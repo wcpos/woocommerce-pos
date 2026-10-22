@@ -1749,9 +1749,8 @@ class Ledger {
 		// A standing completion is replayed whatever its status (a merchant's POS status may be on-hold).
 		// A sale paid before the history existed stands too: it replays with no completion to name.
 		if ( $state->stands() ) {
-			$history = Completion_Stamp::read( $order );
-			$latest  = end( $history );
-			$this->remember_close( $order, $command, is_array( $latest ) ? $latest : false );
+			$latest = Completion_History::of( $order )->standing() ?? false;
+			$this->remember_close( $order, $command, $latest );
 			return $this->closed( $order, $rows, $latest );
 		}
 		if ( ! $state->open() ) {
@@ -1785,11 +1784,9 @@ class Ledger {
 		self::saving( $order->get_id(), fn() => $order->save() );
 		$fresh = wc_get_order( $order->get_id() );
 		$fresh->read_meta_data( true );
-		$history = Completion_Stamp::read( $fresh );
-		$latest  = end( $history );
 		// Only a completion that stands is reported: when the new entry could not be recorded, the
 		// latest is the reopened one (the failure note names the gap), so none is named.
-		$latest = is_array( $latest ) && empty( $latest['reopened_at_gmt'] ) ? $latest : false;
+		$latest = Completion_History::of( $fresh )->standing() ?? false;
 		// The completion id exists only now, so the entry takes a save of its own (§5.2).
 		$this->remember_close( $fresh, $command, $latest );
 		return $this->closed( $fresh, $this->read( $fresh ), $latest );
@@ -1974,7 +1971,7 @@ class Ledger {
 		return 'captured' === $status
 			&& 'manual' === ( $row['capture_mode'] ?? '' )
 			&& in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true )
-			&& ! Completion_Stamp::counted( $order, (string) ( $row['id'] ?? '' ) );
+			&& ! Completion_History::of( $order )->counted( (string) ( $row['id'] ?? '' ) );
 	}
 
 	/**

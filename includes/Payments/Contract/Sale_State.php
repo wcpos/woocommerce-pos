@@ -98,7 +98,7 @@ final class Sale_State {
 		$this->rows       = $rows;
 		$this->attempts   = Gateway_Submission::read_attempts( $order );
 		$this->stamp      = Gateway_Submission::read_stamp( $order );
-		$this->stands     = Completion_Stamp::stands( $order );
+		$this->stands     = Completion_History::of( $order )->stands();
 		$this->editable   = $order->is_editable();
 		$this->status     = (string) $order->get_status();
 		$this->dated_paid = null !== $order->get_date_paid( 'edit' );

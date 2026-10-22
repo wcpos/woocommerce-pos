@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use WC_Order;
 use WC_Order_Refund;
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -93,12 +93,7 @@ final class Fiscal_Record_Writers {
 		if ( ! $order instanceof WC_Order ) {
 			return;
 		}
-		$completion = null;
-		foreach ( Completion_Stamp::read( $order ) as $entry ) {
-			if ( (int) ( $entry['n'] ?? 0 ) === (int) $n ) {
-				$completion = $entry;
-			}
-		}
+		$completion = Completion_History::of( $order )->by_n( (int) $n );
 		if ( null !== $completion ) {
 			$this->record_sale_safely( $order, $completion );
 		}
@@ -129,7 +124,7 @@ final class Fiscal_Record_Writers {
 				return;
 			}
 			$fresh->read_meta_data( true );
-			$history = Completion_Stamp::read( $fresh );
+			$history = Completion_History::of( $fresh );
 			foreach ( self::parked( $fresh ) as $completion_id => $document ) {
 				try {
 					if ( null === $this->store->record( self::fields_of( $order, (array) $document ) ) ) {
@@ -137,10 +132,9 @@ final class Fiscal_Record_Writers {
 						continue;
 					}
 					self::unpark( $fresh, (string) $completion_id );
-					foreach ( $history as $entry ) {
-						if ( ( $entry['id'] ?? null ) === $completion_id ) {
-							$this->record_sale_safely( $fresh, $entry ); // The row exists now: only its late correction runs.
-						}
+					$entry = $history->by_id( (string) $completion_id );
+					if ( null !== $entry ) {
+						$this->record_sale_safely( $fresh, $entry ); // The row exists now: only its late correction runs.
 					}
 				} catch ( \Throwable $error ) {
 					Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
@@ -179,8 +173,8 @@ final class Fiscal_Record_Writers {
 	 * @throws \Throwable Re-thrown after the built document is parked, when the insert throws.
 	 */
 	public function record_sale( WC_Order $order, ?array $completion = null ): void {
-		$history    = Completion_Stamp::read( $order );
-		$completion = $completion ?? ( end( $history ) ? end( $history ) : null );
+		$history    = Completion_History::of( $order );
+		$completion = $completion ?? $history->latest();
 		// Only a completion the server stamped at a register is a fiscal sale; a legacy entry's row already exists.
 		if ( ! is_array( $completion ) || ! empty( $completion['legacy'] ) || ! is_string( $completion['id'] ?? null ) ) {
 			return;
@@ -193,20 +187,15 @@ final class Fiscal_Record_Writers {
 			$this->recover( $order );
 			return;
 		}
-		$latest = end( $history );
-		if ( $missing && ( ! is_array( $latest ) || $latest['id'] !== $completion['id'] || ! empty( $latest['reopened_at_gmt'] ) ) ) {
+		$standing = $history->standing();
+		if ( $missing && ( null === $standing || $standing['id'] !== $completion['id'] ) ) {
 			// Only the completion that stands may be built from the live order; any other has its parked
 			// document or nothing (the failure note at its insert names it for a human).
 			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d was not built: the completion no longer stands and nothing is parked.', $n, $order->get_id() ) );
 			return;
 		}
 		if ( $missing ) {
-			$previous = null;
-			foreach ( $history as $entry ) {
-				if ( (int) ( $entry['n'] ?? 0 ) === $n - 1 ) {
-					$previous = $entry;
-				}
-			}
+			$previous   = $history->by_n( $n - 1 );
 			$prior      = $previous ? $this->store->find_sale( $order->get_id(), (string) $previous['id'] ) : null;
 			$supersedes = $previous ? array(
 				'record_id'     => $prior['id'] ?? null,
@@ -214,7 +203,8 @@ final class Fiscal_Record_Writers {
 				'total'         => $previous['total'],
 			) : null;
 			$adjustment = $previous ? Money::format( Money::minor( $completion['total'] ) - Money::minor( $previous['total'] ) ) : null;
-			$snapshot   = ( new Receipt_Data_Builder() )->build( Completion_Stamp::as_completed( $order, $completion ), 'fiscal' );
+			// The builder reads the standing completion's till tuple: this one (checked above).
+			$snapshot   = ( new Receipt_Data_Builder() )->build( $order, 'fiscal' );
 			$provenance = $this->store->provenance_from_order( $order );
 			unset( $snapshot['i18n'] );
 			$document = array(
@@ -363,9 +353,8 @@ final class Fiscal_Record_Writers {
 		}
 		// The cancellation names the completion it cancels: the latest one, or for an order
 		// completed before the history existed, its legacy sale (named by its row's digest).
-		$history = Completion_Stamp::read( $order );
-		$latest  = end( $history );
-		$sale    = is_array( $latest ) ? $this->store->find_sale( $order_id, (string) $latest['id'] ) : $this->store->find_sale( $order_id );
+		$latest = Completion_History::of( $order )->latest();
+		$sale   = is_array( $latest ) ? $this->store->find_sale( $order_id, (string) $latest['id'] ) : $this->store->find_sale( $order_id );
 		if ( ! $sale ) {
 			return;
 		}
@@ -446,7 +435,7 @@ final class Fiscal_Record_Writers {
 	 * @param WC_Order $order Order.
 	 */
 	private function is_register_sale( WC_Order $order ): bool {
-		return wcpos_is_pos_order( $order ) || array() !== Completion_Stamp::read( $order );
+		return wcpos_is_pos_order( $order ) || ! Completion_History::of( $order )->is_empty();
 	}
 
 	/**
@@ -461,8 +450,7 @@ final class Fiscal_Record_Writers {
 	 */
 	private function sale_for_refund( WC_Order $order ): ?array {
 		$this->recover( $order );
-		$history = Completion_Stamp::read( $order );
-		$latest  = end( $history );
+		$latest = Completion_History::of( $order )->latest();
 		if ( ! is_array( $latest ) ) {
 			return $this->store->find_sale( $order->get_id() );
 		}
