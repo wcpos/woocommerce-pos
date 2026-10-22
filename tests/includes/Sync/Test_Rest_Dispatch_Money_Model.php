@@ -38,6 +38,8 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 	private $mutation_seq = 0;
 	/** @var string Mutation id of the last push. */
 	protected $last_mutation_id = '';
+	/** @var bool Whether this test turned decimal quantities on. */
+	private $decimal_quantities = false;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -46,6 +48,12 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
+		if ( $this->decimal_quantities ) {
+			remove_filter( 'woocommerce_pos_general_settings', array( $this, 'enable_decimal_qty_setting' ) );
+			remove_filter( 'woocommerce_stock_amount', 'floatval' );
+			add_filter( 'woocommerce_stock_amount', 'intval' );
+			$this->decimal_quantities = false;
+		}
 		parent::tearDown();
 	}
 
@@ -707,6 +715,318 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertSame( 10, $this->stock_of( $product ) );
 		$this->assertSame( 3, $this->first_item( $order_id )->get_quantity() );
+	}
+
+	/** Turn on decimal quantities for this test; tearDown() unwinds both filters. */
+	protected function use_decimal_quantities(): void {
+		add_filter( 'woocommerce_pos_general_settings', array( $this, 'enable_decimal_qty_setting' ) );
+		remove_filter( 'woocommerce_stock_amount', 'intval' );
+		add_filter( 'woocommerce_stock_amount', 'floatval' );
+		$this->decimal_quantities = true;
+	}
+
+	/**
+	 * The decimal_qty setting, on.
+	 *
+	 * @param array $settings General settings.
+	 */
+	public function enable_decimal_qty_setting( $settings ) {
+		$settings['decimal_qty'] = true;
+
+		return $settings;
+	}
+
+	protected function decimal_stock_of( \WC_Product $product ): float {
+		return (float) wc_get_product( $product->get_id() )->get_stock_quantity();
+	}
+
+	/**
+	 * A sale of 6.3 units of a product stocked at ten, paid in cash at the till and completed into
+	 * processing: stock 3.7, `_reduced_stock` 6.3. Paid through the ledger rather than paid_order(),
+	 * because a sale paid outside the ledger refuses a later record as already paid.
+	 */
+	protected function paid_decimal_sale( \WC_Product $product ): int {
+		$this->use_pos_cash_order_status( 'wc-processing' );
+		$order_id = $this->make_order( 'pos-open', array( array( $product, 6.3 ) ) );
+		$recorded = $this->record_cash_for_total( $order_id );
+		$this->assertSame( 200, $recorded->get_status(), 'Response: ' . wp_json_encode( $recorded->get_data() ) );
+		$this->assertSame( 'processing', wc_get_order( $order_id )->get_status() );
+		$this->assertEqualsWithDelta( 3.7, $this->decimal_stock_of( $product ), 0.000001 );
+		$this->assertSame( '6.3', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+		$this->assertTrue( (bool) wc_get_order( $order_id )->get_data_store()->get_stock_reduced( $order_id ) );
+
+		return $order_id;
+	}
+
+	/**
+	 * Store Cash's POS Order Status.
+	 *
+	 * @param string $status The configured status, `wc-` prefixed.
+	 */
+	protected function use_pos_cash_order_status( string $status ): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'enabled'      => true,
+						'order_status' => $status,
+					),
+					'pos_card' => array( 'enabled' => true ),
+				),
+			)
+		);
+	}
+
+	/** Record cash for the order's current total. */
+	protected function record_cash_for_total( int $order_id ) {
+		return $this->record_cash( $order_id, (string) wc_get_order( $order_id )->get_total() );
+	}
+
+	protected function record_cash( int $order_id, string $amount ) {
+		$record = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params( $this->envelope( $order_id, array( 'payment' => $this->cash_payment( $amount ) ) ) );
+
+		return $this->server->dispatch( $record );
+	}
+
+	/**
+	 * Record cash for whatever the ledger says is still owed, then close the sale. A quantity-only
+	 * line edit keeps the line's stored total (the till sends totals with it), so the balance is read
+	 * rather than assumed.
+	 */
+	protected function settle_and_close( int $order_id ) {
+		$balance = (string) Ledger::instance()->summary( wc_get_order( $order_id ) )['balance'];
+		if ( (float) $balance > 0 ) {
+			$recorded = $this->record_cash( $order_id, $balance );
+			$this->assertSame( 200, $recorded->get_status(), 'Response: ' . wp_json_encode( $recorded->get_data() ) );
+		}
+
+		return $this->money_command( '/wcpos/v2/orders/' . $order_id . '/close', $order_id );
+	}
+
+	/** Reopen a paid decimal sale and set its first line to the given quantity, in one push. */
+	protected function reopen_with_first_line_quantity( int $order_id, float $quantity ) {
+		$payload = array(
+			'status'     => 'pos-open',
+			'line_items' => array(
+				array(
+					'id'       => $this->first_item( $order_id )->get_id(),
+					'quantity' => $quantity,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		return $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+	}
+
+	public function test_lowering_a_decimal_quantity_on_a_reopened_paid_order_returns_the_difference(): void {
+		// Arrange.
+		$this->use_decimal_quantities();
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->paid_decimal_sale( $product );
+
+		// Act: 6.3 -> 5.8 in the reopening push.
+		$response = $this->reopen_with_first_line_quantity( $order_id, 5.8 );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertEqualsWithDelta( 4.2, $this->decimal_stock_of( $product ), 0.000001 );
+		$this->assertSame( '5.8', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
+
+		// Act: pay anything still owed and close.
+		$closed = $this->settle_and_close( $order_id );
+
+		// Assert: the completion does not reduce again.
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$this->assertEqualsWithDelta( 4.2, $this->decimal_stock_of( $product ), 0.000001 );
+		$this->assertSame( '5.8', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+	}
+
+	public function test_raising_a_decimal_quantity_on_a_reopened_paid_order_reduces_the_difference(): void {
+		// Arrange.
+		$this->use_decimal_quantities();
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->paid_decimal_sale( $product );
+
+		// Act: 6.3 -> 6.8 in the reopening push.
+		$response = $this->reopen_with_first_line_quantity( $order_id, 6.8 );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertEqualsWithDelta( 3.2, $this->decimal_stock_of( $product ), 0.000001 );
+		$this->assertSame( '6.8', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+
+		// Act: pay anything still owed and close.
+		$closed = $this->settle_and_close( $order_id );
+
+		// Assert: the completion does not reduce again.
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$this->assertEqualsWithDelta( 3.2, $this->decimal_stock_of( $product ), 0.000001 );
+		$this->assertSame( '6.8', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+	}
+
+	public function test_adding_a_decimal_line_to_a_reopened_paid_order_reduces_that_product(): void {
+		// Arrange.
+		$this->use_decimal_quantities();
+		$first    = $this->stock_product( 10 );
+		$second   = $this->stock_product( 5 );
+		$order_id = $this->paid_decimal_sale( $first );
+		$payload  = array(
+			'status'     => 'pos-open',
+			'line_items' => array(
+				array(
+					'id'       => $this->first_item( $order_id )->get_id(),
+					'quantity' => 6.3,
+				),
+				array(
+					'product_id' => $second->get_id(),
+					'quantity'   => 1.5,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+		$items    = array_values( wc_get_order( $order_id )->get_items() );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertCount( 2, $items );
+		$this->assertSame( $second->get_id(), $items[1]->get_product_id() );
+		$this->assertEqualsWithDelta( 3.7, $this->decimal_stock_of( $first ), 0.000001 );
+		$this->assertEqualsWithDelta( 3.5, $this->decimal_stock_of( $second ), 0.000001 );
+		$this->assertSame( '1.5', (string) $items[1]->get_meta( '_reduced_stock', true ) );
+
+		// Act: pay anything still owed and close.
+		$closed = $this->settle_and_close( $order_id );
+		$items    = array_values( wc_get_order( $order_id )->get_items() );
+
+		// Assert: the completion does not reduce again.
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$this->assertEqualsWithDelta( 3.7, $this->decimal_stock_of( $first ), 0.000001 );
+		$this->assertEqualsWithDelta( 3.5, $this->decimal_stock_of( $second ), 0.000001 );
+		$this->assertSame( '6.3', (string) $items[0]->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( '1.5', (string) $items[1]->get_meta( '_reduced_stock', true ) );
+	}
+
+	public function test_removing_a_decimal_line_from_a_reopened_paid_order_restores_its_stock(): void {
+		// Arrange.
+		$this->use_decimal_quantities();
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->paid_decimal_sale( $product );
+		$payload  = array(
+			'status'     => 'pos-open',
+			'line_items' => array(
+				array(
+					'id'         => $this->first_item( $order_id )->get_id(),
+					'product_id' => null,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertEqualsWithDelta( 10.0, $this->decimal_stock_of( $product ), 0.000001 );
+		$this->assertCount( 0, wc_get_order( $order_id )->get_items() );
+	}
+
+	public function test_a_sale_completed_into_a_configured_pending_status_reopened_edited_and_closed_ends_at_the_final_quantities(): void {
+		// Arrange: Cash's POS Order Status stored as Pending; cash covers a sale of two.
+		$this->use_pos_cash_order_status( 'wc-pending' );
+		$first    = $this->stock_product( 10 );
+		$second   = $this->stock_product( 5 );
+		$order_id = $this->make_order( 'pos-open', array( array( $first, 2 ) ) );
+		$record   = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order_id . '/payments' );
+		$record->set_body_params( $this->envelope( $order_id, array( 'payment' => $this->cash_payment( '20.00' ) ) ) );
+		$this->assertSame( 200, $this->server->dispatch( $record )->get_status() );
+		$this->assertSame( 'pending', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( 8, $this->stock_of( $first ) );
+		$this->assertSame( '2', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+		$this->assertTrue( (bool) wc_get_order( $order_id )->get_data_store()->get_stock_reduced( $order_id ) );
+
+		// Act: reopen, drop a unit (2 -> 1), add a line of the second product.
+		$reopen   = $this->push_status( $order_id, 'pos-open' );
+		$edit     = $this->push_envelope( 'update', $this->quantity_edit( $order_id, -1 ), $this->order_revision( $order_id ) );
+		$add      = $this->push_envelope(
+			'update',
+			array(
+				'line_items' => array(
+					array(
+						'id'       => $this->first_item( $order_id )->get_id(),
+						'quantity' => 1,
+					),
+					array(
+						'product_id' => $second->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'meta_data'  => $this->uuid_meta(),
+			),
+			$this->order_revision( $order_id )
+		);
+		$items    = array_values( wc_get_order( $order_id )->get_items() );
+
+		// Assert.
+		$this->assertSame( 200, $reopen->get_status(), 'Response: ' . wp_json_encode( $reopen->get_data() ) );
+		$this->assertSame( 200, $edit->get_status(), 'Response: ' . wp_json_encode( $edit->get_data() ) );
+		$this->assertSame( 200, $add->get_status(), 'Response: ' . wp_json_encode( $add->get_data() ) );
+		$this->assertCount( 2, $items );
+		$this->assertSame( 9, $this->stock_of( $first ) );
+		$this->assertSame( 4, $this->stock_of( $second ) );
+		$this->assertSame( '1', (string) $items[0]->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( '1', (string) $items[1]->get_meta( '_reduced_stock', true ) );
+
+		// Act: pay anything still owed and close.
+		$closed = $this->settle_and_close( $order_id );
+		$items  = array_values( wc_get_order( $order_id )->get_items() );
+
+		// Assert.
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 2, $closed->get_data()['completion']['n'] );
+		$this->assertSame( 'pending', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( 9, $this->stock_of( $first ) );
+		$this->assertSame( 4, $this->stock_of( $second ) );
+		$this->assertSame( '1', (string) $items[0]->get_meta( '_reduced_stock', true ) );
+		$this->assertSame( '1', (string) $items[1]->get_meta( '_reduced_stock', true ) );
+		$this->assertTrue( (bool) wc_get_order( $order_id )->get_data_store()->get_stock_reduced( $order_id ) );
+	}
+
+	public function test_an_unpaid_open_cart_edited_then_closed_reduces_once_at_the_final_quantities(): void {
+		// Arrange: an open cart whose stock was never reduced.
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->make_order( 'pos-open', array( array( $product, 2 ) ) );
+
+		// Act: 2 -> 3.
+		$response = $this->push_envelope( 'update', $this->quantity_edit( $order_id, 1 ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 10, $this->stock_of( $product ) );
+		$this->assertSame( '', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+
+		// Act: pay the total and close.
+		$recorded = $this->record_cash_for_total( $order_id );
+		$closed   = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/close', $order_id );
+
+		// Assert.
+		$this->assertSame( 200, $recorded->get_status(), 'Response: ' . wp_json_encode( $recorded->get_data() ) );
+		$this->assertSame( 200, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 1, $closed->get_data()['completion']['n'] );
+		$this->assertSame( 7, $this->stock_of( $product ) );
+		$this->assertSame( '3', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+		$this->assertTrue( (bool) wc_get_order( $order_id )->get_data_store()->get_stock_reduced( $order_id ) );
 	}
 
 	protected function card_row( string $status, string $amount = '5.00', array $extra = array() ): array {
