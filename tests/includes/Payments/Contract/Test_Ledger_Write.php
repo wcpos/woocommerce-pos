@@ -410,59 +410,24 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 			'captured currency changes'      => array( array(), $edit( array( 'currency' => 'EUR' ) ) ),
 			'captured moves to failed'       => array( array(), $edit( array( 'status' => 'failed' ) ) ),
 			'captured gateway row is voided' => array( array( 'capture_mode' => 'gateway' ), $edit( array( 'status' => 'voided' ) ) ),
-			'captured row vanishes'          => array( array(), static fn( Ledger_Draft $draft, array $row ) => $draft->drop( $row['id'] ) ),
 			'closure id is rewritten'        => array( array( 'closure_id' => 'c1' ), $edit( array( 'closure_id' => 'c2' ) ) ),
-			'pending row with refunds goes'  => array(
-				array(
-					'status' => 'pending',
-					'refunds' => array(
-						array(
-							'amount' => '1.00',
-							'status' => 'pending',
-						),
-					),
-				),
-				static fn( Ledger_Draft $draft, array $row ) => $draft->drop( $row['id'] ),
-			),
 		);
 	}
 
-	/** What the invariants allow: a manual captured row is voided, a refused (pending) intent vanishes. */
-	public function test_write_voiding_manual_row_and_dropping_pending_intent_is_allowed(): void {
+	/** What the invariants allow: a manual captured row is voided. */
+	public function test_write_voiding_manual_captured_row_is_allowed(): void {
 		// Arrange.
-		$order   = $this->create_pos_order();
-		$cash    = $this->row( '10.00' );
-		$refused = $this->row( '20.00', 'pending', array( 'capture_mode' => 'gateway' ) );
-		$this->seed_rows( $order->get_id(), array( $cash, $refused ) );
+		$order = $this->create_pos_order();
+		$cash  = $this->row( '10.00' );
+		$this->seed_rows( $order->get_id(), array( $cash ) );
 
 		// Act.
-		Ledger::instance()->write(
-			$order,
-			function ( Ledger_Draft $draft ) use ( $cash, $refused ): void {
-				$draft->put( array_merge( $cash, array( 'status' => 'voided' ) ) );
-				$draft->drop( $refused['id'] );
-			}
-		);
+		Ledger::instance()->write( $order, fn( Ledger_Draft $draft ) => $draft->put( array_merge( $cash, array( 'status' => 'voided' ) ) ) );
 
 		// Assert.
 		$rows = $this->stored_rows( $order->get_id() );
 		$this->assertSame( array( $cash['id'] ), array_column( $rows, 'id' ) );
 		$this->assertSame( 'voided', $rows[0]['status'] );
-	}
-
-	/** Hold stages the rows and projects nothing: a covering row neither moves the status nor completes. */
-	public function test_write_hold_mode_stores_rows_without_projection(): void {
-		// Arrange.
-		$order = $this->create_pos_order();
-		$row   = $this->row( '92.95' );
-
-		// Act.
-		$written = Ledger::instance()->write( $order, fn( Ledger_Draft $draft ) => $draft->put( $row ), Ledger::MODE_HOLD );
-
-		// Assert.
-		$this->assertSame( 'pos-open', $this->stored_status( $order->get_id() ) );
-		$this->assertNull( $written->completion );
-		$this->assertSame( array( $row['id'] ), array_column( $this->stored_rows( $order->get_id() ), 'id' ) );
 	}
 
 	/** A covered open sale stays open under a write that changes a row (rule 3); a replay with no change completes it. */

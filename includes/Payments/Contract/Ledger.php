@@ -67,9 +67,8 @@ class Ledger {
 	public const KINDS = array( 'cash', 'card', 'stored_value', 'bank_transfer', 'other' );
 	/** Who opened a row: the till, a webview mint, or WooCommerce itself (a tender adopted at reopen, D5). */
 	public const SOURCES = array( 'app', 'webview', 'woocommerce' );
-	/** Write modes: project and maybe complete; stage only; or close (may complete zero or on-hold). */
+	/** Write modes: project and maybe complete; or close (may complete zero or on-hold). */
 	public const MODE_AUTO  = 'auto';
-	public const MODE_HOLD  = 'hold';
 	public const MODE_CLOSE = 'close';
 
 	/**
@@ -2163,7 +2162,7 @@ class Ledger {
 	 * @param WC_Order|int  $order  Order or order id; the write reads its own.
 	 * @param callable|null $change fn( Ledger_Draft $draft ): mixed. Pure: no provider call, no save, no hook; it may
 	 *                              run twice. Null is a replay or a sweep: it may complete a sale its rows cover.
-	 * @param string        $mode   MODE_AUTO, MODE_HOLD (stage only) or MODE_CLOSE (may complete zero or on-hold).
+	 * @param string        $mode   MODE_AUTO or MODE_CLOSE (may complete zero or on-hold).
 	 * @throws Ledger_Persistence_Exception Retryable; `stage` names the step that failed.
 	 */
 	public function write( $order, ?callable $change = null, string $mode = self::MODE_AUTO ): Ledger_Written {

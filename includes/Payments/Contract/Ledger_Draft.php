@@ -71,13 +71,4 @@ final class Ledger_Draft {
 		$row['id']                = strtolower( (string) ( $row['id'] ?? '' ) );
 		$this->rows[ $row['id'] ] = $row;
 	}
-
-	/**
-	 * Remove a row: only a refused intent may vanish (`Ledger::write()` enforces it).
-	 *
-	 * @param string $id Payment id.
-	 */
-	public function drop( string $id ): void {
-		unset( $this->rows[ strtolower( $id ) ] );
-	}
 }
