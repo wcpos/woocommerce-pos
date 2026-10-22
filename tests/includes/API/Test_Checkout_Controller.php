@@ -284,8 +284,8 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The till's checkout records the payment its gateway completed before it answers: the webview mint
-	 * the payment hook deferred lands inside the request, not at its shutdown.
+	 * The till's checkout (the app calls it on wcpos/v2) records the payment its gateway completed before
+	 * it answers: the webview mint the payment hook deferred lands inside the request, not at its shutdown.
 	 */
 	public function test_post_checkout_pos_cash_records_the_payment_before_it_answers(): void {
 		// Arrange.
@@ -297,7 +297,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' );
 		$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
 		$request->set_body_params(
 			array(
