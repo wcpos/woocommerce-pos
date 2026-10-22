@@ -8,13 +8,15 @@
 - `Templates\Payment::initialize_order_and_nonces()` gates only on `is_paid()`. `WC_Form_Handler::pay_action()` gates only on `needs_payment()` and then calls the gateway's `process_payment()`.
 - A WooCommerce gateway charges `get_total()`, not the balance. `payment_complete()` then marks the sale paid, and `Webview_Passthrough::mint()` returns null because a row in `Ledger::LIVE_STATUSES` already exists: the second charge gets no payment row.
 
-## Ruling (Paul, 2026-10-22): option A
+## Ruling (Paul, 2026-10-22): option A, widened to manual
 
-On a POS order (`wcpos_is_pos_order`) that holds a row in `Ledger::COUNTING_STATUSES`, order-pay is refused for every gateway whose capture mode resolves to `webview` (`Descriptor_Builder::resolve_mode()`, i.e. the `wcpos_payment_method_capture_mode` filter). Gateways resolving to `server`, `device` or `manual` are untouched. No new flag, no Pro change, no balance-aware pay flow for webview gateways.
+On a POS order (`wcpos_is_pos_order`) that holds a row in `Ledger::COUNTING_STATUSES`, order-pay refuses every gateway whose capture mode (`Descriptor_Builder::resolve_mode()`, i.e. the `wcpos_payment_method_capture_mode` filter) is not `server` or `device`: webview AND manual. No new flag, no Pro change, no balance-aware pay flow for those gateways.
+
+Why manual too: the 2.0 client records cash and card through `POST orders/{id}/payments` (handoff decision D1), so the pay page's manual gateways have no legitimate use on a partly paid sale, and they settle the full total as well: `Cash::apply_tendered_payment()` compares the tender against `get_total()` and calls `payment_complete()`, marking the sale paid with no row for the balance.
 
 Two layers:
-1. On the order-pay endpoint, `woocommerce_available_payment_gateways` drops webview-mode gateways for such an order; when none remain, the gateway list shows "This sale has a payment recorded at the till. Finish it at the till."
-2. The pay action (`woocommerce_before_pay_action`) refuses a webview-mode gateway on such an order with that notice, so `process_payment()` never runs.
+1. On the order-pay endpoint, `woocommerce_available_payment_gateways` drops the refused gateways for such an order; when none remain, the gateway list shows "This sale has a payment recorded at the till. Finish it at the till."
+2. The pay action (`woocommerce_before_pay_action`) refuses a refused (or unknown) gateway on such an order with that notice, so `process_payment()` never runs.
 
 ## Why not a blanket refusal (Pro facts, woocommerce-pos-pro origin/next)
 
@@ -25,5 +27,6 @@ Two layers:
 ## Tests
 
 - (a) POS order total 100, 40.00 cash recorded → `pos-partial`; pay with a webview-mode gateway → refused, no `process_payment`, no `payment_complete`, one row, status `pos-partial`.
+- (a2) Same order, `pos_cash` tendering the full total → refused, no `payment_complete`, one row, status `pos-partial`.
 - (b) Same order, a gateway the filter resolves to `server` → the pay action proceeds as today.
 - (c) A POS order with no captured rows → the webview-mode gateway is allowed as today.

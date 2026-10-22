@@ -45,14 +45,14 @@ class Webview_Passthrough {
 	}
 
 	/**
-	 * Whether order-pay refuses the gateway (ADR 0040 D3): a webview-mode gateway charges the order total,
-	 * so it cannot pay a POS sale holding a captured tender. Pro's server and device modes charge the balance.
+	 * Whether order-pay refuses the gateway (ADR 0040 D3): webview and manual gateways settle the order total,
+	 * so they cannot pay a POS sale holding a captured tender. Pro's server and device modes charge the balance.
 	 *
 	 * @param WC_Order                $order   Order being paid.
 	 * @param WC_Payment_Gateway|null $gateway Chosen gateway; null when unknown.
 	 */
 	private static function refuses( WC_Order $order, ?WC_Payment_Gateway $gateway ): bool {
-		if ( ( $gateway && 'webview' !== Descriptor_Builder::resolve_mode( $gateway ) ) || ! wcpos_is_pos_order( $order ) ) {
+		if ( ( $gateway && in_array( Descriptor_Builder::resolve_mode( $gateway ), array( 'server', 'device' ), true ) ) || ! wcpos_is_pos_order( $order ) ) {
 			return false;
 		}
 		return (bool) array_filter( Ledger::instance()->read( $order ), static fn( $row ) => in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) );
