@@ -75,6 +75,26 @@ class Revision {
 		return $data;
 	}
 
+	/**
+	 * THE stale check both write lanes run (ADR 0040 rule 6): null when the claimed revision is the
+	 * current one, otherwise the facts each lane wraps in its own refusal shape. Collection-generic:
+	 * the push lane compares products, variations and coupons through it as well as orders.
+	 *
+	 * @param string $claimed          The revision the caller built its write against.
+	 * @param string $current_revision The record's current revision.
+	 * @param array  $current_document The record's current document.
+	 * @return null|array{currentRevision: string, current: array}
+	 */
+	public static function stale( string $claimed, string $current_revision, array $current_document ): ?array {
+		if ( hash_equals( $current_revision, $claimed ) ) {
+			return null;
+		}
+		return array(
+			'currentRevision' => $current_revision,
+			'current'         => $current_document,
+		);
+	}
+
 	public static function compute( array $data ): string {
 		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::canonicalize( $data ) ) );
 	}
