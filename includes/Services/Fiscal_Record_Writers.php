@@ -12,6 +12,7 @@ use WC_Order_Refund;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /** Writes history only; never changes order or payment state. */
@@ -58,7 +59,7 @@ final class Fiscal_Record_Writers {
 	 *
 	 * The business transition has already happened when a writer runs, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
-	 * sale row is recovered by the next money command on the order (recover());
+	 * sale row is recovered by the next money command or refund on the order (recover());
 	 * every failure is surfaced as an order note and an action for a recovery job.
 	 *
 	 * @param WC_Order $order  Order the record describes.
@@ -106,31 +107,47 @@ final class Fiscal_Record_Writers {
 	/**
 	 * Insert every parked sale document (built at its completion, inserted unchanged), then let the
 	 * completion's late correction follow. Nothing parked, nothing to recover: a document is never
-	 * rebuilt from the order as it is now. Fires no completion event.
+	 * rebuilt from the order as it is now. Fires no completion event. The drain runs under the order
+	 * lock on a fresh read of the parked map and the history, so a document parked by another request
+	 * since the caller loaded the order is neither overwritten nor left without its late correction;
+	 * while the lock is held elsewhere it is skipped and the next writer recovers.
 	 *
-	 * @param WC_Order $order Order.
+	 * @param WC_Order $order Order; it serves only the pre-check and the id, the drain reads a fresh copy.
 	 */
 	public function recover( WC_Order $order ): void {
-		$parked = self::parked( $order );
-		if ( ! $parked ) {
+		if ( ! self::parked( $order ) ) {
+			return; // A stale "nothing parked" only defers recovery to the next writer.
+		}
+		$lock = Order_Lock::instance();
+		if ( ! $lock->acquire( $order->get_id() ) ) {
+			Logger::log( sprintf( 'Fiscal sale recovery on order #%d skipped: the order is locked elsewhere; the next writer recovers.', $order->get_id() ) );
 			return;
 		}
-		$history = Completion_Stamp::read( $order );
-		foreach ( $parked as $completion_id => $document ) {
-			try {
-				if ( null === $this->store->record( self::fields_of( $order, (array) $document ) ) ) {
-					Logger::log( sprintf( 'Fiscal sale recovery for completion %s on order #%d failed again.', $completion_id, $order->get_id() ) );
-					continue;
-				}
-				self::unpark( $order, (string) $completion_id );
-				foreach ( $history as $entry ) {
-					if ( ( $entry['id'] ?? null ) === $completion_id ) {
-						$this->record_sale_safely( $order, $entry ); // The row exists now: only its late correction runs.
-					}
-				}
-			} catch ( \Throwable $error ) {
-				Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
+		try {
+			$fresh = wc_get_order( $order->get_id() );
+			if ( ! $fresh instanceof WC_Order ) {
+				return;
 			}
+			$fresh->read_meta_data( true );
+			$history = Completion_Stamp::read( $fresh );
+			foreach ( self::parked( $fresh ) as $completion_id => $document ) {
+				try {
+					if ( null === $this->store->record( self::fields_of( $order, (array) $document ) ) ) {
+						Logger::log( sprintf( 'Fiscal sale recovery for completion %s on order #%d failed again.', $completion_id, $order->get_id() ) );
+						continue;
+					}
+					self::unpark( $fresh, (string) $completion_id );
+					foreach ( $history as $entry ) {
+						if ( ( $entry['id'] ?? null ) === $completion_id ) {
+							$this->record_sale_safely( $fresh, $entry ); // The row exists now: only its late correction runs.
+						}
+					}
+				} catch ( \Throwable $error ) {
+					Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
+				}
+			}
+		} finally {
+			$lock->release( $order->get_id() );
 		}
 	}
 
@@ -389,8 +406,8 @@ final class Fiscal_Record_Writers {
 		if ( ! $order instanceof WC_Order || ! $this->is_register_sale( $order ) || ! $refund instanceof WC_Order_Refund ) {
 			return;
 		}
-		$sale = $this->sale_for_refund( $order );
 		try {
+			$sale       = $this->sale_for_refund( $order );
 			$provenance = $this->refund_provenance( $order, $refund );
 			$this->write(
 				$order,
@@ -464,11 +481,15 @@ final class Fiscal_Record_Writers {
 	/**
 	 * The sale record a refund corrects: the latest completion's own record, or none while it is
 	 * missing (never completion n−1's, and never rebuilt from the order the refund just changed). An
-	 * order without a history (completed before it existed) keeps its latest sale.
+	 * order without a history (completed before it existed) keeps its latest sale. A parked sale
+	 * document is drained first (under the order lock; skipped while another request holds it), so a
+	 * refund written after a failed sale insert names the recovered sale; Fiscal_Record_Store::record()
+	 * is idempotent by source_id under the sequence lock, so a recovery racing a money command inserts once.
 	 *
 	 * @param WC_Order $order Parent order.
 	 */
 	private function sale_for_refund( WC_Order $order ): ?array {
+		$this->recover( $order );
 		$history = Completion_Stamp::read( $order );
 		$latest  = end( $history );
 		if ( ! is_array( $latest ) ) {

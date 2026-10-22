@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Service_Groups;
@@ -401,20 +402,20 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( wc_get_order( $order->get_id() ) );
+			$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+			$this->assertCount( 1, $this->sales( $order->get_id() ) );
+
+			// Act: a refund while completion 2's record is missing (the refund's drain runs and fails here).
+			$first = wc_create_refund(
+				array(
+					'order_id' => $order->get_id(),
+					'amount' => 5,
+					'refund_payment' => false,
+				)
+			);
 		} finally {
 			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
-		$this->assertCount( 1, $this->sales( $order->get_id() ) );
-
-		// Act: a refund while completion 2's record is missing.
-		$first = wc_create_refund(
-			array(
-				'order_id' => $order->get_id(),
-				'amount' => 5,
-				'refund_payment' => false,
-			)
-		);
 
 		// Assert: it names no sale, not completion 1's.
 		$store = new Fiscal_Record_Store();
@@ -540,7 +541,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $two['id'], $late[0]['corrects_record_id'] );
 	}
 
-	/** A completion whose sale row is missing is not rebuilt once a refund has changed the order. */
+	/** A completion whose sale row is missing is recovered by the refund from its completion-time document, never rebuilt. */
 	public function test_a_missing_sale_is_recovered_after_a_refund_with_its_completion_time_document(): void {
 		// Arrange: completion 1's sale insert fails.
 		$order  = $this->order();
@@ -562,13 +563,13 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 					)
 				)
 			);
-			$row = $this->server->dispatch( $request )->get_data()['payment'];
+			$this->server->dispatch( $request );
 		} finally {
 			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
 		}
 		$this->assertSame( array(), $this->sales( $order->get_id() ) );
 
-		// Act: a refund, created after the completion, then the next money command.
+		// Act: a refund, with no money command after it.
 		$refund = wc_create_refund(
 			array(
 				'order_id' => $order->get_id(),
@@ -576,17 +577,201 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'refund_payment' => false,
 			)
 		);
-		$refund->set_date_created( time() + MINUTE_IN_SECONDS );
-		$refund->save();
-		$this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $row['id'] . '/status' ) );
 
-		// Assert: the parked completion-time document is inserted (no refund in it); the refund, written
-		// while it was missing, names no sale.
+		// Assert: the refund drained the parked completion-time document (no refund in it) and names it.
 		$sales = $this->sales( $order->get_id() );
 		$this->assertCount( 1, $sales );
 		$this->assertSame( array(), $sales[0]['payload']['refunds'] );
 		$this->assertEquals( 100, $sales[0]['payload']['totals']['total_incl'] );
-		$this->assertNull( ( new Fiscal_Record_Store() )->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+		$this->assertSame( $sales[0]['id'], ( new Fiscal_Record_Store() )->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+	}
+
+	/** A wp-admin refund after a failed sale insert recovers the sale first and names it, with no second completion event. */
+	public function test_a_wp_admin_refund_after_a_failed_sale_insert_names_the_recovered_sale(): void {
+		// Arrange: completion 1's sale insert fails.
+		$order     = $this->order();
+		$announced = array();
+		$listener  = static function ( $completed, $n ) use ( &$announced ): void {
+			$announced[] = $n;
+		};
+		$enrich    = static function () {
+			throw new \Error( 'boom' );
+		};
+		add_action( 'wcpos_sale_completed', $listener, 5, 2 );
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$this->pay( $order );
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
+		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+
+		// Act: a wp-admin refund, no money command in between.
+		$refund = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => 5,
+				'refund_payment' => false,
+			)
+		);
+		remove_action( 'wcpos_sale_completed', $listener, 5 );
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( $sales[0]['id'], ( new Fiscal_Record_Store() )->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$this->assertSame( array( 1 ), $announced );
+	}
+
+	/** A refund drains only under the order lock: held elsewhere, the drain is skipped and the next writer recovers. */
+	public function test_a_refund_skips_the_drain_while_the_order_lock_is_held_elsewhere(): void {
+		// Arrange: completion 1's sale insert fails; another request holds the order lock.
+		$order  = $this->order();
+		$enrich = static function () {
+			throw new \Error( 'boom' );
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$this->pay( $order );
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
+		$elsewhere = new Order_Lock();
+		$this->assertTrue( $elsewhere->acquire( $order->get_id() ) );
+
+		// Act: a wp-admin refund while the lock is held.
+		try {
+			$refund = wc_create_refund(
+				array(
+					'order_id' => $order->get_id(),
+					'amount' => 5,
+					'refund_payment' => false,
+				)
+			);
+		} finally {
+			$elsewhere->release( $order->get_id() );
+		}
+
+		// Assert: no drain, the refund names no sale, the document is still parked.
+		$store = new Fiscal_Record_Store();
+		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+		$this->assertNull( $store->find_refund( $order->get_id(), $refund->get_id() )['corrects_record_id'] );
+		$this->assertCount( 1, $this->parked( $order->get_id() ) );
+
+		// Act: the refund writer again, with the lock free.
+		Fiscal_Record_Writers::instance()->handle_refund( $order->get_id(), $refund->get_id() );
+
+		// Assert: the sale is recovered and no longer parked.
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** recover() reads the parked map fresh, so a document parked after the caller loaded the order survives. */
+	public function test_recover_reads_the_parked_map_fresh_so_a_document_parked_after_the_caller_loaded_the_order_survives(): void {
+		// Arrange: completion 1's sale insert fails; the caller loads the order; completion 2's insert fails too.
+		$order  = $this->order();
+		$enrich = static function () {
+			throw new \Error( 'boom' );
+		};
+		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$this->pay( $order );
+			$stale = wc_get_order( $order->get_id() );
+			$this->pay( $this->reopen( $order ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		}
+		$this->assertCount( 2, $this->parked( $order->get_id() ) );
+
+		// Act: recovery from the copy loaded before completion 2 was parked.
+		Fiscal_Record_Writers::instance()->recover( $stale );
+
+		// Assert: both completions' documents are inserted and nothing stays parked.
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( array( $history[0]['id'], $history[1]['id'] ), array_column( $this->sales( $order->get_id() ), 'source_id' ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** recover() reads the history fresh too, so a completion parked after the caller loaded the order keeps its late correction. */
+	public function test_recover_writes_the_late_sale_of_a_completion_parked_after_the_caller_loaded_the_order(): void {
+		// Arrange: completion 1 in open session A and completion 2 in closed session B, both inserts
+		// failing; the caller loaded the order between them.
+		$session_a = $this->closure_session( null, 'open' );
+		$session_b = $this->closure_session();
+		$closure_b = ( new \WCPOS\WooCommercePOS\Services\Closure_Store() )->create( $this->closure_fields( $session_b ) );
+		$order     = $this->order();
+		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
+		$order->save();
+		$stale = null;
+		$this->with_sale_inserts_failing(
+			function () use ( $order, $session_a, $session_b, &$stale ): void {
+				$this->cash_in( $order, $session_a, '100.00' );
+				$stale    = wc_get_order( $order->get_id() );
+				$reopened = $this->reopen( $order );
+				$reopened->set_total( '120.00' );
+				$reopened->save();
+				$this->cash_in( $order, $session_b, '20.00' );
+			}
+		);
+		$this->assertCount( 2, $this->parked( $order->get_id() ) );
+
+		// Act: recovery from the copy loaded before completion 2.
+		Fiscal_Record_Writers::instance()->recover( $stale );
+
+		// Assert: both sales land, and completion 2's late correction names its own row and B's closure.
+		$store   = new Fiscal_Record_Store();
+		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$two     = $store->find_sale( $order->get_id(), $history[1]['id'] );
+		$this->assertCount( 2, $this->sales( $order->get_id() ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$late = $store->list(
+			array(
+				'type' => 'late_sale',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertCount( 1, $late );
+		$this->assertSame( $two['id'], $late[0]['corrects_record_id'] );
+		$this->assertSame( $closure_b['id'], $late[0]['closure_id'] );
+	}
+
+	/** A sale lookup that throws is contained by the refund writer, like any other fiscal failure. */
+	public function test_a_refund_whose_sale_lookup_throws_fails_quietly(): void {
+		// Arrange: a completed sale and its refund; then every fiscal-record query throws.
+		$order = $this->order();
+		$this->pay( $order );
+		$refund  = wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount' => 5,
+				'refund_payment' => false,
+			)
+		);
+		$table   = ( new Fiscal_Record_Store() )->table_name();
+		$throw   = static function ( string $sql ) use ( $table ): string {
+			if ( false !== strpos( $sql, $table ) ) {
+				throw new \RuntimeException( 'read failed' );
+			}
+			return $sql;
+		};
+		$failed  = array();
+		$observe = static function ( $type ) use ( &$failed ): void {
+			$failed[] = $type;
+		};
+		add_filter( 'query', $throw );
+		add_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+
+		// Act.
+		try {
+			Fiscal_Record_Writers::instance()->handle_refund( $order->get_id(), $refund->get_id() );
+		} finally {
+			remove_filter( 'query', $throw );
+			remove_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+		}
+
+		// Assert: the throw reached fail_quietly(), not the refund request.
+		$this->assertSame( array( 'refund' ), $failed );
 	}
 
 	/**
