@@ -65,7 +65,9 @@ class Gateway_Submission {
 		// A recorded attempt is the row itself: the attempt id is the client-minted row id.
 		$history  = self::read_attempts( $order );
 		$recorded = $ledger->find( $order, $attempt_id );
-		if ( $recorded && 'paid' !== ( $history[ $attempt_id ] ?? null ) ) {
+		$stored   = empty( $command['id'] ) ? null : Command_Log::find( $order, array(), $command['id'] );
+		// A paid attempt answers `paid`, except to the command that first answered `recorded` (ADR 0040 rule 5).
+		if ( $recorded && ( 'paid' !== ( $history[ $attempt_id ] ?? null ) || 'recorded' === ( $stored['outcome'] ?? null ) ) ) {
 			self::answered( $order, $command, $attempt_id, 'recorded' );
 			return array(
 				'outcome' => 'recorded',
@@ -87,7 +89,6 @@ class Gateway_Submission {
 			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled or superseded at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		// The history no longer names the attempt (ATTEMPTS_CAP): the command map still answers it.
-		$stored = empty( $command['id'] ) ? null : Command_Log::find( $order, array(), $command['id'] );
 		if ( $stored ) {
 			return array(
 				'outcome' => $stored['outcome'],

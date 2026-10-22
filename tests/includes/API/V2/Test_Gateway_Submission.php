@@ -1359,6 +1359,31 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'sent', $this->stored_commands( $order->get_id() )[ $body['command_id'] ]['outcome'] );
 	}
 
+	/** D6: a submit first answered `recorded` replays `recorded` with its row under the same command id (ADR 0040 rule 5). */
+	public function test_submit_paid_replay_with_the_same_command_id_answers_recorded_with_the_row(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$body    = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'values'     => array(),
+			)
+		);
+
+		// Act.
+		$first = $this->gateway_command( $order, 'submit', $body, 'wcpos_paid_test' );
+		$again = $this->gateway_command( $order, 'submit', $body, 'wcpos_paid_test' );
+
+		// Assert.
+		$this->assertSame( 'recorded', $first->get_data()['outcome'] );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'recorded', $again->get_data()['outcome'] );
+		$this->assertSame( $attempt, $again->get_data()['payment']['id'] ?? null );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+	}
+
 	/** Pin 9: the same submit command id with other values is a 422; nothing is sent or stamped again. */
 	public function test_submit_replay_with_a_different_body_is_422(): void {
 		// Arrange.
