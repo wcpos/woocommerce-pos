@@ -1519,9 +1519,10 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		);
 		$lost = 0;
 		$keep = static function ( $saving ) use ( $id, &$lost ): void {
-			if ( 0 === $lost && $saving->get_id() === $id && $saving->get_fees() ) {
+			// The rows save (S1): the one carrying the tipped row. The fee and the row land; the tipped total does not.
+			if ( 0 === $lost && $saving->get_id() === $id && false !== strpos( (string) $saving->get_meta( Ledger::META_KEY ), '"tip":"7.05"' ) ) {
 				++$lost;
-				$saving->set_total( '92.95' ); // The fee and the row land; the tipped total does not.
+				$saving->set_total( '92.95' );
 			}
 		};
 		add_action( 'woocommerce_before_order_object_save', $keep, PHP_INT_MAX );
@@ -1569,9 +1570,10 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		);
 		$lost  = 0;
 		$keep  = static function ( $saving ) use ( $id, &$lost ): void {
-			if ( 0 === $lost && $saving->get_id() === $id && $saving->get_fees() ) {
+			// The rows save (S1): the one carrying the tipped row. The fee and the row land; the tipped total does not.
+			if ( 0 === $lost && $saving->get_id() === $id && false !== strpos( (string) $saving->get_meta( Ledger::META_KEY ), '"tip":"7.05"' ) ) {
 				++$lost;
-				$saving->set_total( '92.95' ); // The fee and the row land; the tipped total does not.
+				$saving->set_total( '92.95' );
 			}
 		};
 		add_action( 'woocommerce_before_order_object_save', $keep, PHP_INT_MAX );

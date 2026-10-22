@@ -2589,7 +2589,8 @@ class Ledger {
 		if ( ! $changed && ! $staged && ! $unstamped && ! $projection['completes'] && ! $order->get_changes() ) {
 			return true;
 		}
-		$props = $order->get_changes();
+		// The total is read back even when a change saved it (a drained tip's recalculation lands before S1).
+		$props = $order->get_changes() + array( 'total' => $order->get_total( 'edit' ) );
 		if ( $draft->attempts() ) {
 			$history = Gateway_Submission::read_attempts( $order );
 			foreach ( $draft->attempts() as $attempt_id => $fate ) {
