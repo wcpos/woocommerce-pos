@@ -11,6 +11,7 @@ use WC_Order;
 use WC_Order_Refund;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -516,7 +517,7 @@ final class Fiscal_Record_Writers {
 		$parked                                 = self::parked( $order );
 		$parked[ strtolower( $completion_id ) ] = $document;
 		$order->update_meta_data( self::PENDING_META_KEY, wp_json_encode( $parked ) );
-		$order->save_meta_data();
+		Ledger::save_meta( $order );
 	}
 
 	/**
@@ -533,7 +534,7 @@ final class Fiscal_Record_Writers {
 		} else {
 			$order->delete_meta_data( self::PENDING_META_KEY );
 		}
-		$order->save_meta_data();
+		Ledger::save_meta( $order );
 	}
 
 	/** Log a lost correction and fire the recovery signal without failing the caller.

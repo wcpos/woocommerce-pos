@@ -137,7 +137,7 @@ class Webview_Passthrough {
 	}
 
 	/**
-	 * Mint after WooCommerce completes a payment.
+	 * Mint after WooCommerce completes a payment, once its hook has returned.
 	 *
 	 * @param int $order_id Order ID.
 	 */
@@ -161,14 +161,7 @@ class Webview_Passthrough {
 
 		// A sent attempt this payment answers is the row's id, so Ledger::save() marks the attempt paid.
 		$attempt = Completion_Stamp::attempt( $order->get_id() );
-		try {
-			self::mint( $order, $attempt ? array( 'id' => $attempt['attempt_id'] ) : array() );
-		} catch ( Ledger_Persistence_Exception $error ) {
-			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
-		} catch ( \Throwable $error ) {
-			// Anything else is unexpected: record it once, and still never interrupt the gateway hook.
-			Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
-		}
+		self::defer_mint( $order, $attempt ? array( 'id' => $attempt['attempt_id'] ) : array() );
 	}
 
 	/**
@@ -197,15 +190,38 @@ class Webview_Passthrough {
 		if ( ! $order instanceof WC_Order || '' === $order->get_payment_method() ) {
 			return;
 		}
+		self::defer_mint( $order, array() );
+	}
 
-		try {
-			self::mint( $order );
-		} catch ( Ledger_Persistence_Exception $error ) {
-			return; // mint() already logged and left a recovery note; never interrupt the gateway hook.
-		} catch ( \Throwable $error ) {
-			// Anything else is unexpected: record it once, and still never interrupt the gateway hook.
-			Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $order->get_id(), $error->getMessage() ), array( 'order_id' => $order->get_id() ) );
+	/**
+	 * Mint outside the payment or status hook (no save inside it, #2389): when order-pay hands back the
+	 * gateway's result, or at shutdown for a callback. Then stamp the completion the row stands for.
+	 *
+	 * @param WC_Order $order     Order the hook named.
+	 * @param array    $overrides Submission-specific row values.
+	 */
+	private static function defer_mint( WC_Order $order, array $overrides ): void {
+		$id = $order->get_id();
+		if ( ! wcpos_is_pos_order( $order ) || Ledger::is_deriving( $id ) || Gateway_Submission::is_submitting( $id ) ) {
+			return; // The ledger's own transition, or the submit, records this payment itself.
 		}
+		$work = static function () use ( $id, $overrides ): void {
+			$order = wc_get_order( $id );
+			try {
+				$row = $order instanceof WC_Order ? self::mint( $order, $overrides ) : null;
+			} catch ( Ledger_Persistence_Exception $error ) {
+				return; // mint() already logged and left a recovery note.
+			} catch ( \Throwable $error ) {
+				// Anything else is unexpected: record it once.
+				Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $id, $error->getMessage() ), array( 'order_id' => $id ) );
+				return;
+			}
+			$order = null === $row ? null : wc_get_order( $id );
+			if ( $order instanceof WC_Order ) {
+				Completion_Stamp::stamp( $order );
+			}
+		};
+		Ledger::defer( $id, $work, __( 'Recording the payment WooCommerce took', 'woocommerce-pos' ) );
 	}
 
 	/**

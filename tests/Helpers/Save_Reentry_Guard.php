@@ -176,6 +176,24 @@ class Save_Reentry_Guard {
 	}
 
 	/**
+	 * Run work with every excepted directory policed again, to prove that a site an exemption still
+	 * covers no longer saves inside a hook (#2389 removes the last exemption).
+	 *
+	 * @param callable $work Work.
+	 *
+	 * @return mixed What the work returns.
+	 */
+	public static function strictly( callable $work ) {
+		$excepted            = self::$excepted_dirs;
+		self::$excepted_dirs = array();
+		try {
+			return $work();
+		} finally {
+			self::$excepted_dirs = $excepted;
+		}
+	}
+
+	/**
 	 * A directory as the backtrace reports it: realpath()'d, with one trailing slash.
 	 *
 	 * @param string $dir Directory.

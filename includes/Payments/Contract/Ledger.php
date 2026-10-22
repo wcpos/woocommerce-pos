@@ -278,7 +278,7 @@ class Ledger {
 			)
 		);
 		$order->update_meta_data( self::META_KEY, $json, $stored['meta_id'] );
-		$order->save_meta_data();
+		self::save_meta( $order );
 		$check = $this->stored( $order->get_id(), true );
 		foreach ( $check['payments'] ?? array() as $row ) {
 			if ( ( $row['closure_id'] ?? null ) === $closure_id ) {
@@ -2194,10 +2194,19 @@ class Ledger {
 		if ( ! $lock->acquire( $id ) ) {
 			throw Ledger_Persistence_Exception::at( 'lock', 'WCPOS payment ledger is locked.' );
 		}
-		self::$writing[ $id ] = ( self::$writing[ $id ] ?? 0 ) + 1;
+		$depth = ( self::$writing[ $id ] ?? 0 ) + 1;
 		try {
-			$written = $this->locked_write( $id, $change, $mode );
-			if ( 1 === self::$writing[ $id ] && self::flush( $id ) ) {
+			self::$writing[ $id ] = $depth;
+			try {
+				$written = $this->locked_write( $id, $change, $mode );
+			} finally {
+				self::$writing[ $id ] = $depth - 1;
+				if ( 1 === $depth ) {
+					unset( self::$writing[ $id ] );
+				}
+			}
+			// The outermost write is done, so its deferred work runs as any other caller would, still under the lock.
+			if ( 1 === $depth && self::flush( $id ) ) {
 				$fresh   = $this->fresh( $id );
 				$written = new Ledger_Written( $fresh, $this->read( $fresh ), $written->answer, Completion_History::of( $fresh )->standing() );
 			}
@@ -2206,9 +2215,6 @@ class Ledger {
 			}
 			return $written;
 		} finally {
-			if ( 0 === --self::$writing[ $id ] ) {
-				unset( self::$writing[ $id ] );
-			}
 			$lock->release( $id );
 		}
 	}
@@ -2224,8 +2230,9 @@ class Ledger {
 
 	/**
 	 * Run work for an order outside every hook: after the outermost write on it, at order-pay's
-	 * successful result, or at shutdown. For listeners that must write the ledger (I3). A failure
-	 * is logged and noted on the order under its label.
+	 * successful result, or at shutdown. None of the three runs inside a save, transition or payment
+	 * hook. For listeners that must write the ledger (I3). A failure is logged and noted on the order
+	 * under its label; the flush never throws.
 	 *
 	 * @param int      $order_id Order id.
 	 * @param callable $work     The work.
@@ -2235,14 +2242,16 @@ class Ledger {
 		self::$deferred[ $order_id ][] = array( $work, $label );
 		if ( ! has_action( 'shutdown', array( __CLASS__, 'flush_all' ) ) ) {
 			add_action( 'shutdown', array( __CLASS__, 'flush_all' ), 10, 0 );
-			add_filter( 'woocommerce_payment_successful_result', array( __CLASS__, 'flush_result' ), 10, 2 );
+			// Priority 0: while the order-pay window is still open (the passthrough closes it at 1), so the
+			// completion a deferred mint stamps reads the till as its origin, as it did inside the hook.
+			add_filter( 'woocommerce_payment_successful_result', array( __CLASS__, 'flush_result' ), 0, 2 );
 		}
 	}
 
-	/** Run every order's deferred work (shutdown). */
+	/** Run every order's deferred work, including work a job defers for another order (shutdown). */
 	public static function flush_all(): void {
-		foreach ( array_keys( self::$deferred ) as $order_id ) {
-			self::flush( $order_id );
+		while ( self::$deferred ) {
+			self::flush( (int) array_key_first( self::$deferred ) );
 		}
 	}
 
@@ -2525,7 +2534,7 @@ class Ledger {
 		$order = $this->fresh( $id );
 		if ( null !== Completion_History::of( $order )->standing() && null !== Gateway_Submission::read_stamp( $order ) ) {
 			Gateway_Submission::clear_stamp( $order );
-			self::saving( $id, fn() => $order->save_meta_data() );
+			self::save_meta( $order );
 			$order = $this->fresh( $id );
 		}
 		if ( null === Completion_History::of( $order )->standing() || null !== Gateway_Submission::read_stamp( $order ) ) {
@@ -2607,10 +2616,14 @@ class Ledger {
 				$work();
 			} catch ( \Throwable $error ) {
 				Logger::error( sprintf( 'WCPOS deferred "%s" failed on order #%d: %s', $label, $order_id, $error->getMessage() ), array( 'order_id' => $order_id ) );
-				$order = wc_get_order( $order_id );
-				if ( $order instanceof WC_Order ) {
-					/* translators: %s: what the deferred work was for. */
-					$order->add_order_note( sprintf( __( 'WCPOS: %s did not complete; reconcile manually.', 'woocommerce-pos' ), $label ) );
+				try {
+					$order = wc_get_order( $order_id );
+					if ( $order instanceof WC_Order ) {
+						/* translators: %s: what the deferred work was for. */
+						$order->add_order_note( sprintf( __( 'WCPOS: %s did not complete; reconcile manually.', 'woocommerce-pos' ), $label ) );
+					}
+				} catch ( \Throwable $note_error ) {
+					Logger::error( sprintf( 'WCPOS could not note the failed "%s" on order #%d: %s', $label, $order_id, $note_error->getMessage() ) );
 				}
 			}
 		}
