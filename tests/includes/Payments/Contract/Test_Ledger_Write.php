@@ -18,6 +18,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -1638,6 +1639,70 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		);
 		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ $input['id'] ] );
 		$this->assertSame( array(), $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
+	}
+
+	/** WooCommerce computes a taxed tip's totals: three taxed lines rounded at subtotal plus a taxable tip leave no balance. */
+	public function test_record_taxed_tip_rounded_at_subtotal_leaves_no_balance(): void {
+		// Arrange: 10% tax rounded at subtotal over three 3.33 lines (each line's tax is 0.333).
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_tax_round_at_subtotal', 'yes' );
+		\WC_Tax::_insert_tax_rate(
+			array(
+				'tax_rate_country'  => '',
+				'tax_rate'          => '10.0000',
+				'tax_rate_name'     => 'VAT',
+				'tax_rate_priority' => 1,
+				'tax_rate_compound' => 0,
+				'tax_rate_shipping' => 1,
+				'tax_rate_order'    => 1,
+				'tax_rate_class'    => '',
+			)
+		);
+		Capture_Mode_Registry::instance()->register( 'tip_test', Tip_Test_Handler::class );
+		$mode = static fn( $mode, $gateway ) => 'pos_card' === $gateway->id ? 'tip_test' : $mode;
+		add_filter( 'wcpos_payment_method_capture_mode', $mode, 10, 2 );
+		add_filter( 'wcpos_payment_tip_fee_taxable', '__return_true' );
+		$order = wc_create_order();
+		for ( $i = 0; $i < 3; $i++ ) {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( '3.33' );
+			$product->save();
+			$order->add_product( $product, 1 );
+		}
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->calculate_totals( true );
+		$id    = $order->get_id();
+		$total = Money::minor( wc_get_order( $id )->get_total() );
+		$input = array_merge(
+			$this->tender( Money::format( $total ) ),
+			array(
+				'method_id' => 'pos_card',
+				'status' => 'authorized',
+			)
+		);
+		wcpos_settle_payment(
+			$input['id'],
+			array(
+				'status' => 'captured',
+				'amount' => Money::format( $total + 110 ),
+			)
+		);
+
+		// Act.
+		try {
+			$row = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		} finally {
+			remove_filter( 'wcpos_payment_tip_fee_taxable', '__return_true' );
+			remove_filter( 'wcpos_payment_method_capture_mode', $mode, 10 );
+		}
+
+		// Assert: the stored total is WooCommerce's own figure and the tipped capture covers it exactly.
+		$saved  = new \WC_Order( $id );
+		$stored = $saved->get_total();
+		$this->assertSame( $stored, ( new \WC_Order( $id ) )->calculate_totals( false ) );
+		$this->assertSame( Money::minor( $row['amount'] ), Money::minor( $stored ) );
+		$this->assertSame( '0.00', Ledger::instance()->summary( $saved )['balance'] );
 	}
 
 	/** A tipped confirmation parked while a captured arrival is stored raises its amount by the verified tip on the drain. */

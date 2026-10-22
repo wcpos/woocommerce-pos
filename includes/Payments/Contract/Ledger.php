@@ -1244,9 +1244,9 @@ class Ledger {
 	}
 
 	/**
-	 * Stage a tipped row's fee and the order totals it implies on the draft order, not saved. The fee insert is
-	 * guarded, the totals are always recalculated (D5): an S1 retry may find the fee and the tipped row stored but
-	 * not the total. Summed as WooCommerce's update_taxes() and calculate_totals( false ) do.
+	 * A tipped row's fee and the order totals, as apply_result() lands them: the fee insert is guarded and the
+	 * totals are always recalculated by WooCommerce, the calculation authority (D5). Its update_taxes() and
+	 * calculate_totals() save the order before S1 saves the rows; an S1 retry finds the fee and recalculates.
 	 *
 	 * @param WC_Order $order Draft order.
 	 * @param array    $row   The row as the confirmation leaves it.
@@ -1259,24 +1259,8 @@ class Ledger {
 		if ( $fee ) {
 			$order->add_item( $fee );
 		}
-		$taxes = array();
-		foreach ( $order->get_items( array( 'line_item', 'fee' ) ) as $item ) {
-			foreach ( $item->get_taxes()['total'] ?? array() as $rate_id => $tax ) {
-				$taxes[ $rate_id ] = ( $taxes[ $rate_id ] ?? 0 ) + (float) wc_round_tax_total( (float) $tax );
-			}
-		}
-		foreach ( $taxes as $rate_id => $tax ) {
-			$line = current( array_filter( $order->get_taxes(), static fn( $item ) => (int) $item->get_rate_id() === (int) $rate_id ) );
-			if ( ! $line ) {
-				$line = new \WC_Order_Item_Tax();
-				$line->set_rate( $rate_id );
-				$order->add_item( $line );
-			}
-			$line->set_tax_total( wc_format_decimal( $tax ) );
-		}
-		$order->set_cart_tax( wc_format_decimal( array_sum( $taxes ) ) );
-		$lines = array_sum( array_map( static fn( $item ) => (float) $item->get_total(), $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) ) );
-		$order->set_total( wc_format_decimal( $lines + array_sum( $taxes ) + (float) $order->get_shipping_tax(), wc_get_price_decimals() ) );
+		$order->update_taxes();
+		$order->calculate_totals( false );
 	}
 
 	/**
