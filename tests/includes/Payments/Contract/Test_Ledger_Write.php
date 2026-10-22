@@ -17,6 +17,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Save_Hooks;
 use WP_UnitTestCase;
 
 /**
@@ -410,24 +411,59 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 			'captured currency changes'      => array( array(), $edit( array( 'currency' => 'EUR' ) ) ),
 			'captured moves to failed'       => array( array(), $edit( array( 'status' => 'failed' ) ) ),
 			'captured gateway row is voided' => array( array( 'capture_mode' => 'gateway' ), $edit( array( 'status' => 'voided' ) ) ),
+			'captured row vanishes'          => array( array(), static fn( Ledger_Draft $draft, array $row ) => $draft->drop( $row['id'] ) ),
 			'closure id is rewritten'        => array( array( 'closure_id' => 'c1' ), $edit( array( 'closure_id' => 'c2' ) ) ),
+			'pending row with refunds goes'  => array(
+				array(
+					'status' => 'pending',
+					'refunds' => array(
+						array(
+							'amount' => '1.00',
+							'status' => 'pending',
+						),
+					),
+				),
+				static fn( Ledger_Draft $draft, array $row ) => $draft->drop( $row['id'] ),
+			),
 		);
 	}
 
-	/** What the invariants allow: a manual captured row is voided. */
-	public function test_write_voiding_manual_captured_row_is_allowed(): void {
+	/** What the invariants allow: a manual captured row is voided, a refused (pending) intent vanishes. */
+	public function test_write_voiding_manual_row_and_dropping_pending_intent_is_allowed(): void {
 		// Arrange.
-		$order = $this->create_pos_order();
-		$cash  = $this->row( '10.00' );
-		$this->seed_rows( $order->get_id(), array( $cash ) );
+		$order   = $this->create_pos_order();
+		$cash    = $this->row( '10.00' );
+		$refused = $this->row( '20.00', 'pending', array( 'capture_mode' => 'gateway' ) );
+		$this->seed_rows( $order->get_id(), array( $cash, $refused ) );
 
 		// Act.
-		Ledger::instance()->write( $order, fn( Ledger_Draft $draft ) => $draft->put( array_merge( $cash, array( 'status' => 'voided' ) ) ) );
+		Ledger::instance()->write(
+			$order,
+			function ( Ledger_Draft $draft ) use ( $cash, $refused ): void {
+				$draft->put( array_merge( $cash, array( 'status' => 'voided' ) ) );
+				$draft->drop( $refused['id'] );
+			}
+		);
 
 		// Assert.
 		$rows = $this->stored_rows( $order->get_id() );
 		$this->assertSame( array( $cash['id'] ), array_column( $rows, 'id' ) );
 		$this->assertSame( 'voided', $rows[0]['status'] );
+	}
+
+	/** Hold stages the rows and projects nothing: a covering row neither moves the status nor completes. */
+	public function test_write_hold_mode_stores_rows_without_projection(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->row( '92.95' );
+
+		// Act.
+		$written = Ledger::instance()->write( $order, fn( Ledger_Draft $draft ) => $draft->put( $row ), Ledger::MODE_HOLD );
+
+		// Assert.
+		$this->assertSame( 'pos-open', $this->stored_status( $order->get_id() ) );
+		$this->assertNull( $written->completion );
+		$this->assertSame( array( $row['id'] ), array_column( $this->stored_rows( $order->get_id() ), 'id' ) );
 	}
 
 	/** A covered open sale stays open under a write that changes a row (rule 3); a replay with no change completes it. */
@@ -765,6 +801,234 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$order->save_meta_data();
 		$this->assertNull( $this->fresh( $order->get_id() )->get_date_paid( 'edit' ), 'Precondition: unpaid.' );
 		return $order->get_id();
+	}
+
+	/** Is writing only while a write on that order runs. */
+	public function test_is_writing_is_true_only_inside_write_on_that_order(): void {
+		// Arrange.
+		$order  = $this->create_pos_order();
+		$inside = null;
+		$other  = null;
+
+		// Act.
+		Ledger::instance()->write(
+			$order,
+			function () use ( $order, &$inside, &$other ): void {
+				$inside = Ledger::is_writing( $order->get_id() );
+				$other  = Ledger::is_writing( $order->get_id() + 1 );
+			}
+		);
+
+		// Assert.
+		$this->assertTrue( $inside );
+		$this->assertFalse( $other );
+		$this->assertFalse( Ledger::is_writing( $order->get_id() ) );
+	}
+
+	/** Work deferred inside a write's own paid hooks runs once that write returns: outside every hook and every write. */
+	public function test_defer_from_a_paid_hook_runs_after_the_outermost_write(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$ran   = array();
+		$defer = static function () use ( $id, &$ran ): void {
+			Ledger::defer(
+				$id,
+				static function () use ( $id, &$ran ): void {
+					$ran[] = array(
+						'hooks'   => array_values( array_filter( (array) $GLOBALS['wp_current_filter'], array( Save_Hooks::class, 'contains' ) ) ),
+						'writing' => Ledger::is_writing( $id ),
+					);
+					$late = wc_get_order( $id );
+					$late->update_meta_data( '_wcpos_test_deferred', 'ran' );
+					$late->save_meta_data();
+				},
+				'the test job'
+			);
+		};
+		add_action( 'woocommerce_order_status_changed', $defer );
+
+		// Act.
+		$written = Ledger::instance()->write( $order, fn( Ledger_Draft $draft ) => $draft->put( $this->row( '92.95' ) ) );
+
+		// Assert.
+		$this->assertSame(
+			array(
+				array(
+					'hooks'   => array(),
+					'writing' => false,
+				),
+			),
+			$ran
+		);
+		$this->assertSame( 'ran', $written->order->get_meta( '_wcpos_test_deferred' ), 'The answer is read after the deferred work.' );
+	}
+
+	/** A nested write on the order leaves the queue to the outer write. */
+	public function test_defer_inside_a_nested_write_waits_for_the_outer_write(): void {
+		// Arrange.
+		$order  = $this->create_pos_order();
+		$id     = $order->get_id();
+		$ran    = 0;
+		$inside = null;
+
+		// Act.
+		Ledger::instance()->write(
+			$order,
+			function () use ( $id, &$ran, &$inside ): void {
+				Ledger::defer(
+					$id,
+					static function () use ( &$ran ): void {
+						++$ran;
+					},
+					'the test job'
+				);
+				Ledger::instance()->write( $id );
+				$inside = $ran;
+			}
+		);
+
+		// Assert.
+		$this->assertSame( 0, $inside );
+		$this->assertSame( 1, $ran );
+	}
+
+	/** Order-pay's successful result runs that order's deferred work, and only that order's. */
+	public function test_defer_flushes_at_payment_successful_result_for_that_order_only(): void {
+		// Arrange.
+		$paying = $this->create_pos_order()->get_id();
+		$other  = $this->create_pos_order()->get_id();
+		$ran    = array();
+		foreach ( array( $paying, $other ) as $id ) {
+			Ledger::defer(
+				$id,
+				static function () use ( $id, &$ran ): void {
+					$ran[] = $id;
+				},
+				'the test job'
+			);
+		}
+
+		// Act.
+		$result = apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $paying ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
+
+		// Assert.
+		$this->assertSame( array( 'result' => 'success' ), $result );
+		$this->assertSame( array( $paying ), $ran );
+		Ledger::flush_all();
+		$this->assertSame( array( $paying, $other ), $ran );
+	}
+
+	/** Work deferred outside any write waits for shutdown, which runs every order's queue. */
+	public function test_defer_outside_a_write_runs_at_shutdown(): void {
+		// Arrange.
+		$first  = $this->create_pos_order()->get_id();
+		$second = $this->create_pos_order()->get_id();
+		$ran    = array();
+
+		// Act.
+		foreach ( array( $first, $second ) as $id ) {
+			Ledger::defer(
+				$id,
+				static function () use ( $id, &$ran ): void {
+					$ran[] = $id;
+				},
+				'the test job'
+			);
+		}
+		$before = $ran;
+		Ledger::flush_all();
+
+		// Assert.
+		$this->assertNotFalse( has_action( 'shutdown', array( Ledger::class, 'flush_all' ) ) );
+		$this->assertSame( array(), $before );
+		$this->assertSame( array( $first, $second ), $ran );
+	}
+
+	/** A deferred job that throws is logged and noted on the order under its label; the next job still runs. */
+	public function test_defer_throwing_job_is_logged_and_noted_and_the_rest_still_run(): void {
+		// Arrange.
+		$id     = $this->create_pos_order()->get_id();
+		$ran    = false;
+		$errors = array();
+		$log    = static function ( $enabled, $message ) use ( &$errors ) {
+			if ( 'error' === \WCPOS\WooCommercePOS\Logger::$log_level ) {
+				$errors[] = $message;
+			}
+			return false;
+		};
+		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		Ledger::defer(
+			$id,
+			static function (): void {
+				throw new \RuntimeException( 'job failed' );
+			},
+			'Recording the test payment'
+		);
+		Ledger::defer(
+			$id,
+			static function () use ( &$ran ): void {
+				$ran = true;
+			},
+			'the next job'
+		);
+
+		// Act.
+		Ledger::flush_all();
+		remove_filter( 'woocommerce_pos_logging', $log, 10 );
+
+		// Assert.
+		$this->assertTrue( $ran );
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'Recording the test payment' ) && false !== strpos( $message, 'job failed' ) ) );
+		$notes = array_column( wc_get_order_notes( array( 'order_id' => $id ) ), 'content' );
+		$this->assertContains( 'WCPOS: Recording the test payment did not complete; reconcile manually.', $notes );
+	}
+
+	/**
+	 * H2: a ledger meta write inside a status hook writes the meta only. On HPOS WooCommerce re-saves the whole
+	 * order after a meta change whenever date_modified is older than now; WooCommerce's own saves inside the
+	 * status hooks move it to now, so the test stands in for the clock having ticked past it since.
+	 */
+	public function test_completion_stamped_inside_a_status_hook_runs_no_nested_order_save(): void {
+		// Arrange: a till sale its cash covers.
+		$order = $this->create_pos_order();
+		$this->seed_rows( $order->get_id(), array( $this->row( '92.95' ) ) );
+		$nested = array();
+		$count  = static function ( $saving ) use ( &$nested ): void {
+			if ( doing_action( 'woocommerce_order_status_changed' ) ) {
+				$nested[] = $saving->get_id();
+			}
+		};
+		add_filter( 'woocommerce_orders_table_datastore_should_save_after_meta_change', '__return_true' );
+		add_action( 'woocommerce_before_order_object_save', $count );
+
+		// Act.
+		$this->fresh( $order->get_id() )->update_status( 'processing' );
+		remove_action( 'woocommerce_before_order_object_save', $count );
+		remove_filter( 'woocommerce_orders_table_datastore_should_save_after_meta_change', '__return_true' );
+
+		// Assert.
+		$this->assertNotNull( Completion_History::of( $this->fresh( $order->get_id() ) )->standing(), 'Precondition: the status hook stamped the completion.' );
+		$this->assertSame( array(), $nested );
+	}
+
+	/** The completion of a write is its own step (S3): no listener stamps it inside the paid hooks. */
+	public function test_write_completion_is_stamped_after_the_paid_hooks_return(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$seen  = array();
+		$look  = function () use ( $order, &$seen ): void {
+			$seen[] = Completion_History::of( $this->fresh( $order->get_id() ) )->entries();
+		};
+		add_action( 'woocommerce_order_status_changed', $look, 99 );
+		add_action( 'woocommerce_payment_complete', $look, 99 );
+
+		// Act.
+		$written = Ledger::instance()->write( $order, fn( Ledger_Draft $draft ) => $draft->put( $this->row( '92.95' ) ) );
+
+		// Assert.
+		$this->assertSame( array( array(), array() ), $seen );
+		$this->assertSame( 1, (int) $written->completion['n'] );
 	}
 
 	/**

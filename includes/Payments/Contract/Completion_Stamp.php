@@ -50,7 +50,7 @@ final class Completion_Stamp {
 	private static $attempts = array();
 
 	/**
-	 * Orders whose payment_complete() is running: the passthrough mints their row at payment-complete 10.
+	 * Orders whose payment_complete() is running: the passthrough defers their row's mint from payment-complete 10.
 	 *
 	 * @var array<int, bool>
 	 */
@@ -58,13 +58,13 @@ final class Completion_Stamp {
 
 	/** Arm the completion entry points. */
 	public static function register_hooks(): void {
-		// Priority 5: memoise a sent submit's provenance before Gateway_Submission clears the stamp
-		// (10), and mark a reopen.
+		// Priority 5: memoise a sent submit's provenance (Gateway_Submission memoises it before its
+		// before-save clears the stamp), and mark a reopen, a write's own included.
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 5, 4 );
-		// Priority 15: stamp a completion after the webview's status-only mint (10), so the entry
-		// names the row; still before every woocommerce_payment_complete listener.
+		// Priority 15: stamp a completion; a write stamps its own (S3), and a mint deferred from these
+		// hooks stamps after it lands.
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_completed' ), 15, 4 );
-		// Priority 15: after Webview_Passthrough has minted an order-pay row (10).
+		// Priority 15: a completion whose register origin is already stored; a deferred mint stamps its own.
 		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 15, 1 );
 		add_action( 'woocommerce_pre_payment_complete', array( __CLASS__, 'on_pre_payment_complete' ), 10, 1 );
 	}
@@ -211,6 +211,9 @@ final class Completion_Stamp {
 	 * @param WC_Order|null $order Order object.
 	 */
 	public static function on_completed( $id, $from, $to, $order = null ): void {
+		if ( Ledger::is_writing( (int) $id ) ) {
+			return;
+		}
 		try {
 			$order = $order instanceof WC_Order ? $order : wc_get_order( (int) $id );
 			if ( ! $order instanceof WC_Order ) {
@@ -232,6 +235,9 @@ final class Completion_Stamp {
 	 */
 	public static function on_payment_complete( $id ): void {
 		self::on_payment_completed( $id );
+		if ( Ledger::is_writing( (int) $id ) ) {
+			return;
+		}
 		try {
 			$order = wc_get_order( (int) $id );
 			if ( $order instanceof WC_Order ) {
@@ -260,10 +266,9 @@ final class Completion_Stamp {
 		}
 		try {
 			$fresh = self::fresh( $id );
-			if ( $fresh && self::is_paid( $fresh ) && self::mints_attempt( $fresh ) ) {
-				$fresh = self::fresh( $id );
+			if ( $fresh && self::is_paid( $fresh ) ) {
+				self::mints_attempt( $fresh );
 			}
-			// The window test reads the fresh order: a mint earlier in this save is not on the caller's object.
 			if ( ! $fresh || ! self::is_paid( $fresh ) || ! self::has_origin( $fresh ) || self::awaits_mint( $fresh ) ) {
 				return;
 			}
@@ -446,40 +451,47 @@ final class Completion_Stamp {
 
 	/**
 	 * A sent attempt the merchant (or a provider) marked paid without payment_complete() has no row:
-	 * nothing else will mint one outside a window. Mint it as the submit does for a paying gateway,
-	 * the attempt id as the row id, so the completion names the payment; Ledger::save() marks the
-	 * attempt paid. Inside payment_complete() the passthrough mints at payment-complete 10 instead.
+	 * nothing else will mint one outside a window. Defer minting it as the submit does for a paying
+	 * gateway, the attempt id as the row id, so the completion names the payment, and stamp after it;
+	 * Ledger::save() marks the attempt paid. Inside payment_complete() the passthrough defers its mint instead.
 	 *
 	 * @param WC_Order $order Fresh order, paid, read under the lock.
-	 * @return bool Whether a row was minted.
 	 */
-	private static function mints_attempt( WC_Order $order ): bool {
+	private static function mints_attempt( WC_Order $order ): void {
 		$id      = $order->get_id();
 		$attempt = self::$attempts[ $id ] ?? null;
 		if ( null === $attempt || isset( self::$completing[ $id ] ) || Gateway_Submission::is_submitting( $id ) || Webview_Passthrough::is_paying( $id ) || self::captured_ids( $order ) ) {
-			return false;
+			return;
 		}
-		$transaction = $order->get_transaction_id();
-		try {
-			$row = Webview_Passthrough::mint(
-				$order,
-				array(
-					'id'            => $attempt['attempt_id'],
-					'source'        => 'app',
-					'capture_mode'  => 'gateway',
-					'method_id'     => '' !== $attempt['method_id'] ? $attempt['method_id'] : $order->get_payment_method(),
-					'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
-					'cashier_id'    => $attempt['cashier_id'],
-				)
-			);
-		} catch ( \Throwable $error ) {
-			$row = null;
-		}
-		if ( null === $row ) {
-			Logger::error( sprintf( 'WCPOS attempt %s on order #%d was marked paid but its row could not be minted; the completion waits for it.', $attempt['attempt_id'], $id ), array( 'order_id' => $id ) );
-			return false;
-		}
-		return true;
+		$mint = static function () use ( $id, $attempt ): void {
+			$order = self::fresh( $id );
+			if ( ! $order || self::captured_ids( $order ) ) {
+				return;
+			}
+			$transaction = $order->get_transaction_id();
+			try {
+				$row = Webview_Passthrough::mint(
+					$order,
+					array(
+						'id'            => $attempt['attempt_id'],
+						'source'        => 'app',
+						'capture_mode'  => 'gateway',
+						'method_id'     => '' !== $attempt['method_id'] ? $attempt['method_id'] : $order->get_payment_method(),
+						'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
+						'cashier_id'    => $attempt['cashier_id'],
+					)
+				);
+			} catch ( \Throwable $error ) {
+				$row = null;
+			}
+			$order = self::fresh( $id );
+			if ( null === $row || ! $order || ! self::captured_ids( $order ) ) {
+				Logger::error( sprintf( 'WCPOS attempt %s on order #%d was marked paid but its row could not be minted; the completion waits for it.', $attempt['attempt_id'], $id ), array( 'order_id' => $id ) );
+				return;
+			}
+			self::stamp( $order );
+		};
+		Ledger::defer( $id, $mint, __( 'Recording the paid attempt', 'woocommerce-pos' ) );
 	}
 
 	/**
@@ -609,7 +621,7 @@ final class Completion_Stamp {
 		if ( null !== $completed_at ) {
 			$order->update_meta_data( self::COMPLETED_AT_META_KEY, $completed_at );
 		}
-		Ledger::saving( $order->get_id(), fn() => $order->save_meta_data() );
+		Ledger::save_meta( $order );
 		foreach ( $order->get_data_store()->read_meta( $order ) as $meta ) {
 			if ( self::META_KEY === $meta->meta_key && maybe_unserialize( $meta->meta_value ) === $json ) {
 				return true;

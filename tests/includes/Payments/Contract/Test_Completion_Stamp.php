@@ -264,6 +264,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 		// Act: the provider's callback completes the payment.
 		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 
 		// Assert.
 		$history = $this->stored_history( $order->get_id() );
@@ -284,6 +285,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 
 		// Assert.
 		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
@@ -311,6 +313,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 		// Act: wp-admin marks the bank transfer paid.
 		wc_get_order( $order->get_id() )->update_status( 'processing' );
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 
 		// Assert.
 		$stored  = wc_get_order( $order->get_id() );
@@ -330,6 +333,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 		// Fulfilment afterwards writes nothing more.
 		wc_get_order( $order->get_id() )->update_status( 'completed' );
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 		$this->assertCount( 1, $this->stored_history( $order->get_id() ) );
 		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
@@ -359,6 +363,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 		// Act: later in the request, the merchant marks the invoice paid.
 		wc_get_order( $order->get_id() )->update_status( 'processing' );
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 
 		// Assert.
 		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( wc_get_order( $order->get_id() ) ), 'id' ) );
@@ -681,6 +686,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 		// Act: a webhook in a later request completes the payment.
 		wc_get_order( $order->get_id() )->payment_complete( 'ch_async' );
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 
 		// Assert.
 		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );

@@ -254,6 +254,8 @@ class Gateway_Submission {
 				unset( $_POST[ $id ] );
 			}
 		}
+		// What the gateway's hooks deferred for this order lands before the answer is built.
+		Ledger::flush( $order->get_id() );
 		if ( $threw instanceof Ledger_Persistence_Exception && ! $dispatch_started ) {
 			// Nothing was dispatched and nothing durable records the attempt: a retryable conflict.
 			self::restore_method( $order, $previous_method, null );
@@ -482,17 +484,26 @@ class Gateway_Submission {
 
 	/** Clear obsolete stamps on terminal Woo transitions. */
 	public static function register_hooks(): void {
-		add_action(
-			'woocommerce_order_status_changed',
-			static function ( $id, $from, $to, $order ): void {
-				if ( self::read_stamp( $order ) && in_array( $to, array_merge( wc_get_is_paid_statuses(), array( 'cancelled', 'refunded', 'trash' ) ), true ) ) {
-					self::clear_stamp( $order );
-					Ledger::saving( (int) $id, fn() => $order->save() );
-				}
-			},
-			10,
-			4
-		);
+		add_action( 'woocommerce_before_order_object_save', array( __CLASS__, 'clear_obsolete_stamp' ), 10, 1 );
+	}
+
+	/**
+	 * A save moving a stamped order to a paid, cancelled, refunded or trashed status carries the stamp's
+	 * removal itself, so nothing saves again inside its status hooks. A completion first remembers the
+	 * provenance the stamp names (Completion_Stamp::memoise()).
+	 *
+	 * @param mixed $order Order about to be saved.
+	 */
+	public static function clear_obsolete_stamp( $order ): void {
+		$to = $order instanceof WC_Order ? ( $order->get_changes()['status'] ?? null ) : null;
+		if ( null === $to || ! self::read_stamp( $order ) || ! in_array( $to, array_merge( wc_get_is_paid_statuses(), array( 'cancelled', 'refunded', 'trash' ) ), true ) ) {
+			return;
+		}
+		$completed = Completion_Stamp::completed_statuses( $order );
+		if ( in_array( $to, $completed, true ) && ! in_array( $order->get_data()['status'] ?? '', $completed, true ) ) {
+			Completion_Stamp::memoise( $order );
+		}
+		self::clear_stamp( $order );
 	}
 
 	/**

@@ -13,6 +13,7 @@ use WC_Payment_Gateway;
 use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WCPOS\WooCommercePOS\Payments\Idempotency_Repository;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
@@ -209,6 +210,8 @@ class Checkout_Controller extends WC_REST_Controller {
 
 				throw $exception;
 			}
+			// The gateway's payment_complete() deferred the ledger's record of the payment: land it before answering.
+			Ledger::flush( $order->get_id() );
 
 			if ( is_wp_error( $state ) ) {
 				Stock_Validator::instance()->release_checkout_stock( $order );

@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
+use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
 
 /** Submission reads money from the gateway, not from the verb. */
 class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
@@ -638,6 +639,31 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
 	}
 
+	/** Ledger work a payment listener defers while the gateway runs lands before the submit answers, not at shutdown. */
+	public function test_submit_runs_work_deferred_during_dispatch_before_it_answers(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$ran   = false;
+		$defer = static function ( $id ) use ( &$ran ): void {
+			Ledger::defer(
+				(int) $id,
+				static function () use ( &$ran ): void {
+					$ran = true;
+				},
+				'the test job'
+			);
+		};
+		add_action( 'woocommerce_payment_complete', $defer );
+
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+		remove_action( 'woocommerce_payment_complete', $defer );
+
+		// Assert.
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$this->assertTrue( $ran );
+	}
+
 	/** A completed sale owes money after a refund, yet a new attempt is refused, not dispatched (§4.2). */
 	public function test_submit_on_a_completed_sale_is_refused(): void {
 		// Arrange: paid in cash, 20.00 refunded and allocated.
@@ -679,10 +705,13 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'sent', $this->submit( $order, $attempt, array( 'invoice_email' => 'customer@example.com' ) )->get_data()['outcome'] );
 		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reset();
 
-		// Act: a later request lands the paid status without payment_complete().
-		wc_get_order( $order->get_id() )->update_status( 'processing' );
+		// Act: a later request lands the paid status without payment_complete(); its row is minted at shutdown.
+		Save_Reentry_Guard::strictly( fn() => wc_get_order( $order->get_id() )->update_status( 'processing' ) );
+		$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		Ledger::flush_all();
 
 		// Assert.
+		$this->assertSame( array(), $during, 'Nothing is minted inside the status hook.' );
 		$stored = wc_get_order( $order->get_id() );
 		$rows   = Ledger::instance()->read( $stored );
 		$this->assertSame( array( $attempt ), array_column( $rows, 'id' ) );
@@ -700,10 +729,13 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'sent', $this->submit( $order, $attempt, array( 'invoice_email' => 'customer@example.com' ) )->get_data()['outcome'] );
 		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reset();
 
-		// Act: the provider's callback in a later request.
-		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
+		// Act: the provider's callback in a later request; its row is minted at shutdown.
+		Save_Reentry_Guard::strictly( fn() => wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' ) );
+		$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		Ledger::flush_all();
 
 		// Assert.
+		$this->assertSame( array(), $during, 'Nothing is minted inside the payment hook.' );
 		$stored = wc_get_order( $order->get_id() );
 		$rows   = Ledger::instance()->read( $stored );
 		$this->assertSame( array( $attempt ), array_column( $rows, 'id' ) );
@@ -1070,8 +1102,8 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			$order = $this->create_pos_order();
 			$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
 			$order->save();
-			// Act.
-			$order->update_status( $status );
+			// Act: the stamp's removal rides the status save itself.
+			Save_Reentry_Guard::strictly( fn() => $order->update_status( $status ) );
 			// Assert.
 			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' ) );
 		}

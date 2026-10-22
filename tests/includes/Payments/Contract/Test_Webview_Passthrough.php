@@ -11,9 +11,11 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
 
 /** Webview payment passthrough tests. */
 class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
@@ -44,6 +46,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				static function () use ( $hook, $order ): void {
 					do_action( 'woocommerce_before_pay_action', $order );
 					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order );
+					// Order-pay hands back the gateway's result: the mint deferred from the hook runs here.
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 				}
 			);
 
@@ -94,6 +98,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				static function () use ( $hook, $order ): void {
 					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+					// Order-pay hands back the gateway's result: the mint deferred from the hook runs here.
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 				}
 			);
 		} finally {
@@ -145,6 +151,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				static function () use ( $hook, $order ): void {
 					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+					// Order-pay hands back the gateway's result: the mint deferred from the hook runs here.
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 				}
 			);
 		} finally {
@@ -196,6 +204,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				static function () use ( $hook, $order ): void {
 					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+					// Order-pay hands back the gateway's result: the mint deferred from the hook runs here.
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 				}
 			);
 		} finally {
@@ -247,6 +257,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				static function () use ( $hook, $order ): void {
 					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+					// Order-pay hands back the gateway's result: the mint deferred from the hook runs here.
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 				}
 			);
 		} finally {
@@ -299,6 +311,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				static function () use ( $hook, $order ): void {
 					do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 					do_action( $hook, $order->get_id(), 'pos-open', 'processing', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- WooCommerce's hooks.
+					// Order-pay hands back the gateway's result: the mint deferred from the hook runs here.
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 				}
 			);
 		} finally {
@@ -354,7 +368,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		return array( array( 'ch_duplicate', false ), array( '', false ), array( 'ch_duplicate', true ), array( '', true ) );
 	}
 
-	/** Payment completion mints a captured webview row. */
+	/** Payment completion mints a captured webview row once the hook has returned (a callback request: at shutdown). */
 	public function test_payment_complete_on_pos_order_mints_webview_row(): void {
 		// Arrange.
 		$order = $this->create_order( true );
@@ -364,12 +378,15 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$order->save();
 
 		// Act.
-		$order->payment_complete();
+		Save_Reentry_Guard::strictly( fn() => $order->payment_complete() );
+		$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		Ledger::flush_all();
 		// The hook mints on its own wc_get_order() instance; re-read, as any later request would.
 		$order = wc_get_order( $order->get_id() );
 		$rows  = Ledger::instance()->read( $order );
 
 		// Assert.
+		$this->assertSame( array(), $during, 'Nothing is minted inside the payment hook.' );
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'webview', $rows[0]['source'] );
 		$this->assertSame( 'webview', $rows[0]['capture_mode'] );
@@ -452,15 +469,53 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				// Act: WooCommerce fires this after the pay nonce and order key check,
 				// immediately before it calls the gateway's process_payment().
 				do_action( 'woocommerce_before_pay_action', $order );
-				$order->set_status( 'processing' );
-				$order->save();
+				Save_Reentry_Guard::strictly(
+					static function () use ( $order ): void {
+						$order->set_status( 'processing' );
+						$order->save();
+					}
+				);
+				$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+				apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 
-				// Assert.
-				$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+				// Assert: minted when order-pay hands back the gateway's result, not inside the status hook.
+				$this->assertSame( array(), $during );
+				$stored = wc_get_order( $order->get_id() );
+				$rows   = Ledger::instance()->read( $stored );
 				$this->assertCount( 1, $rows );
 				$this->assertSame( 'webview', $rows[0]['source'] );
+				$this->assertSame( array( $rows[0]['id'] ), Completion_History::of( $stored )->standing()['payment_ids'] );
 			}
 		);
+	}
+
+	/** An order-pay gateway's payment_complete() is minted and stamped when order-pay hands back its result. */
+	public function test_order_pay_payment_complete_mints_and_stamps_after_the_hook_returns(): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$order->set_payment_method( 'pos_card' );
+		$order->set_transaction_id( 'ch_order_pay' );
+		$order->save();
+		$id     = $order->get_id();
+		$during = null;
+		$look   = static function () use ( $id, &$during ): void {
+			$during = Ledger::instance()->read( wc_get_order( $id ) );
+		};
+		add_action( 'woocommerce_payment_complete', $look, 99 );
+
+		// Act.
+		do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+		Save_Reentry_Guard::strictly( fn() => wc_get_order( $id )->payment_complete() );
+		$result = apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
+		remove_action( 'woocommerce_payment_complete', $look, 99 );
+
+		// Assert.
+		$this->assertSame( array(), $during, 'Nothing is minted inside the payment hook.' );
+		$this->assertSame( array( 'result' => 'success' ), $result );
+		$stored = wc_get_order( $id );
+		$rows   = Ledger::instance()->read( $stored );
+		$this->assertSame( array( 'ch_order_pay' ), array_column( array_column( $rows, 'provider_refs' ), 'transaction_id' ) );
+		$this->assertSame( array( $rows[0]['id'] ), Completion_History::of( $stored )->standing()['payment_ids'] );
 	}
 
 	/** An order-pay transition to an unpaid status does not mint a captured row. */
@@ -629,8 +684,9 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			'wcpos_test_full_total',
 			'webview',
 			function ( $gateway ) use ( $order ): void {
-				// Act.
+				// Act: the test gateway answers failure (WooCommerce's success branch exits), so the mint waits for shutdown.
 				$this->pay_on_order_pay( $order, $gateway->id );
+				Ledger::flush_all();
 
 				// Assert.
 				$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );

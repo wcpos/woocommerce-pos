@@ -45,6 +45,7 @@ class Test_Projection extends WP_UnitTestCase {
 		$gift = self::row( 'gift', '60.00', 'captured', '2026-10-22T08:00:00+00:00', array(), 'stored_value' );
 		$none = self::none();
 		return array(
+			'hold projects nothing'                    => array( array( $cash ), '92.95', 'pos-open', false, Ledger::MODE_HOLD, true, $none ),
 			'no rows leaves the method and opens'      => array( array(), '92.95', 'pos-open', false, Ledger::MODE_AUTO, true, self::expect( 'pos-open' ) ),
 			'a part payment is partial'                => array( array( $part ), '92.95', 'pos-open', false, Ledger::MODE_AUTO, true, self::expect( 'pos-partial', 'pos_cash', 'POS_CASH', '' ) ),
 			'covering money completes'                 => array( array( $cash ), '92.95', 'pos-partial', false, Ledger::MODE_AUTO, true, self::expect( null, 'pos_cash', 'POS_CASH', '', true ) ),

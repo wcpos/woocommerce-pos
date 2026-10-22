@@ -22,13 +22,16 @@ final class Projection {
 	 * @param string        $total    Order total.
 	 * @param string        $status   Order status, without `wc-`.
 	 * @param bool          $stamped  Whether a sent submit awaits the customer (the order is POS-owned whatever its status).
-	 * @param string        $mode     `Ledger::MODE_AUTO` or `MODE_CLOSE`.
+	 * @param string        $mode     `Ledger::MODE_AUTO`, `MODE_HOLD` (no projection) or `MODE_CLOSE`.
 	 * @param bool          $editable Whether WooCommerce calls the order editable (only `close` completes an on-hold order).
 	 * @param callable|null $title    Method id to title; the id itself when null.
 	 * @return array{status: ?string, method: ?string, title: ?string, txn: ?string, completes: bool} Null leaves the order's own.
 	 */
 	public static function of( array $rows, string $total, string $status, bool $stamped, string $mode, bool $editable = false, ?callable $title = null ): array {
 		$answer = array_fill_keys( array( 'status', 'method', 'title', 'txn' ), null ) + array( 'completes' => false );
+		if ( Ledger::MODE_HOLD === $mode ) {
+			return $answer;
+		}
 		$closing  = Ledger::MODE_CLOSE === $mode;
 		$counting = array_values( array_filter( $rows, static fn( $row ) => in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) ) );
 		$paying   = array_values( array_filter( $counting, static fn( $row ) => 'stored_value' !== ( $row['kind'] ?? '' ) ) );
