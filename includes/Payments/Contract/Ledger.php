@@ -2299,12 +2299,16 @@ class Ledger {
 				unset( $this->server_saves[ $id ] );
 			}
 		}
-		// The rows, the attempt fates their coverage settled, and every order property staged.
-		$check = $this->fresh( $id );
-		$kept  = $this->stored( $id, true );
-		return null !== $kept && $kept['payments'] === $wire
-			&& $check->get_meta( Gateway_Submission::ATTEMPTS_META_KEY ) === $order->get_meta( Gateway_Submission::ATTEMPTS_META_KEY )
-			&& self::holds( $check->get_data(), $props );
+		// The rows, their three indexes, the attempt fates their coverage settled, and every order property staged.
+		$check  = $this->fresh( $id );
+		$kept   = $this->stored( $id, true );
+		$values = static fn( WC_Order $read, string $key ) => array_map( static fn( $meta ) => $meta->value, $read->get_meta( $key, false ) );
+		foreach ( array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY ) as $key ) {
+			if ( $values( $check, $key ) !== $values( $order, $key ) ) {
+				return false;
+			}
+		}
+		return null !== $kept && $kept['payments'] === $wire && self::holds( $check->get_data(), $props );
 	}
 
 	/**
@@ -2353,15 +2357,26 @@ class Ledger {
 
 	/**
 	 * S3-heal: a paid POS sale the ledger wrote (a zero-total close has no rows) whose completion never
-	 * landed: a crash after or inside S2, whose hooks may never have run. Stock and the stamp are idempotent.
+	 * landed: a crash after or inside S2, whose hooks may never have run. It repairs in storage order: a paid
+	 * status without its paid date gets the date, then stock (idempotent), then S3.
 	 *
 	 * @param WC_Order $order    Fresh order.
 	 * @param bool     $ledgered Whether the ledger has stored this order (WCPOS 1.x never did).
 	 * @return bool Whether it healed.
+	 * @throws Ledger_Persistence_Exception When the paid date does not reach storage.
 	 */
 	private function heal( WC_Order $order, bool $ledgered ): bool {
-		if ( ! $ledgered || ! wcpos_is_pos_order( $order ) || ! self::paid_now( $order ) || null !== Completion_History::of( $order )->standing() ) {
+		$paid = self::paid_now( $order ) || in_array( $order->get_status(), wc_get_is_paid_statuses(), true );
+		if ( ! $ledgered || ! wcpos_is_pos_order( $order ) || ! $paid || null !== Completion_History::of( $order )->standing() ) {
 			return false;
+		}
+		if ( null === $order->get_date_paid( 'edit' ) ) {
+			$order->set_date_paid( time() );
+			self::saving( $order->get_id(), fn() => $order->save() );
+			$order = $this->fresh( $order->get_id() );
+			if ( ! self::paid_now( $order ) ) {
+				throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid date was not persisted.' );
+			}
 		}
 		wc_maybe_reduce_stock_levels( $order->get_id() );
 		$this->finish( $order );
