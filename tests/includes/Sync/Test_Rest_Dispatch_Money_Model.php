@@ -2043,6 +2043,83 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order_id ) ) );
 		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
 	}
+
+	/** A captured full-total row stamped by a closure: what a forged ledger would claim. */
+	protected function forged_ledger( string $amount ): string {
+		$row = $this->cash_payment( $amount ) + array(
+			'status'     => 'captured',
+			'closure_id' => wp_generate_uuid4(),
+		);
+
+		return (string) wp_json_encode(
+			array(
+				'schema'   => 1,
+				'payments' => array( $row ),
+			)
+		);
+	}
+
+	/** Record a cash tender through the route and return the order's ledger rows read back from storage. */
+	protected function record_cash_and_read( int $order_id, string $amount ): array {
+		$response = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/payments', $order_id, array( 'payment' => $this->cash_payment( $amount ) ) );
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+
+		return Ledger::instance()->read( wc_get_order( $order_id ) );
+	}
+
+	/** Spellings MySQL's `_ci` PAD SPACE collation matches to the ledger key and PHP does not. */
+	public static function ledger_key_variants(): array {
+		return array(
+			'upper case'     => array( '_WCPOS_PAYMENTS' ),
+			'mixed case'     => array( '_Wcpos_Payments' ),
+			'trailing space' => array( '_wcpos_payments ' ),
+		);
+	}
+
+	/** D13: a case variant of the ledger key on a push never reaches storage or the ledger. */
+	public function test_a_case_variant_ledger_key_pushed_before_payment_is_never_read_as_the_ledger(): void {
+		// Arrange: an open 10.00 sale with no ledger; the till pushes a forged, closure-stamped full payment.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$meta     = $this->uuid_meta();
+		$meta[]   = array(
+			'key'   => '_WCPOS_PAYMENTS',
+			'value' => $this->forged_ledger( '10.00' ),
+		);
+		$pushed   = $this->push_envelope( 'update', array( 'meta_data' => $meta ), $this->order_revision( $order_id ) );
+		$this->assertSame( 200, $pushed->get_status(), 'Response: ' . wp_json_encode( $pushed->get_data() ) );
+
+		// Act.
+		$rows = $this->record_cash_and_read( $order_id, '1.00' );
+
+		// Assert.
+		$this->assertCount( 1, $rows );
+		$this->assertSame( '1.00', $rows[0]['amount'] );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'pos-partial', $order->get_status() );
+		$this->assertNull( $order->get_date_paid( 'edit' ) );
+		$this->assertSame( '', $order->get_meta( '_WCPOS_PAYMENTS' ) );
+	}
+
+	/**
+	 * D13 at the reader: a case variant already in storage (any writer) is not the ledger.
+	 *
+	 * @dataProvider ledger_key_variants
+	 */
+	public function test_a_case_variant_ledger_row_in_storage_is_never_read_as_the_ledger( string $key ): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$order    = wc_get_order( $order_id );
+		$order->add_meta_data( $key, $this->forged_ledger( '10.00' ) );
+		$order->save();
+
+		// Act.
+		$rows = $this->record_cash_and_read( $order_id, '1.00' );
+
+		// Assert.
+		$this->assertCount( 1, $rows );
+		$this->assertSame( '1.00', $rows[0]['amount'] );
+		$this->assertSame( 'pos-partial', wc_get_order( $order_id )->get_status() );
+	}
 }
 
 /** A refund-capable gateway that records its calls and contacts no provider. */
