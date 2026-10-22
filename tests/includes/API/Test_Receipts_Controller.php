@@ -9,8 +9,11 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\V1\Receipts_Controller;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
+use WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture;
+use WCPOS\WooCommercePOS\Tests\Services\Register_Fixture;
 
 /**
  * Test_Receipts_Controller class.
@@ -20,6 +23,8 @@ use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
  * @coversNothing
  */
 class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
+	use Register_Fixture;
+
 	/**
 	 * Endpoint instance.
 	 *
@@ -142,6 +147,57 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data = $response->get_data();
 		$this->assertEquals( 'live', $data['mode'] );
 		$this->assertArrayHasKey( 'totals', $data['data'] );
+	}
+
+	/**
+	 * A live receipt after a reopen and a second completion at another register names that
+	 * completion's register, counter and sale time, as its fiscal record does (ADR 0040 rule 1c).
+	 */
+	public function test_live_receipt_after_a_second_completion_names_its_register(): void {
+		// Arrange: completed at register A (the write-once till tuple), reopened, completed again at B.
+		$this->use_multi_register_repository();
+		$a = $this->create_register(
+			array(
+				'name'     => 'Register A',
+				'store_id' => 12,
+			)
+		);
+		$b = $this->create_register(
+			array(
+				'name'     => 'Register B',
+				'store_id' => 12,
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_wcpos_register', $a['id'] );
+		$order->update_meta_data( '_wcpos_sale_counter', '1' );
+		$order->update_meta_data( '_wcpos_sale_time', '2026-10-20T12:00:00+00:00' );
+		$order->update_meta_data( '_wcpos_sale_tz', 'UTC' );
+		$order->save();
+		Completion_Fixture::sale( $order );
+		Completion_Fixture::reopen( $order );
+		Completion_Fixture::seed( $order );
+		$history                 = Completion_Stamp::read( $order );
+		$history[1]['register']  = $b['id'];
+		$history[1]['counter']   = '7';
+		$history[1]['sale_time'] = '2026-10-21T12:00:00+00:00';
+		$history[1]['sale_tz']   = 'UTC';
+		$order->update_meta_data( Completion_Stamp::META_KEY, wp_json_encode( $history ) );
+		$order->save_meta_data();
+		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
+		$request->set_param( 'mode', 'live' );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data()['data'];
+		$this->assertSame( $b['id'], $data['register']['id'] );
+		$this->assertSame( 'Register B', $data['register']['name'] );
+		$this->assertSame( 7, $data['fiscal']['sale_counter'] );
+		$this->assertSame( '2026-10-21', $data['fiscal']['sale_time']['date_ymd'] );
 	}
 
 	/**

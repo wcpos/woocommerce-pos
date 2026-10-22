@@ -214,7 +214,7 @@ final class Fiscal_Record_Writers {
 				'total'         => $previous['total'],
 			) : null;
 			$adjustment = $previous ? Money::format( Money::minor( $completion['total'] ) - Money::minor( $previous['total'] ) ) : null;
-			$snapshot   = ( new Receipt_Data_Builder() )->build( self::as_completed( $order, $completion ), 'fiscal' );
+			$snapshot   = ( new Receipt_Data_Builder() )->build( Completion_Stamp::as_completed( $order, $completion ), 'fiscal' );
 			$provenance = $this->store->provenance_from_order( $order );
 			unset( $snapshot['i18n'] );
 			$document = array(
@@ -437,35 +437,6 @@ final class Fiscal_Record_Writers {
 			// The refund is durable; fiscal bookkeeping must not fail its request, only signal.
 			$this->fail_quietly( 'refund', $order, $refund, $error );
 		}
-	}
-
-	/**
-	 * The order as this completion saw it: an in-memory copy whose till tuple carries the entry's
-	 * register, session, sale time, zone and counter (an absent value stays absent), so the frozen
-	 * document names the register that completed the sale, not the first one. Never saved.
-	 *
-	 * @param WC_Order $order      Order.
-	 * @param array    $completion Completion entry.
-	 */
-	private static function as_completed( WC_Order $order, array $completion ): WC_Order {
-		$copy = clone $order;
-		// WC_Abstract_Order::__clone() is empty, so a clone shares its meta objects with the order:
-		// give the copy its own before changing any of them.
-		$copy->read_meta_data( true );
-		foreach ( array(
-			'register'  => '_wcpos_register',
-			'session'   => '_wcpos_session',
-			'sale_time' => '_wcpos_sale_time',
-			'sale_tz'   => '_wcpos_sale_tz',
-			'counter'   => '_wcpos_sale_counter',
-		) as $field => $key ) {
-			if ( null === ( $completion[ $field ] ?? null ) ) {
-				$copy->delete_meta_data( $key );
-			} else {
-				$copy->update_meta_data( $key, (string) $completion[ $field ] );
-			}
-		}
-		return $copy;
 	}
 
 	/**
