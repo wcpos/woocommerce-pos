@@ -1542,6 +1542,104 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertCount( 1, Completion_History::of( $this->fresh( $id ) )->entries() );
 	}
 
+	/** A late-drained tipped capture carrying an event id, whose first S1 lost the total, still retries to the tipped total. */
+	public function test_record_late_tipped_drain_with_event_whose_total_was_lost_retries_to_the_tipped_total(): void {
+		// Arrange.
+		Capture_Mode_Registry::instance()->register( 'tip_test', Tip_Test_Handler::class );
+		$mode = static fn( $mode, $gateway ) => 'pos_card' === $gateway->id ? 'tip_test' : $mode;
+		add_filter( 'wcpos_payment_method_capture_mode', $mode, 10, 2 );
+		$order = $this->priced_pos_order();
+		$id    = $order->get_id();
+		$input = array_merge(
+			$this->tender( '92.95' ),
+			array(
+				'method_id' => 'pos_card',
+				'status' => 'authorized',
+			)
+		);
+		$park  = $this->park_once(
+			$id,
+			$input['id'],
+			array(
+				'status'   => 'captured',
+				'amount'   => '100.00',
+				'event_id' => 'evt_tip',
+			)
+		);
+		$lost  = 0;
+		$keep  = static function ( $saving ) use ( $id, &$lost ): void {
+			if ( 0 === $lost && $saving->get_id() === $id && $saving->get_fees() ) {
+				++$lost;
+				$saving->set_total( '92.95' ); // The fee and the row land; the tipped total does not.
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $keep, PHP_INT_MAX );
+
+		// Act.
+		try {
+			Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		} finally {
+			$park();
+			remove_action( 'woocommerce_before_order_object_save', $keep, PHP_INT_MAX );
+			remove_filter( 'wcpos_payment_method_capture_mode', $mode, 10 );
+		}
+
+		// Assert.
+		$saved = new \WC_Order( $id );
+		$this->assertSame( 1, $lost );
+		$this->assertCount( 1, $saved->get_fees() );
+		$this->assertSame( '100.00', $saved->get_total() );
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$this->assertCount( 1, Completion_History::of( $this->fresh( $id ) )->entries() );
+	}
+
+	/** A debt a completion outside the ledger settled does not let the sweep complete the reopened sale again. */
+	public function test_sweeper_on_reopened_sale_whose_debt_was_settled_elsewhere_completes_nothing(): void {
+		// Arrange: a record stops after S1; the sale completes outside the ledger; the merchant reopens it.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$input = $this->tender( '92.95' );
+		$undo  = $this->inject( 'paid', $id );
+		try {
+			Ledger::instance()->record( $order, $input, array(), $this->record_command( $input ) );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			unset( $error );
+		} finally {
+			$undo();
+		}
+		$elsewhere = $this->fresh( $id );
+		$elsewhere->set_status( 'completed' );
+		$elsewhere->save();
+		$reopened = $this->fresh( $id );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$sales = ( new Fiscal_Record_Store() )->count(
+			array(
+				'order_id' => $id,
+				'type' => 'sale',
+			)
+		);
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$saved = $this->fresh( $id );
+		$this->assertSame( 'pos-open', $this->stored_status( $id ) );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertSame(
+			$sales,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type' => 'sale',
+				)
+			)
+		);
+		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ $input['id'] ] );
+		$this->assertSame( array(), $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
+	}
+
 	/** A tipped confirmation parked while a captured arrival is stored raises its amount by the verified tip on the drain. */
 	public function test_record_captured_with_tipped_capture_parked_during_its_rows_save_takes_the_tip(): void {
 		// Arrange.

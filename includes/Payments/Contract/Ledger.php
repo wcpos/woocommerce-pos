@@ -70,8 +70,8 @@ class Ledger {
 	public const SOURCES = array( 'app', 'webview', 'woocommerce' );
 	/**
 	 * Write modes: project and maybe complete; stage only; close (may complete zero or on-hold); or settle, which
-	 * may also complete a sale its rows already cover: the sweep's recovery pass, and an arrival stored held
-	 * while its parked confirmations were drained.
+	 * may also complete a sale its rows already cover when captured money no completion counted is among them
+	 * (rows a completion counted complete again only on a debt still owed): the sweep, and an arrival stored held.
 	 */
 	public const MODE_AUTO  = 'auto';
 	public const MODE_HOLD  = 'hold';
@@ -1217,7 +1217,12 @@ class Ledger {
 	private function confirm( Ledger_Draft $draft, string $id, array $patch ) {
 		$row   = $draft->row( $id );
 		$event = $patch['event_id'] ?? null;
-		if ( ! $row || ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) || 'failed' === $row['status'] ) {
+		if ( ! $row || 'failed' === $row['status'] ) {
+			return null;
+		}
+		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
+			// The provider's effect is applied; a retried S1 may still owe the tipped totals.
+			$this->retotal( $draft->order(), $row );
 			return null;
 		}
 		$confirmed = $this->confirmed( $row, $patch );
@@ -1229,39 +1234,49 @@ class Ledger {
 		if ( $mismatch && Completion_History::of( $order )->counted( $row['id'] ) ) {
 			return $row; // Counted money leaves only through a refund: the row stays, the caller notes it.
 		}
-		if ( null !== ( $applied['tip'] ?? null ) ) {
-			// The fee insert is guarded, the totals are always recalculated (D5): an S1 retry may find the fee and
-			// the tipped row stored but not the total. Recalculated as WooCommerce's update_taxes() and
-			// calculate_totals( false ) do, staged on the draft, not saved.
-			$fee = $this->tip_fee( $order, $applied, Money::minor( $applied['tip'] ) );
-			if ( $fee ) {
-				$order->add_item( $fee );
-			}
-			$taxes = array();
-			foreach ( $order->get_items( array( 'line_item', 'fee' ) ) as $item ) {
-				foreach ( $item->get_taxes()['total'] ?? array() as $rate_id => $tax ) {
-					$taxes[ $rate_id ] = ( $taxes[ $rate_id ] ?? 0 ) + (float) wc_round_tax_total( (float) $tax );
-				}
-			}
-			foreach ( $taxes as $rate_id => $tax ) {
-				$line = current( array_filter( $order->get_taxes(), static fn( $item ) => (int) $item->get_rate_id() === (int) $rate_id ) );
-				if ( ! $line ) {
-					$line = new \WC_Order_Item_Tax();
-					$line->set_rate( $rate_id );
-					$order->add_item( $line );
-				}
-				$line->set_tax_total( wc_format_decimal( $tax ) );
-			}
-			$order->set_cart_tax( wc_format_decimal( array_sum( $taxes ) ) );
-			$lines = array_sum( array_map( static fn( $item ) => (float) $item->get_total(), $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) ) );
-			$order->set_total( wc_format_decimal( $lines + array_sum( $taxes ) + (float) $order->get_shipping_tax(), wc_get_price_decimals() ) );
-		}
+		$this->retotal( $order, $applied );
 		if ( is_string( $event ) ) {
 			$applied['seen_events'][] = $event;
 			$applied['seen_events']   = array_slice( $applied['seen_events'], -self::SEEN_EVENTS_MAX );
 		}
 		$draft->put( $applied );
 		return $mismatch ? $row : null;
+	}
+
+	/**
+	 * Stage a tipped row's fee and the order totals it implies on the draft order, not saved. The fee insert is
+	 * guarded, the totals are always recalculated (D5): an S1 retry may find the fee and the tipped row stored but
+	 * not the total. Summed as WooCommerce's update_taxes() and calculate_totals( false ) do.
+	 *
+	 * @param WC_Order $order Draft order.
+	 * @param array    $row   The row as the confirmation leaves it.
+	 */
+	private function retotal( WC_Order $order, array $row ): void {
+		if ( null === ( $row['tip'] ?? null ) ) {
+			return;
+		}
+		$fee = $this->tip_fee( $order, $row, Money::minor( $row['tip'] ) );
+		if ( $fee ) {
+			$order->add_item( $fee );
+		}
+		$taxes = array();
+		foreach ( $order->get_items( array( 'line_item', 'fee' ) ) as $item ) {
+			foreach ( $item->get_taxes()['total'] ?? array() as $rate_id => $tax ) {
+				$taxes[ $rate_id ] = ( $taxes[ $rate_id ] ?? 0 ) + (float) wc_round_tax_total( (float) $tax );
+			}
+		}
+		foreach ( $taxes as $rate_id => $tax ) {
+			$line = current( array_filter( $order->get_taxes(), static fn( $item ) => (int) $item->get_rate_id() === (int) $rate_id ) );
+			if ( ! $line ) {
+				$line = new \WC_Order_Item_Tax();
+				$line->set_rate( $rate_id );
+				$order->add_item( $line );
+			}
+			$line->set_tax_total( wc_format_decimal( $tax ) );
+		}
+		$order->set_cart_tax( wc_format_decimal( array_sum( $taxes ) ) );
+		$lines = array_sum( array_map( static fn( $item ) => (float) $item->get_total(), $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) ) );
+		$order->set_total( wc_format_decimal( $lines + array_sum( $taxes ) + (float) $order->get_shipping_tax(), wc_get_price_decimals() ) );
 	}
 
 	/**
@@ -2340,7 +2355,7 @@ class Ledger {
 	 *                              run twice. Null is a replay: it completes a sale its rows cover only while a
 	 *                              command's entry still owes the paid transition (`Command_Log::OWED`).
 	 * @param string        $mode   MODE_AUTO, MODE_HOLD (stage only), MODE_CLOSE (may complete zero or on-hold) or
-	 *                              MODE_SETTLE (may complete a sale its rows already cover: the sweep, an arrival).
+	 *                              MODE_SETTLE (may complete a covered sale holding money no completion counted).
 	 * @throws Ledger_Persistence_Exception Retryable; `stage` names the step that failed.
 	 */
 	public function write( $order, ?callable $change = null, string $mode = self::MODE_AUTO ): Ledger_Written {
@@ -2470,10 +2485,10 @@ class Ledger {
 				$order  = $this->fresh( $id );
 				$stored = $this->stored( $id, true )['payments'] ?? array(); // Heal may have advanced the rows' commands.
 			}
-			// A sale its rows already covered completes only on a close, a sweep, or the replay of a command
-			// whose entry still owes it (rule 3: a reopened sale its rows still cover is covered and open, and
-			// stays open under other writes). Decided from the first read, never this write's own half-stored S1.
-			$may    = $may ?? ( ! $this->project( $order, $stored, $covering )['completes'] || in_array( $mode, array( self::MODE_CLOSE, self::MODE_SETTLE ), true ) || ( null === $change && Command_Log::owing( $order, $stored ) ) );
+			// A sale its rows already covered completes only on a close, a settle holding money no completion counted,
+			// or a no-change write while a command owes it (rule 3: a reopened sale its counted rows still cover stays
+			// open). Decided from the first read, never this write's own half-stored S1.
+			$may    = $may ?? ( ! $this->project( $order, $stored, $covering )['completes'] || self::MODE_CLOSE === $mode || ( self::MODE_SETTLE === $mode && $this->uncounted( $order, $stored ) ) || ( null === $change && Command_Log::owing( $order, $stored ) ) );
 			$draft  = new Ledger_Draft( $order, $stored );
 			$answer = null === $change ? null : $change( $draft );
 			$rows   = $this->settle( $order, $stored, $draft->rows() );
@@ -2531,6 +2546,17 @@ class Ledger {
 			}
 		}
 		return array_values( $settled );
+	}
+
+	/**
+	 * Whether captured money no completion counted is on the order: what lets a settle complete a covered sale.
+	 *
+	 * @param WC_Order $order Order.
+	 * @param array    $rows  Stored rows.
+	 */
+	private function uncounted( WC_Order $order, array $rows ): bool {
+		$history = Completion_History::of( $order );
+		return (bool) array_filter( $rows, static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) && ! $history->counted( (string) $row['id'] ) );
 	}
 
 	/**
@@ -2673,7 +2699,12 @@ class Ledger {
 		if ( ! $ledgered || ! wcpos_is_pos_order( $order ) ) {
 			return false;
 		}
-		$standing = Completion_History::of( $order )->standing();
+		$history  = Completion_History::of( $order );
+		$standing = $history->standing();
+		if ( null === $standing && null !== $history->latest() && Command_Log::stale( $order, $this->read( $order ) ) ) {
+			$this->tidy( $order, $history->latest(), false ); // A reopen does not revive debts a completion settled.
+			return true;
+		}
 		if ( null !== $standing ) {
 			$stamped = null !== Gateway_Submission::read_stamp( $order ) && ! in_array( 'sent', Gateway_Submission::read_attempts( $order ), true );
 			if ( ! $stamped && ! Command_Log::stale( $order, $this->read( $order ) ) ) {
