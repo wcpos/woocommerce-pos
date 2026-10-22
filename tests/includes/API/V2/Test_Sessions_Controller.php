@@ -229,7 +229,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			'movements' => 0,
 		);
 		$observe = static function ( $sql ) use ( &$reads ) {
-			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::META_KEY ) ) {
+			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::SESSION_META_KEY ) ) {
 				++$reads['orders'];
 			}
 			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, 'shop_order_refund' ) ) {

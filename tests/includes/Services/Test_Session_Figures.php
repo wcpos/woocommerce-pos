@@ -197,7 +197,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			'movements' => 0,
 		);
 		$observe = static function ( $sql ) use ( &$reads ) {
-			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::META_KEY ) ) {
+			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::SESSION_META_KEY ) ) {
 				++$reads['orders'];
 			}
 			if ( 0 === strpos( $sql, 'SELECT movements FROM ' . ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->table_name() ) ) {
