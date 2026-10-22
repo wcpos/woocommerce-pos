@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Save_Hooks;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
@@ -70,8 +71,6 @@ class Ledger {
 	public const MODE_AUTO  = 'auto';
 	public const MODE_HOLD  = 'hold';
 	public const MODE_CLOSE = 'close';
-	/** Order hooks a write refuses to run inside (I3), beside every `woocommerce_order_status_*` and payment-complete status hook. */
-	private const ORDER_HOOKS = array( 'woocommerce_pre_payment_complete', 'woocommerce_payment_complete', 'woocommerce_new_order', 'woocommerce_update_order', 'woocommerce_before_order_object_save', 'woocommerce_after_order_object_save', 'woocommerce_order_object_updated_props', 'woocommerce_order_refunded', 'woocommerce_refund_created', 'woocommerce_reduce_order_stock', 'woocommerce_restore_order_stock', 'woocommerce_checkout_order_processed' );
 
 	/**
 	 * Shared instance.
@@ -2286,7 +2285,8 @@ class Ledger {
 		if ( null !== $projection['status'] ) {
 			$order->set_status( $projection['status'] );
 		}
-		if ( ! $changed && ! $staged && ! $order->get_changes() ) {
+		// A completing write always stores its ledger (empty rows too): heal's marker lands before the paid transition.
+		if ( ! $changed && ! $staged && ! $projection['completes'] && ! $order->get_changes() ) {
 			return true;
 		}
 		$props = $order->get_changes();
@@ -2301,7 +2301,8 @@ class Ledger {
 		}
 		// The rows, the attempt fates their coverage settled, and every order property staged.
 		$check = $this->fresh( $id );
-		return ( $this->stored( $id, true )['payments'] ?? array() ) === $wire
+		$kept  = $this->stored( $id, true );
+		return null !== $kept && $kept['payments'] === $wire
 			&& $check->get_meta( Gateway_Submission::ATTEMPTS_META_KEY ) === $order->get_meta( Gateway_Submission::ATTEMPTS_META_KEY )
 			&& self::holds( $check->get_data(), $props );
 	}
@@ -2441,14 +2442,13 @@ class Ledger {
 	 * on return), so a listed name there is confirmed against the dispatches on the call stack.
 	 */
 	private static function order_hook(): ?string {
-		$listed = static fn( $name ) => in_array( $name, self::ORDER_HOOKS, true ) || ( is_string( $name ) && ( 0 === strpos( $name, 'woocommerce_order_status_' ) || 0 === strpos( $name, 'woocommerce_payment_complete_order_status_' ) ) );
-		if ( ! array_filter( (array) ( $GLOBALS['wp_current_filter'] ?? array() ), $listed ) ) {
+		if ( ! array_filter( (array) ( $GLOBALS['wp_current_filter'] ?? array() ), array( Save_Hooks::class, 'contains' ) ) ) {
 			return null;
 		}
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Only while an order hook name is on the stack: which dispatches are live.
 		foreach ( debug_backtrace( 0 ) as $frame ) {
 			$name = $frame['args'][0] ?? null;
-			if ( ! isset( $frame['class'] ) && in_array( $frame['function'], array( 'do_action', 'do_action_ref_array', 'apply_filters', 'apply_filters_ref_array' ), true ) && $listed( $name ) ) {
+			if ( ! isset( $frame['class'] ) && in_array( $frame['function'], array( 'do_action', 'do_action_ref_array', 'apply_filters', 'apply_filters_ref_array' ), true ) && Save_Hooks::contains( $name ) ) {
 				return $name;
 			}
 		}

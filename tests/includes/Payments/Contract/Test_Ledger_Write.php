@@ -200,7 +200,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 
 	/** The hooks a write refuses to run inside. */
 	public function order_hooks(): array {
-		$hooks = array( 'woocommerce_pre_payment_complete', 'woocommerce_payment_complete', 'woocommerce_order_status_changed', 'woocommerce_order_status_processing', 'woocommerce_order_status_pos-open_to_processing', 'woocommerce_payment_complete_order_status_pos-open', 'woocommerce_before_order_object_save', 'woocommerce_after_order_object_save', 'woocommerce_new_order', 'woocommerce_update_order' );
+		$hooks = array( 'save_post', 'save_post_shop_order', 'wp_insert_post', 'pre_post_update', 'post_updated', 'woocommerce_pre_payment_complete', 'woocommerce_payment_complete', 'woocommerce_order_status_changed', 'woocommerce_order_status_processing', 'woocommerce_order_status_pos-open_to_processing', 'woocommerce_payment_complete_order_status_pos-open', 'woocommerce_before_order_object_save', 'woocommerce_after_order_object_save', 'woocommerce_new_order', 'woocommerce_update_order' );
 		return array_combine( $hooks, array_map( static fn( $hook ) => array( $hook ), $hooks ) );
 	}
 
@@ -226,6 +226,67 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		// Assert.
 		$this->assertInstanceOf( Ledger_Persistence_Exception::class, $caught );
 		$this->assertSame( 'lock', $caught->stage );
+	}
+
+	/** On posts storage a write from a save_post_shop_order listener, inside the order's own save, is refused and does not recurse. */
+	public function test_write_inside_save_post_shop_order_is_refused_without_recursing(): void {
+		// Arrange.
+		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$this->markTestSkipped( 'Orders are posts only on posts storage.' );
+		}
+		$order  = $this->create_pos_order();
+		$calls  = 0;
+		$caught = null;
+		add_action(
+			'save_post_shop_order',
+			function ( $post_id ) use ( $order, &$calls, &$caught ): void {
+				if ( (int) $post_id !== $order->get_id() || ++$calls > 3 ) {
+					return; // The bound keeps a missing refusal a failure, not a runaway recursion.
+				}
+				try {
+					Ledger::instance()->write( $order->get_id(), fn( Ledger_Draft $draft ) => $draft->put( $this->row( '5.00' ) ) );
+				} catch ( Ledger_Persistence_Exception $error ) {
+					$caught = $error;
+				}
+			}
+		);
+		$saving = $this->fresh( $order->get_id() );
+		$saving->set_customer_note( 'Saved' );
+
+		// Act.
+		$saving->save();
+
+		// Assert.
+		$this->assertSame( 1, $calls );
+		$this->assertInstanceOf( Ledger_Persistence_Exception::class, $caught );
+		$this->assertSame( 'lock', $caught->stage );
+		$this->assertSame( array(), $this->stored_rows( $order->get_id() ) );
+	}
+
+	/** A zero-total close with nothing to change still stores the ledger before it is paid, so a lost completion heals. */
+	public function test_write_no_change_zero_total_close_stores_ledger_and_heals_lost_completion(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_total( '0.00' );
+		$order->save();
+		$this->assertFalse( $this->fresh( $order->get_id() )->meta_exists( Ledger::META_KEY ), 'Precondition: no ledger yet.' );
+		$undo   = $this->inject( 'completion', $order->get_id() );
+		$caught = null;
+		try {
+			Ledger::instance()->write( $order->get_id(), null, Ledger::MODE_CLOSE );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$undo();
+		}
+		$this->assertSame( 'completion', $caught ? $caught->stage : null, 'Precondition: paid, completion lost.' );
+		$this->assertTrue( $this->fresh( $order->get_id() )->meta_exists( Ledger::META_KEY ), 'S1 stored the ledger before the paid transition.' );
+
+		// Act.
+		$written = Ledger::instance()->write( $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 1, (int) $written->completion['n'] );
 	}
 
 	/** A listener that threw out of an order save WooCommerce swallowed does not leave later writes refused. */
