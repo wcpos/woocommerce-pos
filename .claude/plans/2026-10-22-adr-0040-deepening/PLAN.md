@@ -42,10 +42,11 @@ An architecture review of the ADR 0040 money model on `next` (2026-10-22, after 
 
 1. `fix(payments)`: defects-ledger — D1 (cancel path), D4, D5, D6, D9 — **PR #2396**
 2. `fix`: defects-lanes — D8, D10 (D11 was already done by #2376) — **PR #2397, merged 2026-10-22 as f7fd4d9b**
-3. c7 — **PR #2398**
-4. c1 (+ D2) — in implementation
-5. c2 slices 1–3 (design chosen from three alternatives; spec beside this plan)
-6. c3 (needs c2-3 and c7), then c2 slices 4–6
-7. c4 (c4-1 may run after PR 2, independent of c2; c4-2 after c2-5), c5, c8, c6; then the #2378 retry PR
+3. c7 — **PR #2398, merged 2026-10-22 as 9638516a**
+4. c1 (+ D2) — **PR #2400**
+5. c4-1 (completion-history read model; independent of c2) — **PR #2401**
+6. c2 slices 1–3 (design chosen from three alternatives; spec beside this plan; needs Paul's yes on the ADR amendment)
+7. c3 (needs c2-3 and c7), then c2 slices 4–6
+8. c4-2 (after c2-5), c5, c8, c6; then the #2377 and #2378 PRs
 
 Refs #2389 (closed by c2), #2377, #2378 (overlaps D7/D4). Specs for each PR live beside this plan.
