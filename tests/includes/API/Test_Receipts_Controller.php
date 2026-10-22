@@ -185,7 +185,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$history[1]['sale_tz']   = 'UTC';
 		$order->update_meta_data( Completion_Stamp::META_KEY, wp_json_encode( $history ) );
 		$order->save_meta_data();
-		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
 		$request->set_param( 'mode', 'live' );
 
 		// Act.
