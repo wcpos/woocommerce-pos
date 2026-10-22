@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-22T06:43:56+00:00\n"
+"POT-Creation-Date: 2026-10-22T07:07:38+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1089,7 +1089,7 @@ msgstr ""
 #: includes/API/V2/Payment_Methods_Controller.php:110
 #: includes/Payments/Contract/Gateway_Handler.php:59
 #: includes/Payments/Contract/Gateway_Submission.php:118
-#: includes/Payments/Contract/Ledger.php:1603
+#: includes/Payments/Contract/Ledger.php:1605
 msgid "Payment method not found."
 msgstr ""
 
@@ -1131,7 +1131,7 @@ msgstr ""
 
 #: includes/API/V2/Payment_Methods_Controller.php:114
 #: includes/Payments/Contract/Gateway_Submission.php:54
-#: includes/Payments/Contract/Ledger.php:2582
+#: includes/Payments/Contract/Ledger.php:2584
 msgid "Payment capture mode is unsupported."
 msgstr ""
 
@@ -1231,7 +1231,7 @@ msgid "The session request could not be completed."
 msgstr ""
 
 #. translators: 1: line name, 2: units.
-#: includes/API/V2/Writers/Order_Writer.php:598
+#: includes/API/V2/Writers/Order_Writer.php:590
 #, php-format
 msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
 msgstr ""
@@ -1491,125 +1491,125 @@ msgstr ""
 msgid "Check the payment fields."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:656
+#: includes/Payments/Contract/Ledger.php:658
 msgid "This payment method cannot be recorded; it has to run its own payment leg."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:662
+#: includes/Payments/Contract/Ledger.php:664
 msgid "Recorded payments must be captured or authorized."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:670
-#: includes/Payments/Contract/Ledger.php:674
+#: includes/Payments/Contract/Ledger.php:672
+#: includes/Payments/Contract/Ledger.php:676
 msgid "Tendered amount is invalid for this payment method."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:843
+#: includes/Payments/Contract/Ledger.php:845
 msgid "Payment method is disabled."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:851
-#: includes/Payments/Contract/Ledger.php:1664
-#: includes/Payments/Contract/Ledger.php:1725
+#: includes/Payments/Contract/Ledger.php:853
+#: includes/Payments/Contract/Ledger.php:1666
+#: includes/Payments/Contract/Ledger.php:1727
 msgid "The order is already paid."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:851
-#: includes/Payments/Contract/Ledger.php:1665
+#: includes/Payments/Contract/Ledger.php:853
+#: includes/Payments/Contract/Ledger.php:1667
 msgid "Payment amount exceeds the order balance."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:863
-#: includes/Payments/Contract/Ledger.php:1667
-#: includes/Payments/Contract/Ledger.php:1853
+#: includes/Payments/Contract/Ledger.php:865
+#: includes/Payments/Contract/Ledger.php:1669
+#: includes/Payments/Contract/Ledger.php:1855
 msgid "Another payment is already in progress on this order."
 msgstr ""
 
 #. translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency.
-#: includes/Payments/Contract/Ledger.php:1031
+#: includes/Payments/Contract/Ledger.php:1033
 #, php-format
 msgid "WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1038
+#: includes/Payments/Contract/Ledger.php:1040
 msgid "Tip"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1114
+#: includes/Payments/Contract/Ledger.php:1116
 msgid "Refund must belong to this order."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1117
-#: includes/Payments/Contract/Ledger.php:1132
-#: includes/Payments/Contract/Ledger.php:1183
+#: includes/Payments/Contract/Ledger.php:1119
+#: includes/Payments/Contract/Ledger.php:1134
+#: includes/Payments/Contract/Ledger.php:1185
 msgid "Refund amount cannot be allocated to this payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1153
+#: includes/Payments/Contract/Ledger.php:1155
 msgid "The refund could not be reserved; retry."
 msgstr ""
 
 #. translators: 1: refund ID, 2: amount with currency, 3: payment method ID
-#: includes/Payments/Contract/Ledger.php:1395
+#: includes/Payments/Contract/Ledger.php:1397
 #, php-format
 msgid "WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying."
 msgstr ""
 
 #. translators: 1: refund ID, 2: amount with currency, 3: payment method ID
-#: includes/Payments/Contract/Ledger.php:1398
+#: includes/Payments/Contract/Ledger.php:1400
 #, php-format
 msgid "WCPOS: refund #%1$d for %2$s did not go through %3$s but its reservation could not be removed; check the payment before retrying."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1444
-#: includes/Payments/Contract/Ledger.php:1578
+#: includes/Payments/Contract/Ledger.php:1446
+#: includes/Payments/Contract/Ledger.php:1580
 #: includes/Payments/Contract/Settlement.php:51
 msgid "Payment id must be a UUID."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1465
-#: includes/Payments/Contract/Ledger.php:1643
+#: includes/Payments/Contract/Ledger.php:1467
+#: includes/Payments/Contract/Ledger.php:1645
 msgid "Payment id conflicts with an existing payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1500
+#: includes/Payments/Contract/Ledger.php:1502
 msgid "Refund status is invalid."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1581
-#: includes/Payments/Contract/Ledger.php:1585
+#: includes/Payments/Contract/Ledger.php:1583
+#: includes/Payments/Contract/Ledger.php:1587
 msgid "Payment amount must be positive."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1590
+#: includes/Payments/Contract/Ledger.php:1592
 msgid "Payment currency must match the order."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1666
+#: includes/Payments/Contract/Ledger.php:1668
 msgid "Provider-confirmed amount or currency does not match the payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1766
+#: includes/Payments/Contract/Ledger.php:1768
 msgid "The order is not covered by its payments."
 msgstr ""
 
 #. translators: %s: payment row uuid.
-#: includes/Payments/Contract/Ledger.php:1930
+#: includes/Payments/Contract/Ledger.php:1932
 #, php-format
 msgid "WCPOS payment %s voided."
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: void reason given by the cashier.
-#: includes/Payments/Contract/Ledger.php:1932
+#: includes/Payments/Contract/Ledger.php:1934
 #, php-format
 msgid "WCPOS payment %1$s voided: %2$s"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:2577
+#: includes/Payments/Contract/Ledger.php:2579
 msgid "Payment not found."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:2587
+#: includes/Payments/Contract/Ledger.php:2589
 msgid "Payment transition is invalid."
 msgstr ""
 
@@ -1720,7 +1720,7 @@ msgstr ""
 msgid "Relay registration returned invalid credentials."
 msgstr ""
 
-#: includes/Services/Core_Order_Audit_Guard.php:186
+#: includes/Services/Core_Order_Audit_Guard.php:187
 msgid "POS audit metadata cannot be modified through this REST route."
 msgstr ""
 
@@ -4937,11 +4937,11 @@ msgstr ""
 msgid "The WCPOS sync store is not installed yet (initialising or a schema install failed). Retry shortly."
 msgstr ""
 
-#: includes/Sync/Order_Write_Payload.php:367
+#: includes/Sync/Order_Write_Payload.php:370
 msgid "date_created_gmt cannot be more than 24 hours in the future."
 msgstr ""
 
-#: includes/Sync/Order_Write_Payload.php:373
+#: includes/Sync/Order_Write_Payload.php:376
 msgid "date_created_gmt must be a valid ISO 8601 UTC date."
 msgstr ""
 
