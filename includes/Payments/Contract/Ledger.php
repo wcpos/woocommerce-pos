@@ -721,6 +721,7 @@ class Ledger {
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
 			Settlement::instance()->apply_parked( $order, $row['id'] );
+			$row = $this->find( $order, $row['id'] ) ?? $row;
 			Logger::warning( sprintf( 'WCPOS payment %s refused on order #%d: %s (%s %s against %s owed)', $row['id'], $order->get_id(), $row['failure_reason'], $amount, $currency, Money::format( $balance ) ) );
 			/**
 			 * Fires after a new payment row is saved as refused.
@@ -800,8 +801,7 @@ class Ledger {
 				// A new command id on a settled leg changes nothing else, but its entry is still kept.
 				$noted = $this->with_command( $replayed, $command );
 				if ( $noted !== $replayed ) {
-					$this->replace_and_save( $order, $rows, $noted, false );
-					$replayed = $this->find( $order, $replayed['id'] );
+					$replayed = $this->replace_and_save( $order, $rows, $noted, false );
 				}
 				return array(
 					'payment' => $replayed,
@@ -1006,7 +1006,7 @@ class Ledger {
 		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
 			$noted = $this->with_command( $row, $command );
 			if ( $noted !== $row ) {
-				$this->replace_and_save( $order, $rows, $noted, false );
+				$noted = $this->replace_and_save( $order, $rows, $noted, false );
 			}
 			return $noted;
 		}
@@ -1028,8 +1028,7 @@ class Ledger {
 			if ( ! $valid || ! $currency || ( 0 !== $difference && ! $tip ) ) {
 				$applied['status'] = 'failed';
 				$applied['failure_reason'] = 'amount_mismatch';
-				$applied = $this->normalize_row( $order, $applied );
-				$this->replace_and_save( $order, $rows, $applied, $derive );
+				$applied = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $applied ), $derive );
 				$this->release_hold_if_idle( $order );
 				/* translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency. */
 				$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
@@ -1077,8 +1076,7 @@ class Ledger {
 		}
 		$applied = $this->with_command( $applied, $command );
 		if ( $applied !== $row ) {
-			$applied = $this->normalize_row( $order, $applied );
-			$this->replace_and_save( $order, $rows, $applied, $derive );
+			$applied = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $applied ), $derive );
 			if ( in_array( $applied['status'], array( 'failed', 'voided' ), true ) ) {
 				$this->release_hold_if_idle( $order );
 			}
@@ -1112,8 +1110,7 @@ class Ledger {
 				// Already allocated: a new command id changes nothing else, but its entry is kept.
 				$noted = $this->with_command( $row, $command, $refund_id );
 				if ( $noted !== $row ) {
-					$this->replace_and_save( $order, $rows, $noted, false );
-					return $this->find( $order, $row['id'] );
+					return $this->replace_and_save( $order, $rows, $noted, false );
 				}
 				return $row;
 			}
@@ -1214,6 +1211,7 @@ class Ledger {
 			// No hook and no success storage does not hold: the reservation is the guard, re-persisted (§7.16).
 			return $strand( 'the provider settled it, but storage will not keep the settled allocation' );
 		}
+		$row = $this->stored_row( $order->get_id(), $row['id'] ) ?? $row;
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
 		 * (succeeded or failed) through settle_allocation(). $amount is the allocation's
@@ -1532,8 +1530,7 @@ class Ledger {
 			if ( $events ) {
 				$row['events'] = array_merge( $row['events'] ?? array(), $events );
 			}
-			$row = $this->normalize_row( $order, $row );
-			$this->replace_and_save( $order, $rows, $row, false );
+			$row = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $row ), false );
 			if ( 'pending' !== $status ) {
 				$refund = wc_get_order( $refund_id );
 				if ( $refund instanceof \WC_Order_Refund && $refund->get_parent_id() === $order->get_id() ) {
@@ -2507,8 +2504,10 @@ class Ledger {
 	 * @param array    $rows        Payment rows.
 	 * @param array    $replacement Replacement payment row.
 	 * @param bool     $derive      Project payment state after saving.
+	 * @return array The row as stored. save() normalizes again under the lock, so the caller's copy
+	 *               may carry another updated_at_gmt: an answer built from it is not what a replay reads (D14).
 	 */
-	private function replace_and_save( WC_Order $order, array $rows, array $replacement, bool $derive = true ): void {
+	private function replace_and_save( WC_Order $order, array $rows, array $replacement, bool $derive = true ): array {
 		foreach ( $rows as &$row ) {
 			if ( $row['id'] === $replacement['id'] ) {
 				$row = $replacement;
@@ -2517,6 +2516,7 @@ class Ledger {
 		}
 		unset( $row );
 		$this->save( $order, $rows, $derive );
+		return $this->find( $order, $replacement['id'] ) ?? $replacement;
 	}
 
 	/**
