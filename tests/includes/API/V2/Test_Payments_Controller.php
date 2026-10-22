@@ -1846,8 +1846,8 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $cash['id'] ), array_column( $rows, 'id' ) );
 	}
 
-	/** Pin 19: the status poll is not a command: no envelope asked, no revision answered. */
-	public function test_the_status_poll_takes_no_envelope(): void {
+	/** Pin 19: the status poll is not a command: no envelope asked, but its answer carries the revision. */
+	public function test_the_status_poll_takes_no_envelope_and_answers_the_revision(): void {
 		// Arrange.
 		$order   = $this->create_pos_order();
 		$payment = $this->payment( 'pos_cash', '20.00' );
@@ -1858,7 +1858,33 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertArrayNotHasKey( 'revision', $response->get_data() );
+		$this->assertSame( $this->current_revision( $order ), $response->get_data()['revision'] );
+	}
+
+	/** A poll that settles the row answers the revision after it, so the next void or capture is not stale. */
+	public function test_a_status_poll_that_completes_the_order_answers_the_revision_after_it(): void {
+		// Arrange: a pending card leg the provider has captured.
+		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
+		add_filter( 'wcpos_payment_method_capture_mode', static fn() => 'route_test' );
+		$order = $this->create_pos_order();
+		$leg   = array(
+			'id'           => wp_generate_uuid4(),
+			'method_id'    => 'pos_cash',
+			'capture_mode' => 'route_test',
+			'amount'       => '92.95',
+			'status'       => 'pending',
+		);
+		Ledger::instance()->save( $order, array( $leg ), false );
+		Route_Handler::$answer = array( 'status' => 'captured' );
+		$before                = $this->current_revision( $order );
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( $this->payment_path( $order, $leg['id'] ) . '/status' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $this->current_revision( $order ), $response->get_data()['revision'] );
+		$this->assertNotSame( $before, $response->get_data()['revision'] );
 	}
 
 	/** Pin 20: the command maps are kept in storage and never answered on the wire. */
