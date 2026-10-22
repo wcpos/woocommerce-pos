@@ -2107,6 +2107,37 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, $announced );
 	}
 
+	/** A close's retry that heals a lost completion attributes it from the retry's body, as an uninterrupted close would. */
+	public function test_close_retry_healing_a_lost_completion_uses_the_bodys_provenance(): void {
+		// Arrange: a paid sale reopened; the tender came from register C, the close is sent from register A.
+		$order = $this->create_pos_order();
+		$till  = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+		$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', '92.95', array( 'register_id' => $till ) ) )->get_status() );
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$register = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+		$body     = $this->envelope( $order, array( 'provenance' => array( 'register_id' => $register ) ) );
+		$path     = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$refuse   = static fn( $check, $meta_id, $value, $key ) => Completion_Stamp::META_KEY === $key ? true : $check;
+		add_filter( 'update_post_metadata_by_mid', $refuse, 10, 4 );
+		try {
+			$first = $this->command( $path, $body );
+		} finally {
+			remove_filter( 'update_post_metadata_by_mid', $refuse, 10 );
+		}
+		$this->assertSame( 409, $first->get_status(), 'Precondition: the completion was lost.' );
+
+		// Act.
+		$again = $this->command( $path, $body );
+
+		// Assert.
+		$this->assertSame( 200, $again->get_status() );
+		$history = $this->stored_meta( $order->get_id(), Completion_Stamp::META_KEY );
+		$this->assertCount( 2, $history );
+		$this->assertSame( $register, $history[1]['register'] );
+	}
+
 	/** A close whose paid transition failed after its entry was stored is completed by its replay, naming the completion. */
 	public function test_close_failing_after_its_rows_is_completed_by_its_replay(): void {
 		// Arrange: a covered sale; the paid transition is refused once.

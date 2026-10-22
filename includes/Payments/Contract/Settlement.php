@@ -97,12 +97,35 @@ class Settlement {
 	}
 
 	/**
-	 * Whether a confirmation is parked for a payment that has not arrived yet.
+	 * The confirmation parked for a payment that has not arrived, read without the parking lock.
 	 *
 	 * @param string $payment_id Payment UUID.
 	 */
-	public function is_parked( string $payment_id ): bool {
-		return isset( $this->pending()[ strtolower( $payment_id ) ] );
+	public function parked( string $payment_id ): ?array {
+		return $this->pending()[ strtolower( $payment_id ) ]['patch'] ?? null;
+	}
+
+	/**
+	 * Under the parking lock, hand an arrival's parked confirmation to `$apply` and forget it. Called once
+	 * the arrival's index is stored, so a confirmation parked before that is seen here and any later one
+	 * finds the row. The caller holds the order lock (record takes them in that order).
+	 *
+	 * @param string   $payment_id Payment UUID.
+	 * @param callable $apply      fn( array $patch ): mixed; a WP_Error is the answer.
+	 * @return true|WP_Error
+	 */
+	public function drain( string $payment_id, callable $apply ) {
+		return Order_Lock::instance()->with_lock(
+			self::PARK_LOCK_ID,
+			function () use ( $payment_id, $apply ) {
+				$pending = $this->pending();
+				$result  = isset( $pending[ $payment_id ] ) ? $apply( $pending[ $payment_id ]['patch'] ) : true;
+				$pending = $this->pending(); // Written back pruned, as apply_parked() does.
+				unset( $pending[ $payment_id ] );
+				$saved = $this->write_pending( $pending );
+				return is_wp_error( $result ) ? $result : $saved;
+			}
+		);
 	}
 
 	/**
@@ -110,15 +133,14 @@ class Settlement {
 	 *
 	 * @param WC_Order $order      Freshly stored order.
 	 * @param string   $payment_id Payment UUID.
-	 * @param bool     $derive     Project payment state after applying; false when the caller completes from storage.
 	 * @return true|WP_Error
 	 */
-	public function apply_parked( WC_Order $order, string $payment_id, bool $derive = true ) {
+	public function apply_parked( WC_Order $order, string $payment_id ) {
 		return Order_Lock::instance()->with_lock(
 			self::PARK_LOCK_ID,
-			function () use ( $order, $payment_id, $derive ) {
+			function () use ( $order, $payment_id ) {
 				$pending = $this->pending();
-				$result = isset( $pending[ $payment_id ] ) ? $this->apply( $order, $payment_id, $pending[ $payment_id ]['patch'], $derive ) : true;
+				$result = isset( $pending[ $payment_id ] ) ? $this->apply( $order, $payment_id, $pending[ $payment_id ]['patch'] ) : true;
 				$pending = $this->pending();
 				unset( $pending[ $payment_id ] );
 				$saved = $this->write_pending( $pending );
@@ -133,11 +155,10 @@ class Settlement {
 	 * @param WC_Order $order      Locked order.
 	 * @param string   $payment_id Payment UUID.
 	 * @param array    $patch      Provider confirmation.
-	 * @param bool     $derive     Project payment state after applying.
 	 * @return true|WP_Error
 	 */
-	private function apply( WC_Order $order, string $payment_id, array $patch, bool $derive = true ) {
-		$result = Ledger::instance()->apply_result( $order, $payment_id, $patch, $derive );
+	private function apply( WC_Order $order, string $payment_id, array $patch ) {
+		$result = Ledger::instance()->apply_result( $order, $payment_id, $patch );
 		if ( is_wp_error( $result ) ) {
 			Logger::log( sprintf( 'WCPOS settlement %s: %s', $payment_id, $result->get_error_message() ) );
 			return $result;

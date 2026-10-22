@@ -201,13 +201,25 @@ final class Command_Log {
 	 * @param array    $rows  Payment rows.
 	 */
 	public static function owing( WC_Order $order, array $rows ): bool {
-		$n       = self::completions( $order );
-		$entries = array_values( self::read( $order ) );
-		foreach ( $rows as $row ) {
-			$entries = array_merge( $entries, array_values( array_filter( is_array( $row['commands'] ?? null ) ? $row['commands'] : array(), 'is_array' ) ) );
-		}
-		foreach ( $entries as $entry ) {
+		$n = self::completions( $order );
+		foreach ( self::entries( $order, $rows ) as $entry ) {
 			if ( self::OWED === ( $entry['phase'] ?? null ) && isset( $entry['owed_at_n'] ) && (int) $entry['owed_at_n'] === $n ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a mark outlived the completion it owed: taken at a count below the order's latest.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	public static function stale( WC_Order $order, array $rows ): bool {
+		$n = self::completions( $order );
+		foreach ( self::entries( $order, $rows ) as $entry ) {
+			if ( self::OWED === ( $entry['phase'] ?? null ) && (int) ( $entry['owed_at_n'] ?? -1 ) < $n ) {
 				return true;
 			}
 		}
@@ -245,6 +257,20 @@ final class Command_Log {
 		}
 		unset( $row );
 		return $owed ? $rows : null;
+	}
+
+	/**
+	 * Every entry on the order: the order map's, then each row's.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	private static function entries( WC_Order $order, array $rows ): array {
+		$entries = array_values( self::read( $order ) );
+		foreach ( $rows as $row ) {
+			$entries = array_merge( $entries, array_values( array_filter( is_array( $row['commands'] ?? null ) ? $row['commands'] : array(), 'is_array' ) ) );
+		}
+		return $entries;
 	}
 
 	/**

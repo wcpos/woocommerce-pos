@@ -188,6 +188,11 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( is_wp_error( $order ) ) {
 			return $order;
 		}
+		if ( ! empty( $command['heal'] ) ) {
+			// A close that stored its entry and still owes the paid transition: the replay heals from storage.
+			$order = Ledger::instance()->write( $order, null, Ledger::MODE_CLOSE )->order;
+			return $this->replay( $order, 'close', (array) Command_Log::find( $order, Ledger::instance()->read( $order ), $command['id'] ) );
+		}
 		$result = Ledger::instance()->close( $order, $command );
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
 	}
@@ -428,9 +433,7 @@ class Payments_Controller extends WC_REST_Controller {
 			return new WP_Error( 'wcpos_command_conflict', __( 'This command ID was already used with a different request.', 'woocommerce-pos' ), $data );
 		}
 		if ( $stored && 'close' === $kind && Command_Log::OWED === ( $stored['phase'] ?? null ) && Command_Log::owing( $order, Ledger::instance()->read( $order ) ) ) {
-			// A close that stored its entry and still owes the paid transition: the replay heals from storage.
-			$order  = Ledger::instance()->write( $order, null, Ledger::MODE_CLOSE )->order;
-			$stored = Command_Log::find( $order, Ledger::instance()->read( $order ), $command['id'] );
+			return array_merge( $command, array( 'heal' => true ) ); // Healed in close_item(), under the body's provenance.
 		}
 		if ( $stored && ! in_array( $kind, array( 'record', 'intent', 'submit' ), true ) ) {
 			return $this->replay( $order, $kind, $stored );

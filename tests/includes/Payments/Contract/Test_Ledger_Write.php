@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
@@ -16,6 +17,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
+use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -794,6 +796,24 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Store an awaiting-customer stamp as a sent submit leaves it.
+	 *
+	 * @param int $id Order id.
+	 */
+	private function seed_stamp( int $id ): void {
+		$order = $this->fresh( $id );
+		$order->update_meta_data(
+			Gateway_Submission::STAMP_META_KEY,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'method_id'  => 'pos_cash',
+				'cashier_id' => 1,
+			)
+		);
+		$order->save_meta_data();
+	}
+
 	/** A POS order a sent gateway submit left on-hold, awaiting the customer, with no paid date. */
 	private function create_stamped_on_hold_order(): int {
 		$order = $this->create_pos_order();
@@ -966,7 +986,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 			}
 			return false;
 		};
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 		Ledger::defer(
 			$id,
 			static function (): void {
@@ -984,7 +1004,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 
 		// Act.
 		Ledger::flush_all();
-		remove_filter( 'woocommerce_pos_logging', $log, 10 );
+		remove_filter( 'wcpos_logging', $log, 10 );
 
 		// Assert.
 		$this->assertTrue( $ran );
@@ -1357,6 +1377,258 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ $input['id'] ] );
 	}
 
+	/** An authorized offline record whose parked webhook captured the balance completes the sale once; its replay is a no-op. */
+	public function test_record_authorized_with_parked_capture_covering_the_balance_completes_once(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$input = array_merge(
+			$this->tender( '92.95' ),
+			array(
+				'method_id' => 'pos_card',
+				'status' => 'authorized',
+			)
+		);
+		$this->assertTrue(
+			wcpos_settle_payment(
+				$input['id'],
+				array(
+					'status' => 'captured',
+					'event_id' => 'evt_parked',
+				)
+			)
+		);
+
+		// Act.
+		$row    = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		$replay = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+
+		// Assert.
+		$this->assertIsArray( $row );
+		$this->assertSame( 'captured', $row['status'] );
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$history = Completion_History::of( $this->fresh( $id ) )->entries();
+		$this->assertCount( 1, $history );
+		$this->assertSame( 1, (int) $history[0]['n'] );
+		$this->assertSame( $row, $replay );
+		$this->assertArrayNotHasKey( $input['id'], (array) get_option( 'wcpos_pending_settlements', array() ) );
+	}
+
+	/** A parked on-reader capture above the recorded leg lands its Tip fee and the raised total in S1, then completes. */
+	public function test_record_with_parked_tipped_capture_stores_fee_and_total_with_the_rows(): void {
+		// Arrange: the card leg tips on the reader; the confirmation for 100.00 parked before the 92.95 arrival.
+		Capture_Mode_Registry::instance()->register( 'tip_test', Tip_Test_Handler::class );
+		$mode = static fn( $mode, $gateway ) => 'pos_card' === $gateway->id ? 'tip_test' : $mode;
+		add_filter( 'wcpos_payment_method_capture_mode', $mode, 10, 2 );
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$input = array_merge(
+			$this->tender( '92.95' ),
+			array(
+				'method_id' => 'pos_card',
+				'status' => 'authorized',
+			)
+		);
+		wcpos_settle_payment(
+			$input['id'],
+			array(
+				'status' => 'captured',
+				'amount' => '100.00',
+			)
+		);
+
+		// Act.
+		try {
+			$row = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_mode', $mode, 10 );
+		}
+
+		// Assert.
+		$saved = new \WC_Order( $id );
+		$fees  = array_values( $saved->get_fees() );
+		$this->assertCount( 1, $fees );
+		$this->assertSame( '7.05', $fees[0]->get_total() );
+		$this->assertSame( '100.00', $saved->get_total() );
+		$this->assertSame( '100.00', $row['amount'] );
+		$this->assertSame( '7.05', $row['tip'] );
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$this->assertCount( 1, Completion_History::of( $this->fresh( $id ) )->entries() );
+	}
+
+	/** A mismatching confirmation parked while the arrival is being stored is drained before the paid transition: no completion. */
+	public function test_record_with_mismatch_parked_during_its_rows_save_does_not_complete(): void {
+		// Arrange.
+		$order  = $this->create_pos_order();
+		$id     = $order->get_id();
+		$input  = array_merge( $this->tender( '92.95' ), array( 'method_id' => 'pos_card' ) );
+		$parked = false;
+		$park   = static function ( $saving ) use ( $id, $input, &$parked ): void {
+			if ( $parked || $saving->get_id() !== $id ) {
+				return;
+			}
+			$parked = true;
+			wcpos_settle_payment(
+				$input['id'],
+				array(
+					'status' => 'captured',
+					'amount' => '100.00',
+				)
+			);
+		};
+		add_action( 'woocommerce_before_order_object_save', $park, 1 );
+
+		// Act.
+		try {
+			$answer = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $park, 1 );
+		}
+
+		// Assert.
+		$this->assertTrue( $parked, 'Precondition: the confirmation parked inside the arrival save.' );
+		$this->assertWPError( $answer );
+		$this->assertSame( 'wcpos_amount_mismatch', $answer->get_error_code() );
+		$this->assertNull( $this->fresh( $id )->get_date_paid( 'edit' ) );
+		$this->assertCount( 0, Completion_History::of( $this->fresh( $id ) )->entries() );
+		$this->assertSame( 'failed', $this->stored_rows( $id )[0]['status'] );
+	}
+
+	/** A legacy paid sale (no ledger, no completion history) closed twice stays as it was: no ledger, no completion, no marker. */
+	public function test_close_on_legacy_paid_sale_twice_creates_no_ledger_and_no_completion(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$paid  = $this->fresh( $id );
+		$paid->set_date_paid( time() );
+		$paid->set_status( 'completed' );
+		$this->as_if_paid_hooks_never_ran( fn() => $paid->save() );
+		$first  = array(
+			'id' => wp_generate_uuid4(),
+			'fp' => 'sha256:one',
+			'kind' => 'close',
+		);
+		$second = array(
+			'id' => wp_generate_uuid4(),
+			'fp' => 'sha256:two',
+			'kind' => 'close',
+		);
+
+		// Act.
+		Ledger::instance()->close( wc_get_order( $id ), $first );
+		$closed = Ledger::instance()->close( wc_get_order( $id ), $second );
+
+		// Assert.
+		$saved = $this->fresh( $id );
+		$this->assertNull( $closed['completion'] );
+		$this->assertFalse( $saved->meta_exists( Ledger::META_KEY ) );
+		$this->assertCount( 0, Completion_History::of( $saved )->entries() );
+		$this->assertSame(
+			0,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type' => 'sale',
+				)
+			)
+		);
+		foreach ( array( $first, $second ) as $command ) {
+			$entry = Command_Log::find( $saved, array(), $command['id'] );
+			$this->assertSame( $command['fp'], $entry['fp'] );
+			$this->assertArrayNotHasKey( 'phase', $entry );
+			$this->assertArrayNotHasKey( 'owed_at_n', $entry );
+		}
+	}
+
+	/** A completion whose cleanup was lost after it landed is answered retryable, and the next write resumes the cleanup once. */
+	public function test_completion_cleanup_lost_after_the_completion_is_resumed_by_the_next_write(): void {
+		// Arrange: a sent sale on-hold with its stamp; the covering tender's command owes the completion. Once the
+		// completion is stored, the next write of the ledger meta is lost.
+		$id      = $this->create_stamped_on_hold_order();
+		$command = wp_generate_uuid4();
+		$row     = Command_Log::with_on_row( $this->row( '92.95' ), $command, Command_Log::entry( 'sha256:cash', 'record' ) );
+		$armed   = false;
+		$lost    = 0;
+		$arm     = static function () use ( &$armed ): void {
+			$armed = true;
+		};
+		$lose    = static function ( $sql ) use ( &$armed, &$lost ) {
+			if ( $armed && 0 === $lost && is_string( $sql ) && preg_match( '/^\s*UPDATE/i', $sql ) && false !== strpos( $sql, Ledger::META_KEY ) ) {
+				++$lost;
+				return 'SELECT 0';
+			}
+			return $sql;
+		};
+		add_action( 'wcpos_sale_completed', $arm, 1 );
+		add_filter( 'query', $lose );
+		$caught = null;
+		try {
+			Ledger::instance()->write( $id, fn( Ledger_Draft $draft ) => $draft->put( $row ) );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			remove_action( 'wcpos_sale_completed', $arm, 1 );
+			remove_filter( 'query', $lose );
+		}
+		$paid = 0;
+		add_action(
+			'woocommerce_pre_payment_complete',
+			function () use ( &$paid ): void {
+				++$paid;
+			}
+		);
+
+		// Act.
+		Ledger::instance()->write( $id );
+
+		// Assert.
+		$this->assertSame( 1, $lost, 'Precondition: the cleanup was lost after the completion landed.' );
+		$this->assertSame( 'completion', $caught ? $caught->stage : null );
+		$saved = $this->fresh( $id );
+		$this->assertSame( 0, $paid );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ $command ] );
+	}
+
+	/** A standing completion whose cleanup never landed (stamp left, a debt taken before it) is cleaned by any write, completing nothing. */
+	public function test_write_on_standing_completion_with_cleanup_undone_resumes_it(): void {
+		// Arrange: completion 1 stands; then storage as a cleanup that never landed leaves it.
+		$id    = $this->create_stamped_on_hold_order();
+		$entry = array_merge(
+			Command_Log::entry( 'sha256:cash', 'record' ),
+			array(
+				'phase'     => Command_Log::OWED,
+				'owed_at_n' => 0,
+			)
+		);
+		$row   = Command_Log::with_on_row( $this->row( '92.95' ), wp_generate_uuid4(), $entry );
+		Ledger::instance()->write( $id, fn( Ledger_Draft $draft ) => $draft->put( $this->row( '92.95' ) ) );
+		$this->seed_rows( $id, array( $row ) );
+		$this->seed_stamp( $id );
+		$saved = $this->fresh( $id );
+		$this->assertSame( 1, (int) Completion_History::of( $saved )->standing()['n'], 'Precondition: completion 1 stands.' );
+		$this->assertNotNull( Gateway_Submission::read_stamp( $saved ), 'Precondition: the stamp was left.' );
+		$paid = 0;
+		add_action(
+			'woocommerce_pre_payment_complete',
+			function () use ( &$paid ): void {
+				++$paid;
+			}
+		);
+
+		// Act.
+		Ledger::instance()->write( $id );
+
+		// Assert.
+		$saved = $this->fresh( $id );
+		$this->assertSame( 0, $paid );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+		$this->assertFalse( Command_Log::stale( $saved, $this->stored_rows( $id ) ) );
+		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ array_key_first( $row['commands'] ) ] );
+	}
+
 	/**
 	 * Make one step of the next write fail.
 	 *
@@ -1593,5 +1865,21 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$held->setAccessible( true );
 		$locks = $held->getValue( Order_Lock::instance() );
 		return (int) ( $locks[ sprintf( 'wcpos_order_%d_%d', $id, get_current_blog_id() ) ]['count'] ?? 0 );
+	}
+}
+
+/** A recordable card leg whose reader takes tips. */
+class Tip_Test_Handler extends Manual_Handler {
+ // phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- A fixture for this class's tests, as Test_Ledger keeps its handlers.
+	/**
+	 * The manual descriptor, tipping on the reader.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway.
+	 */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		$descriptor                         = parent::describe( $gateway );
+		$descriptor['capture']['mode']      = 'tip_test';
+		$descriptor['capabilities']['tips'] = 'on_reader';
+		return $descriptor;
 	}
 }
