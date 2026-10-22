@@ -27,8 +27,8 @@ class Ledger {
 	 * completion), which is exactly the leg that most needs reconciling.
 	 */
 	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
-	/** On a Tip fee item: the row whose on-reader capture added it, so a retried capture adds none. */
-	private const TIP_FEE_META_KEY = '_wcpos_tip_payment_id';
+	/** On a Tip fee item: the row whose on-reader capture added it, so a retried capture adds none. Server-owned (rule 2). */
+	public const TIP_FEE_META_KEY = '_wcpos_tip_payment_id';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
 	public const SEEN_EVENTS_MAX = 20;
 	/**
