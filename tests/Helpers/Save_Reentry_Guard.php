@@ -183,14 +183,6 @@ class Save_Reentry_Guard {
 	private static $extra_dirs = array();
 
 	/**
-	 * The hook stack at the last trip, guard's own hook included, while it is still a
-	 * prefix of the live stack. See `live_stack()`.
-	 *
-	 * @var string[]
-	 */
-	private static $tripped_stack = array();
-
-	/**
 	 * Global functions that dispatch a hook. In a backtrace, a frame for one of these
 	 * marks a hook firing; its file is the code that fired it.
 	 */
@@ -233,13 +225,11 @@ class Save_Reentry_Guard {
 	}
 
 	/**
-	 * Forget per-test state. Called before every test by `Save_Reentry_Guard_Reset`, the
-	 * PHPUnit extension registered in the suite config: the hook restore at the end of a
-	 * test clears the leftovers `$tripped_stack` describes, and a stale copy would hide a
-	 * genuine trip in the next test whose live stack happens to equal it.
+	 * The per-test boundary, called before every test by `Save_Reentry_Guard_Reset`, the
+	 * PHPUnit extension Free's and Pro's suite configs register. The guard keeps no per-test
+	 * state any more: `live_stack()` reads which hooks are running from the call stack.
 	 */
 	public static function reset(): void {
-		self::$tripped_stack = array();
 	}
 
 	/**
@@ -434,11 +424,6 @@ class Save_Reentry_Guard {
 		// a downstream assertion before WP_UnitTestCase reports the notice. Say it here too.
 		fwrite( STDERR, "\n[Save_Reentry_Guard] " . $message . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- test-only tripwire.
 
-		// The exception unwinds the hooks between here and whoever catches it without
-		// popping them from $wp_current_filter. Remember the stack so later checks in the
-		// same test can tell those leftovers from hooks that are really running.
-		self::$tripped_stack = $GLOBALS['wp_current_filter'] ?? array();
-
 		throw new LogicException( $message );
 	}
 
@@ -449,7 +434,21 @@ class Save_Reentry_Guard {
 	 * @return null|string
 	 */
 	private static function running_reentry_hook(): ?string {
-		$stack = self::live_stack();
+		$stack = $GLOBALS['wp_current_filter'] ?? array();
+		if ( null !== self::innermost_reentry_hook( $stack ) ) {
+			$stack = self::live_stack( $stack );
+		}
+		return self::innermost_reentry_hook( $stack );
+	}
+
+	/**
+	 * The innermost hook on the list in a stack, ignoring its last entry (the guard's own hook).
+	 *
+	 * @param string[] $stack Hook stack, outermost first.
+	 *
+	 * @return null|string
+	 */
+	private static function innermost_reentry_hook( array $stack ): ?string {
 		for ( $i = \count( $stack ) - 2; $i >= 0; $i-- ) {
 			$name = (string) $stack[ $i ];
 			if ( ! isset( self::$is_reentry_hook[ $name ] ) ) {
@@ -463,29 +462,35 @@ class Save_Reentry_Guard {
 	}
 
 	/**
-	 * `$wp_current_filter` without the entries a previous trip left behind.
+	 * `$wp_current_filter` without the hooks that are no longer running.
 	 *
-	 * WordPress pops a hook from `$wp_current_filter` only when its callbacks return. When
-	 * the guard throws and WooCommerce catches the exception (status transitions, payment
-	 * complete, order saves), every hook it unwound stays on the stack until the test's hook
-	 * restore, and the next plugin save in that test would be blamed on them. While the
-	 * stack recorded at the trip is still a prefix of the live stack, it is dropped; once it
-	 * is not, it is forgotten, and `reset()` forgets it at every test boundary. A caught
-	 * trip still fails its test through the `_doing_it_wrong()` notice.
+	 * WordPress pops a hook from `$wp_current_filter` only when its callbacks return. When a
+	 * listener throws and WooCommerce catches the exception (status transitions, payment
+	 * complete, order saves: a guard trip, a keeper refusal, any third-party listener), every
+	 * hook it unwound stays on the stack until the test's hook restore, and the next plugin
+	 * save in that test would be blamed on them. A hook is running only while its dispatch
+	 * (`do_action()`, `apply_filters()` and their `_ref_array` forms) is on the call stack, so
+	 * each stack entry is kept only when the next live dispatch, outermost first, names it.
+	 *
+	 * @param string[] $stack `$wp_current_filter`.
 	 *
 	 * @return string[]
 	 */
-	private static function live_stack(): array {
-		$stack = $GLOBALS['wp_current_filter'] ?? array();
-		if ( empty( self::$tripped_stack ) ) {
-			return $stack;
+	private static function live_stack( array $stack ): array {
+		$dispatched = array();
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- test-only tripwire; args carry the hook names.
+		foreach ( array_reverse( debug_backtrace( 0 ) ) as $frame ) {
+			if ( ! isset( $frame['class'] ) && \in_array( $frame['function'], self::DISPATCH_FUNCTIONS, true ) && isset( $frame['args'][0] ) ) {
+				$dispatched[] = (string) $frame['args'][0];
+			}
 		}
-		$length = \count( self::$tripped_stack );
-		if ( \array_slice( $stack, 0, $length ) === self::$tripped_stack ) {
-			return \array_slice( $stack, $length );
+		$live = array();
+		foreach ( $stack as $name ) {
+			if ( isset( $dispatched[ \count( $live ) ] ) && $dispatched[ \count( $live ) ] === (string) $name ) {
+				$live[] = (string) $name;
+			}
 		}
-		self::$tripped_stack = array();
-		return $stack;
+		return $live;
 	}
 
 	/**
