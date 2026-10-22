@@ -205,6 +205,8 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		}
 		$after = Order_Serializer::current_state( $order->get_id() );
 		$this->assertIsArray( $after );
+		// The canonical forms first, so a failure names the field that moved.
+		$this->assertSame( Order_Serializer::canonical_form( $before['document'] ), Order_Serializer::canonical_form( $after['document'] ) );
 		$this->assertSame( $before['revision'], $after['revision'] );
 	}
 
