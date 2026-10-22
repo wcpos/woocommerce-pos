@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
@@ -461,6 +462,136 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 1, (int) $written->completion['n'] );
 		$this->assertSame( array( $row['id'] ), $written->completion['payment_ids'] );
 		$this->assertSame( 9, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
+	}
+
+	/** A staged total that did not reach storage never reaches the paid transition; the retried command completes. */
+	public function test_write_staged_total_lost_in_save_never_reaches_paid_and_retry_completes(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$this->seed_rows( $id, array( $this->row( '50.00' ) ) );
+		$lower = static fn( Ledger_Draft $draft ) => $draft->order()->set_total( '50.00' );
+		$keep  = static function ( $saving ) use ( $id ): void {
+			if ( $saving->get_id() === $id ) {
+				$saving->set_total( '92.95' ); // The staged total does not land; the rows do.
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $keep, PHP_INT_MAX );
+		$caught = null;
+
+		// Act.
+		try {
+			Ledger::instance()->write( $id, $lower );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $keep, PHP_INT_MAX );
+		}
+		$unpaid  = $this->stored_status( $id );
+		$written = Ledger::instance()->write( $id, $lower );
+
+		// Assert.
+		$this->assertInstanceOf( Ledger_Persistence_Exception::class, $caught );
+		$this->assertSame( 'rows', $caught->stage );
+		$this->assertSame( 'pos-open', $unpaid );
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$this->assertSame( '50.00', $written->order->get_total() );
+		$this->assertSame( 1, (int) $written->completion['n'] );
+	}
+
+	/** A write whose first S1 lost an attempt fate still completes the sale it covered on the retried S1. */
+	public function test_write_retried_s1_after_lost_attempt_fate_still_completes(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$row   = $this->row( '92.95' );
+		$sent  = array( $row['id'] => 'sent' );
+		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $sent );
+		$order->save_meta_data();
+		$lost = 0;
+		$lose = static function ( $saving ) use ( $id, $sent, &$lost ): void {
+			global $wpdb;
+			if ( 0 !== $lost || $saving->get_id() !== $id ) {
+				return;
+			}
+			++$lost;
+			$hpos = OrderUtil::custom_orders_table_usage_is_enabled();
+			$wpdb->update(
+				$hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta,
+				array( 'meta_value' => maybe_serialize( $sent ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_value -- test fixture.
+				array(
+					( $hpos ? 'order_id' : 'post_id' ) => $id,
+					'meta_key'                         => Gateway_Submission::ATTEMPTS_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_key -- test fixture.
+				)
+			);
+		};
+		add_action( 'woocommerce_after_order_object_save', $lose, 1 );
+
+		// Act.
+		try {
+			$written = Ledger::instance()->write( $id, fn( Ledger_Draft $draft ) => $draft->put( $row ) );
+		} finally {
+			remove_action( 'woocommerce_after_order_object_save', $lose, 1 );
+		}
+
+		// Assert.
+		$this->assertSame( 1, $lost );
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$this->assertSame( 1, (int) $written->completion['n'] );
+		$this->assertSame( array( $row['id'] => 'paid' ), Gateway_Submission::read_attempts( $this->fresh( $id ) ) );
+		$this->assertSame( 9, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
+	}
+
+	/** A heal whose completion still does not land is the retryable completion failure, not a write without one. */
+	public function test_write_heal_whose_completion_fails_throws_completion(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$this->seed_rows( $order->get_id(), array( $this->row( '92.95' ) ) );
+		$paid = $this->fresh( $order->get_id() );
+		$paid->set_date_paid( time() );
+		$paid->set_status( 'processing' );
+		$this->as_if_paid_hooks_never_ran( fn() => $paid->save() );
+		$undo   = $this->inject( 'completion', $order->get_id() );
+		$caught = null;
+
+		// Act.
+		try {
+			Ledger::instance()->write( $order->get_id() );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$undo();
+		}
+
+		// Assert.
+		$this->assertInstanceOf( Ledger_Persistence_Exception::class, $caught );
+		$this->assertSame( 'completion', $caught->stage );
+		$this->assertNull( Completion_History::of( $this->fresh( $order->get_id() ) )->standing() );
+	}
+
+	/** A zero-total sale closed through write() whose completion failed is healed by the next write. */
+	public function test_write_zero_total_close_whose_completion_failed_heals_on_next_write(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_total( '0.00' );
+		$order->save();
+		$undo   = $this->inject( 'completion', $order->get_id() );
+		$caught = null;
+		try {
+			Ledger::instance()->write( $order->get_id(), static fn() => null, Ledger::MODE_CLOSE );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$undo();
+		}
+		$this->assertSame( 'completion', $caught ? $caught->stage : null, 'Precondition: the close was paid and its completion was lost.' );
+
+		// Act.
+		$written = Ledger::instance()->write( $order->get_id() );
+
+		// Assert.
+		$this->assertSame( 1, (int) $written->completion['n'] );
+		$this->assertSame( array(), $written->completion['payment_ids'] );
 	}
 
 	/** Is writing only while a write on that order runs. */

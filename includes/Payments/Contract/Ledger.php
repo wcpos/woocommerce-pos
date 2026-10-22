@@ -2217,25 +2217,29 @@ class Ledger {
 	 * @throws Ledger_Persistence_Exception When a step does not reach storage.
 	 */
 	private function locked_write( int $id, ?callable $change, string $mode ): Ledger_Written {
+		$before = null;
 		for ( $try = 0; ; ++$try ) {
 			$order  = $this->fresh( $id );
-			$stored = $this->stored( $id, true )['payments'] ?? array();
-			if ( 0 === $try && $this->heal( $order, $stored ) ) {
+			$ledger = $this->stored( $id, true );
+			$stored = $ledger['payments'] ?? array();
+			if ( 0 === $try && $this->heal( $order, null !== $ledger ) ) {
 				$order = $this->fresh( $id );
 			}
-			$before = $this->project( $order, $stored, $mode );
+			// Covered before this write: from the first read, never from this write's own half-stored S1.
+			$before = $before ?? $this->project( $order, $stored, $mode );
 			$draft  = new Ledger_Draft( $order, $stored );
 			$answer = null === $change ? null : $change( $draft );
 			$rows   = $this->settle( $order, $stored, $draft->rows() );
-			$after  = $this->project( $order, $rows, $mode );
-			if ( $this->store_rows( $order, $stored, $rows, $after, null !== $change ) ) {
+			if ( $this->store_rows( $order, $stored, $rows, $this->project( $order, $rows, $mode ), null !== $change ) ) {
 				break;
 			}
 			if ( 0 < $try ) {
 				throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS payment ledger was not persisted.' );
 			}
 		}
+		// S2 is decided from storage: the rows and the order as S1 stored them (I4).
 		$order = $this->fresh( $id );
+		$after = $this->project( $order, $this->read( $order ), $mode );
 		// A sale its rows already covered completes only on a replay, a sweep or a close (rule 3: a
 		// reopened sale its rows still cover is covered and open, and stays open under other writes).
 		if ( $after['completes'] && ( ! $before['completes'] || null === $change || self::MODE_CLOSE === $mode ) ) {
@@ -2308,6 +2312,7 @@ class Ledger {
 		if ( ! $changed && ! $staged && ! $clears && ! $order->get_changes() ) {
 			return true;
 		}
+		$props = $order->get_changes();
 		$this->stage( $order, $rows );
 		$this->server_saves[ $id ] = ( $this->server_saves[ $id ] ?? 0 ) + 1;
 		try {
@@ -2317,11 +2322,32 @@ class Ledger {
 				unset( $this->server_saves[ $id ] );
 			}
 		}
-		// The rows, the attempt fates their coverage settled, and the projected status.
+		// The rows, the attempt fates their coverage settled, and every order property staged.
 		$check = $this->fresh( $id );
 		return ( $this->stored( $id, true )['payments'] ?? array() ) === $wire
 			&& $check->get_meta( Gateway_Submission::ATTEMPTS_META_KEY ) === $order->get_meta( Gateway_Submission::ATTEMPTS_META_KEY )
-			&& ( null === $projection['status'] || $check->get_status() === $projection['status'] );
+			&& self::holds( $check->get_data(), $props );
+	}
+
+	/**
+	 * Whether stored data holds every staged change: a date by its time, a map key by key.
+	 *
+	 * @param mixed $stored Stored value.
+	 * @param mixed $staged Staged value.
+	 */
+	private static function holds( $stored, $staged ): bool {
+		if ( is_array( $staged ) ) {
+			foreach ( $staged as $key => $value ) {
+				if ( ! self::holds( is_array( $stored ) ? ( $stored[ $key ] ?? null ) : null, $value ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		if ( $staged instanceof \DateTimeInterface ) {
+			return $stored instanceof \DateTimeInterface && $stored->getTimestamp() === $staged->getTimestamp();
+		}
+		return (string) $staged === (string) $stored;
 	}
 
 	/**
@@ -2354,15 +2380,16 @@ class Ledger {
 	}
 
 	/**
-	 * S3-heal: a paid sale whose rows took the money but whose completion never landed (a crash after or
-	 * inside S2, whose hooks may never have run). Stock reduction and the stamp are idempotent.
+	 * S3-heal: a paid POS sale the ledger wrote (a zero-total close has no rows) whose completion never
+	 * landed: a crash after or inside S2, whose hooks may never have run. Stock and the stamp are idempotent.
 	 *
-	 * @param WC_Order $order Fresh order.
-	 * @param array    $rows  Stored rows.
+	 * @param WC_Order $order    Fresh order.
+	 * @param bool     $ledgered Whether the ledger has stored this order (WCPOS 1.x never did).
 	 * @return bool Whether it healed.
+	 * @throws Ledger_Persistence_Exception When the completion still does not reach storage.
 	 */
-	private function heal( WC_Order $order, array $rows ): bool {
-		if ( ! self::paid_now( $order ) || ! array_filter( $rows, static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) ) || null !== Completion_History::of( $order )->standing() ) {
+	private function heal( WC_Order $order, bool $ledgered ): bool {
+		if ( ! $ledgered || ! wcpos_is_pos_order( $order ) || ! self::paid_now( $order ) || null !== Completion_History::of( $order )->standing() ) {
 			return false;
 		}
 		wc_maybe_reduce_stock_levels( $order->get_id() );
@@ -2372,6 +2399,9 @@ class Ledger {
 			Completion_Stamp::stamp( $order );
 		} finally {
 			self::$deriving = $previous;
+		}
+		if ( null === Completion_History::of( $this->fresh( $order->get_id() ) )->standing() ) {
+			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
 		}
 		return true;
 	}
