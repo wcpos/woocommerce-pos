@@ -28,6 +28,11 @@ class Ledger {
 	 * completion), which is exactly the leg that most needs reconciling.
 	 */
 	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
+	/**
+	 * One meta row per distinct session holding a captured leg: what `Session_Figures::legs()`
+	 * selects orders by, an indexed equality instead of a LIKE over every order's ledger.
+	 */
+	public const SESSION_META_KEY = '_wcpos_payment_session';
 	/** On a Tip fee item: the row whose on-reader capture added it, so a retried capture adds none. Server-owned (rule 2). */
 	public const TIP_FEE_META_KEY = '_wcpos_tip_payment_id';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
@@ -2418,7 +2423,7 @@ class Ledger {
 			sort( $list );
 			return $list;
 		};
-		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY, Command_Log::META_KEY );
+		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, self::SESSION_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY, Command_Log::META_KEY );
 		$want   = array_map( static fn( $key ) => $values( $order, $key ), $keys );
 		$this->server_saves[ $id ] = ( $this->server_saves[ $id ] ?? 0 ) + 1;
 		try {
@@ -2428,7 +2433,7 @@ class Ledger {
 				unset( $this->server_saves[ $id ] );
 			}
 		}
-		// The rows, their three indexes, the attempt fates their coverage settled, and every order property staged.
+		// The rows, their four indexes, the attempt fates their coverage settled, and every order property staged.
 		$check = $this->fresh( $id );
 		$kept  = $this->stored( $id, true );
 		return array_map( static fn( $key ) => $values( $check, $key ), $keys ) === $want && null !== $kept && $kept['payments'] === $wire && self::holds( $check->get_data(), $props );
@@ -2658,10 +2663,17 @@ class Ledger {
 		$this->reindex( $order, $normalized );
 		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
 		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
+		$order->delete_meta_data( self::SESSION_META_KEY );
+		$sessions = array();
 		foreach ( $normalized as $row ) {
 			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
 			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
 				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
+			}
+			// Normalized: a lowercase uuid or null. Only counting money is a session leg.
+			if ( null !== $row['session_id'] && in_array( $row['status'], self::COUNTING_STATUSES, true ) && ! in_array( $row['session_id'], $sessions, true ) ) {
+				$sessions[] = $row['session_id'];
+				$order->add_meta_data( self::SESSION_META_KEY, $row['session_id'], false );
 			}
 		}
 		// Money that covers the order: the send whose row paid it is paid, the sends it replaced are superseded.

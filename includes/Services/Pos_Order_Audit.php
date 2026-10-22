@@ -49,6 +49,7 @@ final class Pos_Order_Audit {
 		Ledger::INDEX_META_KEY,
 		Ledger::PAYMENT_ID_META_KEY,
 		Ledger::LIVE_LEG_META_KEY,
+		Ledger::SESSION_META_KEY,
 		Ledger::TIP_FEE_META_KEY,
 		Command_Log::META_KEY,
 		Completion_Stamp::COMPLETED_AT_META_KEY,
