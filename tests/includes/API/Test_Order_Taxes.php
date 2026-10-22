@@ -5,6 +5,8 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Admin_Settings;
 use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
 /**
@@ -424,5 +426,39 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$db_product = wc_get_product( $product->get_id() );
 		$this->assertEquals( 'taxable', $db_product->get_tax_status(), 'Product tax_status should not be permanently changed by line item override.' );
 		$this->assertEquals( '', $db_product->get_tax_class(), 'Product tax_class should remain unchanged.' );
+	}
+
+	/**
+	 * A v1 read of a taxed order leaves its revision alone (live run 39770381792).
+	 *
+	 * The v1 `woocommerce_order_get_items` filter stamps item uuids on read. A tax
+	 * line's meta is inside the order revision, so a stamp on it moved the revision
+	 * with no edit and the next money command answered 409 `wcpos_revision_stale`.
+	 */
+	public function test_v1_read_of_a_taxed_order_stamps_no_tax_line_and_keeps_the_revision(): void {
+		// Arrange: a taxed order built without a v1 dispatch, so nothing is stamped yet.
+		$order = wc_create_order();
+		$order->add_product( ProductHelper::create_simple_product(), 1 );
+		$order->calculate_totals();
+		$order->save();
+		$this->assertNotEmpty( $order->get_items( 'tax' ), 'Precondition: the order carries a tax line.' );
+		$before = Order_Serializer::current_state( $order->get_id() );
+		$this->assertIsArray( $before );
+
+		// Act: the read the e2e credential probe makes (`GET /wcpos/v1/orders?per_page=1`).
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		foreach ( $stored->get_items( 'tax' ) as $tax_item ) {
+			$this->assertSame( '', wc_get_order_item_meta( $tax_item->get_id(), Pos_Uuid::META_KEY, true ), 'A tax line is never uuid-stamped.' );
+		}
+		foreach ( $stored->get_items() as $line_item ) {
+			$this->assertTrue( Pos_Uuid::is_uuid( wc_get_order_item_meta( $line_item->get_id(), Pos_Uuid::META_KEY, true ) ), 'v1 still stamps the lines clients pair by uuid.' );
+		}
+		$after = Order_Serializer::current_state( $order->get_id() );
+		$this->assertIsArray( $after );
+		$this->assertSame( $before['revision'], $after['revision'] );
 	}
 }
