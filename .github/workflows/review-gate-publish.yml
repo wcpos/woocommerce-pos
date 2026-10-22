@@ -11,7 +11,7 @@ permissions:
 jobs:
   resolve:
     if: github.event.workflow_run.event != 'workflow_run'
-    uses: wcpos/.github/.github/workflows/review-gate.yml@65f9ad98973a7b6a15b93a0928b7ad198bfac63a # wcpos/.github main, 2026-10-19 (#22: docs-only incl. .mdx)
+    uses: wcpos/.github/.github/workflows/review-gate.yml@5d513136f2bed31920f5a4a3c982043d36a412fb # wcpos/.github main, 2026-10-22 (#23: a GET that answers 5xx is retried; an empty body fails with its status)
     with:
       resolve_only: true
       publish: false
@@ -21,6 +21,6 @@ jobs:
   publish:
     needs: resolve
     if: needs.resolve.outputs.sha != ''
-    uses: wcpos/.github/.github/workflows/review-gate.yml@65f9ad98973a7b6a15b93a0928b7ad198bfac63a # wcpos/.github main, 2026-10-19 (#22: docs-only incl. .mdx)
+    uses: wcpos/.github/.github/workflows/review-gate.yml@5d513136f2bed31920f5a4a3c982043d36a412fb # wcpos/.github main, 2026-10-22 (#23: a GET that answers 5xx is retried; an empty body fails with its status)
     with:
       sha: ${{ needs.resolve.outputs.sha }}
