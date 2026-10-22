@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-22T04:46:15+00:00\n"
+"POT-Creation-Date: 2026-10-22T05:27:29+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -506,7 +506,7 @@ msgstr ""
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Checkout_Controller.php:279
 #: includes/API/V1/Receipts_Controller.php:283
-#: includes/API/V2/Payments_Controller.php:585
+#: includes/API/V2/Payments_Controller.php:587
 #: includes/Payments/Contract/Settlement.php:92
 msgid "Order not found."
 msgstr ""
@@ -1077,15 +1077,15 @@ msgstr ""
 msgid "Collection \"%1$s\" is not served by this route. Supported: %2$s."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:139
+#: includes/API/V2/Payments_Controller.php:140
 msgid "Sorry, you cannot manage order payments."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:159
+#: includes/API/V2/Payments_Controller.php:160
 msgid "Payment must be an object."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:230
+#: includes/API/V2/Payments_Controller.php:231
 #: includes/API/V2/Payment_Methods_Controller.php:110
 #: includes/Payments/Contract/Gateway_Handler.php:59
 #: includes/Payments/Contract/Gateway_Submission.php:118
@@ -1093,31 +1093,31 @@ msgstr ""
 msgid "Payment method not found."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:236
+#: includes/API/V2/Payments_Controller.php:237
 msgid "Values must be an object and attempt ID a UUID."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:241
+#: includes/API/V2/Payments_Controller.php:242
 msgid "Attempt ID must name the sent attempt to cancel."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:352
+#: includes/API/V2/Payments_Controller.php:353
 msgid "Invalid payment operation parameters."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:403
+#: includes/API/V2/Payments_Controller.php:404
 msgid "Command ID must be a UUID."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:414
+#: includes/API/V2/Payments_Controller.php:415
 msgid "A payment command needs the order revision it was built against."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:426
+#: includes/API/V2/Payments_Controller.php:427
 msgid "This command ID was already used with a different request."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:498
+#: includes/API/V2/Payments_Controller.php:500
 msgid "The order changed since this command was built; read it again."
 msgstr ""
 
@@ -1231,7 +1231,7 @@ msgid "The session request could not be completed."
 msgstr ""
 
 #. translators: 1: line name, 2: units.
-#: includes/API/V2/Writers/Order_Writer.php:636
+#: includes/API/V2/Writers/Order_Writer.php:630
 #, php-format
 msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
 msgstr ""
