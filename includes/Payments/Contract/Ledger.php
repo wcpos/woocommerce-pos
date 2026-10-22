@@ -27,6 +27,8 @@ class Ledger {
 	 * completion), which is exactly the leg that most needs reconciling.
 	 */
 	public const LIVE_LEG_META_KEY = '_wcpos_payment_live';
+	/** On a Tip fee item: the row whose on-reader capture added it, so a retried capture adds none. */
+	private const TIP_FEE_META_KEY = '_wcpos_tip_payment_id';
 	/** Bound provider-event dedupe history without growing each row indefinitely. */
 	public const SEEN_EVENTS_MAX = 20;
 	/**
@@ -1034,8 +1036,11 @@ class Ledger {
 			// An authorization above the leg is tolerated but takes no tip: the hold may yet be voided,
 			// and only the captured amount confirms what the customer paid (the capture adds the fee).
 			if ( $tip && 'captured' === $applied['status'] ) {
+				// update_taxes() and calculate_totals() save the fee before the row: a retry after a failed row save finds it.
+				$tipped = array_filter( $order->get_fees(), static fn( $item ) => $row['id'] === $item->get_meta( self::TIP_FEE_META_KEY ) );
 				$fee = new \WC_Order_Item_Fee();
 				$fee->set_name( __( 'Tip', 'woocommerce-pos' ) );
+				$fee->add_meta_data( self::TIP_FEE_META_KEY, $row['id'], true );
 				$fee->set_tax_status( 'none' );
 				$fee->set_total( Money::format( $difference ) );
 				// The customer has already paid the confirmed amount, so a tax on the tip is
@@ -1054,9 +1059,11 @@ class Ledger {
 					$fee->set_taxes( array( 'total' => $taxes ) );
 					$fee->set_total( Money::format( $difference - Money::minor( array_sum( $taxes ) ) ) );
 				}
-				$order->add_item( $fee );
-				$order->update_taxes();
-				$order->calculate_totals( false );
+				if ( ! $tipped ) {
+					$order->add_item( $fee );
+					$order->update_taxes();
+					$order->calculate_totals( false );
+				}
 				$applied['amount'] = Money::normalize( $confirmed );
 				$applied['tip'] = Money::format( $difference );
 			}
@@ -2042,20 +2049,6 @@ class Ledger {
 			$fresh = wc_get_order( $order->get_id() );
 			$fresh = $fresh instanceof WC_Order ? $fresh : $order;
 			$fresh->read_meta_data( true );
-			// Unsaved items the caller added (an on-reader tip fee) ride the locked write.
-			$carried = false;
-			if ( $fresh !== $order ) {
-				foreach ( $order->get_items( array( 'line_item', 'fee', 'shipping', 'tax', 'coupon' ) ) as $item ) {
-					if ( 0 === (int) $item->get_id() ) {
-						$fresh->add_item( $item );
-						$carried = true;
-					}
-				}
-			}
-			if ( $carried ) {
-				$fresh->update_taxes();
-				$fresh->calculate_totals( false );
-			}
 			// updated_at_gmt is when a leg last changed. normalize_row() stamps now, so a row whose
 			// content is what is already stored keeps its stored stamp: a write to one leg must not
 			// make every other leg on the order look fresh to Payments_Sweeper.
