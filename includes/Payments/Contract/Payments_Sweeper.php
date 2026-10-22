@@ -41,9 +41,9 @@ final class Payments_Sweeper {
 	/** Poll oldest-modified in-progress orders within this run's batch budget. */
 	public function run(): void {
 		$threshold = max( 0, (int) apply_filters( 'wcpos_payments_sweep_threshold', 5 * MINUTE_IN_SECONDS ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
-		// Selected by the live-leg index, not by order status: an authorization that covers
-		// the balance has already completed the order (ledger.md §3.3, authorized counts),
-		// and that leg still has to be voided if it expires uncaptured.
+		// Selected by the live-leg index, not by order status: a live leg can stand on an order
+		// whose status moved on (completed by captured tenders, or by an older rule under which
+		// an authorization counted), and it still has to be captured or voided.
 		$order_ids = Payment_Index::order_ids_with_live_legs(
 			max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) ) // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
 		);
@@ -127,11 +127,12 @@ final class Payments_Sweeper {
 								/* translators: 1: payment row uuid, 2: leg amount with currency. */
 								$order->add_order_note( sprintf( __( 'WCPOS payment %1$s: the authorization for %2$s expired after the order was marked paid and was never captured — needs attention.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'] ) );
 							}
-						} elseif ( ! is_wp_error( $result ) && 'authorized' === $result['status'] && empty( $result['void_requested_at'] ) && $order->is_paid() ) {
-							// An authorization that covered the balance completed the order (§3.3), and
-							// the app resumes live legs only on orders still open — so no till is coming
-							// back to capture this one. The hold is on the provider and the cashier
-							// already took the money: capture it here, through the same amount and
+						} elseif ( ! is_wp_error( $result ) && 'authorized' === $result['status'] && empty( $result['void_requested_at'] ) && $order->is_paid() && $ledger->signed_balance( $order, $ledger->read( $order ) ) >= Money::minor( $result['amount'] ) ) {
+							// Only captured money pays a sale (ADR 0040 rule 1), so an authorization on a
+							// paid order is captured only while the order still owes at least its amount:
+							// captured tenders that already cover the total leave it to lapse at expires_at.
+							// The app resumes live legs only on orders still open, so no till is coming
+							// back to capture this one. Capture it here, through the same amount and
 							// currency verification the capture route uses. Only a PAID order qualifies
 							// (wc_get_is_paid_statuses()): one still in progress is left to its till,
 							// which may yet cancel the leg, and a cancelled or refunded order is never
