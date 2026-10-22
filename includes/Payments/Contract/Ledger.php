@@ -170,7 +170,7 @@ class Ledger {
 	 * @param int  $order_id Order id.
 	 * @param bool $lock Use a current locking read, not the transaction snapshot.
 	 * @return array|null Meta id and payments, or no readable ledger.
-	 * @throws \RuntimeException On a read failure or an invalid locked ledger.
+	 * @throws Ledger_Persistence_Exception On a read failure or an invalid locked ledger: retryable.
 	 */
 	private function stored( int $order_id, bool $lock ): ?array {
 		global $wpdb;
@@ -182,7 +182,7 @@ class Ledger {
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage identifiers and lock clause are selected above.
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT {$id} AS meta_id, meta_value FROM {$table} WHERE {$owner} = %d AND meta_key = %s ORDER BY {$id} ASC LIMIT 1{$suffix}", $order_id, self::META_KEY ), ARRAY_A );
 		if ( '' !== $wpdb->last_error ) {
-			throw new \RuntimeException( 'Ledger storage read failed.' );
+			throw new Ledger_Persistence_Exception( 'Ledger storage read failed.' );
 		}
 		if ( ! $row ) {
 			return null;
@@ -190,7 +190,7 @@ class Ledger {
 		$value = $this->decode( maybe_unserialize( $row['meta_value'] ) );
 		if ( null === $value ) {
 			if ( $lock ) {
-				throw new \RuntimeException( 'Ledger storage decode failed.' );
+				throw new Ledger_Persistence_Exception( 'Ledger storage decode failed.' );
 			}
 			return null;
 		}

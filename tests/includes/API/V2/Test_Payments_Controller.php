@@ -105,6 +105,39 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 	}
 
+	/** D4: a failed ledger storage read is the retryable 409, never a 500, and stores nothing. */
+	public function test_record_when_the_ledger_read_fails_answers_409(): void {
+		// Arrange.
+		global $wpdb;
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '5.00' );
+		$broken  = 0;
+		$break   = static function ( $sql ) use ( &$broken ) {
+			if ( 0 === $broken && false !== strpos( $sql, 'AS meta_id, meta_value FROM' ) && false !== strpos( $sql, "'" . Ledger::META_KEY . "'" ) ) {
+				++$broken;
+				return 'SELECT no_such_column FROM no_such_table';
+			}
+			return $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $break );
+
+		// Act.
+		try {
+			$response = $this->record( $order, $payment );
+		} finally {
+			remove_filter( 'query', $break );
+			$wpdb->suppress_errors( $previous );
+		}
+
+		// Assert.
+		$this->assertSame( 1, $broken );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		$this->assertNull( $this->stored_row( $order->get_id(), $payment['id'] ) );
+	}
+
 	/** Cashiers cannot forge handler events or an in-flight cancellation. */
 	public function test_record_client_events_and_cancel_stamp_do_not_persist(): void {
 		$order   = $this->create_pos_order();
