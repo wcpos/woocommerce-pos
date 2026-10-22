@@ -432,7 +432,7 @@ class Payments_Controller extends WC_REST_Controller {
 			}
 			return new WP_Error( 'wcpos_command_conflict', __( 'This command ID was already used with a different request.', 'woocommerce-pos' ), $data );
 		}
-		if ( $stored && 'close' === $kind && Command_Log::OWED === ( $stored['phase'] ?? null ) && Command_Log::owing( $order, Ledger::instance()->read( $order ) ) ) {
+		if ( $stored && 'close' === $kind && Command_Log::owes( $order, $stored ) ) {
 			return array_merge( $command, array( 'heal' => true ) ); // Healed in close_item(), under the body's provenance.
 		}
 		if ( $stored && ! in_array( $kind, array( 'record', 'intent', 'submit' ), true ) ) {

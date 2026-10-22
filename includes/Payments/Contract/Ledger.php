@@ -666,7 +666,16 @@ class Ledger {
 				return $replayed;
 			}
 			// A confirmation still parked for the row (its arrival stopped before draining it) is applied first.
-			$settled = Settlement::instance()->drain( $stored['id'], fn( array $patch ) => $this->write( $order, fn( Ledger_Draft $draft ) => $this->confirm( $draft, $stored['id'], $patch ) )->answer );
+			$settled = Settlement::instance()->drain(
+				$stored['id'],
+				function ( array $patch ) use ( $order, $stored ) {
+					$answer = $this->write( $order, fn( Ledger_Draft $draft ) => $this->confirm( $draft, $stored['id'], $patch ) )->answer;
+					if ( is_array( $answer ) ) {
+						$this->note_mismatch( $order, $answer, $patch );
+					}
+					return $answer;
+				}
+			);
 			if ( is_wp_error( $settled ) ) {
 				return $settled;
 			}
@@ -799,9 +808,13 @@ class Ledger {
 		if ( is_wp_error( $settled ) ) {
 			return $settled;
 		}
+		$refusal = null;
 		if ( null !== $failed ) {
 			$this->note_mismatch( $order, ...$failed );
-			return $this->refusal_error( (array) $this->find( $order, $row['id'] ), $order );
+			$refusal = $this->refusal_error( (array) $this->find( $order, $row['id'] ), $order );
+		}
+		if ( $refusal ) {
+			return $refusal;
 		}
 		// The sale owed a balance before this arrival, so rows that cover it now are this tender's to complete.
 		$this->write( $order, null, self::MODE_SETTLE );
@@ -1075,6 +1088,10 @@ class Ledger {
 			return $confirmed;
 		}
 		list( $applied, $tip, $mismatch ) = $confirmed;
+		if ( $mismatch && Completion_History::of( $order )->counted( $row['id'] ) ) {
+			$this->note_mismatch( $order, $row, $new ); // Counted money leaves only through a refund.
+			return $row;
+		}
 		if ( $mismatch ) {
 			$applied = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $applied ), $derive );
 			$this->release_hold_if_idle( $order );
@@ -1182,7 +1199,9 @@ class Ledger {
 	private function note_mismatch( WC_Order $order, array $row, array $new ): void {
 		$confirmed = array_key_exists( 'amount', $new ) ? $new['amount'] : $row['amount'];
 		/* translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency. */
-		$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
+		$note = sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) );
+		$order->add_order_note( $note );
+		Logger::warning( sprintf( '%s Order #%d.', $note, $order->get_id() ) );
 	}
 
 	/**
@@ -1206,6 +1225,9 @@ class Ledger {
 		}
 		list( $applied, $tip, $mismatch ) = $confirmed;
 		$order = $draft->order();
+		if ( $mismatch && Completion_History::of( $order )->counted( $row['id'] ) ) {
+			return $row; // Counted money leaves only through a refund: the row stays, the caller notes it.
+		}
 		$fee   = $tip > 0 ? $this->tip_fee( $order, $row, $tip ) : null;
 		if ( $fee ) {
 			// Staged, not saved: the fee's taxes onto the order's tax lines, and the total by the tip.
@@ -2463,8 +2485,8 @@ class Ledger {
 
 	/**
 	 * The rows to store, normalized, an untouched row keeping its stamp, every stored row's invariants held
-	 * (I5): a captured row keeps id, amount, currency and method and moves only to voided, only when manual, or to
-	 * failed on a provider's amount mismatch;
+	 * (I5): a captured row keeps id, amount, currency and method and moves only to voided, only when manual; one no
+	 * completion counted may also fail on a provider's amount mismatch, or rise by a verified on-reader tip;
 	 * a row carrying refunds or a closure, or not pending, never vanishes; a closure id is write-once.
 	 *
 	 * @param WC_Order $order  Fresh order.
@@ -2473,6 +2495,7 @@ class Ledger {
 	 * @throws \LogicException When the draft breaks an invariant: a programming error, never a merchant outcome.
 	 */
 	private function settle( WC_Order $order, array $stored, array $rows ): array {
+		$counted = static fn( array $row ) => Completion_History::of( $order )->counted( (string) $row['id'] );
 		$settled = array();
 		foreach ( $rows as $row ) {
 			$row                   = $this->normalize_row( $order, $row );
@@ -2484,9 +2507,9 @@ class Ledger {
 				? 'pending' === ( $old['status'] ?? '' ) && empty( $old['refunds'] ) && empty( $old['closure_id'] )
 				: ( empty( $old['closure_id'] ) || ( $new['closure_id'] ?? null ) === $old['closure_id'] )
 					&& ( 'captured' !== ( $old['status'] ?? '' ) || (
-						( Money::minor( $old['amount'] ) === Money::minor( $new['amount'] ) || $this->tipped( $old, $new ) ) && (string) $old['currency'] === $new['currency'] && (string) $old['method_id'] === $new['method_id']
-						// A provider's amount mismatch fails it too: the confirmation refuting the arrival.
-						&& ( 'captured' === $new['status'] || ( 'voided' === $new['status'] && 'manual' === ( $old['capture_mode'] ?? '' ) ) || ( 'failed' === $new['status'] && 'amount_mismatch' === $new['failure_reason'] ) )
+						( Money::minor( $old['amount'] ) === Money::minor( $new['amount'] ) || ( ! $counted( $old ) && $this->tipped( $old, $new ) ) ) && (string) $old['currency'] === $new['currency'] && (string) $old['method_id'] === $new['method_id']
+						// A provider's amount mismatch fails it too, the confirmation refuting an arrival no completion counted.
+						&& ( 'captured' === $new['status'] || ( 'voided' === $new['status'] && 'manual' === ( $old['capture_mode'] ?? '' ) ) || ( 'failed' === $new['status'] && 'amount_mismatch' === $new['failure_reason'] && ! $counted( $old ) ) )
 					) );
 			if ( ! $kept ) {
 				throw new \LogicException( esc_html( sprintf( 'Payment row %s breaks the ledger invariants.', $old['id'] ) ) );

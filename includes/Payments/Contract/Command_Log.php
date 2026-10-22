@@ -207,6 +207,16 @@ final class Command_Log {
 	}
 
 	/**
+	 * Whether this entry itself still owes the paid transition, at the order's current completion count.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $entry Command entry.
+	 */
+	public static function owes( WC_Order $order, array $entry ): bool {
+		return self::OWED === ( $entry['phase'] ?? null ) && isset( $entry['owed_at_n'] ) && self::completions( $order ) === (int) $entry['owed_at_n'];
+	}
+
+	/**
 	 * Whether a mark outlived the completion it owed: taken at a count below the order's latest.
 	 *
 	 * @param WC_Order $order Order object.

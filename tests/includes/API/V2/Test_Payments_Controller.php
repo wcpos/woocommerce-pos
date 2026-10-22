@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -2105,6 +2106,46 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $again->get_data()['completion'] );
 		$this->assertSame( $first->get_data()['completion'], $again->get_data()['completion'] );
 		$this->assertSame( 1, $announced );
+	}
+
+	/** A close replay heals only when its own entry owes the current completion: another command's debt does not complete a reopened sale. */
+	public function test_close_replay_with_another_commands_debt_answers_its_stored_result(): void {
+		// Arrange: completion 1 stands on a recorded tender; the sale is reopened. Close A's entry still says
+		// owed from before completion 1; record B owes at completion 1.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95' );
+		$this->assertSame( 200, $this->record( $order, $payment )->get_status() );
+		$reopened = wc_get_order( $order->get_id() );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$body  = $this->envelope( $order );
+		$owed  = static fn( int $n ) => array(
+			'phase'     => Command_Log::OWED,
+			'owed_at_n' => $n,
+		);
+		$stale = wc_get_order( $order->get_id() );
+		Command_Log::remember( $stale, $body['command_id'], array_merge( Command_Log::entry( Command_Log::fingerprint( 'close', '', $body ), 'close' ), $owed( 0 ) ) );
+		$rows = Ledger::instance()->read( $stale );
+		$rows[0]['commands'][ strtolower( $payment['id'] ) ] = array_merge( $rows[0]['commands'][ strtolower( $payment['id'] ) ], $owed( 1 ) );
+		$stale->update_meta_data(
+			Ledger::META_KEY,
+			wp_json_encode(
+				array(
+					'schema'   => Ledger::SCHEMA,
+					'payments' => array_map( array( Ledger::class, 'to_wire' ), $rows ),
+				)
+			)
+		);
+		$stale->save_meta_data();
+
+		// Act.
+		$response = $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/close', $body );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( $response->get_data()['completion'] );
+		$this->assertCount( 1, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
 	}
 
 	/** A close's retry that heals a lost completion attributes it from the retry's body, as an uninterrupted close would. */

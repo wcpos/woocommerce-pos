@@ -806,6 +806,15 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The order's notes, joined.
+	 *
+	 * @param int $id Order id.
+	 */
+	private function notes( int $id ): string {
+		return implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $id ) ), 'content' ) );
+	}
+
+	/**
 	 * Park a confirmation from inside the order's next save, once (a webhook landing while the arrival is stored).
 	 *
 	 * @param int    $id         Order id.
@@ -1561,6 +1570,65 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 'completed', $saved->get_status() );
 		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
 		$this->assertSame( array(), $saved->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
+	}
+
+	/** Counted money leaves only through a refund: a mismatching confirmation drained onto a counted row changes nothing and is noted. */
+	public function test_mismatch_drained_onto_a_counted_row_leaves_it_and_notes_it(): void {
+		// Arrange: a tender completed the sale (completion 1 counts it); a mismatch is parked for it after.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$input = array_merge( $this->tender( '92.95' ), array( 'method_id' => 'pos_card' ) );
+		Ledger::instance()->record( $order, $input, array(), $this->record_command( $input ) );
+		$this->assertTrue( Completion_History::of( $this->fresh( $id ) )->counted( $input['id'] ), 'Precondition: counted.' );
+		update_option(
+			'wcpos_pending_settlements',
+			array(
+				$input['id'] => array(
+					'patch'     => array(
+						'status' => 'captured',
+						'amount' => '100.00',
+					),
+					'parked_at' => time(),
+				),
+			),
+			false
+		);
+		$before = $this->stored_rows( $id );
+
+		// Act.
+		$replayed = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+
+		// Assert.
+		$this->assertSame( $before, $this->stored_rows( $id ) );
+		$this->assertSame( $before[0], $replayed );
+		$this->assertStringContainsString( 'amount mismatch', $this->notes( $id ) );
+		$this->assertSame( array(), (array) get_option( 'wcpos_pending_settlements', array() ) );
+	}
+
+	/** The same on apply_result(): a counted captured row is never failed by a confirmation. */
+	public function test_apply_result_mismatch_on_a_counted_row_leaves_it_and_notes_it(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$input = array_merge( $this->tender( '92.95' ), array( 'method_id' => 'pos_card' ) );
+		Ledger::instance()->record( $order, $input, array(), $this->record_command( $input ) );
+		$before = $this->stored_rows( $id );
+
+		// Act.
+		$answer = Ledger::instance()->apply_result(
+			wc_get_order( $id ),
+			$input['id'],
+			array(
+				'status' => 'captured',
+				'amount' => '100.00',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( $before, $this->stored_rows( $id ) );
+		$this->assertSame( $before[0], $answer );
+		$this->assertStringContainsString( 'amount mismatch', $this->notes( $id ) );
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
 	}
 
 	/** A mismatching confirmation parked while the arrival is being stored is drained before the paid transition: no completion. */
