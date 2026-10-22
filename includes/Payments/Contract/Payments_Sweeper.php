@@ -156,9 +156,15 @@ final class Payments_Sweeper {
 							Logger::log( sprintf( 'WCPOS payment sweep %s: %s', $row['id'], $result->get_error_message() ) );
 						}
 					}
-					// Project the reconciled legs; as the recovery pass the sweep also completes a sale its rows cover.
+					// Project the reconciled legs and complete what completion_due() says is due, once every confirmation
+					// parked for the rows is drained (a mismatch is the answer, not a completion).
 					try {
-						$ledger->write( $order_id, null, Ledger::MODE_SETTLE );
+						foreach ( $ledger->read( wc_get_order( $order_id ) ) as $row ) {
+							if ( null !== Settlement::instance()->parked( (string) $row['id'] ) && is_wp_error( $ledger->drain_parked( wc_get_order( $order_id ), (string) $row['id'] ) ) ) {
+								return; // The parking lock is busy: the next sweep drains it.
+							}
+						}
+						$ledger->write( $order_id );
 					} catch ( Ledger_Persistence_Exception $error ) {
 						Logger::log( sprintf( 'WCPOS payment sweep on order #%d: %s', $order_id, $error->getMessage() ) );
 					}

@@ -269,24 +269,24 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( array(), $this->stored_rows( $order->get_id() ) );
 	}
 
-	/** A zero-total close with nothing to change still stores the ledger before it is paid, so a lost completion heals. */
-	public function test_write_no_change_zero_total_close_stores_ledger_and_heals_lost_completion(): void {
+	/** A zero-total close stores its command owing the completion before it is paid, so a lost completion heals. */
+	public function test_write_zero_total_close_owes_its_completion_and_heals_it(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
 		$order->set_total( '0.00' );
 		$order->save();
-		$this->assertFalse( $this->fresh( $order->get_id() )->meta_exists( Ledger::META_KEY ), 'Precondition: no ledger yet.' );
-		$undo   = $this->inject( 'completion', $order->get_id() );
-		$caught = null;
+		$command = wp_generate_uuid4();
+		$undo    = $this->inject( 'completion', $order->get_id() );
+		$caught  = null;
 		try {
-			Ledger::instance()->write( $order->get_id(), null, Ledger::MODE_CLOSE );
+			Ledger::instance()->write( $order->get_id(), fn( Ledger_Draft $draft ) => $draft->command( $command, Command_Log::entry( 'sha256:close', 'close' ) ), Ledger::MODE_CLOSE );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			$caught = $error;
 		} finally {
 			$undo();
 		}
 		$this->assertSame( 'completion', $caught ? $caught->stage : null, 'Precondition: paid, completion lost.' );
-		$this->assertTrue( $this->fresh( $order->get_id() )->meta_exists( Ledger::META_KEY ), 'S1 stored the ledger before the paid transition.' );
+		$this->assertSame( Command_Log::OWED, Command_Log::find( $this->fresh( $order->get_id() ), array(), $command )['phase'] ?? null, 'S1 stored the command owing the completion.' );
 
 		// Act.
 		$written = Ledger::instance()->write( $order->get_id() );
@@ -735,7 +735,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$undo   = $this->inject( 'completion', $order->get_id() );
 		$caught = null;
 		try {
-			Ledger::instance()->write( $order->get_id(), static fn() => null, Ledger::MODE_CLOSE );
+			Ledger::instance()->write( $order->get_id(), static fn( Ledger_Draft $draft ) => $draft->command( wp_generate_uuid4(), Command_Log::entry( 'sha256:close', 'close' ) ), Ledger::MODE_CLOSE );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			$caught = $error;
 		} finally {
@@ -1844,6 +1844,206 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 'completed', $this->stored_status( $id ) );
 	}
 
+	/** The sweep drains a confirmation the arrival never drained before it completes: a mismatch is the answer. */
+	public function test_sweeper_drains_a_parked_mismatch_before_completing(): void {
+		// Arrange: a covering record stores its held rows, a mismatch parks during that save, and the drain never
+		// runs (the parking lock is taken elsewhere right after the confirmation parked).
+		$order  = $this->create_pos_order();
+		$id     = $order->get_id();
+		$input  = array_merge( $this->tender( '92.95' ), array( 'method_id' => 'pos_card' ) );
+		$busy   = new Order_Lock();
+		$parked = false;
+		$park   = static function ( $saving ) use ( $id, $input, $busy, &$parked ): void {
+			if ( ! $parked && $saving->get_id() === $id ) {
+				$parked = true;
+				wcpos_settle_payment(
+					$input['id'],
+					array(
+						'status' => 'captured',
+						'amount' => '100.00',
+					)
+				);
+				$busy->acquire( 0 );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $park, 1 );
+		try {
+			$stopped = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $park, 1 );
+			$busy->release( 0 );
+		}
+		$this->assertWPError( $stopped, 'Precondition: the drain did not run.' );
+		$this->assertNull( $this->fresh( $id )->get_date_paid( 'edit' ), 'Precondition: not paid before the sweep.' );
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$saved = $this->fresh( $id );
+		$this->assertNull( $saved->get_date_paid( 'edit' ) );
+		$this->assertCount( 0, Completion_History::of( $saved )->entries() );
+		$this->assertSame( 'failed', $this->stored_rows( $id )[0]['status'] );
+		$this->assertStringContainsString( 'amount mismatch', $this->notes( $id ) );
+	}
+
+	/** Refused tenders on a legacy paid sale are history, not evidence: no completion, no fiscal sale. */
+	public function test_refused_tenders_on_a_legacy_paid_sale_complete_nothing(): void {
+		// Arrange: paid under 1.x, no ledger, no completion history.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$paid  = $this->fresh( $id );
+		$paid->set_date_paid( time() );
+		$paid->set_status( 'completed' );
+		$this->as_if_paid_hooks_never_ran( fn() => $paid->save() );
+
+		// Act.
+		$first  = Ledger::instance()->record( wc_get_order( $id ), $this->tender( '5.00' ) );
+		$second = Ledger::instance()->record( wc_get_order( $id ), $this->tender( '5.00' ) );
+
+		// Assert.
+		$this->assertWPError( $first );
+		$this->assertWPError( $second );
+		$this->assertCount( 0, Completion_History::of( $this->fresh( $id ) )->entries() );
+		$this->assertSame(
+			0,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type' => 'sale',
+				)
+			)
+		);
+	}
+
+	/**
+	 * The one rule for a completion: storage shows uncounted covering money with no confirmation outstanding,
+	 * or a command owed at the current completion count.
+	 *
+	 * @dataProvider completion_evidence
+	 *
+	 * @param callable $arrange fn( Test_Ledger_Write, int $id ): void, shaping storage.
+	 * @param bool     $due     Whether a completion is due.
+	 */
+	public function test_completion_due_reads_only_storage_evidence( callable $arrange, bool $due ): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$arrange( $this, $order->get_id() );
+		$saved = $this->fresh( $order->get_id() );
+
+		// Act.
+		$answer = Ledger::instance()->completion_due( $saved, Ledger::instance()->read( $saved ) );
+
+		// Assert.
+		$this->assertSame( $due, $answer );
+	}
+
+	/** Storage shapes and whether each is evidence of a completion due. */
+	public function completion_evidence(): array {
+		$owed = static fn( int $n ) => array_merge(
+			Command_Log::entry( 'sha256:x', 'record' ),
+			array(
+				'phase'     => Command_Log::OWED,
+				'owed_at_n' => $n,
+			)
+		);
+		return array(
+			'covering uncounted rows'                  => array( static fn( $test, $id ) => $test->seed( $id, array( $test->cash( '92.95' ) ) ), true ),
+			'covering rows a completion counted'       => array(
+				static function ( $test, $id ) {
+					$row = $test->cash( '92.95' );
+					$test->seed( $id, array( $row ) );
+					$test->seed_completion( $id, array( $row['id'] ) );
+				},
+				false,
+			),
+			'covering rows, one confirmation parked'   => array(
+				static function ( $test, $id ) {
+					$row = $test->cash( '92.95' );
+					$test->seed( $id, array( $row ) );
+					update_option(
+						'wcpos_pending_settlements',
+						array(
+							$row['id'] => array(
+								'patch' => array( 'status' => 'captured' ),
+								'parked_at' => time(),
+							),
+						),
+						false
+					);
+				},
+				false,
+			),
+			'failed rows only, paid legacy order'      => array(
+				static function ( $test, $id ) {
+					$test->seed( $id, array( $test->cash( '92.95', 'failed' ) ) );
+					$order = wc_get_order( $id );
+					$order->set_date_paid( time() );
+					$order->set_status( 'completed' );
+					$order->save();
+				},
+				false,
+			),
+			'owed mark at the current count'           => array( static fn( $test, $id ) => $test->seed( $id, array( Command_Log::with_on_row( $test->cash( '10.00' ), wp_generate_uuid4(), $owed( 0 ) ) ) ), true ),
+			'owed mark at a stale count'               => array(
+				static function ( $test, $id ) use ( $owed ) {
+					$row = Command_Log::with_on_row( $test->cash( '10.00' ), wp_generate_uuid4(), $owed( 0 ) );
+					$test->seed( $id, array( $row ) );
+					$test->seed_completion( $id, array() );
+				},
+				false,
+			),
+			'zero-total close owed at the current count' => array(
+				static function ( $test, $id ) use ( $owed ) {
+					$order = wc_get_order( $id );
+					$order->set_total( '0.00' );
+					Command_Log::remember( $order, wp_generate_uuid4(), array_merge( $owed( 0 ), array( 'kind' => 'close' ) ) );
+					$order->save();
+				},
+				true,
+			),
+		);
+	}
+
+	/**
+	 * Seed rows (for the evidence table).
+	 *
+	 * @param int   $id   Order id.
+	 * @param array $rows Rows.
+	 */
+	public function seed( int $id, array $rows ): void {
+		$this->seed_rows( $id, $rows );
+	}
+
+	/**
+	 * A cash row (for the evidence table).
+	 *
+	 * @param string $amount Amount.
+	 * @param string $status Status.
+	 */
+	public function cash( string $amount, string $status = 'captured' ): array {
+		return $this->row( $amount, $status );
+	}
+
+	/**
+	 * Seed completion 1, counting the named rows (for the evidence table).
+	 *
+	 * @param int   $id          Order id.
+	 * @param array $payment_ids Counted row ids.
+	 */
+	public function seed_completion( int $id, array $payment_ids ): void {
+		$order = $this->fresh( $id );
+		$entry = array(
+			'id'              => wp_generate_uuid4(),
+			'n'               => 1,
+			'at_gmt'          => gmdate( 'c' ),
+			'payment_ids'     => $payment_ids,
+			'reopened_at_gmt' => gmdate( 'c' ),
+		);
+		$order->update_meta_data( Completion_Stamp::META_KEY, wp_json_encode( array( $entry ) ) );
+		$order->save_meta_data();
+	}
+
 	/** A mismatching confirmation parked while the arrival is being stored is drained before the paid transition: no completion. */
 	public function test_record_with_mismatch_parked_during_its_rows_save_does_not_complete(): void {
 		// Arrange.
@@ -1882,8 +2082,8 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 'failed', $this->stored_rows( $id )[0]['status'] );
 	}
 
-	/** A legacy paid sale (no ledger, no completion history) closed twice stays as it was: no ledger, no completion, no marker. */
-	public function test_close_on_legacy_paid_sale_twice_creates_no_ledger_and_no_completion(): void {
+	/** A legacy paid sale (no ledger, no completion history) closed twice stays as it was: no completion, no fiscal sale, no marker. */
+	public function test_close_on_legacy_paid_sale_twice_creates_no_completion(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
 		$id    = $order->get_id();
@@ -1909,7 +2109,6 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		// Assert.
 		$saved = $this->fresh( $id );
 		$this->assertNull( $closed['completion'] );
-		$this->assertFalse( $saved->meta_exists( Ledger::META_KEY ) );
 		$this->assertCount( 0, Completion_History::of( $saved )->entries() );
 		$this->assertSame(
 			0,
