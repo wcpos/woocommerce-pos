@@ -9,6 +9,8 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -502,6 +504,280 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 			}
 		);
+	}
+
+	/** A webview-mode gateway charges the order total, so order-pay refuses it on a partly paid sale (D3). */
+	public function test_order_pay_on_a_partial_sale_is_refused(): void {
+		// Arrange: 40.00 cash at the till on a 100.00 sale.
+		$order = $this->create_partial_sale();
+		$this->with_order_pay_gateway(
+			'wcpos_test_full_total',
+			'webview',
+			function ( $gateway ) use ( $order ): void {
+				$completed = did_action( 'woocommerce_payment_complete' );
+
+				// Act.
+				$this->pay_on_order_pay( $order, $gateway->id );
+
+				// Assert.
+				$fresh = wc_get_order( $order->get_id() );
+				$this->assertSame( 0, $gateway->calls, 'The gateway is never asked to charge.' );
+				$this->assertSame( $completed, did_action( 'woocommerce_payment_complete' ) );
+				$this->assertCount( 1, Ledger::instance()->read( $fresh ) );
+				$this->assertSame( 'pos-partial', $fresh->get_status() );
+				$this->assertContains( 'This sale has a payment recorded at the till. Finish it at the till.', array_column( wc_get_notices( 'error' ), 'notice' ) );
+				$this->assertArrayNotHasKey( $gateway->id, $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ) );
+				$this->assertSame( 'This sale has a payment recorded at the till. Finish it at the till.', $this->on_pay_page( $order, static fn() => apply_filters( 'woocommerce_no_available_payment_methods_message', 'none' ) ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+			}
+		);
+	}
+
+	/** The pay page's manual gateways compare against the order total too, so a partly paid sale refuses them. */
+	public function test_order_pay_on_a_partial_sale_refuses_the_pos_cash_gateway(): void {
+		// Arrange: pos_cash is offered on a POS sale's pay page, and the customer tenders the full total.
+		$order = $this->create_partial_sale();
+		$open = $this->create_order( true );
+		$this->in_pos_request(
+			function () use ( $open ): void {
+				$this->assertArrayHasKey( 'pos_cash', $this->on_pay_page( $open, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_cash is offered' );
+			}
+		);
+		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
+		$_POST['pos-cash-tendered']            = '100.00';
+		$completed                             = did_action( 'woocommerce_payment_complete' );
+		$redirect                              = static function () {
+			throw new \RuntimeException( 'redirected' ); // WooCommerce's success branch exits after the redirect.
+		};
+		add_filter( 'wp_redirect', $redirect );
+
+		// Act.
+		try {
+			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_cash' ) );
+		} catch ( \RuntimeException $exception ) {
+			$this->assertSame( 'redirected', $exception->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $redirect );
+			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
+			wc_clear_notices();
+		}
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( $completed, did_action( 'woocommerce_payment_complete' ), 'The sale is not marked paid.' );
+		$this->assertCount( 1, Ledger::instance()->read( $fresh ) );
+		$this->assertSame( 'pos-partial', $fresh->get_status() );
+		$this->assertContains( 'This sale has a payment recorded at the till. Finish it at the till.', $errors );
+	}
+
+	/**
+	 * A server or device gateway (Pro's terminal panel) charges the balance, so order-pay keeps it.
+	 *
+	 * @dataProvider balance_modes
+	 *
+	 * @param string $mode Capture mode the filter answers, with a handler registered for it.
+	 */
+	public function test_order_pay_on_a_partial_sale_with_a_server_mode_gateway_proceeds( string $mode ): void {
+		// Arrange.
+		$order = $this->create_partial_sale();
+		$this->with_order_pay_gateway(
+			'wcpos_test_terminal',
+			$mode,
+			function ( $gateway ) use ( $order ): void {
+				// Act.
+				$this->pay_on_order_pay( $order, $gateway->id );
+
+				// Assert.
+				$this->assertSame( 1, $gateway->calls );
+				$this->assertArrayHasKey( $gateway->id, $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ) );
+			}
+		);
+	}
+
+	/** Capture modes that charge the balance: bare, and provider-scoped. */
+	public function balance_modes(): array {
+		return array(
+			'server'        => array( 'server' ),
+			'device:stripe' => array( 'device:stripe' ),
+		);
+	}
+
+	/** A filtered server mode with no registered handler is described as webview, so order-pay refuses it. */
+	public function test_order_pay_on_a_partial_sale_refuses_a_server_mode_without_a_handler(): void {
+		// Arrange.
+		$order = $this->create_partial_sale();
+		$this->with_order_pay_gateway(
+			'wcpos_test_unhandled',
+			'server',
+			function ( $gateway ) use ( $order ): void {
+				// Act.
+				$this->pay_on_order_pay( $order, $gateway->id );
+
+				// Assert.
+				$this->assertSame( 0, $gateway->calls );
+				$this->assertArrayNotHasKey( $gateway->id, $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ) );
+			},
+			false
+		);
+	}
+
+	/** A POS sale with no captured tender pays on order-pay with a webview-mode gateway as before. */
+	public function test_order_pay_on_a_pos_sale_without_captured_tender_proceeds(): void {
+		// Arrange.
+		$order = $this->create_order( true );
+		$this->with_order_pay_gateway(
+			'wcpos_test_full_total',
+			'webview',
+			function ( $gateway ) use ( $order ): void {
+				// Act.
+				$this->pay_on_order_pay( $order, $gateway->id );
+
+				// Assert.
+				$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+				$this->assertSame( 1, $gateway->calls );
+				$this->assertCount( 1, $rows );
+				$this->assertSame( 'webview', $rows[0]['source'] );
+			}
+		);
+	}
+
+	/** A 100.00 POS sale with 40.00 cash recorded at the till. */
+	private function create_partial_sale(): \WC_Order {
+		$order = $this->create_order( true );
+		$order->set_total( '100.00' );
+		$order->save();
+		Ledger::instance()->record(
+			$order,
+			array(
+				'id'        => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount'    => '40.00',
+			)
+		);
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-partial', $order->get_status(), 'precondition: the cash leaves the sale partly paid' );
+
+		return $order;
+	}
+
+	/**
+	 * Register a charging gateway whose capture mode resolves to the given mode for the callback.
+	 *
+	 * @param string   $id       Gateway id.
+	 * @param string   $mode     Capture mode the wcpos_payment_method_capture_mode filter resolves.
+	 * @param callable $callback Receives the gateway.
+	 * @param bool     $handled  Register a handler for a mode Free does not ship (Pro registers server and device).
+	 */
+	private function with_order_pay_gateway( string $id, string $mode, callable $callback, bool $handled = true ): void {
+		$gateway = new class( $id ) extends \WC_Payment_Gateway {
+			/**
+			 * Calls to process_payment().
+			 *
+			 * @var int
+			 */
+			public $calls = 0;
+
+			/**
+			 * Assign the id without building form fields.
+			 *
+			 * @param string $id Gateway id.
+			 */
+			public function __construct( string $id ) {
+				$this->id           = $id;
+				$this->method_title = $id;
+				$this->title        = $id;
+				$this->enabled      = 'yes';
+			}
+
+			/**
+			 * Charge the order total, as a WooCommerce gateway does.
+			 *
+			 * @param int $order_id Order id.
+			 */
+			public function process_payment( $order_id ) {
+				++$this->calls;
+				wc_get_order( $order_id )->payment_complete( 'ch_' . $this->id );
+				return array( 'result' => 'failure' ); // WooCommerce's success branch exits.
+			}
+		};
+		$add      = static fn( $gateways ) => array_merge( $gateways, array( $gateway ) );
+		$resolve  = static fn( $resolved, $candidate ) => $candidate->id === $id ? $mode : $resolved;
+		$registry = \WC_Payment_Gateways::instance();
+		add_filter( 'woocommerce_payment_gateways', $add );
+		add_filter( 'wcpos_payment_method_capture_mode', $resolve, 10, 2 );
+		$registry->payment_gateways = array();
+		$registry->init();
+		if ( $handled && ! Capture_Mode_Registry::instance()->has( $mode ) ) {
+			// A handler that describes nothing, standing in for Pro's: the descriptor keeps the filtered mode.
+			$handler = new class() extends Abstract_Capture_Mode_Handler {
+				/**
+				 * Describe nothing.
+				 *
+				 * @param \WC_Payment_Gateway $gateway Gateway instance.
+				 */
+				public function describe( \WC_Payment_Gateway $gateway ): array {
+					return array();
+				}
+			};
+			Capture_Mode_Registry::instance()->register( $mode, get_class( $handler ) );
+		}
+
+		try {
+			$callback( $gateway );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add );
+			remove_filter( 'wcpos_payment_method_capture_mode', $resolve, 10 );
+			$registry->payment_gateways = array();
+			$registry->init();
+			wc_clear_notices();
+			// Rebuild the process-global registry with Free's built-in modes only.
+			$instance = new \ReflectionProperty( Capture_Mode_Registry::class, 'instance' );
+			$instance->setAccessible( true );
+			$instance->setValue( null, null );
+		}
+	}
+
+	/**
+	 * POST WooCommerce's order-pay form for the order with the gateway, through WC_Form_Handler::pay_action().
+	 *
+	 * @param \WC_Order $order      Order.
+	 * @param string    $gateway_id Chosen gateway.
+	 */
+	private function pay_on_order_pay( \WC_Order $order, string $gateway_id ): void {
+		$previous_query_vars                     = $GLOBALS['wp']->query_vars;
+		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
+		$_GET['key']                             = $order->get_order_key();
+		$_POST['woocommerce_pay']                = '1';
+		$_POST['payment_method']                 = $gateway_id;
+		$_REQUEST['woocommerce-pay-nonce']       = wp_create_nonce( 'woocommerce-pay' );
+		$level                                   = ob_get_level();
+
+		try {
+			\WC_Form_Handler::pay_action();
+		} finally {
+			while ( ob_get_level() > $level ) {
+				ob_end_clean();
+			}
+			$GLOBALS['wp']->query_vars = $previous_query_vars;
+			unset( $_GET['key'], $_POST['woocommerce_pay'], $_POST['payment_method'], $_REQUEST['woocommerce-pay-nonce'] );
+		}
+	}
+
+	/**
+	 * Run a callback as the order's pay page.
+	 *
+	 * @param \WC_Order $order    Order.
+	 * @param callable  $callback Returns what the page would read.
+	 * @return mixed
+	 */
+	private function on_pay_page( \WC_Order $order, callable $callback ) {
+		$previous_query_vars                     = $GLOBALS['wp']->query_vars;
+		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
+		try {
+			return $callback();
+		} finally {
+			$GLOBALS['wp']->query_vars = $previous_query_vars;
+		}
 	}
 
 	/**
