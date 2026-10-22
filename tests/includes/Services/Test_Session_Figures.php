@@ -197,7 +197,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			'movements' => 0,
 		);
 		$observe = static function ( $sql ) use ( &$reads ) {
-			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::META_KEY ) ) {
+			if ( false !== strpos( $sql, 'SELECT DISTINCT' ) && false !== strpos( $sql, Ledger::SESSION_META_KEY ) ) {
 				++$reads['orders'];
 			}
 			if ( 0 === strpos( $sql, 'SELECT movements FROM ' . ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->table_name() ) ) {
@@ -430,5 +430,134 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $rows[1]['id'] ), array_column( Session_Figures::late_legs( $stale, $closure ), 'id' ) );
 		$ledger->stamp_closure( $order, array( $rows[1]['id'] ), wp_generate_uuid4() );
 		$this->assertSame( array( $rows[1]['id'] ), array_column( Session_Figures::late_legs( $stale, $closure ), 'id' ) );
+	}
+
+	/**
+	 * A POS order whose ledger holds these rows, saved through the Ledger.
+	 *
+	 * @param array $rows Payment rows; each gets a fresh id.
+	 */
+	private function order_with_legs( array $rows ): \WC_Order {
+		$order = new \WC_Order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_total( '100' );
+		$order->save();
+		$base = array(
+			'method_id' => 'pos_cash',
+			'kind' => 'cash',
+			'amount' => '10',
+			'status' => 'captured',
+		);
+		Ledger::instance()->save( $order, array_map( static fn( $fields ) => array_merge( $base, $fields, array( 'id' => wp_generate_uuid4() ) ), $rows ), false );
+		return wc_get_order( $order->get_id() );
+	}
+
+	/**
+	 * The session index values stored on an order.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	private function indexed_sessions( \WC_Order $order ): array {
+		$values = array_map( static fn( $meta ) => $meta->value, wc_get_order( $order->get_id() )->get_meta( Ledger::SESSION_META_KEY, false ) );
+		sort( $values );
+		return $values;
+	}
+
+	/** A captured leg indexes its session, and the session read finds it there. */
+	public function test_legs_captured_leg_is_found_through_the_session_index(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$order = $this->order_with_legs( array( array( 'session_id' => $session['id'] ) ) );
+
+		// Act.
+		$legs = Session_Figures::for_session( $session )->legs();
+
+		// Assert.
+		$this->assertSame( array( $session['id'] ), $this->indexed_sessions( $order ) );
+		$this->assertSame( array( $order->get_id() ), array_keys( $legs ) );
+		$this->assertSame( array_column( Ledger::instance()->read( $order ), 'id' ), array_column( $legs[ $order->get_id() ], 'id' ) );
+	}
+
+	/** A partly paid order, not completed and never stamped with the session, is still a session's leg. */
+	public function test_legs_partly_paid_order_without_a_completion_stamp_is_found(): void {
+		// Arrange.
+		$session = $this->closure_session( null, 'open' );
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_total( '40.00' );
+		$order->save();
+
+		// Act.
+		$recorded = Ledger::instance()->record(
+			$order,
+			array(
+				'id' => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount' => '15.00',
+				'session_id' => $session['id'],
+			)
+		);
+		$saved = wc_get_order( $order->get_id() );
+		$legs = Session_Figures::for_session( $session )->legs();
+
+		// Assert.
+		$this->assertIsArray( $recorded, is_wp_error( $recorded ) ? $recorded->get_error_message() : '' );
+		$this->assertSame( 'captured', $recorded['status'] );
+		$this->assertFalse( $saved->is_paid() );
+		$this->assertSame( '', $saved->get_meta( '_wcpos_session', true ) );
+		$this->assertSame( array( $session['id'] ), $this->indexed_sessions( $saved ) );
+		$this->assertCount( 1, $legs[ $order->get_id() ] ?? array() );
+	}
+
+	/** An order paid again in a second session carries both sessions and is a leg in each. */
+	public function test_legs_order_with_captured_legs_in_two_sessions_appears_in_both(): void {
+		// Arrange.
+		$first = $this->closure_session();
+		$second = $this->closure_session();
+		$expected = array( $first['id'], $second['id'] );
+		sort( $expected );
+
+		// Act.
+		$order = $this->order_with_legs( array( array( 'session_id' => $first['id'] ), array( 'session_id' => $second['id'] ) ) );
+
+		// Assert.
+		$this->assertSame( $expected, $this->indexed_sessions( $order ) );
+		foreach ( array( $first, $second ) as $session ) {
+			$legs = Session_Figures::for_session( $session )->legs();
+			$this->assertSame( array( $session['id'] ), array_column( $legs[ $order->get_id() ] ?? array(), 'session_id' ) );
+		}
+	}
+
+	/**
+	 * Money in motion is not a session leg until it is captured.
+	 *
+	 * @param string $status The uncaptured status the row starts in.
+	 *
+	 * @testWith ["pending"]
+	 *           ["authorized"]
+	 */
+	public function test_legs_uncaptured_row_is_not_indexed_until_captured( string $status ): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$order = $this->order_with_legs(
+			array(
+				array(
+					'session_id' => $session['id'],
+					'status' => $status,
+				),
+			)
+		);
+		$this->assertSame( array(), $this->indexed_sessions( $order ) );
+		$this->assertSame( array(), Session_Figures::for_session( $session )->legs() );
+		$rows = Ledger::instance()->read( $order );
+		$rows[0]['status'] = 'captured';
+
+		// Act.
+		Ledger::instance()->save( $order, $rows, false );
+
+		// Assert.
+		$this->assertSame( array( $session['id'] ), $this->indexed_sessions( $order ) );
+		$this->assertSame( array( $rows[0]['id'] ), array_column( Session_Figures::for_session( $session )->legs()[ $order->get_id() ] ?? array(), 'id' ) );
 	}
 }

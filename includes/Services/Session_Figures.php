@@ -582,8 +582,9 @@ final class Session_Figures {
 		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
 		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
 		$key = $hpos ? 'order_id' : 'post_id';
+		// The index narrows the candidates; the ledger rows below stay the truth.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value LIKE %s ORDER BY {$key} DESC", Ledger::META_KEY, '%' . $wpdb->esc_like( '"session_id":"' . $session['id'] . '"' ) . '%' ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value = %s ORDER BY {$key} DESC", Ledger::SESSION_META_KEY, strtolower( $session['id'] ) ) );
 		if ( '' !== $wpdb->last_error ) {
 			throw new \RuntimeException( 'Session ledger read failed.' );
 		}
