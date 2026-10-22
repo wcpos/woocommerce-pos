@@ -1229,21 +1229,32 @@ class Ledger {
 		if ( $mismatch && Completion_History::of( $order )->counted( $row['id'] ) ) {
 			return $row; // Counted money leaves only through a refund: the row stays, the caller notes it.
 		}
-		$fee   = $tip > 0 ? $this->tip_fee( $order, $row, $tip ) : null;
-		if ( $fee ) {
-			// Staged, not saved: the fee's taxes onto the order's tax lines, and the total by the tip.
-			$order->add_item( $fee );
-			foreach ( $fee->get_taxes()['total'] ?? array() as $rate_id => $tax ) {
+		if ( null !== ( $applied['tip'] ?? null ) ) {
+			// The fee insert is guarded, the totals are always recalculated (D5): an S1 retry may find the fee and
+			// the tipped row stored but not the total. Recalculated as WooCommerce's update_taxes() and
+			// calculate_totals( false ) do, staged on the draft, not saved.
+			$fee = $this->tip_fee( $order, $applied, Money::minor( $applied['tip'] ) );
+			if ( $fee ) {
+				$order->add_item( $fee );
+			}
+			$taxes = array();
+			foreach ( $order->get_items( array( 'line_item', 'fee' ) ) as $item ) {
+				foreach ( $item->get_taxes()['total'] ?? array() as $rate_id => $tax ) {
+					$taxes[ $rate_id ] = ( $taxes[ $rate_id ] ?? 0 ) + (float) wc_round_tax_total( (float) $tax );
+				}
+			}
+			foreach ( $taxes as $rate_id => $tax ) {
 				$line = current( array_filter( $order->get_taxes(), static fn( $item ) => (int) $item->get_rate_id() === (int) $rate_id ) );
 				if ( ! $line ) {
 					$line = new \WC_Order_Item_Tax();
 					$line->set_rate( $rate_id );
 					$order->add_item( $line );
 				}
-				$line->set_tax_total( wc_format_decimal( (float) $line->get_tax_total() + (float) $tax ) );
-				$order->set_cart_tax( wc_format_decimal( (float) $order->get_cart_tax() + (float) $tax ) );
+				$line->set_tax_total( wc_format_decimal( $tax ) );
 			}
-			$order->set_total( Money::format( Money::minor( $order->get_total() ) + $tip ) );
+			$order->set_cart_tax( wc_format_decimal( array_sum( $taxes ) ) );
+			$lines = array_sum( array_map( static fn( $item ) => (float) $item->get_total(), $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) ) );
+			$order->set_total( wc_format_decimal( $lines + array_sum( $taxes ) + (float) $order->get_shipping_tax(), wc_get_price_decimals() ) );
 		}
 		if ( is_string( $event ) ) {
 			$applied['seen_events'][] = $event;
