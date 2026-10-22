@@ -1144,7 +1144,7 @@ class Test_Activator extends WP_UnitTestCase {
 		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
 		$previous = $wpdb->suppress_errors();
 		add_filter( 'query', $refuse );
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			// Act.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
@@ -1162,7 +1162,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertStringContainsString( '"previous":"9","legacy_table":"' . $fixture['legacy'] . '"', $logs[0] );
 		} finally {
 			remove_filter( 'query', $refuse );
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			$wpdb->suppress_errors( $previous );
 			$this->restore_closure_schema( $fixture );
 		}
@@ -1221,7 +1221,7 @@ class Test_Activator extends WP_UnitTestCase {
 			return false;
 		};
 		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			// Act.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
@@ -1255,7 +1255,7 @@ class Test_Activator extends WP_UnitTestCase {
 			);
 			$this->assertStringContainsString( wp_json_encode( $context ), $logs[0] );
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			$this->restore_closure_schema( $fixture );
 		}
 	}
@@ -1276,7 +1276,7 @@ class Test_Activator extends WP_UnitTestCase {
 		};
 		$silence = '__return_false';
 		add_filter( 'query', $recreate );
-		add_filter( 'woocommerce_pos_logging', $silence );
+		add_filter( 'wcpos_logging', $silence );
 		try {
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
 			$errors = array();
@@ -1309,7 +1309,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertNull( $closures->get( $straggler ) );
 		} finally {
 			remove_filter( 'query', $recreate );
-			remove_filter( 'woocommerce_pos_logging', $silence );
+			remove_filter( 'wcpos_logging', $silence );
 			$this->restore_closure_schema( $fixture );
 		}
 	}
@@ -1398,7 +1398,7 @@ class Test_Activator extends WP_UnitTestCase {
 			return false;
 		};
 		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			// Act.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
@@ -1423,7 +1423,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertStringContainsString( 'Closure fold refused: legacy closures do not match their sessions', $errors[0][1] );
 			$this->assertStringContainsString( '"mismatches":1', $errors[0][1] );
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			$this->restore_closure_schema( $fixture );
 		}
 	}
@@ -1440,7 +1440,7 @@ class Test_Activator extends WP_UnitTestCase {
 			return false;
 		};
 		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			// Act.
 			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '9' );
@@ -1478,7 +1478,7 @@ class Test_Activator extends WP_UnitTestCase {
 				$this->assertSame( 'Closure storage is migrating.', $error->getMessage() );
 			}
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			$this->restore_closure_schema( $fixture );
 		}
 	}
@@ -2293,7 +2293,7 @@ class Test_Activator extends WP_UnitTestCase {
 
 			/** Remove the capture. */
 			public function stop(): void {
-				remove_filter( 'woocommerce_pos_logging', array( $this, 'capture' ), 10 );
+				remove_filter( 'wcpos_logging', array( $this, 'capture' ), 10 );
 			}
 
 			/** Keep error-level messages and suppress the write.
@@ -2309,7 +2309,7 @@ class Test_Activator extends WP_UnitTestCase {
 			}
 		};
 		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', array( $logs, 'capture' ), 10, 2 );
+		add_filter( 'wcpos_logging', array( $logs, 'capture' ), 10, 2 );
 		return $logs;
 	}
 

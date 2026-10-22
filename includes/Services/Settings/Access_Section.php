@@ -237,9 +237,10 @@ class Access_Section implements Settings_Section_Interface {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_access_settings
+		 * @hook wcpos_access_settings
 		 */
-		return apply_filters( 'woocommerce_pos_access_settings', $role_caps );
+		$filtered = apply_filters( 'wcpos_access_settings', $role_caps );
+		return apply_filters_deprecated( 'woocommerce_pos_access_settings', array( $filtered ), '2.0.0', 'wcpos_access_settings' );
 	}
 
 	/**
@@ -283,7 +284,7 @@ class Access_Section implements Settings_Section_Interface {
 
 			if ( $role ) {
 				// Build the allow-list of capabilities exposed for this role, including
-				// extension groups added via the woocommerce_pos_access_settings filter.
+				// extension groups added via the wcpos_access_settings filter.
 				$access_settings = $this->read();
 				$allowed_caps    = array();
 				if ( isset( $access_settings[ $slug ]['capabilities'] ) ) {

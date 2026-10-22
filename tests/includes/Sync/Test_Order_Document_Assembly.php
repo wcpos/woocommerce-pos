@@ -109,8 +109,8 @@ final class Assembly_Fake_Mutation_Store {
  * The v2 surface shapes an order document three times over:
  *
  *  - PULL      Order_Serializer::serialize_order — prepare_object_for_response,
- *              document with PULL_AUGMENTATIONS, `woocommerce_pos_sync_serialized_order`.
- *  - PROXY     Catalog_Proxy_Controller::proxy — `woocommerce_pos_sync_proxy_response`,
+ *              document with PULL_AUGMENTATIONS, `wcpos_sync_serialized_order`.
+ *  - PROXY     Catalog_Proxy_Controller::proxy — `wcpos_sync_proxy_response`,
  *              document with V2_AUGMENTATIONS. No serialized_order filter.
  *  - WRITE-ACK Write_Controller::document_for + respond — Meta_Normalizer::normalize,
  *              then Order_Serializer::document with V2_AUGMENTATIONS. Same augmentation
@@ -387,7 +387,7 @@ class Test_Order_Document_Assembly extends Sync_REST_Store_Test_Case {
 
 		// The CONTRACT is shared canonical revision — NOT whole-document identity.
 		// The lanes legitimately differ: pull applies the pull-only
-		// `woocommerce_pos_sync_serialized_order` filter and serializes from the
+		// `wcpos_sync_serialized_order` filter and serializes from the
 		// WC_Order, while the proxy reshapes a wc/v3 response (see the class
 		// docblock). Asserting the full arrays identical here is an overreach
 		// that failed in CI the first time it ran (PR #1509, run 31140777816).

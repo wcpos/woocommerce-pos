@@ -39,7 +39,7 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 	 * Restore posts storage and sync schema state.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ), 10 );
+		remove_filter( 'wcpos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ), 10 );
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
 		remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );

@@ -17,7 +17,7 @@ use WCPOS\WooCommercePOS\Logger;
  * A named resource out of reach answers 404 exactly as absent, unlike Report_Scope_Gate's visible 403.
  */
 final class Store_Reach {
-	public const FILTER = 'woocommerce_pos_closures_list_args';
+	public const FILTER = 'wcpos_closures_list_args';
 
 	/** Allowed stores; null means unrestricted.
 	 *
@@ -55,6 +55,7 @@ final class Store_Reach {
 	 */
 	public static function for_request( \WP_REST_Request $request ): self {
 		$answer = apply_filters( self::FILTER, array(), $request );
+		$answer = apply_filters_deprecated( 'woocommerce_pos_closures_list_args', array( $answer, $request ), '2.0.0', 'wcpos_closures_list_args' );
 		if ( ! is_array( $answer ) ) {
 			Logger::warning(
 				'Store reach refused: ' . self::FILTER . ' did not return an array',

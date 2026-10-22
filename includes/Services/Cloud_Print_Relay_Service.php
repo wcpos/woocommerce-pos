@@ -43,7 +43,7 @@ class Cloud_Print_Relay_Service {
 	 * Register relay event handlers.
 	 */
 	public function __construct() {
-		add_action( 'woocommerce_pos_print_job_created', array( $this, 'send_hint' ), 10, 2 );
+		add_action( 'wcpos_print_job_created', array( $this, 'send_hint' ), 10, 2 );
 		add_action( self::REREGISTER_HOOK, array( $this, 'reregister' ) );
 	}
 
@@ -161,10 +161,11 @@ class Cloud_Print_Relay_Service {
 	 * The relay is on by default — there is no admin toggle. Sites that
 	 * really want to opt out do so in code:
 	 *
-	 *     add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
+	 *     add_filter( 'wcpos_cloud_print_relay_enabled', '__return_false' );
 	 */
 	public static function is_enabled(): bool {
-		return (bool) apply_filters( 'woocommerce_pos_cloud_print_relay_enabled', true );
+		$filtered = apply_filters( 'wcpos_cloud_print_relay_enabled', true );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_cloud_print_relay_enabled', array( $filtered ), '2.0.0', 'wcpos_cloud_print_relay_enabled' );
 	}
 
 	/**
@@ -471,6 +472,8 @@ class Cloud_Print_Relay_Service {
 	 * Return the filterable relay base URL.
 	 */
 	private static function relay_url(): string {
-		return untrailingslashit( esc_url_raw( (string) apply_filters( 'woocommerce_pos_cloud_print_relay_url', self::RELAY_URL ) ) );
+		$filtered = apply_filters( 'wcpos_cloud_print_relay_url', self::RELAY_URL );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_cloud_print_relay_url', array( $filtered ), '2.0.0', 'wcpos_cloud_print_relay_url' );
+		return untrailingslashit( esc_url_raw( (string) $filtered ) );
 	}
 }

@@ -141,7 +141,9 @@ final class Orders_Controller extends WP_REST_Controller {
 		 * @param int[]           $ids     Candidate order IDs in this pull page.
 		 * @param WP_REST_Request $request Pull request.
 		 */
-		$allowed = array_map( 'intval', (array) apply_filters( 'woocommerce_pos_order_pull_ids', $ids, $request ) );
+		$filtered = apply_filters( 'wcpos_order_pull_ids', $ids, $request );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_order_pull_ids', array( $filtered, $request ), '2.0.0', 'wcpos_order_pull_ids' );
+		$allowed = array_map( 'intval', (array) $filtered );
 		$allowed = array_flip( $allowed ); // O(1) membership for 250-row pages.
 
 		$planner = new Order_Pull_Planner(
@@ -218,7 +220,8 @@ final class Orders_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$payloads = (array) apply_filters( 'woocommerce_pos_sync_order_pull_payloads', array_column( $documents, 'payload' ), 'orders', $request );
+		$payloads = apply_filters( 'wcpos_sync_order_pull_payloads', array_column( $documents, 'payload' ), 'orders', $request );
+		$payloads = (array) apply_filters_deprecated( 'woocommerce_pos_sync_order_pull_payloads', array( $payloads, 'orders', $request ), '2.0.0', 'wcpos_sync_order_pull_payloads' );
 		foreach ( $payloads as $index => $payload ) {
 			$documents[ $index ]['payload'] = $payload;
 		}

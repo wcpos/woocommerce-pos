@@ -312,7 +312,7 @@ class Test_Access_Section extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Granting a capability added via the woocommerce_pos_access_settings filter succeeds.
+	 * Granting a capability added via the wcpos_access_settings filter succeeds.
 	 */
 	public function test_write_grants_filter_added_capability(): void {
 		$capability = 'wcpos_extension_test_cap';
@@ -331,7 +331,7 @@ class Test_Access_Section extends WP_UnitTestCase {
 			return $settings;
 		};
 
-		add_filter( 'woocommerce_pos_access_settings', $filter );
+		add_filter( 'wcpos_access_settings', $filter );
 
 		try {
 			$result = $this->section->write(
@@ -349,7 +349,7 @@ class Test_Access_Section extends WP_UnitTestCase {
 			$this->assertTrue( get_role( 'subscriber' )->has_cap( $capability ) );
 			$this->assertTrue( $result['subscriber']['capabilities']['extensions'][ $capability ] );
 		} finally {
-			remove_filter( 'woocommerce_pos_access_settings', $filter );
+			remove_filter( 'wcpos_access_settings', $filter );
 		}
 	}
 

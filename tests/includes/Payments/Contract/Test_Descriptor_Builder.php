@@ -174,13 +174,13 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 			$settings['gateways']['pos_cash']['title'] = 'Till';
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_payment_gateways_settings', $filter );
+		add_filter( 'wcpos_payment_gateways_settings', $filter );
 
 		try {
 			// Act / Assert.
 			$this->assertSame( 'Till', Descriptor_Builder::instance()->get( 'pos_cash' )['title'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_payment_gateways_settings', $filter );
+			remove_filter( 'wcpos_payment_gateways_settings', $filter );
 		}
 	}
 }

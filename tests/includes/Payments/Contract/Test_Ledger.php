@@ -39,7 +39,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			2
 		);
 		add_filter(
-			'woocommerce_pos_payment_gateways_settings',
+			'wcpos_payment_gateways_settings',
 			static function ( $settings ) {
 				$settings['gateways']['pos_card']['enabled'] = true;
 				return $settings;
@@ -599,7 +599,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	public function test_intent_disabled_method_returns_403(): void {
 		$order = $this->create_pos_order();
 		add_filter(
-			'woocommerce_pos_payment_gateways_settings',
+			'wcpos_payment_gateways_settings',
 			static function ( $settings ) {
 				$settings['gateways']['pos_card']['enabled'] = false;
 				return $settings;
@@ -726,7 +726,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$first = $this->payment( 'pos_card', '92.95' );
 		$ledger->intent( $order, $first['id'], $first, array() );
 		add_filter(
-			'woocommerce_pos_payment_gateways_settings',
+			'wcpos_payment_gateways_settings',
 			static function ( $settings ) {
 				$settings['gateways']['cod']['enabled'] = true;
 				return $settings;
@@ -2449,7 +2449,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$listener = static function ( $order, $row, $refund, $amount ) use ( &$calls ) {
 			$calls[] = array( $order, $row, $refund, $amount );
 		};
-		add_action( 'woocommerce_pos_refund_allocated', $listener, 10, 4 );
+		add_action( 'wcpos_refund_allocated', $listener, 10, 4 );
 		$events = array(
 			array(
 				't'       => gmdate( 'c' ),
@@ -2459,7 +2459,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 		// Act.
 		Ledger::instance()->settle_allocation( $order, $row['id'], $refund->get_id(), 'succeeded', 'ref_1', $events );
-		remove_action( 'woocommerce_pos_refund_allocated', $listener, 10 );
+		remove_action( 'wcpos_refund_allocated', $listener, 10 );
 		// Assert.
 		$saved = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
 		$this->assertSame(
@@ -2484,7 +2484,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	public function test_settle_allocation_failed_answer_releases_the_reservation_and_fires_allocated(): void {
 		// Arrange.
 		list( $order, $row, $refund ) = $this->seed_settlement_allocation( 'pending', 'ref_seed' );
-		$before = did_action( 'woocommerce_pos_refund_allocated' );
+		$before = did_action( 'wcpos_refund_allocated' );
 		// Act.
 		Ledger::instance()->settle_allocation( $order, $row['id'], $refund->get_id(), 'failed', null );
 		// Assert.
@@ -2493,7 +2493,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'ref_seed', $saved['refunds'][0]['provider_ref'] );
 		$this->assertSame( '0.00', $saved['refunded_amount'] );
 		$this->assertSame( 2000, Ledger::available_for_refund( $saved ) );
-		$this->assertSame( $before + 1, did_action( 'woocommerce_pos_refund_allocated' ) );
+		$this->assertSame( $before + 1, did_action( 'wcpos_refund_allocated' ) );
 	}
 
 	/** A pending answer fills a reference only once and never fires the allocation hook. */
@@ -2501,7 +2501,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		list( $order, $row, $refund ) = $this->seed_settlement_allocation();
 		$ledger = Ledger::instance();
-		$before = did_action( 'woocommerce_pos_refund_allocated' );
+		$before = did_action( 'wcpos_refund_allocated' );
 		// Act / Assert.
 		$this->assertSame( $row, $ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'pending', null ) );
 		$this->assertSame( $row, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] ) );
@@ -2511,7 +2511,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'pending', $saved['refunds'][0]['status'] );
 		$ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'pending', 'ref_other' );
 		$this->assertSame( $saved, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] ) );
-		$this->assertSame( $before, did_action( 'woocommerce_pos_refund_allocated' ) );
+		$this->assertSame( $before, did_action( 'wcpos_refund_allocated' ) );
 	}
 
 	/** Settled and missing allocations are no-ops; invalid requests return contract errors. */
@@ -2519,14 +2519,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		list( $order, $row, $refund ) = $this->seed_settlement_allocation( 'succeeded' );
 		$ledger = Ledger::instance();
-		$before = did_action( 'woocommerce_pos_refund_allocated' );
+		$before = did_action( 'wcpos_refund_allocated' );
 		// Act / Assert.
 		$this->assertSame( $row, $ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'failed', 'x' ) );
 		$this->assertSame( $row, $ledger->settle_allocation( $order, $row['id'], 0, 'succeeded' ) );
 		$this->assertSame( 'wcpos_payment_not_found', $ledger->settle_allocation( $order, wp_generate_uuid4(), $refund->get_id(), 'succeeded' )->get_error_code() );
 		$this->assertSame( 'rest_invalid_param', $ledger->settle_allocation( $order, $row['id'], $refund->get_id(), 'refunded' )->get_error_code() );
 		$this->assertSame( $row, $ledger->find( wc_get_order( $order->get_id() ), $row['id'] ) );
-		$this->assertSame( $before, did_action( 'woocommerce_pos_refund_allocated' ) );
+		$this->assertSame( $before, did_action( 'wcpos_refund_allocated' ) );
 	}
 
 	/** Adoption normalizes identity, indexes the leg and refuses duplicates. */
@@ -3293,7 +3293,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		\WC_Payment_Gateways::instance()->init();
 		$this->refund_logs = array();
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				$this->refund_logs[] = (string) $message;
 				return false;
@@ -3416,14 +3416,14 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Listen to woocommerce_pos_refund_allocated; the statuses it saw for the refund land in $seen.
+	 * Listen to wcpos_refund_allocated; the statuses it saw for the refund land in $seen.
 	 *
 	 * @param int   $refund_id Refund id.
 	 * @param array $seen      Allocation statuses, by reference.
 	 */
 	private function listen_allocated( int $refund_id, array &$seen ): void {
 		add_action(
-			'woocommerce_pos_refund_allocated',
+			'wcpos_refund_allocated',
 			static function ( $order, $row ) use ( $refund_id, &$seen ): void {
 				foreach ( $row['refunds'] as $allocation ) {
 					if ( (int) $allocation['id'] === $refund_id ) {
@@ -3820,11 +3820,11 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$listener = static function (): void {
 			throw new \RuntimeException( 'allocation listener failed' );
 		};
-		add_action( 'woocommerce_pos_refund_allocated', $listener );
+		add_action( 'wcpos_refund_allocated', $listener );
 
 		// Act.
 		$settled = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $second->get_id(), '5.00', $this->refund_command() );
-		remove_action( 'woocommerce_pos_refund_allocated', $listener );
+		remove_action( 'wcpos_refund_allocated', $listener );
 
 		// Assert.
 		$this->assertIsArray( $settled );
@@ -3853,7 +3853,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		Ledger::instance()->save( wc_get_order( $order->get_id() ), array( $row ), false );
 		$this->refund_logs = array();
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				$this->refund_logs[] = (string) $message;
 				return false;
@@ -3896,7 +3896,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->listen_allocated( $refund->get_id(), $seen );
 		$paid_when_allocated = null;
 		add_action(
-			'woocommerce_pos_refund_allocated',
+			'wcpos_refund_allocated',
 			static function ( $allocated ) use ( &$paid_when_allocated ): void {
 				$paid_when_allocated = wc_get_order( $allocated->get_id() )->is_paid();
 			}

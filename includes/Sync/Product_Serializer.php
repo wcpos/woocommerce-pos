@@ -265,7 +265,8 @@ final class Product_Serializer {
 		 *
 		 * @var mixed $augmented
 		 */
-		$augmented = apply_filters( 'woocommerce_pos_sync_serialized_product', $payload, $object, $request );
+		$augmented = apply_filters( 'wcpos_sync_serialized_product', $payload, $object, $request );
+		$augmented = apply_filters_deprecated( 'woocommerce_pos_sync_serialized_product', array( $augmented, $object, $request ), '2.0.0', 'wcpos_sync_serialized_product' );
 
 		return \is_array( $augmented ) ? $augmented : $payload;
 	}

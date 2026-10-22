@@ -170,7 +170,7 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_product_search(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_barcode',
@@ -422,7 +422,7 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_product_search_ranks_exact_barcode_first(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_barcode',
@@ -531,7 +531,7 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_product_orderby_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_barcode',
@@ -568,7 +568,7 @@ class Test_Catalog_Proxy_Products extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_product_orderby_barcode_preserves_category_membership(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_barcode',

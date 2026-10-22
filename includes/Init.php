@@ -82,7 +82,7 @@ class Init {
 				'phase'    => 'pre-latch',
 			),
 			array(
-				'hook'     => 'woocommerce_pos_rest_api_controllers',
+				'hook'     => 'wcpos_rest_api_controllers',
 				'callback' => array( Sync\Api::class, 'register_controllers' ),
 				'priority' => 10,
 				'args'     => 1,
@@ -114,7 +114,7 @@ class Init {
 				'phase'    => 'sync-latched',
 			),
 			array(
-				'hook'     => 'woocommerce_pos_sync_serialized_order',
+				'hook'     => 'wcpos_sync_serialized_order',
 				'callback' => array( Sync\Pos_Uuid::class, 'stamp_serialized_record' ),
 				'priority' => 10,
 				'args'     => 3,
@@ -595,7 +595,7 @@ class Init {
 	 * Construct the order-event services exactly once per request.
 	 *
 	 * Idempotent and safe to call after `init`; each service handles its own
-	 * late registration. Fires `woocommerce_pos_order_services_ready` once so
+	 * late registration. Fires `wcpos_order_services_ready` once so
 	 * Pro and extensions can construct their own order-event services at the
 	 * same moment on every lane. Implementation now lives in Service_Groups.
 	 */

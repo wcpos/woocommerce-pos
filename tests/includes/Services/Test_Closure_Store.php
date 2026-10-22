@@ -397,7 +397,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$threshold = static function () {
 			return '5';
 		};
-		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		add_filter( 'wcpos_session_variance_threshold', $threshold );
 		try {
 			$store = new Closure_Store();
 			$error = $store->create( $fields );
@@ -408,7 +408,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 			( new Register_Session_Store() )->approve( $session, $manager, $fields['counted'] );
 			$this->assertSame( $manager, $store->create( $fields )['approved_by'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+			remove_filter( 'wcpos_session_variance_threshold', $threshold );
 		}
 	}
 

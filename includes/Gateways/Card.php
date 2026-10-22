@@ -26,20 +26,13 @@ class Card extends Abstract_POS_Gateway {
 		$this->id          = 'pos_card';
 		$this->title       = /* translators: POS payment gateway label shown during checkout. */ __( 'Card', 'woocommerce-pos' );
 		$this->description = '';
-		$this->icon        = apply_filters( 'woocommerce_pos_card_icon', '' );
+		$this->icon = apply_filters( 'wcpos_card_icon', '' );
+		$this->icon = apply_filters_deprecated( 'woocommerce_pos_card_icon', array( $this->icon ), '2.0.0', 'wcpos_card_icon' );
 		$this->has_fields  = true;
 		$this->enabled     = 'no';
 		$this->supports    = array( 'products', 'refunds' );
 
 		// Actions.
-		// @phpstan-ignore-next-line -- Action hook type mismatch.
-		add_action(
-			'woocommerce_pos_update_options_payment_gateways_' . $this->id,
-			array(
-				$this,
-				'process_admin_options',
-			)
-		);
 		add_action( 'woocommerce_thankyou_pos_card', array( $this, 'calculate_cashback' ) );
 		$this->register_pos_gateway_contract_hooks();
 	}

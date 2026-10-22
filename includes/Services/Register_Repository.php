@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Services;
 
 /**
  * Where register rows live. Free binds Option_Register_Repository; Pro binds its own
- * through the `woocommerce_pos_register_repository` filter. Rows are unnormalised:
+ * through the `wcpos_register_repository` filter. Rows are unnormalised:
  * `id, name, store_id, default_float, created_at_gmt` (`Y-m-d H:i:s`).
  */
 interface Register_Repository {

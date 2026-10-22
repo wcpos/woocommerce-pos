@@ -35,7 +35,7 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 	public function test_registry_malformed_entries_are_dropped_and_cached(): void {
 		$calls = 0;
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			function ( $reports ) use ( &$calls ) {
 				++$calls;
 				$valid = array(
@@ -99,7 +99,7 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 	 */
 	public function test_registry_null_optional_fields_are_treated_as_absent(): void {
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports['nulls'] = array(
 					'title' => 'Nulls',
@@ -131,7 +131,7 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 	 */
 	public function test_registry_malformed_nested_extras_are_dropped_not_merged(): void {
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports['broken'] = array(
 					'title' => 'Broken',
@@ -164,7 +164,7 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 	 */
 	public function test_registry_key_with_a_trailing_newline_is_dropped(): void {
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports["sneaky\n"] = array(
 					'title' => 'Sneaky',
@@ -181,7 +181,7 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 	/** PHP turns a numeric string array key into an int; the grammar and the route allow it. */
 	public function test_registry_numeric_report_key_is_kept(): void {
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports['2026'] = array(
 					'title' => 'Year 2026',
@@ -198,7 +198,7 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 	/** Two reports sharing an extras path form a union; neither vanishes, order does not decide. */
 	public function test_registry_colliding_extras_paths_merge_with_the_incumbent_winning(): void {
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports['first'] = array(
 					'title' => 'First',
@@ -249,7 +249,7 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 	public function test_registry_filter_reading_the_field_tree_does_not_recurse(): void {
 		$seen = null;
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) use ( &$seen ) {
 				// Shaping extras from the existing tree re-enters Reports_Registry::all().
 				$seen = Receipt_Data_Schema::get_field_tree( 'report' );
@@ -270,21 +270,21 @@ class Test_Reports_Registry extends \WC_Unit_Test_Case {
 		$thrower = static function () {
 			throw new \RuntimeException( 'Registration exploded' );
 		};
-		add_filter( 'woocommerce_pos_reports', $thrower );
+		add_filter( 'wcpos_reports', $thrower );
 		try {
 			Reports_Registry::all();
 			$this->fail( 'Expected the registration filter to throw.' );
 		} catch ( \RuntimeException $error ) {
 			$this->assertSame( 'Registration exploded', $error->getMessage() );
 		}
-		remove_filter( 'woocommerce_pos_reports', $thrower );
+		remove_filter( 'wcpos_reports', $thrower );
 		$this->assertSame( array( 'sales', 'cash_movements' ), array_keys( Reports_Registry::all() ) );
 	}
 
 	/** Extras remain top-level, optional and grouped under the registrant's title. */
 	public function test_registry_extras_extend_field_picker_without_requiring_them(): void {
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports['example'] = array(
 					'title' => 'Example report',

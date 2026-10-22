@@ -282,8 +282,9 @@ class Payment_Gateways_Section extends Abstract_Section {
 		 *
 		 * @param array $settings The payment gateways settings.
 		 *
-		 * @hook woocommerce_pos_payment_gateways_settings
+		 * @hook wcpos_payment_gateways_settings
 		 */
-		return apply_filters( 'woocommerce_pos_payment_gateways_settings', $response );
+		$filtered = apply_filters( 'wcpos_payment_gateways_settings', $response );
+		return apply_filters_deprecated( 'woocommerce_pos_payment_gateways_settings', array( $filtered ), '2.0.0', 'wcpos_payment_gateways_settings' );
 	}
 }

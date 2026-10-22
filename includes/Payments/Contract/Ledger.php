@@ -755,9 +755,10 @@ class Ledger {
 			 * @param WC_Order $order Order object.
 			 * @param array    $row   Failed payment row.
 			 *
-			 * @hook woocommerce_pos_payment_refused
+			 * @hook wcpos_payment_refused
 			 */
-			do_action( 'woocommerce_pos_payment_refused', $order, $row );
+			do_action( 'wcpos_payment_refused', $order, $row );
+			do_action_deprecated( 'woocommerce_pos_payment_refused', array( $order, $row ), '2.0.0', 'wcpos_payment_refused' );
 			return $this->refusal_error( $row, $order );
 		}
 
@@ -785,9 +786,10 @@ class Ledger {
 		 * @param WC_Order $order Order object.
 		 * @param array    $row   Recorded payment row.
 		 *
-		 * @hook woocommerce_pos_payment_recorded
+		 * @hook wcpos_payment_recorded
 		 */
-		do_action( 'woocommerce_pos_payment_recorded', $order, $row );
+		do_action( 'wcpos_payment_recorded', $order, $row );
+		do_action_deprecated( 'woocommerce_pos_payment_recorded', array( $order, $row ), '2.0.0', 'wcpos_payment_recorded' );
 		return $row;
 	}
 
@@ -1079,7 +1081,7 @@ class Ledger {
 				// order's tax lines and cart_tax — calculate_totals( false ) reads cart_tax
 				// but only refreshes it through calculate_taxes(), which we skip so the rest
 				// of the order is not recalculated.
-				if ( apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ) ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+				if ( apply_filters( 'wcpos_payment_tip_fee_taxable', false, $order, $row ) ) {
 					$fee->set_tax_status( 'taxable' );
 					$tax_location = $order->get_taxable_location();
 					$tax_location = array( $tax_location['country'], $tax_location['state'], $tax_location['postcode'], $tax_location['city'] );
@@ -1248,10 +1250,11 @@ class Ledger {
 		 * @param \WC_Order_Refund $refund Refund object.
 		 * @param string          $amount Allocation amount on this row.
 		 *
-		 * @hook woocommerce_pos_refund_allocated
+		 * @hook wcpos_refund_allocated
 		 */
 		try {
-			do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
+			do_action( 'wcpos_refund_allocated', $order, $row, $refund, Money::format( $saved ) );
+			do_action_deprecated( 'woocommerce_pos_refund_allocated', array( $order, $row, $refund, Money::format( $saved ) ), '2.0.0', 'wcpos_refund_allocated' );
 		} catch ( \Throwable $error ) {
 			// The allocation is stored; a listener's throw must not reach WooCommerce's deleting catch (rule 8).
 			$this->report( $order, sprintf( 'WCPOS refund #%d allocated on order #%d, but a woocommerce_pos_refund_allocated listener threw: %s', $refund_id, $order->get_id(), $error->getMessage() ) );
@@ -1516,7 +1519,7 @@ class Ledger {
 	/**
 	 * Apply a provider's later answer to a pending refund allocation. A final answer
 	 * (succeeded, failed) sets the allocation's status and reference, recomputes
-	 * refunded_amount, and fires woocommerce_pos_refund_allocated again. A pending
+	 * refunded_amount, and fires wcpos_refund_allocated again. A pending
 	 * answer only records a reference the allocation does not have yet. An allocation
 	 * that is no longer pending, or does not exist, is returned unchanged. The caller
 	 * holds the order lock and has re-read the order's meta.
@@ -1560,7 +1563,8 @@ class Ledger {
 			if ( 'pending' !== $status ) {
 				$refund = wc_get_order( $refund_id );
 				if ( $refund instanceof \WC_Order_Refund && $refund->get_parent_id() === $order->get_id() ) {
-					do_action( 'woocommerce_pos_refund_allocated', $order, $row, $refund, Money::format( Money::minor( $allocation['amount'] ) ) );
+					do_action( 'wcpos_refund_allocated', $order, $row, $refund, Money::format( Money::minor( $allocation['amount'] ) ) );
+					do_action_deprecated( 'woocommerce_pos_refund_allocated', array( $order, $row, $refund, Money::format( Money::minor( $allocation['amount'] ) ) ), '2.0.0', 'wcpos_refund_allocated' );
 				}
 			}
 			return $row;
@@ -1967,7 +1971,8 @@ class Ledger {
 			self::saving( $order->get_id(), fn() => $order->save() );
 			$this->release_hold_if_idle( $order );
 			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
-			do_action( 'woocommerce_pos_payment_voided', $order, $row, $applied, $reason );
+			do_action( 'wcpos_payment_voided', $order, $row, $applied, $reason );
+			do_action_deprecated( 'woocommerce_pos_payment_voided', array( $order, $row, $applied, $reason ), '2.0.0', 'wcpos_payment_voided' );
 		}
 		return $applied;
 	}

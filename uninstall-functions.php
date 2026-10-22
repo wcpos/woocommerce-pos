@@ -110,7 +110,8 @@ function woocommerce_pos_uninstall_pro_installed(): bool {
 		$installed       = isset( $network_plugins[ $pro_plugin ] );
 	}
 
-	return (bool) apply_filters( 'woocommerce_pos_uninstall_pro_installed', $installed );
+	$filtered = apply_filters( 'wcpos_uninstall_pro_installed', $installed );
+	return (bool) apply_filters_deprecated( 'woocommerce_pos_uninstall_pro_installed', array( $filtered ), '2.0.0', 'wcpos_uninstall_pro_installed' );
 }
 
 /**
@@ -348,7 +349,8 @@ function woocommerce_pos_uninstall_report(): void {
 	// still point a self-hosted deployment at its own project, and sending its
 	// uninstall events to the default project instead would be wrong twice over.
 	$token = \defined( 'WCPOS_POSTHOG_TOKEN' ) ? (string) WCPOS_POSTHOG_TOKEN : 'phc_BhTJzZ7fXMqcD4MiaUJQsQqPkEpu94yoSAthXFBWemvd';
-	$token = (string) apply_filters( 'woocommerce_pos_posthog_token', $token );
+	$token = apply_filters( 'wcpos_posthog_token', $token );
+	$token = (string) apply_filters_deprecated( 'woocommerce_pos_posthog_token', array( $token ), '2.0.0', 'wcpos_posthog_token' );
 
 	$body = wp_json_encode(
 		array(
@@ -365,7 +367,8 @@ function woocommerce_pos_uninstall_report(): void {
 	}
 
 	$host = \defined( 'WCPOS_POSTHOG_HOST' ) ? (string) WCPOS_POSTHOG_HOST : 'https://ph.wcpos.com';
-	$host = (string) apply_filters( 'woocommerce_pos_posthog_host', $host );
+	$host = apply_filters( 'wcpos_posthog_host', $host );
+	$host = (string) apply_filters_deprecated( 'woocommerce_pos_posthog_host', array( $host ), '2.0.0', 'wcpos_posthog_host' );
 
 	wp_remote_post(
 		untrailingslashit( $host ) . '/capture/',

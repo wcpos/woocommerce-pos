@@ -210,7 +210,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * @param bool $restore_stock Whether to restore stock. Default from settings.
 		 * @param int  $order_id      The order ID being deleted.
 		 */
-		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', $setting, $order_id );
+		$restore_stock = apply_filters( 'wcpos_restore_stock_on_delete', $setting, $order_id );
+		$restore_stock = apply_filters_deprecated( 'woocommerce_pos_restore_stock_on_delete', array( $restore_stock, $order_id ), '2.0.0', 'wcpos_restore_stock_on_delete' );
 		$force         = (bool) $request->get_param( 'force' );
 
 		// Force-delete permanently removes the order, so restore stock beforehand.
@@ -397,7 +398,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 						// Pre-flight: check meta count before WC loads the full order.
 						$meta_count      = $this->wcpos_preflight_meta_count( $order_id, 'order' );
-						$error_threshold = (int) apply_filters( 'woocommerce_pos_meta_data_error_threshold', 500 );
+						$error_threshold = apply_filters( 'wcpos_meta_data_error_threshold', 500 );
+						$error_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_meta_data_error_threshold', array( $error_threshold ), '2.0.0', 'wcpos_meta_data_error_threshold' );
 
 						if ( $meta_count >= $error_threshold ) {
 							return $this->wcpos_build_safe_order_response( $order_id, $meta_count );

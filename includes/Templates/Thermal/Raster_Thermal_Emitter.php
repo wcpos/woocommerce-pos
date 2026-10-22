@@ -24,7 +24,7 @@
  *
  * Glyph coverage is DejaVu Sans Mono's: Latin, Greek, Cyrillic,
  * Arabic and currency symbols, but not CJK, Hebrew or Thai. Sites needing those
- * point `woocommerce_pos_receipt_raster_font` at a face that has them — see
+ * point `wcpos_receipt_raster_font` at a face that has them — see
  * issue #1682.
  *
  * Complex scripts are a harder limit than coverage. Placing glyphs in cells
@@ -339,7 +339,8 @@ class Raster_Thermal_Emitter {
 		 *
 		 * @param string $path Absolute path to a .ttf file.
 		 */
-		$path = (string) apply_filters( 'woocommerce_pos_receipt_raster_font', $bundled );
+		$path = apply_filters( 'wcpos_receipt_raster_font', $bundled );
+		$path = (string) apply_filters_deprecated( 'woocommerce_pos_receipt_raster_font', array( $path ), '2.0.0', 'wcpos_receipt_raster_font' );
 
 		if ( '' === $path || ! is_readable( $path ) ) {
 			return is_readable( $bundled ) ? $bundled : '';

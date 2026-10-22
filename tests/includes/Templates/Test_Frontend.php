@@ -87,14 +87,14 @@ class Test_Frontend extends WP_UnitTestCase {
 		$past_gate = static function () {
 			throw new \RuntimeException( 'Frontend gate let a user without publish_shop_orders through.' );
 		};
-		add_action( 'woocommerce_pos_frontend_template_redirect', $past_gate );
+		add_action( 'wcpos_frontend_template_redirect', $past_gate );
 		$this->expectException( WPDieException::class );
 		$this->expectExceptionMessage( 'publish_shop_orders' );
 
 		try {
 			( new Frontend() )->get_template();
 		} finally {
-			remove_action( 'woocommerce_pos_frontend_template_redirect', $past_gate );
+			remove_action( 'wcpos_frontend_template_redirect', $past_gate );
 			remove_filter( 'wp_die_handler', $handler );
 			wp_set_current_user( 0 );
 			if ( null === $https ) {

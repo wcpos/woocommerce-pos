@@ -216,7 +216,7 @@ final class Order_Lock {
 			 * @param bool   $supported Detected from the server version.
 			 * @param string $info      The server version string.
 			 */
-			self::$multi_lock = (bool) apply_filters( 'wcpos_order_lock_supports_multiple_locks', $supported, $info ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+			self::$multi_lock = (bool) apply_filters( 'wcpos_order_lock_supports_multiple_locks', $supported, $info );
 		}
 		return self::$multi_lock;
 	}

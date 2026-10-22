@@ -276,8 +276,8 @@ final class Integrity_Digest {
 			}
 			$registered[] = $collection;
 		}
-		add_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_digests' ), 10, 3 );
-		add_filter( 'woocommerce_pos_sync_order_pull_payloads', array( __CLASS__, 'stamp_digests' ), 10, 3 );
+		add_filter( 'wcpos_sync_proxy_response', array( __CLASS__, 'stamp_digests' ), 10, 3 );
+		add_filter( 'wcpos_sync_order_pull_payloads', array( __CLASS__, 'stamp_digests' ), 10, 3 );
 
 		return $registered;
 	}
@@ -293,8 +293,8 @@ final class Integrity_Digest {
 	 * leaks this filter into everything that runs after it.
 	 */
 	public static function unregister_proxy_digest_stampers(): void {
-		remove_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_digests' ), 10 );
-		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( __CLASS__, 'stamp_digests' ), 10 );
+		remove_filter( 'wcpos_sync_proxy_response', array( __CLASS__, 'stamp_digests' ), 10 );
+		remove_filter( 'wcpos_sync_order_pull_payloads', array( __CLASS__, 'stamp_digests' ), 10 );
 	}
 
 	/**

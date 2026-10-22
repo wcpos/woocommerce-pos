@@ -429,8 +429,8 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'products', 'orders', 'customers' ), $registered );
 		$this->assertSame( $expected, $registered );
 		$this->assertTrue( \is_callable( array( Integrity_Digest::class, 'stamp_digests' ) ) );
-		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
-		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ) ) );
+		$this->assertSame( 10, has_filter( 'wcpos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
+		$this->assertSame( 10, has_filter( 'wcpos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ) ) );
 		foreach ( $registered as $collection ) {
 			$row = Collections::row( $collection );
 			$this->assertSame(
@@ -475,11 +475,11 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		// Act: one full pass of the batch lane over the raw record.
-		$stamped = apply_filters( 'woocommerce_pos_sync_proxy_response', array( $record ), 'products', null );
+		$stamped = apply_filters( 'wcpos_sync_proxy_response', array( $record ), 'products', null );
 
 		// Assert.
-		$this->assertSame( 9, has_filter( 'woocommerce_pos_sync_proxy_response', array( Revision::class, 'stamp_proxy_revisions' ) ) );
-		$this->assertSame( 10, has_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
+		$this->assertSame( 9, has_filter( 'wcpos_sync_proxy_response', array( Revision::class, 'stamp_proxy_revisions' ) ) );
+		$this->assertSame( 10, has_filter( 'wcpos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ) ) );
 		// Pin the actual priority of the projection containing the UUID augmenter.
 		$projections = new \ReflectionProperty( Augmentation_Pipeline::class, 'projections' );
 		$projections->setAccessible( true );
@@ -496,7 +496,7 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		$this->assertSame( 10, $uuid_priority );
-		$serialized = apply_filters( 'woocommerce_pos_sync_serialized_product', $record, $product, null );
+		$serialized = apply_filters( 'wcpos_sync_serialized_product', $record, $product, null );
 		$this->assertTrue( Pos_Uuid::is_uuid( Pos_Uuid::read_valid_uuid_from_meta( $serialized['meta_data'] ) ) );
 		// The variable-price augmentation reaches this lane as an Augmentation_Pipeline
 		// projection closure, so pin the ordering by effect rather than by callback

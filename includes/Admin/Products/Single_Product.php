@@ -269,7 +269,8 @@ class Single_Product {
 		if ( ! $selected ) {
 			$selected = '';
 			if ( 'add' == get_current_screen()->action ) {
-				$selected = apply_filters( 'woocommerce_pos_default_product_visibility', '', $post );
+				$selected = apply_filters( 'wcpos_default_product_visibility', '', $post );
+				$selected = apply_filters_deprecated( 'woocommerce_pos_default_product_visibility', array( $selected, $post ), '2.0.0', 'wcpos_default_product_visibility' );
 			}
 		}
 
@@ -347,6 +348,7 @@ class Single_Product {
 		 *
 		 * @param array $excluded_fields Array of field keys to exclude from custom barcode input.
 		 */
-		return apply_filters( 'woocommerce_pos_excluded_custom_barcode_fields', $excluded_fields );
+		$filtered = apply_filters( 'wcpos_excluded_custom_barcode_fields', $excluded_fields );
+		return apply_filters_deprecated( 'woocommerce_pos_excluded_custom_barcode_fields', array( $filtered ), '2.0.0', 'wcpos_excluded_custom_barcode_fields' );
 	}
 }

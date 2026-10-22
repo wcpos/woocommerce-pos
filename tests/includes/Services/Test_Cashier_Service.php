@@ -521,7 +521,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	 */
 	public function test_cashier_data_filter_applied(): void {
 		add_filter(
-			'woocommerce_pos_cashier_data',
+			'wcpos_cashier_data',
 			function ( $data, $user, $include_stores ) {
 				$data['custom_field'] = 'filtered_value';
 
@@ -536,7 +536,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		$this->assertArrayHasKey( 'custom_field', $data );
 		$this->assertEquals( 'filtered_value', $data['custom_field'] );
 
-		remove_all_filters( 'woocommerce_pos_cashier_data' );
+		remove_all_filters( 'wcpos_cashier_data' );
 	}
 
 	/**
@@ -544,7 +544,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	 */
 	public function test_accessible_stores_filter_applied(): void {
 		add_filter(
-			'woocommerce_pos_cashier_accessible_stores',
+			'wcpos_cashier_accessible_stores',
 			function ( $stores, $user ) {
 				// Return empty array to test filter.
 				return array();
@@ -557,7 +557,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 
 		$this->assertEmpty( $stores );
 
-		remove_all_filters( 'woocommerce_pos_cashier_accessible_stores' );
+		remove_all_filters( 'wcpos_cashier_accessible_stores' );
 	}
 
 	/**

@@ -23,8 +23,8 @@ final class Order_Serializer {
 
 	/**
 	 * The pull lane's set: the shared v2 augmentations plus the public
-	 * `woocommerce_pos_sync_serialized_order` filter. The filter is pull-only —
-	 * the proxy lane runs `woocommerce_pos_sync_proxy_response` instead, and the
+	 * `wcpos_sync_serialized_order` filter. The filter is pull-only —
+	 * the proxy lane runs `wcpos_sync_proxy_response` instead, and the
 	 * write path deliberately keeps third-party read filters off its acks.
 	 */
 	public const PULL_AUGMENTATIONS = array( 'tax_ids', 'image_cast', 'item_uuids', 'links', 'serialized_filter' );
@@ -93,7 +93,8 @@ final class Order_Serializer {
 			 * Allows explicit lab inspection without bypassing WooCommerce/WP REST response preparation.
 			 * This filter is additive and must not remove WooCommerce REST fields.
 			 */
-			$payload = (array) apply_filters( 'woocommerce_pos_sync_serialized_order', $payload, $order, $request );
+			$payload = apply_filters( 'wcpos_sync_serialized_order', $payload, $order, $request );
+			$payload = (array) apply_filters_deprecated( 'woocommerce_pos_sync_serialized_order', array( $payload, $order, $request ), '2.0.0', 'wcpos_sync_serialized_order' );
 		}
 
 		return $payload;
@@ -102,7 +103,7 @@ final class Order_Serializer {
 	/**
 	 * The pull lane's order document — and the form its revision hashes.
 	 *
-	 * NOT a pre-augmentation form: `woocommerce_pos_sync_serialized_order` is
+	 * NOT a pre-augmentation form: `wcpos_sync_serialized_order` is
 	 * where this lane runs `Meta_Normalizer::normalize` (priority 5), and the
 	 * other two revision sites normalize too (the CAS re-read through
 	 * `Product_Serializer::dispatched_bare_read()`, the proxy stamp behind that
@@ -316,7 +317,7 @@ final class Order_Serializer {
 	 * schema, read from a subclass that keeps `register_rest_field` additions out
 	 * and rebuilt per call — schema membership is site-dependent and must never
 	 * freeze for a process. That closes free#1744 by construction: third-party REST
-	 * fields and anything the public `woocommerce_pos_sync_serialized_order` filter
+	 * fields and anything the public `wcpos_sync_serialized_order` filter
 	 * adds sit outside the hash, so a read-time decoration can never 409 a till.
 	 * The generated timestamps are excluded too: WooCommerce moves `date_modified`
 	 * on every save, a semantic no-op included, so hashing it would 409 the next
@@ -349,7 +350,8 @@ final class Order_Serializer {
 		 *
 		 * @param string[] $fields Top-level order keys inside the hash.
 		 */
-		$fields = (array) apply_filters( 'woocommerce_pos_sync_order_revision_fields', $fields );
+		$fields = apply_filters( 'wcpos_sync_order_revision_fields', $fields );
+		$fields = (array) apply_filters_deprecated( 'woocommerce_pos_sync_order_revision_fields', array( $fields ), '2.0.0', 'wcpos_sync_order_revision_fields' );
 
 		// tax_ids is a read-time decoration (Tax_Id_Reader) wc/v3 never carries and
 		// _rxdb_digest is transport metadata; neither is a schema key, so scoping

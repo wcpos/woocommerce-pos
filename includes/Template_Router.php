@@ -304,9 +304,10 @@ class Template_Router {
 		 *
 		 * @param string $policy The CSP policy string. Default empty (no CSP set).
 		 *
-		 * @hook woocommerce_pos_content_security_policy
+		 * @hook wcpos_content_security_policy
 		 */
-		$policy = apply_filters( 'woocommerce_pos_content_security_policy', '' );
+		$policy = apply_filters( 'wcpos_content_security_policy', '' );
+		$policy = apply_filters_deprecated( 'woocommerce_pos_content_security_policy', array( $policy ), '2.0.0', 'wcpos_content_security_policy' );
 
 		if ( ! empty( $policy ) ) {
 			header( 'Content-Security-Policy: ' . $policy );

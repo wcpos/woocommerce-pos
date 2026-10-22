@@ -29,7 +29,7 @@ class Test_Request_Lane extends WP_UnitTestCase {
 		$this->previous_get = $_GET;
 		set_current_screen( 'front' );
 		// The suite pins the REST lane (tests/bootstrap.php); this file tests detection.
-		remove_filter( 'woocommerce_pos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
+		remove_filter( 'wcpos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
 		Request_Lane::reset();
 	}
 
@@ -41,11 +41,11 @@ class Test_Request_Lane extends WP_UnitTestCase {
 			$_SERVER['REQUEST_URI'] = $this->previous_uri;
 		}
 		$GLOBALS['current_screen'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the test environment.
-		remove_all_filters( 'woocommerce_pos_request_lane' );
+		remove_all_filters( 'wcpos_request_lane' );
 		remove_all_filters( 'wp_doing_cron' );
 		remove_all_filters( 'wp_doing_ajax' );
 		remove_all_filters( 'home_url' );
-		add_filter( 'woocommerce_pos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
+		add_filter( 'wcpos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
 		Request_Lane::reset();
 		parent::tearDown();
 	}
@@ -132,7 +132,7 @@ class Test_Request_Lane extends WP_UnitTestCase {
 		// ...and a host can force one.
 		Request_Lane::reset();
 		add_filter(
-			'woocommerce_pos_request_lane',
+			'wcpos_request_lane',
 			static function (): string {
 				return Request_Lane::POS;
 			}

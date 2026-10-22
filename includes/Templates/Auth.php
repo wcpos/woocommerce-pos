@@ -75,7 +75,7 @@ class Auth {
 	 * deployments live on variable `wcpos--<id>.expo.app` hosts and are NOT
 	 * listed: any Expo account can register an `expo.app` subdomain, so a
 	 * wildcard would reopen the hole. A test store allows its preview origins
-	 * through `woocommerce_pos_auth_redirect_origin_allowed`.
+	 * through `wcpos_auth_redirect_origin_allowed`.
 	 *
 	 * @var array
 	 */
@@ -194,9 +194,10 @@ class Auth {
 		 *
 		 * @since 1.0.0
 		 *
-		 * @hook woocommerce_pos_auth_template_redirect
+		 * @hook wcpos_auth_template_redirect
 		 */
-		do_action( 'woocommerce_pos_auth_template_redirect' );
+		do_action( 'wcpos_auth_template_redirect' );
+		do_action_deprecated( 'woocommerce_pos_auth_template_redirect', array(), '2.0.0', 'wcpos_auth_template_redirect' );
 
 		// Make this instance available to the template.
 		global $wcpos_auth_instance; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
@@ -302,9 +303,10 @@ class Auth {
 		 *
 		 * @since 1.11.1
 		 *
-		 * @hook woocommerce_pos_auth_redirect_origin_allowed
+		 * @hook wcpos_auth_redirect_origin_allowed
 		 */
-		return (bool) apply_filters( 'woocommerce_pos_auth_redirect_origin_allowed', $allowed, $origin, $url );
+		$filtered = apply_filters( 'wcpos_auth_redirect_origin_allowed', $allowed, $origin, $url );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_auth_redirect_origin_allowed', array( $filtered, $origin, $url ), '2.0.0', 'wcpos_auth_redirect_origin_allowed' );
 	}
 
 	/**
@@ -527,9 +529,10 @@ class Auth {
 		 *
 		 * @since 1.8.0
 		 *
-		 * @hook woocommerce_pos_authenticate_user
+		 * @hook wcpos_authenticate_user
 		 */
-		return apply_filters( 'woocommerce_pos_authenticate_user', $user, $username );
+		$filtered = apply_filters( 'wcpos_authenticate_user', $user, $username );
+		return apply_filters_deprecated( 'woocommerce_pos_authenticate_user', array( $filtered, $username ), '2.0.0', 'wcpos_authenticate_user' );
 	}
 
 	/**

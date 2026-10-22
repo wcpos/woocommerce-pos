@@ -137,7 +137,7 @@ class Admin {
 		/**
 		 * Filters the screen handlers for WCPOS admin screens.
 		 *
-		 * @hook woocommerce_pos_admin_screen_handlers
+		 * @hook wcpos_admin_screen_handlers
 		 *
 		 * @since 1.4.10
 		 *
@@ -145,7 +145,8 @@ class Admin {
 		 *                                  Handler can be a class name or a callback array.
 		 * @param WP_Screen $current_screen The current WP_Screen object being loaded in the admin.
 		 */
-		$handlers = apply_filters( 'woocommerce_pos_admin_screen_handlers', $this->screen_handlers, $current_screen );
+		$handlers = apply_filters( 'wcpos_admin_screen_handlers', $this->screen_handlers, $current_screen );
+		$handlers = apply_filters_deprecated( 'woocommerce_pos_admin_screen_handlers', array( $handlers, $current_screen ), '2.0.0', 'wcpos_admin_screen_handlers' );
 
 		// Check if the current screen has a handler.
 		if ( isset( $handlers[ $current_screen->id ] ) ) {

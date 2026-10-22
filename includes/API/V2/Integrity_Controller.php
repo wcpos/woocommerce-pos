@@ -318,7 +318,8 @@ final class Integrity_Controller extends WP_REST_Controller {
 		}
 
 		$filters   = array( 'status' => (string) $request->get_param( 'status' ) );
-		$ttl       = (int) apply_filters( 'woocommerce_pos_integrity_scan_cache_ttl', 120 );
+		$ttl = apply_filters( 'wcpos_integrity_scan_cache_ttl', 120 );
+		$ttl = (int) apply_filters_deprecated( 'woocommerce_pos_integrity_scan_cache_ttl', array( $ttl ), '2.0.0', 'wcpos_integrity_scan_cache_ttl' );
 		$key_parts = array( $collection, $bucket_size, $filters, $window_start, $window_end );
 		$cache_key = 'wcpos_integrity_scan_' . md5( (string) wp_json_encode( $key_parts ) );
 		$cached    = 0 < $ttl ? get_transient( $cache_key ) : false;

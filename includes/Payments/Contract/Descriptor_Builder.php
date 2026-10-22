@@ -108,9 +108,7 @@ class Descriptor_Builder {
 		 * @param string             $kind    Payment method kind.
 		 * @param WC_Payment_Gateway $gateway Gateway instance.
 		 */
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS payments contract filter.
 		$kind = apply_filters( 'wcpos_payment_method_kind', $kind, $gateway );
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 		if ( ! is_string( $kind ) || ! in_array( $kind, Ledger::KINDS, true ) ) {
 			Logger::log( sprintf( 'Unknown WCPOS payment method kind returned for gateway "%s"; using "other".', $gateway->id ) );
 			return 'other';
@@ -137,9 +135,7 @@ class Descriptor_Builder {
 		 * @param string             $mode    Capture mode.
 		 * @param WC_Payment_Gateway $gateway Gateway instance.
 		 */
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS payments contract filter.
 		return (string) apply_filters( 'wcpos_payment_method_capture_mode', $mode, $gateway );
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 	}
 
 	/**

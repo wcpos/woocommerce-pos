@@ -252,7 +252,6 @@ class Gateway_Contract {
 			return $this->get_adapter( $gateway )->get_pos_bootstrap_response( $context, $request );
 		}
 
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
 		return (array) apply_filters(
 			'wcpos_payment_gateway_bootstrap',
 			array(
@@ -265,7 +264,6 @@ class Gateway_Contract {
 			$context,
 			$request
 		);
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 	}
 
 	/**

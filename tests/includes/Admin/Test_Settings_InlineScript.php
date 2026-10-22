@@ -37,7 +37,7 @@ class Test_Settings_InlineScript extends \WP_UnitTestCase {
 	 */
 	public function test_inline_script_includes_cloud_print_store_options(): void {
 		add_filter(
-			'woocommerce_pos_cloud_print_store_options',
+			'wcpos_cloud_print_store_options',
 			static function () {
 				return array(
 					array(

@@ -147,7 +147,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		 *
 		 * @param bool $maintain Default from {@see i18n::is_maintenance_request()}.
 		 */
-		return (bool) apply_filters( 'woocommerce_pos_i18n_maintain', self::is_maintenance_request() );
+		$filtered = apply_filters( 'wcpos_i18n_maintain', self::is_maintenance_request() );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_i18n_maintain', array( $filtered ), '2.0.0', 'wcpos_i18n_maintain' );
 	}
 
 	/**

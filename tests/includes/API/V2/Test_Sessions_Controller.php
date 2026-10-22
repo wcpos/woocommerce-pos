@@ -1401,7 +1401,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$values['variance_threshold'] = '5.00';
 			return $values;
 		};
-		add_filter( 'woocommerce_pos_general_settings', $settings );
+		add_filter( 'wcpos_general_settings', $settings );
 		try {
 			$id = $this->counting_session_with_cash_sale();
 			$route = 'sessions/' . $id . '/status';
@@ -1443,7 +1443,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( $manager->ID, $response->get_data()['approved_by'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_general_settings', $settings );
+			remove_filter( 'wcpos_general_settings', $settings );
 		}
 	}
 
@@ -1454,7 +1454,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 				$values['variance_threshold'] = $threshold;
 				return $values;
 			};
-			add_filter( 'woocommerce_pos_general_settings', $settings );
+			add_filter( 'wcpos_general_settings', $settings );
 			try {
 				$id = $this->counting_session_with_cash_sale();
 				$response = $this->post(
@@ -1474,7 +1474,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 					$this->assertSame( '4.99999', $response->get_data()['data']['threshold'] );
 				}
 			} finally {
-				remove_filter( 'woocommerce_pos_general_settings', $settings );
+				remove_filter( 'wcpos_general_settings', $settings );
 			}
 		}
 	}
@@ -1601,7 +1601,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$args['store_id'] = 765;
 			return $args;
 		};
-		add_filter( 'woocommerce_pos_sessions_list_args', $list_scope );
+		add_filter( 'wcpos_sessions_list_args', $list_scope );
 		try {
 			foreach ( array(
 				1 => $b['id'],
@@ -1628,7 +1628,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( 400, $this->server->dispatch( $request )->get_status() );
 			}
 		} finally {
-			remove_filter( 'woocommerce_pos_sessions_list_args', $list_scope );
+			remove_filter( 'wcpos_sessions_list_args', $list_scope );
 		}
 	}
 

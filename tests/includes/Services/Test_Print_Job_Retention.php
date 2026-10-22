@@ -35,8 +35,8 @@ class Test_Print_Job_Retention extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		wp_clear_scheduled_hook( Print_Job_Service::PURGE_HOOK );
-		remove_all_filters( 'woocommerce_pos_print_job_retention_days' );
-		remove_all_filters( 'woocommerce_pos_print_job_failed_retention_days' );
+		remove_all_filters( 'wcpos_print_job_retention_days' );
+		remove_all_filters( 'wcpos_print_job_failed_retention_days' );
 		parent::tearDown();
 	}
 
@@ -136,7 +136,7 @@ class Test_Print_Job_Retention extends WP_UnitTestCase {
 	 */
 	public function test_purge_retention_filter_zero_disables_purging(): void {
 		// Arrange.
-		add_filter( 'woocommerce_pos_print_job_retention_days', '__return_zero' );
+		add_filter( 'wcpos_print_job_retention_days', '__return_zero' );
 		$old_printed = $this->make_job( Print_Job_Service::STATUS_PRINTED, 100 );
 		$old_failed  = $this->make_job( Print_Job_Service::STATUS_FAILED, 100 );
 

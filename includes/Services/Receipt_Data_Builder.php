@@ -180,7 +180,9 @@ class Receipt_Data_Builder {
 		);
 		$identity = array_intersect_key( $fiscal, array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id' ) ) );
 		$printed = array_intersect_key( $row, array_flip( array( 'id', 'number', 'printed_number' ) ) );
-		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, new \WC_Order(), $xreport ? 'xreport' : 'closure' );
+		$order = new \WC_Order();
+		$data = apply_filters( 'wcpos_receipt_data', $data, $order, $xreport ? 'xreport' : 'closure' );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $data, $order, $xreport ? 'xreport' : 'closure' ), '2.0.0', 'wcpos_receipt_data' );
 		// The identity is core-owned, as on the refund path: an extension cannot restate the
 		// document type or the closure's number. Its other fiscal additions are kept.
 		$data['fiscal'] = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
@@ -307,9 +309,10 @@ class Receipt_Data_Builder {
 		 *
 		 * @since 2.0.0
 		 *
-		 * @hook woocommerce_pos_report_data
+		 * @hook wcpos_report_data
 		 */
-		$data = (array) apply_filters( 'woocommerce_pos_report_data', $data, $key, $scope );
+		$data = apply_filters( 'wcpos_report_data', $data, $key, $scope );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_report_data', array( $data, $key, $scope ), '2.0.0', 'wcpos_report_data' );
 
 		// Restored for the same reason the closure path restores its identity, and covering what a
 		// template prints rather than only what `fiscal` records: the key and title name the
@@ -856,15 +859,16 @@ class Receipt_Data_Builder {
 		 *
 		 * @since 1.10.8
 		 *
-		 * @hook woocommerce_pos_receipt_data
+		 * @hook wcpos_receipt_data
 		 */
-		$data = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
+		$data = apply_filters( 'wcpos_receipt_data', $data, $order, $mode );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $data, $order, $mode ), '2.0.0', 'wcpos_receipt_data' );
 
 		// Frozen identity on live builds (roadmap#243): when a snapshot exists, the
 		// fiscal identity is copied from it, never rebuilt. Applied AFTER the filter
 		// so an extension that recomputes a QR or a label live cannot overwrite what
 		// was captured at the sale; enrichment belongs in the snapshot
-		// (`woocommerce_pos_fiscal_snapshot_enrich`). Order details and provenance
+		// (`wcpos_fiscal_snapshot_enrich`). Order details and provenance
 		// stay live. A 1.3 snapshot without a key keeps the live value.
 		if ( 'live' === $mode ) {
 			$records  = new Fiscal_Record_Store();
@@ -1032,7 +1036,8 @@ class Receipt_Data_Builder {
 		);
 		$data['fiscal']['corrects'] = $corrects;
 		$identity = array_intersect_key( $data['fiscal'], array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id', 'corrects' ) ) );
-		$data     = (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, 'refund' );
+		$data = apply_filters( 'wcpos_receipt_data', $data, $order, 'refund' );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $data, $order, 'refund' ), '2.0.0', 'wcpos_receipt_data' );
 		// The minted identity is core-owned: an extension unaware of the refund mode
 		// cannot rewrite it after the number and the row are fixed.
 		$data['fiscal']         = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );

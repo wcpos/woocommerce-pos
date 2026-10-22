@@ -36,31 +36,31 @@ class Test_Service_Groups extends WC_Unit_Test_Case {
 	}
 
 	public function test_ensure_order_twice_fires_ready_once(): void {
-		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before = did_action( 'wcpos_order_services_ready' );
 
 		Service_Groups::ensure( Service_Groups::ORDER );
 		Service_Groups::ensure( Service_Groups::ORDER );
 
 		$this->assertSame( array( 'order' ), Service_Groups::constructed() );
-		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ) );
+		$this->assertSame( $ready_before + 1, did_action( 'wcpos_order_services_ready' ) );
 	}
 
 	public function test_ensure_pos_does_not_construct_order_or_fire_ready(): void {
-		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before = did_action( 'wcpos_order_services_ready' );
 
 		Service_Groups::ensure( Service_Groups::POS );
 
 		$this->assertSame( array( 'pos' ), Service_Groups::constructed() );
-		$this->assertSame( $ready_before, did_action( 'woocommerce_pos_order_services_ready' ) );
+		$this->assertSame( $ready_before, did_action( 'wcpos_order_services_ready' ) );
 	}
 
 	public function test_ensure_unknown_group_constructs_nothing(): void {
-		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before = did_action( 'wcpos_order_services_ready' );
 
 		Service_Groups::ensure( 'unknown' );
 
 		$this->assertSame( array(), Service_Groups::constructed() );
-		$this->assertSame( $ready_before, did_action( 'woocommerce_pos_order_services_ready' ) );
+		$this->assertSame( $ready_before, did_action( 'wcpos_order_services_ready' ) );
 	}
 
 	public function test_constructed_returns_groups_in_construction_order(): void {
@@ -89,13 +89,13 @@ class Test_Service_Groups extends WC_Unit_Test_Case {
 
 	public function test_armed_order_write_constructs_order_group(): void {
 		Service_Groups::arm_order_group();
-		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before = did_action( 'wcpos_order_services_ready' );
 
 		$order = wc_create_order();
 
 		$this->assertInstanceOf( \WC_Order::class, $order );
 		$this->assertSame( array( 'order' ), Service_Groups::constructed() );
-		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ) );
+		$this->assertSame( $ready_before + 1, did_action( 'wcpos_order_services_ready' ) );
 	}
 
 	public function test_reset_clears_constructed_and_armed_state(): void {

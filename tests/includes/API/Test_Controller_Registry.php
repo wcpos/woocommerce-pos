@@ -258,49 +258,49 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 				$map['stores'] = Registry_Stores_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_controllers', $this->v1_filter );
+			add_filter( 'wcpos_rest_api_controllers', $this->v1_filter );
 		}
 		if ( 'test_a_replacement_that_registers_nothing_under_v2_leaves_the_lane_to_the_core_service' === $this->getName() ) {
 			$this->v1_filter = static function ( array $map ): array {
 				$map['auth'] = Registry_Legacy_Auth_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_controllers', $this->v1_filter );
+			add_filter( 'wcpos_rest_api_controllers', $this->v1_filter );
 		}
 		if ( 'test_a_promoted_controller_outside_core_s_base_class_is_stamped_v2' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Plain_Settings_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_a_namespace_the_constructor_assigned_without_declaring_is_stamped' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Dynamic_Settings_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_a_dynamic_namespace_over_a_private_base_slot_stamps_both' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Dynamic_Over_Private_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_a_shadowed_namespace_is_stamped_in_every_scope_that_holds_one' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Shadowed_Settings_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_a_namespace_private_to_a_base_class_is_stamped_in_its_own_scope' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Private_Settings_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_a_readonly_namespace_is_left_alone_rather_than_fatally_rewritten' === $this->getName() ) {
 			if ( version_compare( PHP_VERSION, '8.1', '>=' ) ) {
@@ -309,7 +309,7 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 					$map['settings'] = 'Registry_Readonly_Settings_Test_Double';
 					return $map;
 				};
-				add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+				add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 			}
 		}
 		if ( 'test_a_v2_filter_replacement_that_serves_nothing_is_not_overridden_by_the_core_service' === $this->getName() ) {
@@ -317,26 +317,26 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 				$map['settings'] = Registry_Silent_Settings_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_routes_under_a_plugin_added_namespace_are_attributed' === $this->getName() ) {
 			$this->namespaces_filter = static function ( array $namespaces ): array {
 				$namespaces[] = 'wcpos-ext/v1';
 				return $namespaces;
 			};
-			add_filter( 'woocommerce_pos_rest_namespaces', $this->namespaces_filter );
+			add_filter( 'wcpos_rest_namespaces', $this->namespaces_filter );
 			$this->v1_filter = static function ( array $map ): array {
 				$map['stores'] = Registry_Namespaced_Stores_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_controllers', $this->v1_filter );
+			add_filter( 'wcpos_rest_api_controllers', $this->v1_filter );
 		}
 		if ( 'test_a_v2_filter_entry_without_a_namespace_override_is_stamped_v2' === $this->getName() ) {
 			$this->v2_filter = static function ( array $map ): array {
 				$map['settings'] = Registry_Settings_Test_Double::class;
 				return $map;
 			};
-			add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( 'test_route_attribution_survives_closure_wrapped_callbacks' === $this->getName() ) {
 			$this->endpoints_filter = static function ( array $routes ): array {
@@ -369,16 +369,16 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 	/** Remove only the filters this case installed. */
 	public function tearDown(): void {
 		if ( $this->v1_filter ) {
-			remove_filter( 'woocommerce_pos_rest_api_controllers', $this->v1_filter );
+			remove_filter( 'wcpos_rest_api_controllers', $this->v1_filter );
 		}
 		if ( $this->v2_filter ) {
-			remove_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+			remove_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 		}
 		if ( $this->endpoints_filter ) {
 			remove_filter( 'rest_endpoints', $this->endpoints_filter, 1 );
 		}
 		if ( $this->namespaces_filter ) {
-			remove_filter( 'woocommerce_pos_rest_namespaces', $this->namespaces_filter );
+			remove_filter( 'wcpos_rest_namespaces', $this->namespaces_filter );
 		}
 		parent::tearDown();
 	}
@@ -440,7 +440,7 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 			$map['auth']  = 'Replacement_Auth';
 			return $map;
 		};
-		add_filter( 'woocommerce_pos_rest_api_v2_controllers', $this->v2_filter );
+		add_filter( 'wcpos_rest_api_v2_controllers', $this->v2_filter );
 
 		// Act.
 		$v2 = Controller_Registry::v2_map( array( 'auth' => 'Fake_Auth' ) );
@@ -673,7 +673,7 @@ class Test_Controller_Registry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertInstanceOf( Registry_Silent_Settings_Test_Double::class, $registry->controllers()['v2-settings'] );
 	}
 
-	/** A filtered controller's routes under a namespace added through woocommerce_pos_rest_namespaces are attributed. */
+	/** A filtered controller's routes under a namespace added through wcpos_rest_namespaces are attributed. */
 	public function test_routes_under_a_plugin_added_namespace_are_attributed(): void {
 		// Arrange.
 		$registry = $this->registry();

@@ -60,7 +60,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	 */
 	private function set_bundled_version( int $version ): void {
 		add_filter(
-			'woocommerce_pos_gallery_templates',
+			'wcpos_gallery_templates',
 			function ( $catalogue ) use ( $version ) {
 				if ( isset( $catalogue[ $this->gallery_key ] ) ) {
 					$catalogue[ $this->gallery_key ]['version'] = $version;
@@ -93,7 +93,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	public function test_registry_version_is_memoised_for_the_request(): void {
 		$calls = 0;
 		add_filter(
-			'woocommerce_pos_gallery_templates',
+			'wcpos_gallery_templates',
 			static function ( $catalogue ) use ( &$calls ) {
 				++$calls;
 				return $catalogue;
@@ -340,7 +340,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		$empty_file  = wp_tempnam( 'wcpos-empty-gallery' );
 		file_put_contents( $empty_file, '' );
 		add_filter(
-			'woocommerce_pos_gallery_templates',
+			'wcpos_gallery_templates',
 			function ( $catalogue ) use ( $empty_file ) {
 				if ( isset( $catalogue[ $this->gallery_key ] ) ) {
 					$catalogue[ $this->gallery_key ]['version']      = 2;
@@ -408,7 +408,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		$empty_file = wp_tempnam( 'wcpos-empty-gallery' );
 		file_put_contents( $empty_file, '' );
 		add_filter(
-			'woocommerce_pos_gallery_templates',
+			'wcpos_gallery_templates',
 			function ( $catalogue ) use ( $empty_file ) {
 				if ( isset( $catalogue[ $this->gallery_key ] ) ) {
 					$catalogue[ $this->gallery_key ]['version']      = 2;

@@ -51,7 +51,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 
 		// Capture all Logger calls for assertion.
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				unset( $should_log ); // Intentionally unused.
 				$this->captured_logs[] = $message;
@@ -67,11 +67,11 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		$this->uninstall_sync_read_lane();
-		remove_all_filters( 'woocommerce_pos_logging' );
-		remove_all_filters( 'woocommerce_pos_meta_data_warning_threshold' );
-		remove_all_filters( 'woocommerce_pos_meta_data_error_threshold' );
-		remove_all_filters( 'woocommerce_pos_response_size_warning_threshold' );
-		remove_all_filters( 'woocommerce_pos_response_size_error_threshold' );
+		remove_all_filters( 'wcpos_logging' );
+		remove_all_filters( 'wcpos_meta_data_warning_threshold' );
+		remove_all_filters( 'wcpos_meta_data_error_threshold' );
+		remove_all_filters( 'wcpos_response_size_warning_threshold' );
+		remove_all_filters( 'wcpos_response_size_error_threshold' );
 		parent::tearDown();
 	}
 
@@ -263,7 +263,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	public function test_meta_count_warning_is_logged(): void {
 		// Lower the threshold for testing.
 		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
+			'wcpos_meta_data_warning_threshold',
 			function () {
 				return 10;
 			}
@@ -309,13 +309,13 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	public function test_meta_count_error_is_logged(): void {
 		// Lower thresholds for testing.
 		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
+			'wcpos_meta_data_warning_threshold',
 			function () {
 				return 5;
 			}
 		);
 		add_filter(
-			'woocommerce_pos_meta_data_error_threshold',
+			'wcpos_meta_data_error_threshold',
 			function () {
 				return 15;
 			}
@@ -411,7 +411,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 
 		// Lower the error threshold for testing.
 		add_filter(
-			'woocommerce_pos_meta_data_error_threshold',
+			'wcpos_meta_data_error_threshold',
 			function () {
 				return 20;
 			}
@@ -471,7 +471,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	public function test_response_size_warning_for_large_description(): void {
 		// Lower the threshold for testing.
 		add_filter(
-			'woocommerce_pos_response_size_warning_threshold',
+			'wcpos_response_size_warning_threshold',
 			function () {
 				return 1000; // 1KB.
 			}
@@ -506,13 +506,13 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	public function test_thresholds_are_configurable_via_filters(): void {
 		// Set very high thresholds so no warnings fire.
 		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
+			'wcpos_meta_data_warning_threshold',
 			function () {
 				return 9999;
 			}
 		);
 		add_filter(
-			'woocommerce_pos_meta_data_error_threshold',
+			'wcpos_meta_data_error_threshold',
 			function () {
 				return 99999;
 			}

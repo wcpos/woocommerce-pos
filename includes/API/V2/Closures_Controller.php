@@ -224,7 +224,8 @@ class Closures_Controller extends \WP_REST_Controller {
 				return $fields;
 			}
 			$request->set_param( 'session_id', $fields['session_id'] );
-			$session = apply_filters( 'woocommerce_pos_session_row', ( new Register_Session_Store() )->get( $fields['session_id'] ), $request );
+			$session = apply_filters( 'wcpos_session_row', ( new Register_Session_Store() )->get( $fields['session_id'] ), $request );
+			$session = apply_filters_deprecated( 'woocommerce_pos_session_row', array( $session, $request ), '2.0.0', 'wcpos_session_row' );
 			if ( ! $session || ! $reach->admits( $session['store_id'] ) ) {
 				return $this->error( 'wcpos_session_not_found', 404 );
 			}

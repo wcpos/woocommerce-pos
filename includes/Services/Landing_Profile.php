@@ -139,9 +139,10 @@ class Landing_Profile {
 		 * @param string $profile_url The profile endpoint URL.
 		 */
 		$profile_url = apply_filters(
-			'woocommerce_pos_updates_server_profile_url',
+			'wcpos_updates_server_profile_url',
 			self::UPDATES_SERVER_URL . '/v1/profile'
 		);
+		$profile_url = apply_filters_deprecated( 'woocommerce_pos_updates_server_profile_url', array( $profile_url ), '2.0.0', 'wcpos_updates_server_profile_url' );
 
 		return array(
 			'profile_url' => $profile_url,

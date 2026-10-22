@@ -1300,7 +1300,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$order->update_meta_data( '_pos_store', '5' );
 		$order->save();
 
-		add_filter( 'woocommerce_pos_order_store_reassignment_allowed', '__return_false' );
+		add_filter( 'wcpos_order_store_reassignment_allowed', '__return_false' );
 		try {
 			$updated = $this->updateOrder(
 				$order,
@@ -1314,7 +1314,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				)
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_order_store_reassignment_allowed', '__return_false' );
+			remove_filter( 'wcpos_order_store_reassignment_allowed', '__return_false' );
 		}
 
 		$this->assertSame( 200, $updated->get_status(), 'push response: ' . wp_json_encode( $updated->get_data() ) );

@@ -1699,7 +1699,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_order_links_force_ssl_disabled_preserves_home_scheme(): void {
 		// Arrange.
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['force_ssl'] = false;
 

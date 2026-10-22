@@ -77,7 +77,7 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 			}
 			return $search;
 		};
-		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		add_filter( 'wcpos_search_fields', $filter, 10, 2 );
 		try {
 			$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v2/site' ) );
 			$this->assertSame(
@@ -88,7 +88,7 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 				$response->get_data()['search_meta_keys']
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+			remove_filter( 'wcpos_search_fields', $filter, 10 );
 		}
 	}
 
@@ -100,7 +100,7 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 			}
 			return $search;
 		};
-		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		add_filter( 'wcpos_search_fields', $filter, 10, 2 );
 		try {
 			// The index filter itself, not a dispatch to '/': the lane-coverage gate cannot
 			// classify the root route, and the filter is the unit under test.
@@ -113,7 +113,7 @@ class Test_Site extends WCPOS_REST_Unit_Test_Case {
 				$data['search_meta_keys']
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+			remove_filter( 'wcpos_search_fields', $filter, 10 );
 		}
 	}
 

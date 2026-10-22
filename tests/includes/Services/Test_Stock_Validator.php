@@ -108,12 +108,12 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 
 			return $statuses;
 		};
-		add_filter( 'woocommerce_pos_stock_validation_exempt_statuses', $add_exempt_status );
+		add_filter( 'wcpos_stock_validation_exempt_statuses', $add_exempt_status );
 
 		try {
 			$this->assertFalse( Stock_Validator::instance()->should_validate_create_payload( 'custom-draft', false ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_stock_validation_exempt_statuses', $add_exempt_status );
+			remove_filter( 'wcpos_stock_validation_exempt_statuses', $add_exempt_status );
 		}
 	}
 

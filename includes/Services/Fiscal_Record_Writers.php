@@ -40,10 +40,10 @@ final class Fiscal_Record_Writers {
 	/** Arm observers when the order services become ready. */
 	private function __construct() {
 		$this->store = new Fiscal_Record_Store();
-		add_action( 'wcpos_sale_completed', array( $this, 'handle_sale_completed' ), 10, 2 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract action.
-		add_action( 'woocommerce_pos_payment_voided', array( $this, 'handle_void' ), 10, 4 );
+		add_action( 'wcpos_sale_completed', array( $this, 'handle_sale_completed' ), 10, 2 );
+		add_action( 'wcpos_payment_voided', array( $this, 'handle_void' ), 10, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'handle_cancellation' ), 10, 2 );
-		add_action( 'woocommerce_pos_refund_allocated', array( $this, 'handle_allocation' ), 10, 4 );
+		add_action( 'wcpos_refund_allocated', array( $this, 'handle_allocation' ), 10, 4 );
 		add_action( 'woocommerce_order_refunded', array( $this, 'handle_refund' ), 10, 2 );
 	}
 
@@ -80,7 +80,8 @@ final class Fiscal_Record_Writers {
 		 * @param WC_Order $order  Order.
 		 * @param array    $fields Record fields as offered to the store.
 		 */
-		do_action( 'woocommerce_pos_fiscal_record_failed', $type, $order, $fields );
+		do_action( 'wcpos_fiscal_record_failed', $type, $order, $fields );
+		do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( $type, $order, $fields ), '2.0.0', 'wcpos_fiscal_record_failed' );
 		return false;
 	}
 
@@ -159,7 +160,8 @@ final class Fiscal_Record_Writers {
 			Logger::log( 'Fiscal sale record failed: ' . $error->getMessage() );
 			/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
 			$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), 'sale' ) );
-			do_action( 'woocommerce_pos_fiscal_record_failed', 'sale', $order, array() );
+			do_action( 'wcpos_fiscal_record_failed', 'sale', $order, array() );
+			do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( 'sale', $order, array() ), '2.0.0', 'wcpos_fiscal_record_failed' );
 		}
 	}
 
@@ -489,7 +491,8 @@ final class Fiscal_Record_Writers {
 			 * @param array $snapshot Fiscal document.
 			 * @param int   $order_id Order ID.
 			 */
-			$enriched = apply_filters( 'woocommerce_pos_fiscal_snapshot_enrich', $snapshot, $order_id );
+			$enriched = apply_filters( 'wcpos_fiscal_snapshot_enrich', $snapshot, $order_id );
+			$enriched = apply_filters_deprecated( 'woocommerce_pos_fiscal_snapshot_enrich', array( $enriched, $order_id ), '2.0.0', 'wcpos_fiscal_snapshot_enrich' );
 			return is_array( $enriched ) ? $enriched : $snapshot;
 		};
 		return $fields;
@@ -546,7 +549,8 @@ final class Fiscal_Record_Writers {
 	 */
 	private function fail_quietly( string $type, WC_Order $order, WC_Order_Refund $refund, \Throwable $error ): void {
 		Logger::log( 'Fiscal ' . $type . ' record failed: ' . $error->getMessage() );
-		do_action( 'woocommerce_pos_fiscal_record_failed', $type, $order, array( 'refund_id' => $refund->get_id() ) );
+		do_action( 'wcpos_fiscal_record_failed', $type, $order, array( 'refund_id' => $refund->get_id() ) );
+		do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( $type, $order, array( 'refund_id' => $refund->get_id() ) ), '2.0.0', 'wcpos_fiscal_record_failed' );
 	}
 
 	/** Provenance for a refund's records: the refund's own stamp and its session's store.

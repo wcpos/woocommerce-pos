@@ -217,7 +217,7 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Force DB handler detection.
 		add_filter(
-			'woocommerce_pos_log_handler_type',
+			'wcpos_log_handler_type',
 			function () {
 				return 'database';
 			}
@@ -233,7 +233,7 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'warning', $data['entries'][1]['level'] );
 		$this->assertEquals( 'DB warning message', $data['entries'][1]['message'] );
 
-		remove_all_filters( 'woocommerce_pos_log_handler_type' );
+		remove_all_filters( 'wcpos_log_handler_type' );
 	}
 
 	/**

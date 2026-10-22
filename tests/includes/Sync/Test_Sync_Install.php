@@ -391,7 +391,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 		// The Logger suppresses a consecutive duplicate before the filter runs; the latch test
 		// logs this same line, so start from clean dedup state whatever the test order.
 		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
+		add_filter( 'wcpos_logging', $capture_log, 10, 2 );
 		$suppress = $wpdb->suppress_errors();
 
 		try {
@@ -404,7 +404,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 			do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
 		} finally {
 			remove_filter( 'query', $break_business_day_read );
-			remove_filter( 'woocommerce_pos_logging', $capture_log, 10 );
+			remove_filter( 'wcpos_logging', $capture_log, 10 );
 			\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
 			$wpdb->suppress_errors( $suppress );
 		}

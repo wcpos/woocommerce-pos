@@ -510,7 +510,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		add_filter(
-			'woocommerce_pos_payment_gateways_settings',
+			'wcpos_payment_gateways_settings',
 			static function ( $settings ) {
 				$settings['gateways']['bacs']['enabled'] = true;
 				return $settings;
@@ -577,7 +577,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 
 		add_filter( 'woocommerce_payment_gateways', $add_gateway );
-		add_filter( 'woocommerce_pos_payment_gateways_settings', $enable_gateway );
+		add_filter( 'wcpos_payment_gateways_settings', $enable_gateway );
 		$registry                   = \WC_Payment_Gateways::instance();
 		$registry->payment_gateways = array();
 		$registry->init();
@@ -613,7 +613,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'rdr_checkout', $data['provider_data']['reader_id'] );
 		} finally {
 			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
-			remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable_gateway );
+			remove_filter( 'wcpos_payment_gateways_settings', $enable_gateway );
 			$registry->payment_gateways = array();
 			$registry->init();
 		}

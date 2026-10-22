@@ -81,7 +81,7 @@ class Test_Section_Registry extends WP_UnitTestCase {
 	public function test_save_settings_unregistered_id_is_rejected(): void {
 		$pre_save_fired = 0;
 		add_filter(
-			'woocommerce_pos_pre_save_thirdparty_settings',
+			'wcpos_pre_save_thirdparty_settings',
 			function ( $settings ) use ( &$pre_save_fired ) {
 				++$pre_save_fired;
 
@@ -96,7 +96,7 @@ class Test_Section_Registry extends WP_UnitTestCase {
 		$this->assertFalse( get_option( 'woocommerce_pos_settings_thirdparty' ) );
 		$this->assertEquals( 0, $pre_save_fired );
 
-		remove_all_filters( 'woocommerce_pos_pre_save_thirdparty_settings' );
+		remove_all_filters( 'wcpos_pre_save_thirdparty_settings' );
 	}
 
 	/**
@@ -106,7 +106,7 @@ class Test_Section_Registry extends WP_UnitTestCase {
 	public function test_facade_routes_through_registered_section(): void {
 		$fired = 0;
 		add_action(
-			'woocommerce_pos_register_settings_sections',
+			'wcpos_register_settings_sections',
 			function ( $registry ) use ( &$fired ) {
 				++$fired;
 				$registry->register( new Registry_Fixture_Section() );
@@ -131,7 +131,7 @@ class Test_Section_Registry extends WP_UnitTestCase {
 		wcpos_get_settings( 'fixture' );
 		$this->assertEquals( 1, $fired );
 
-		remove_all_actions( 'woocommerce_pos_register_settings_sections' );
+		remove_all_actions( 'wcpos_register_settings_sections' );
 		\WCPOS\WooCommercePOS\Services\Settings::instance()->reset_sections_for_testing();
 		delete_option( 'woocommerce_pos_settings_fixture' );
 	}

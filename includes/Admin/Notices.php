@@ -57,9 +57,10 @@ class Notices {
 		 *
 		 * @return array $notices
 		 *
-		 * @hook woocommerce_pos_admin_notices
+		 * @hook wcpos_admin_notices
 		 */
-		$notices = apply_filters( 'woocommerce_pos_admin_notices', self::$notices );
+		$notices = apply_filters( 'wcpos_admin_notices', self::$notices );
+		$notices = apply_filters_deprecated( 'woocommerce_pos_admin_notices', array( $notices ), '2.0.0', 'wcpos_admin_notices' );
 		if ( empty( $notices ) ) {
 			return;
 		}

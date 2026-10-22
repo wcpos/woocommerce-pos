@@ -27,7 +27,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		parent::setUp();
 		// WP restores hooks between tests, while service singletons survive.
 		$writers = Fiscal_Record_Writers::instance();
-		add_action( 'woocommerce_pos_payment_voided', array( $writers, 'handle_void' ), 10, 4 );
+		add_action( 'wcpos_payment_voided', array( $writers, 'handle_void' ), 10, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $writers, 'handle_cancellation' ), 10, 2 );
 		add_action( 'woocommerce_order_refunded', array( $writers, 'handle_refund' ), 10, 2 );
 		add_action( 'wcpos_sale_completed', array( $writers, 'handle_sale_completed' ), 10, 2 );
@@ -400,7 +400,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			throw new \Error( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( wc_get_order( $order->get_id() ) );
 			$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
@@ -415,7 +415,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 
 		// Assert: it names no sale, not completion 1's.
@@ -436,11 +436,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			throw new \Error( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( wc_get_order( $order->get_id() ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		Fiscal_Record_Writers::instance()->recover( wc_get_order( $order->get_id() ) );
 		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
@@ -549,7 +549,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			throw new \Error( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 			$request->set_body_params(
@@ -566,7 +566,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			);
 			$this->server->dispatch( $request );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$this->assertSame( array(), $this->sales( $order->get_id() ) );
 
@@ -599,11 +599,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			throw new \Error( 'boom' );
 		};
 		add_action( 'wcpos_sale_completed', $listener, 5, 2 );
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$this->assertSame( array(), $this->sales( $order->get_id() ) );
 
@@ -632,11 +632,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			throw new \Error( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$elsewhere = new Order_Lock();
 		$this->assertTrue( $elsewhere->acquire( $order->get_id() ) );
@@ -675,13 +675,13 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			throw new \Error( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( $order );
 			$stale = wc_get_order( $order->get_id() );
 			$this->pay( $this->reopen( $order ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$this->assertCount( 2, $this->parked( $order->get_id() ) );
 
@@ -761,14 +761,14 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			$failed[] = $type;
 		};
 		add_filter( 'query', $throw );
-		add_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
 
 		// Act.
 		try {
 			Fiscal_Record_Writers::instance()->handle_refund( $order->get_id(), $refund->get_id() );
 		} finally {
 			remove_filter( 'query', $throw );
-			remove_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
 		}
 
 		// Assert: the throw reached fail_quietly(), not the refund request.
@@ -964,7 +964,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			throw new \Error( 'boom' );
 		};
 		add_action( 'wcpos_sale_completed', $listener, 5, 2 );
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 			$request->set_body_params(
@@ -981,7 +981,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			);
 			$recorded = $this->server->dispatch( $request );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$this->assertSame( 200, $recorded->get_status() );
 		$this->assertSame( array(), $this->sales( $order->get_id() ) );
@@ -1005,11 +1005,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			throw new \Error( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$order = $this->reopen( $order );
 
@@ -1029,11 +1029,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			throw new \Error( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$reopened = $this->reopen( $order );
 		$reopened->set_total( '80.00' );
@@ -1161,11 +1161,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$filter = static function () {
 			throw new \RuntimeException( 'boom' );
 		};
-		add_filter( 'woocommerce_pos_receipt_data', $filter );
+		add_filter( 'wcpos_receipt_data', $filter );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_data', $filter );
+			remove_filter( 'wcpos_receipt_data', $filter );
 		}
 
 		$this->assertNull( ( new Fiscal_Record_Store() )->find_sale( $order->get_id() ) );
@@ -1183,13 +1183,13 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$observe = static function ( $type ) use ( &$failed ) {
 			$failed[] = $type;
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
-		add_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
-			remove_action( 'woocommerce_pos_fiscal_record_failed', $observe );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
 		}
 
 		$this->assertNull( ( new Fiscal_Record_Store() )->find_sale( $order->get_id() ) );
@@ -1207,11 +1207,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			$snapshot['fiscal']['qr_payload'] = 'ENRICHED';
 			return $snapshot;
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich, 10, 2 );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich, 10, 2 );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$sale = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
 		$this->assertSame( $sale['number'], $seen[0]['fiscal']['sequence'] );
@@ -1226,11 +1226,11 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$enrich = static function () {
 			return 'oops';
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			$this->pay( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$sale = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
 		$this->assertIsArray( $sale );
@@ -1443,10 +1443,10 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'capture_mode' => 'manual',
 			);
 			Ledger::instance()->save( $order, array( $row ) );
-			$before = did_action( 'woocommerce_pos_payment_voided' );
+			$before = did_action( 'wcpos_payment_voided' );
 			$applied = Ledger::instance()->void( $order, $row['id'], 'Cancelled' );
 			$this->assertSame( 'voided', $applied['status'] );
-			$this->assertSame( $before + 1, did_action( 'woocommerce_pos_payment_voided' ) );
+			$this->assertSame( $before + 1, did_action( 'wcpos_payment_voided' ) );
 			$this->assertSame(
 				array(),
 				( new Fiscal_Record_Store() )->list(
