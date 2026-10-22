@@ -23,7 +23,7 @@ hook (`save_post*`, `wp_insert_post`, `transition_post_status`,
 `woocommerce_before/after_*_object_save`, `woocommerce_new_{object}` /
 `woocommerce_update_{object}`, `woocommerce_order_status_*`, `woocommerce_payment_complete`,
 `woocommerce_product_set_stock`, `woocommerce_reduce_order_stock`, the checkout
-order-creation hooks, `woocommerce_rest_insert_*`, and the rest of the list in the guard),
+order-creation hooks, `woocommerce_rest_insert_*`, and the rest of the list in `includes/Services/Save_Hooks.php`, which the guard reads),
 never call anything that re-enters the save stack: `wp_insert_post()`, `wp_update_post()`,
 `wp_delete_post()`, `wp_trash_post()`, `WC_Data::save()` on any product, order, refund,
 coupon or customer, or any other function that runs a save from the top.

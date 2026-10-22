@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Tests\Helpers;
 
 use LogicException;
 use WC_Data;
+use WCPOS\WooCommercePOS\Services\Save_Hooks;
 
 /**
  * Fails any test in which a file under `includes/` saves a post or a WooCommerce object,
@@ -58,113 +59,6 @@ class Save_Reentry_Guard {
 	 * `woocommerce_before_{type}_object_save`.
 	 */
 	const WC_DATA_TYPES = array( 'product', 'product_variation', 'order', 'order_refund', 'coupon', 'customer' );
-
-	/**
-	 * Hooks that, when running, make a save from plugin code a re-entrant save. Exact names.
-	 */
-	const REENTRY_HOOKS = array(
-		// WordPress post save stack: everything wp_insert_post(), wp_delete_post() and
-		// wp_trash_post() fire around the write.
-		'save_post',
-		'wp_insert_post',
-		'wp_after_insert_post',
-		'post_updated',
-		'pre_post_update',
-		'edit_post',
-		'transition_post_status',
-		'wp_insert_post_data',
-		'content_save_pre',
-		'pre_delete_post',
-		'pre_delete_attachment',
-		'delete_post',
-		'before_delete_post',
-		'wp_trash_post',
-
-		// Product edit screen staging hooks: they hand over the object BEFORE WooCommerce's
-		// own save, so a save here is a double save. The meta-box persistence hooks
-		// (woocommerce_process_product_meta, woocommerce_process_shop_order_meta) are not
-		// listed: WooCommerce's own meta boxes save the object inside them, so a handler
-		// saving the data it owns there follows WooCommerce's contract.
-		'woocommerce_admin_process_product_object',
-		'woocommerce_admin_process_variation_object',
-
-		// Order life-cycle: payment, stock, refunds and checkout.
-		'woocommerce_payment_complete',
-		'woocommerce_pre_payment_complete',
-		'woocommerce_reduce_order_stock',
-		'woocommerce_restore_order_stock',
-		'woocommerce_reduce_order_item_stock',
-		'woocommerce_product_set_stock',
-		'woocommerce_variation_set_stock',
-		'woocommerce_product_before_set_stock',
-		'woocommerce_variation_before_set_stock',
-		'woocommerce_order_refunded',
-		'woocommerce_refund_created',
-		'woocommerce_checkout_order_processed',
-		'woocommerce_checkout_create_order',
-		'woocommerce_checkout_update_order_meta',
-		'woocommerce_checkout_order_created',
-
-		// Checkout order creation: the item and customer writes WC_Checkout makes while it
-		// builds the order. Listed one by one; the non-write checkout filters
-		// (woocommerce_checkout_fields and friends) stay off.
-		'woocommerce_checkout_create_order_line_item',
-		'woocommerce_checkout_create_order_fee_item',
-		'woocommerce_checkout_create_order_shipping_item',
-		'woocommerce_checkout_create_order_tax_item',
-		'woocommerce_checkout_create_order_coupon_item',
-		'woocommerce_checkout_update_customer',
-
-		// WooCommerce data store create/update events, per object type. Exact names, not a
-		// woocommerce_new_ / woocommerce_update_ prefix: that would also catch settings saves
-		// (woocommerce_update_options_{tab}, woocommerce_update_option), which run at a
-		// request entry point.
-		'woocommerce_new_product',
-		'woocommerce_update_product',
-		'woocommerce_new_product_variation',
-		'woocommerce_update_product_variation',
-		'woocommerce_new_order',
-		'woocommerce_update_order',
-		'woocommerce_new_order_refund',
-		'woocommerce_update_order_refund',
-		'woocommerce_new_order_item',
-		'woocommerce_update_order_item',
-		'woocommerce_new_coupon',
-		'woocommerce_update_coupon',
-		'woocommerce_new_customer',
-		'woocommerce_update_customer',
-		'woocommerce_new_webhook',
-		'woocommerce_update_webhook',
-		'woocommerce_new_payment_token',
-		'woocommerce_update_payment_token',
-		'woocommerce_new_shipping_zone',
-		'woocommerce_update_shipping_zone',
-	);
-
-	/**
-	 * Hook families on the re-entry list, as (prefix, suffix) pairs: a hook matches when it
-	 * starts with the prefix and ends with the suffix ('' = any).
-	 */
-	const REENTRY_PATTERNS = array(
-		// WordPress post save stack: the per-type save action.
-		array( 'save_post_', '' ),
-
-		// WooCommerce object saves: WC_Data::save() and the data stores' updated-props event.
-		array( 'woocommerce_before_', '_object_save' ),
-		array( 'woocommerce_after_', '_object_save' ),
-		array( 'woocommerce_', '_object_updated_props' ),
-
-		// Order life-cycle: every status pair, woocommerce_order_status_changed, and the
-		// payment-complete status actions.
-		array( 'woocommerce_order_status_', '' ),
-		array( 'woocommerce_payment_complete_order_status_', '' ),
-
-		// REST writes by WooCommerce and WordPress core controllers.
-		array( 'woocommerce_rest_insert_', '' ),
-		array( 'woocommerce_rest_pre_insert_', '' ),
-		array( 'rest_insert_', '' ),
-		array( 'rest_after_insert_', '' ),
-	);
 
 	/**
 	 * Directory whose files are policed, with trailing slash. realpath()'d so it matches
@@ -489,26 +383,14 @@ class Save_Reentry_Guard {
 	}
 
 	/**
-	 * Whether a hook name is on the re-entry list.
+	 * Whether a hook name is on the re-entry list: production's `Save_Hooks`, so the guard and production code share one list.
 	 *
 	 * @param string $name Hook name.
 	 *
 	 * @return bool
 	 */
 	private static function is_reentry_hook( string $name ): bool {
-		if ( \in_array( $name, self::REENTRY_HOOKS, true ) ) {
-			return true;
-		}
-		foreach ( self::REENTRY_PATTERNS as $pattern ) {
-			list( $prefix, $suffix ) = $pattern;
-			if ( 0 !== strpos( $name, $prefix ) ) {
-				continue;
-			}
-			if ( '' === $suffix || ( \strlen( $name ) > \strlen( $prefix ) + \strlen( $suffix ) && substr( $name, - \strlen( $suffix ) ) === $suffix ) ) {
-				return true;
-			}
-		}
-		return false;
+		return Save_Hooks::contains( $name );
 	}
 
 	/**
