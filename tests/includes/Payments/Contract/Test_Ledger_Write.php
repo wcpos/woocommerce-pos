@@ -957,7 +957,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 			}
 			return false;
 		};
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 		Ledger::defer(
 			$id,
 			static function (): void {
@@ -975,7 +975,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 
 		// Act.
 		Ledger::flush_all();
-		remove_filter( 'woocommerce_pos_logging', $log, 10 );
+		remove_filter( 'wcpos_logging', $log, 10 );
 
 		// Assert.
 		$this->assertTrue( $ran );

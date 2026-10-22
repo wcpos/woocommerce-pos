@@ -50,7 +50,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		if ( $this->decimal_quantities ) {
-			remove_filter( 'woocommerce_pos_general_settings', array( $this, 'enable_decimal_qty_setting' ) );
+			remove_filter( 'wcpos_general_settings', array( $this, 'enable_decimal_qty_setting' ) );
 			remove_filter( 'woocommerce_stock_amount', 'floatval' );
 			add_filter( 'woocommerce_stock_amount', 'intval' );
 			$this->decimal_quantities = false;
@@ -720,7 +720,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 
 	/** Turn on decimal quantities for this test; tearDown() unwinds both filters. */
 	protected function use_decimal_quantities(): void {
-		add_filter( 'woocommerce_pos_general_settings', array( $this, 'enable_decimal_qty_setting' ) );
+		add_filter( 'wcpos_general_settings', array( $this, 'enable_decimal_qty_setting' ) );
 		remove_filter( 'woocommerce_stock_amount', 'intval' );
 		add_filter( 'woocommerce_stock_amount', 'floatval' );
 		$this->decimal_quantities = true;
