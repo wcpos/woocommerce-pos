@@ -46,7 +46,7 @@ An architecture review of the ADR 0040 money model on `next` (2026-10-22, after 
 3. c7 — **PR #2398, merged 2026-10-22 as 9638516a**
 4. c1 (+ D2) — **PR #2400, merged 2026-10-22 as 06caef3e**
 5. c4-1 (completion-history read model; independent of c2) — **PR #2401, merged 2026-10-22 as f78bc97c**
-5b. c8 (one pushable-document step + D13) — **PR #2404**
+5b. c8 (one pushable-document step + D13) — **PR #2404, merged 2026-10-22 as 22542bf6**
 6. c2 slices 1–3 (design chosen from three alternatives; spec beside this plan; needs Paul's yes on the ADR amendment)
 7. c3 (needs c2-3 and c7), then c2 slices 4–6
 8. c4-2 (after c2-5), c5, c8, c6; then the #2377 and #2378 PRs

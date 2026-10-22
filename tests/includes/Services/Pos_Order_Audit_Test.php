@@ -342,4 +342,100 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$meta[0]['value'] = 'bad';
 		$this->assertSame( array(), Pos_Order_Audit::sanitize_create_meta( $meta ) );
 	}
+
+	/**
+	 * The meta tables match `_WCPOS_PAYMENTS` and `_wcpos_payments ` to the ledger key, so the strip does too.
+	 */
+	public function test_strip_audit_meta_drops_case_and_trailing_space_variants_of_server_keys(): void {
+		// Arrange.
+		$meta = array(
+			array(
+				'key'   => '_WCPOS_PAYMENTS',
+				'value' => '{}',
+			),
+			array(
+				'key'   => '_Wcpos_Payment_Id',
+				'value' => 'x',
+			),
+			array(
+				'key'   => '_wcpos_completions ',
+				'value' => '[]',
+			),
+			array(
+				'key'   => '_POS_USER',
+				'value' => '1',
+			),
+			array(
+				'key'   => '_wcpos_payments_note',
+				'value' => 'kept',
+			),
+		);
+
+		// Act.
+		$result = Pos_Order_Audit::strip_audit_meta( $meta );
+
+		// Assert.
+		$this->assertSame(
+			array(
+				array(
+					'key'   => '_wcpos_payments_note',
+					'value' => 'kept',
+				),
+			),
+			$result
+		);
+	}
+
+	/**
+	 * A stored row under a variant spelling of a server key is protected by id like the key itself.
+	 */
+	public function test_audit_meta_ids_include_rows_under_a_variant_spelling(): void {
+		// Arrange.
+		$order = wc_create_order();
+		$order->add_meta_data( '_WCPOS_PAYMENTS', '{}' );
+		$order->add_meta_data( 'harmless', 'kept' );
+		$order->save();
+		$ids = array();
+		foreach ( wc_get_order( $order->get_id() )->get_meta_data() as $meta ) {
+			$ids[ $meta->key ] = (int) $meta->id;
+		}
+
+		// Act.
+		$protected = Pos_Order_Audit::audit_meta_ids( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertContains( $ids['_WCPOS_PAYMENTS'], $protected );
+		$this->assertNotContains( $ids['harmless'], $protected );
+	}
+
+	/**
+	 * Every order meta key a money module declares is server-owned, so a new key cannot skip the list.
+	 */
+	public function test_every_order_meta_key_the_money_modules_declare_is_server_owned(): void {
+		// Arrange.
+		$classes  = array(
+			\WCPOS\WooCommercePOS\Payments\Contract\Ledger::class,
+			\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::class,
+			\WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::class,
+			\WCPOS\WooCommercePOS\Payments\Contract\Command_Log::class,
+			\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::class,
+			\WCPOS\WooCommercePOS\Payments\Checkout_State_Repository::class,
+		);
+		$declared = array();
+		foreach ( $classes as $class ) {
+			foreach ( ( new \ReflectionClass( $class ) )->getConstants() as $name => $value ) {
+				if ( 1 === preg_match( '/META_KEY$/', $name ) ) {
+					$declared[] = $value;
+				}
+			}
+		}
+
+		// Act.
+		$missing = array_values( array_diff( $declared, Pos_Order_Audit::SERVER_MONEY_META_KEYS ) );
+
+		// Assert.
+		$this->assertGreaterThanOrEqual( 11, count( $declared ) );
+		$this->assertContains( '_wcpos_checkout_state', $declared );
+		$this->assertSame( array(), $missing );
+	}
 }
