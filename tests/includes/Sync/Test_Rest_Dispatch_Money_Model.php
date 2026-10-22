@@ -960,6 +960,10 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		// Act: reopen, drop a unit (2 -> 1), add a line of the second product.
 		$reopen   = $this->push_status( $order_id, 'pos-open' );
 		$edit     = $this->push_envelope( 'update', $this->quantity_edit( $order_id, -1 ), $this->order_revision( $order_id ) );
+		// The quantity edit on its own, before the add can mask it: 2 -> 1 returns one unit.
+		$this->assertSame( 200, $edit->get_status(), 'Response: ' . wp_json_encode( $edit->get_data() ) );
+		$this->assertSame( 9, $this->stock_of( $first ) );
+		$this->assertSame( '1', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
 		$add      = $this->push_envelope(
 			'update',
 			array(
