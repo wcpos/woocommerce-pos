@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 \defined( 'ABSPATH' ) || die;
 
 use WC_Order;
+use WC_Payment_Gateway;
 use WCPOS\WooCommercePOS\Logger;
 
 /** Mints the server-owned ledger row for legacy webview payments. */
@@ -38,10 +39,60 @@ class Webview_Passthrough {
 		// runs on this same filter at PHP_INT_MAX and lands the merchant's configured status.
 		add_filter( 'woocommerce_payment_successful_result', array( __CLASS__, 'on_payment_successful_result' ), 1, 2 );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 10, 3 );
+		// Priority 100: after Gateways::available_payment_gateways() (99) rebuilds the POS list.
+		add_filter( 'woocommerce_available_payment_gateways', array( __CLASS__, 'drop_full_total_gateways' ), 100 );
+		add_filter( 'woocommerce_no_available_payment_methods_message', array( __CLASS__, 'no_gateways_message' ) );
 	}
 
 	/**
-	 * Remember the order WooCommerce is about to hand to a gateway.
+	 * Whether order-pay refuses the gateway (ADR 0040 D3): a webview-mode gateway charges the order total,
+	 * so it cannot pay a POS sale holding a captured tender. Pro's server and device modes charge the balance.
+	 *
+	 * @param WC_Order                $order   Order being paid.
+	 * @param WC_Payment_Gateway|null $gateway Chosen gateway; null when unknown.
+	 */
+	private static function refuses( WC_Order $order, ?WC_Payment_Gateway $gateway ): bool {
+		if ( ( $gateway && 'webview' !== Descriptor_Builder::resolve_mode( $gateway ) ) || ! wcpos_is_pos_order( $order ) ) {
+			return false;
+		}
+		return (bool) array_filter( Ledger::instance()->read( $order ), static fn( $row ) => in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) );
+	}
+
+	/** The order whose pay page this request renders, or null off the order-pay endpoint. */
+	private static function order_pay_order(): ?WC_Order {
+		$order = isset( $GLOBALS['wp'] ) && is_wc_endpoint_url( 'order-pay' ) ? wc_get_order( absint( $GLOBALS['wp']->query_vars['order-pay'] ) ) : null;
+		return $order instanceof WC_Order ? $order : null;
+	}
+
+	/**
+	 * Drop the gateways order-pay refuses for the order on the pay page.
+	 *
+	 * @param mixed $gateways Available gateways; other plugins call this filter with anything.
+	 * @return mixed
+	 */
+	public static function drop_full_total_gateways( $gateways ) {
+		$order = is_array( $gateways ) ? self::order_pay_order() : null;
+		return $order ? array_filter( $gateways, static fn( $gateway ) => $gateway instanceof WC_Payment_Gateway && ! self::refuses( $order, $gateway ) ) : $gateways;
+	}
+
+	/**
+	 * Say why the pay page lists no gateway when order-pay refused them all.
+	 *
+	 * @param mixed $message WooCommerce's message.
+	 * @return mixed
+	 */
+	public static function no_gateways_message( $message ) {
+		$order = self::order_pay_order();
+		return $order && self::refuses( $order, null ) ? self::refusal() : $message;
+	}
+
+	/** The refusal shown on the pay page. */
+	private static function refusal(): string {
+		return __( 'This sale has a payment recorded at the till. Finish it at the till.', 'woocommerce-pos' );
+	}
+
+	/**
+	 * Remember the order WooCommerce is about to hand to a gateway, or refuse a full-total one (D3).
 	 *
 	 * WC_Form_Handler::pay_action() fires this after verifying the pay nonce and the
 	 * order key and immediately before calling the gateway's process_payment(). It is
@@ -52,7 +103,13 @@ class Webview_Passthrough {
 	 * @param mixed $order Order being paid.
 	 */
 	public static function on_before_pay_action( $order ): void {
-		self::$paying_order_id = $order instanceof WC_Order ? $order->get_id() : 0;
+		$method_id = isset( $_POST['payment_method'] ) ? sanitize_text_field( wp_unslash( $_POST['payment_method'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verified the pay nonce before this action.
+		$refused   = $order instanceof WC_Order && self::refuses( $order, Descriptor_Builder::instance()->gateway( (string) $method_id ) );
+		if ( $refused ) {
+			// An error notice is WooCommerce's own stop: pay_action() never calls process_payment() with one queued.
+			wc_add_notice( self::refusal(), 'error' );
+		}
+		self::$paying_order_id = $order instanceof WC_Order && ! $refused ? $order->get_id() : 0;
 	}
 
 	/**
