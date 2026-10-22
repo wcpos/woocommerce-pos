@@ -1196,6 +1196,157 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'cancelled', wc_get_order( $order_id )->get_status() );
 	}
 
+	/**
+	 * Push a delete of the order on its current revision.
+	 *
+	 * @param int       $order_id Order id.
+	 * @param bool|null   $force    The envelope's `force`, or null to leave it out (trash).
+	 * @param string|null $revision The base revision, or null to read the current one.
+	 */
+	protected function push_delete( int $order_id, ?bool $force = null, ?string $revision = null ) {
+		$this->last_mutation_id = sprintf( 'e5f6a7b8-5555-4666-8777-%012d', ++$this->mutation_seq );
+		$envelope               = array(
+			'mutationId'   => $this->last_mutation_id,
+			'operation'    => 'delete',
+			'collection'   => 'orders',
+			'recordId'     => self::REC,
+			'baseRevision' => $revision ?? $this->order_revision( $order_id ),
+		);
+		if ( null !== $force ) {
+			$envelope['force'] = $force;
+		}
+		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
+		$request->set_body( (string) wp_json_encode( $envelope ) );
+
+		return $this->server->dispatch( $request );
+	}
+
+	public function test_delete_with_a_pending_row_is_refused_money_in_motion_and_deletes_nothing(): void {
+		// Arrange: an open sale whose card leg is still pending.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$row      = $this->card_row( 'pending' );
+		$this->seed_rows( $order_id, array( $row ) );
+
+		// Act.
+		$response = $this->push_delete( $order_id );
+
+		// Assert: refused like a cancel, naming the leg; the order is not trashed.
+		$this->assert_money_in_motion( $response, $order_id, 'pos-open' );
+		$this->assertSame( $row['id'], $response->get_data()['data']['payment_id'] );
+		$this->assertNull( $response->get_data()['data']['attempt_id'] );
+	}
+
+	public function test_delete_with_a_sent_attempt_is_refused_money_in_motion(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$attempt  = wp_generate_uuid4();
+		$order    = wc_get_order( $order_id );
+		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'sent' ) );
+		$order->save();
+
+		// Act.
+		$response = $this->push_delete( $order_id );
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'pos-open' );
+		$this->assertNull( $response->get_data()['data']['payment_id'] );
+		$this->assertSame( $attempt, $response->get_data()['data']['attempt_id'] );
+	}
+
+	public function test_force_delete_with_an_authorized_row_is_refused_and_restores_no_stock(): void {
+		// Arrange: a paid sale of two (stock 8) holding an authorized leg; delete restores stock.
+		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		$product  = $this->stock_product( 10 );
+		$order_id = $this->paid_sale_of_two( $product );
+		$row      = $this->card_row( 'authorized' );
+		$this->seed_rows( $order_id, array( $row ) );
+
+		// Act.
+		try {
+			$response = $this->push_delete( $order_id, true );
+		} finally {
+			remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		}
+
+		// Assert.
+		$this->assert_money_in_motion( $response, $order_id, 'processing' );
+		$this->assertSame( $row['id'], $response->get_data()['data']['payment_id'] );
+		$this->assertSame( 8, $this->stock_of( $product ) );
+	}
+
+	public function test_delete_with_only_captured_rows_is_accepted(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
+		$this->seed_rows( $order_id, array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ), $this->card_row( 'voided' ) ) );
+
+		// Act.
+		$response = $this->push_delete( $order_id );
+
+		// Assert: trashed; the rows stay on the order.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'trash', wc_get_order( $order_id )->get_status() );
+		$this->assertCount( 2, Ledger::instance()->read( wc_get_order( $order_id ) ) );
+	}
+
+	public function test_delete_holds_the_order_lock_from_the_revision_read_through_the_forward(): void {
+		// Arrange: a probe that tries to take the order lock as another writer would.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$probe    = static function () use ( $order_id ): bool {
+			$other = new Order_Lock();
+			$taken = $other->acquire( $order_id );
+			if ( $taken ) {
+				$other->release( $order_id );
+			}
+			return $taken;
+		};
+		$seen     = array();
+		$spy      = static function ( $result, $server, $request ) use ( $probe, $order_id, &$seen ) {
+			if ( '/wc/v3/orders/' . $order_id === $request->get_route() ) {
+				$seen[ $request->get_method() ][] = $probe();
+			}
+			return $result;
+		};
+		$revision = $this->order_revision( $order_id );
+		add_filter( 'rest_pre_dispatch', $spy, 10, 3 );
+
+		// Act.
+		try {
+			$response = $this->push_delete( $order_id, null, $revision );
+		} finally {
+			remove_filter( 'rest_pre_dispatch', $spy, 10 );
+		}
+
+		// Assert: the revision read (the first inner GET) and the forwarded DELETE ran under the lock; it is free after.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertFalse( $seen['GET'][0] );
+		$this->assertSame( array( false ), $seen['DELETE'] );
+		$this->assertTrue( $probe() );
+	}
+
+	public function test_close_and_push_name_the_same_payment_in_motion(): void {
+		// Arrange.
+		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
+		$row      = $this->card_row( 'pending' );
+		$this->seed_rows( $order_id, array( $row ) );
+
+		// Act.
+		$closed    = $this->money_command( '/wcpos/v2/orders/' . $order_id . '/close', $order_id );
+		$cancelled = $this->push_status( $order_id, 'cancelled' );
+		$deleted   = $this->push_delete( $order_id );
+
+		// Assert.
+		$this->assertSame( 409, $closed->get_status(), 'Response: ' . wp_json_encode( $closed->get_data() ) );
+		$this->assertSame( 'wcpos_payment_in_flight', $closed->get_data()['code'] );
+		$this->assertSame( $row['id'], $closed->get_data()['data']['payment_id'] );
+		$this->assertArrayNotHasKey( 'attempt_id', $closed->get_data()['data'] );
+		$this->assert_money_in_motion( $cancelled, $order_id, 'pos-open' );
+		$this->assertSame( $row['id'], $cancelled->get_data()['data']['payment_id'] );
+		$this->assert_money_in_motion( $deleted, $order_id, 'pos-open' );
+		$this->assertSame( $row['id'], $deleted->get_data()['data']['payment_id'] );
+	}
+
 	protected function currency_and_quantity_edit( int $order_id ): array {
 		$payload             = $this->quantity_edit( $order_id );
 		$payload['currency'] = 'EUR';

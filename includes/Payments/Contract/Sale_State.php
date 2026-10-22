@@ -22,31 +22,67 @@ final class Sale_State {
 	/** The statuses a sale is open in: it takes lines, tender and a close. */
 	public const OPEN_STATUSES = array( 'pos-open', 'pos-partial', 'pending', 'on-hold' );
 
-	/** @var WC_Order The order read; kept for has_money()'s lazy refunds query. */
+	/**
+	 * The order read; kept for has_money()'s lazy refunds query.
+	 *
+	 * @var WC_Order
+	 */
 	private WC_Order $order;
 
-	/** @var array Payment rows. */
+	/**
+	 * Payment rows.
+	 *
+	 * @var array
+	 */
 	private array $rows;
 
-	/** @var array<string, string> Gateway attempt id => state. */
+	/**
+	 * Gateway attempt id => state.
+	 *
+	 * @var array<string, string>
+	 */
 	private array $attempts;
 
-	/** @var array|null The awaiting-customer stamp. */
+	/**
+	 * The awaiting-customer stamp.
+	 *
+	 * @var array|null
+	 */
 	private ?array $stamp;
 
-	/** @var bool Whether the latest completion stands. */
+	/**
+	 * Whether the latest completion stands.
+	 *
+	 * @var bool
+	 */
 	private bool $stands;
 
-	/** @var bool WooCommerce's is_editable(). */
+	/**
+	 * WooCommerce's is_editable().
+	 *
+	 * @var bool
+	 */
 	private bool $editable;
 
-	/** @var string Order status, without the `wc-` prefix. */
+	/**
+	 * Order status, without the `wc-` prefix.
+	 *
+	 * @var string
+	 */
 	private string $status;
 
-	/** @var bool Whether `date_paid` is set. */
+	/**
+	 * Whether `date_paid` is set.
+	 *
+	 * @var bool
+	 */
 	private bool $dated_paid;
 
-	/** @var bool|null Memoised has_money(). */
+	/**
+	 * Memoised has_money().
+	 *
+	 * @var bool|null
+	 */
 	private ?bool $has_money = null;
 
 	/**
