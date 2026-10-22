@@ -59,7 +59,7 @@ final class Request_Lane {
 			 *
 			 * @param string $lane One of the Request_Lane constants.
 			 */
-			self::$lane = apply_filters( 'wcpos_request_lane', self::detect() );
+			self::$lane = (string) apply_filters( 'wcpos_request_lane', self::detect() );
 			self::$lane = (string) apply_filters_deprecated( 'woocommerce_pos_request_lane', array( self::$lane ), '2.0.0', 'wcpos_request_lane' );
 		}
 		return self::$lane;
