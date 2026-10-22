@@ -163,8 +163,9 @@ final class Command_Log {
 	}
 
 	/**
-	 * Mark the entries a completing write stages as owing the paid transition: the draft's order-level
-	 * entries, and every row entry storage does not hold yet. Returns the rows.
+	 * Mark the commands of the write that covers the sale as owing the paid transition: the draft's
+	 * order-level entries, and every entry on each row the write changes (one storage already holds too,
+	 * when its row's confirmation is what covers the sale). Returns the rows.
 	 *
 	 * @param Ledger_Draft $draft  The write's draft.
 	 * @param array        $rows   Settled rows.
@@ -178,15 +179,10 @@ final class Command_Log {
 		foreach ( $draft->commands() as $command_id => $entry ) {
 			$draft->command( $command_id, array_merge( $entry, $owed ) );
 		}
-		$held = array();
-		foreach ( $stored as $row ) {
-			$held[ strtolower( (string) $row['id'] ) ] = is_array( $row['commands'] ?? null ) ? $row['commands'] : array();
-		}
+		$held = array_column( $stored, null, 'id' );
 		foreach ( $rows as &$row ) {
-			foreach ( array_keys( $row['commands'] ) as $command_id ) {
-				if ( ! isset( $held[ $row['id'] ][ $command_id ] ) ) {
-					$row['commands'][ $command_id ] = array_merge( $row['commands'][ $command_id ], $owed );
-				}
+			if ( ( $held[ $row['id'] ] ?? null ) !== json_decode( (string) wp_json_encode( Ledger::to_wire( $row ) ), true ) ) {
+				$row['commands'] = array_map( static fn( $entry ) => array_merge( $entry, $owed ), $row['commands'] );
 			}
 		}
 		unset( $row );

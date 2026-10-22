@@ -2484,7 +2484,7 @@ class Ledger {
 				? 'pending' === ( $old['status'] ?? '' ) && empty( $old['refunds'] ) && empty( $old['closure_id'] )
 				: ( empty( $old['closure_id'] ) || ( $new['closure_id'] ?? null ) === $old['closure_id'] )
 					&& ( 'captured' !== ( $old['status'] ?? '' ) || (
-						Money::minor( $old['amount'] ) === Money::minor( $new['amount'] ) && (string) $old['currency'] === $new['currency'] && (string) $old['method_id'] === $new['method_id']
+						( Money::minor( $old['amount'] ) === Money::minor( $new['amount'] ) || $this->tipped( $old, $new ) ) && (string) $old['currency'] === $new['currency'] && (string) $old['method_id'] === $new['method_id']
 						// A provider's amount mismatch fails it too: the confirmation refuting the arrival.
 						&& ( 'captured' === $new['status'] || ( 'voided' === $new['status'] && 'manual' === ( $old['capture_mode'] ?? '' ) ) || ( 'failed' === $new['status'] && 'amount_mismatch' === $new['failure_reason'] ) )
 					) );
@@ -2496,6 +2496,18 @@ class Ledger {
 			}
 		}
 		return array_values( $settled );
+	}
+
+	/**
+	 * Whether a captured row's amount rose by exactly the verified on-reader tip now set on it, staying captured.
+	 *
+	 * @param array $old Stored row.
+	 * @param array $new Settled row.
+	 */
+	private function tipped( array $old, array $new ): bool {
+		$tip = Money::minor( $new['tip'] ?? 0 );
+		return 'captured' === $new['status'] && null === ( $old['tip'] ?? null ) && $tip > 0 && Money::minor( $new['amount'] ) === Money::minor( $old['amount'] ) + $tip
+			&& 'on_reader' === ( Descriptor_Builder::instance()->get( (string) $old['method_id'] )['capabilities']['tips'] ?? 'none' );
 	}
 
 	/**
@@ -2730,6 +2742,12 @@ class Ledger {
 				'payments' => array_map( array( __CLASS__, 'to_wire' ), $advanced ),
 			);
 			$order->update_meta_data( self::META_KEY, wp_json_encode( $ledger ) );
+			$order->delete_meta_data( self::LIVE_LEG_META_KEY ); // Advanced rows leave the sweep's selection unless still live.
+			foreach ( $advanced as $row ) {
+				if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) ) {
+					$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
+				}
+			}
 		}
 		return null !== $advanced;
 	}
@@ -2846,7 +2864,8 @@ class Ledger {
 		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
 		foreach ( $normalized as $row ) {
 			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
-			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
+			// An owed row stays in the sweep's selection until its completion advances it.
+			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) || in_array( Command_Log::OWED, array_column( $row['commands'] ?? array(), 'phase' ), true ) ) {
 				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
 			}
 		}
