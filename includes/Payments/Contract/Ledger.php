@@ -68,13 +68,14 @@ class Ledger {
 	/** Who opened a row: the till, a webview mint, or WooCommerce itself (a tender adopted at reopen, D5). */
 	public const SOURCES = array( 'app', 'webview', 'woocommerce' );
 	/**
-	 * Write modes: project and maybe complete; stage only; close (may complete zero or on-hold); or the
-	 * sweep, which as the recovery pass may also complete a sale its rows already covered.
+	 * Write modes: project and maybe complete; stage only; close (may complete zero or on-hold); or settle, which
+	 * may also complete a sale its rows already cover: the sweep's recovery pass, and an arrival stored held
+	 * while its parked confirmations were drained.
 	 */
 	public const MODE_AUTO  = 'auto';
 	public const MODE_HOLD  = 'hold';
 	public const MODE_CLOSE = 'close';
-	public const MODE_SWEEP = 'sweep';
+	public const MODE_SETTLE = 'settle';
 
 	/**
 	 * Shared instance.
@@ -802,7 +803,8 @@ class Ledger {
 			$this->note_mismatch( $order, ...$failed );
 			return $this->refusal_error( (array) $this->find( $order, $row['id'] ), $order );
 		}
-		$this->write( $order );
+		// The sale owed a balance before this arrival, so rows that cover it now are this tender's to complete.
+		$this->write( $order, null, self::MODE_SETTLE );
 		$this->refresh( $order );
 		$row = $this->find( $order, $row['id'] );
 		Logger::log( sprintf( 'WCPOS payment %s recorded on order #%d: %s %s via %s (%s) by cashier #%d', $row['id'], $order->get_id(), $row['amount'], $row['currency'], $row['method_id'], $row['status'], $row['cashier_id'] ) );
@@ -2304,7 +2306,7 @@ class Ledger {
 	 *                              run twice. Null is a replay: it completes a sale its rows cover only while a
 	 *                              command's entry still owes the paid transition (`Command_Log::OWED`).
 	 * @param string        $mode   MODE_AUTO, MODE_HOLD (stage only), MODE_CLOSE (may complete zero or on-hold) or
-	 *                              MODE_SWEEP (the recovery pass: may complete a sale its rows already cover).
+	 *                              MODE_SETTLE (may complete a sale its rows already cover: the sweep, an arrival).
 	 * @throws Ledger_Persistence_Exception Retryable; `stage` names the step that failed.
 	 */
 	public function write( $order, ?callable $change = null, string $mode = self::MODE_AUTO ): Ledger_Written {
@@ -2437,7 +2439,7 @@ class Ledger {
 			// A sale its rows already covered completes only on a close, a sweep, or the replay of a command
 			// whose entry still owes it (rule 3: a reopened sale its rows still cover is covered and open, and
 			// stays open under other writes). Decided from the first read, never this write's own half-stored S1.
-			$may    = $may ?? ( ! $this->project( $order, $stored, $covering )['completes'] || in_array( $mode, array( self::MODE_CLOSE, self::MODE_SWEEP ), true ) || ( null === $change && Command_Log::owing( $order, $stored ) ) );
+			$may    = $may ?? ( ! $this->project( $order, $stored, $covering )['completes'] || in_array( $mode, array( self::MODE_CLOSE, self::MODE_SETTLE ), true ) || ( null === $change && Command_Log::owing( $order, $stored ) ) );
 			$draft  = new Ledger_Draft( $order, $stored );
 			$answer = null === $change ? null : $change( $draft );
 			$rows   = $this->settle( $order, $stored, $draft->rows() );

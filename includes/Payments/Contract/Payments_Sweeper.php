@@ -158,7 +158,7 @@ final class Payments_Sweeper {
 					}
 					// Project the reconciled legs; as the recovery pass the sweep also completes a sale its rows cover.
 					try {
-						$ledger->write( $order_id, null, Ledger::MODE_SWEEP );
+						$ledger->write( $order_id, null, Ledger::MODE_SETTLE );
 					} catch ( Ledger_Persistence_Exception $error ) {
 						Logger::log( sprintf( 'WCPOS payment sweep on order #%d: %s', $order_id, $error->getMessage() ) );
 					}
