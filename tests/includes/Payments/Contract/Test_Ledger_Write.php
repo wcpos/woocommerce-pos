@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
@@ -16,6 +17,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Save_Hooks;
 use WP_UnitTestCase;
@@ -466,11 +468,12 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( array( $row['id'] ), array_column( $this->stored_rows( $order->get_id() ), 'id' ) );
 	}
 
-	/** A covered open sale stays open under a write that changes a row (rule 3); a replay with no change completes it. */
+	/** A covered open sale stays open under a write that changes a row (rule 3); the replay of a command owing it completes it. */
 	public function test_write_covered_open_sale_completes_only_on_replay(): void {
-		// Arrange.
+		// Arrange: the covering row's command stored its rows and still owes the paid transition.
 		$order = $this->create_pos_order();
-		$row   = $this->row( '92.95' );
+		$entry = array_merge( Command_Log::entry( 'sha256:cash', 'record' ), array( 'phase' => Command_Log::OWED ) );
+		$row   = Command_Log::with_on_row( $this->row( '92.95' ), wp_generate_uuid4(), $entry );
 		$this->seed_rows( $order->get_id(), array( $row ) );
 
 		// Act.
@@ -1032,6 +1035,241 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `record` failing after S1, after S2 or after S3 (its answer lost), then replayed with the same
+	 * command: one completion, one fiscal sale, stock reduced once, the row of a single run.
+	 *
+	 * @dataProvider record_failures
+	 *
+	 * @param string|null $stage The step that fails once; null when only the answer is lost.
+	 */
+	public function test_record_failing_at_stage_then_replayed_lands_one_completion( ?string $stage ): void {
+		// Arrange.
+		global $wpdb;
+		$order   = $this->create_pos_order();
+		$id      = $order->get_id();
+		$input   = $this->tender( '92.95' );
+		$command = $this->record_command( $input );
+		$undo    = null === $stage ? static fn() => null : $this->inject( $stage, $id );
+		$caught  = null;
+
+		// Act.
+		try {
+			Ledger::instance()->record( wc_get_order( $id ), $input, array(), $command );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$undo();
+		}
+		$wpdb->last_error = '';
+		$replayed = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $command );
+
+		// Assert.
+		$this->assertSame( $stage, $caught ? $caught->stage : null );
+		$saved = $this->fresh( $id );
+		$this->assertSame( 'completed', $saved->get_status() );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertSame( array( $input['id'] ), Completion_History::of( $saved )->standing()['payment_ids'] );
+		$this->assertSame(
+			1,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type' => 'sale',
+				)
+			)
+		);
+		$this->assertSame( 9, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
+		$rows = $this->stored_rows( $id );
+		$this->assertSame( array( $input['id'] ), array_column( $rows, 'id' ) );
+		$this->assertSame( 'captured', $rows[0]['status'] );
+		$this->assertSame( $rows[0], $replayed, 'The replay answers the row as stored.' );
+		$this->assertArrayNotHasKey( 'phase', $rows[0]['commands'][ $input['id'] ], 'S3 advanced the command past its rows.' );
+	}
+
+	/** Failures after S1 (the paid transition fails), after S2 (the completion fails) and after S3. */
+	public function record_failures(): array {
+		return array(
+			'after S1' => array( 'paid' ),
+			'after S2' => array( 'completion' ),
+			'after S3' => array( null ),
+		);
+	}
+
+	/** A `record` whose S2 failed leaves its command entry saying `rows`: storage knows the paid transition is owed. */
+	public function test_record_failing_after_rows_leaves_its_command_owing_the_paid_transition(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$input   = $this->tender( '92.95' );
+		$undo    = $this->inject( 'paid', $order->get_id() );
+
+		// Act.
+		try {
+			Ledger::instance()->record( $order, $input, array(), $this->record_command( $input ) );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			unset( $error );
+		} finally {
+			$undo();
+		}
+
+		// Assert.
+		$rows = $this->stored_rows( $order->get_id() );
+		$this->assertSame( 'rows', $rows[0]['commands'][ $input['id'] ]['phase'] ?? null );
+		$this->assertSame( 'pos-open', $this->stored_status( $order->get_id() ) );
+	}
+
+	/** A partial `record` owes no paid transition: its entry carries no `rows` phase. */
+	public function test_record_partial_tender_marks_no_owed_phase(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$input = $this->tender( '20.00' );
+
+		// Act.
+		Ledger::instance()->record( $order, $input, array(), $this->record_command( $input ) );
+
+		// Assert.
+		$rows = $this->stored_rows( $order->get_id() );
+		$this->assertArrayNotHasKey( 'phase', $rows[0]['commands'][ $input['id'] ] );
+		$this->assertSame( 'pos-partial', $this->stored_status( $order->get_id() ) );
+	}
+
+	/** `close` on a covered open sale completes it once, its command entry naming the completion (S3 carries the ref). */
+	public function test_close_covered_sale_completes_with_the_close_ref(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$this->seed_rows( $order->get_id(), array( $this->row( '92.95' ) ) );
+		$command = array(
+			'id'   => wp_generate_uuid4(),
+			'fp'   => 'sha256:close',
+			'kind' => 'close',
+		);
+
+		// Act.
+		$closed = Ledger::instance()->close( wc_get_order( $order->get_id() ), $command );
+
+		// Assert.
+		$saved = $this->fresh( $order->get_id() );
+		$entry = Command_Log::find( $saved, Ledger::instance()->read( $saved ), $command['id'] );
+		$this->assertSame( 1, $closed['completion']['n'] );
+		$this->assertSame( Completion_History::of( $saved )->standing()['id'], $closed['completion']['id'] );
+		$this->assertSame( $closed['completion']['id'], $entry['ref'] );
+		$this->assertArrayNotHasKey( 'phase', $entry );
+		$this->assertSame(
+			1,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'sale',
+				)
+			)
+		);
+	}
+
+	/** A `close` whose paid transition failed is completed by the same command again, naming its completion. */
+	public function test_close_failing_after_rows_then_retried_completes_once_with_the_ref(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$this->seed_rows( $id, array( $this->row( '92.95' ) ) );
+		$command = array(
+			'id'   => wp_generate_uuid4(),
+			'fp'   => 'sha256:close',
+			'kind' => 'close',
+		);
+		$undo    = $this->inject( 'paid', $id );
+		$caught  = null;
+		try {
+			Ledger::instance()->close( wc_get_order( $id ), $command );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$undo();
+		}
+		$owed = Command_Log::find( $this->fresh( $id ), $this->stored_rows( $id ), $command['id'] );
+
+		// Act.
+		$closed = Ledger::instance()->close( wc_get_order( $id ), $command );
+
+		// Assert.
+		$this->assertSame( 'paid', $caught ? $caught->stage : null );
+		$this->assertSame( 'rows', $owed['phase'] ?? null );
+		$saved = $this->fresh( $id );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertSame( $closed['completion']['id'], Command_Log::find( $saved, $this->stored_rows( $id ), $command['id'] )['ref'] );
+	}
+
+	/** The sweeper on an order whose write stopped after S1 runs the paid transition, then the completion, once. */
+	public function test_sweeper_on_s1_only_order_runs_paid_then_completion_once(): void {
+		// Arrange: the covering row stored with its command owing S2, beside a live leg the sweep selects the order by.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$cash  = Command_Log::with_on_row( $this->row( '92.95' ), wp_generate_uuid4(), Command_Log::entry( 'sha256:cash', 'record' ) );
+		$live  = $this->row( '1.00', 'pending', array( 'capture_mode' => 'sweep_none' ) );
+		$undo  = $this->inject( 'paid', $id );
+		try {
+			Ledger::instance()->write(
+				$id,
+				static function ( Ledger_Draft $draft ) use ( $cash, $live ): void {
+					$draft->put( $cash );
+					$draft->put( $live );
+				}
+			);
+		} catch ( Ledger_Persistence_Exception $error ) {
+			unset( $error );
+		} finally {
+			$undo();
+		}
+		$this->assertSame( 'pos-open', $this->stored_status( $id ), 'Precondition: S1 only.' );
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$saved = $this->fresh( $id );
+		$this->assertSame( 'completed', $saved->get_status() );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertSame(
+			1,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type' => 'sale',
+				)
+			)
+		);
+		$this->assertSame( 9, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
+	}
+
+	/** Rule 3: a write with no change on a reopened sale its rows still cover runs no paid transition. */
+	public function test_write_without_change_on_reopened_covered_sale_runs_no_paid_transition(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$input = $this->tender( '92.95' );
+		Ledger::instance()->record( $order, $input, array(), $this->record_command( $input ) );
+		$reopened = $this->fresh( $id );
+		$reopened->set_status( 'pos-open' );
+		$reopened->save();
+		$this->assertNull( Completion_History::of( $this->fresh( $id ) )->standing(), 'Precondition: reopened.' );
+		$paid = 0;
+		add_action(
+			'woocommerce_pre_payment_complete',
+			function () use ( &$paid ): void {
+				++$paid;
+			}
+		);
+
+		// Act.
+		$written = Ledger::instance()->write( $id );
+
+		// Assert.
+		$this->assertSame( 0, $paid );
+		$this->assertSame( 'pos-open', $this->stored_status( $id ) );
+		$this->assertNull( $written->completion );
+		$this->assertCount( 1, Completion_History::of( $this->fresh( $id ) )->entries() );
+	}
+
+	/**
 	 * Make one step of the next write fail.
 	 *
 	 * @param string $stage Step.
@@ -1093,6 +1331,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	 */
 	private function pay( int $id, array $row ): void {
 		$stored = in_array( $row['id'], array_column( $this->stored_rows( $id ), 'id' ), true );
+		$row    = Command_Log::with_on_row( $row, $row['id'], Command_Log::entry( 'sha256:pay', 'record' ) );
 		Ledger::instance()->write( $id, $stored ? null : fn( Ledger_Draft $draft ) => $draft->put( $row ) );
 	}
 
@@ -1120,6 +1359,32 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 				add_action( ...$listener );
 			}
 		}
+	}
+
+	/**
+	 * The till's input for a cash tender.
+	 *
+	 * @param string $amount Amount.
+	 */
+	private function tender( string $amount ): array {
+		return array(
+			'id'        => wp_generate_uuid4(),
+			'method_id' => 'pos_cash',
+			'amount'    => $amount,
+		);
+	}
+
+	/**
+	 * The admitted `record` command for a tender: its row id, its body fingerprint (as the route builds it).
+	 *
+	 * @param array $input Tender input.
+	 */
+	private function record_command( array $input ): array {
+		return array(
+			'id'   => $input['id'],
+			'fp'   => Command_Log::fingerprint( 'record', '', array( 'payment' => $input ) ),
+			'kind' => 'record',
+		);
 	}
 
 	/**

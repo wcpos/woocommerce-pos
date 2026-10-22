@@ -427,6 +427,11 @@ class Payments_Controller extends WC_REST_Controller {
 			}
 			return new WP_Error( 'wcpos_command_conflict', __( 'This command ID was already used with a different request.', 'woocommerce-pos' ), $data );
 		}
+		if ( $stored && 'close' === $kind && Command_Log::OWED === ( $stored['phase'] ?? null ) && Command_Log::owing( $order, Ledger::instance()->read( $order ) ) ) {
+			// A close that stored its entry and still owes the paid transition: the replay heals from storage.
+			$order  = Ledger::instance()->write( $order, null, Ledger::MODE_CLOSE )->order;
+			$stored = Command_Log::find( $order, Ledger::instance()->read( $order ), $command['id'] );
+		}
 		if ( $stored && ! in_array( $kind, array( 'record', 'intent', 'submit' ), true ) ) {
 			return $this->replay( $order, $kind, $stored );
 		}

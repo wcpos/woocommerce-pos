@@ -27,6 +27,11 @@ final class Command_Log {
 	public const ORDER_KINDS = array( 'submit', 'cancel', 'close' );
 	/** The order-level map, in `Pos_Order_Audit::SERVER_MONEY_META_KEYS` so a push cannot write it. */
 	public const META_KEY = '_wcpos_commands';
+	/**
+	 * An entry's `phase` while the write it rode stored its rows (S1) and still owes the paid transition
+	 * (S2): the replay of that command completes the sale. The completion (S3) advances it.
+	 */
+	public const OWED = 'rows';
 
 	/**
 	 * The body fingerprint: route, target and the body as sent (keys sorted at every depth, values
@@ -154,6 +159,88 @@ final class Command_Log {
 			unset( $map[ strtolower( $command_id ) ] );
 			$order->update_meta_data( self::META_KEY, (string) wp_json_encode( (object) $map ) );
 		}
+	}
+
+	/**
+	 * Mark the entries a completing write stages as owing the paid transition: the draft's order-level
+	 * entries, and every row entry storage does not hold yet. Returns the rows.
+	 *
+	 * @param Ledger_Draft $draft  The write's draft.
+	 * @param array        $rows   Settled rows.
+	 * @param array        $stored Stored rows.
+	 */
+	public static function owe( Ledger_Draft $draft, array $rows, array $stored ): array {
+		foreach ( $draft->commands() as $command_id => $entry ) {
+			$draft->command( $command_id, array_merge( $entry, array( 'phase' => self::OWED ) ) );
+		}
+		$held = array();
+		foreach ( $stored as $row ) {
+			$held[ strtolower( (string) $row['id'] ) ] = is_array( $row['commands'] ?? null ) ? $row['commands'] : array();
+		}
+		foreach ( $rows as &$row ) {
+			foreach ( array_keys( $row['commands'] ) as $command_id ) {
+				if ( ! isset( $held[ $row['id'] ][ $command_id ] ) ) {
+					$row['commands'][ $command_id ]['phase'] = self::OWED;
+				}
+			}
+		}
+		unset( $row );
+		return $rows;
+	}
+
+	/**
+	 * Whether a command on the order still owes the paid transition: its entry says so and no completion
+	 * landed since it was answered (one that did, by another path, settled it).
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	public static function owing( WC_Order $order, array $rows ): bool {
+		$latest  = Completion_History::of( $order )->latest();
+		$since   = null === $latest ? PHP_INT_MIN : (int) strtotime( (string) $latest['at_gmt'] );
+		$entries = array_values( self::read( $order ) );
+		foreach ( $rows as $row ) {
+			$entries = array_merge( $entries, array_values( array_filter( is_array( $row['commands'] ?? null ) ? $row['commands'] : array(), 'is_array' ) ) );
+		}
+		foreach ( $entries as $entry ) {
+			if ( self::OWED === ( $entry['phase'] ?? null ) && (int) strtotime( (string) ( $entry['at_gmt'] ?? '' ) ) >= $since ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Advance every owing entry once the completion stands: stage the order map (a close naming the
+	 * completion it answered) and return the rows advanced; null when nothing owed.
+	 *
+	 * @param WC_Order $order         Order object; the map is staged on it, the caller saves.
+	 * @param array    $rows          Stored rows.
+	 * @param string   $completion_id The standing completion.
+	 */
+	public static function advance( WC_Order $order, array $rows, string $completion_id ): ?array {
+		$map  = self::read( $order );
+		$owed = false;
+		foreach ( $map as $command_id => $entry ) {
+			if ( self::OWED === ( $entry['phase'] ?? null ) ) {
+				unset( $map[ $command_id ]['phase'] );
+				$map[ $command_id ]['ref'] = 'close' === ( $entry['kind'] ?? '' ) ? $completion_id : ( $entry['ref'] ?? null );
+				$owed                      = true;
+			}
+		}
+		if ( $owed ) {
+			$order->update_meta_data( self::META_KEY, (string) wp_json_encode( (object) $map ) );
+		}
+		foreach ( $rows as &$row ) {
+			foreach ( is_array( $row['commands'] ?? null ) ? $row['commands'] : array() as $command_id => $entry ) {
+				if ( self::OWED === ( $entry['phase'] ?? null ) ) {
+					unset( $row['commands'][ $command_id ]['phase'] );
+					$owed = true;
+				}
+			}
+		}
+		unset( $row );
+		return $owed ? $rows : null;
 	}
 
 	/**

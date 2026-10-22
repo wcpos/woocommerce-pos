@@ -97,18 +97,28 @@ class Settlement {
 	}
 
 	/**
+	 * Whether a confirmation is parked for a payment that has not arrived yet.
+	 *
+	 * @param string $payment_id Payment UUID.
+	 */
+	public function is_parked( string $payment_id ): bool {
+		return isset( $this->pending()[ strtolower( $payment_id ) ] );
+	}
+
+	/**
 	 * Drain an arrival's parked confirmation; record's caller already holds the order lock.
 	 *
 	 * @param WC_Order $order      Freshly stored order.
 	 * @param string   $payment_id Payment UUID.
+	 * @param bool     $derive     Project payment state after applying; false when the caller completes from storage.
 	 * @return true|WP_Error
 	 */
-	public function apply_parked( WC_Order $order, string $payment_id ) {
+	public function apply_parked( WC_Order $order, string $payment_id, bool $derive = true ) {
 		return Order_Lock::instance()->with_lock(
 			self::PARK_LOCK_ID,
-			function () use ( $order, $payment_id ) {
+			function () use ( $order, $payment_id, $derive ) {
 				$pending = $this->pending();
-				$result = isset( $pending[ $payment_id ] ) ? $this->apply( $order, $payment_id, $pending[ $payment_id ]['patch'] ) : true;
+				$result = isset( $pending[ $payment_id ] ) ? $this->apply( $order, $payment_id, $pending[ $payment_id ]['patch'], $derive ) : true;
 				$pending = $this->pending();
 				unset( $pending[ $payment_id ] );
 				$saved = $this->write_pending( $pending );
@@ -123,10 +133,11 @@ class Settlement {
 	 * @param WC_Order $order      Locked order.
 	 * @param string   $payment_id Payment UUID.
 	 * @param array    $patch      Provider confirmation.
+	 * @param bool     $derive     Project payment state after applying.
 	 * @return true|WP_Error
 	 */
-	private function apply( WC_Order $order, string $payment_id, array $patch ) {
-		$result = Ledger::instance()->apply_result( $order, $payment_id, $patch );
+	private function apply( WC_Order $order, string $payment_id, array $patch, bool $derive = true ) {
+		$result = Ledger::instance()->apply_result( $order, $payment_id, $patch, $derive );
 		if ( is_wp_error( $result ) ) {
 			Logger::log( sprintf( 'WCPOS settlement %s: %s', $payment_id, $result->get_error_message() ) );
 			return $result;

@@ -156,10 +156,11 @@ final class Payments_Sweeper {
 							Logger::log( sprintf( 'WCPOS payment sweep %s: %s', $row['id'], $result->get_error_message() ) );
 						}
 					}
-					// Reconcile every leg before counting authorizations that may expire this run.
-					$ledger->derive( $order, $ledger->read( $order ) );
-					if ( $order->get_changes() ) {
-						Ledger::saving( $order->get_id(), fn() => $order->save() );
+					// Project the reconciled legs; as the recovery pass the sweep also completes a sale its rows cover.
+					try {
+						$ledger->write( $order_id, null, Ledger::MODE_SWEEP );
+					} catch ( Ledger_Persistence_Exception $error ) {
+						Logger::log( sprintf( 'WCPOS payment sweep on order #%d: %s', $order_id, $error->getMessage() ) );
 					}
 				}
 			);
