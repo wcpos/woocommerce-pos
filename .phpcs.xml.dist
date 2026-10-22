@@ -110,6 +110,7 @@
 		<properties>
 			<property name="prefixes" type="array">
 				<element value="woocommerce_pos_"/>
+				<element value="wcpos_"/>
 				<element value="WCPOS\WooCommercePOS"/>
 			</property>
 		</properties>

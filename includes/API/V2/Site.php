@@ -58,7 +58,7 @@ final class Site {
 			'site_icon_url'    => get_site_icon_url(),
 			'wp_version'       => get_bloginfo( 'version' ),
 			'wcpos_version'    => VERSION,
-			// Custom meta keys a store added to search (woocommerce_pos_search_fields), so the till
+			// Custom meta keys a store added to search (wcpos_search_fields), so the till
 			// searches them locally too; the declared fields are fixed in both codebases.
 			'search_meta_keys' => Collection_Rules::client_search_meta_keys(),
 			'namespaces'       => array( 'wcpos/v2' ),
@@ -85,7 +85,7 @@ final class Site {
 		 *
 		 * @param array $data Site discovery data.
 		 */
-		$data = apply_filters( 'wcpos_rest_site_info', $data ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public WCPOS site discovery filter.
+		$data = apply_filters( 'wcpos_rest_site_info', $data );
 
 		return new WP_REST_Response( $data, 200 );
 	}

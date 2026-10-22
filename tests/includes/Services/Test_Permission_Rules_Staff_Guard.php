@@ -132,14 +132,14 @@ class Test_Permission_Rules_Staff_Guard extends WP_UnitTestCase {
 		$filter = static function () {
 			return array( 'custom_staff', '', 'custom_staff' );
 		};
-		add_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
+		add_filter( 'wcpos_protected_account_capabilities', $filter );
 
 		try {
 			$capabilities = Permission_Rules::protected_capabilities();
 
 			$this->assertSame( array( 'custom_staff' ), $capabilities );
 		} finally {
-			remove_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
+			remove_filter( 'wcpos_protected_account_capabilities', $filter );
 		}
 	}
 }

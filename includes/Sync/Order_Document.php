@@ -24,7 +24,7 @@ final class Order_Document {
 	/**
 	 * Read the order's stable uuid from a payload's meta, failing closed.
 	 * The IDENTITY payload must be the full serialized payload (the serializer
-	 * stamped it via the woocommerce_pos_sync_serialized_order filter).
+	 * stamped it via the wcpos_sync_serialized_order filter).
 	 *
 	 * @param array $identity_payload The FULL serialized payload (uuid source of truth).
 	 * @param int   $order_id         The numeric Woo order id (for the error message).

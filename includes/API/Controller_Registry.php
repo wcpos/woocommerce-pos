@@ -62,7 +62,7 @@ final class Controller_Registry {
 	/**
 	 * Get the filtered v1 controller map.
 	 *
-	 * @return array<string, class-string> The v1 map after woocommerce_pos_rest_api_controllers.
+	 * @return array<string, class-string> The v1 map after wcpos_rest_api_controllers.
 	 */
 	public static function v1_map(): array {
 		/**
@@ -90,7 +90,8 @@ final class Controller_Registry {
 		 *                           - 'tax_classes'           => Fully qualified name of the class handling tax classes.
 		 *                           - 'order_statuses'        => Fully qualified name of the class handling order statuses.
 		 */
-		return apply_filters( 'woocommerce_pos_rest_api_controllers', self::core_v1_map() );
+		$filtered = apply_filters( 'wcpos_rest_api_controllers', self::core_v1_map() );
+		return apply_filters_deprecated( 'woocommerce_pos_rest_api_controllers', array( $filtered ), '2.0.0', 'wcpos_rest_api_controllers' );
 	}
 
 	/**
@@ -169,7 +170,8 @@ final class Controller_Registry {
 		 *
 		 * @param array $controllers Associative array of v2 service controller class names.
 		 */
-		return apply_filters( 'woocommerce_pos_rest_api_v2_controllers', $map );
+		$filtered = apply_filters( 'wcpos_rest_api_v2_controllers', $map );
+		return apply_filters_deprecated( 'woocommerce_pos_rest_api_v2_controllers', array( $filtered ), '2.0.0', 'wcpos_rest_api_v2_controllers' );
 	}
 
 	/**

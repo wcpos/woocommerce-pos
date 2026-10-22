@@ -964,11 +964,11 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 			return false;
 		};
 		Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			$operation();
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 		}
 
 		return $lines;

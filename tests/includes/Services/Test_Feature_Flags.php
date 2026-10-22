@@ -130,12 +130,12 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 		$override = static function (): array {
 			return array( 'landing-variant' => 'free-plus' );
 		};
-		add_filter( 'woocommerce_pos_landing_bootstrap_flags', $override );
+		add_filter( 'wcpos_landing_bootstrap_flags', $override );
 
 		try {
 			$flags = $this->flags->get_landing_bootstrap_flags( 'test-distinct-id' );
 		} finally {
-			remove_filter( 'woocommerce_pos_landing_bootstrap_flags', $override );
+			remove_filter( 'wcpos_landing_bootstrap_flags', $override );
 		}
 
 		$this->assertSame( 'free-plus', $flags['landing-variant'] );

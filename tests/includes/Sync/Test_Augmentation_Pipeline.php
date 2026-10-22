@@ -43,7 +43,7 @@ class Test_Augmentation_Pipeline extends WP_UnitTestCase {
 		remove_all_filters( Augmentation_Pipeline::SERIALIZED_FILTER );
 		// install() wires the digest stamper onto the ORDER PULL lane too, and this
 		// class's hook state must stop at its own boundary on both.
-		remove_all_filters( 'woocommerce_pos_sync_order_pull_payloads' );
+		remove_all_filters( 'wcpos_sync_order_pull_payloads' );
 		parent::tearDown();
 	}
 
@@ -300,7 +300,7 @@ class Test_Augmentation_Pipeline extends WP_UnitTestCase {
 			'reset() plus the three unregistrars is a COMPLETE unwind of install()'
 		);
 		$this->assertFalse(
-			has_filter( 'woocommerce_pos_sync_order_pull_payloads' ),
+			has_filter( 'wcpos_sync_order_pull_payloads' ),
 			'the digest registrar also owns the order pull lane, so its unregistrar must too'
 		);
 	}

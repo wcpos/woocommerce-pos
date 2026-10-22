@@ -99,12 +99,12 @@ class Test_Integrity_Digest_Upsert_Retry extends Sync_Store_Test_Case {
 			return false;
 		};
 		Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			$digest->$method( $id );
 			Integrity_Digest::flush_pending_digests();
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			Logger::reset_dedup_state();
 		}
 

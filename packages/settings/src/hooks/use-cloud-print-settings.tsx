@@ -117,7 +117,7 @@ const RELAY_REGISTER_ENDPOINT = 'wcpos/v2/print-jobs/relay/register?wcpos=1';
  * Self-register with the WCPOS Cloud Print relay. The endpoint returns the
  * new relay state, which is folded into the cached cloud-print settings.
  * There is no disable counterpart — the relay is on by default and sites
- * opt out server-side via the `woocommerce_pos_cloud_print_relay_enabled`
+ * opt out server-side via the `wcpos_cloud_print_relay_enabled`
  * filter.
  */
 export function useCloudPrintRelay() {

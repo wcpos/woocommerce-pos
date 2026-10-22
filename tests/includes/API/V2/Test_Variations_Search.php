@@ -400,7 +400,7 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_pos_orderby_barcode_serves_variations_without_a_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_barcode',

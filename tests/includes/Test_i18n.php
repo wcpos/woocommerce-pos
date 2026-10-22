@@ -37,7 +37,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		// Everything below exercises the maintenance path (version markers,
 		// downloads). A storefront request only loads an existing file —
 		// Test_I18n_Storefront pins that — so opt these tests in explicitly.
-		add_filter( 'woocommerce_pos_i18n_maintain', '__return_true' );
+		add_filter( 'wcpos_i18n_maintain', '__return_true' );
 
 		// Clear any cached transients from previous tests.
 		delete_transient( 'wcpos_i18n_woocommerce-pos_de_DE' );
@@ -95,7 +95,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		// Remove locale and upload_dir filters if set.
 		remove_all_filters( 'locale' );
 		remove_all_filters( 'upload_dir' );
-		remove_all_filters( 'woocommerce_pos_i18n_maintain' );
+		remove_all_filters( 'wcpos_i18n_maintain' );
 		// The temp dirs above are gone, but WordPress parses loaded translation
 		// files lazily — a later class's first lookup would include them.
 		unload_textdomain( 'woocommerce-pos', true );

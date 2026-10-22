@@ -34,7 +34,8 @@ class Gallery_Registry {
 		 *
 		 * @param array<string,array<string,mixed>> $catalogue Gallery templates keyed by template key.
 		 */
-		return (array) apply_filters( 'woocommerce_pos_gallery_templates', self::catalogue() );
+		$filtered = apply_filters( 'wcpos_gallery_templates', self::catalogue() );
+		return (array) apply_filters_deprecated( 'woocommerce_pos_gallery_templates', array( $filtered ), '2.0.0', 'wcpos_gallery_templates' );
 	}
 
 	/**

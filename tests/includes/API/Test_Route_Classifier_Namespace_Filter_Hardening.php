@@ -8,7 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 /**
- * The woocommerce_pos_rest_namespaces filter is strictly additive: a consumer
+ * The wcpos_rest_namespaces filter is strictly additive: a consumer
  * replacing the list (dropping wcpos/v1) must not strip the central permission
  * gate off live v1 routes.
  *
@@ -20,7 +20,7 @@ class Test_Route_Classifier_Namespace_Filter_Hardening extends WCPOS_REST_Unit_T
 	 * Replace (rather than extend) the namespace list before REST registration.
 	 */
 	public function setUp(): void {
-		add_filter( 'woocommerce_pos_rest_namespaces', array( $this, 'replace_namespaces' ) );
+		add_filter( 'wcpos_rest_namespaces', array( $this, 'replace_namespaces' ) );
 		parent::setUp();
 	}
 
@@ -28,7 +28,7 @@ class Test_Route_Classifier_Namespace_Filter_Hardening extends WCPOS_REST_Unit_T
 	 * Remove the replacing filter.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_rest_namespaces', array( $this, 'replace_namespaces' ) );
+		remove_filter( 'wcpos_rest_namespaces', array( $this, 'replace_namespaces' ) );
 		parent::tearDown();
 	}
 

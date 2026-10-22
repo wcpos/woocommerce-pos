@@ -76,7 +76,7 @@ class Test_Visibility_Section extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		if ( null !== $this->register_override ) {
-			remove_action( 'woocommerce_pos_register_settings_sections', $this->register_override );
+			remove_action( 'wcpos_register_settings_sections', $this->register_override );
 			$this->register_override = null;
 		}
 		Settings::instance()->reset_sections_for_testing();
@@ -92,7 +92,7 @@ class Test_Visibility_Section extends WP_UnitTestCase {
 		$this->register_override = static function ( $registry ) use ( $override ): void {
 			$registry->register( $override );
 		};
-		add_action( 'woocommerce_pos_register_settings_sections', $this->register_override );
+		add_action( 'wcpos_register_settings_sections', $this->register_override );
 
 		$settings = Settings::instance();
 		$settings->reset_sections_for_testing();

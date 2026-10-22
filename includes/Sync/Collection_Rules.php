@@ -245,7 +245,7 @@ final class Collection_Rules {
 	 * @internal
 	 *
 	 * @param string $collection    Collection slug.
-	 * @param bool   $apply_filters False returns the declaration as shipped, before `woocommerce_pos_search_fields`.
+	 * @param bool   $apply_filters False returns the declaration as shipped, before `wcpos_search_fields`.
 	 *
 	 * @return array{sorts?: array<string, array>, filters?: array<string, array>, search?: array<string, mixed>, visibility?: array<string, mixed>}
 	 */
@@ -503,17 +503,16 @@ final class Collection_Rules {
 			 * @param string $collection Collection slug.
 			 */
 			$declared                        = $rules[ $collection ]['search'];
-			$rules[ $collection ]['search'] = self::normalize_search_declaration(
-				$declared,
-				apply_filters( 'woocommerce_pos_search_fields', $declared, $collection )
-			);
+			$filtered = apply_filters( 'wcpos_search_fields', $declared, $collection );
+			$filtered = apply_filters_deprecated( 'woocommerce_pos_search_fields', array( $filtered, $collection ), '2.0.0', 'wcpos_search_fields' );
+			$rules[ $collection ]['search'] = self::normalize_search_declaration( $declared, $filtered );
 		}
 
 		return $rules[ $collection ] ?? array();
 	}
 
 	/**
-	 * The meta keys a store ADDED to search through `woocommerce_pos_search_fields`, per collection,
+	 * The meta keys a store ADDED to search through `wcpos_search_fields`, per collection,
 	 * in the form the POS client can search them: the keys the REST `meta_data` exposes.
 	 *
 	 * Published on the site payload so the till folds the same custom fields into its local

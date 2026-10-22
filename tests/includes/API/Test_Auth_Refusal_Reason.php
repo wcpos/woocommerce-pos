@@ -73,11 +73,11 @@ class Test_Auth_Refusal_Reason extends WCPOS_REST_Unit_Test_Case {
 		$expire = static function ( $expires_at, $issued_at ) {
 			return $issued_at - HOUR_IN_SECONDS;
 		};
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $expire, 10, 2 );
 		try {
 			$token = Auth::instance()->generate_access_token( get_user_by( 'id', $this->user ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $expire, 10 );
 		}
 		$this->assertIsString( $token );
 

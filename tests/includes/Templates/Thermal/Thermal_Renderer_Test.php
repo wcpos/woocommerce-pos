@@ -25,11 +25,11 @@ class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 			$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
 			return $snapshot;
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$number = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload']['fiscal']['receipt_number'];
 		$template = array(

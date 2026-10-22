@@ -201,7 +201,8 @@ final class Core_Order_Audit_Guard {
 	 */
 	private function is_wcpos_route( string $route ): bool {
 		/** This filter is documented in includes/API.php */
-		$namespaces = apply_filters( 'woocommerce_pos_rest_namespaces', API::ROUTE_NAMESPACES );
+		$namespaces = apply_filters( 'wcpos_rest_namespaces', API::ROUTE_NAMESPACES );
+		$namespaces = apply_filters_deprecated( 'woocommerce_pos_rest_namespaces', array( $namespaces ), '2.0.0', 'wcpos_rest_namespaces' );
 		$namespaces = array_unique( array_merge( API::ROUTE_NAMESPACES, (array) $namespaces ) );
 
 		foreach ( $namespaces as $namespace ) {

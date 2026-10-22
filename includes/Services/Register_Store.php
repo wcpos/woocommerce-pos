@@ -95,7 +95,8 @@ final class Register_Store {
 		$fields['id'] = $id;
 		if ( null !== $request ) {
 			/** Filter initial registration fields; Pro may set store_id. */
-			$fields = apply_filters( 'woocommerce_pos_register_upsert_fields', $fields, $request );
+			$fields = apply_filters( 'wcpos_register_upsert_fields', $fields, $request );
+			$fields = apply_filters_deprecated( 'woocommerce_pos_register_upsert_fields', array( $fields, $request ), '2.0.0', 'wcpos_register_upsert_fields' );
 		}
 		$fields['id'] = $id;
 		$this->insert_row( $fields );
@@ -307,7 +308,8 @@ final class Register_Store {
 	/** Resolve the repository once: Free's option, or the one Pro binds. */
 	private function repository(): Register_Repository {
 		if ( null === $this->repository ) {
-			$repository = apply_filters( 'woocommerce_pos_register_repository', new Option_Register_Repository() );
+			$repository = apply_filters( 'wcpos_register_repository', new Option_Register_Repository() );
+			$repository = apply_filters_deprecated( 'woocommerce_pos_register_repository', array( $repository ), '2.0.0', 'wcpos_register_repository' );
 			if ( ! $repository instanceof Register_Repository ) {
 				Logger::warning( 'woocommerce_pos_register_repository did not return a Register_Repository; using the option' );
 				$repository = new Option_Register_Repository();

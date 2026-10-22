@@ -49,14 +49,14 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$this->previous_level = Logger::$log_level;
 		Logger::set_log_level( 'info' );
 		Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', array( $this, 'capture_log' ), 10, 2 );
+		add_filter( 'wcpos_logging', array( $this, 'capture_log' ), 10, 2 );
 		add_filter( 'query', array( $this, 'record_rollback' ) );
 	}
 
 	/** Restore logging and remove committed fixtures. */
 	public function tearDown(): void {
 		remove_filter( 'query', array( $this, 'record_rollback' ) );
-		remove_filter( 'woocommerce_pos_logging', array( $this, 'capture_log' ), 10 );
+		remove_filter( 'wcpos_logging', array( $this, 'capture_log' ), 10 );
 		Logger::reset_dedup_state();
 		Logger::$log_level = $this->previous_level;
 		$this->cleanup_closures();
@@ -281,7 +281,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 		$threshold = static function () {
 			return '0';
 		};
-		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		add_filter( 'wcpos_session_variance_threshold', $threshold );
 		try {
 			$this->assertWPError(
 				( new Register_Session_Store() )->transition(
@@ -302,7 +302,7 @@ class Test_Register_Logging extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+			remove_filter( 'wcpos_session_variance_threshold', $threshold );
 		}
 	}
 

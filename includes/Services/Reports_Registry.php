@@ -32,7 +32,7 @@ final class Reports_Registry {
 			return self::$reports;
 		}
 		if ( self::$building ) {
-			// Re-entered from a woocommerce_pos_reports callback — for instance one that reads
+			// Re-entered from a wcpos_reports callback — for instance one that reads
 			// the report field tree to shape its extras, since that tree consults this registry.
 			// Answer with the empty set rather than recursing until the stack is exhausted.
 			return array();
@@ -111,9 +111,10 @@ final class Reports_Registry {
 		 *
 		 * @param array $reports Registrations keyed by report key.
 		 * @since 2.0.0
-		 * @hook woocommerce_pos_reports
+		 * @hook wcpos_reports
 		 */
-		$reports = apply_filters( 'woocommerce_pos_reports', $reports );
+		$reports = apply_filters( 'wcpos_reports', $reports );
+		$reports = apply_filters_deprecated( 'woocommerce_pos_reports', array( $reports ), '2.0.0', 'wcpos_reports' );
 		return (array) $reports;
 	}
 

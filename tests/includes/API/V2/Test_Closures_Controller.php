@@ -87,7 +87,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$threshold = static function () {
 			return '5';
 		};
-		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		add_filter( 'wcpos_session_variance_threshold', $threshold );
 		try {
 			foreach ( array( 'same', 'cash', 'card', 'missing', 'missing_expected', 'sale', 'under', 'stale_under' ) as $case ) {
 				$session = $this->closure_session();
@@ -170,7 +170,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 				}
 			}
 		} finally {
-			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+			remove_filter( 'wcpos_session_variance_threshold', $threshold );
 		}
 	}
 
@@ -179,7 +179,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$threshold = static function () {
 			return '5';
 		};
-		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		add_filter( 'wcpos_session_variance_threshold', $threshold );
 		try {
 			foreach ( array( 'counting', 'closed' ) as $status ) {
 				$session = $this->closure_session( null, $status );
@@ -209,7 +209,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( $row['findings'], ( new Closure_Store() )->get( $row['id'] )['findings'] );
 			}
 		} finally {
-			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+			remove_filter( 'wcpos_session_variance_threshold', $threshold );
 		}
 	}
 
@@ -221,11 +221,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->closure_ledger( $session );
 			return '5';
 		};
-		add_filter( 'woocommerce_pos_session_variance_threshold', $late_sale );
+		add_filter( 'wcpos_session_variance_threshold', $late_sale );
 		try {
 			$response = $this->post( 'closures', array( 'counted' => array( 'cash' => '80' ) ) + $this->body( $session ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_session_variance_threshold', $late_sale );
+			remove_filter( 'wcpos_session_variance_threshold', $late_sale );
 		}
 		$this->assertSame( 201, $response->get_status() );
 		$this->assertSame( array( 'cash' => '100.0000' ), $response->get_data()['expected'] );
@@ -321,7 +321,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$threshold = static function () {
 			return '5';
 		};
-		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		add_filter( 'wcpos_session_variance_threshold', $threshold );
 		try {
 			foreach ( array( 'counted', 'expected' ) as $case ) {
 				$session = $store->approve( $this->closure_session(), $manager, array( 'cash' => '80' ) );
@@ -355,7 +355,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 				}
 			}
 		} finally {
-			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+			remove_filter( 'wcpos_session_variance_threshold', $threshold );
 		}
 	}
 
@@ -370,7 +370,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$threshold = static function () {
 			return '5';
 		};
-		add_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+		add_filter( 'wcpos_session_variance_threshold', $threshold );
 		try {
 			$refused = $this->post( 'closures', $body );
 			$this->assertSame( 403, $refused->get_status() );
@@ -388,7 +388,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 201, $closed->get_status() );
 			$this->assertSame( '150.0000', $closed->get_data()['expected']['cash'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_session_variance_threshold', $threshold );
+			remove_filter( 'wcpos_session_variance_threshold', $threshold );
 		}
 	}
 
@@ -520,7 +520,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** An extension's store scoping is an authorization boundary, not a list filter.
 	 *
 	 * Pro restricts a manager to its authorized stores through
-	 * `woocommerce_pos_closures_list_args`, and Fiscal_Record_Store::resolve_document()
+	 * `wcpos_closures_list_args`, and Fiscal_Record_Store::resolve_document()
 	 * enforces the same scope on a single document read. An export that paged the store
 	 * directly would serve fiscal figures for stores the caller cannot reach by either
 	 * existing path, so the scope is resolved from an empty base and applied to both
@@ -537,13 +537,13 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 
 		// Act.
-		add_filter( 'woocommerce_pos_closures_list_args', $scope );
+		add_filter( 'wcpos_closures_list_args', $scope );
 		try {
 			$scoped_response = $this->get( 'closures/export' );
 			$scoped_body = $scoped_response->get_raw_body();
 			$scoped = $this->export_csv( $scoped_response );
 		} finally {
-			remove_filter( 'woocommerce_pos_closures_list_args', $scope );
+			remove_filter( 'wcpos_closures_list_args', $scope );
 		}
 		$unscoped = $this->export_csv( $this->get( 'closures/export' ) );
 
@@ -573,11 +573,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 
 		// Act.
-		add_filter( 'woocommerce_pos_closures_list_args', $broken );
+		add_filter( 'wcpos_closures_list_args', $broken );
 		try {
 			$response = $this->get( 'closures/export' );
 		} finally {
-			remove_filter( 'woocommerce_pos_closures_list_args', $broken );
+			remove_filter( 'wcpos_closures_list_args', $broken );
 		}
 
 		// Assert: refused, and nothing was served.
@@ -648,11 +648,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 				return $args;
 			};
 			// Act.
-			add_filter( 'woocommerce_pos_closures_list_args', $broken );
+			add_filter( 'wcpos_closures_list_args', $broken );
 			try {
 				$response = $this->get( 'closures/export' );
 			} finally {
-				remove_filter( 'woocommerce_pos_closures_list_args', $broken );
+				remove_filter( 'wcpos_closures_list_args', $broken );
 			}
 			// Assert.
 			$this->assertSame( 500, $response->get_status(), wp_json_encode( $value ) );
@@ -670,11 +670,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 
 		// Act.
-		add_filter( 'woocommerce_pos_closures_list_args', $none );
+		add_filter( 'wcpos_closures_list_args', $none );
 		try {
 			$response = $this->get( 'closures/export' );
 		} finally {
-			remove_filter( 'woocommerce_pos_closures_list_args', $none );
+			remove_filter( 'wcpos_closures_list_args', $none );
 		}
 
 		// Assert: accepted, and indistinguishable from a store with no closures.
@@ -712,11 +712,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 
 		// Act.
-		add_filter( 'woocommerce_pos_closures_list_args', $hostile );
+		add_filter( 'wcpos_closures_list_args', $hostile );
 		try {
 			$csv = $this->export_csv( $this->get( 'closures/export' ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_closures_list_args', $hostile );
+			remove_filter( 'wcpos_closures_list_args', $hostile );
 		}
 
 		// Assert: all three rows, still in register-then-number order.
@@ -989,11 +989,11 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$filter = static function ( $row, $request ) use ( $session, $body ) {
 			return $row && $session['id'] === $row['id'] && $session['id'] === $request['session_id'] && strtolower( $body['id'] ) === $request['id'] ? null : $row;
 		};
-		add_filter( 'woocommerce_pos_session_row', $filter, 10, 2 );
+		add_filter( 'wcpos_session_row', $filter, 10, 2 );
 		try {
 			$response = $this->post( 'closures', $body );
 		} finally {
-			remove_filter( 'woocommerce_pos_session_row', $filter );
+			remove_filter( 'wcpos_session_row', $filter );
 		}
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
@@ -1104,12 +1104,12 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$scope = static function () {
 			return array( 'store_id' => array( 456 ) );
 		};
-		add_filter( 'woocommerce_pos_session_row', $insert );
+		add_filter( 'wcpos_session_row', $insert );
 		add_filter( Store_Reach::FILTER, $scope );
 		try {
 			$response = $this->post( 'closures', $body );
 		} finally {
-			remove_filter( 'woocommerce_pos_session_row', $insert );
+			remove_filter( 'wcpos_session_row', $insert );
 			remove_filter( Store_Reach::FILTER, $scope );
 		}
 		$this->assertSame( 404, $response->get_status() );
@@ -1723,9 +1723,9 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 			$args['store_id'] = 789;
 			return $args;
 		};
-		add_filter( 'woocommerce_pos_closures_list_args', $scope );
+		add_filter( 'wcpos_closures_list_args', $scope );
 		$this->assertSame( array(), $this->get( 'closures' )->get_data() );
-		remove_filter( 'woocommerce_pos_closures_list_args', $scope );
+		remove_filter( 'wcpos_closures_list_args', $scope );
 		$this->assertSame( 2, $this->get( 'registers/' . $a['register_id'] )->get_data()['counters']['last_closure_number'] );
 		$register_counters = array_column( $this->get( 'registers' )->get_data(), 'counters', 'id' );
 		$this->assertSame( 2, $register_counters[ $a['register_id'] ]['last_closure_number'] );

@@ -367,7 +367,8 @@ final class Register_Session_Store {
 			$bound = false;
 			if ( 'closed' === $fields['status'] ) {
 				$threshold = Settings::instance()->get_general_settings()['variance_threshold'] ?? '';
-				$threshold = apply_filters( 'woocommerce_pos_session_variance_threshold', $threshold, $session );
+				$threshold = apply_filters( 'wcpos_session_variance_threshold', $threshold, $session );
+				$threshold = apply_filters_deprecated( 'woocommerce_pos_session_variance_threshold', array( $threshold, $session ), '2.0.0', 'wcpos_session_variance_threshold' );
 				$approved = Closure_Store::tenders( $session['approved_counted'] ?? null );
 				$counted = Closure_Store::tenders( $fields['counted'] );
 				if ( 'closed' === $session['status'] && Closure_Store::tenders( $session['counted'] ) != $counted ) {

@@ -63,8 +63,8 @@ class Test_Storefront_Receipts extends WC_Unit_Test_Case {
 		}
 
 		remove_filter( 'woocommerce_my_account_my_orders_actions', array( $this->storefront_receipts, 'add_my_account_action' ) );
-		remove_all_filters( 'woocommerce_pos_storefront_receipt_my_account_button' );
-		remove_all_filters( 'woocommerce_pos_storefront_receipt_order_statuses' );
+		remove_all_filters( 'wcpos_storefront_receipt_my_account_button' );
+		remove_all_filters( 'wcpos_storefront_receipt_order_statuses' );
 		unset( $wp->query_vars['order-received'], $wp->query_vars['view-order'], $_GET['key'] );
 		delete_option( 'wcpos_active_template_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
@@ -162,7 +162,7 @@ class Test_Storefront_Receipts extends WC_Unit_Test_Case {
 	public function test_my_account_button_disabled_by_filter_omits_action(): void {
 		// Arrange.
 		$order = OrderHelper::create_order( array( 'status' => 'completed' ) );
-		add_filter( 'woocommerce_pos_storefront_receipt_my_account_button', '__return_false' );
+		add_filter( 'wcpos_storefront_receipt_my_account_button', '__return_false' );
 
 		// Act.
 		$actions = $this->storefront_receipts->add_my_account_action( array(), $order );
@@ -178,7 +178,7 @@ class Test_Storefront_Receipts extends WC_Unit_Test_Case {
 		// Arrange.
 		$order = OrderHelper::create_order( array( 'status' => 'pending' ) );
 		add_filter(
-			'woocommerce_pos_storefront_receipt_order_statuses',
+			'wcpos_storefront_receipt_order_statuses',
 			static function ( $statuses ) {
 				$statuses[] = 'pending';
 
@@ -215,7 +215,7 @@ class Test_Storefront_Receipts extends WC_Unit_Test_Case {
 		// Arrange.
 		delete_option( 'woocommerce_pos_settings_general' );
 		$order = OrderHelper::create_order( array( 'status' => 'completed' ) );
-		add_filter( 'woocommerce_pos_storefront_receipt_my_account_button', '__return_true' );
+		add_filter( 'wcpos_storefront_receipt_my_account_button', '__return_true' );
 
 		// Act.
 		$actions = $this->storefront_receipts->add_my_account_action( array(), $order );

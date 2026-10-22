@@ -141,8 +141,8 @@ class Test_Uninstall extends WP_UnitTestCase {
 	 * @param bool $installed Desired detection result.
 	 */
 	private function pin_pro_installed( bool $installed ): void {
-		remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
-		add_filter( 'woocommerce_pos_uninstall_pro_installed', $installed ? '__return_true' : '__return_false' );
+		remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		add_filter( 'wcpos_uninstall_pro_installed', $installed ? '__return_true' : '__return_false' );
 	}
 
 	/**
@@ -242,7 +242,7 @@ class Test_Uninstall extends WP_UnitTestCase {
 			wp_cache_flush();
 			$this->assertFalse( get_option( 'wcpos_remove_all_data' ) );
 		} finally {
-			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
 		}
 	}
 
@@ -819,7 +819,7 @@ PHP;
 			$this->assertSame( '1', $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE source = 'woocommerce-pos'" ), 'Installed Pro shares the core log source' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
 		} finally {
 			$wpdb->query( "DELETE FROM {$table} WHERE source IN ('woocommerce-pos', 'woocommerce-pos-extension')" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned WooCommerce log table name.
-			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
 		}
 	}
 
@@ -853,7 +853,7 @@ PHP;
 					unlink( $file );
 				}
 			}
-			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
 		}
 	}
 
@@ -884,7 +884,7 @@ PHP;
 					unlink( $file );
 				}
 			}
-			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
 		}
 	}
 
@@ -932,7 +932,7 @@ PHP;
 			if ( is_dir( $fallback_dir ) ) {
 				rmdir( $fallback_dir );
 			}
-			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
 		}
 	}
 
@@ -969,7 +969,7 @@ PHP;
 		} finally {
 			remove_filter( 'upload_dir', $filter );
 			as_unschedule_all_actions( Font_Pack_Loader::ACTION );
-			remove_all_filters( 'woocommerce_pos_uninstall_pro_installed' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
 			if ( is_dir( $uploads ) ) {
 				$items = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $uploads, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
 				foreach ( $items as $item ) {

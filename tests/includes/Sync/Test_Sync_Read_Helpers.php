@@ -88,7 +88,7 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 		// Act: the production drive point is the public catalog-proxy filter the
 		// registry-built stamper closures are hooked to.
 		$data = apply_filters(
-			'woocommerce_pos_sync_proxy_response',
+			'wcpos_sync_proxy_response',
 			array(
 				array(
 					'id' => $product->get_id(),

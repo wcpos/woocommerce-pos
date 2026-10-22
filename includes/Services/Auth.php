@@ -428,9 +428,10 @@ class Auth {
 		 *
 		 * @since 1.8.0
 		 *
-		 * @hook woocommerce_pos_jwt_access_token_before_sign
+		 * @hook wcpos_jwt_access_token_before_sign
 		 */
-		$payload = apply_filters( 'woocommerce_pos_jwt_access_token_before_sign', $token, $user );
+		$payload = apply_filters( 'wcpos_jwt_access_token_before_sign', $token, $user );
+		$payload = apply_filters_deprecated( 'woocommerce_pos_jwt_access_token_before_sign', array( $payload, $user ), '2.0.0', 'wcpos_jwt_access_token_before_sign' );
 		$token   = JWT::encode( $payload, $this->get_secret_key(), 'HS256' );
 
 		$expires_at        = $this->get_payload_claim( $payload, 'exp' );
@@ -518,9 +519,11 @@ class Auth {
 		 *
 		 * @since 1.8.0
 		 *
-		 * @hook woocommerce_pos_jwt_refresh_token_before_sign
+		 * @hook wcpos_jwt_refresh_token_before_sign
 		 */
-		$token = JWT::encode( apply_filters( 'woocommerce_pos_jwt_refresh_token_before_sign', $token, $user ), $this->get_refresh_secret_key(), 'HS256' );
+		$token = apply_filters( 'wcpos_jwt_refresh_token_before_sign', $token, $user );
+		$token = apply_filters_deprecated( 'woocommerce_pos_jwt_refresh_token_before_sign', array( $token, $user ), '2.0.0', 'wcpos_jwt_refresh_token_before_sign' );
+		$token = JWT::encode( $token, $this->get_refresh_secret_key(), 'HS256' );
 
 		if ( $reuse ) {
 			$this->sessions->touch( $user->ID, $jti );
@@ -1010,10 +1013,11 @@ class Auth {
 	 *
 	 * @since 1.8.0
 	 *
-	 * @hook woocommerce_pos_jwt_access_token_expire
+	 * @hook wcpos_jwt_access_token_expire
 	 */
 	private function get_access_token_expire( int $issued_at ): int {
-		return (int) apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+		$filtered = apply_filters( 'wcpos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+		return (int) apply_filters_deprecated( 'woocommerce_pos_jwt_access_token_expire', array( $filtered, $issued_at ), '2.0.0', 'wcpos_jwt_access_token_expire' );
 	}
 
 	/**
@@ -1026,10 +1030,11 @@ class Auth {
 	 *
 	 * @since 1.8.0
 	 *
-	 * @hook woocommerce_pos_jwt_refresh_token_expire
+	 * @hook wcpos_jwt_refresh_token_expire
 	 */
 	private function get_refresh_token_expire( int $issued_at ): int {
-		return (int) apply_filters( 'woocommerce_pos_jwt_refresh_token_expire', $issued_at + ( DAY_IN_SECONDS * 30 ), $issued_at );
+		$filtered = apply_filters( 'wcpos_jwt_refresh_token_expire', $issued_at + ( DAY_IN_SECONDS * 30 ), $issued_at );
+		return (int) apply_filters_deprecated( 'woocommerce_pos_jwt_refresh_token_expire', array( $filtered, $issued_at ), '2.0.0', 'wcpos_jwt_refresh_token_expire' );
 	}
 
 	/**

@@ -126,7 +126,7 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 	 *
 	 * NOTE: the promoted wcpos/v2 service pass-through controllers (the
 	 * `API\V2\*` subclasses of the v1 controllers, registered through
-	 * `woocommerce_pos_rest_api_v2_controllers`) share the namespace but are
+	 * `wcpos_rest_api_v2_controllers`) share the namespace but are
 	 * deliberately NOT sync routes, so ownership is derived from the sync
 	 * controller map rather than from the namespace.
 	 */

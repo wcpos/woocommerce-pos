@@ -660,16 +660,12 @@ class Stock_Validator {
 	 */
 	private function exempt_statuses(): array {
 		$statuses = apply_filters(
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Backward-compatible public filter.
-			'woocommerce_pos_stock_validation_exempt_statuses',
+			'wcpos_stock_validation_exempt_statuses',
 			array( 'pos-open', 'pos-partial', 'pending', 'auto-draft', 'checkout-draft', 'draft', 'cancelled', 'refunded', 'failed', 'trash' )
 		);
+		$statuses = apply_filters_deprecated( 'woocommerce_pos_stock_validation_exempt_statuses', array( $statuses ), '2.0.0', 'wcpos_stock_validation_exempt_statuses' );
 
-		return apply_filters(
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Intentional public WCPOS hook.
-			'wcpos_stock_validation_exempt_statuses',
-			$statuses
-		);
+		return $statuses;
 	}
 
 	/**

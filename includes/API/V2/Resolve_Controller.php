@@ -30,7 +30,7 @@ use WP_REST_Server;
  * that own barcode storage can override resolution entirely; the returned
  * payload is hydrated through the filtered REST serialization path.
  *
- * Not final: the woocommerce_pos_sync_resolve_barcode_matches filter is applied
+ * Not final: the wcpos_sync_resolve_barcode_matches filter is applied
  * through a protected seam that the unit harness subclasses (its
  * apply_filters stub is identity).
  */
@@ -204,13 +204,14 @@ class Resolve_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Seam for woocommerce_pos_sync_resolve_barcode_matches: plugins that own
+	 * Seam for wcpos_sync_resolve_barcode_matches: plugins that own
 	 * barcode storage (ADR 0003: value-based lookups must be hookable) can
 	 * replace discovery output entirely. Protected so the unit harness —
 	 * whose apply_filters stub is identity — can subclass the override path.
 	 */
 	protected function apply_matches_filter( array $matches, string $code ): array {
-		$filtered = apply_filters( 'woocommerce_pos_sync_resolve_barcode_matches', $matches, $code );
+		$filtered = apply_filters( 'wcpos_sync_resolve_barcode_matches', $matches, $code );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sync_resolve_barcode_matches', array( $filtered, $code ), '2.0.0', 'wcpos_sync_resolve_barcode_matches' );
 
 		return \is_array( $filtered ) ? array_values( $filtered ) : array();
 	}

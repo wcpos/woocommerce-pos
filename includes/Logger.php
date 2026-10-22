@@ -132,7 +132,7 @@ class Logger {
 		$written = self::write_log( $full_message );
 
 		// Forward after dedup so "repeated N times" remains one event, and only
-		// when the write itself was allowed: `woocommerce_pos_logging` is how a
+		// when the write itself was allowed: `wcpos_logging` is how a
 		// site says "do not record this", so it must gate the remote copy too.
 		if ( $written && ( 'error' === self::$log_level || 'critical' === self::$log_level ) ) {
 			try {
@@ -219,10 +219,12 @@ class Logger {
 	 * @param string $message The formatted message to write.
 	 *
 	 * @return bool Whether the message was written, so callers can mirror the
-	 *              `woocommerce_pos_logging` decision instead of re-applying it.
+	 *              `wcpos_logging` decision instead of re-applying it.
 	 */
 	private static function write_log( string $message ): bool {
-		if ( ! apply_filters( 'woocommerce_pos_logging', true, $message ) ) {
+		$filtered = apply_filters( 'wcpos_logging', true, $message );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_logging', array( $filtered, $message ), '2.0.0', 'wcpos_logging' );
+		if ( ! $filtered ) {
 			return false;
 		}
 

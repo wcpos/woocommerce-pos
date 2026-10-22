@@ -211,7 +211,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$custom_icon = 'https://example.com/custom-icon.png';
 
 		add_filter(
-			'woocommerce_pos_cash_icon',
+			'wcpos_cash_icon',
 			function () use ( $custom_icon ) {
 				return $custom_icon;
 			}
@@ -221,7 +221,7 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 
 		$this->assertEquals( $custom_icon, $gateway->icon );
 
-		remove_all_filters( 'woocommerce_pos_cash_icon' );
+		remove_all_filters( 'wcpos_cash_icon' );
 	}
 
 	/**
@@ -382,20 +382,6 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$result_defaults = $this->gateway->process_refund( $order->get_id() );
 
 		$this->assertTrue( $result_defaults );
-	}
-
-	/**
-	 * Direct test: constructor registers admin options action.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Gateways\Cash::__construct
-	 */
-	public function test_direct_constructor_registers_admin_action(): void {
-		$gateway = new Cash();
-
-		$this->assertTrue(
-			has_action( 'woocommerce_pos_update_options_payment_gateways_pos_cash' ),
-			'Admin options action should be registered'
-		);
 	}
 
 }

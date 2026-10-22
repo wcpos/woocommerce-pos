@@ -524,7 +524,9 @@ class Preview_Receipt_Builder {
 	 * @return array Filtered payload.
 	 */
 	public static function apply_receipt_data_filter( array $data ): array {
-		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, new \WC_Order(), 'preview' );
+		$order = new \WC_Order();
+		$filtered = apply_filters( 'wcpos_receipt_data', $data, $order, 'preview' );
+		return (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $filtered, $order, 'preview' ), '2.0.0', 'wcpos_receipt_data' );
 	}
 
 	/**

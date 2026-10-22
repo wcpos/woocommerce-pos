@@ -351,11 +351,11 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$again = wp_generate_uuid4();
 		$logs = array();
 		$log = static function ( $enabled, $message ) use ( &$logs ) { $logs[] = $message; return false; };
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 		try {
 			$this->assertSame( 200, $this->submit( $order, $first, array( 'invoice_email' => 'first@example.com' ) )->get_status() );
 			$this->assertSame( 200, $this->submit( $order, $again, array( 'invoice_email' => 'second@example.com' ) )->get_status() );
-		} finally { remove_filter( 'woocommerce_pos_logging', $log, 10 ); }
+		} finally { remove_filter( 'wcpos_logging', $log, 10 ); }
 		$this->assertSame( 200, $this->cancel( $order, $again )->get_status() );
 		$saved = wc_get_order( $order->get_id() );
 		$this->assertSame( 'superseded', Gateway_Submission::read_attempts( $saved )[ $first ] );
@@ -454,14 +454,14 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			return false;
 		};
 		add_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 
 		// Act.
 		try {
 			$response = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
 		} finally {
 			remove_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
-			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			remove_filter( 'wcpos_logging', $log, 10 );
 		}
 		$retry = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
 
@@ -507,14 +507,14 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			return false;
 		};
 		add_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 
 		// Act.
 		try {
 			$response = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
 		} finally {
 			remove_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
-			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			remove_filter( 'wcpos_logging', $log, 10 );
 		}
 
 		// Assert.
@@ -1916,14 +1916,14 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			$logged[] = $message;
 			return false;
 		};
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 
 		// Act.
 		try {
 			$declined = $this->gateway_command( $order, 'submit', $body );
 		} finally {
 			remove_action( 'woocommerce_before_order_object_save', $hook, 1 );
-			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			remove_filter( 'wcpos_logging', $log, 10 );
 			Sent_Test_Gateway::$failure = '';
 		}
 

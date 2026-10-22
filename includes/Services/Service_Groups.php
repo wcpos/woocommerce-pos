@@ -216,7 +216,8 @@ final class Service_Groups {
 		 *
 		 * @since 1.10.8
 		 */
-		do_action( 'woocommerce_pos_order_services_ready' );
+		do_action( 'wcpos_order_services_ready' );
+		do_action_deprecated( 'woocommerce_pos_order_services_ready', array(), '2.0.0', 'wcpos_order_services_ready' );
 	}
 
 	/**

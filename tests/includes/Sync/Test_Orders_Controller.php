@@ -45,14 +45,14 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	 */
 	public function setUp(): void {
 		parent::setUp();
-		add_filter( 'woocommerce_pos_sync_serialized_order', array( $this, 'stamp_test_uuid' ), 10, 3 );
+		add_filter( 'wcpos_sync_serialized_order', array( $this, 'stamp_test_uuid' ), 10, 3 );
 	}
 
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_sync_serialized_order', array( $this, 'stamp_test_uuid' ), 10 );
-		remove_filter( 'woocommerce_pos_sync_proxy_response', array( Meta_Normalizer::class, 'normalize' ), 5 );
-		remove_filter( 'woocommerce_pos_sync_serialized_product', array( Meta_Normalizer::class, 'normalize' ), 5 );
-		remove_filter( 'woocommerce_pos_sync_serialized_order', array( Meta_Normalizer::class, 'normalize' ), 5 );
+		remove_filter( 'wcpos_sync_serialized_order', array( $this, 'stamp_test_uuid' ), 10 );
+		remove_filter( 'wcpos_sync_proxy_response', array( Meta_Normalizer::class, 'normalize' ), 5 );
+		remove_filter( 'wcpos_sync_serialized_product', array( Meta_Normalizer::class, 'normalize' ), 5 );
+		remove_filter( 'wcpos_sync_serialized_order', array( Meta_Normalizer::class, 'normalize' ), 5 );
 		delete_option( Sync_Journal::BACKFILL_OPTION );
 		parent::tearDown();
 	}
@@ -148,11 +148,11 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 			return array_values( array_diff( $ids, array( $first->get_id() ) ) );
 		};
 
-		add_filter( 'woocommerce_pos_order_pull_ids', $filter, 10, 2 );
+		add_filter( 'wcpos_order_pull_ids', $filter, 10, 2 );
 		try {
 			$data = ( new Orders_Controller() )->pull_orders( $this->request( array( 'limit' => 100 ) ) )->get_data();
 		} finally {
-			remove_filter( 'woocommerce_pos_order_pull_ids', $filter, 10 );
+			remove_filter( 'wcpos_order_pull_ids', $filter, 10 );
 		}
 
 		$served_ids = array_map( static fn ( array $document ): int => (int) $document['payload']['id'], $data['documents'] );
@@ -171,11 +171,11 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 			return array_map( 'strval', $ids );
 		};
 
-		add_filter( 'woocommerce_pos_order_pull_ids', $filter, 10, 2 );
+		add_filter( 'wcpos_order_pull_ids', $filter, 10, 2 );
 		try {
 			$data = ( new Orders_Controller() )->pull_orders( $this->request( array( 'limit' => 100 ) ) )->get_data();
 		} finally {
-			remove_filter( 'woocommerce_pos_order_pull_ids', $filter, 10 );
+			remove_filter( 'wcpos_order_pull_ids', $filter, 10 );
 		}
 
 		$served_ids = array_map( static fn ( array $document ): int => (int) $document['payload']['id'], $data['documents'] );

@@ -105,9 +105,9 @@ class Test_Web_Bundle_Loader_Config extends WP_UnitTestCase {
 		$dev_filter = static function () use ( $development ) { return $development; };
 		$vars       = null;
 		$capture    = static function ( $value ) use ( &$vars ) { $vars = $value; return $value; };
-		add_filter( 'woocommerce_pos_web_bundle_ref', $ref_filter );
-		add_filter( 'woocommerce_pos_development_mode', $dev_filter );
-		add_filter( 'woocommerce_pos_inline_vars', $capture );
+		add_filter( 'wcpos_web_bundle_ref', $ref_filter );
+		add_filter( 'wcpos_development_mode', $dev_filter );
+		add_filter( 'wcpos_inline_vars', $capture );
 		ob_start();
 		try {
 			// Act.
@@ -129,9 +129,9 @@ class Test_Web_Bundle_Loader_Config extends WP_UnitTestCase {
 			}
 		} finally {
 			ob_end_clean();
-			remove_filter( 'woocommerce_pos_web_bundle_ref', $ref_filter );
-			remove_filter( 'woocommerce_pos_development_mode', $dev_filter );
-			remove_filter( 'woocommerce_pos_inline_vars', $capture );
+			remove_filter( 'wcpos_web_bundle_ref', $ref_filter );
+			remove_filter( 'wcpos_development_mode', $dev_filter );
+			remove_filter( 'wcpos_inline_vars', $capture );
 			wp_set_current_user( 0 );
 		}
 	}

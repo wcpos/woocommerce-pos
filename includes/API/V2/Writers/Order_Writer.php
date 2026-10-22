@@ -593,7 +593,8 @@ class Order_Writer extends Null_Writer {
 	/** Name and execute the permanent/trash stock restore/rollback protocol. */
 	private function forward_with_stock_restore_rollback( $request, int $id, bool $force, callable $dispatch, callable $can_delete ) {
 		$setting       = SettingsService::instance()->restore_stock_on_delete_enabled();
-		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', $setting, $id );
+		$restore_stock = apply_filters( 'wcpos_restore_stock_on_delete', $setting, $id );
+		$restore_stock = apply_filters_deprecated( 'woocommerce_pos_restore_stock_on_delete', array( $restore_stock, $id ), '2.0.0', 'wcpos_restore_stock_on_delete' );
 		$pre_restored  = false;
 		if ( $restore_stock && $force && $this->order_stock_reduced( $id ) && $can_delete( $id ) ) {
 			wc_maybe_increase_stock_levels( $id );
@@ -633,9 +634,11 @@ class Order_Writer extends Null_Writer {
 				$reassignment[ (string) $key ] = Meta_Entry::value( $entry ) ?? '';
 			}
 		}
-		$authorized = isset( $reassignment['_pos_store'] ) && is_scalar( $reassignment['_pos_store'] ) && '' !== (string) $reassignment['_pos_store']
-			? (bool) apply_filters( 'woocommerce_pos_order_store_reassignment_allowed', true, (string) $reassignment['_pos_store'], $id )
-			: false;
+		$authorized = false;
+		if ( isset( $reassignment['_pos_store'] ) && is_scalar( $reassignment['_pos_store'] ) && '' !== (string) $reassignment['_pos_store'] ) {
+			$authorized = apply_filters( 'wcpos_order_store_reassignment_allowed', true, (string) $reassignment['_pos_store'], $id );
+			$authorized = (bool) apply_filters_deprecated( 'woocommerce_pos_order_store_reassignment_allowed', array( $authorized, (string) $reassignment['_pos_store'], $id ), '2.0.0', 'wcpos_order_store_reassignment_allowed' );
+		}
 		// Read from the raw payload: the forward has already dropped an empty billing email.
 		$clear_email = isset( $payload['billing'] ) && is_array( $payload['billing'] )
 			&& array_key_exists( 'email', $payload['billing'] ) && '' === $payload['billing']['email'];

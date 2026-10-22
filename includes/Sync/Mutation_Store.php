@@ -46,7 +46,9 @@ class Mutation_Store {
 	 * we err large. Filterable for unusual setups.
 	 */
 	public function reservation_ttl(): int {
-		return max( 60, (int) apply_filters( 'woocommerce_pos_sync_reservation_ttl', 900 ) );
+		$filtered = apply_filters( 'wcpos_sync_reservation_ttl', 900 );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sync_reservation_ttl', array( $filtered ), '2.0.0', 'wcpos_sync_reservation_ttl' );
+		return max( 60, (int) $filtered );
 	}
 
 	public function table_name(): string {
@@ -327,7 +329,7 @@ class Mutation_Store {
 	 * whose client identity was never stamped, so the uuid guard cannot catch a
 	 * replay. They are rare (bounded by failures, not traffic) and are kept
 	 * forever unless a site opts into a window via
-	 * `woocommerce_pos_sync_mutation_failure_retention_days`.
+	 * `wcpos_sync_mutation_failure_retention_days`.
 	 *
 	 * @param string $cutoff_gmt UTC datetime; only rows created before it are pruned.
 	 * @param int    $limit      Maximum rows to delete.
@@ -408,7 +410,9 @@ class Mutation_Store {
 	 */
 	public function acquire_record_lock( string $collection, string $uuid ): bool {
 		global $wpdb;
-		$timeout = max( 0, (int) apply_filters( 'woocommerce_pos_sync_record_lock_timeout', 5 ) );
+		$filtered = apply_filters( 'wcpos_sync_record_lock_timeout', 5 );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sync_record_lock_timeout', array( $filtered ), '2.0.0', 'wcpos_sync_record_lock_timeout' );
+		$timeout = max( 0, (int) $filtered );
 		$got     = $wpdb->get_var(
 			$wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $this->record_lock_name( $collection, $uuid ), $timeout )
 		);

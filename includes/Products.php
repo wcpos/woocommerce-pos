@@ -238,7 +238,8 @@ class Products {
 		 * @param bool      $hide  Whether to exclude POS Only products from this query.
 		 * @param \WP_Query $query The query being decided.
 		 */
-		return (bool) apply_filters( 'woocommerce_pos_hide_pos_only_products', $hide, $query );
+		$filtered = apply_filters( 'wcpos_hide_pos_only_products', $hide, $query );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_hide_pos_only_products', array( $filtered, $query ), '2.0.0', 'wcpos_hide_pos_only_products' );
 	}
 
 	/**

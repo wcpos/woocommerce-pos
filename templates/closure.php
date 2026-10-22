@@ -12,7 +12,7 @@ $breakdowns = $closure['breakdowns'] ?? array();
 $fiscal = $receipt_data['fiscal'] ?? array();
 ?>
 <!doctype html>
-<html><head><meta charset="utf-8"><?php do_action( 'woocommerce_pos_receipt_head' ); ?><style>
+<html><head><meta charset="utf-8"><?php do_action( 'wcpos_receipt_head' ); ?><style>
 body { font: 12px sans-serif; max-width: 720px; margin: auto; padding: 12px; }
 table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
 th, td { text-align: right; padding: 4px; border-bottom: 1px solid #ddd; }

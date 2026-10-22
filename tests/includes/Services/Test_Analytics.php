@@ -41,7 +41,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		remove_filter( 'pre_http_request', array( $this, 'intercept_http' ), 10 );
-		remove_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
+		remove_filter( 'wcpos_is_pro_active', '__return_true' );
 		Analytics::reset_instance();
 		wp_set_current_user( 0 );
 
@@ -212,7 +212,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 */
 	public function test_default_properties_when_pro_detection_is_filtered_report_pro_active(): void {
 		// Arrange.
-		add_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
+		add_filter( 'wcpos_is_pro_active', '__return_true' );
 		$this->login_user_with_uuid();
 		$analytics = $this->enable_consent();
 
@@ -311,11 +311,11 @@ class Test_Analytics extends WP_UnitTestCase {
 		$cb = function () {
 			return 'phc_override';
 		};
-		add_filter( 'woocommerce_pos_posthog_token', $cb );
+		add_filter( 'wcpos_posthog_token', $cb );
 
 		$this->assertSame( 'phc_override', Analytics::instance()->get_token() );
 
-		remove_filter( 'woocommerce_pos_posthog_token', $cb );
+		remove_filter( 'wcpos_posthog_token', $cb );
 	}
 
 	/**
@@ -325,11 +325,11 @@ class Test_Analytics extends WP_UnitTestCase {
 		$cb = function () {
 			return 'https://ph.example.com/';
 		};
-		add_filter( 'woocommerce_pos_posthog_host', $cb );
+		add_filter( 'wcpos_posthog_host', $cb );
 
 		$this->assertSame( 'https://ph.example.com', Analytics::instance()->get_host() );
 
-		remove_filter( 'woocommerce_pos_posthog_host', $cb );
+		remove_filter( 'wcpos_posthog_host', $cb );
 	}
 
 	/**

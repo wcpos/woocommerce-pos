@@ -569,13 +569,13 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 			$editing->save();
 			return $snapshot;
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $edit, 10, 2 );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $edit, 10, 2 );
 
 		// Act.
 		try {
 			$this->record( $order, '92.95' );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $edit, 10 );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $edit, 10 );
 		}
 
 		// Assert: the document is the completed sale's, not the edited order's.

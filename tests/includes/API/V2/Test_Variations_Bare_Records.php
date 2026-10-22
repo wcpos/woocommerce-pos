@@ -47,9 +47,9 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		Meta_Normalizer::unregister_hooks();
 		Revision::unregister_proxy_stamps();
 		Proxy_Uuid_Stamper::unregister_proxy_stampers();
-		remove_filter( 'woocommerce_pos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ), 10 );
-		remove_filter( 'woocommerce_pos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ), 10 );
-		remove_all_filters( 'woocommerce_pos_sync_variation_revision_fields' );
+		remove_filter( 'wcpos_sync_proxy_response', array( Integrity_Digest::class, 'stamp_digests' ), 10 );
+		remove_filter( 'wcpos_sync_order_pull_payloads', array( Integrity_Digest::class, 'stamp_digests' ), 10 );
+		remove_all_filters( 'wcpos_sync_variation_revision_fields' );
 		// WordPress has no unregister_rest_field(); drop the entry from the registry directly.
 		unset( $GLOBALS['wp_rest_additional_fields']['product_variation']['revision_extra'] );
 		parent::tearDown();
@@ -129,7 +129,7 @@ class Test_Variations_Bare_Records extends WCPOS_REST_Unit_Test_Case {
 		$before = $this->flat( $variation );
 		$extra = 'site-value';
 		$noise = $this->flat( $variation );
-		add_filter( 'woocommerce_pos_sync_variation_revision_fields', static fn( $fields ) => array_merge( $fields, array( 'revision_extra' ) ) );
+		add_filter( 'wcpos_sync_variation_revision_fields', static fn( $fields ) => array_merge( $fields, array( 'revision_extra' ) ) );
 		$scoped = $this->flat( $variation );
 		$stale = $this->push( $variation, $before['_rxdb_revision'], array( 'stock_quantity' => 9 ) );
 		$ack = $this->push( $variation, $scoped['_rxdb_revision'], array( 'stock_quantity' => 9 ) );

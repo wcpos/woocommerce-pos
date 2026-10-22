@@ -93,7 +93,7 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			}
 			return false;
 		};
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			// Act / Assert: a register lock alone must not warn.
 			$registers = new Register_Store();
@@ -121,7 +121,7 @@ class Test_Cash_Movement_Store extends WP_UnitTestCase {
 			// Assert.
 			$this->assertSame( array( 'Register lock nesting is unsupported on this database server; a concurrent close and movement may interleave' ), $warnings );
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			Logger::reset_dedup_state();
 			Logger::$log_level = $previous_level;
 			$reflection->setValue( null, null );

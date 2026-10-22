@@ -159,7 +159,8 @@ class Print_Job_Service {
 		if ( ! empty( $args['drawer_connector'] ) ) {
 			update_post_meta( $id, self::META_DRAWER_CONNECTOR, self::normalize_drawer_connector( (string) $args['drawer_connector'] ) );
 		}
-		do_action( 'woocommerce_pos_print_job_created', (int) $id, (string) $args['printer_id'] );
+		do_action( 'wcpos_print_job_created', (int) $id, (string) $args['printer_id'] );
+		do_action_deprecated( 'woocommerce_pos_print_job_created', array( (int) $id, (string) $args['printer_id'] ), '2.0.0', 'wcpos_print_job_created' );
 
 		return (int) $id;
 	}
@@ -988,22 +989,26 @@ class Print_Job_Service {
 	 * Delete terminal jobs past their retention window.
 	 *
 	 * Runs daily via PURGE_HOOK. Printed/cancelled jobs are kept for
-	 * `woocommerce_pos_print_job_retention_days` (default 7 — long enough
+	 * `wcpos_print_job_retention_days` (default 7 — long enough
 	 * for the duplicate-trigger guard and "did it print?" questions);
-	 * failed jobs for `woocommerce_pos_print_job_failed_retention_days`
+	 * failed jobs for `wcpos_print_job_failed_retention_days`
 	 * (default 30 — they represent unresolved problems). A filter
 	 * returning 0 or less keeps that class of job forever. Waiting jobs
 	 * (pending/claimed) are never purged.
 	 */
 	public function purge_expired(): void {
+		$retention_days = apply_filters( 'wcpos_print_job_retention_days', 7 );
+		$retention_days = apply_filters_deprecated( 'woocommerce_pos_print_job_retention_days', array( $retention_days ), '2.0.0', 'wcpos_print_job_retention_days' );
+		$failed_retention_days = apply_filters( 'wcpos_print_job_failed_retention_days', 30 );
+		$failed_retention_days = apply_filters_deprecated( 'woocommerce_pos_print_job_failed_retention_days', array( $failed_retention_days ), '2.0.0', 'wcpos_print_job_failed_retention_days' );
 		$windows = array(
 			array(
 				'statuses' => array( self::STATUS_PRINTED, self::STATUS_CANCELLED ),
-				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_retention_days', 7 ),
+				'days'     => (int) $retention_days,
 			),
 			array(
 				'statuses' => array( self::STATUS_FAILED ),
-				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_failed_retention_days', 30 ),
+				'days'     => (int) $failed_retention_days,
 			),
 		);
 

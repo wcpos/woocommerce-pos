@@ -180,9 +180,12 @@ trait WCPOS_REST_API {
 			return;
 		}
 
-		$warning_threshold = (int) apply_filters( 'woocommerce_pos_meta_data_warning_threshold', 50 );
-		$error_threshold   = (int) apply_filters( 'woocommerce_pos_meta_data_error_threshold', 500 );
-		$include_top_keys  = (bool) apply_filters( 'woocommerce_pos_meta_data_log_top_keys', false, $object, $count );
+		$warning_threshold = apply_filters( 'wcpos_meta_data_warning_threshold', 50 );
+		$warning_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_meta_data_warning_threshold', array( $warning_threshold ), '2.0.0', 'wcpos_meta_data_warning_threshold' );
+		$error_threshold = apply_filters( 'wcpos_meta_data_error_threshold', 500 );
+		$error_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_meta_data_error_threshold', array( $error_threshold ), '2.0.0', 'wcpos_meta_data_error_threshold' );
+		$include_top_keys = apply_filters( 'wcpos_meta_data_log_top_keys', false, $object, $count );
+		$include_top_keys = (bool) apply_filters_deprecated( 'woocommerce_pos_meta_data_log_top_keys', array( $include_top_keys, $object, $count ), '2.0.0', 'wcpos_meta_data_log_top_keys' );
 		$context           = $include_top_keys ? 'Top meta keys: ' . $this->wcpos_get_top_meta_keys( $raw_meta ) : null;
 
 		if ( $count >= $error_threshold ) {
@@ -282,8 +285,10 @@ trait WCPOS_REST_API {
 			}
 		}
 
-		$warning_threshold = (int) apply_filters( 'woocommerce_pos_response_size_warning_threshold', 100000 );
-		$error_threshold   = (int) apply_filters( 'woocommerce_pos_response_size_error_threshold', 500000 );
+		$warning_threshold = apply_filters( 'wcpos_response_size_warning_threshold', 100000 );
+		$warning_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_response_size_warning_threshold', array( $warning_threshold ), '2.0.0', 'wcpos_response_size_warning_threshold' );
+		$error_threshold = apply_filters( 'wcpos_response_size_error_threshold', 500000 );
+		$error_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_response_size_error_threshold', array( $error_threshold ), '2.0.0', 'wcpos_response_size_error_threshold' );
 
 		if ( $estimated_size >= $error_threshold ) {
 			$logged_ids[ $key ] = true;

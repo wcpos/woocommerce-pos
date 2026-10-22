@@ -133,7 +133,7 @@ class Test_Order_Revision_Recipe extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		Revision::unregister_proxy_stamps();
 		Meta_Normalizer::unregister_hooks();
-		remove_all_filters( 'woocommerce_pos_sync_order_revision_fields' );
+		remove_all_filters( 'wcpos_sync_order_revision_fields' );
 		parent::tearDown();
 	}
 
@@ -230,7 +230,7 @@ class Test_Order_Revision_Recipe extends Sync_REST_Store_Test_Case {
 		// Arrange.
 		$order = $this->fixture_order();
 		add_filter(
-			'woocommerce_pos_sync_serialized_order',
+			'wcpos_sync_serialized_order',
 			static function ( $payload ) {
 				$payload['x_third_party'] = 'read-time decoration';
 
@@ -254,7 +254,7 @@ class Test_Order_Revision_Recipe extends Sync_REST_Store_Test_Case {
 		// Arrange.
 		$order = $this->fixture_order();
 		add_filter(
-			'woocommerce_pos_sync_serialized_order',
+			'wcpos_sync_serialized_order',
 			static function ( $payload ) {
 				$payload['x_third_party'] = 'read-time decoration';
 
@@ -307,7 +307,7 @@ class Test_Order_Revision_Recipe extends Sync_REST_Store_Test_Case {
 		$this->add_site_local_field();
 		$unscoped = $this->pull_revision( $order->get_id() );
 		add_filter(
-			'woocommerce_pos_sync_order_revision_fields',
+			'wcpos_sync_order_revision_fields',
 			static function ( $fields ) {
 				$fields[] = 'x_probe';
 

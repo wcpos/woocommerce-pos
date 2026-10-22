@@ -755,9 +755,10 @@ class Templates {
 		 *
 		 * @since 1.9.2
 		 *
-		 * @hook woocommerce_pos_wp_overnight_pdf_templates_enabled
+		 * @hook wcpos_wp_overnight_pdf_templates_enabled
 		 */
-		return (bool) apply_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', $available );
+		$filtered = apply_filters( 'wcpos_wp_overnight_pdf_templates_enabled', $available );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', array( $filtered ), '2.0.0', 'wcpos_wp_overnight_pdf_templates_enabled' );
 	}
 
 	/**
@@ -1192,7 +1193,7 @@ class Templates {
 	 * @return string Absolute path to the content file, or '' when none exists.
 	 */
 	private static function find_gallery_content_file( string $key, array $metadata = array() ): string {
-		// An entry added through `woocommerce_pos_gallery_templates` lives in another plugin and
+		// An entry added through `wcpos_gallery_templates` lives in another plugin and
 		// cannot put its markup in this one's directory, so it may name its own file. Without this
 		// the filter can only ever re-describe templates that already ship here.
 		if ( isset( $metadata['content_file'] ) && \is_string( $metadata['content_file'] ) ) {

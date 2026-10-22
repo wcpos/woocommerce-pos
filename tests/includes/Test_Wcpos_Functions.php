@@ -240,7 +240,7 @@ class Test_Wcpos_Functions extends WP_UnitTestCase {
 	public function test_wcpos_checkout_url_force_ssl_disabled_preserves_home_scheme(): void {
 		// Arrange.
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['force_ssl'] = false;
 

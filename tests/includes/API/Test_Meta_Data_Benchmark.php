@@ -35,19 +35,19 @@ class Test_Meta_Data_Benchmark extends WCPOS_REST_Unit_Test_Case {
 
 		// Suppress monitoring logs so they don't affect timing.
 		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
+			'wcpos_meta_data_warning_threshold',
 			function () {
 				return 99999;
 			}
 		);
 		add_filter(
-			'woocommerce_pos_meta_data_error_threshold',
+			'wcpos_meta_data_error_threshold',
 			function () {
 				return 99999;
 			}
 		);
 		add_filter(
-			'woocommerce_pos_response_size_warning_threshold',
+			'wcpos_response_size_warning_threshold',
 			function () {
 				return 999999999;
 			}
@@ -58,9 +58,9 @@ class Test_Meta_Data_Benchmark extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
-		remove_all_filters( 'woocommerce_pos_meta_data_warning_threshold' );
-		remove_all_filters( 'woocommerce_pos_meta_data_error_threshold' );
-		remove_all_filters( 'woocommerce_pos_response_size_warning_threshold' );
+		remove_all_filters( 'wcpos_meta_data_warning_threshold' );
+		remove_all_filters( 'wcpos_meta_data_error_threshold' );
+		remove_all_filters( 'wcpos_response_size_warning_threshold' );
 		parent::tearDown();
 	}
 

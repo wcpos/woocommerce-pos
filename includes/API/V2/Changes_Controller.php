@@ -684,7 +684,8 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * phantom changes (measured live: 43/52 false positives per no-op sweep).
 	 */
 	private function canonicalize_for_revision( array $payload ): array {
-		$excluded = apply_filters( 'woocommerce_pos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
+		$excluded = apply_filters( 'wcpos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
+		$excluded = apply_filters_deprecated( 'woocommerce_pos_sync_revision_excluded_fields', array( $excluded ), '2.0.0', 'wcpos_sync_revision_excluded_fields' );
 		foreach ( (array) $excluded as $field ) {
 			unset( $payload[ $field ] );
 		}

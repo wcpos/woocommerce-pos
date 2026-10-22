@@ -486,7 +486,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$product->set_catalog_visibility( $prior );
 		$product->save();
 		$id = $product->get_id();
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+		add_filter( 'wcpos_pos_only_catalog_visibility', '__return_null' );
 		$saves = 0;
 		$count_save = static function () use ( &$saves ) {
 			++$saves;
@@ -528,7 +528,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
 		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
 		remove_action( 'woocommerce_update_product', $count_save );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', '__return_null' );
 	}
 
 	/**
@@ -552,7 +552,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$filter = static function () {
 			return 'search';
 		};
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		add_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 
 		// Act.
 		$this->set_visibility( $id );
@@ -576,7 +576,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
 		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 	}
 
 	/**
@@ -588,14 +588,14 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$filter = static function () {
 			return 'bogus';
 		};
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		add_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 
 		// Act.
 		$this->set_visibility( $id );
 
 		// Assert.
 		$this->assertSame( 'hidden', wc_get_product( $id )->get_catalog_visibility() );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 	}
 
 	/**
@@ -611,14 +611,14 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 			$called = true;
 			return $visibility;
 		};
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter, 10, 2 );
+		add_filter( 'wcpos_pos_only_catalog_visibility', $filter, 10, 2 );
 
 		// Act.
 		$this->set_visibility( $id );
 
 		// Assert.
 		$this->assertTrue( $called );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 	}
 
 	/**
@@ -631,7 +631,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$filter = static function ( $visibility, $product ) use ( $first ) {
 			return $first === $product->get_id() ? null : $visibility;
 		};
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter, 10, 2 );
+		add_filter( 'wcpos_pos_only_catalog_visibility', $filter, 10, 2 );
 
 		// Act.
 		Settings::instance()->update_visibility_settings(
@@ -647,7 +647,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$this->assertFalse( metadata_exists( 'post', $first, Catalog_Visibility::PRIOR_META ) );
 		$this->assertSame( 'hidden', wc_get_product( $second )->get_catalog_visibility() );
 		$this->assertSame( 'visible', get_post_meta( $second, Catalog_Visibility::PRIOR_META, true ) );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 	}
 
 	/**
@@ -665,7 +665,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$filter          = static function () use ( $forced ) {
 			return $forced;
 		};
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		add_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 		$this->set_visibility( $id );
 		$post = get_post( $id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Render the product edit screen.
 		set_current_screen( 'product' );
@@ -676,7 +676,7 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$output = ob_get_clean();
 		$post   = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore the previous screen context.
 		set_current_screen( $previous_screen );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $filter );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', $filter );
 
 		// Assert.
 		if ( null === $forced ) {
@@ -709,11 +709,11 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		$search = static function () {
 			return 'search';
 		};
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', $search );
+		add_filter( 'wcpos_pos_only_catalog_visibility', $search );
 		$this->set_visibility( $id );
 		$this->assertSame( 'search', wc_get_product( $id )->get_catalog_visibility() );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', $search );
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', $search );
+		add_filter( 'wcpos_pos_only_catalog_visibility', '__return_null' );
 
 		// Act.
 		$this->set_visibility( $id, '' );
@@ -721,6 +721,6 @@ class Test_Catalog_Visibility extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 'visible', wc_get_product( $id )->get_catalog_visibility() );
 		$this->assertFalse( metadata_exists( 'post', $id, Catalog_Visibility::PRIOR_META ) );
-		remove_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+		remove_filter( 'wcpos_pos_only_catalog_visibility', '__return_null' );
 	}
 }

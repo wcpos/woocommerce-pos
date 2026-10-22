@@ -485,11 +485,11 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 			$fields['store_id'] = 123;
 			return $fields;
 		};
-		add_filter( 'woocommerce_pos_register_upsert_fields', $filter, 10, 2 );
+		add_filter( 'wcpos_register_upsert_fields', $filter, 10, 2 );
 		try {
 			$response = $this->post_register( array( 'name' => 'Front' ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_register_upsert_fields', $filter );
+			remove_filter( 'wcpos_register_upsert_fields', $filter );
 		}
 		$this->assertSame( 201, $response->get_status() );
 		$this->assertSame( $seen, $response->get_data()['id'] );
@@ -597,12 +597,12 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 			return $fields;
 		};
 		add_filter( 'query', $trace );
-		add_filter( 'woocommerce_pos_register_update_fields', $filter );
+		add_filter( 'wcpos_register_update_fields', $filter );
 		try {
 			// Act.
 			$response = $this->server->dispatch( $request );
 		} finally {
-			remove_filter( 'woocommerce_pos_register_update_fields', $filter );
+			remove_filter( 'wcpos_register_update_fields', $filter );
 			remove_filter( 'query', $trace );
 		}
 		// Assert.
@@ -678,11 +678,11 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 			$args['store_id'] = 123;
 			return $args;
 		};
-		add_filter( 'woocommerce_pos_registers_list_args', $scope, 10, 2 );
+		add_filter( 'wcpos_registers_list_args', $scope, 10, 2 );
 		try {
 			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_registers_list_args', $scope );
+			remove_filter( 'wcpos_registers_list_args', $scope );
 		}
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $id ), array_column( $response->get_data()['registers'], 'id' ) );
@@ -770,11 +770,11 @@ class Test_Registers_Controller extends WCPOS_REST_Unit_Test_Case {
 			$args['store_id'] = 1;
 			return $args;
 		};
-		add_filter( 'woocommerce_pos_registers_list_args', $scope );
+		add_filter( 'wcpos_registers_list_args', $scope );
 		try {
 			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/registers/health' ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_registers_list_args', $scope );
+			remove_filter( 'wcpos_registers_list_args', $scope );
 		}
 		$this->assertSame( 200, $response->get_status() );
 		$report = $response->get_data();

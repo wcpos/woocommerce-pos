@@ -41,7 +41,7 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 		Logger::reset_dedup_state();
 
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				$this->logged_messages[] = $message;
 
@@ -61,7 +61,7 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 		$wp->query_vars = array();
 		delete_transient( 'wcpos_missing_request_marker_v1' );
 		delete_transient( 'wcpos_missing_request_marker_v2' );
-		remove_all_filters( 'woocommerce_pos_logging' );
+		remove_all_filters( 'wcpos_logging' );
 		Logger::reset_dedup_state();
 		parent::tearDown();
 	}

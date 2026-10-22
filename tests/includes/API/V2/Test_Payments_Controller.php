@@ -48,14 +48,14 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->logged_messages[] = $message;
 			return false;
 		};
-		add_filter( 'woocommerce_pos_logging', $this->log_filter, 10, 2 );
+		add_filter( 'wcpos_logging', $this->log_filter, 10, 2 );
 		// WP restores hooks between tests while the writer singleton survives: arm its sale trigger.
 		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
 	}
 
 	/** Remove the capture filter after each test. */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_logging', $this->log_filter, 10 );
+		remove_filter( 'wcpos_logging', $this->log_filter, 10 );
 		Logger::reset_dedup_state();
 		parent::tearDown();
 	}
@@ -265,7 +265,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$listener = static function ( $hook_order, $row ) use ( &$calls ) {
 			$calls[] = array( $hook_order, $row );
 		};
-		add_action( 'woocommerce_pos_payment_recorded', $listener, 10, 2 );
+		add_action( 'wcpos_payment_recorded', $listener, 10, 2 );
 		try {
 			$first = $this->record( $order, $payment );
 			$this->assertSame( array( sprintf( 'WCPOS payment %s recorded on order #%d: 92.95 USD via pos_cash (captured) by cashier #%d', $payment['id'], $order->get_id(), get_current_user_id() ) ), $this->payment_logs() );
@@ -279,7 +279,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( $payment['id'], $calls[0][1]['id'] );
 			$this->assertSame( 'captured', $calls[0][1]['status'] );
 		} finally {
-			remove_action( 'woocommerce_pos_payment_recorded', $listener, 10 );
+			remove_action( 'wcpos_payment_recorded', $listener, 10 );
 		}
 
 		// Assert.
@@ -302,11 +302,11 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$listener = static function ( $hook_order, $row ) use ( &$calls ) {
 			$calls[] = array( $hook_order, $row );
 		};
-		add_action( 'woocommerce_pos_payment_refused', $listener, 10, 2 );
+		add_action( 'wcpos_payment_refused', $listener, 10, 2 );
 		try {
 			$response = $this->record( $order, $payment );
 		} finally {
-			remove_action( 'woocommerce_pos_payment_refused', $listener, 10 );
+			remove_action( 'wcpos_payment_refused', $listener, 10 );
 		}
 		$data = $response->get_data();
 		$this->assertSame( array( sprintf( 'WCPOS payment %s refused on order #%d: order_already_paid (10.00 USD against 0.00 owed)', $payment['id'], $order->get_id() ) ), $this->payment_logs() );
@@ -422,11 +422,11 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$listener = static function ( $hook_order, $row, $applied, $reason ) use ( &$calls ) {
 			$calls[] = array( $hook_order->get_id(), $row['id'], $applied['status'], $reason );
 		};
-		add_action( 'woocommerce_pos_payment_voided', $listener, 10, 4 );
+		add_action( 'wcpos_payment_voided', $listener, 10, 4 );
 		try {
 			$response = $this->void( $order, $payment['id'] );
 		} finally {
-			remove_action( 'woocommerce_pos_payment_voided', $listener, 10 );
+			remove_action( 'wcpos_payment_voided', $listener, 10 );
 		}
 
 		// Assert.
@@ -2413,7 +2413,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$body    = $this->envelope( $order, array( 'payment' => $payment, 'context' => array( 'reader' => 'reader-1' ) ) );
 		$this->assertSame( 200, $this->command( $path, $body )->get_status() );
 		add_filter(
-			'woocommerce_pos_payment_gateways_settings',
+			'wcpos_payment_gateways_settings',
 			static function ( $settings ) {
 				$settings['gateways']['pos_cash']['enabled'] = false;
 				return $settings;

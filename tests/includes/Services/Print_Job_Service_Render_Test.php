@@ -23,11 +23,11 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 			$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
 			return $snapshot;
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$number = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload']['fiscal']['receipt_number'];
 		$tid = $this->create_thermal_template( '<receipt><text>ID:{{fiscal.receipt_number}} {{fiscal.qr_payload}}</text></receipt>' );
@@ -308,7 +308,7 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	 * It renders WP Overnight native PDF bytes for PrintNode PDF jobs.
 	 */
 	public function test_render_payload_printnode_wp_overnight_invoice_uses_native_pdf_bytes(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$native_pdf = "%PDF-1.4\n% native wp overnight invoice from cloud print\n";
 		$callback   = function () use ( $native_pdf ) {
@@ -339,7 +339,7 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 				}
 			};
 		};
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+		add_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10, 3 );
 
 		try {
 			$order  = OrderHelper::create_order();
@@ -357,8 +357,8 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 
 			$this->assertSame( $native_pdf, $out );
 		} finally {
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+			remove_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 		}
 	}
 

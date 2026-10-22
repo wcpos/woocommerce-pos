@@ -195,9 +195,10 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 		 *
 		 * @param array $settings The section settings.
 		 *
-		 * @hook woocommerce_pos_{$id}_settings
+		 * @hook wcpos_{$id}_settings
 		 */
-		$settings = apply_filters( "woocommerce_pos_{$this->id()}_settings", $settings );
+		$settings = apply_filters( "wcpos_{$this->id()}_settings", $settings );
+		$settings = apply_filters_deprecated( "woocommerce_pos_{$this->id()}_settings", array( $settings ), '2.0.0', "wcpos_{$this->id()}_settings" );
 
 		return $this->redact( $settings );
 	}
@@ -231,9 +232,10 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 		 * @param array  $settings The settings array about to be saved.
 		 * @param string $id       The ID of the settings section being saved.
 		 *
-		 * @hook woocommerce_pos_pre_save_{$id}_settings
+		 * @hook wcpos_pre_save_{$id}_settings
 		 */
-		$settings = apply_filters( "woocommerce_pos_pre_save_{$this->id()}_settings", $settings, $this->id() );
+		$settings = apply_filters( "wcpos_pre_save_{$this->id()}_settings", $settings, $this->id() );
+		$settings = apply_filters_deprecated( "woocommerce_pos_pre_save_{$this->id()}_settings", array( $settings, $this->id() ), '2.0.0', "wcpos_pre_save_{$this->id()}_settings" );
 
 		$option_name    = $this->option_name();
 		$previous_value = get_option( $option_name, null );
@@ -267,9 +269,10 @@ abstract class Abstract_Section implements Settings_Section_Interface {
 			 * @param array  $saved_settings The settings array that was just saved.
 			 * @param string $id             The ID of the settings section that was saved.
 			 *
-			 * @hook woocommerce_pos_saved_{$id}_settings
+			 * @hook wcpos_saved_{$id}_settings
 			 */
-			do_action( "woocommerce_pos_saved_{$this->id()}_settings", $saved_settings, $this->id() );
+			do_action( "wcpos_saved_{$this->id()}_settings", $saved_settings, $this->id() );
+			do_action_deprecated( "woocommerce_pos_saved_{$this->id()}_settings", array( $saved_settings, $this->id() ), '2.0.0', "wcpos_saved_{$this->id()}_settings" );
 		}
 
 		return $saved_settings;

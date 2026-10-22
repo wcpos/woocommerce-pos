@@ -65,7 +65,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 	/** Grant closure capabilities and restore the singleton's WooCommerce observer. */
 	public function setUp(): void {
 		add_filter(
-			'woocommerce_pos_payment_gateways_settings',
+			'wcpos_payment_gateways_settings',
 			static function ( $settings ) {
 				$settings['gateways']['pos_card']['enabled'] = true;
 				return $settings;
@@ -75,7 +75,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos_cash' );
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos_closures' );
 		add_action( 'woocommerce_order_refunded', array( Fiscal_Record_Writers::instance(), 'handle_refund' ), 10, 2 );
-		add_action( 'woocommerce_pos_refund_allocated', array( Fiscal_Record_Writers::instance(), 'handle_allocation' ), 10, 4 );
+		add_action( 'wcpos_refund_allocated', array( Fiscal_Record_Writers::instance(), 'handle_allocation' ), 10, 4 );
 	}
 
 	/** Switch order storage to HPOS for this case, restored in tearDown. */

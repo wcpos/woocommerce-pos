@@ -65,11 +65,16 @@ class Frontend {
 		$this->no_cache();
 
 		// last chance before frontend template is rendered.
-		do_action( 'woocommerce_pos_frontend_template_redirect' );
+		do_action( 'wcpos_frontend_template_redirect' );
+		do_action_deprecated( 'woocommerce_pos_frontend_template_redirect', array(), '2.0.0', 'wcpos_frontend_template_redirect' );
 
 		// add head & footer actions.
-		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
-		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
+		add_action( 'wcpos_head', array( $this, 'head' ) );
+		add_action( 'wcpos_footer', array( $this, 'footer' ) );
+		// A theme's pos.php override fires the 1.x names itself; the bridge
+		// lives on the listener side (ADR 0041).
+		add_action( 'woocommerce_pos_head', array( $this, 'legacy_head' ) );
+		add_action( 'woocommerce_pos_footer', array( $this, 'legacy_footer' ) );
 
 		// Generate user credentials BEFORE including template to ensure cookies can be set.
 		// The set_web_session_cookie() call in Auth::get_user_data() requires headers not yet sent.
@@ -99,6 +104,22 @@ class Frontend {
 	 */
 	public function login_url( $login_url ) {
 		return add_query_arg( SHORT_NAME, '1', $login_url );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_head` (1.x) as `wcpos_head`.
+	 */
+	public function legacy_head(): void {
+		_deprecated_hook( 'woocommerce_pos_head', '2.0.0', 'wcpos_head' );
+		do_action( 'wcpos_head' );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_footer` (1.x) as `wcpos_footer`.
+	 */
+	public function legacy_footer(): void {
+		_deprecated_hook( 'woocommerce_pos_footer', '2.0.0', 'wcpos_footer' );
+		do_action( 'wcpos_footer' );
 	}
 
 	/**
@@ -149,12 +170,13 @@ class Frontend {
 		 *                          Defaults to checking WCPOS_DEVELOPMENT constant,
 		 *                          then $_ENV['DEVELOPMENT'].
 		 *
-		 * @hook woocommerce_pos_development_mode
+		 * @hook wcpos_development_mode
 		 */
-		return (bool) apply_filters(
-			'woocommerce_pos_development_mode',
+		$filtered = apply_filters(
+			'wcpos_development_mode',
 			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) ) )
 		);
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_development_mode', array( $filtered ), '2.0.0', 'wcpos_development_mode' );
 	}
 
 	/**
@@ -192,9 +214,10 @@ class Frontend {
 		 * full base URL (anything containing `://`, e.g. a local dev server or an EAS
 		 * preview) also work.
 		 *
-		 * @hook woocommerce_pos_web_bundle_ref
+		 * @hook wcpos_web_bundle_ref
 		 */
-		$bundle_ref = (string) apply_filters( 'woocommerce_pos_web_bundle_ref', $explicit_bundle_ref ?? $default_bundle_ref );
+		$bundle_ref = apply_filters( 'wcpos_web_bundle_ref', $explicit_bundle_ref ?? $default_bundle_ref );
+		$bundle_ref = (string) apply_filters_deprecated( 'woocommerce_pos_web_bundle_ref', array( $bundle_ref ), '2.0.0', 'wcpos_web_bundle_ref' );
 		$bundle_ref = trim( $bundle_ref );
 		if ( '' === $bundle_ref ) {
 			$bundle_ref = $default_bundle_ref;
@@ -290,9 +313,10 @@ class Frontend {
 		 *
 		 * @since 1.0.0
 		 *
-		 * @hook woocommerce_pos_inline_vars
+		 * @hook wcpos_inline_vars
 		 */
-		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
+		$vars = apply_filters( 'wcpos_inline_vars', $vars );
+		$vars = apply_filters_deprecated( 'woocommerce_pos_inline_vars', array( $vars ), '2.0.0', 'wcpos_inline_vars' );
 		$initial_props = wp_json_encode( $vars );
 		$cdn_base_url  = wp_json_encode( $cdn_base_url );
 

@@ -288,7 +288,7 @@ final class Gallery_Update_Status {
 	 * A fingerprint of every key and version the EFFECTIVE registry currently offers.
 	 *
 	 * Keyed to the registry rather than the plugin version so that a template contributed through
-	 * `woocommerce_pos_gallery_templates` — by Pro, say — can bump its own version and be picked
+	 * `wcpos_gallery_templates` — by Pro, say — can bump its own version and be picked
 	 * up without waiting for a free-plugin release. Keying on VERSION made the documented
 	 * extension point unusable for the one thing versions are for.
 	 *

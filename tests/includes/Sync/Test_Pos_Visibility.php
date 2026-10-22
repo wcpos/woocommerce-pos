@@ -112,7 +112,7 @@ class Test_Pos_Visibility extends WP_UnitTestCase {
 		$this->enable_feature( true );
 		$this->store_hidden( array(), array() );
 		$this->add_filter(
-			'woocommerce_pos_online_only_product_visibility_settings',
+			'wcpos_online_only_product_visibility_settings',
 			static function ( $settings ) {
 				$settings['ids'] = array( 4242 );
 
@@ -130,7 +130,7 @@ class Test_Pos_Visibility extends WP_UnitTestCase {
 		$this->enable_feature( true );
 		$this->store_hidden( array(), array() );
 		$this->add_filter(
-			'woocommerce_pos_online_only_variations_visibility_settings',
+			'wcpos_online_only_variations_visibility_settings',
 			static function ( $settings ) {
 				$settings['ids'] = array( 5252 );
 

@@ -82,7 +82,8 @@ class Extensions {
 		 *
 		 * @param string $url The catalog URL.
 		 */
-		$url = apply_filters( 'woocommerce_pos_extensions_catalog_url', self::CATALOG_URL );
+		$url = apply_filters( 'wcpos_extensions_catalog_url', self::CATALOG_URL );
+		$url = apply_filters_deprecated( 'woocommerce_pos_extensions_catalog_url', array( $url ), '2.0.0', 'wcpos_extensions_catalog_url' );
 
 		$response = wp_remote_get(
 			$url,

@@ -37,7 +37,7 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 		$filter = static function ( $resolved_store, $the_store, $args ) use ( $store ) {
 			return 7 === $the_store ? $store : $resolved_store;
 		};
-		add_filter( 'woocommerce_pos_get_store', $filter, 10, 3 );
+		add_filter( 'wcpos_get_store', $filter, 10, 3 );
 
 		try {
 			// Act.
@@ -51,7 +51,7 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 			// Assert.
 			$this->assertSame( 7, $data['store']['id'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $filter, 10 );
+			remove_filter( 'wcpos_get_store', $filter, 10 );
 		}
 	}
 
@@ -245,11 +245,11 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 			return $data;
 		};
 
-		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		add_filter( 'wcpos_receipt_data', $filter, 10, 3 );
 		try {
 			$data = ( new Receipt_Preview_Fixture_Loader() )->build( 'base-receipt' );
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_data', $filter, 10 );
+			remove_filter( 'wcpos_receipt_data', $filter, 10 );
 		}
 
 		$this->assertSame( 1, $calls );

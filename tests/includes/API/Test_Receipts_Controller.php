@@ -282,7 +282,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test PDF endpoint returns WP Overnight's native PDF bytes for integration templates.
 	 */
 	public function test_get_receipt_pdf_wp_overnight_invoice_uses_native_pdf_bytes(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$native_pdf = "%PDF-1.4\n% native wp overnight invoice from POS download\n";
 		$callback   = static function () use ( $native_pdf ) {
@@ -298,7 +298,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 				}
 			};
 		};
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+		add_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10, 3 );
 
 		try {
 			$order = OrderHelper::create_order();
@@ -315,8 +315,8 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( $native_pdf, $body );
 			$this->assertEquals( (string) \strlen( $native_pdf ), $headers['Content-Length'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+			remove_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 		}
 	}
 
@@ -537,7 +537,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$template_id = $this->create_receipt_template();
 		// A live rebuild must not be consulted by either rendering engine.
 		$reject_live = static function () { throw new \RuntimeException( 'Unexpected live build' ); };
-		add_filter( 'woocommerce_pos_receipt_data', $reject_live );
+		add_filter( 'wcpos_receipt_data', $reject_live );
 		try {
 			foreach ( array( 'thermal', 'logicless' ) as $engine ) {
 				update_post_meta( $template_id, '_template_engine', $engine );
@@ -550,7 +550,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->assertStringStartsWith( '%PDF-', $this->serve_raw_response_body( $response, $request ) );
 			}
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_data', $reject_live );
+			remove_filter( 'wcpos_receipt_data', $reject_live );
 		}
 		$wrong_order = OrderHelper::create_order();
 		foreach ( array( '' , '/pdf' ) as $suffix ) {
