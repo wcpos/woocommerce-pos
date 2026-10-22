@@ -324,6 +324,47 @@ final class Completion_Stamp {
 	}
 
 	/**
+	 * The latest completion entry while it stands; null when the sale has none or was reopened.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	public static function standing( WC_Order $order ): ?array {
+		$history = self::read( $order );
+		$latest  = end( $history );
+		return is_array( $latest ) && empty( $latest['reopened_at_gmt'] ) ? $latest : null;
+	}
+
+	/**
+	 * The order as this completion saw it: an in-memory copy whose till tuple carries the entry's
+	 * register, session, sale time, zone and counter (an absent value stays absent), so a receipt or
+	 * fiscal document built from it names the register that completed the sale, not the first one.
+	 * Never saved.
+	 *
+	 * @param WC_Order $order      Order.
+	 * @param array    $completion Completion entry.
+	 */
+	public static function as_completed( WC_Order $order, array $completion ): WC_Order {
+		$copy = clone $order;
+		// WC_Abstract_Order::__clone() is empty, so a clone shares its meta objects with the order:
+		// give the copy its own before changing any of them.
+		$copy->read_meta_data( true );
+		foreach ( array(
+			'register'  => '_wcpos_register',
+			'session'   => '_wcpos_session',
+			'sale_time' => '_wcpos_sale_time',
+			'sale_tz'   => '_wcpos_sale_tz',
+			'counter'   => '_wcpos_sale_counter',
+		) as $field => $key ) {
+			if ( null === ( $completion[ $field ] ?? null ) ) {
+				$copy->delete_meta_data( $key );
+			} else {
+				$copy->update_meta_data( $key, (string) $completion[ $field ] );
+			}
+		}
+		return $copy;
+	}
+
+	/**
 	 * Whether the sale's completion stands: its latest entry is not marked reopened, or, before the
 	 * history existed, it is paid in a completed status. A standing sale takes no new tender, whatever
 	 * WooCommerce's is_editable() says of its status (a merchant's POS status stored as on-hold).
