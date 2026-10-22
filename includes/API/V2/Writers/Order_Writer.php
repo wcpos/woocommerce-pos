@@ -32,12 +32,6 @@ use const WCPOS\WooCommercePOS\VERSION;
 /** Owns order audit, tax, reassignment, hook, note, email, and stock behavior. */
 class Order_Writer extends Null_Writer {
 	/**
-	 * The statuses a till may push (ADR 0040 D4): the open statuses and cancel. `pos-partial`
-	 * is derived from the ledger, and `failed` and every paid status are the server's.
-	 */
-	public const PUSHABLE_STATUSES = array( 'pos-open', 'pending', 'on-hold', 'cancelled' );
-
-	/**
 	 * Payload keys that can move money on the order: a push carrying one is serialised against the
 	 * money commands. Billing and shipping count because wc/v3 recalculates the totals when either is sent.
 	 */
@@ -48,6 +42,9 @@ class Order_Writer extends Null_Writer {
 
 	/** @var Order_Write_Payload Order forward payload shaper. */
 	private Order_Write_Payload $order_payload;
+
+	/** @var Pushable_Document What a push may forward to wc/v3. */
+	private Pushable_Document $document;
 
 	/**
 	 * Provenance keys the pre-insert callback refused because the order had
@@ -62,6 +59,7 @@ class Order_Writer extends Null_Writer {
 	public function __construct( object $store, ?Order_Write_Payload $order_payload = null ) {
 		$this->store         = $store;
 		$this->order_payload = $order_payload ?? new Order_Write_Payload();
+		$this->document      = new Pushable_Document( $this->order_payload );
 	}
 
 	/** Prepare an order create and its create-only hook policy. */
@@ -74,15 +72,9 @@ class Order_Writer extends Null_Writer {
 		if ( is_wp_error( $error ) ) {
 			return $error;
 		}
-		$payload = self::with_pushable_status( $payload );
-		if ( is_wp_error( $payload ) ) {
-			return $payload;
-		}
-		$forward                = self::without_money( $payload );
-		$forward['created_via'] = 'woocommerce-pos';
-		unset( $forward['tax_ids'] );
-		if ( isset( $forward['meta_data'] ) && is_array( $forward['meta_data'] ) ) {
-			$forward['meta_data'] = $this->without_pos_audit_meta( $forward );
+		$forward = $this->document->shape( $payload );
+		if ( is_wp_error( $forward ) ) {
+			return $forward;
 		}
 		$meta_data = isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ? $payload['meta_data'] : array();
 		$till_meta = Pos_Order_Audit::till_meta_from_payload( $meta_data );
@@ -94,7 +86,7 @@ class Order_Writer extends Null_Writer {
 		return array(
 			'method' => 'POST',
 			'route' => $meta['route'],
-			'payload' => $this->order_payload->for_create( $forward ),
+			'payload' => $forward,
 			'context' => array(
 				'operation' => 'create',
 				'created_gmt' => $created_gmt,
@@ -630,9 +622,9 @@ class Order_Writer extends Null_Writer {
 	 */
 	private function prepare_order_update_after_read( int $id, array $payload, ?int $created_gmt = null ) {
 		$order   = wc_get_order( $id );
-		$payload = self::with_pushable_status( $payload, $order ? $order->get_status() : null );
-		if ( is_wp_error( $payload ) ) {
-			return $payload;
+		$forward = $this->document->shape( $payload, $id, $order instanceof \WC_Abstract_Order ? $order : null );
+		if ( is_wp_error( $forward ) ) {
+			return $forward;
 		}
 		$reassignment = array();
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
@@ -644,13 +636,9 @@ class Order_Writer extends Null_Writer {
 		$authorized = isset( $reassignment['_pos_store'] ) && is_scalar( $reassignment['_pos_store'] ) && '' !== (string) $reassignment['_pos_store']
 			? (bool) apply_filters( 'woocommerce_pos_order_store_reassignment_allowed', true, (string) $reassignment['_pos_store'], $id )
 			: false;
-		$forward = self::without_money( $payload );
-		unset( $forward['created_via'], $forward['tax_ids'] );
-		if ( isset( $forward['meta_data'] ) && is_array( $forward['meta_data'] ) ) {
-			$forward['meta_data'] = $this->without_pos_audit_meta( $forward, $id );
-		}
-		$clear_email = isset( $forward['billing'] ) && is_array( $forward['billing'] )
-			&& array_key_exists( 'email', $forward['billing'] ) && '' === $forward['billing']['email'];
+		// Read from the raw payload: the forward has already dropped an empty billing email.
+		$clear_email = isset( $payload['billing'] ) && is_array( $payload['billing'] )
+			&& array_key_exists( 'email', $payload['billing'] ) && '' === $payload['billing']['email'];
 		$fill_meta          = array();
 		$fill_provenance    = array();
 		$provenance_refused = array();
@@ -709,7 +697,6 @@ class Order_Writer extends Null_Writer {
 		if ( null !== $restart_gmt ) {
 			$context['restart_gmt'] = $restart_gmt;
 		}
-		$forward       = $this->order_payload->for_update( $id, $forward );
 		$lines_changed = $order && $this->order_payload->lines_changed( $order, $forward );
 		// One state from the locked pre-read; adopt_original_tender() moves neither the status nor the completion.
 		$state         = $order ? Ledger::instance()->sale_state( $order ) : null;
@@ -872,55 +859,6 @@ class Order_Writer extends Null_Writer {
 		if ( $meta ) {
 			$this->store->persist_order_audit_meta( $id, $meta );
 		}
-	}
-
-	/**
-	 * The payload with its `status` normalised (no `wc-` prefix), or a 422 when the till may not push it.
-	 * An absent or empty status is untouched (wc/v3 defaults a create to `pending`); on an update, the
-	 * order's own status echoed back by a full document is dropped from the forward, not refused.
-	 *
-	 * @param array       $payload Client payload.
-	 * @param string|null $current The order's status on the locked read, or null on create.
-	 * @return array|WP_Error
-	 */
-	private static function with_pushable_status( array $payload, ?string $current = null ) {
-		if ( ! isset( $payload['status'] ) || '' === $payload['status'] ) {
-			return $payload;
-		}
-		$status = is_scalar( $payload['status'] ) ? (string) $payload['status'] : '';
-		$status = 0 === strpos( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
-		if ( null !== $current && $status === $current && ! in_array( $status, self::PUSHABLE_STATUSES, true ) ) {
-			unset( $payload['status'] );
-			return $payload;
-		}
-		if ( ! in_array( $status, self::PUSHABLE_STATUSES, true ) ) {
-			return new WP_Error(
-				'wcpos_status_not_pushable',
-				'This order status is set by the server, not pushed by the till.',
-				array(
-					'status'    => 422,
-					'requested' => $status,
-					'pushable'  => self::PUSHABLE_STATUSES,
-				)
-			);
-		}
-		$payload['status'] = $status;
-		return $payload;
-	}
-
-	/** Drop every top-level money field: the push lane carries no money (ADR 0040 rule 2). */
-	private static function without_money( array $payload ): array {
-		foreach ( Pos_Order_Audit::SERVER_MONEY_FIELDS as $field ) {
-			unset( $payload[ $field ] );
-		}
-		return $payload;
-	}
-
-	/** Strip server-owned audit metadata from a forward. */
-	private function without_pos_audit_meta( array $payload, int $id = 0 ): array {
-		$meta      = is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array();
-		$protected = $id > 0 ? Pos_Order_Audit::audit_meta_ids( wc_get_order( $id ) ) : array();
-		return Pos_Order_Audit::strip_audit_meta( $meta, $protected );
 	}
 
 	/** Whether order stock was actually reduced before delete. */

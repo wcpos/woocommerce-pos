@@ -60,7 +60,16 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		$this->authenticate_via_wcpos_jwt();
 		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
-		$request->set_body_params( array( 'meta_data' => array( array( 'key' => '_wcpos_sale_counter', 'value' => '123' ) ) ) );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_sale_counter',
+						'value' => '123',
+					),
+				),
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
@@ -484,11 +493,46 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$order->save();
 		$this->authenticate_via_wcpos_jwt();
 		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
-		$request->set_body_params( array( 'meta_data' => array( array( 'key' => '_wcpos_receipt_print_count', 'value' => '999' ) ) ) );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_receipt_print_count',
+						'value' => '999',
+					),
+				),
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
 		$this->assertSame( 2, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
 	}
 
+	/**
+	 * A case variant of a server-owned key is the same row to the meta tables, so it is refused too.
+	 */
+	public function test_audit_guard_jwt_order_update_with_a_case_variant_server_key_returns_forbidden(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_WCPOS_PAYMENTS',
+						'value' => '{"schema":1,"payments":[]}',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_WCPOS_PAYMENTS' ) );
+	}
 }

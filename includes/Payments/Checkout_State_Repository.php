@@ -14,9 +14,9 @@ namespace WCPOS\WooCommercePOS\Payments;
  */
 class Checkout_State_Repository {
 	/**
-	 * Order meta key.
+	 * Order meta key; server-written, so it is in `Pos_Order_Audit::SERVER_MONEY_META_KEYS`.
 	 */
-	private const META_KEY = '_wcpos_checkout_state';
+	public const META_KEY = '_wcpos_checkout_state';
 
 	/**
 	 * Persist checkout state on the order.

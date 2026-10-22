@@ -35,6 +35,7 @@ An architecture review of the ADR 0040 money model on `next` (2026-10-22, after 
 | D10 | Address-only pushes skip the order lock though wc/v3 recalculates totals on them | confirmed | defects-lanes |
 | D11 | Dead `Write_Controller::wcpos_check_permissions` (deprecated, no callers in Free, Pro or the extensions) | confirmed | defects-lanes |
 | D12 | Pro's prompt-answer route returns rows through `Ledger::to_wire()` with their `commands` map, leaking command ids and fingerprints to the till | confirmed by reading | c3 (+ Pro companion) |
+| D13 | `Ledger::stored()` (and possibly other raw readers) match the meta key case-insensitively, so a pushed `_WCPOS_PAYMENTS` row passes the exact-match strip and can be merged into the real ledger as forged captured rows | found by reading (c8 spec); failing test first | c8 |
 | #2377 | Gateway submission takes payment without holding stock when prevent-overselling is on | open issue | own ~20-line PR after c2-5 |
 | #2378 | A parked or never-written fiscal sale record has no scheduled retry; `recover()` runs only on a money-command answer | open issue; same gap c4 found | own PR after c4-2 |
 
@@ -43,8 +44,9 @@ An architecture review of the ADR 0040 money model on `next` (2026-10-22, after 
 1. `fix(payments)`: defects-ledger — D1 (cancel path), D4, D5, D6, D9 — **PR #2396**
 2. `fix`: defects-lanes — D8, D10 (D11 was already done by #2376) — **PR #2397, merged 2026-10-22 as f7fd4d9b**
 3. c7 — **PR #2398, merged 2026-10-22 as 9638516a**
-4. c1 (+ D2) — **PR #2400**
+4. c1 (+ D2) — **PR #2400, merged 2026-10-22 as 06caef3e**
 5. c4-1 (completion-history read model; independent of c2) — **PR #2401**
+5b. c8 (one pushable-document step + D13) — in implementation
 6. c2 slices 1–3 (design chosen from three alternatives; spec beside this plan; needs Paul's yes on the ADR amendment)
 7. c3 (needs c2-3 and c7), then c2 slices 4–6
 8. c4-2 (after c2-5), c5, c8, c6; then the #2377 and #2378 PRs

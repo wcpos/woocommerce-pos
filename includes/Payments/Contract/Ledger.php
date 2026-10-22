@@ -179,8 +179,10 @@ class Ledger {
 		$id = $hpos ? 'id' : 'meta_id';
 		$owner = $hpos ? 'order_id' : 'post_id';
 		$suffix = $lock ? ' FOR UPDATE' : '';
+		// `meta_key` compares under a `_ci` PAD SPACE collation, so `_WCPOS_PAYMENTS` matches too: the
+		// binary comparison keeps only the exact key, and the plain one keeps the index usable.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage identifiers and lock clause are selected above.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT {$id} AS meta_id, meta_value FROM {$table} WHERE {$owner} = %d AND meta_key = %s ORDER BY {$id} ASC LIMIT 1{$suffix}", $order_id, self::META_KEY ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT {$id} AS meta_id, meta_value FROM {$table} WHERE {$owner} = %d AND meta_key = %s AND CAST(meta_key AS BINARY) = %s ORDER BY {$id} ASC LIMIT 1{$suffix}", $order_id, self::META_KEY, self::META_KEY ), ARRAY_A );
 		if ( '' !== $wpdb->last_error ) {
 			throw new \RuntimeException( 'Ledger storage read failed.' );
 		}

@@ -16,6 +16,11 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
  * it fires a `doing_it_wrong` and returns unfiltered results — so, like
  * `Sync\Pos_Uuid::get_order_ids_by_uuid()`, the two lookups here read the meta table
  * directly: `wc_orders_meta` under HPOS, `wp_postmeta` otherwise.
+ *
+ * `meta_key` compares under the table's `_ci` PAD SPACE collation, where `_WCPOS_PAYMENT_ID` and
+ * `_wcpos_payment_id ` match the index key; the holder lookup adds a binary comparison so only
+ * the exact key counts (the plain comparison stays so the `meta_key` index is still used). The
+ * live-leg scan is a candidate list: the sweeper re-reads each order's ledger by its exact key.
  */
 final class Payment_Index {
 	/**
@@ -35,9 +40,10 @@ final class Payment_Index {
 				$wpdb->prepare(
 					"SELECT m.order_id FROM {$wpdb->prefix}wc_orders_meta m"
 					. " JOIN {$wpdb->prefix}wc_orders o ON o.id = m.order_id AND o.type = 'shop_order'"
-					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
+					. ' WHERE m.meta_key = %s AND CAST(m.meta_key AS BINARY) = %s AND m.meta_value = %s'
 					. " AND o.status <> 'auto-draft'"
 					. ' LIMIT 1',
+					Ledger::PAYMENT_ID_META_KEY,
 					Ledger::PAYMENT_ID_META_KEY,
 					$payment_id
 				)
@@ -47,9 +53,10 @@ final class Payment_Index {
 				$wpdb->prepare(
 					"SELECT m.post_id FROM {$wpdb->postmeta} m"
 					. " JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type = 'shop_order'"
-					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
+					. ' WHERE m.meta_key = %s AND CAST(m.meta_key AS BINARY) = %s AND m.meta_value = %s'
 					. " AND p.post_status <> 'auto-draft'"
 					. ' LIMIT 1',
+					Ledger::PAYMENT_ID_META_KEY,
 					Ledger::PAYMENT_ID_META_KEY,
 					$payment_id
 				)

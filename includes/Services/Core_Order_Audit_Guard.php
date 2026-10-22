@@ -133,7 +133,8 @@ final class Core_Order_Audit_Guard {
 		$has_audit_key = false;
 		foreach ( $candidates as $candidate ) {
 			foreach ( $this->meta_entries( $candidate[0] ) as $entry ) {
-				if ( \in_array( Meta_Entry::key( $entry ), $audit_keys, true ) ) {
+				$key = Meta_Entry::key( $entry );
+				if ( \is_scalar( $key ) && Pos_Order_Audit::is_one_of( (string) $key, $audit_keys ) ) {
 					$has_audit_key = true;
 					break 2;
 				}
