@@ -14,6 +14,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
+use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -36,8 +38,8 @@ final class Pos_Order_Audit {
 
 	/**
 	 * Meta the server alone writes: the ledger and its index rows, the command and completion maps,
-	 * the gateway attempt history and stamp, and the WooCommerce money meta a push could address by id
-	 * on posts storage. A new server-owned key joins this list in the change that introduces it (ADR 0040 rule 2).
+	 * the gateway attempt history and stamp, the v1 checkout state, and the WooCommerce money meta a
+	 * push could address by id on posts storage. A new server-owned key joins this list in the change that introduces it (ADR 0040 rule 2).
 	 *
 	 * @var string[]
 	 */
@@ -46,7 +48,7 @@ final class Pos_Order_Audit {
 		Ledger::INDEX_META_KEY,
 		Ledger::PAYMENT_ID_META_KEY,
 		Ledger::LIVE_LEG_META_KEY,
-		'_wcpos_commands',
+		Command_Log::META_KEY,
 		Completion_Stamp::COMPLETED_AT_META_KEY,
 		Completion_Stamp::META_KEY,
 		Fiscal_Record_Writers::PENDING_META_KEY,
@@ -57,6 +59,7 @@ final class Pos_Order_Audit {
 		'_transaction_id',
 		'_date_paid',
 		'_paid_date',
+		Checkout_State_Repository::META_KEY,
 	);
 
 	/**
@@ -178,7 +181,8 @@ final class Pos_Order_Audit {
 			array_filter(
 				$meta_data,
 				static function ( $entry ) use ( $strip, $protected_meta_ids ) {
-					if ( \in_array( self::entry_key( $entry ), $strip, true ) ) {
+					$key = self::entry_key( $entry );
+					if ( null !== $key && self::is_one_of( $key, $strip ) ) {
 						return false;
 					}
 					$id = \is_array( $entry ) ? ( $entry['id'] ?? null ) : ( \is_object( $entry ) ? ( $entry->id ?? null ) : null );
@@ -187,6 +191,25 @@ final class Pos_Order_Audit {
 				}
 			)
 		);
+	}
+
+	/**
+	 * Whether a meta key is one of `$keys` as the meta tables compare keys: ignoring case and
+	 * trailing spaces (`_ci` PAD SPACE), so `_WCPOS_PAYMENTS` counts as the ledger key. A strip
+	 * matches this way; a reader of a server-owned key matches byte-exactly (ADR 0040 rule 2).
+	 *
+	 * @param string   $key  Meta key.
+	 * @param string[] $keys Protected keys.
+	 */
+	public static function is_one_of( string $key, array $keys ): bool {
+		$key = strtolower( rtrim( $key, ' ' ) );
+		foreach ( $keys as $protected ) {
+			if ( strtolower( $protected ) === $key ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -205,7 +228,7 @@ final class Pos_Order_Audit {
 		$ids  = array();
 		foreach ( $order->get_meta_data() as $meta ) {
 			$data = \is_object( $meta ) && method_exists( $meta, 'get_data' ) ? $meta->get_data() : array();
-			if ( isset( $data['id'], $data['key'] ) && \in_array( (string) $data['key'], $keys, true ) ) {
+			if ( isset( $data['id'], $data['key'] ) && self::is_one_of( (string) $data['key'], $keys ) ) {
 				$ids[] = (int) $data['id'];
 			}
 		}
