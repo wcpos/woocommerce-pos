@@ -327,15 +327,9 @@ class Order_Writer extends Null_Writer {
 		);
 	}
 
-	/** Read an order with six-decimal precision and POS links. */
+	/** Read the order as both lanes compare it (Order_Serializer::compared_read()). */
 	public function document( array $meta, int $id, callable $default_document ) {
-		$response = $default_document( $meta, $id, array( 'dp' => '6' ) );
-		$data     = $response->get_data();
-		$order    = wc_get_order( $id );
-		if ( is_array( $data ) && $order ) {
-			$response->set_data( Order_Serializer::add_pos_links( $data, $order ) );
-		}
-		return $response;
+		return Order_Serializer::compared_read( $id );
 	}
 
 	/** Build the canonical augmented order response document. */

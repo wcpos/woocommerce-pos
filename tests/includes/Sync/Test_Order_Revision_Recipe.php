@@ -247,6 +247,31 @@ class Test_Order_Revision_Recipe extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * The money-command lane reads the order it compares through the same recipe:
+	 * a fourth site that must agree with the CAS and pull revisions.
+	 */
+	public function test_order_revision_money_command_read_agrees_with_the_cas_and_pull_revisions(): void {
+		// Arrange.
+		$order = $this->fixture_order();
+		add_filter(
+			'woocommerce_pos_sync_serialized_order',
+			static function ( $payload ) {
+				$payload['x_third_party'] = 'read-time decoration';
+
+				return $payload;
+			}
+		);
+
+		// Act.
+		$state = Order_Serializer::current_state( $order->get_id() );
+
+		// Assert.
+		$this->assertIsArray( $state );
+		$this->assertSame( $this->cas_revision( $order->get_id() ), $state['revision'] );
+		$this->assertSame( $this->pull_revision( $order->get_id() ), $state['revision'] );
+	}
+
+	/**
 	 * A third-party REST field is outside WooCommerce's own order schema, so the
 	 * revision cannot see it.
 	 */

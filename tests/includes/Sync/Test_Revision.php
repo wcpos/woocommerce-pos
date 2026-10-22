@@ -197,4 +197,62 @@ class Test_Revision extends WP_UnitTestCase {
 
 		$this->assertNotSame( Revision::compute( $original ), Revision::compute( $reordered ) );
 	}
+
+	/**
+	 * A claim that is the current revision is not stale.
+	 */
+	public function test_revision_stale_with_the_current_revision_returns_null(): void {
+		// Arrange.
+		$document = array(
+			'id'     => 7,
+			'status' => 'pending',
+		);
+		$current  = Revision::compute( $document );
+
+		// Act.
+		$facts = Revision::stale( $current, $current, $document );
+
+		// Assert.
+		$this->assertNull( $facts );
+	}
+
+	/**
+	 * A claim against another revision gets the current revision and document back.
+	 */
+	public function test_revision_stale_with_another_revision_returns_the_current_revision_and_document(): void {
+		// Arrange.
+		$document = array(
+			'id'     => 7,
+			'status' => 'processing',
+		);
+		$current  = Revision::compute( $document );
+
+		// Act.
+		$facts = Revision::stale( 'sha256:STALE', $current, $document );
+
+		// Assert.
+		$this->assertSame(
+			array(
+				'currentRevision' => $current,
+				'current'         => $document,
+			),
+			$facts
+		);
+	}
+
+	/**
+	 * A revision that is not a hash (a date-shaped claim) compares as a plain string.
+	 */
+	public function test_revision_stale_with_a_date_revision_compares_as_a_string(): void {
+		// Arrange.
+		$document = array( 'id' => 7 );
+
+		// Act.
+		$same    = Revision::stale( '2026-07-01T10:00:00', '2026-07-01T10:00:00', $document );
+		$changed = Revision::stale( '2026-07-01T10:00:00', '2026-07-01T10:00:01', $document );
+
+		// Assert.
+		$this->assertNull( $same );
+		$this->assertSame( '2026-07-01T10:00:01', $changed['currentRevision'] );
+	}
 }

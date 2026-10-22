@@ -2940,6 +2940,39 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array( self::MID ), $store->released ); // reservation released (failure)
 	}
 
+	public function test_order_update_with_a_failed_current_read_carries_no_order_key(): void {
+		// Arrange: a real order (so the POS links could be built) whose current read is refused.
+		list( $order_id ) = $this->real_order_payload();
+		$order_key = wc_get_order( $order_id )->get_order_key();
+		$store = new Fake_Mutation_Store();
+		$store->resolve = $order_id;
+		$this->setRestResponse(
+			array(
+				'code' => 'woocommerce_rest_cannot_view',
+				'message' => 'Sorry, you cannot view this resource.',
+			),
+			403
+		);
+
+		// Act.
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'baseRevision' => 'sha256:whatever',
+				'payload'      => array( 'status' => 'on-hold' ),
+			)
+		);
+
+		// Assert: the refusal is propagated, and the error body carries no pay or receipt link.
+		$this->assertInstanceOf( WP_REST_Response::class, $result );
+		$this->assertSame( 403, $result->get_status() );
+		$this->assertSame( 'woocommerce_rest_cannot_view', $result->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'links', $result->get_data() );
+		$this->assertStringNotContainsString( $order_key, (string) wp_json_encode( $result->get_data() ) );
+	}
+
 	public function test_delete_already_gone_is_idempotent_success(): void {
 		$store = new Fake_Mutation_Store(); // resolve=0 ⇒ already gone
 		$result = $this->push(
