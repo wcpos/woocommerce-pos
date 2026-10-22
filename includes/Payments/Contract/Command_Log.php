@@ -29,7 +29,8 @@ final class Command_Log {
 	public const META_KEY = '_wcpos_commands';
 	/**
 	 * An entry's `phase` while the write it rode stored its rows (S1) and still owes the paid transition
-	 * (S2): the replay of that command completes the sale. The completion (S3) advances it.
+	 * (S2): the replay of that command completes the sale. The completion (S3) advances it. `owed_at_n`
+	 * names the completion count the debt was taken at, so one that landed by any other path settles it.
 	 */
 	public const OWED = 'rows';
 
@@ -170,8 +171,12 @@ final class Command_Log {
 	 * @param array        $stored Stored rows.
 	 */
 	public static function owe( Ledger_Draft $draft, array $rows, array $stored ): array {
+		$owed = array(
+			'phase'     => self::OWED,
+			'owed_at_n' => self::completions( $draft->order() ),
+		);
 		foreach ( $draft->commands() as $command_id => $entry ) {
-			$draft->command( $command_id, array_merge( $entry, array( 'phase' => self::OWED ) ) );
+			$draft->command( $command_id, array_merge( $entry, $owed ) );
 		}
 		$held = array();
 		foreach ( $stored as $row ) {
@@ -180,7 +185,7 @@ final class Command_Log {
 		foreach ( $rows as &$row ) {
 			foreach ( array_keys( $row['commands'] ) as $command_id ) {
 				if ( ! isset( $held[ $row['id'] ][ $command_id ] ) ) {
-					$row['commands'][ $command_id ]['phase'] = self::OWED;
+					$row['commands'][ $command_id ] = array_merge( $row['commands'][ $command_id ], $owed );
 				}
 			}
 		}
@@ -189,21 +194,20 @@ final class Command_Log {
 	}
 
 	/**
-	 * Whether a command on the order still owes the paid transition: its entry says so and no completion
-	 * landed since it was answered (one that did, by another path, settled it).
+	 * Whether a command on the order still owes the paid transition: its entry says so and the order has
+	 * as many completions as when the debt was taken (one more, by any path, settled it).
 	 *
 	 * @param WC_Order $order Order object.
 	 * @param array    $rows  Payment rows.
 	 */
 	public static function owing( WC_Order $order, array $rows ): bool {
-		$latest  = Completion_History::of( $order )->latest();
-		$since   = null === $latest ? PHP_INT_MIN : (int) strtotime( (string) $latest['at_gmt'] );
+		$n       = self::completions( $order );
 		$entries = array_values( self::read( $order ) );
 		foreach ( $rows as $row ) {
 			$entries = array_merge( $entries, array_values( array_filter( is_array( $row['commands'] ?? null ) ? $row['commands'] : array(), 'is_array' ) ) );
 		}
 		foreach ( $entries as $entry ) {
-			if ( self::OWED === ( $entry['phase'] ?? null ) && (int) strtotime( (string) ( $entry['at_gmt'] ?? '' ) ) >= $since ) {
+			if ( self::OWED === ( $entry['phase'] ?? null ) && isset( $entry['owed_at_n'] ) && (int) $entry['owed_at_n'] === $n ) {
 				return true;
 			}
 		}
@@ -223,7 +227,7 @@ final class Command_Log {
 		$owed = false;
 		foreach ( $map as $command_id => $entry ) {
 			if ( self::OWED === ( $entry['phase'] ?? null ) ) {
-				unset( $map[ $command_id ]['phase'] );
+				unset( $map[ $command_id ]['phase'], $map[ $command_id ]['owed_at_n'] );
 				$map[ $command_id ]['ref'] = 'close' === ( $entry['kind'] ?? '' ) ? $completion_id : ( $entry['ref'] ?? null );
 				$owed                      = true;
 			}
@@ -234,13 +238,22 @@ final class Command_Log {
 		foreach ( $rows as &$row ) {
 			foreach ( is_array( $row['commands'] ?? null ) ? $row['commands'] : array() as $command_id => $entry ) {
 				if ( self::OWED === ( $entry['phase'] ?? null ) ) {
-					unset( $row['commands'][ $command_id ]['phase'] );
+					unset( $row['commands'][ $command_id ]['phase'], $row['commands'][ $command_id ]['owed_at_n'] );
 					$owed = true;
 				}
 			}
 		}
 		unset( $row );
 		return $owed ? $rows : null;
+	}
+
+	/**
+	 * How many completions the order has had (the latest entry's number; 0 for none).
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	private static function completions( WC_Order $order ): int {
+		return (int) ( Completion_History::of( $order )->latest()['n'] ?? 0 );
 	}
 
 	/**

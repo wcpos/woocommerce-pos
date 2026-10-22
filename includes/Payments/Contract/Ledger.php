@@ -2529,21 +2529,8 @@ class Ledger {
 		}
 		$order    = $this->fresh( $id );
 		$standing = Completion_History::of( $order )->standing();
-		$staged   = false;
+		$staged   = $this->advance( $order, $this->stored( $id, true )['payments'] ?? array(), $standing );
 		if ( null !== $standing ) {
-			$advanced = Command_Log::advance( $order, $this->stored( $id, true )['payments'] ?? array(), (string) $standing['id'] );
-			if ( null !== $advanced ) {
-				$order->update_meta_data(
-					self::META_KEY,
-					wp_json_encode(
-						array(
-							'schema' => self::SCHEMA,
-							'payments' => array_map( array( __CLASS__, 'to_wire' ), $advanced ),
-						)
-					)
-				);
-				$staged = true;
-			}
 			if ( null !== Gateway_Submission::read_stamp( $order ) ) {
 				Gateway_Submission::clear_stamp( $order );
 				$staged = true;
@@ -2558,6 +2545,26 @@ class Ledger {
 			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
 		}
 		return $order;
+	}
+
+	/**
+	 * Advance the commands that owed the completion now standing; staged on the order, the caller saves.
+	 *
+	 * @param WC_Order   $order    Order object.
+	 * @param array      $rows     The rows the caller will store.
+	 * @param array|null $standing The standing completion; null advances nothing.
+	 * @return bool Whether anything was staged.
+	 */
+	private function advance( WC_Order $order, array $rows, ?array $standing ): bool {
+		$advanced = null === $standing ? null : Command_Log::advance( $order, $rows, (string) $standing['id'] );
+		if ( null !== $advanced ) {
+			$ledger = array(
+				'schema'   => self::SCHEMA,
+				'payments' => array_map( array( __CLASS__, 'to_wire' ), $advanced ),
+			);
+			$order->update_meta_data( self::META_KEY, wp_json_encode( $ledger ) );
+		}
+		return null !== $advanced;
 	}
 
 	/**
@@ -2792,6 +2799,8 @@ class Ledger {
 				} finally {
 					self::$deriving = 0;
 				}
+				// A completion reached outside write() still settles the commands that owed it; the caller saves.
+				$this->advance( $order, $rows, Completion_History::of( $this->fresh( $order->get_id() ) )->standing() );
 			}
 			return;
 		}
