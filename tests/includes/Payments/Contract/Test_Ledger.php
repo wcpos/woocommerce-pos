@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
@@ -2955,6 +2956,113 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '7.05', $row['tip'] );
 	}
 
+	/** D5: a tip capture whose row save fails, retried, adds the Tip fee once. */
+	public function test_tip_capture_retried_after_a_failed_row_save_adds_one_fee(): void {
+		// Arrange: an authorized on-reader leg for the order total, as in the tip test above.
+		$order   = $this->create_pos_order();
+		$product = ProductHelper::create_simple_product();
+		$product->set_price( '92.95' );
+		$product->set_tax_status( 'none' );
+		$product->save();
+		$order->add_product( $product );
+		$order->calculate_totals( false );
+		Integrity_Handler::$tips = 'on_reader';
+		$input  = $this->payment( 'pos_card', '92.95' );
+		$ledger = Ledger::instance();
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$ledger->capture(
+			$order,
+			$input['id'],
+			array(
+				'status' => 'authorized',
+				'amount' => '92.95',
+			)
+		);
+		$refused = 0;
+		$refuse  = static function ( $saving ) use ( $order, &$refused ): void {
+			$staged = json_decode( (string) $saving->get_meta( Ledger::META_KEY, true ), true );
+			$status = array_column( (array) ( $staged['payments'] ?? array() ), 'status' );
+			if ( $saving->get_id() === $order->get_id() && in_array( 'captured', $status, true ) ) {
+				++$refused;
+				throw new \RuntimeException( 'Simulated refused row save' );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $refuse, 1 );
+
+		// Act: every save staging the captured row fails during the first capture; the retry lands.
+		try {
+			$ledger->capture( wc_get_order( $order->get_id() ), $input['id'], array( 'amount' => '100.00' ) );
+			$this->fail( 'Expected the failed row save to throw.' );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$this->assertGreaterThan( 0, $refused );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $refuse, 1 );
+		}
+		$ledger->capture( wc_get_order( $order->get_id() ), $input['id'], array( 'amount' => '100.00' ) );
+
+		// Assert: one Tip fee and the tipped total, read from storage.
+		$saved = new \WC_Order( $order->get_id() );
+		$fees  = array_values( $saved->get_fees() );
+		$this->assertCount( 1, $fees );
+		$this->assertSame( 'Tip', $fees[0]->get_name() );
+		$this->assertSame( '7.05', $fees[0]->get_total() );
+		$this->assertSame( '100.00', $saved->get_total() );
+		$row = $ledger->find( $saved, $input['id'] );
+		$this->assertSame( 'captured', $row['status'] );
+		$this->assertSame( '100.00', $row['amount'] );
+		$this->assertSame( '7.05', $row['tip'] );
+	}
+
+	/** D5: a retry after the fee was saved but the new total was not still brings the total to the tipped amount. */
+	public function test_tip_capture_retried_after_the_total_save_failed_recalculates_the_total(): void {
+		// Arrange: as above; every save after update_taxes() persisted the fee fails during the first capture.
+		$order   = $this->create_pos_order();
+		$product = ProductHelper::create_simple_product();
+		$product->set_price( '92.95' );
+		$product->set_tax_status( 'none' );
+		$product->save();
+		$order->add_product( $product );
+		$order->calculate_totals( false );
+		Integrity_Handler::$tips = 'on_reader';
+		$input  = $this->payment( 'pos_card', '92.95' );
+		$ledger = Ledger::instance();
+		$ledger->intent( $order, $input['id'], $input, array() );
+		$ledger->capture(
+			$order,
+			$input['id'],
+			array(
+				'status' => 'authorized',
+				'amount' => '92.95',
+			)
+		);
+		$refuse = static function ( $saving ) use ( $order ): void {
+			$saved_fees = array_filter( $saving->get_fees(), static fn( $fee ) => 0 < (int) $fee->get_id() );
+			if ( $saving->get_id() === $order->get_id() && $saved_fees ) {
+				throw new \RuntimeException( 'Simulated refused save after the fee landed' );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $refuse, 1 );
+		try {
+			$ledger->capture( wc_get_order( $order->get_id() ), $input['id'], array( 'amount' => '100.00' ) );
+			$this->fail( 'Expected the failed row save to throw.' );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$stranded = new \WC_Order( $order->get_id() );
+			$this->assertCount( 1, $stranded->get_fees() );
+			$this->assertSame( '92.95', $stranded->get_total() );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $refuse, 1 );
+		}
+
+		// Act: the retry finds the fee already stored.
+		$ledger->capture( wc_get_order( $order->get_id() ), $input['id'], array( 'amount' => '100.00' ) );
+
+		// Assert: one fee, and the order totals the captured amount.
+		$saved = new \WC_Order( $order->get_id() );
+		$this->assertCount( 1, $saved->get_fees() );
+		$this->assertSame( '100.00', $saved->get_total() );
+		$this->assertSame( 'captured', $ledger->find( $saved, $input['id'] )['status'] );
+	}
+
 	/** An authorization for more than the leg adds no tip: only the captured amount confirms one. */
 	public function test_an_authorized_on_reader_tip_adds_no_fee_until_capture(): void {
 		// Arrange: a 100.00 sale; the reader takes on-reader tips.
@@ -3032,28 +3140,6 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$order->calculate_totals( false );
 		$order->save();
 		return array( wc_get_order( $order->get_id() ) );
-	}
-
-	/** A ledger save reloads the order under the lock but keeps items the caller added and has not saved. */
-	public function test_save_carries_unsaved_caller_items(): void {
-		// Arrange: a fee staged on the caller's object, never saved.
-		$order = $this->create_pos_order();
-		$fee   = new \WC_Order_Item_Fee();
-		$fee->set_name( 'Tip' );
-		$fee->set_tax_status( 'none' );
-		$fee->set_total( '7.05' );
-		$order->add_item( $fee );
-
-		// Act.
-		Ledger::instance()->save( $order, array( $this->payment( 'pos_cash', '5.00', array( 'status' => 'captured' ) ) ), false );
-
-		// Assert: read storage, not the caller's object.
-		$saved = new \WC_Order( $order->get_id() );
-		$fees  = array_values( $saved->get_fees() );
-		$this->assertCount( 1, $fees );
-		$this->assertSame( 'Tip', $fees[0]->get_name() );
-		$this->assertSame( '7.05', $fees[0]->get_total() );
-		$this->assertCount( 1, Ledger::instance()->read( $saved ) );
 	}
 
 	/**

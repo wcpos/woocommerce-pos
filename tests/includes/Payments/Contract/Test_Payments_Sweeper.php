@@ -295,6 +295,39 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertEmpty( wc_get_order( $order->get_id() )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
 	}
 
+	/** D9: only captured money pays a sale (ADR 0040 rule 1); an authorization on an order already covered is never captured on top. */
+	public function test_sweeper_never_captures_an_authorization_on_an_order_its_captured_tenders_cover(): void {
+		// Arrange: a live authorization, and captured cash that covers the whole total.
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg(
+			600,
+			array(
+				'status'     => 'authorized',
+				'expires_at' => gmdate( 'c', time() + 3600 ),
+			)
+		);
+		$rows   = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$rows[] = array(
+			'id'           => wp_generate_uuid4(),
+			'method_id'    => 'pos_cash',
+			'capture_mode' => 'manual',
+			'amount'       => '92.95',
+			'status'       => 'captured',
+		);
+		Ledger::instance()->save( wc_get_order( $order->get_id() ), $rows, false );
+		$order = wc_get_order( $order->get_id() );
+		$order->set_status( 'processing' );
+		$order->save();
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
+	}
+
 	public function test_sweeper_leaves_an_authorization_on_an_in_progress_order_to_its_till(): void {
 		// A partial authorization keeps the order open; the till that owns the leg resumes
 		// it on reload and may still cancel it, so the sweep does not pre-empt that.

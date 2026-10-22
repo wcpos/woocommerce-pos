@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WC_Order_Item_Product;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
@@ -64,6 +65,9 @@ final class Order_Write_Payload {
 
 	/** Plain item meta the stock helper reads as its baseline (wc_maybe_adjust_line_item_product_stock). */
 	private const STOCK_BASELINE_ITEM_META = array( '_reduced_stock', '_restock_refunded_items' );
+
+	/** Item meta only the server writes: the Tip fee's row mark (ADR 0040 rule 2). */
+	private const SERVER_ITEM_META = array( Ledger::TIP_FEE_META_KEY );
 
 	/**
 	 * Shape a CREATE payload for the wc/v3 forward.
@@ -127,7 +131,7 @@ final class Order_Write_Payload {
 			} catch ( \Throwable $error ) {
 				$keys = array();
 			}
-			$keys = array_merge( is_array( $keys ) ? $keys : array(), self::STOCK_BASELINE_ITEM_META );
+			$keys = array_merge( is_array( $keys ) ? $keys : array(), self::STOCK_BASELINE_ITEM_META, self::SERVER_ITEM_META );
 			foreach ( $payload[ $type ] as $i => $line ) {
 				if ( ! is_array( $line ) || ! isset( $line['meta_data'] ) || ! is_array( $line['meta_data'] ) ) {
 					continue;

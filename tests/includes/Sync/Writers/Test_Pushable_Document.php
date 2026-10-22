@@ -294,4 +294,37 @@ class Test_Pushable_Document extends WP_UnitTestCase {
 			$forward['meta_data']
 		);
 	}
+
+	/** The tip-fee mark is the server's (rule 2): a push writes it neither on a fee line nor on the order, in any spelling. */
+	public function test_shape_drops_the_tip_fee_mark_from_fee_lines_and_order_meta(): void {
+		// Arrange.
+		$mark    = static fn( string $key ): array => array(
+			'key'   => $key,
+			'value' => wp_generate_uuid4(),
+		);
+		$payload = array(
+			'meta_data' => array( $mark( '_wcpos_tip_payment_id' ) ),
+			'fee_lines' => array(
+				array(
+					'name'      => 'Tip',
+					'total'     => '7.05',
+					'meta_data' => array(
+						array(
+							'key'   => 'note',
+							'value' => 'kept',
+						),
+						$mark( '_wcpos_tip_payment_id' ),
+						$mark( '_WCPOS_TIP_PAYMENT_ID' ),
+					),
+				),
+			),
+		);
+
+		// Act.
+		$forward = $this->document()->shape( $payload );
+
+		// Assert.
+		$this->assertSame( array(), $forward['meta_data'] );
+		$this->assertSame( array( 'note' ), array_column( $forward['fee_lines'][0]['meta_data'], 'key' ) );
+	}
 }

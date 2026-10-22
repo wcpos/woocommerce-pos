@@ -37,7 +37,8 @@ final class Pos_Order_Audit {
 	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count' );
 
 	/**
-	 * Meta the server alone writes: the ledger and its index rows, the command and completion maps,
+	 * Meta the server alone writes: the ledger and its index rows, the Tip fee's row mark (item meta, also
+	 * stripped from pushed lines by Order_Write_Payload), the command and completion maps,
 	 * the gateway attempt history and stamp, the v1 checkout state, and the WooCommerce money meta a
 	 * push could address by id on posts storage. A new server-owned key joins this list in the change that introduces it (ADR 0040 rule 2).
 	 *
@@ -48,6 +49,7 @@ final class Pos_Order_Audit {
 		Ledger::INDEX_META_KEY,
 		Ledger::PAYMENT_ID_META_KEY,
 		Ledger::LIVE_LEG_META_KEY,
+		Ledger::TIP_FEE_META_KEY,
 		Command_Log::META_KEY,
 		Completion_Stamp::COMPLETED_AT_META_KEY,
 		Completion_Stamp::META_KEY,
