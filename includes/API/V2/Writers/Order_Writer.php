@@ -38,8 +38,11 @@ class Order_Writer extends Null_Writer {
 	 */
 	public const PUSHABLE_STATUSES = array( 'pos-open', 'pending', 'on-hold', 'cancelled' );
 
-	/** Payload keys that can move money on the order: a push carrying one is serialised against the money commands. */
-	private const MONEY_SENSITIVE_KEYS = array( 'line_items', 'fee_lines', 'shipping_lines', 'coupon_lines', 'currency', 'status', 'customer_id', 'date_created_gmt' );
+	/**
+	 * Payload keys that can move money on the order: a push carrying one is serialised against the
+	 * money commands. Billing and shipping count because wc/v3 recalculates the totals when either is sent.
+	 */
+	private const MONEY_SENSITIVE_KEYS = array( 'line_items', 'fee_lines', 'shipping_lines', 'coupon_lines', 'currency', 'status', 'customer_id', 'date_created_gmt', 'billing', 'shipping' );
 
 	/** @var object Mutation store used for HPOS-safe audit persistence. */
 	private $store;
@@ -137,7 +140,7 @@ class Order_Writer extends Null_Writer {
 	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b),
 	 * so a capture cannot land between the compare and the write. The Mutation_Store record
 	 * lock is already held; Order_Lock falls back to its option lease on servers that cannot
-	 * nest named locks. A note or address push takes no order lock, as before.
+	 * nest named locks. A note-only push takes no order lock.
 	 */
 	public function with_write_lock( int $id, array $payload, callable $work ) {
 		if ( ! array_intersect( self::MONEY_SENSITIVE_KEYS, array_keys( $payload ) ) ) {

@@ -310,6 +310,57 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'Goes through', wc_get_order( $order->get_id() )->get_customer_note() );
 	}
 
+	/**
+	 * An address push waits for the order lock too: wc/v3 recalculates the totals whenever
+	 * billing or shipping is sent, so an address change can move tax and total (ADR 0040 rule 6b).
+	 */
+	public function test_address_only_push_waits_for_the_order_lock(): void {
+		// Arrange: a POS order, and another owner holding its order lock.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$city           = $order->get_billing_city();
+		$store          = new Fake_Mutation_Store();
+		$store->resolve = $order->get_id();
+		$push           = function () use ( $store, $order ) {
+			$current  = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+			$envelope = $this->envelope(
+				array(
+					'collection'   => 'orders',
+					'operation'    => 'update',
+					'baseRevision' => Order_Serializer::canonical_revision( $current ),
+					'payload'      => array( 'billing' => array( 'city' => 'Elsewhere' ) ),
+				)
+			);
+			return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+		};
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+
+		// Act.
+		try {
+			$refused = $push();
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+
+		// Assert: refused before anything was written.
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_error_code() );
+		$this->assertSame( 409, $refused->get_error_data()['status'] );
+		$this->assertSame( $city, wc_get_order( $order->get_id() )->get_billing_city() );
+
+		// Act: the same push once the lock is free.
+		$retried = $push();
+
+		// Assert.
+		$this->assertNotInstanceOf( WP_Error::class, $retried );
+		$this->assertLessThan( 300, $retried->get_status() );
+		$this->assertSame( 'Elsewhere', wc_get_order( $order->get_id() )->get_billing_city() );
+	}
+
 	public function test_create_full_provenance_tuple_is_stored_with_received_time(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$tuple = $this->provenance_tuple();
