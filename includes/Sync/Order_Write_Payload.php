@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WC_Order_Item_Product;
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -109,7 +110,8 @@ final class Order_Write_Payload {
 	 * Drop a line's meta entries that would write the item itself: WooCommerce routes an item data
 	 * store's internal key to its setter or stores it as the plain row it reads back as the line's
 	 * quantity, total, product or cost, and the stock helper reads `_reduced_stock` as its baseline.
-	 * Dropped by key and, on a stored line, by the meta id of such a row (ADR 0040 rules 2 and 4).
+	 * Dropped by key in any spelling the meta tables match to it and, on a stored line, by the meta id
+	 * of such a row (ADR 0040 rules 2 and 4).
 	 *
 	 * @param \WC_Abstract_Order|false $order   Loaded order, or false on create.
 	 * @param array                    $payload Order payload about to be forwarded.
@@ -133,7 +135,7 @@ final class Order_Write_Payload {
 				$item = $order && isset( $line['id'] ) && is_numeric( $line['id'] ) ? $order->get_item( (int) $line['id'] ) : false;
 				$ids  = array();
 				foreach ( $item ? $item->get_meta_data() : array() as $meta ) {
-					if ( in_array( $meta->key, $keys, true ) ) {
+					if ( Pos_Order_Audit::is_one_of( (string) $meta->key, $keys ) ) {
 						$ids[] = (int) $meta->id;
 					}
 				}
@@ -141,8 +143,9 @@ final class Order_Write_Payload {
 					array_filter(
 						$line['meta_data'],
 						static function ( $entry ) use ( $keys, $ids ) {
-							$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
-							return ! in_array( Meta_Entry::key( $entry ), $keys, true ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) );
+							$id  = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
+							$key = Meta_Entry::key( $entry );
+							return ! ( is_scalar( $key ) && Pos_Order_Audit::is_one_of( (string) $key, $keys ) ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) );
 						}
 					)
 				);
