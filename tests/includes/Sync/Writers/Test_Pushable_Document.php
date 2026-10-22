@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync\Writers;
 
+// phpcs:disable Squiz.Commenting.FunctionComment.Missing -- Test names state each case.
+
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Order;
 use WC_Order_Item_Product;

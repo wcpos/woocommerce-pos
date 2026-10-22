@@ -35,10 +35,16 @@ final class Pushable_Document {
 	 */
 	public const STATUSES = array( 'pos-open', 'pending', 'on-hold', 'cancelled' );
 
-	/** @var Order_Write_Payload Line and identity shaping shared with v1. */
+	/**
+	 * Line and identity shaping shared with v1.
+	 *
+	 * @var Order_Write_Payload
+	 */
 	private Order_Write_Payload $lines;
 
 	/**
+	 * Build over the line shaping.
+	 *
 	 * @param Order_Write_Payload $lines Line and identity shaping.
 	 */
 	public function __construct( Order_Write_Payload $lines ) {

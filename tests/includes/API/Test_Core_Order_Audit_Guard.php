@@ -60,7 +60,16 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		$this->authenticate_via_wcpos_jwt();
 		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
-		$request->set_body_params( array( 'meta_data' => array( array( 'key' => '_wcpos_sale_counter', 'value' => '123' ) ) ) );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_sale_counter',
+						'value' => '123',
+					),
+				),
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
@@ -484,7 +493,16 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$order->save();
 		$this->authenticate_via_wcpos_jwt();
 		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
-		$request->set_body_params( array( 'meta_data' => array( array( 'key' => '_wcpos_receipt_print_count', 'value' => '999' ) ) ) );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_receipt_print_count',
+						'value' => '999',
+					),
+				),
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
