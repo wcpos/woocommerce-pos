@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-22T05:27:29+00:00\n"
+"POT-Creation-Date: 2026-10-22T06:04:49+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1131,7 +1131,7 @@ msgstr ""
 
 #: includes/API/V2/Payment_Methods_Controller.php:114
 #: includes/Payments/Contract/Gateway_Submission.php:54
-#: includes/Payments/Contract/Ledger.php:2580
+#: includes/Payments/Contract/Ledger.php:2585
 msgid "Payment capture mode is unsupported."
 msgstr ""
 
@@ -1231,7 +1231,7 @@ msgid "The session request could not be completed."
 msgstr ""
 
 #. translators: 1: line name, 2: units.
-#: includes/API/V2/Writers/Order_Writer.php:630
+#: includes/API/V2/Writers/Order_Writer.php:598
 #, php-format
 msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
 msgstr ""
@@ -1379,18 +1379,18 @@ msgstr[1] ""
 msgid "This payment capture mode does not support that operation."
 msgstr ""
 
-#: includes/Payments/Contract/Completion_Stamp.php:255
+#: includes/Payments/Contract/Completion_Stamp.php:258
 msgid "WCPOS: completion could not be recorded; reconcile manually."
 msgstr ""
 
 #. translators: %d: completion number.
-#: includes/Payments/Contract/Completion_Stamp.php:294
+#: includes/Payments/Contract/Completion_Stamp.php:297
 #, php-format
 msgid "WCPOS: completion %d could not be recorded; reconcile manually."
 msgstr ""
 
-#: includes/Payments/Contract/Completion_Stamp.php:410
-#: includes/Payments/Contract/Completion_Stamp.php:432
+#: includes/Payments/Contract/Completion_Stamp.php:413
+#: includes/Payments/Contract/Completion_Stamp.php:435
 msgid "WCPOS: the reopen could not be recorded on the completion history; reconcile manually."
 msgstr ""
 
@@ -1510,7 +1510,7 @@ msgstr ""
 
 #: includes/Payments/Contract/Ledger.php:851
 #: includes/Payments/Contract/Ledger.php:1664
-#: includes/Payments/Contract/Ledger.php:1714
+#: includes/Payments/Contract/Ledger.php:1725
 msgid "The order is already paid."
 msgstr ""
 
@@ -1521,7 +1521,7 @@ msgstr ""
 
 #: includes/Payments/Contract/Ledger.php:863
 #: includes/Payments/Contract/Ledger.php:1667
-#: includes/Payments/Contract/Ledger.php:1851
+#: includes/Payments/Contract/Ledger.php:1856
 msgid "Another payment is already in progress on this order."
 msgstr ""
 
@@ -1589,27 +1589,27 @@ msgstr ""
 msgid "Provider-confirmed amount or currency does not match the payment."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:1762
+#: includes/Payments/Contract/Ledger.php:1767
 msgid "The order is not covered by its payments."
 msgstr ""
 
 #. translators: %s: payment row uuid.
-#: includes/Payments/Contract/Ledger.php:1928
+#: includes/Payments/Contract/Ledger.php:1933
 #, php-format
 msgid "WCPOS payment %s voided."
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: void reason given by the cashier.
-#: includes/Payments/Contract/Ledger.php:1930
+#: includes/Payments/Contract/Ledger.php:1935
 #, php-format
 msgid "WCPOS payment %1$s voided: %2$s"
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:2575
+#: includes/Payments/Contract/Ledger.php:2580
 msgid "Payment not found."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:2585
+#: includes/Payments/Contract/Ledger.php:2590
 msgid "Payment transition is invalid."
 msgstr ""
 
