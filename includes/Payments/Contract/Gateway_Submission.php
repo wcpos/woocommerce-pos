@@ -270,6 +270,11 @@ class Gateway_Submission {
 				$detail = '' === $detail ? $threw->getMessage() : $detail;
 				Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d: %s threw %s: %s', $attempt_id, $order->get_id(), $descriptor['id'], get_class( $threw ), $threw->getMessage() ) );
 			}
+			if ( $threw && $dispatch_started ) {
+				// The attempt stays `sent` with no stamp: tell staff where it stands and how to clear it.
+				/* translators: 1: attempt id, 2: payment method title. */
+				$order->add_order_note( sprintf( __( 'WCPOS payment attempt %1$s: %2$s failed after the payment was sent. Check with the provider whether money was taken, then cancel the attempt at the POS.', 'woocommerce-pos' ), $attempt_id, $descriptor['title'] ) );
+			}
 			return new WP_Error(
 				'wcpos_provider_error',
 				__( 'The payment provider failed.', 'woocommerce-pos' ),
@@ -405,13 +410,22 @@ class Gateway_Submission {
 	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason, array $command = array() ) {
 		$rows  = Ledger::instance()->read( $order );
 		$stamp = self::read_stamp( $order );
-		if ( ! $stamp || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) {
+		// A send whose gateway threw after dispatch never got its stamp; its history still says `sent`.
+		// Accepted only where a stamp would still stand (register_hooks() clears it on these statuses).
+		$stranded = ! $stamp && 'sent' === ( self::read_attempts( $order )[ strtolower( $attempt_id ) ] ?? null )
+			&& ! $order->has_status( array( 'cancelled', 'refunded', 'trash' ) );
+		if ( $stranded && ( $order->is_paid() || $order->get_date_paid( 'edit' ) ) && Money::minor( Ledger::instance()->paid( $rows ) ) < Money::minor( $order->get_total() ) ) {
+			// The gateway paid but no row records it: cancelling would reopen the sale for a second charge.
+			/* translators: %s: attempt id. */
+			return new WP_Error( 'wcpos_invalid_transition', sprintf( __( 'Payment attempt %s may already have been paid by the gateway; reconcile the payment before cancelling it.', 'woocommerce-pos' ), strtolower( $attempt_id ) ), array( 'status' => 409 ) );
+		}
+		if ( ( ! $stamp && ! $stranded ) || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) {
 			return new WP_Error( 'wcpos_invalid_transition', __( 'This invoice cannot be cancelled.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
-		if ( ( $stamp['method_id'] ?? null ) !== $descriptor['id'] ) {
+		if ( $stamp && ( $stamp['method_id'] ?? null ) !== $descriptor['id'] ) {
 			return new WP_Error( 'wcpos_invalid_transition', __( 'The invoice was sent by a different payment method.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
-		if ( strtolower( $attempt_id ) !== ( $stamp['attempt_id'] ?? null ) ) {
+		if ( $stamp && strtolower( $attempt_id ) !== ( $stamp['attempt_id'] ?? null ) ) {
 			// A stale cancel (an older send, or another till's view) must not undo a newer send.
 			return new WP_Error( 'wcpos_payment_conflict', __( 'A newer invoice has been sent for this order.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}

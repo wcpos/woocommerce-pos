@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\API\V2\Writers\Order_Writer;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -777,6 +778,110 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 
+	/** D1: a send whose gateway threw after dispatch has no stamp, yet the till can still cancel it. */
+	public function test_submit_that_threw_after_dispatch_can_be_cancelled(): void {
+		// Arrange: the gateway throws once dispatch has started, leaving the attempt `sent` with no stamp.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Sent_Test_Gateway::$failure = 'throw';
+		$this->assertSame( 502, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		Sent_Test_Gateway::$failure = '';
+		$stranded = wc_get_order( $order->get_id() );
+		$this->assertSame( 'sent', Gateway_Submission::read_attempts( $stranded )[ $attempt ] ?? null );
+		$this->assertNull( Gateway_Submission::read_stamp( $stranded ) );
+		$this->assertSame( 'wcpos_payment_in_flight', $this->close( $order )->get_data()['code'] );
+		$notes = array_filter( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), static fn( $note ) => false !== strpos( $note->content, $attempt ) );
+		$this->assertCount( 1, $notes );
+
+		// Act.
+		$response = $this->cancel( $order, $attempt );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( $saved )[ $attempt ] ?? null );
+		$this->assertSame( 'wcpos_balance_outstanding', $this->close( $order )->get_data()['code'] );
+		$motion = new \ReflectionMethod( Order_Writer::class, 'money_in_motion' );
+		$motion->setAccessible( true );
+		$this->assertNull( $motion->invoke( null, $saved ) );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
+	/** D1: a stranded send on an order staff have since cancelled is not cancellable, so the order is never reopened. */
+	public function test_cancel_of_a_stranded_send_on_a_cancelled_order_is_refused(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Sent_Test_Gateway::$failure = 'throw';
+		$this->assertSame( 502, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		wc_get_order( $order->get_id() )->update_status( 'cancelled' );
+
+		// Act.
+		$response = $this->cancel( $order, $attempt );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertSame( 'cancelled', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/**
+	 * D1: a stamp-less `sent` attempt the gateway already paid (payment_complete() ran, the mint failed)
+	 * is never cancelled: that would reopen a paid sale and let the next submit charge again.
+	 *
+	 * @dataProvider paid_without_a_row
+	 *
+	 * @param string $stored The gateway's stored POS Order Status; empty keeps WooCommerce's paid status.
+	 */
+	public function test_cancel_of_a_sent_attempt_the_gateway_already_paid_is_refused( string $stored ): void {
+		// Arrange: the gateway takes the money, then throws; the row mint is refused.
+		if ( '' !== $stored ) {
+			$this->enable_for_pos( true, array( 'wcpos_paid_test' => $stored ) );
+		}
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Paid_Test_Gateway::$throw_after = true;
+		$deny = static function ( $saving ) use ( $order ): void {
+			if ( $saving->get_id() === $order->get_id() && Ledger::instance()->read( $saving ) ) {
+				throw new \RuntimeException( 'Mint unavailable' );
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
+		try {
+			$this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
+		} finally {
+			remove_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
+		}
+		$paid = wc_get_order( $order->get_id() );
+		$this->assertSame( 'sent', Gateway_Submission::read_attempts( $paid )[ $attempt ] ?? null );
+		$this->assertNull( Gateway_Submission::read_stamp( $paid ) );
+		$this->assertSame( array(), Ledger::instance()->read( $paid ) );
+		$this->assertNotNull( $paid->get_date_paid( 'edit' ) );
+		$status = $paid->get_status();
+
+		// Act.
+		$response = $this->cancel( $order, $attempt, 'wcpos_paid_test' );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_invalid_transition', $response->get_data()['code'] );
+		$this->assertStringContainsString( $attempt, $response->get_data()['message'] );
+		$this->assertStringContainsString( 'reconcile', $response->get_data()['message'] );
+		$saved = wc_get_order( $order->get_id() );
+		$this->assertSame( $status, $saved->get_status() );
+		$this->assertNotNull( $saved->get_date_paid( 'edit' ) );
+		$this->assertSame( 'sent', Gateway_Submission::read_attempts( $saved )[ $attempt ] ?? null );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+	}
+
+	/** Paid facts without a row: a paid status, or a stored unpaid status with date_paid set. */
+	public function paid_without_a_row(): array {
+		return array(
+			'a paid status'          => array( '' ),
+			'a stored unpaid status' => array( 'wc-pending' ),
+		);
+	}
+
 	/** A stale, mismatched or unnamed cancel never undoes a newer send. */
 	public function test_cancel_refusals(): void {
 		// Arrange.
@@ -1267,6 +1372,17 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * Close the sale through the locked route.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	private function close( \WC_Order $order ): \WP_REST_Response {
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
+		$request->set_body_params( $this->envelope( $order ) );
 		return $this->server->dispatch( $request );
 	}
 
