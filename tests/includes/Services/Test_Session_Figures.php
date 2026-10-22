@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
@@ -296,7 +297,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$this->recomplete_in( $order, $session );
 
 		// Assert.
-		$this->assertCount( 2, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertCount( 2, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 		$this->assertSame( 2, Session_Figures::for_session( $session )->sales_count() );
 	}
 
@@ -325,7 +326,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$count = Session_Figures::for_session( $session )->sales_count();
 
 		// Assert.
-		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 		$this->assertSame( 1, $count );
 	}
 
@@ -367,7 +368,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$reopened->save();
 
 		// Assert.
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( $session['id'], $history[0]['session'] );
 		$this->assertSame( 1, Session_Figures::for_session( $session )->sales_count() );

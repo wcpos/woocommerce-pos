@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 
@@ -22,16 +23,22 @@ final class Completion_Fixture {
 	 * @return array The entry.
 	 */
 	public static function seed( \WC_Order $order ): array {
-		$history = Completion_Stamp::read( $order );
-		$entry   = array(
+		$history = Completion_History::of( $order )->entries();
+		$n       = count( $history ) + 1;
+		$till    = static function ( string $key ) use ( $order ): ?string {
+			return '' === (string) $order->get_meta( $key ) ? null : (string) $order->get_meta( $key );
+		};
+		// As Completion_Stamp resolves it with no request provenance: completion 1 takes the whole till
+		// tuple; a later one only the register and session (the latest captured row's, here the till's).
+		$entry = array(
 			'id' => wp_generate_uuid4(),
-			'n' => count( $history ) + 1,
+			'n' => $n,
 			'at_gmt' => gmdate( 'c' ),
-			'sale_time' => null,
-			'sale_tz' => null,
-			'register' => '' === (string) $order->get_meta( '_wcpos_register' ) ? null : (string) $order->get_meta( '_wcpos_register' ),
-			'session' => '' === (string) $order->get_meta( '_wcpos_session' ) ? null : (string) $order->get_meta( '_wcpos_session' ),
-			'counter' => null,
+			'sale_time' => 1 === $n ? $till( '_wcpos_sale_time' ) : null,
+			'sale_tz' => 1 === $n ? $till( '_wcpos_sale_tz' ) : null,
+			'register' => $till( '_wcpos_register' ),
+			'session' => $till( '_wcpos_session' ),
+			'counter' => 1 === $n ? $till( '_wcpos_sale_counter' ) : null,
 			'total' => $order->get_total(),
 			'payment_ids' => array(),
 			'reopened_at_gmt' => null,
@@ -48,7 +55,7 @@ final class Completion_Fixture {
 	 * @param \WC_Order $order Order.
 	 */
 	public static function reopen( \WC_Order $order ): void {
-		$history = Completion_Stamp::read( $order );
+		$history = Completion_History::of( $order )->entries();
 		$history[ count( $history ) - 1 ]['reopened_at_gmt'] = gmdate( 'c' );
 		$order->update_meta_data( Completion_Stamp::META_KEY, wp_json_encode( $history ) );
 		$order->save_meta_data();

@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -498,7 +499,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $stored->is_paid() );
 		$this->assertNotNull( $stored->get_date_paid( 'edit' ) );
 		$this->assertSame( 1, $response->get_data()['completion']['n'] );
-		$this->assertCount( 1, Completion_Stamp::read( $stored ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
 		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
 	}
 
@@ -523,7 +524,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
 		$stored  = wc_get_order( $order->get_id() );
-		$history = Completion_Stamp::read( $stored );
+		$history = Completion_History::of( $stored )->entries();
 		$this->assertTrue( $stored->is_paid() );
 		$this->assertSame( $date_paid, $stored->get_date_paid( 'edit' )->getTimestamp() );
 		$this->assertSame( 8, wc_get_product( $product[0] )->get_stock_quantity() );
@@ -561,7 +562,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 2, $response->get_data()['completion']['n'] );
 		$this->assertSame( '20.00', $response->get_data()['order']['refund_due'] );
 		$this->assertSame( '0.00', $response->get_data()['order']['balance'] );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$two     = ( new Fiscal_Record_Store() )->find_sale( $order->get_id(), $history[1]['id'] );
 		$this->assertSame( '-20.00', $two['payload']['fiscal']['adjustment'] );
 	}
@@ -582,7 +583,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$stored = wc_get_order( $order->get_id() );
 		$this->assertSame( 'pos-open', $stored->get_status() );
 		$this->assertNull( $stored->get_date_paid( 'edit' ) );
-		$this->assertSame( array(), Completion_Stamp::read( $stored ) );
+		$this->assertSame( array(), Completion_History::of( $stored )->entries() );
 	}
 
 	/** Money in motion refuses a close, naming the row. */
@@ -599,7 +600,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 409, $response->get_status() );
 		$this->assertSame( 'wcpos_payment_in_flight', $response->get_data()['code'] );
 		$this->assertSame( $pending['id'], $response->get_data()['data']['payment_id'] );
-		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 	}
 
 	/** Closing a paid sale again replays its completion and writes nothing. */
@@ -607,7 +608,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$order = $this->create_pos_order();
 		$this->assertSame( 200, $this->record( $order, $this->payment( 'pos_cash', '92.95' ) )->get_status() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 
 		// Act.
 		$response = $this->close( $order );
@@ -621,7 +622,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			),
 			$response->get_data()['completion']
 		);
-		$this->assertSame( $history, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( $history, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 	}
 
 	/** A cancelled sale is not closed: its completion no longer stands, so nothing replays. */
@@ -666,7 +667,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$this->assertIsArray( Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), '20.00' ) );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 
 		// Act.
 		$response = $this->close( $order );
@@ -680,7 +681,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			),
 			$response->get_data()['completion']
 		);
-		$this->assertSame( $history, Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( $history, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 	}
 
 	/** A sale paid before the completion history existed stands: close replays it with no completion and writes nothing. */
@@ -691,7 +692,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$paid->set_date_paid( time() );
 		$paid->set_status( 'processing' );
 		$paid->save();
-		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 
 		// Act.
 		$response = $this->close( $order );
@@ -700,7 +701,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
 		$this->assertNull( $response->get_data()['completion'] );
 		$this->assertSame( 'processing', wc_get_order( $order->get_id() )->get_status() );
-		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 	}
 
 	/** A status poll is no money command: its body's provenance is not the completion's. */
@@ -728,7 +729,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( $register, $history[0]['register'] );
 	}
@@ -1033,7 +1034,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
 			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 );
 		}
-		$this->assertSame( array(), Completion_Stamp::read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 		$this->reopen( $order );
 
 		// Act.
@@ -1478,7 +1479,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $first->get_status() );
 		$this->assertSame( 200, $again->get_status() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $first->get_data()['completion'] );
 		$this->assertSame( $first->get_data()['completion'], $again->get_data()['completion'] );
@@ -1505,7 +1506,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 409, $stale->get_status() );
 		$this->assertSame( 'wcpos_revision_stale', $stale->get_data()['code'] );
 		$this->assertSame( 200, $fresh->get_status() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $fresh->get_data()['completion'] );
 	}
@@ -1933,7 +1934,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$c9       = $this->envelope( $order );
 		$replayed = $this->command( $close, $c9 );
 		$this->assertSame( 200, $replayed->get_status() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( $history[0]['id'], $this->stored_meta( $order->get_id(), '_wcpos_commands' )[ $c9['command_id'] ]['ref'] );
 		$this->assertSame( 422, $this->command( $close, array_merge( $c9, array( 'provenance' => array( 'register_id' => wp_generate_uuid4() ) ) ) )->get_status() );
@@ -2067,7 +2068,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $again->get_data()['completion'] );
 		$this->assertSame( $first->get_data()['completion'], $again->get_data()['completion'] );
@@ -2106,7 +2107,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( $body['command_id'], (array) $stored );
 		$this->assertNull( $stored[ $body['command_id'] ]['ref'] );
 		$this->assertSame( 200, $again->get_status() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $again->get_data()['completion'] );
 	}
@@ -2136,7 +2137,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
 		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
 		$this->assertTrue( wc_get_order( $order->get_id() )->is_paid() );
-		$history = Completion_Stamp::read( wc_get_order( $order->get_id() ) );
+		$history = Completion_History::of( wc_get_order( $order->get_id() ) )->entries();
 		$this->assertCount( 1, $history );
 		$this->assertSame( 200, $again->get_status() );
 		$this->assertSame( array( 'n' => 1, 'id' => $history[0]['id'] ), $again->get_data()['completion'] );

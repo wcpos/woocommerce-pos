@@ -9,9 +9,11 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
@@ -351,6 +353,50 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 		$this->builder = new Receipt_Data_Builder();
+	}
+
+	/**
+	 * A sale record's document carries the till tuple of the completion it records, whole; a first
+	 * completion's live receipt reads the order's till meta (ADR 0040 rule 1c).
+	 */
+	public function test_sale_record_reads_the_completion_tuple_and_live_reads_the_till_for_completion_one(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_wcpos_sale_counter', '4' );
+		$order->update_meta_data( '_wcpos_sale_tz', 'Europe/Madrid' );
+		$order->update_meta_data(
+			Completion_Stamp::META_KEY,
+			wp_json_encode(
+				array(
+					array(
+						'id'              => wp_generate_uuid4(),
+						'n'               => 1,
+						'at_gmt'          => '2026-10-22T09:00:00+00:00',
+						'sale_time'       => null,
+						'sale_tz'         => 'UTC',
+						'register'        => null,
+						'session'         => null,
+						'counter'         => null,
+						'total'           => $order->get_total(),
+						'payment_ids'     => array(),
+						'reopened_at_gmt' => null,
+					),
+				)
+			)
+		);
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->record_sale( $order );
+		$fiscal = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload'];
+		$live   = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$this->assertNull( $fiscal['fiscal']['sale_counter'] );
+		$this->assertSame( 'UTC', $fiscal['fiscal']['sale_tz'] );
+		$this->assertSame( 4, $live['fiscal']['sale_counter'] );
+		$this->assertSame( 'Europe/Madrid', $live['fiscal']['sale_tz'] );
 	}
 
 	/**

@@ -13,6 +13,7 @@ use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
@@ -452,18 +453,13 @@ class Payments_Controller extends WC_REST_Controller {
 			return rest_ensure_response( array( 'order' => $summary ) );
 		}
 		if ( 'close' === $kind ) {
-			$completion = null;
-			$history    = Completion_Stamp::read( $order );
+			$history = Completion_History::of( $order );
 			// A null ref is a close that crashed between its two saves: it names what stands, as close() would.
-			$named = null === $entry['ref'] ? ( Completion_Stamp::stands( $order ) ? end( $history ) : false ) : null;
-			foreach ( $history as $completed ) {
-				if ( ( null !== $entry['ref'] && ( $completed['id'] ?? null ) === $entry['ref'] ) || $completed === $named ) {
-					$completion = array(
-						'n'  => (int) $completed['n'],
-						'id' => (string) $completed['id'],
-					);
-				}
-			}
+			$completed  = null === $entry['ref'] ? $history->standing() : $history->by_id( (string) $entry['ref'] );
+			$completion = null === $completed ? null : array(
+				'n'  => (int) $completed['n'],
+				'id' => (string) $completed['id'],
+			);
 			return rest_ensure_response(
 				array(
 					'order'      => $summary,
