@@ -639,6 +639,31 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
 	}
 
+	/** Ledger work a payment listener defers while the gateway runs lands before the submit answers, not at shutdown. */
+	public function test_submit_runs_work_deferred_during_dispatch_before_it_answers(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$ran   = false;
+		$defer = static function ( $id ) use ( &$ran ): void {
+			Ledger::defer(
+				(int) $id,
+				static function () use ( &$ran ): void {
+					$ran = true;
+				},
+				'the test job'
+			);
+		};
+		add_action( 'woocommerce_payment_complete', $defer );
+
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+		remove_action( 'woocommerce_payment_complete', $defer );
+
+		// Assert.
+		$this->assertSame( 'recorded', $response->get_data()['outcome'] );
+		$this->assertTrue( $ran );
+	}
+
 	/** A completed sale owes money after a refund, yet a new attempt is refused, not dispatched (§4.2). */
 	public function test_submit_on_a_completed_sale_is_refused(): void {
 		// Arrange: paid in cash, 20.00 refunded and allocated.

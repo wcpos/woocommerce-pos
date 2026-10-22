@@ -2602,12 +2602,14 @@ class Ledger {
 	}
 
 	/**
-	 * Run an order's deferred work, including work deferred while it runs.
+	 * Run an order's deferred work now, including work deferred while it runs. Besides the three flush
+	 * points, a request entry point calls it after dispatching a gateway, so its answer reads storage
+	 * with the payment recorded; never from inside a hook.
 	 *
 	 * @param int $order_id Order id.
 	 * @return bool Whether any ran.
 	 */
-	private static function flush( int $order_id ): bool {
+	public static function flush( int $order_id ): bool {
 		$ran = false;
 		while ( ! empty( self::$deferred[ $order_id ] ) ) {
 			list( $work, $label ) = array_shift( self::$deferred[ $order_id ] );

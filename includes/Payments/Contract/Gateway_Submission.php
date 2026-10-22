@@ -254,6 +254,8 @@ class Gateway_Submission {
 				unset( $_POST[ $id ] );
 			}
 		}
+		// What the gateway's hooks deferred for this order lands before the answer is built.
+		Ledger::flush( $order->get_id() );
 		if ( $threw instanceof Ledger_Persistence_Exception && ! $dispatch_started ) {
 			// Nothing was dispatched and nothing durable records the attempt: a retryable conflict.
 			self::restore_method( $order, $previous_method, null );
