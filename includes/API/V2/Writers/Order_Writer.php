@@ -10,12 +10,11 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
-use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
@@ -146,6 +145,16 @@ class Order_Writer extends Null_Writer {
 		if ( ! array_intersect( self::MONEY_SENSITIVE_KEYS, array_keys( $payload ) ) ) {
 			return $work();
 		}
+		return self::under_order_lock( $id, $work );
+	}
+
+	/** A delete always takes the order lock: it is refused while money is in motion (rule 3), as a cancel is. */
+	public function with_delete_lock( int $id, callable $work ) {
+		return self::under_order_lock( $id, $work );
+	}
+
+	/** Run the work holding the order lock; a busy lock is a retryable 409. */
+	private static function under_order_lock( int $id, callable $work ) {
 		if ( ! Order_Lock::instance()->acquire( $id ) ) {
 			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Record is being written; retry shortly.', array( 'status' => 409 ) );
 		}
@@ -315,8 +324,18 @@ class Order_Writer extends Null_Writer {
 		}
 	}
 
-	/** Execute delete with the named stock restore/rollback lifecycle. */
+	/**
+	 * Execute delete with the named stock restore/rollback lifecycle. Run under the order lock
+	 * (with_delete_lock()), a trash or a force delete is refused while money is in motion
+	 * (`wcpos_money_in_motion`, rule 3), before any stock moves: the sweeper still has to resolve
+	 * that money. Captured money does not block, as on cancel.
+	 */
 	public function delete( array $meta, int $id, array $mutation, callable $dispatch, callable $can_delete ) {
+		$order  = wc_get_order( $id );
+		$motion = $order ? Ledger::instance()->sale_state( $order )->in_motion() : null;
+		if ( null !== $motion ) {
+			return self::in_motion_refusal( $motion );
+		}
 		$force = (bool) ( $mutation['force'] ?? false );
 		return $this->forward_with_stock_restore_rollback(
 			$this->delete_request( $meta['route'] . '/' . $id, $id, $force ),
@@ -327,15 +346,9 @@ class Order_Writer extends Null_Writer {
 		);
 	}
 
-	/** Read an order with six-decimal precision and POS links. */
+	/** Read the order as both lanes compare it (Order_Serializer::compared_read()). */
 	public function document( array $meta, int $id, callable $default_document ) {
-		$response = $default_document( $meta, $id, array( 'dp' => '6' ) );
-		$data     = $response->get_data();
-		$order    = wc_get_order( $id );
-		if ( is_array( $data ) && $order ) {
-			$response->set_data( Order_Serializer::add_pos_links( $data, $order ) );
-		}
-		return $response;
+		return Order_Serializer::compared_read( $id );
 	}
 
 	/** Build the canonical augmented order response document. */
@@ -439,20 +452,6 @@ class Order_Writer extends Null_Writer {
 	}
 
 	/**
-	 * Whether the order's lines are locked: WooCommerce's is_editable() refuses them, or a completion
-	 * stands on a status that is_editable() allows (a merchant's POS status stored as on-hold).
-	 */
-	private static function locked( \WC_Order $order ): bool {
-		return ! $order->is_editable() || Completion_Stamp::stands( $order );
-	}
-
-	/** Whether the push moves a locked order into another editable status (a reopen, D3). */
-	private static function reopens( \WC_Order $order, array $forward ): bool {
-		$status = (string) ( $forward['status'] ?? '' );
-		return in_array( $status, array( 'pos-open', 'pending', 'on-hold' ), true ) && $status !== $order->get_status() && self::locked( $order );
-	}
-
-	/**
 	 * D5: a sale a WooCommerce gateway paid outside the ledger (online, or before the ledger existed)
 	 * shows that tender as a captured row once reopened, so its balance counts it and its refunds,
 	 * and a later close completes on it. Written before the status moves, without deriving, so the
@@ -513,43 +512,6 @@ class Order_Writer extends Null_Writer {
 			return new WP_Error( 'woo_rxdb_sync_record_locked', $error->getMessage(), array( 'status' => 409 ) );
 		}
 		return is_wp_error( $adopted ) ? $adopted : null;
-	}
-
-	/**
-	 * Whether any money exists on the order: a ledger row, a gateway attempt or the awaiting-customer
-	 * stamp, or WooCommerce's own paid facts for an order a gateway or an earlier version paid
-	 * (`date_paid`, a paid status, a transaction id, a refund).
-	 */
-	private static function has_money( \WC_Order $order ): bool {
-		return Ledger::instance()->read( $order ) || Gateway_Submission::read_attempts( $order ) || null !== Gateway_Submission::read_stamp( $order )
-			|| null !== $order->get_date_paid( 'edit' ) || $order->is_paid() || '' !== (string) $order->get_transaction_id( 'edit' ) || array() !== $order->get_refunds();
-	}
-
-	/**
-	 * The payment or attempt still in motion on the order, or null: a `pending` or `authorized`
-	 * row, a `pending` refund allocation, a `sent` gateway attempt, or the awaiting-customer stamp.
-	 *
-	 * @return array{payment_id: ?string, attempt_id: ?string}|null
-	 */
-	private static function money_in_motion( \WC_Order $order ): ?array {
-		foreach ( Ledger::instance()->read( $order ) as $row ) {
-			$pending_refund = array_filter( is_array( $row['refunds'] ?? null ) ? $row['refunds'] : array(), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );
-			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || $pending_refund ) {
-				return array(
-					'payment_id' => (string) ( $row['id'] ?? '' ),
-					'attempt_id' => null,
-				);
-			}
-		}
-		$sent  = array_search( 'sent', Gateway_Submission::read_attempts( $order ), true );
-		$stamp = Gateway_Submission::read_stamp( $order );
-		if ( false !== $sent || null !== $stamp ) {
-			return array(
-				'payment_id' => null,
-				'attempt_id' => false !== $sent ? (string) $sent : (string) ( $stamp['attempt_id'] ?? '' ),
-			);
-		}
-		return null;
 	}
 
 	/**
@@ -749,8 +711,11 @@ class Order_Writer extends Null_Writer {
 		}
 		$forward       = $this->order_payload->for_update( $id, $forward );
 		$lines_changed = $order && $this->order_payload->lines_changed( $order, $forward );
-		$refusal       = $order ? $this->money_gate( $order, $forward, $lines_changed ) : null;
-		if ( null === $refusal && $order && self::reopens( $order, $forward ) ) {
+		// One state from the locked pre-read; adopt_original_tender() moves neither the status nor the completion.
+		$state         = $order ? Ledger::instance()->sale_state( $order ) : null;
+		$reopens       = $state && $state->reopens( (string) ( $forward['status'] ?? '' ) );
+		$refusal       = $state ? $this->money_gate( $order, $state, $forward, $lines_changed ) : null;
+		if ( null === $refusal && $reopens ) {
 			$refusal = self::adopt_original_tender( $order );
 		}
 		if ( null !== $refusal ) {
@@ -759,7 +724,7 @@ class Order_Writer extends Null_Writer {
 		// A non-editable order that is not being reopened keeps its lines and totals: wc/v3 recalculates
 		// whenever lines or an address are posted, which would move a paid order's tax. Its unchanged
 		// lines are not forwarded and its addresses are applied after the write, without a recalculation.
-		if ( $order && self::locked( $order ) && ! self::reopens( $order, $forward ) && ! $lines_changed ) {
+		if ( $state && $state->locked() && ! $reopens && ! $lines_changed ) {
 			unset( $forward['line_items'], $forward['fee_lines'], $forward['shipping_lines'], $forward['coupon_lines'] );
 			$context['frozen_addresses'] = array_filter( array_intersect_key( $forward, array_flip( array( 'billing', 'shipping' ) ) ), 'is_array' );
 			unset( $forward['billing'], $forward['shipping'] );
@@ -795,24 +760,24 @@ class Order_Writer extends Null_Writer {
 	 * (`reopen_required`, rule 4) unless the same push reopens it (D3: reopen and edit are one
 	 * write); `cancelled` never unlocks lines.
 	 *
-	 * @param \WC_Order $order         The order read under the order lock.
-	 * @param array     $forward       The forwarded update payload.
-	 * @param bool      $lines_changed Whether the forward changes the order's money lines.
+	 * @param \WC_Order  $order         The order read under the order lock.
+	 * @param Sale_State $state         Its state, from the same read.
+	 * @param array      $forward       The forwarded update payload.
+	 * @param bool       $lines_changed Whether the forward changes the order's money lines.
 	 */
-	private function money_gate( \WC_Order $order, array $forward, bool $lines_changed ): ?WP_Error {
+	private function money_gate( \WC_Order $order, Sale_State $state, array $forward, bool $lines_changed ): ?WP_Error {
 		$currency = isset( $forward['currency'] ) && is_scalar( $forward['currency'] ) ? (string) $forward['currency'] : '';
-		if ( '' !== $currency && $currency !== $order->get_currency( 'edit' ) && self::has_money( $order ) ) {
+		if ( '' !== $currency && $currency !== $order->get_currency( 'edit' ) && $state->has_money() ) {
 			return new WP_Error( 'wcpos_currency_locked', 'The currency cannot change once a payment exists on this order.', array( 'status' => 422 ) );
 		}
-		$status   = (string) ( $forward['status'] ?? '' );
-		$editable = ! self::locked( $order );
-		$reopens  = self::reopens( $order, $forward );
-		$cancels  = 'cancelled' === $status && 'cancelled' !== $order->get_status();
-		$motion   = ( $reopens || $cancels ) ? self::money_in_motion( $order ) : null;
+		$status  = (string) ( $forward['status'] ?? '' );
+		$reopens = $state->reopens( $status );
+		$cancels = 'cancelled' === $status && 'cancelled' !== $order->get_status();
+		$motion  = ( $reopens || $cancels ) ? $state->in_motion() : null;
 		if ( null !== $motion ) {
-			return new WP_Error( 'wcpos_money_in_motion', 'A payment on this order is still in progress; finish or cancel it first.', array( 'status' => 422 ) + $motion );
+			return self::in_motion_refusal( $motion );
 		}
-		if ( ! $editable && ! $reopens && $lines_changed ) {
+		if ( $state->locked() && ! $reopens && $lines_changed ) {
 			return new WP_Error(
 				'reopen_required',
 				'Reopen the order before changing its lines.',
@@ -823,6 +788,19 @@ class Order_Writer extends Null_Writer {
 			);
 		}
 		return null;
+	}
+
+	/**
+	 * The push lane's refusal for money in motion: both keys present, the one not in motion null.
+	 *
+	 * @param array $motion {@see Sale_State::in_motion()}.
+	 */
+	private static function in_motion_refusal( array $motion ): WP_Error {
+		$named = array(
+			'payment_id' => $motion['payment_id'],
+			'attempt_id' => null === $motion['payment_id'] ? (string) $motion['attempt_id'] : null,
+		);
+		return new WP_Error( 'wcpos_money_in_motion', 'A payment on this order is still in progress; finish or cancel it first.', array( 'status' => 422 ) + $named );
 	}
 
 	/** Persist reassignment and its mutually exclusive order-note policy. */

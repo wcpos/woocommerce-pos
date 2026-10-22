@@ -8,9 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use WCPOS\WooCommercePOS\API\V2\Writers\Order_Writer;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
@@ -801,9 +801,8 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$saved = wc_get_order( $order->get_id() );
 		$this->assertSame( 'cancelled', Gateway_Submission::read_attempts( $saved )[ $attempt ] ?? null );
 		$this->assertSame( 'wcpos_balance_outstanding', $this->close( $order )->get_data()['code'] );
-		$motion = new \ReflectionMethod( Order_Writer::class, 'money_in_motion' );
-		$motion->setAccessible( true );
-		$this->assertNull( $motion->invoke( null, $saved ) );
+		// The push lane's reopen/cancel gate reads the same state (wcpos_money_in_motion).
+		$this->assertNull( ( new Sale_State( $saved, Ledger::instance()->read( $saved ) ) )->in_motion() );
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 

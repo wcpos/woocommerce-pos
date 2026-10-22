@@ -250,26 +250,41 @@ final class Order_Serializer {
 	}
 
 	/**
-	 * The order as the push lane compares it, and its revision: the bare wc/v3 read with POS links
-	 * that `Order_Writer::document()` makes for `Write_Controller::revision_for()`, so a money
-	 * command and a push agree on what "current" means (ADR 0040 rule 6). A failed inner read
-	 * (no read permission, a vanished order) is returned as its error, never hashed.
+	 * THE order both lanes compare a claimed revision against: the bare wc/v3 read with six-decimal
+	 * precision and POS links, read once here for the push lane (`Order_Writer::document()`) and the
+	 * money-command lane ({@see self::current_state()}) so they agree on what "current" means
+	 * (ADR 0040 rule 6, ADR 0033). A failed read is returned as it came back: never hashed, and never
+	 * given the pay or receipt link, which carry the order key.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	public static function compared_read( int $order_id ): \WP_REST_Response {
+		$response = Product_Serializer::dispatched_bare_read( '/wc/v3/orders/' . $order_id, array( 'dp' => '6' ) );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $order_id );
+		if ( $response->get_status() < 400 && is_array( $data ) && $order ) {
+			$response->set_data( self::add_pos_links( $data, $order ) );
+		}
+		return $response;
+	}
+
+	/**
+	 * The compared order and its revision, for the money-command lane. A failed inner read (no read
+	 * permission, a vanished order) is returned as its error, never hashed.
 	 *
 	 * @param int $order_id Order id.
 	 * @return array{document: array, revision: string}|\WP_Error
 	 */
 	public static function current_state( int $order_id ) {
-		$response = Product_Serializer::dispatched_bare_read( '/wc/v3/orders/' . $order_id, array( 'dp' => '6' ) );
+		$response = self::compared_read( $order_id );
 		$data     = $response->get_data();
 		if ( $response->get_status() >= 400 || ! is_array( $data ) ) {
 			$error = is_array( $data ) ? $data : array();
 			return new \WP_Error( (string) ( $error['code'] ?? 'wcpos_order_unreadable' ), (string) ( $error['message'] ?? '' ), array( 'status' => max( 400, $response->get_status() ) ) );
 		}
-		$order    = wc_get_order( $order_id );
-		$document = $order ? self::add_pos_links( $data, $order ) : $data;
 		return array(
-			'document' => $document,
-			'revision' => self::canonical_revision( $document ),
+			'document' => $data,
+			'revision' => self::canonical_revision( $data ),
 		);
 	}
 

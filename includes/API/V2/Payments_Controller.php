@@ -20,6 +20,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -490,7 +491,8 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( is_wp_error( $current ) ) {
 			return $current;
 		}
-		if ( hash_equals( $current['revision'], $revision ) ) {
+		$facts = Revision::stale( $revision, $current['revision'], $current['document'] );
+		if ( null === $facts ) {
 			return null;
 		}
 		return new WP_Error(
@@ -498,8 +500,8 @@ class Payments_Controller extends WC_REST_Controller {
 			__( 'The order changed since this command was built; read it again.', 'woocommerce-pos' ),
 			array(
 				'status'          => 409,
-				'currentRevision' => $current['revision'],
-				'current'         => $current['document'],
+				'currentRevision' => $facts['currentRevision'],
+				'current'         => $facts['current'],
 				'order'           => Ledger::instance()->summary( $order ),
 			)
 		);

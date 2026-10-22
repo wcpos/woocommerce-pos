@@ -41,6 +41,13 @@ interface Collection_Writer_Interface {
 	 */
 	public function with_write_lock( int $id, array $payload, callable $work );
 
+	/**
+	 * Run a delete's compare and delete under whatever lock the collection needs.
+	 *
+	 * @return mixed The work's result, or a retryable refusal when the lock is held elsewhere.
+	 */
+	public function with_delete_lock( int $id, callable $work );
+
 	/** Validate and repair an already-existing create target. */
 	public function validate_existing_create( int $id, array $payload, array $prepared );
 

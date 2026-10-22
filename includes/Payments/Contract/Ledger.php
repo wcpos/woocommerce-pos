@@ -1704,6 +1704,17 @@ class Ledger {
 	}
 
 	/**
+	 * What may happen to the sale now, and what money is in motion on it: one read of the order,
+	 * valid until it is next saved. The push lane and the money-command routes translate it into
+	 * their own refusals (ADR 0040 rules 3 and 4).
+	 *
+	 * @param WC_Order $order Order object, read under the caller's order lock.
+	 */
+	public function sale_state( WC_Order $order ): Sale_State {
+		return new Sale_State( $order, $this->read( $order ) );
+	}
+
+	/**
 	 * A closed sale takes no new tender (spec §4.2): a new row is accepted only while the sale is open
 	 * (editable, in progress, or awaiting a sent submit). A completed sale whose signed balance went
 	 * positive through a refund is reopened first, so the money lands on an open sale and completes it
@@ -1712,11 +1723,11 @@ class Ledger {
 	 * @param WC_Order $order Order object.
 	 */
 	public function accepts_tender( WC_Order $order ): ?WP_Error {
-		$stands = Completion_Stamp::stands( $order );
-		if ( ! $stands && ( $order->is_editable() || in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) || null !== Gateway_Submission::read_stamp( $order ) ) ) {
+		$state = $this->sale_state( $order );
+		if ( $state->takes_tender() ) {
 			return null;
 		}
-		if ( $stands || null !== $order->get_date_paid( 'edit' ) ) {
+		if ( $state->already_paid() ) {
 			return new WP_Error(
 				'wcpos_order_already_paid',
 				__( 'The order is already paid.', 'woocommerce-pos' ),
@@ -1741,28 +1752,22 @@ class Ledger {
 	 * @return array|WP_Error `{ order: summary, completion: { n, id } }`.
 	 */
 	public function close( WC_Order $order, array $command = array() ) {
-		$rows = $this->read( $order );
+		$rows  = $this->read( $order );
+		$state = new Sale_State( $order, $rows );
 		// A standing completion is replayed whatever its status (a merchant's POS status may be on-hold).
 		// A sale paid before the history existed stands too: it replays with no completion to name.
-		if ( Completion_Stamp::stands( $order ) ) {
+		if ( $state->stands() ) {
 			$history = Completion_Stamp::read( $order );
 			$latest  = end( $history );
 			$this->remember_close( $order, $command, is_array( $latest ) ? $latest : false );
 			return $this->closed( $order, $rows, $latest );
 		}
-		if ( ! in_array( $order->get_status(), array( 'pos-open', 'pos-partial', 'pending', 'on-hold' ), true ) ) {
+		if ( ! $state->open() ) {
 			return $this->invalid_transition(); // Never completed, or its completion was reopened (a cancel).
 		}
-		foreach ( $rows as $row ) {
-			$pending_refund = array_filter( (array) ( $row['refunds'] ?? array() ), static fn( $allocation ) => 'pending' === ( $allocation['status'] ?? '' ) );
-			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || $pending_refund ) {
-				return $this->in_flight( $order, array( 'payment_id' => $row['id'] ) );
-			}
-		}
-		$sent  = array_search( 'sent', Gateway_Submission::read_attempts( $order ), true );
-		$stamp = Gateway_Submission::read_stamp( $order );
-		if ( false !== $sent || null !== $stamp ) {
-			return $this->in_flight( $order, array( 'attempt_id' => false !== $sent ? $sent : ( $stamp['attempt_id'] ?? null ) ) );
+		$motion = $state->in_motion();
+		if ( null !== $motion ) {
+			return $this->in_flight( $order, null !== $motion['payment_id'] ? array( 'payment_id' => $motion['payment_id'] ) : array( 'attempt_id' => $motion['attempt_id'] ) );
 		}
 		if ( Money::minor( $order->get_total() ) < 0 || $this->signed_balance( $order, $rows ) > 0 ) {
 			return new WP_Error(

@@ -25,9 +25,6 @@ final class Completion_Stamp {
 	public const META_KEY              = '_wcpos_completions';
 	public const COMPLETED_AT_META_KEY = '_wcpos_completed_at';
 
-	/** Statuses a sale is reopened into (the observer marks the latest entry). */
-	private const OPEN_STATUSES = array( 'pos-open', 'pos-partial', 'pending', 'on-hold', 'failed', 'cancelled' );
-
 	/** Entry field => [ request body field, till meta key whose validation it borrows ]. */
 	private const PROVENANCE_FIELDS = array(
 		'register'  => array( 'register_id', '_wcpos_register' ),
@@ -183,13 +180,14 @@ final class Completion_Stamp {
 				return;
 			}
 			$completed = self::completed_statuses( $order );
+			$reopened  = self::reopened_statuses();
 			if ( in_array( (string) $to, $completed, true ) && ! in_array( (string) $from, $completed, true ) ) {
 				self::memoise( $order );
 			} elseif ( in_array( (string) $to, $completed, true ) ) {
 				return; // Completed to completed (processing to a configured on-hold): the sale still stands.
-			} elseif ( in_array( (string) $to, self::OPEN_STATUSES, true ) && ! in_array( (string) $from, self::OPEN_STATUSES, true ) ) {
+			} elseif ( in_array( (string) $to, $reopened, true ) && ! in_array( (string) $from, $reopened, true ) ) {
 				self::mark_reopened( $order );
-			} elseif ( in_array( (string) $to, self::OPEN_STATUSES, true ) && in_array( (string) $from, $completed, true ) ) {
+			} elseif ( in_array( (string) $to, $reopened, true ) && in_array( (string) $from, $completed, true ) ) {
 				// A completed status that is also open (a merchant's POS status stored as on-hold) is
 				// left for another open status: that is a reopen of the standing completion too.
 				self::mark_reopened( $order );
@@ -197,6 +195,11 @@ final class Completion_Stamp {
 		} catch ( \Throwable $error ) {
 			Logger::error( sprintf( 'WCPOS completion observer failed on order #%d: %s', (int) $id, $error->getMessage() ), array( 'order_id' => (int) $id ) );
 		}
+	}
+
+	/** Statuses a sale is reopened into (the observer marks the latest entry): the open ones, failed and cancelled. */
+	private static function reopened_statuses(): array {
+		return array_merge( Sale_State::OPEN_STATUSES, array( 'failed', 'cancelled' ) );
 	}
 
 	/**

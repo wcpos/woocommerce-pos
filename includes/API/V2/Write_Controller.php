@@ -488,18 +488,10 @@ class Write_Controller extends WP_REST_Controller {
 				if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
 					return $current;
 				}
-				$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
-				$current_revision = $this->revision_for( $meta, $id, $current_bare );
-				if ( $m['baseRevision'] !== $current_revision ) {
-					return new WP_REST_Response(
-						array(
-							'code' => 'woo_rxdb_sync_conflict',
-							'message' => 'baseRevision is stale.',
-							'current' => $current->get_data(),
-							'currentRevision' => $current_revision,
-						),
-						409
-					);
+				$current_bare = is_array( $current->get_data() ) ? $current->get_data() : array();
+				$stale        = Revision::stale( $m['baseRevision'], $this->revision_for( $meta, $id, $current_bare ), $current_bare );
+				if ( null !== $stale ) {
+					return $this->stale_conflict( $stale );
 				}
 				if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
 					$late = $prepared['context_factory']();
@@ -558,33 +550,37 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 
+		// The writer's lock spans the current read, the compare and the delete, as on update.
 		$writer  = $this->writer( $meta );
-		$current = $this->document_for( $meta, $id );
-		if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
-			return $current;
-		}
-		$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
-		$current_revision = $this->revision_for( $meta, $id, $current_bare );
-		if ( $m['baseRevision'] !== $current_revision ) {
-			return new WP_REST_Response(
-				array(
-					'code' => 'woo_rxdb_sync_conflict',
-					'message' => 'baseRevision is stale.',
-					'current' => $current->get_data(),
-					'currentRevision' => $current_revision,
-				),
-				409
-			);
-		}
+		$status  = 0;
+		$failure = $writer->with_delete_lock(
+			$id,
+			function () use ( $meta, $id, $m, $writer, &$status ) {
+				$current = $this->document_for( $meta, $id );
+				if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
+					return $current;
+				}
+				$current_bare = is_array( $current->get_data() ) ? $current->get_data() : array();
+				$stale        = Revision::stale( $m['baseRevision'], $this->revision_for( $meta, $id, $current_bare ), $current_bare );
+				if ( null !== $stale ) {
+					return $this->stale_conflict( $stale );
+				}
 
-		$response = $writer->delete( $meta, $id, $m, \Closure::fromCallable( array( $this, 'dispatch_write' ) ), \Closure::fromCallable( array( $this, 'can_forward_delete' ) ) );
-		if ( is_wp_error( $response ) ) {
-			return $response;
+				$response = $writer->delete( $meta, $id, $m, \Closure::fromCallable( array( $this, 'dispatch_write' ) ), \Closure::fromCallable( array( $this, 'can_forward_delete' ) ) );
+				if ( is_wp_error( $response ) ) {
+					return $response;
+				}
+				if ( $response->get_status() >= 400 ) {
+					return new WP_REST_Response( $response->get_data(), $response->get_status() );
+				}
+				$status = $response->get_status();
+				return null;
+			}
+		);
+		if ( null !== $failure ) {
+			return $failure;
 		}
-		if ( $response->get_status() >= 400 ) {
-			return new WP_REST_Response( $response->get_data(), $response->get_status() );
-		}
-		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
+		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $status );
 		return is_wp_error( $finalized ) ? $finalized : new WP_REST_Response( (object) array(), 200 );
 	}
 
@@ -806,6 +802,23 @@ class Write_Controller extends WP_REST_Controller {
 		$writer = $writer ?? $this->writer( $meta );
 		$bare = $document->get_data();
 		return $this->respond( is_array( $bare ) ? $bare : array(), $record_id, $status ?? $document->get_status(), $meta, $id, $writer );
+	}
+
+	/**
+	 * The push lane's 409 for a stale baseRevision, in its wire key order.
+	 *
+	 * @param array{currentRevision: string, current: array} $facts From Revision::stale().
+	 */
+	private function stale_conflict( array $facts ): WP_REST_Response {
+		return new WP_REST_Response(
+			array(
+				'code'            => 'woo_rxdb_sync_conflict',
+				'message'         => 'baseRevision is stale.',
+				'current'         => $facts['current'],
+				'currentRevision' => $facts['currentRevision'],
+			),
+			409
+		);
 	}
 
 	/**
