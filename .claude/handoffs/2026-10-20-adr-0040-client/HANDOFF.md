@@ -132,6 +132,15 @@ Read by a Codex read-only run at monorepo `origin/next` `c0d06af6` (sparse clone
 
 Rules in force on the app side: failing test first for every item; one Jest/Vitest suite at a time with `--maxWorkers=2`; never commit to `next` or `main` directly; one PR per numbered item unless two are one change; the server spec is the authority on field names and codes. Anything the spec does not say is a question for Paul, not an invention.
 
+## 4b. Later, with the server: one stale shape and one missing-revision shape (not yet scheduled)
+
+Since the server's c7 refactor (2026-10-22) both lanes read the compared order through `Order_Serializer::compared_read()` and decide staleness through `Revision::stale()`; only the wire wrappers still differ. Unify them in one server-and-app step, never one side first:
+
+- **Stale:** `woo_rxdb_sync_conflict` (push lane, 409, top-level `current` and `currentRevision`) and `wcpos_revision_stale` (money lane, 409, `data.currentRevision`, `data.current`, `data.order`).
+- **Missing:** `wcpos_revision_required` (money lane, `WP_Error`, 428), `woo_rxdb_sync_revision_required` (push update, body, 428), `woo_rxdb_sync_precondition_required` (push delete, body, 428).
+
+Under the patch-compatibility rule each lane keeps serving its old shape for one full minor after the new shape lands. Until then the app handles both shapes as section 2 lists them.
+
 ## 5. Pointers
 
 - ADR: `docs/adr/0040-server-derives-paid-no-money-epoch.md` (wcpos/woocommerce-pos, `next`).
