@@ -67,7 +67,8 @@ final class Payment_Index {
 	}
 
 	/**
-	 * Orders holding at least one pending or authorized leg, oldest-modified first.
+	 * Orders holding at least one live leg, oldest-modified first: a row the ledger still has work to do on
+	 * (pending, authorized, or owing its sale's paid transition).
 	 *
 	 * No status filter on purpose: an authorization that covers the balance completes
 	 * the order through payment_complete(), and that is exactly the leg a sweep must

@@ -23,7 +23,8 @@ class Ledger {
 	public const INDEX_META_KEY = '_wcpos_payment_method';
 	public const PAYMENT_ID_META_KEY = '_wcpos_payment_id';
 	/**
-	 * One meta row per pending or authorized leg. What the sweep selects orders by: a status
+	 * One meta row per live leg, a row the ledger still has work to do on: pending, authorized, or one whose
+	 * command owes the sale's paid transition. What the sweep selects orders by: a status
 	 * filter would lose a leg on an order whose status moved on (a cancel, an earlier
 	 * completion), which is exactly the leg that most needs reconciling.
 	 */
