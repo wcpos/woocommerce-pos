@@ -234,7 +234,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'password_reset'                                        => array( 10 ),
 			'pre_update_option_woocommerce_pos_settings_general'    => array( 10 ),
 			'pre_update_option_woocommerce_pos_settings_visibility' => array( 10 ),
-			'pre_update_option_woocommerce_pos_pro_settings_license' => array( 10 ),
 			'profile_update'                                        => array( 10 ),
 			'query_vars'                                            => array( 10 ),
 			'rest_api_init'                                         => array( 10, 20 ),
@@ -414,7 +413,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 				if ( 'determine_current_user' === $row['hook'] ) {
 					$this->assertSame( 20, $row['priority'] );
 					// JWT row index after three next-only rows; seven sync-latched rows are omitted when unlatched.
-					$this->assertSame( $latched ? 23 : 16, array_search( $row, $rows, true ) );
+					$this->assertSame( $latched ? 22 : 15, array_search( $row, $rows, true ) );
 					$auth_rows[] = self::label_for( $row['callback'] );
 				}
 			}
