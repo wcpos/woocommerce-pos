@@ -13,7 +13,7 @@ use WC_Order;
 use WC_Order_Item_Fee;
 use WC_REST_Orders_Controller;
 use WC_Tax;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Tests\Sync\Seeds_Stored_Digests;
 
 /**
  * Pins the wire SHAPE of a v2 order row, on both order storage backends.
@@ -31,6 +31,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  * reason, so the delta stays reviewable instead of being buried in a literal.
  */
 trait Catalog_Proxy_Order_Payload_Tests {
+	use Seeds_Stored_Digests;
 	/**
 	 * An order row carries WooCommerce's ORDER shape plus the v2 additions.
 	 */
@@ -255,7 +256,7 @@ trait Catalog_Proxy_Order_Payload_Tests {
 		// carries no stored digest and `_rxdb_digest` would be absent for a reason
 		// that has nothing to do with the wire contract. Seed one, so the field is
 		// pinned PRESENT rather than pinned absent (#1717).
-		( new Integrity_Digest() )->upsert_order_digest( $order->get_id() );
+		$this->seed_digests( 'orders', $order->get_id() );
 
 		return wc_get_order( $order->get_id() );
 	}

@@ -283,7 +283,7 @@ class Test_Rest_Dispatch_Order_Taxes extends Sync_REST_Store_Test_Case {
 	 * carries no tax.
 	 *
 	 * PROBED RED on the v2 lane (2026-07-30, evidence on #1402): the handler
-	 * (V1\Orders_Controller::wcpos_order_item_fee_after_calculate_taxes) is
+	 * (Orders::fee_after_calculate_taxes()) is
 	 * The negative-fee handler moved to the globally registered Orders service
 	 * (#1410), so the probe that once escalated this RED row now runs green and
 	 * inherits the pin alongside Test_Rest_Dispatch_Fee_Tax.

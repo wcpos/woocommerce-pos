@@ -251,7 +251,7 @@ class Orders {
 	 * @return string
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
-		if ( woocommerce_pos_request() || woocommerce_pos_is_pos_order( $order ) ) {
+		if ( wcpos_request() || wcpos_is_pos_order( $order ) ) {
 			$configured = $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
 
 			if (
@@ -276,7 +276,7 @@ class Orders {
 	 * @return string
 	 */
 	public function offline_process_payment_order_status( string $status, WC_Abstract_Order $order ): string {
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			return $status;
 		}
 
@@ -284,7 +284,7 @@ class Orders {
 			return $status;
 		}
 
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return $status;
 		}
 
@@ -480,13 +480,13 @@ class Orders {
 	 * @return array
 	 */
 	public function apply_unpaid_gateway_order_status( $result, $order_id ) {
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			return $result;
 		}
 
 		$order = wc_get_order( $order_id );
 
-		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! $order instanceof WC_Order || ! wcpos_is_pos_order( $order ) ) {
 			return $result;
 		}
 
@@ -747,7 +747,7 @@ class Orders {
 	 * @return string The configured order status (may include wc- prefix).
 	 */
 	private function get_gateway_order_status( string $gateway_id ): string {
-		$gateway_settings = woocommerce_pos_get_settings( 'payment_gateways' );
+		$gateway_settings = wcpos_get_settings( 'payment_gateways' );
 
 		if (
 			is_array( $gateway_settings )
@@ -866,7 +866,7 @@ class Orders {
 	 */
 	public function coupon_get_items_to_validate( array $items, WC_Discounts $discounts ): array {
 		$object = $discounts->get_object();
-		if ( ! $object instanceof WC_Order || ! woocommerce_pos_is_pos_order( $object ) ) {
+		if ( ! $object instanceof WC_Order || ! wcpos_is_pos_order( $object ) ) {
 			return $items;
 		}
 
@@ -1099,7 +1099,7 @@ class Orders {
 	 * @return array
 	 */
 	public function get_tax_location( $args, WC_Abstract_Order $order ) {
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return $args;
 		}
 

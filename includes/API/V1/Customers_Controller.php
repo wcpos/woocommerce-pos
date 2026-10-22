@@ -37,7 +37,6 @@ use WP_User_Query;
  * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Customers_Controller methods
  */
 class Customers_Controller extends WC_REST_Customers_Controller {
-	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
@@ -635,7 +634,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Combine two meta_query arrays.
 	 *
-	 * Moved here from the Query_Helpers trait, of which this controller was the only caller.
+	 * Lives here because only this controller needs it.
 	 *
 	 * @param array $meta_query1 First meta query array.
 	 * @param array $meta_query2 Second meta query array.

@@ -57,7 +57,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		Error_Reporter::reset_instance();
 		delete_transient( Error_Reporter::BACKOFF_TRANSIENT );
 
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'undecided';
 		SettingsService::instance()->save_settings( 'general', $settings );
 
@@ -795,7 +795,7 @@ PHP;
 	 * @param string $consent Consent state.
 	 */
 	private function set_consent( string $consent ): void {
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = $consent;
 		SettingsService::instance()->save_settings( 'general', $settings );
 	}

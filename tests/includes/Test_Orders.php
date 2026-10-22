@@ -2622,7 +2622,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * A nested payment on the same order must retain its configured status.
 	 *
 	 * bacs, not a made-up gateway: payment_complete_order_status() reads the
-	 * configured status through woocommerce_pos_get_settings(), which only knows
+	 * configured status through wcpos_get_settings(), which only knows
 	 * registered gateways, so an unknown id would answer 'completed' there.
 	 */
 	public function test_unpaid_gateway_success_lets_a_nested_payment_complete_on_the_same_order_keep_its_status(): void {

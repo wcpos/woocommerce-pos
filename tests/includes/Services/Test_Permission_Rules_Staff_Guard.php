@@ -7,15 +7,15 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
-use WCPOS\WooCommercePOS\Services\Customer_Account_Guard;
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WP_UnitTestCase;
 
 /**
  * Staff account guard tests.
  *
- * @covers \WCPOS\WooCommercePOS\Services\Customer_Account_Guard
+ * @covers \WCPOS\WooCommercePOS\Services\Permission_Rules
  */
-class Test_Customer_Account_Guard extends WP_UnitTestCase {
+class Test_Permission_Rules_Staff_Guard extends WP_UnitTestCase {
 	/**
 	 * Verify administrator actor may modify staff.
 	 */
@@ -23,7 +23,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 		$actor_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
 		$target_id = $this->factory->user->create( array( 'role' => 'shop_manager' ) );
 
-		$allowed = Customer_Account_Guard::can_modify( $actor_id, $target_id );
+		$allowed = Permission_Rules::can_modify( $actor_id, $target_id );
 
 		$this->assertTrue( $allowed );
 		wp_delete_user( $actor_id );
@@ -36,7 +36,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 	public function test_self_edit_is_allowed(): void {
 		$actor_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
 
-		$allowed = Customer_Account_Guard::can_modify( $actor_id, $actor_id );
+		$allowed = Permission_Rules::can_modify( $actor_id, $actor_id );
 
 		$this->assertTrue( $allowed );
 		wp_delete_user( $actor_id );
@@ -51,7 +51,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 		get_user_by( 'id', $actor_id )->add_cap( 'edit_users' );
 		get_user_by( 'id', $target_id )->add_cap( 'manage_woocommerce' );
 
-		$allowed = Customer_Account_Guard::can_modify( $actor_id, $target_id );
+		$allowed = Permission_Rules::can_modify( $actor_id, $target_id );
 
 		$this->assertFalse( $allowed );
 		wp_delete_user( $actor_id );
@@ -67,7 +67,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 		get_user_by( 'id', $actor_id )->add_cap( 'edit_users' );
 		get_user_by( 'id', $target_id )->add_role( 'author' );
 
-		$allowed = Customer_Account_Guard::can_modify( $actor_id, $target_id );
+		$allowed = Permission_Rules::can_modify( $actor_id, $target_id );
 
 		$this->assertFalse( $allowed );
 		wp_delete_user( $actor_id );
@@ -81,7 +81,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 		$actor_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
 		$target_id = $this->factory->user->create( array( 'role' => 'customer' ) );
 
-		$allowed = Customer_Account_Guard::can_modify( $actor_id, $target_id );
+		$allowed = Permission_Rules::can_modify( $actor_id, $target_id );
 
 		$this->assertTrue( $allowed );
 		wp_delete_user( $actor_id );
@@ -96,7 +96,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 		$target_id = $this->factory->user->create( array( 'role' => 'customer' ) );
 		wp_delete_user( $target_id );
 
-		$allowed = Customer_Account_Guard::can_modify( $actor_id, $target_id );
+		$allowed = Permission_Rules::can_modify( $actor_id, $target_id );
 
 		$this->assertFalse( $allowed );
 		wp_delete_user( $actor_id );
@@ -106,7 +106,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 	 * A logged-out actor is denied, including against user ID zero.
 	 */
 	public function test_missing_actor_is_denied(): void {
-		$this->assertFalse( Customer_Account_Guard::can_modify( 0, 0 ) );
+		$this->assertFalse( Permission_Rules::can_modify( 0, 0 ) );
 	}
 
 	/**
@@ -115,7 +115,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 	public function test_allow_target_roles_adds_target_roles_and_restores(): void {
 		$target_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 
-		$restore = Customer_Account_Guard::allow_target_roles( $target_id );
+		$restore = Permission_Rules::allow_target_roles( $target_id );
 		$during  = apply_filters( 'woocommerce_shop_manager_editable_roles', array( 'customer' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook, applied here only to observe the filter.
 		$restore();
 		$after = apply_filters( 'woocommerce_shop_manager_editable_roles', array( 'customer' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook, applied here only to observe the filter.
@@ -135,7 +135,7 @@ class Test_Customer_Account_Guard extends WP_UnitTestCase {
 		add_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
 
 		try {
-			$capabilities = Customer_Account_Guard::protected_capabilities();
+			$capabilities = Permission_Rules::protected_capabilities();
 
 			$this->assertSame( array( 'custom_staff' ), $capabilities );
 		} finally {

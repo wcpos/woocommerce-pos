@@ -1961,7 +1961,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
 			// Money fields: bare keys carry the numeric value, `<key>_display`
 			// holds the locale-formatted currency string. Mirrors the JS
-			// `formatReceiptData` contract — see Receipt_Data_Schema::format_money_fields().
+			// `formatReceiptData` contract — see Receipt_Money_Formatter::format().
 			$this->assertIsNumeric( $data['receipt_data']['totals']['total_incl'] );
 			$this->assertIsString( $data['receipt_data']['totals']['total_incl_display'] );
 		} finally {

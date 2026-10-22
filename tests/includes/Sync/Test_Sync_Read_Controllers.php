@@ -40,6 +40,7 @@ use WP_REST_Request;
  * @covers \WCPOS\WooCommercePOS\API\V2\Variations_Controller
  */
 class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * Remove read settings after each test.
 	 */
@@ -90,9 +91,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$first   = ProductHelper::create_simple_product();
 		$second  = ProductHelper::create_simple_product();
 		$deleted = ProductHelper::create_simple_product();
-		$digest  = new Integrity_Digest();
-		$digest->upsert_digest( $first->get_id() );
-		$digest->upsert_digest( $second->get_id() );
+		$this->seed_digests( 'products', $first->get_id(), $second->get_id() );
 		wp_delete_post( $deleted->get_id(), true );
 
 		$response = ( new Digests_Controller() )->get_digests(
@@ -1256,10 +1255,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	public function test_variations_attach_stored_digests(): void {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = array_map( 'intval', $product->get_children() );
-		$digest        = new Integrity_Digest();
-		foreach ( $variation_ids as $variation_id ) {
-			$digest->upsert_digest( $variation_id );
-		}
+		$this->seed_digests( 'variations', ...$variation_ids );
 
 		$response = ( new Variations_Controller() )->get_variations(
 			$this->request( array( 'include' => $variation_ids ) )
@@ -1517,7 +1513,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$product     = ProductHelper::create_simple_product();
 		$bucket_size = 1000;
 		$bucket      = (int) floor( $product->get_id() / $bucket_size );
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 
 		$response = ( new Integrity_Controller() )->scan(
 			$this->request(

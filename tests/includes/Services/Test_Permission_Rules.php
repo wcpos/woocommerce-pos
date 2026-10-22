@@ -220,6 +220,9 @@ class Test_Permission_Rules extends Sync_REST_Store_Test_Case {
 
 		// Assert.
 		$this->assertTrue( $verdict, is_wp_error( $verdict ) ? $verdict->get_error_code() : '' );
+		if ( 'v2' === $lane ) {
+			$this->assertFalse( Permission_Rules::wc_filter( false, $context, wc_create_order()->get_id(), 'shop_order', 'writes' ) );
+		}
 	}
 
 	/**

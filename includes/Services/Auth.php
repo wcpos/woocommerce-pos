@@ -26,27 +26,6 @@ class Auth {
 	private const WEB_SESSION_REUSE_MIN_REMAINING = DAY_IN_SECONDS;
 
 	/**
-	 * Maximum retained idle sessions.
-	 *
-	 * @deprecated Use Session_Registry::MAX_SESSIONS_PER_USER.
-	 */
-	public const MAX_SESSIONS_PER_USER = Session_Registry::MAX_SESSIONS_PER_USER;
-
-	/**
-	 * Minimum idle time before eviction.
-	 *
-	 * @deprecated Use Session_Registry::SESSION_EVICTION_IDLE_SECONDS.
-	 */
-	public const SESSION_EVICTION_IDLE_SECONDS = Session_Registry::SESSION_EVICTION_IDLE_SECONDS;
-
-	/**
-	 * Session row byte ceiling.
-	 *
-	 * @deprecated Use Session_Registry::MAX_SESSIONS_ROW_BYTES.
-	 */
-	public const MAX_SESSIONS_ROW_BYTES = Session_Registry::MAX_SESSIONS_ROW_BYTES;
-
-	/**
 	 * The single instance of the class.
 	 *
 	 * @var null|Auth
@@ -634,19 +613,6 @@ class Auth {
 		}
 
 		return $error;
-	}
-
-	/**
-	 * Legacy method for backward compatibility.
-	 *
-	 * @deprecated Use generate_access_token() instead
-	 *
-	 * @param WP_User $user The user object.
-	 *
-	 * @return string|WP_Error
-	 */
-	public function generate_token( WP_User $user ) {
-		return $this->generate_access_token( $user );
 	}
 
 	/**

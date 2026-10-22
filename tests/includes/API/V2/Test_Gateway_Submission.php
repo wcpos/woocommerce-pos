@@ -1186,7 +1186,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 				'gateways'        => $gateways,
 			)
 		);
-		// Free's settings filter (API\V1\Settings::payment_gateways_settings) switches every
+		// Free's settings filter (Services\Settings\Payment_Gateways_Section::free_tier_rule()) switches every
 		// gateway but Cash and Card off; Pro lifts that. Stand in for Pro after it has run.
 		remove_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'keep_fixtures_enabled' ), 20 );
 		add_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'keep_fixtures_enabled' ), 20 );

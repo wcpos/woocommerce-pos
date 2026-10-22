@@ -200,7 +200,7 @@ class Template_Router {
 		global $wp;
 
 		// check is pos.
-		if ( ! woocommerce_pos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
+		if ( ! wcpos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
 			return $order_received_url;
 		}
 

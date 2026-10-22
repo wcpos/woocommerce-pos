@@ -501,7 +501,7 @@ class Receipt {
 		 *
 		 * @hook woocommerce_pos_print_receipt_path
 		 */
-		return apply_filters( 'woocommerce_pos_print_receipt_path', woocommerce_pos_locate_template( $file_name ) );
+		return apply_filters( 'woocommerce_pos_print_receipt_path', wcpos_locate_template( $file_name ) );
 	}
 
 	/**

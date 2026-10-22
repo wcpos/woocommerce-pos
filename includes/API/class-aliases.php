@@ -49,7 +49,6 @@ spl_autoload_register(
 			'WCPOS\WooCommercePOS\API\Taxes_Controller'              => 'WCPOS\WooCommercePOS\API\V1\Taxes_Controller',
 			'WCPOS\WooCommercePOS\API\Templates_Controller'          => 'WCPOS\WooCommercePOS\API\V1\Templates_Controller',
 			'WCPOS\WooCommercePOS\API\Traits\Product_Helpers'        => 'WCPOS\WooCommercePOS\API\V1\Traits\Product_Helpers',
-			'WCPOS\WooCommercePOS\API\Traits\Query_Helpers'          => 'WCPOS\WooCommercePOS\API\V1\Traits\Query_Helpers',
 			'WCPOS\WooCommercePOS\API\Traits\Uuid_Handler'           => 'WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler',
 			'WCPOS\WooCommercePOS\API\Traits\WCPOS_REST_API'         => 'WCPOS\WooCommercePOS\API\V1\Traits\WCPOS_REST_API',
 

@@ -246,34 +246,6 @@ final class Pos_Visibility {
 	}
 
 	/**
-	 * Product ids hidden from the POS for the given scope.
-	 *
-	 * @deprecated Use hidden_ids( self::PRODUCTS, $scope ). Kept as a thin delegate so callers outside
-	 *             this repository keep working.
-	 *
-	 * @param string $scope Visibility scope: `default` or a store id.
-	 *
-	 * @return int[]
-	 */
-	public function online_only_product_ids( string $scope = self::DEFAULT_SCOPE ): array {
-		return $this->hidden_ids( self::PRODUCTS, $scope );
-	}
-
-	/**
-	 * Variation ids hidden from the POS for the given scope.
-	 *
-	 * @deprecated Use hidden_ids( self::VARIATIONS, $scope ). Kept as a thin delegate so callers
-	 *             outside this repository keep working.
-	 *
-	 * @param string $scope Visibility scope: `default` or a store id.
-	 *
-	 * @return int[]
-	 */
-	public function online_only_variation_ids( string $scope = self::DEFAULT_SCOPE ): array {
-		return $this->hidden_ids( self::VARIATIONS, $scope );
-	}
-
-	/**
 	 * Map a collection slug to the hidden-set type it must exclude.
 	 *
 	 * @param string $collection Collection slug.

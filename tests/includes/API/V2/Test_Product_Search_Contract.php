@@ -8,9 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\API\Product_Search;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Sync\Product_Search;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
-use WP_Query;
 
 /**
  * Server-side twin of the POS client's search fixture catalogue.
@@ -306,12 +306,8 @@ class Test_Product_Search_Contract extends WCPOS_REST_Unit_Test_Case {
 	 * Malformed UTF-8 must not turn a constrained search into the whole catalogue.
 	 */
 	public function test_product_search_rejects_malformed_utf8(): void {
-		// Arrange.
-		$query = new WP_Query();
-		$query->query_vars['wcpos_search_phrase'] = "bad\xFF";
-
 		// Act.
-		$search = Product_Search::posts_search( '', $query );
+		$search = Product_Search::posts_search( '', array( 'wcpos_search_phrase' => "bad\xFF" ), Collection_Rules::rules( 'products' )['search'] );
 
 		// Assert.
 		$this->assertSame( ' AND 1=0 ', $search );

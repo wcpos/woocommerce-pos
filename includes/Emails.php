@@ -77,7 +77,7 @@ class Emails {
 	 * @return bool Whether the email should be sent.
 	 */
 	public function manage_admin_emails( $enabled, $order, $email_class ) {
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return $enabled;
 		}
 
@@ -115,7 +115,7 @@ class Emails {
 	 * @return bool Whether the email should be sent.
 	 */
 	public function manage_customer_emails( $enabled, $order, $email_class ) {
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return $enabled;
 		}
 
@@ -157,7 +157,7 @@ class Emails {
 	 * @return string Filtered comma-separated recipient emails.
 	 */
 	public function filter_new_order_recipients( $recipient, $order = null, $email = null ) {
-		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! $order instanceof WC_Order || ! wcpos_is_pos_order( $order ) ) {
 			return $recipient;
 		}
 
@@ -209,7 +209,7 @@ class Emails {
 			$order = wc_get_order( $order_id );
 		}
 
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return;
 		}
 

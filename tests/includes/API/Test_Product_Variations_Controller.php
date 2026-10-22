@@ -671,7 +671,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'integer', $schema['properties']['stock_quantity']['type'] );
 
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$schema = $this->endpoint->get_item_schema();
 		$this->assertEquals( 'number', $schema['properties']['stock_quantity']['type'] );
@@ -679,7 +679,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_response_with_decimal_quantities(): void {
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
@@ -700,7 +700,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_orderby_decimal_stock_quantity(): void {
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();

@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
  * @covers \WCPOS\WooCommercePOS\Sync\Digest_Index
  */
 class Test_Digest_Index extends Sync_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * The read half under test.
 	 *
@@ -268,7 +269,7 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 		$this->clear_stored_product_digests();
 		$product = ProductHelper::create_simple_product();
 		$this->clear_stored_product_digests();
-		$this->digests->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 
 		$buckets = $this->index->bucket_aggregates( $this->whole_space() )['buckets'];
 
@@ -289,7 +290,7 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 		$this->clear_stored_product_digests();
 		$product = ProductHelper::create_simple_product();
 		$this->clear_stored_product_digests();
-		$this->digests->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 
 		// A direct row write fires no hook, so the stored digest is not refreshed.
 		$wpdb->update( $wpdb->posts, array( 'post_title' => 'sql bypass' ), array( 'ID' => $product->get_id() ) );
@@ -564,7 +565,7 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 	 */
 	public function test_bucket_drift_omits_a_row_whose_stored_digest_is_fresh(): void {
 		$product = ProductHelper::create_simple_product();
-		$this->digests->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 
 		$rows = $this->index->bucket_drift( $this->whole_space() );
 
@@ -617,7 +618,7 @@ class Test_Digest_Index extends Sync_Store_Test_Case {
 		$this->clear_stored_product_digests();
 
 		$this->assertTrue( $this->index->needs_product_rebuild() );
-		$this->digests->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 		$this->assertFalse( $this->index->needs_product_rebuild(), 'needs_product_rebuild_false_once_a_digest_is_stored' );
 	}
 

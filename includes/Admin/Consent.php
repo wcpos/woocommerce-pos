@@ -276,7 +276,7 @@ class Consent {
 	public function register_routes(): void {
 		// Only expose the consent REST routes on WCPOS-flagged requests, matching the
 		// rest of /wcpos/v1/ (see Init::init_rest_api). Limits the always-on surface.
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			return;
 		}
 
@@ -334,7 +334,7 @@ class Consent {
 			return new WP_Error( 'wcpos_consent_invalid', /* translators: Short WCPOS UI label; keep concise. */ __( 'Invalid consent value.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 
-		$settings = woocommerce_pos_get_settings( 'general' );
+		$settings = wcpos_get_settings( 'general' );
 		if ( ! \is_array( $settings ) ) {
 			return new WP_Error( 'wcpos_consent_load_failed', __( 'Unable to load general settings.', 'woocommerce-pos' ), array( 'status' => 500 ) );
 		}

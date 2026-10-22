@@ -280,7 +280,7 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 				'headers'  => array(),
 			);
 		};
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 		Analytics::reset_instance();

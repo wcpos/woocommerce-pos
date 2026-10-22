@@ -18,7 +18,7 @@ class Cloud_Print_Relay_Service {
 	const RELAY_URL = 'https://cloudprint.wcpos.com';
 
 	/**
-	 * Server-owned relay state {enabled, site_key, hint_secret, registered_at}.
+	 * Server-owned relay state {site_key, hint_secret, registered_at}.
 	 * Deliberately a separate option from the client-writable cloud-print
 	 * settings so no settings write path can clobber or leak it.
 	 */
@@ -71,13 +71,9 @@ class Cloud_Print_Relay_Service {
 	 * outbound request below is still open, proving consent and that WCPOS
 	 * is actually installed at the claimed URL.
 	 *
-	 * @param bool $admin_initiated True for an explicit admin action; false for
-	 *                              background re-registration, which must never
-	 *                              flip a relay the admin has since disabled.
-	 *
 	 * @return array|WP_Error Public relay fields or an error.
 	 */
-	public static function register_site( bool $admin_initiated = true ) {
+	public static function register_site() {
 		if ( ! self::is_enabled() ) {
 			return new WP_Error(
 				'wcpos_relay_disabled',
@@ -134,13 +130,9 @@ class Cloud_Print_Relay_Service {
 			return self::registration_error( __( 'Relay registration returned invalid credentials.', 'woocommerce-pos' ) );
 		}
 
-		// Re-read at completion time: a background re-registration must adopt
-		// the admin's latest enabled/disabled intent, not the state at launch.
-		$current = self::settings();
 		update_option(
 			self::OPTION,
 			array(
-				'enabled'       => $admin_initiated ? true : ! empty( $current['enabled'] ),
 				'site_key'      => strtolower( $site_key ),
 				'hint_secret'   => strtolower( $hint_secret ),
 				'registered_at' => time(),
@@ -161,22 +153,6 @@ class Cloud_Print_Relay_Service {
 			'enabled'          => true,
 			'printer_base_url' => self::printer_base_url( strtolower( $site_key ) ),
 		);
-	}
-
-	/**
-	 * Disable relay use while retaining the deterministic site credentials.
-	 *
-	 * @deprecated The stored flag is no longer consulted; opt out with the
-	 *             `woocommerce_pos_cloud_print_relay_enabled` filter.
-	 *
-	 * @return array Public relay state.
-	 */
-	public static function disable(): array {
-		$stored            = self::settings();
-		$stored['enabled'] = false;
-		update_option( self::OPTION, $stored );
-
-		return array( 'enabled' => false );
 	}
 
 	/**
@@ -393,7 +369,7 @@ class Cloud_Print_Relay_Service {
 		if ( ! self::is_enabled() ) {
 			return;
 		}
-		self::register_site( false );
+		self::register_site();
 	}
 
 	/**

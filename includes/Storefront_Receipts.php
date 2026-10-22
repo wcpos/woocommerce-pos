@@ -19,7 +19,7 @@ class Storefront_Receipts {
 	public function __construct() {
 		add_shortcode( 'wcpos_receipt', array( $this, 'receipt_shortcode' ) );
 
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			add_filter( 'woocommerce_my_account_my_orders_actions', array( $this, 'add_my_account_action' ), 10, 2 );
 		}
 	}
@@ -100,7 +100,7 @@ class Storefront_Receipts {
 		 *
 		 * @hook woocommerce_pos_storefront_receipt_my_account_button
 		 */
-		$default_enabled = wp_validate_boolean( woocommerce_pos_get_settings( 'general', 'storefront_receipt_enabled' ) );
+		$default_enabled = wp_validate_boolean( wcpos_get_settings( 'general', 'storefront_receipt_enabled' ) );
 		$enabled         = (bool) apply_filters( 'woocommerce_pos_storefront_receipt_my_account_button', $default_enabled, $order );
 		if ( ! $enabled || null === Templates::get_active_template_id( 'receipt' ) ) {
 			return $actions;
@@ -131,7 +131,7 @@ class Storefront_Receipts {
 		// value is passed through the existing, already-validated ?template= path
 		// (published receipt templates only); an invalid value simply falls back
 		// to the active template when the receipt renders.
-		$template = sanitize_text_field( (string) woocommerce_pos_get_settings( 'general', 'storefront_receipt_template' ) );
+		$template = sanitize_text_field( (string) wcpos_get_settings( 'general', 'storefront_receipt_template' ) );
 
 		$actions['wcpos-receipt'] = array(
 			'url'        => self::get_receipt_url( $order, 'pdf', $template ),

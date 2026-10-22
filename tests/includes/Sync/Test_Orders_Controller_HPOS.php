@@ -21,6 +21,7 @@ use WCPOS\WooCommercePOS\Sync\Sync_Journal;
  * Storage-sensitive order pull probes using HPOS.
  */
 class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	use HPOSToggleTrait;
 
 	/**
@@ -67,9 +68,9 @@ class Test_Orders_Controller_HPOS extends Sync_REST_Store_Test_Case {
 			// wiring. Capture $stored from the steady state, as a real pull cadence
 			// would, or the stamp legitimately outruns this pre-pull snapshot.
 			$serializer->serialize_order( $order->get_id(), new \WP_REST_Request() );
-			$digest->upsert_order_digest( $order->get_id() );
 			$index->record_order_change( $order->get_id(), 'test:digest-pull', false );
 		}
+		$this->seed_digests( 'orders', ...$order_ids );
 		$stored         = ( new Digest_Index() )->read_digests( 'orders', $order_ids );
 		$digest_queries = 0;
 		$digest_table   = $digest->table_name();

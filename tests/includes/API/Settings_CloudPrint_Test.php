@@ -783,15 +783,12 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Sanitize_cloud_assignment defaults store_id to 0 and casts a provided id to int.
+	 * Cloud_Print_Section::sanitize_assignment() defaults store_id to 0 and casts a provided id to int.
 	 */
 	public function test_cloud_assignment_persists_store_id(): void {
-		$method = new \ReflectionMethod( \WCPOS\WooCommercePOS\API\V1\Settings::class, 'sanitize_cloud_assignment' );
-		$method->setAccessible( true );
-		$settings = new \WCPOS\WooCommercePOS\API\V1\Settings();
+		$section = new \WCPOS\WooCommercePOS\Services\Settings\Cloud_Print_Section();
 
-		$default = $method->invoke(
-			$settings,
+		$default = $section->sanitize_assignment(
 			array(
 				'printer_id'  => 'kitchen',
 				'template_id' => '11',
@@ -799,8 +796,7 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertEquals( 0, $default['store_id'] );
 
-		$with_store = $method->invoke(
-			$settings,
+		$with_store = $section->sanitize_assignment(
 			array(
 				'printer_id'  => 'kitchen',
 				'template_id' => '11',

@@ -22,6 +22,7 @@ use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
  * @covers \WCPOS\WooCommercePOS\Sync\Digest_Index
  */
 class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	use HPOSToggleTrait;
 
 	/**
@@ -118,7 +119,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	public function test_scan_aggregates_are_cached_within_the_ttl(): void {
 		$product = ProductHelper::create_simple_product();
 		$id      = $product->get_id();
-		( new Integrity_Digest() )->upsert_digest( $id );
+		$this->seed_digests( 'products', $id );
 		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
 
 		$digest_queries = 0;
@@ -144,7 +145,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		global $wpdb;
 		$product = ProductHelper::create_simple_product();
 		$id      = $product->get_id();
-		( new Integrity_Digest() )->upsert_digest( $id );
+		$this->seed_digests( 'products', $id );
 		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
 
 		try {
@@ -168,7 +169,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	public function test_scan_cache_can_be_disabled_by_ttl_filter(): void {
 		$product = ProductHelper::create_simple_product();
 		$id      = $product->get_id();
-		( new Integrity_Digest() )->upsert_digest( $id );
+		$this->seed_digests( 'products', $id );
 
 		$digest_queries = 0;
 		$count_digests  = $this->digest_query_counter( $digest_queries );
@@ -189,7 +190,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_customer_scan_echoes_collection_and_returns_both_aggregate_sides(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		( new Integrity_Digest() )->upsert_customer_digest( $user_id );
+		$this->seed_digests( 'customers', $user_id );
 
 		$data = $this->scan_id( 'customers', $user_id );
 		$row  = $data['changes'][0];
@@ -212,8 +213,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		global $wpdb;
 		$order   = OrderHelper::create_order();
 		$order_id = $order->get_id();
-		$digest  = new Integrity_Digest();
-		$digest->upsert_order_digest( $order_id );
+		$this->seed_digests( 'orders', $order_id );
 
 		$before = $this->scan_id( 'orders', $order_id );
 		$row    = $before['changes'][0];
@@ -245,7 +245,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		try {
 			$order    = OrderHelper::create_order();
 			$order_id = $order->get_id();
-			( new Integrity_Digest() )->upsert_order_digest( $order_id );
+			$this->seed_digests( 'orders', $order_id );
 
 			$before = $this->scan_id( 'orders', $order_id );
 			$row    = $before['changes'][0];
@@ -307,7 +307,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 			'DELETE FROM ' . ( new Digest_Index() )->table_name() . ' WHERE object_type IN ' . Digest_Index::OBJECT_TYPES_SQL // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table and constant.
 		);
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		( new Integrity_Digest() )->upsert_customer_digest( $user_id );
+		$this->seed_digests( 'customers', $user_id );
 
 		$data = $this->scan_id( 'customers', $user_id );
 
@@ -358,10 +358,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		);
 
 		$ids    = array( $published->get_id(), $draft->get_id(), $hidden->get_id(), $parent->get_id(), $variation );
-		$digest = new Integrity_Digest();
-		foreach ( $ids as $id ) {
-			$digest->upsert_digest( $id );
-		}
+		$this->seed_digests( 'products', ...$ids );
 
 		$bucket_size = 1000;
 		$first       = (int) floor( min( $ids ) / $bucket_size );
@@ -411,9 +408,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		global $wpdb;
 		$published = ProductHelper::create_simple_product();
 		$orphan    = ProductHelper::create_simple_product();
-		$digest    = new Integrity_Digest();
-		$digest->upsert_digest( $published->get_id() );
-		$digest->upsert_digest( $orphan->get_id() );
+		$this->seed_digests( 'products', $published->get_id(), $orphan->get_id() );
 		$wpdb->delete( $wpdb->posts, array( 'ID' => $orphan->get_id() ), array( '%d' ) );
 
 		$response = $this->scan( 'products', 1, $published->get_id() - 1, 1, 'publish' );

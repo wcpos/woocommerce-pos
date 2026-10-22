@@ -260,7 +260,7 @@ class Access_Section implements Settings_Section_Interface {
 	public function write( array $settings ) {
 		// Defense-in-depth: capability mutation is a privileged service-layer
 		// operation; do not rely solely on the REST route's permission
-		// callback (matches the Settings::delete_settings() precedent).
+		// callback.
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) || ! current_user_can( 'edit_users' ) || ! current_user_can( 'promote_users' ) ) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',

@@ -14,10 +14,8 @@ use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
-use WCPOS\WooCommercePOS\Sync\Product_Search;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
-use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
@@ -376,34 +374,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	}
 
 	/**
-	 * Apply the declared POS variation sorts to the SQL clauses.
-	 *
-	 * `posts_clauses` fires for EVERY WP_Query, so the body is guarded by post type and by
-	 * the plan itself — it contributes nothing unless this request claimed one of the
-	 * declared sorts.
-	 *
-	 * @param array    $clauses  Associative array of the clauses for the query.
-	 * @param WP_Query $wp_query The WP_Query instance.
-	 *
-	 * @deprecated Collection Rules now installs this behavior; retained for Pro callers.
-	 * @return array
-	 */
-	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
-		if ( null === $this->wcpos_sort_request ) {
-			return $clauses;
-		}
-
-		$post_type = $wp_query->query_vars['post_type'] ?? null;
-		if ( 'product_variation' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product_variation', $post_type, true ) ) ) {
-			return $clauses;
-		}
-
-		$plan = Collection_Rules::for_request( 'variations', $this->wcpos_sort_request, self::WCPOS_SORT_PARAM_MAP );
-
-		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
-	}
-
-	/**
 	 * WooCommerce's collection params, plus the sort keys the POS grids offer.
 	 *
 	 * `orderby` is a validated enum. Appending here is what lets `prepare_objects_query()` act on
@@ -426,18 +396,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		}
 
 		return $params;
-	}
-
-	/**
-	 * De-duplicate variation searches joined through matching meta rows.
-	 *
-	 * @param string   $groupby Existing GROUP BY clause.
-	 * @param WP_Query $query   Query being filtered.
-	 *
-	 * @deprecated Collection Rules owns variation grouping.
-	 */
-	public function group_search_results( string $groupby, WP_Query $query ): string {
-		return Product_Search::variation_groupby( $groupby, $query->query_vars );
 	}
 
 	/**

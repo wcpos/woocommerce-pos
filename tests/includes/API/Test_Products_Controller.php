@@ -1047,7 +1047,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'integer', $schema['properties']['stock_quantity']['type'] );
 
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$schema = $this->endpoint->get_item_schema();
 		$this->assertEquals( 'number', $schema['properties']['stock_quantity']['type'] );
@@ -1055,7 +1055,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_product_response_with_decimal_quantities(): void {
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product  = ProductHelper::create_simple_product();
 		$product->set_manage_stock( true );
@@ -1074,7 +1074,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_product_orderby_decimal_stock_quantity(): void {
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product1  = ProductHelper::create_simple_product(
 			array(

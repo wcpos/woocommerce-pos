@@ -77,7 +77,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 * Enable tracking consent and return the Analytics instance.
 	 */
 	private function enable_consent(): Analytics {
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 
@@ -91,7 +91,7 @@ class Test_Analytics extends WP_UnitTestCase {
 	 * Set consent to denied.
 	 */
 	private function deny_consent(): Analytics {
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'denied';
 		SettingsService::instance()->save_settings( 'general', $settings );
 

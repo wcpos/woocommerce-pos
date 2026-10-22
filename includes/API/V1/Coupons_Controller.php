@@ -158,20 +158,6 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	}
 
 	/**
-	 * Authorize coupon read access for POS users.
-	 *
-	 * @deprecated Use Permission_Rules::wc_filter().
-	 * @param bool   $permission Incoming WC permission.
-	 * @param string $context    Permission context.
-	 * @param int    $object_id  Target object ID.
-	 * @param string $post_type  WC object type.
-	 * @return bool
-	 */
-	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
-		return Permission_Rules::wc_filter( $permission, $context, $object_id, $post_type, 'coupons', 'v1' );
-	}
-
-	/**
 	 * Get the query params for collections.
 	 *
 	 * @return array $params The collection parameters.

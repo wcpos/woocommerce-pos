@@ -211,7 +211,6 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( true, $saved['enabled'] );
 		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
 		$this->assertEquals( '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff', $saved['hint_secret'] );
 		$this->assertGreaterThan( 0, $saved['registered_at'] );
@@ -580,40 +579,6 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( 1, $calls, 'a futile unknown-site 404 must not be replayed while backed off' );
-	}
-
-	/**
-	 * It keeps the relay disabled when the admin disables it mid re-registration.
-	 */
-	public function test_reregister_preserves_disable_that_lands_mid_flight(): void {
-		// Arrange: enabled at launch; the admin disables while the outbound
-		// registration request is in flight.
-		$this->store_relay();
-		$this->mock_http(
-			function ( $pre, $args, $url ) {
-				if ( false !== strpos( $url, '/api/register' ) ) {
-					Cloud_Print_Relay_Service::disable();
-
-					return $this->http_response(
-						201,
-						array(
-							'site_key'    => 'abcdef0123456789abcdef0123456789',
-							'hint_secret' => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
-						)
-					);
-				}
-
-				return new WP_Error( 'unexpected', 'unexpected request' );
-			}
-		);
-
-		// Act.
-		( new Cloud_Print_Relay_Service() )->reregister();
-		$saved = get_option( Cloud_Print_Relay_Service::OPTION );
-
-		// Assert: credentials refreshed, but the admin's disable wins.
-		$this->assertFalse( (bool) $saved['enabled'] );
-		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
 	}
 
 	/**

@@ -842,7 +842,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			)
 		);
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'admin_emails' );
 
 		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
 		$this->assertTrue( $settings['enabled'], 'Master toggle should be true' );
@@ -862,7 +862,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			)
 		);
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'admin_emails' );
 
 		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
 		$this->assertFalse( $settings['enabled'], 'Master toggle should be false' );
@@ -881,7 +881,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			)
 		);
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'customer_emails' );
 
 		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
 		$this->assertFalse( $settings['enabled'], 'Master toggle should be false' );
@@ -894,7 +894,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 	public function test_cashier_emails_defaults_on_fresh_install(): void {
 		delete_option( 'woocommerce_pos_settings_checkout' );
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'cashier_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'cashier_emails' );
 
 		$this->assertIsArray( $settings );
 		$this->assertFalse( $settings['enabled'], 'Cashier emails should default to disabled' );

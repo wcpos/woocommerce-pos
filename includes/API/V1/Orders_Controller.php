@@ -21,7 +21,6 @@ use WC_Data;
 use WC_Email_Customer_Invoice;
 use WC_Order;
 use WC_Order_Item;
-use WC_Order_Item_Fee;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
@@ -564,23 +563,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$data['tax_ids'] = $tax_ids;
 			$response->set_data( $data );
 		}
-	}
-
-	/**
-	 * The way WooCommerce handles negative fees is ... weird.
-	 * They by-pass the normal tax calculation, disregard the tax_status and tax_class, and apply the taxes to the fee line.
-	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
-	 * the wrong result.
-	 *
-	 * The implementation lives in WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes,
-	 * registered globally and request-gated so the v2 push forward shares it (issue #1403).
-	 * This public method is preserved for backward compatibility and delegates.
-	 *
-	 * @param \WC_Order_Item_Fee $fee_item          The fee item.
-	 * @param array              $calculate_tax_for The tax calculation data.
-	 */
-	public function wcpos_order_item_fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
-		\WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes( $fee_item, $calculate_tax_for );
 	}
 
 	/**

@@ -20,6 +20,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  * @covers \WCPOS\WooCommercePOS\Sync\Integrity_Digest
  */
 class Test_Sync_Observation extends Sync_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	use Sync_Observer_Unhook_Trait;
 
 	/** @var Integrity_Digest */
@@ -157,12 +158,12 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		global $wpdb;
 
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$this->integrity_digest->upsert_customer_digest( $user_id );
+		$this->seed_digests( 'customers', $user_id );
 		$stored_digest = $this->digest_index->read_digests( 'customers', array( $user_id ) )[ $user_id ];
 		update_user_meta( $user_id, $wpdb->prefix . 'capabilities', array( 'editor' => true ) );
 		$current_digest = (string) $wpdb->get_var(
 			$wpdb->prepare(
-				'SELECT crc FROM (' . $this->integrity_digest->customer_digest_select_sql( 'u.ID = %d' ) . ') current_digest', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal query with prepared id placeholder.
+				'SELECT crc FROM (' . $this->digest_index->customer_digest_select_sql( 'u.ID = %d' ) . ') current_digest', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal query with prepared id placeholder.
 				$user_id
 			)
 		);
@@ -193,7 +194,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		do_action( 'woocommerce_new_customer', $user_id, new \WC_Customer( $user_id ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
 		$current_digest = (string) $wpdb->get_var(
 			$wpdb->prepare(
-				'SELECT crc FROM (' . $this->integrity_digest->customer_digest_select_sql( 'u.ID = %d' ) . ') current_digest', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal query with prepared id placeholder.
+				'SELECT crc FROM (' . $this->digest_index->customer_digest_select_sql( 'u.ID = %d' ) . ') current_digest', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal query with prepared id placeholder.
 				$user_id
 			)
 		);

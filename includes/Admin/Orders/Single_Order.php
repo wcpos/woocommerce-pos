@@ -35,7 +35,7 @@ class Single_Order {
 		// @phpstan-ignore-next-line
 		if ( WC()->payment_gateways() ) {
 			$payment_gateways = WC()->payment_gateways->payment_gateways;
-			$settings = woocommerce_pos_get_settings( 'payment_gateways' );
+			$settings = wcpos_get_settings( 'payment_gateways' );
 
 			// Add POS gateways to the available gateways for the edit order dropdown.
 			foreach ( $payment_gateways as $gateway ) {
@@ -56,7 +56,7 @@ class Single_Order {
 	 */
 	public function add_cashier_select( $order ): void {
 		// only show if order created by POS.
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return;
 		}
 
@@ -133,7 +133,7 @@ class Single_Order {
 			return;
 		}
 		$order = wc_get_order( $post_id );
-		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! $order instanceof WC_Order || ! wcpos_is_pos_order( $order ) ) {
 			return;
 		}
 		$old_customer_id = $order->get_customer_id();

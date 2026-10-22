@@ -122,19 +122,6 @@ final class Order_Serializer {
 	}
 
 	/**
-	 * Add the v1-owned order fields missing from stock wc/v3 serialization.
-	 *
-	 * Retained as the named shorthand for the three payload augmentations (links
-	 * excluded); `document()` is the entry point new callers should use.
-	 *
-	 * @param array     $payload Serialized order payload.
-	 * @param \WC_Order $order   The order backing the payload.
-	 */
-	public function augment_order_payload( array $payload, WC_Order $order ): array {
-		return $this->document( $payload, array( 'tax_ids', 'image_cast', 'item_uuids' ), null, $order );
-	}
-
-	/**
 	 * Cast every line item's `image.id` to an int.
 	 *
 	 * WC core's `get_image_id()` returns a string; both the v1 order response and

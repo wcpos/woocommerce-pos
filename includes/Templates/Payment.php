@@ -223,7 +223,7 @@ class Payment {
 
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', /* translators: Short WCPOS UI label; keep concise. */ __( 'Pay for order', 'woocommerce-pos' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 
-			include woocommerce_pos_locate_template( 'payment.php' );
+			include wcpos_locate_template( 'payment.php' );
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
@@ -527,7 +527,7 @@ class Payment {
 			$disable_wp_footer = isset( $_POST['disable_wp_footer'] ) ? (bool) $_POST['disable_wp_footer'] : false;
 
 			// @TODO - the save settings function should allow saving by key
-			$checkout_settings = woocommerce_pos_get_settings( 'checkout' );
+			$checkout_settings = wcpos_get_settings( 'checkout' );
 			$new_settings      = array_merge(
 				$checkout_settings,
 				array(

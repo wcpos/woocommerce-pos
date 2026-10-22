@@ -282,15 +282,6 @@ class API {
 	}
 
 	/**
-	 * Extract the Authorization Bearer token from the request.
-	 *
-	 * @return false|string
-	 */
-	public function get_auth_header() {
-		return Auth::instance()->get_auth_header();
-	}
-
-	/**
 	 * Adds info to the WP REST API index response.
 	 * - UUID
 	 * - Version Info.

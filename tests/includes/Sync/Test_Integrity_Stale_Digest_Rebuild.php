@@ -25,6 +25,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  * @covers \WCPOS\WooCommercePOS\API\V2\Integrity_Controller
  */
 class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * Isolate cron, lock and streak state.
 	 */
@@ -318,8 +319,8 @@ class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 		$order_id    = OrderHelper::create_order()->get_id();
 		$digest      = new Integrity_Digest();
 		$index       = new Digest_Index();
-		$digest->upsert_customer_digest( $customer_id );
-		$digest->upsert_order_digest( $order_id );
+		$this->seed_digests( 'customers', $customer_id );
+		$this->seed_digests( 'orders', $order_id );
 
 		$customer_digest = $index->read_digests( 'customers', array( $customer_id ) )[ $customer_id ];
 		$order_digest    = $index->read_digests( 'orders', array( $order_id ) )[ $order_id ];

@@ -266,7 +266,7 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'wcpos-login', $GLOBALS['wp']->query_vars );
 		$this->assertTrue( is_404() );
 		// This is the frame-exemption predicate; headers_list() is always empty under the CLI SAPI.
-		$this->assertFalse( woocommerce_pos_request() );
+		$this->assertFalse( wcpos_request() );
 	}
 
 	/**

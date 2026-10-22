@@ -731,11 +731,6 @@ class Write_Controller extends WP_REST_Controller {
 		}
 	}
 
-	/** @deprecated Use Permission_Rules::wc_filter(). */
-	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
-		return Permission_Rules::wc_filter( $permission, $context, $object_id, $post_type, 'writes' );
-	}
-
 	/**
 	 * Read this collection's document for one record, through its writer.
 	 *

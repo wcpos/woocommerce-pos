@@ -45,7 +45,7 @@ class Frontend {
 	public function get_template(): void {
 		// force ssl.
 		if ( ! is_ssl() && Settings::instance()->force_ssl_enabled() ) {
-			wp_safe_redirect( woocommerce_pos_url() );
+			wp_safe_redirect( wcpos_url() );
 			exit;
 		}
 
@@ -86,7 +86,7 @@ class Frontend {
 		// with `access_woocommerce_pos`, past the SSL redirect.
 		( new Lifecycle_Events() )->report_app_opened();
 
-		include woocommerce_pos_locate_template( 'pos.php' );
+		include wcpos_locate_template( 'pos.php' );
 		exit;
 	}
 
@@ -214,7 +214,7 @@ class Frontend {
 			// jsDelivr web-bundle lane (e.g. `1.9`, `1.10`, `next`, a tag or commit).
 			$cdn_base_url = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@' . rawurlencode( $bundle_ref ) . '/build';
 		}
-		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
+		$wcpos_base_path      = rtrim( wp_parse_url( wcpos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
 			function ( $store ) {
 				return $store->get_data();
@@ -256,7 +256,7 @@ class Frontend {
 			),
 			'version'        => VERSION,
 			'manifest'       => $cdn_base_url . '/metadata.json?v=' . $opfs_worker_hash,
-			'homepage'       => woocommerce_pos_url(),
+			'homepage'       => wcpos_url(),
 			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
 				'uuid'               => $site_uuid,
@@ -332,7 +332,7 @@ class Frontend {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook
 		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout', false );
 
-		$redirect_to  = urlencode( woocommerce_pos_url() );
+		$redirect_to  = urlencode( wcpos_url() );
 		$reauth       = 1;
 		$wcpos        = 1;
 		$logout_nonce = wp_create_nonce( 'log-out' );

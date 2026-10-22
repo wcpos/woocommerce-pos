@@ -184,7 +184,7 @@ class Permission_Rules {
 	}
 
 	/**
-	 * Single WC callback; optional scope arguments serve deprecated public forwarders.
+	 * Single WC callback; optional scope arguments support internal permission checks.
 	 *
 	 * @param bool        $permission Incoming WC permission.
 	 * @param string      $context    Permission context.

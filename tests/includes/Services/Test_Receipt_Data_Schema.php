@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
-use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WP_UnitTestCase;
@@ -100,7 +99,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	 * silence. This test is the ratchet that makes drift impossible.
 	 *
 	 * The constant is deliberately NOT derived at runtime: it is an implicitly
-	 * public class constant, and `format_money_fields()` sits on the thermal
+	 * public class constant, and `Receipt_Money_Formatter::format()` sits on the thermal
 	 * print path, where walking the field tree (hundreds of leaves, each one
 	 * calling `__()`) on every render would be a real cost.
 	 */
@@ -343,15 +342,6 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$json_fields = Receipt_Data_Schema::get_json_schema()['properties']['totals']['properties'];
 		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['total_saved']['type'] );
 		$this->assertSame( 'boolean', $json_fields['total_saved_complete']['type'] );
-	}
-
-	/**
-	 * The legacy schema method delegates to the money formatter.
-	 */
-	public function test_format_money_fields_delegates_to_money_formatter(): void {
-		$data = ( new Preview_Receipt_Builder() )->build();
-
-		$this->assertSame( Receipt_Money_Formatter::format( $data, 'USD' ), Receipt_Data_Schema::format_money_fields( $data, 'USD' ) );
 	}
 
 	/**

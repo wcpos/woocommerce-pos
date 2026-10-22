@@ -162,15 +162,6 @@ class Auth {
 	}
 
 	/**
-	 * Get the state parameter.
-	 *
-	 * @return string
-	 */
-	public function get_state(): string {
-		return $this->state;
-	}
-
-	/**
 	 * Get the error message.
 	 *
 	 * @return string
@@ -215,7 +206,7 @@ class Auth {
 			nocache_headers();
 		}
 
-		include woocommerce_pos_locate_template( 'auth.php' );
+		include wcpos_locate_template( 'auth.php' );
 		exit;
 	}
 

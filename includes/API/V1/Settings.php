@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\API\V1;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -306,32 +305,6 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
-	 * Sanitize a cloud assignment entry.
-	 *
-	 * Kept for backward compatibility — the Settings_CloudPrint_Test conformance
-	 * gate exercises this method directly via ReflectionMethod. Delegates to
-	 * Cloud_Print_Section::sanitize_assignment() when the section is registered.
-	 *
-	 * @param mixed $assignment Assignment.
-	 *
-	 * @return array
-	 *
-	 * @phpstan-ignore-next-line
-	 */
-	private function sanitize_cloud_assignment( $assignment ): array {
-		$section = SettingsService::instance()->sections()->get( 'cloud_print' );
-
-		if ( $section instanceof \WCPOS\WooCommercePOS\Services\Settings\Cloud_Print_Section ) {
-			return $section->sanitize_assignment( $assignment );
-		}
-
-		$assignment           = \is_array( $assignment ) ? $assignment : array();
-		$assignment['copies'] = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
-
-		return $assignment;
-	}
-
-	/**
 	 * Check read permissions for a section.
 	 *
 	 * @param string $id Section id.
@@ -397,17 +370,6 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function update_access_permission_check(): bool {
 		return current_user_can( 'manage_woocommerce_pos' ) && current_user_can( 'edit_users' ) && current_user_can( 'promote_users' );
-	}
-
-	/**
-	 * Filter payment gateways settings.
-	 *
-	 * @deprecated 2.0.0 Use Payment_Gateways_Section::free_tier_rule().
-	 *
-	 * @param mixed $options The gateway options.
-	 */
-	public function payment_gateways_settings( $options ) {
-		return Payment_Gateways_Section::free_tier_rule( $options );
 	}
 
 

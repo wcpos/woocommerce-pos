@@ -22,7 +22,7 @@ class Test_Receipt_Money_Formatter extends WP_UnitTestCase {
 	/**
 	 * Test money formatting adds _display variants alongside the numeric values.
 	 *
-	 * `format_money_fields` does NOT replace numbers in-place — it KEEPS the
+	 * `Receipt_Money_Formatter::format()` does NOT replace numbers in-place — it KEEPS the
 	 * numeric value at the bare key and ADDS a `<key>_display` companion with
 	 * the locale-formatted currency string. This shape mirrors the JS
 	 * `formatReceiptData` exactly so a single Mustache template renders the
@@ -30,8 +30,8 @@ class Test_Receipt_Money_Formatter extends WP_UnitTestCase {
 	 *
 	 * If this assertion ever has to be "fixed" by switching back to in-place
 	 * replacement, please don't — cross-pipeline templates depend on the
-	 * `_display` companion. See the comment block in
-	 * `Receipt_Data_Schema::format_money_fields()`.
+	 * `_display` companion. See the class docblock of
+	 * `Receipt_Money_Formatter`.
 	 */
 	public function test_format_uses_presentation_hints(): void {
 		$data = array(

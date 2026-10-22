@@ -342,15 +342,6 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Canonical per-CUSTOMER digest SELECT (ADR 0015, Leg-3 phase 7).
-	 *
-	 * @deprecated Use {@see Digest_Index::customer_digest_select_sql()}.
-	 */
-	public function customer_digest_select_sql( string $where_sql = '' ): string {
-		return $this->index->customer_digest_select_sql( $where_sql );
-	}
-
-	/**
 	 * Customer digest maintenance (ADR 0015, Leg-3 phase 7) — every WordPress
 	 * user is a POS customer, so saves and role changes always upsert.
 	 */
@@ -473,15 +464,6 @@ final class Integrity_Digest {
 	}
 
 	/**
-	 * Order analogue of {@see upsert_customer_digest} (HPOS or CPT).
-	 *
-	 * @deprecated Use record_order_saved().
-	 */
-	public function upsert_order_digest( int $order_id ): void {
-		$this->upsert_for( 'orders', $order_id );
-	}
-
-	/**
 	 * Owe the product's or variation's digest; it is written once, on flush (see
 	 * $pending). Both share the registry's queue key: the upsert's SQL
 	 * derives the stored object_type from the row, so nothing here needs to.
@@ -537,26 +519,6 @@ final class Integrity_Digest {
 				}
 			}
 		);
-	}
-
-	/**
-	 * One statement: the digest is computed in SQL from the raw row and
-	 * upserted in the same statement — PHP never materializes the value.
-	 * No-op for rows outside the live predicate (the delete hook owns those).
-	 * @deprecated Use record_post_saved().
-	 */
-	public function upsert_digest( int $post_id ): void {
-		$this->upsert_for( 'products', $post_id );
-	}
-
-	/**
-	 * Customer analogue of {@see upsert_digest} (ADR 0015, Leg-3 phase 7):
-	 * compute and store one WordPress user's customer digest in a single
-	 * INSERT…SELECT. Only the delete hook removes it.
-	 * @deprecated Use record_customer_saved().
-	 */
-	public function upsert_customer_digest( int $user_id ): void {
-		$this->upsert_for( 'customers', $user_id );
 	}
 
 	/** Compute and store one row using its id-space's canonical SELECT and retry policy. */
