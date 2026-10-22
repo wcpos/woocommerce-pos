@@ -326,7 +326,14 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$store->resolve = $order->get_id();
 		$push           = function () use ( $store, $order ) {
 			$current  = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
-			$envelope = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => Order_Serializer::canonical_revision( $current ), 'payload' => array( 'billing' => array( 'city' => 'Elsewhere' ) ) ) );
+			$envelope = $this->envelope(
+				array(
+					'collection'   => 'orders',
+					'operation'    => 'update',
+					'baseRevision' => Order_Serializer::canonical_revision( $current ),
+					'payload'      => array( 'billing' => array( 'city' => 'Elsewhere' ) ),
+				)
+			);
 			return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
 		};
 		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
