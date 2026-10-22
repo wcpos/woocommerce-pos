@@ -41,7 +41,7 @@ class Settings {
 
 	/**
 	 * The Section Registry. Built lazily on first access so registrants can
-	 * hook `woocommerce_pos_register_settings_sections` during plugins_loaded.
+	 * hook `wcpos_register_settings_sections` during plugins_loaded.
 	 *
 	 * @var null|Section_Registry
 	 */
@@ -83,9 +83,10 @@ class Settings {
 			 *
 			 * @param Section_Registry $registry The Section Registry.
 			 *
-			 * @hook woocommerce_pos_register_settings_sections
+			 * @hook wcpos_register_settings_sections
 			 */
-			do_action( 'woocommerce_pos_register_settings_sections', $this->registry );
+			do_action( 'wcpos_register_settings_sections', $this->registry );
+			do_action_deprecated( 'woocommerce_pos_register_settings_sections', array( $this->registry ), '2.0.0', 'wcpos_register_settings_sections' );
 		}
 
 		return $this->registry;
@@ -189,7 +190,7 @@ class Settings {
 	 * The error returned for a settings id with no registered Settings Section.
 	 *
 	 * Registering a section through the
-	 * `woocommerce_pos_register_settings_sections` action is the only supported
+	 * `wcpos_register_settings_sections` action is the only supported
 	 * way to add a settings group; there is no generic option fallback.
 	 *
 	 * @param string $id The settings section ID.

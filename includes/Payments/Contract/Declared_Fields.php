@@ -34,9 +34,7 @@ class Declared_Fields {
 		 * @param array|null         $fields  Declared fields, or null when absent.
 		 * @param WC_Payment_Gateway $gateway Gateway instance.
 		 */
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS payments contract filter.
 		$block = apply_filters( 'wcpos_payment_method_fields', null, $gateway );
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 		if ( ! is_array( $block ) ) {
 			return null;
 		}

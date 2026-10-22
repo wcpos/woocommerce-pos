@@ -104,7 +104,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 			$pdf_data = $data;
 			throw new \Error( 'Receipt page stopped for test.' );
 		};
-		add_filter( 'woocommerce_pos_receipt_pdf_data', $capture_pdf );
+		add_filter( 'wcpos_receipt_pdf_data', $capture_pdf );
 		try {
 			$params['format'] = 'pdf';
 			$this->render_receipt_page( $order->get_id(), $params );
@@ -115,7 +115,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 			$this->render_receipt_page( $order->get_id(), $params );
 			$this->assertNull( $pdf_data );
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_pdf_data', $capture_pdf );
+			remove_filter( 'wcpos_receipt_pdf_data', $capture_pdf );
 			unset( $params['format'] );
 		}
 
@@ -188,7 +188,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 				$stop();
 			};
 		};
-		add_action( 'woocommerce_pos_after_template_render', $stop );
+		add_action( 'wcpos_after_template_render', $stop );
 		add_filter( 'wp_die_handler', $die );
 		$_GET = $params;
 		ob_start();
@@ -204,7 +204,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 				ob_end_clean();
 			}
 			$_GET = $original_get;
-			remove_action( 'woocommerce_pos_after_template_render', $stop );
+			remove_action( 'wcpos_after_template_render', $stop );
 			remove_filter( 'wp_die_handler', $die );
 		}
 		return $page;
@@ -219,11 +219,11 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 			$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
 			return $snapshot;
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$number = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload']['fiscal']['receipt_number'];
 		$receipt = new Receipt( $order->get_id() );

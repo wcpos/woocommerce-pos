@@ -139,7 +139,7 @@ class Bootstrap {
 		// services. The suite exercises the full object graph the POS and its
 		// REST clients see, so pin the REST lane; tests about lane detection
 		// remove this filter and restore it.
-		add_filter( 'woocommerce_pos_request_lane', array( __CLASS__, 'default_request_lane' ) );
+		add_filter( 'wcpos_request_lane', array( __CLASS__, 'default_request_lane' ) );
 
 		// StaticMockerHack rewrites short class names and falls back through the
 		// global name. Alias the namespaced identity brain so unmocked methods keep

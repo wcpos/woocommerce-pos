@@ -1257,7 +1257,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 
 	public function test_force_delete_with_an_authorized_row_is_refused_and_restores_no_stock(): void {
 		// Arrange: a paid sale of two (stock 8) holding an authorized leg; delete restores stock.
-		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		add_filter( 'wcpos_restore_stock_on_delete', '__return_true' );
 		$product  = $this->stock_product( 10 );
 		$order_id = $this->paid_sale_of_two( $product );
 		$row      = $this->card_row( 'authorized' );
@@ -1267,7 +1267,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		try {
 			$response = $this->push_delete( $order_id, true );
 		} finally {
-			remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+			remove_filter( 'wcpos_restore_stock_on_delete', '__return_true' );
 		}
 
 		// Assert.

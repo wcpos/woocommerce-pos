@@ -26,15 +26,16 @@ class Emails {
 	public function __construct() {
 		// Get filterable email arrays - allow users to customize which emails are affected.
 		$admin_emails = apply_filters(
-			'woocommerce_pos_admin_emails',
+			'wcpos_admin_emails',
 			array(
 				'cancelled_order',
 				'failed_order',
 			)
 		);
+		$admin_emails = apply_filters_deprecated( 'woocommerce_pos_admin_emails', array( $admin_emails ), '2.0.0', 'wcpos_admin_emails' );
 
 		$customer_emails = apply_filters(
-			'woocommerce_pos_customer_emails',
+			'wcpos_customer_emails',
 			array(
 				'customer_failed_order',
 				'customer_on_hold_order',
@@ -43,6 +44,7 @@ class Emails {
 				'customer_refunded_order',
 			)
 		);
+		$customer_emails = apply_filters_deprecated( 'woocommerce_pos_customer_emails', array( $customer_emails ), '2.0.0', 'wcpos_customer_emails' );
 
 		// Hook into email enabled filters - this is the main control mechanism.
 		foreach ( $admin_emails as $email_id ) {
@@ -102,7 +104,8 @@ class Emails {
 		 * @param WC_Order $order       The order object.
 		 * @param WC_Email $email_class The email class instance.
 		 */
-		return apply_filters( 'woocommerce_pos_admin_email_enabled', $is_enabled, $email_id, $order, $email_class );
+		$filtered = apply_filters( 'wcpos_admin_email_enabled', $is_enabled, $email_id, $order, $email_class );
+		return apply_filters_deprecated( 'woocommerce_pos_admin_email_enabled', array( $filtered, $email_id, $order, $email_class ), '2.0.0', 'wcpos_admin_email_enabled' );
 	}
 
 	/**
@@ -140,7 +143,8 @@ class Emails {
 		 * @param WC_Order $order       The order object.
 		 * @param WC_Email $email_class The email class instance.
 		 */
-		return apply_filters( 'woocommerce_pos_customer_email_enabled', $is_enabled, $email_id, $order, $email_class );
+		$filtered = apply_filters( 'wcpos_customer_email_enabled', $is_enabled, $email_id, $order, $email_class );
+		return apply_filters_deprecated( 'woocommerce_pos_customer_email_enabled', array( $filtered, $email_id, $order, $email_class ), '2.0.0', 'wcpos_customer_email_enabled' );
 	}
 
 	/**

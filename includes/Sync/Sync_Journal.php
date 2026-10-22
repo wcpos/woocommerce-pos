@@ -288,13 +288,13 @@ final class Sync_Journal {
 		add_action( 'woocommerce_before_trash_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'record_order_deleted' ), 10, 1 );
 		add_action( 'woocommerce_untrash_order', array( $this, 'record_cot_order_untrashed' ), 10, 1 );
-		add_action( 'woocommerce_pos_invalidate', array( $this, 'record_invalidation' ), 10, 2 );
+		add_action( 'wcpos_invalidate', array( $this, 'record_invalidation' ), 10, 2 );
 	}
 
 	/**
 	 * Record an out-of-band change announced by an extension.
 	 *
-	 * Plugins fire `woocommerce_pos_invalidate` when they change a record's
+	 * Plugins fire `wcpos_invalidate` when they change a record's
 	 * SERVED representation in a way no save hook announces — a filter-only
 	 * output change (a pricing filter, an added payload field). The journal
 	 * appends a pointer row; clients hydrate pointer rows by sequence, so the

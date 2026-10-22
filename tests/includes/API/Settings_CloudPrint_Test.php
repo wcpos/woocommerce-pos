@@ -328,13 +328,13 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * It honours a star-line fallback override for Line Mode-only fleets.
 	 *
-	 * The woocommerce_pos_cloud_printer_default_language filter must be able
+	 * The wcpos_cloud_printer_default_language filter must be able
 	 * to rescue a Line Mode-only printer whose stored language is a
 	 * materialized esc-pos default.
 	 */
 	public function test_get_settings_accepts_star_line_filter_override(): void {
 		add_filter(
-			'woocommerce_pos_cloud_printer_default_language',
+			'wcpos_cloud_printer_default_language',
 			static function (): string {
 				return 'star-line';
 			}
@@ -365,7 +365,7 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_get_settings_rejects_invalid_language_filter_override(): void {
 		add_filter(
-			'woocommerce_pos_cloud_printer_default_language',
+			'wcpos_cloud_printer_default_language',
 			static function (): string {
 				return 'esc-pos';
 			}

@@ -174,7 +174,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 	public function test_read_fires_section_filter(): void {
 		$received = null;
 		add_filter(
-			'woocommerce_pos_fixture_settings',
+			'wcpos_fixture_settings',
 			function ( $settings ) use ( &$received ) {
 				$received             = $settings;
 				$settings['filtered'] = true;
@@ -188,7 +188,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 
 		$this->assertIsArray( $received );
 		$this->assertTrue( $settings['filtered'] );
-		remove_all_filters( 'woocommerce_pos_fixture_settings' );
+		remove_all_filters( 'wcpos_fixture_settings' );
 	}
 
 	/**
@@ -202,7 +202,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 
 		update_option( 'woocommerce_pos_settings_hooked', array( 'alpha' => false ) );
 		add_filter(
-			'woocommerce_pos_hooked_settings',
+			'wcpos_hooked_settings',
 			function ( $settings ) {
 				$settings['from_filter'] = true;
 
@@ -223,7 +223,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 		$this->assertEquals( 'sanitize', $section->calls[0], 'sanitize runs first on write' );
 		$this->assertArrayNotHasKey( 'date_modified_gmt', $section->sanitize_input, 'sanitize runs before the date stamp' );
 
-		remove_all_filters( 'woocommerce_pos_hooked_settings' );
+		remove_all_filters( 'wcpos_hooked_settings' );
 	}
 
 	/**
@@ -234,7 +234,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 		$pre_save_payload = null;
 		$saved_payload    = null;
 		add_filter(
-			'woocommerce_pos_pre_save_fixture_settings',
+			'wcpos_pre_save_fixture_settings',
 			function ( $settings, $id ) use ( &$pre_save_payload ) {
 				$pre_save_payload = array( $settings, $id );
 
@@ -244,7 +244,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 			2
 		);
 		add_action(
-			'woocommerce_pos_saved_fixture_settings',
+			'wcpos_saved_fixture_settings',
 			function ( $settings, $id ) use ( &$saved_payload ) {
 				$saved_payload = array( $settings, $id );
 			},
@@ -268,8 +268,8 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 		$this->assertIsArray( $saved_payload );
 		$this->assertEquals( 'custom', $result['beta'] );
 
-		remove_all_filters( 'woocommerce_pos_pre_save_fixture_settings' );
-		remove_all_actions( 'woocommerce_pos_saved_fixture_settings' );
+		remove_all_filters( 'wcpos_pre_save_fixture_settings' );
+		remove_all_actions( 'wcpos_saved_fixture_settings' );
 	}
 
 	/**
@@ -286,7 +286,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 		unset( $stored['date_modified_gmt'] );
 		// Freeze the timestamp so the second write is byte-identical.
 		add_filter(
-			'woocommerce_pos_pre_save_fixture_settings',
+			'wcpos_pre_save_fixture_settings',
 			function ( $settings ) {
 				$settings['date_modified_gmt'] = get_option( 'woocommerce_pos_settings_fixture' )['date_modified_gmt'];
 
@@ -295,7 +295,7 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 		);
 		$saved_fired = 0;
 		add_action(
-			'woocommerce_pos_saved_fixture_settings',
+			'wcpos_saved_fixture_settings',
 			function () use ( &$saved_fired ) {
 				++$saved_fired;
 			}
@@ -303,8 +303,8 @@ class Test_Abstract_Section extends WP_UnitTestCase {
 		$second = $section->write( $stored );
 		$this->assertIsArray( $second, 'No-op write must not return WP_Error' );
 		$this->assertEquals( 0, $saved_fired, 'saved action must not fire on a no-op write' );
-		remove_all_actions( 'woocommerce_pos_saved_fixture_settings' );
-		remove_all_filters( 'woocommerce_pos_pre_save_fixture_settings' );
+		remove_all_actions( 'wcpos_saved_fixture_settings' );
+		remove_all_filters( 'wcpos_pre_save_fixture_settings' );
 	}
 
 	/**

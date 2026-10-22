@@ -41,7 +41,7 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->jobs->register_post_type();
 		Logger::reset_dedup_state();
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				$this->logged_messages[] = $message;
 
@@ -69,7 +69,7 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		$this->uninstall_sync_read_lane();
-		remove_all_filters( 'woocommerce_pos_logging' );
+		remove_all_filters( 'wcpos_logging' );
 		Logger::reset_dedup_state();
 		parent::tearDown();
 	}

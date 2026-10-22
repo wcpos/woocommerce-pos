@@ -33,7 +33,7 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	private $prepared = 0;
 
 	/**
-	 * Calls to `woocommerce_pos_sync_proxy_response` (the proxy's filter chain).
+	 * Calls to `wcpos_sync_proxy_response` (the proxy's filter chain).
 	 *
 	 * @var int
 	 */
@@ -53,7 +53,7 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 		parent::setUp();
 		$this->install_sync_read_lane();
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'count_prepared' ) );
-		add_filter( 'woocommerce_pos_sync_proxy_response', array( $this, 'count_proxy_filtered' ) );
+		add_filter( 'wcpos_sync_proxy_response', array( $this, 'count_proxy_filtered' ) );
 		add_filter( 'rest_pre_dispatch', array( $this, 'count_forwarded' ), 10, 3 );
 	}
 
@@ -62,7 +62,7 @@ class Test_Catalog_Proxy_Products_Fast_Path extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		remove_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'count_prepared' ) );
-		remove_filter( 'woocommerce_pos_sync_proxy_response', array( $this, 'count_proxy_filtered' ) );
+		remove_filter( 'wcpos_sync_proxy_response', array( $this, 'count_proxy_filtered' ) );
 		remove_filter( 'rest_pre_dispatch', array( $this, 'count_forwarded' ), 10 );
 		parent::tearDown();
 		$this->uninstall_sync_read_lane();

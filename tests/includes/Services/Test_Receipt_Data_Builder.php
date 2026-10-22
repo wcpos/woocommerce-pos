@@ -160,11 +160,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			);
 			return $snapshot;
 		};
-		add_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		try {
 			Completion_Fixture::sale( $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $enrich );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
 		}
 		$store = new Fiscal_Record_Store();
 		$sale = $store->find_sale( $order->get_id() );
@@ -191,11 +191,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$data['order']['customer_note'] = 'Filtered note';
 			return $data;
 		};
-		add_filter( 'woocommerce_pos_receipt_data', $rebuild );
+		add_filter( 'wcpos_receipt_data', $rebuild );
 		try {
 			$data = $this->builder->build( $order, 'live' );
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_data', $rebuild );
+			remove_filter( 'wcpos_receipt_data', $rebuild );
 		}
 		$this->assertSame( 'Frozen-qr_payload', $data['fiscal']['qr_payload'] );
 		$this->assertSame( $snapshot['fiscal']['extra_fields'], $data['fiscal']['extra_fields'] );
@@ -1615,7 +1615,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		try {
 			update_option( 'woocommerce_store_address', '1 Current Store Road' );
-			add_filter( 'woocommerce_pos_get_store', $store_filter, 10, 3 );
+			add_filter( 'wcpos_get_store', $store_filter, 10, 3 );
 
 			$payload = $this->builder->build( $order, 'live' );
 			$store   = $payload['store'];
@@ -1626,7 +1626,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$this->assertSame( $expected_store_name, $store['name'] );
 			$this->assertSame( '', $store['address']['address_1'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter, 10 );
+			remove_filter( 'wcpos_get_store', $store_filter, 10 );
 			update_option( 'woocommerce_store_address', $original_store_address );
 		}
 	}
@@ -1787,7 +1787,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		};
 
 		try {
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$payload = $this->builder->build( $order, 'live' );
 			$store   = $payload['store'];
@@ -1797,7 +1797,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$this->assertNull( $store['opening_hours_inline'] );
 			$this->assertNull( $store['opening_hours_notes'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 		}
 	}
 
@@ -1855,12 +1855,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		try {
 			set_theme_mod( 'custom_logo', $logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$payload = $this->builder->build( $order, 'live' );
 			$this->assertSame( $logo_url, $payload['store']['logo'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
 		}
@@ -1922,12 +1922,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		try {
 			set_theme_mod( 'custom_logo', $logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$payload = $this->builder->build( $order, 'live' );
 			$this->assertNull( $payload['store']['logo'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
 		}
@@ -2045,12 +2045,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		try {
 			set_theme_mod( 'custom_logo', $site_logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$payload = $this->builder->build( $order, 'live' );
 			$this->assertSame( $logo_url, $payload['store']['logo'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
 		}
@@ -2282,7 +2282,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test extensions can reshape the receipt payload through woocommerce_pos_receipt_data.
+	 * Test extensions can reshape the receipt payload through wcpos_receipt_data.
 	 */
 	public function test_build_applies_receipt_data_filter_with_order_and_mode(): void {
 		$product = new \WC_Product_Simple();
@@ -2314,11 +2314,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			return $data;
 		};
 
-		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		add_filter( 'wcpos_receipt_data', $filter, 10, 3 );
 		try {
 			$payload = $this->builder->build( $order, 'fiscal' );
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_data', $filter, 10 );
+			remove_filter( 'wcpos_receipt_data', $filter, 10 );
 		}
 
 		$this->assertSame(
@@ -2796,11 +2796,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$data['fiscal']['extra_fields']['extension'] = $source->get_id();
 			return $data;
 		};
-		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		add_filter( 'wcpos_receipt_data', $filter, 10, 3 );
 		try {
 			$data = $this->builder->build_refund_document( $order, $refund, 7, 'sale:42' );
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_data', $filter );
+			remove_filter( 'wcpos_receipt_data', $filter );
 		}
 		$this->assertSame( array( 'refund' ), $modes );
 		$this->assertSame( $order->get_id(), $data['order']['id'] );

@@ -324,7 +324,7 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_cashier_data_filter_applied(): void {
 		add_filter(
-			'woocommerce_pos_rest_prepare_cashier',
+			'wcpos_rest_prepare_cashier',
 			function ( $data, $user, $request ) {
 				$data['custom_field'] = 'test_value';
 
@@ -342,7 +342,7 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'custom_field', $data );
 		$this->assertEquals( 'test_value', $data['custom_field'] );
 
-		remove_all_filters( 'woocommerce_pos_rest_prepare_cashier' );
+		remove_all_filters( 'wcpos_rest_prepare_cashier' );
 	}
 
 	/**

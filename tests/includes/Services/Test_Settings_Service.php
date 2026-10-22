@@ -606,7 +606,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$product_id = 12345;
 
 		add_filter(
-			'woocommerce_pos_pos_only_product_visibility_settings',
+			'wcpos_pos_only_product_visibility_settings',
 			function ( $settings ) use ( $product_id ) {
 				$settings['ids'][] = $product_id;
 
@@ -618,7 +618,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 
 		$this->assertTrue( $result );
 
-		remove_all_filters( 'woocommerce_pos_pos_only_product_visibility_settings' );
+		remove_all_filters( 'wcpos_pos_only_product_visibility_settings' );
 	}
 
 	/**

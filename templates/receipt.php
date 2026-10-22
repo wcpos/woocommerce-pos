@@ -132,7 +132,7 @@ $i18n = $receipt_data['i18n'] ?? array();
 			body { background: #fff; }
 		}
 	</style>
-	<?php do_action( 'woocommerce_pos_receipt_head' ); ?>
+	<?php do_action( 'wcpos_receipt_head' ); ?><?php do_action_deprecated( 'woocommerce_pos_receipt_head', array(), '2.0.0', 'wcpos_receipt_head' ); ?>
 </head>
 <body>
 

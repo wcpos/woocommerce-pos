@@ -91,7 +91,8 @@ class Sessions_Controller extends \WP_REST_Controller {
 			// A movement is keyed by (session, uuid): its replay is looked up in the body's session.
 			$existing = $movement ? $store->get( strtolower( $request['session_id'] ), $request['id'] ) : $store->get( $request['id'] );
 			/** Filter a directly addressed session or movement row on the write routes; nothing hooks it today. Read routes are checked by Store_Reach. */
-			$row = apply_filters( 'woocommerce_pos_session_row', $existing, $request );
+			$row = apply_filters( 'wcpos_session_row', $existing, $request );
+			$row = apply_filters_deprecated( 'woocommerce_pos_session_row', array( $row, $request ), '2.0.0', 'wcpos_session_row' );
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
@@ -184,7 +185,9 @@ class Sessions_Controller extends \WP_REST_Controller {
 			}
 			$args['register_id'] = strtolower( $request['register_id'] );
 		}
-		return new WP_REST_Response( array_map( array( $this, 'visible_row' ), $store->list( Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_sessions_list_args', $args, $request ) ) ) ) );
+		$filtered = apply_filters( 'wcpos_sessions_list_args', $args, $request );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sessions_list_args', array( $filtered, $request ), '2.0.0', 'wcpos_sessions_list_args' );
+		return new WP_REST_Response( array_map( array( $this, 'visible_row' ), $store->list( Store_Reach::for_request( $request )->narrow( $filtered ) ) ) );
 	}
 
 	/** Keep the count blind: without the report capability a session or movement row omits every figure.

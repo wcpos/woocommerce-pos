@@ -19,7 +19,7 @@ namespace WCPOS\WooCommercePOS\Sync;
  * Stable by construction so it changes ONLY when the record's representation does:
  *  - volatile/derived REST fields are stripped — `related_ids` comes back in random
  *    order every GET, `_links` is request-derived — shared with the change-log via
- *    the `woocommerce_pos_sync_revision_excluded_fields` filter;
+ *    the `wcpos_sync_revision_excluded_fields` filter;
  *  - keys are sorted recursively, so wc/v3 (or a filter) re-ordering properties is
  *    not seen as a change.
  *
@@ -45,14 +45,14 @@ class Revision {
 	 * the protected uuid meta on reads).
 	 */
 	public static function register_proxy_stamps(): void {
-		add_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_proxy_revisions' ), 9, 3 );
+		add_filter( 'wcpos_sync_proxy_response', array( __CLASS__, 'stamp_proxy_revisions' ), 9, 3 );
 	}
 
 	/**
 	 * Remove the canonical revision stamper.
 	 */
 	public static function unregister_proxy_stamps(): void {
-		remove_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_proxy_revisions' ), 9 );
+		remove_filter( 'wcpos_sync_proxy_response', array( __CLASS__, 'stamp_proxy_revisions' ), 9 );
 	}
 
 	public static function stamp_proxy_revisions( $data, $resource = '', $request = null ) {
@@ -160,12 +160,14 @@ class Revision {
 				)
 			);
 		}
-		$fields = (array) apply_filters( 'woocommerce_pos_sync_variation_revision_fields', $fields );
+		$fields = apply_filters( 'wcpos_sync_variation_revision_fields', $fields );
+		$fields = (array) apply_filters_deprecated( 'woocommerce_pos_sync_variation_revision_fields', array( $fields ), '2.0.0', 'wcpos_sync_variation_revision_fields' );
 		return self::canonicalize( array_intersect_key( $record, array_flip( $fields ) ) );
 	}
 
 	public static function canonicalize( array $data ): array {
-		$excluded = apply_filters( 'woocommerce_pos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
+		$excluded = apply_filters( 'wcpos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
+		$excluded = apply_filters_deprecated( 'woocommerce_pos_sync_revision_excluded_fields', array( $excluded ), '2.0.0', 'wcpos_sync_revision_excluded_fields' );
 		foreach ( (array) $excluded as $field ) {
 			unset( $data[ $field ] );
 		}

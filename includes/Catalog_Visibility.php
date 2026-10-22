@@ -153,7 +153,8 @@ final class Catalog_Visibility {
 		 * @param string     $visibility The catalog visibility WCPOS is about to force. Default 'hidden'.
 		 * @param WC_Product $product    The product entering or already in the POS Only set.
 		 */
-		$visibility = apply_filters( 'woocommerce_pos_pos_only_catalog_visibility', 'hidden', $product );
+		$visibility = apply_filters( 'wcpos_pos_only_catalog_visibility', 'hidden', $product );
+		$visibility = apply_filters_deprecated( 'woocommerce_pos_pos_only_catalog_visibility', array( $visibility, $product ), '2.0.0', 'wcpos_pos_only_catalog_visibility' );
 		if ( null === $visibility ) {
 			return null;
 		}

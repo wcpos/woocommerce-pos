@@ -41,7 +41,8 @@ class Settings {
 		 *
 		 * @param Settings $this Settings class instance for the current admin context.
 		 */
-		do_action( 'woocommerce_pos_admin_settings_init', $this );
+		do_action( 'wcpos_admin_settings_init', $this );
+		do_action_deprecated( 'woocommerce_pos_admin_settings_init', array( $this ), '2.0.0', 'wcpos_admin_settings_init' );
 	}
 
 	/**
@@ -152,7 +153,8 @@ class Settings {
 		$store_country    = function_exists( 'WC' )
 			? WC()->countries->get_base_country()
 			: '';
-		$store_options   = apply_filters( 'woocommerce_pos_cloud_print_store_options', array() );
+		$store_options = apply_filters( 'wcpos_cloud_print_store_options', array() );
+		$store_options = apply_filters_deprecated( 'woocommerce_pos_cloud_print_store_options', array( $store_options ), '2.0.0', 'wcpos_cloud_print_store_options' );
 		$anon_id         = ( new \WCPOS\WooCommercePOS\Services\Anon_ID() )->get();
 		$site_uuid       = get_option( 'woocommerce_pos_uuid', '' );
 

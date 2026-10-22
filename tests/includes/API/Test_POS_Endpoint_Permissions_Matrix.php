@@ -171,9 +171,9 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 				return $issued_at - 1;
 			};
 
-			add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10, 2 );
+			add_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10, 2 );
 			$expired_access_token = $this->auth_service->generate_access_token( $user );
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10 );
 
 			$this->assertIsString( $expired_access_token );
 
@@ -216,9 +216,9 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 				return $issued_at - 1;
 			};
 
-			add_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
+			add_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
 			$expired_refresh_token = $this->auth_service->generate_refresh_token( $user );
-			remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+			remove_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
 
 			$this->assertIsString( $expired_refresh_token );
 
@@ -277,9 +277,9 @@ class Test_POS_Endpoint_Permissions_Matrix extends Sync_REST_Store_Test_Case {
 			return $issued_at - 1;
 		};
 
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10, 2 );
 		$expired_access_token = $this->auth_service->generate_access_token( $user );
-		remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+		remove_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10 );
 
 		$this->assertIsString( $expired_access_token );
 

@@ -373,7 +373,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 			$logs[] = $message;
 			return false;
 		};
-		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
+		add_filter( 'wcpos_logging', $capture_log, 10, 2 );
 		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
 		Sweep_Test_Handler::$capture_patch = new \WP_Error( 'wcpos_capture_mode_unsupported', 'Unsupported', array( 'status' => 501 ) );
 		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized' ) );
@@ -382,7 +382,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		try {
 			( new Payments_Sweeper() )->run();
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture_log, 10 );
+			remove_filter( 'wcpos_logging', $capture_log, 10 );
 		}
 		$this->assertCount( 1, Sweep_Test_Handler::$captures );
 		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
@@ -398,7 +398,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 			$logs[] = $message;
 			return false;
 		};
-		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
+		add_filter( 'wcpos_logging', $capture_log, 10, 2 );
 		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
 		Sweep_Test_Handler::$capture_patch = new \WP_Error( 'wcpos_provider_error', 'Declined by the provider' );
 		list( $order, $id ) = $this->leg( 600, array( 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() + 3600 ) ) );
@@ -407,7 +407,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		try {
 			( new Payments_Sweeper() )->run();
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture_log, 10 );
+			remove_filter( 'wcpos_logging', $capture_log, 10 );
 		}
 		$this->assertCount( 1, Sweep_Test_Handler::$captures );
 		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );

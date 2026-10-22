@@ -58,7 +58,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->received = null;
 		$this->producer = null;
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			function ( $reports ) {
 				$reports['example'] = array(
 					'title' => 'Example report',
@@ -149,7 +149,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		remove_theme_mod( 'custom_logo' );
 		$filtered = null;
 		add_filter(
-			'woocommerce_pos_report_data',
+			'wcpos_report_data',
 			static function ( $data, $key, $scope ) use ( &$filtered ) {
 				$filtered = array( $key, $scope );
 				$data['example']['note'] = 'Filtered';
@@ -191,7 +191,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $data['fiscal']['is_report_document'] );
 		$this->assertSame( array( 'example', $this->received ), $filtered );
 		$this->assertSame( 'Filtered', $data['example']['note'] );
-		// woocommerce_pos_report_data may enrich, but the identity is restored after it, exactly
+		// wcpos_report_data may enrich, but the identity is restored after it, exactly
 		// as the closure path restores its own. Without this the filter could relabel a report,
 		// or restate the scope it was authorised for, and still pass schema validation.
 		$this->assertSame( 'Closure fixture', $data['report']['scope']['register_name'] );
@@ -306,7 +306,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * A store the caller cannot reach is absent, by either door.
 	 *
-	 * Pro answers `woocommerce_pos_closures_list_args` with the caller's stores; the fixture's
+	 * Pro answers `wcpos_closures_list_args` with the caller's stores; the fixture's
 	 * store is 456, so a caller scoped to 789 must not reach it by naming its register (range)
 	 * or its session (session mode). 404 rather than 403, so the scope cannot be probed.
 	 */
@@ -338,7 +338,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			$codes[ $door ] = $this->server->dispatch( $request )->get_data()['code'];
 		}
 		add_filter(
-			'woocommerce_pos_closures_list_args',
+			'wcpos_closures_list_args',
 			static function ( $args ) {
 				$args['store_id'] = array( 789 );
 				return $args;
@@ -368,7 +368,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$session = $this->closure_session();
 		$this->use_multi_register_repository()->update( $session['register_id'], array( 'store_id' => null ) );
 		add_filter(
-			'woocommerce_pos_closures_list_args',
+			'wcpos_closures_list_args',
 			static function ( $args ) {
 				$args['store_id'] = array( 456 );
 				return $args;
@@ -392,7 +392,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_report_malformed_scope_filter_denies_rather_than_unscoping(): void {
 		foreach ( array( 'nonsense', 7, null, false ) as $bad ) {
 			add_filter(
-				'woocommerce_pos_closures_list_args',
+				'wcpos_closures_list_args',
 				static function () use ( $bad ) {
 					return $bad;
 				},
@@ -403,7 +403,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 			$this->assertSame( 404, $response->get_status() );
 			$this->assertNull( $this->received );
-			remove_all_filters( 'woocommerce_pos_closures_list_args', 20 );
+			remove_all_filters( 'wcpos_closures_list_args', 20 );
 		}
 	}
 
@@ -422,7 +422,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		// The register is reassigned to a store this caller cannot reach; the session is not.
 		$this->use_multi_register_repository()->update( $session['register_id'], array( 'store_id' => 789 ) );
 		add_filter(
-			'woocommerce_pos_closures_list_args',
+			'wcpos_closures_list_args',
 			static function ( $args ) {
 				$args['store_id'] = array( 456 );
 				return $args;
@@ -470,7 +470,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		foreach ( $cases as list( $bad, $store ) ) {
 			$registers->update( $session['register_id'], array( 'store_id' => $store ) );
 			add_filter(
-				'woocommerce_pos_closures_list_args',
+				'wcpos_closures_list_args',
 				static function ( $args ) use ( $bad ) {
 					$args['store_id'] = array( $bad );
 					return $args;
@@ -482,7 +482,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 			$this->assertSame( 404, $response->get_status(), 'restriction ' . var_export( $bad, true ) . ' was not refused' );
 			$this->assertNull( $this->received );
-			remove_all_filters( 'woocommerce_pos_closures_list_args', 20 );
+			remove_all_filters( 'wcpos_closures_list_args', 20 );
 		}
 	}
 
@@ -505,7 +505,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		add_filter(
-			'woocommerce_pos_closures_list_args',
+			'wcpos_closures_list_args',
 			static function ( $args ) {
 				$args['store_id'] = array( 456 );
 				return $args;
@@ -550,7 +550,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 		$expected = ( new \DateTimeImmutable( $session['opened_at_gmt'], new \DateTimeZone( 'UTC' ) ) )
 			->setTimezone( wp_timezone() )->format( 'Y-m-d' );
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports['example']['scopes'] = array( 'range', 'session' );
 				return $reports;
@@ -584,7 +584,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** A caller allowed no stores at all reads no report. */
 	public function test_report_deny_all_store_scope_refuses_every_report(): void {
 		add_filter(
-			'woocommerce_pos_closures_list_args',
+			'wcpos_closures_list_args',
 			static function ( $args ) {
 				$args['store_id'] = array();
 				return $args;
@@ -702,7 +702,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** A broken registration must not take down the catalogue route. */
 	public function test_registry_malformed_registration_still_serves_valid_reports(): void {
 		add_filter(
-			'woocommerce_pos_reports',
+			'wcpos_reports',
 			static function ( $reports ) {
 				$reports['broken'] = array(
 					'title' => 'Broken',
@@ -762,7 +762,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** Validation must run after extensions, not before them. */
 	public function test_report_filter_invalid_document_is_rejected(): void {
 		add_filter(
-			'woocommerce_pos_report_data',
+			'wcpos_report_data',
 			static function ( $data ) {
 				$data['report']['column_count'] = 999;
 				return $data;
@@ -779,7 +779,7 @@ class Test_Reports_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_receipt_filter_closure_and_xreport_receive_unsaved_order_and_preserve_identity(): void {
 		$seen = array();
 		add_filter(
-			'woocommerce_pos_receipt_data',
+			'wcpos_receipt_data',
 			static function ( $data, $order, $mode ) use ( &$seen ) {
 				$seen[] = array( $order->get_id(), $mode );
 				$data['extra_note'] = 'Extension';

@@ -97,7 +97,7 @@
 		}
 	</style>
 
-	<?php do_action( 'woocommerce_pos_head' ); ?>
+	<?php do_action( 'wcpos_head' ); ?><?php do_action_deprecated( 'woocommerce_pos_head', array(), '2.0.0', 'wcpos_head' ); ?>
 </head>
 <body>
 
@@ -109,6 +109,6 @@
 </div>
 
 </body>
-<?php do_action( 'woocommerce_pos_footer' ); ?>
+<?php do_action( 'wcpos_footer' ); ?><?php do_action_deprecated( 'woocommerce_pos_footer', array(), '2.0.0', 'wcpos_footer' ); ?>
 
 </html>

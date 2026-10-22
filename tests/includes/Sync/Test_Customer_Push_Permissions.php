@@ -301,7 +301,7 @@ class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 		$filter = static function () {
 			return array( 'manage_options' );
 		};
-		add_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
+		add_filter( 'wcpos_protected_account_capabilities', $filter );
 		wp_set_current_user( $this->cashier );
 
 		try {
@@ -309,7 +309,7 @@ class Test_Customer_Push_Permissions extends Sync_REST_Store_Test_Case {
 
 			$this->assertSame( 200, $response->get_status() );
 		} finally {
-			remove_filter( 'woocommerce_pos_protected_account_capabilities', $filter );
+			remove_filter( 'wcpos_protected_account_capabilities', $filter );
 		}
 	}
 

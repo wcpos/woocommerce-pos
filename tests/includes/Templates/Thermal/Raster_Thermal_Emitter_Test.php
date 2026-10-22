@@ -60,7 +60,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		remove_filter( 'pre_http_request', array( $this, 'block_http' ) );
-		remove_all_filters( 'woocommerce_pos_receipt_raster_font' );
+		remove_all_filters( 'wcpos_receipt_raster_font' );
 		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
 		parent::tearDown();
 	}
@@ -117,7 +117,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 		};
 		wp_mkdir_p( $dir );
 		add_filter( 'upload_dir', $filter );
-		add_filter( 'woocommerce_pos_receipt_raster_font', $face );
+		add_filter( 'wcpos_receipt_raster_font', $face );
 		$method = new \ReflectionMethod( Raster_Thermal_Emitter::class, 'font_path' );
 		$method->setAccessible( true );
 		try {
@@ -130,7 +130,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
 		} finally {
 			remove_filter( 'upload_dir', $filter );
-			remove_filter( 'woocommerce_pos_receipt_raster_font', $face );
+			remove_filter( 'wcpos_receipt_raster_font', $face );
 			delete_transient( 'wcpos_font_pack_failed_dejavu' );
 			delete_transient( 'wcpos_font_pack_lock_dejavu' );
 			rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
@@ -636,7 +636,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 */
 	public function test_emit_falls_back_when_the_font_filter_is_broken(): void {
 		add_filter(
-			'woocommerce_pos_receipt_raster_font',
+			'wcpos_receipt_raster_font',
 			static function (): string {
 				return '/nonexistent/font.ttf';
 			}

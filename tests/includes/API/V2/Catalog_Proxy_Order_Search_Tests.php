@@ -330,14 +330,14 @@ trait Catalog_Proxy_Order_Search_Tests {
 			}
 			return $search;
 		};
-		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		add_filter( 'wcpos_search_fields', $filter, 10, 2 );
 
 		try {
 			$this->target_order->update_meta_data( '_wcpos_probe_reference', 'FilteredMetaProbe-41' );
 			$this->target_order->save();
 			$this->assert_order_search_finds_target( 'FilteredMetaProbe' );
 		} finally {
-			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+			remove_filter( 'wcpos_search_fields', $filter, 10 );
 		}
 	}
 
@@ -350,12 +350,12 @@ trait Catalog_Proxy_Order_Search_Tests {
 			}
 			return $search;
 		};
-		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		add_filter( 'wcpos_search_fields', $filter, 10, 2 );
 
 		try {
 			$this->assert_order_search_finds_target( 'AureliaProbe' );
 		} finally {
-			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+			remove_filter( 'wcpos_search_fields', $filter, 10 );
 		}
 	}
 

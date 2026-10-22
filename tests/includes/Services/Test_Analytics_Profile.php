@@ -21,8 +21,8 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_analytics_multi_currency', '__return_true' );
-		remove_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
+		remove_filter( 'wcpos_analytics_multi_currency', '__return_true' );
+		remove_filter( 'wcpos_is_pro_active', '__return_true' );
 		delete_transient( 'wcpos_landing_profile' );
 
 		parent::tearDown();
@@ -98,7 +98,7 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 	 */
 	public function test_group_properties_when_pro_detection_is_filtered_report_pro_edition(): void {
 		// Arrange.
-		add_filter( 'woocommerce_pos_is_pro_active', '__return_true' );
+		add_filter( 'wcpos_is_pro_active', '__return_true' );
 
 		// Act.
 		$properties = ( new Analytics_Profile() )->get_group_properties();
@@ -203,9 +203,9 @@ class Test_Analytics_Profile extends WP_UnitTestCase {
 	 * Integrations can correct the multi-currency signal.
 	 */
 	public function test_multi_currency_is_filterable(): void {
-		add_filter( 'woocommerce_pos_analytics_multi_currency', '__return_true' );
+		add_filter( 'wcpos_analytics_multi_currency', '__return_true' );
 		$properties = ( new Analytics_Profile() )->get_group_properties();
-		remove_filter( 'woocommerce_pos_analytics_multi_currency', '__return_true' );
+		remove_filter( 'wcpos_analytics_multi_currency', '__return_true' );
 
 		$this->assertTrue( $properties['multi_currency'] );
 	}

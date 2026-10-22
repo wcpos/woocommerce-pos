@@ -45,9 +45,10 @@ class Font_Pack_Loader {
 		 *
 		 * @since 2.0.0
 		 * @param array<string, string> $sources Pack name → base URL with `%s` for the lane ref.
-		 * @hook woocommerce_pos_font_pack_sources
+		 * @hook wcpos_font_pack_sources
 		 */
-		return apply_filters( 'woocommerce_pos_font_pack_sources', self::PACKS );
+		$filtered = apply_filters( 'wcpos_font_pack_sources', self::PACKS );
+		return apply_filters_deprecated( 'woocommerce_pos_font_pack_sources', array( $filtered ), '2.0.0', 'wcpos_font_pack_sources' );
 	}
 
 	/**
@@ -58,13 +59,14 @@ class Font_Pack_Loader {
 	public static function packs(): array {
 		/**
 		 * Filters the enabled font packs so a site can drop one it does not need.
-		 * Packs must have a source (see `woocommerce_pos_font_pack_sources`).
+		 * Packs must have a source (see `wcpos_font_pack_sources`).
 		 *
 		 * @since 2.0.0
 		 * @param string[] $packs Enabled pack names.
-		 * @hook woocommerce_pos_font_packs
+		 * @hook wcpos_font_packs
 		 */
-		return apply_filters( 'woocommerce_pos_font_packs', array_keys( self::sources() ) );
+		$filtered = apply_filters( 'wcpos_font_packs', array_keys( self::sources() ) );
+		return apply_filters_deprecated( 'woocommerce_pos_font_packs', array( $filtered ), '2.0.0', 'wcpos_font_packs' );
 	}
 
 	/**

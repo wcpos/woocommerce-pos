@@ -42,9 +42,9 @@ use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
  *
  * The option is NEVER read directly here. `Services\Settings` owns the Visibility section's
  * defaults-merge and migration, and applies the public extension filters
- * (`woocommerce_pos_product_visibility_settings`, `woocommerce_pos_variations_visibility_settings`,
- * `woocommerce_pos_online_only_product_visibility_settings`,
- * `woocommerce_pos_online_only_variations_visibility_settings`). Reading the raw option would bypass
+ * (`wcpos_product_visibility_settings`, `wcpos_variations_visibility_settings`,
+ * `wcpos_online_only_product_visibility_settings`,
+ * `wcpos_online_only_variations_visibility_settings`). Reading the raw option would bypass
  * all of it, so an extension that hides a product would be honoured on some lanes and ignored on
  * others. Routing every lane through this class routes every lane through those filters.
  *

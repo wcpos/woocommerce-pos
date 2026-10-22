@@ -110,7 +110,8 @@ class API {
 		 *
 		 * @param string[] $namespaces REST API namespaces.
 		 */
-		$namespaces = apply_filters( 'woocommerce_pos_rest_namespaces', self::ROUTE_NAMESPACES );
+		$namespaces = apply_filters( 'wcpos_rest_namespaces', self::ROUTE_NAMESPACES );
+		$namespaces = apply_filters_deprecated( 'woocommerce_pos_rest_namespaces', array( $namespaces ), '2.0.0', 'wcpos_rest_namespaces' );
 
 		return array_values( array_unique( array_merge( self::ROUTE_NAMESPACES, (array) $namespaces ) ) );
 	}

@@ -101,7 +101,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$custom_icon = 'https://example.com/card-icon.png';
 
 		add_filter(
-			'woocommerce_pos_card_icon',
+			'wcpos_card_icon',
 			function () use ( $custom_icon ) {
 				return $custom_icon;
 			}
@@ -111,7 +111,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 
 		$this->assertEquals( $custom_icon, $gateway->icon );
 
-		remove_all_filters( 'woocommerce_pos_card_icon' );
+		remove_all_filters( 'wcpos_card_icon' );
 	}
 
 	/**
@@ -154,7 +154,7 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$gateway = new Card();
 
 		$this->assertTrue(
-			has_action( 'woocommerce_pos_update_options_payment_gateways_pos_card' ),
+			has_action( 'wcpos_update_options_payment_gateways_pos_card' ),
 			'Admin options action should be registered'
 		);
 	}

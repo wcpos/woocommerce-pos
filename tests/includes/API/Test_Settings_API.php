@@ -67,11 +67,11 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 		Fixture_Settings_Section::register();
 
 		if ( 'test_section_with_an_unsafe_id_gets_no_route' === $this->getName() ) {
-			add_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_unsafe_section' ) );
+			add_action( 'wcpos_register_settings_sections', array( $this, 'register_unsafe_section' ) );
 		}
 		if ( 'test_sections_with_colliding_route_slugs_are_rejected' === $this->getName() ) {
-			add_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_colliding_sections' ) );
-			add_filter( 'woocommerce_pos_logging', array( $this, 'capture_route_warning' ), 10, 2 );
+			add_action( 'wcpos_register_settings_sections', array( $this, 'register_colliding_sections' ) );
+			add_filter( 'wcpos_logging', array( $this, 'capture_route_warning' ), 10, 2 );
 		}
 
 		SettingsService::instance()->reset_sections_for_testing();
@@ -153,9 +153,9 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
-		remove_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_unsafe_section' ) );
-		remove_action( 'woocommerce_pos_register_settings_sections', array( $this, 'register_colliding_sections' ) );
-		remove_filter( 'woocommerce_pos_logging', array( $this, 'capture_route_warning' ), 10 );
+		remove_action( 'wcpos_register_settings_sections', array( $this, 'register_unsafe_section' ) );
+		remove_action( 'wcpos_register_settings_sections', array( $this, 'register_colliding_sections' ) );
+		remove_filter( 'wcpos_logging', array( $this, 'capture_route_warning' ), 10 );
 		Fixture_Settings_Section::unregister();
 		Fixture_Settings_Section::reset();
 		SettingsService::instance()->reset_sections_for_testing();
@@ -912,13 +912,13 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 			);
 		};
 
-		add_action( 'woocommerce_pos_register_settings_sections', $filter );
+		add_action( 'wcpos_register_settings_sections', $filter );
 		SettingsService::instance()->reset_sections_for_testing();
 
 		try {
 			$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v1/settings/access' ) );
 		} finally {
-			remove_action( 'woocommerce_pos_register_settings_sections', $filter );
+			remove_action( 'wcpos_register_settings_sections', $filter );
 			SettingsService::instance()->reset_sections_for_testing();
 		}
 

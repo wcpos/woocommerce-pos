@@ -190,11 +190,22 @@ class Menu {
 		 * }
 		 */
 		do_action(
-			'woocommerce_pos_register_pos_admin',
+			'wcpos_register_pos_admin',
 			array(
 				'toplevel' => $this->toplevel_screen_id,
 				'settings' => $this->settings_screen_id,
 			)
+		);
+		do_action_deprecated(
+			'woocommerce_pos_register_pos_admin',
+			array(
+				array(
+					'toplevel' => $this->toplevel_screen_id,
+					'settings' => $this->settings_screen_id,
+				),
+			),
+			'2.0.0',
+			'wcpos_register_pos_admin'
 		);
 	}
 
@@ -578,9 +589,10 @@ JS;
 		 * @since 1.11.2
 		 *
 		 * @param string $url Preview base URL without a trailing slash.
-		 * @hook woocommerce_pos_template_gallery_preview_base_url
+		 * @hook wcpos_template_gallery_preview_base_url
 		 */
-		return apply_filters( 'woocommerce_pos_template_gallery_preview_base_url', $url );
+		$filtered = apply_filters( 'wcpos_template_gallery_preview_base_url', $url );
+		return apply_filters_deprecated( 'woocommerce_pos_template_gallery_preview_base_url', array( $filtered ), '2.0.0', 'wcpos_template_gallery_preview_base_url' );
 	}
 
 	/**

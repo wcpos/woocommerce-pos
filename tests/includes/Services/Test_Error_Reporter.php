@@ -326,13 +326,13 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	public function test_kill_switch_with_consent_sends_no_event(): void {
 		// Arrange.
 		$this->enable_consent();
-		add_filter( 'woocommerce_pos_error_reporting_enabled', '__return_false' );
+		add_filter( 'wcpos_error_reporting_enabled', '__return_false' );
 
 		// Act.
 		Logger::error( 'blocked by host' );
 
 		// Assert.
-		remove_filter( 'woocommerce_pos_error_reporting_enabled', '__return_false' );
+		remove_filter( 'wcpos_error_reporting_enabled', '__return_false' );
 		$this->assertSame( array(), $this->transport->events );
 	}
 
@@ -342,13 +342,13 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	public function test_filter_without_consent_cannot_enable_reporting(): void {
 		// Arrange.
 		$this->set_consent( 'denied' );
-		add_filter( 'woocommerce_pos_error_reporting_enabled', '__return_true' );
+		add_filter( 'wcpos_error_reporting_enabled', '__return_true' );
 
 		// Act.
 		Logger::error( 'must remain blocked' );
 
 		// Assert.
-		remove_filter( 'woocommerce_pos_error_reporting_enabled', '__return_true' );
+		remove_filter( 'wcpos_error_reporting_enabled', '__return_true' );
 		$this->assertSame( array(), $this->transport->events );
 		$this->assertFalse( Error_Reporter::instance()->is_initialized() );
 	}
@@ -357,7 +357,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	 * A settings filter cannot manufacture consent the merchant never gave.
 	 *
 	 * `Settings::tracking_consent()` reads the filtered view, so gating on it
-	 * would let any plugin filtering woocommerce_pos_general_settings switch
+	 * would let any plugin filtering wcpos_general_settings switch
 	 * reporting on for a store that declined.
 	 */
 	public function test_settings_filter_claiming_consent_sends_no_event(): void {
@@ -368,13 +368,13 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_general_settings', $claim_consent );
+		add_filter( 'wcpos_general_settings', $claim_consent );
 
 		// Act.
 		Logger::error( 'must not be reported' );
 
 		// Assert.
-		remove_filter( 'woocommerce_pos_general_settings', $claim_consent );
+		remove_filter( 'wcpos_general_settings', $claim_consent );
 		$this->assertSame( array(), $this->transport->events );
 		$this->assertFalse( Error_Reporter::instance()->is_initialized() );
 	}
@@ -382,7 +382,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	/**
 	 * No send gate anywhere reads consent through the filtered settings view.
 	 *
-	 * `Settings::tracking_consent()` applies `woocommerce_pos_general_settings`,
+	 * `Settings::tracking_consent()` applies `wcpos_general_settings`,
 	 * so any gate deciding whether data LEAVES the site must call
 	 * `raw_tracking_consent()` instead. Hardening one gate and leaving the
 	 * others is no hardening at all — a filter simply picks another door. The
@@ -621,13 +621,13 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 	public function test_logging_filter_disabled_sends_no_event(): void {
 		// Arrange.
 		$this->enable_consent();
-		add_filter( 'woocommerce_pos_logging', '__return_false' );
+		add_filter( 'wcpos_logging', '__return_false' );
 
 		// Act.
 		Logger::error( 'suppressed locally' );
 
 		// Assert.
-		remove_filter( 'woocommerce_pos_logging', '__return_false' );
+		remove_filter( 'wcpos_logging', '__return_false' );
 		$this->assertSame( array(), $this->transport->events );
 	}
 

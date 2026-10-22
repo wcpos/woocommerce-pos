@@ -250,7 +250,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 			return $token;
 		};
-		add_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+		add_filter( 'wcpos_jwt_refresh_token_before_sign', $filter );
 
 		try {
 			$result = $this->auth_service->generate_token_pair( $this->test_user );
@@ -259,7 +259,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			$this->assertSame( 'woocommmerce_pos_auth_invalid_token_type', $result->get_error_code() );
 			$this->assertCount( 0, $this->auth_service->get_user_sessions( $this->test_user->ID ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+			remove_filter( 'wcpos_jwt_refresh_token_before_sign', $filter );
 		}
 	}
 
@@ -268,14 +268,14 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 */
 	public function test_token_pair_with_a_failing_access_sign_records_no_session(): void {
 		$failure = null;
-		add_filter( 'woocommerce_pos_jwt_access_token_before_sign', '__return_null' );
+		add_filter( 'wcpos_jwt_access_token_before_sign', '__return_null' );
 
 		try {
 			$this->auth_service->generate_token_pair( $this->test_user );
 		} catch ( \TypeError $error ) {
 			$failure = $error;
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_before_sign', '__return_null' );
+			remove_filter( 'wcpos_jwt_access_token_before_sign', '__return_null' );
 		}
 
 		$this->assertInstanceOf( \TypeError::class, $failure );
@@ -299,7 +299,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 			return $token;
 		};
-		add_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+		add_filter( 'wcpos_jwt_refresh_token_before_sign', $filter );
 
 		try {
 			$_COOKIE['wcpos_web_session_jti'] = $refresh->jti;
@@ -311,7 +311,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			$this->assertCount( 1, $sessions );
 			$this->assertSame( $refresh->jti, $sessions[0]['jti'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_refresh_token_before_sign', $filter );
+			remove_filter( 'wcpos_jwt_refresh_token_before_sign', $filter );
 			$_COOKIE = $cookies;
 		}
 	}
@@ -341,12 +341,12 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			return $issued_at + ( 300 * $filter_calls );
 		};
 
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
 
 		try {
 			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $access_expiry_filter, 10 );
 		}
 
 		$this->assertIsArray( $tokens );
@@ -494,9 +494,9 @@ class Test_Auth_Service extends WP_UnitTestCase {
 				return $issued_at - 1;
 			};
 
-			add_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
+			add_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
 			$cashier_one_expired_refresh_token = $this->auth_service->generate_refresh_token( $cashier_one );
-			remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+			remove_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
 
 			$this->assertIsString( $cashier_one_expired_refresh_token );
 
@@ -510,9 +510,9 @@ class Test_Auth_Service extends WP_UnitTestCase {
 				return $issued_at - 1;
 			};
 
-			add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10, 2 );
+			add_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10, 2 );
 			$cashier_one_expired_access_token = $this->auth_service->generate_access_token( $cashier_one );
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10 );
 
 			$this->assertIsString( $cashier_one_expired_access_token );
 
@@ -524,10 +524,10 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			$this->assertEquals( $cashier_two->ID, $cashier_two_access_result->data->user->id );
 		} finally {
 			if ( null !== $expire_refresh_token ) {
-				remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+				remove_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
 			}
 			if ( null !== $expire_access_token ) {
-				remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+				remove_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10 );
 			}
 			wp_delete_user( $cashier_one->ID );
 			wp_delete_user( $cashier_two->ID );
@@ -644,9 +644,9 @@ class Test_Auth_Service extends WP_UnitTestCase {
 				return $issued_at - 1;
 			};
 
-			add_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
+			add_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
 			$manager_one_expired_refresh_token = $this->auth_service->generate_refresh_token( $manager_one );
-			remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+			remove_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
 
 			$this->assertIsString( $manager_one_expired_refresh_token );
 
@@ -660,9 +660,9 @@ class Test_Auth_Service extends WP_UnitTestCase {
 				return $issued_at - 1;
 			};
 
-			add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10, 2 );
+			add_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10, 2 );
 			$manager_one_expired_access_token = $this->auth_service->generate_access_token( $manager_one );
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10 );
 
 			$this->assertIsString( $manager_one_expired_access_token );
 
@@ -674,10 +674,10 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			$this->assertEquals( $manager_two->ID, $manager_two_access_result->data->user->id );
 		} finally {
 			if ( null !== $expire_refresh_token ) {
-				remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+				remove_filter( 'wcpos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
 			}
 			if ( null !== $expire_access_token ) {
-				remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+				remove_filter( 'wcpos_jwt_access_token_expire', $expire_access_token, 10 );
 			}
 			wp_delete_user( $manager_one->ID );
 			wp_delete_user( $manager_two->ID );
@@ -789,12 +789,12 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			return $issued_at + ( 300 * $filter_calls );
 		};
 
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
 
 		try {
 			$result = $this->auth_service->refresh_access_token( $refresh_token );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $access_expiry_filter, 10 );
 		}
 
 		$this->assertIsArray( $result );
@@ -1015,12 +1015,12 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			return $issued_at + 10;
 		};
 
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
 
 		try {
 			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $long_access_expiry, 10 );
 		}
 
 		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
@@ -1033,7 +1033,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			return $issued_at + 1;
 		};
 
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
 
 		try {
 			$result = $this->auth_service->revoke_session_with_blacklist(
@@ -1045,7 +1045,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 			$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
 		}
 
 		$this->assertTrue( $result );
@@ -1061,12 +1061,12 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			return $issued_at + 10;
 		};
 
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
 
 		try {
 			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $long_access_expiry, 10 );
 		}
 
 		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
@@ -1086,7 +1086,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 			return $issued_at + 1;
 		};
 
-		add_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
+		add_filter( 'wcpos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
 
 		try {
 			$result = $this->auth_service->revoke_session_with_blacklist(
@@ -1098,7 +1098,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 			$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
 		} finally {
-			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
+			remove_filter( 'wcpos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
 		}
 
 		$this->assertTrue( $result );

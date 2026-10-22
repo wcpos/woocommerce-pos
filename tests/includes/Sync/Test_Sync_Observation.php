@@ -108,19 +108,19 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 
 		$previous_suppress_errors = $wpdb->suppress_errors();
 		add_filter( 'query', $break_digest_delete );
-		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
+		add_filter( 'wcpos_logging', $capture_log, 10, 2 );
 		try {
 			wp_delete_user( $user_id );
 			$this->integrity_digest->record_order_deleted( 1 );
 		} finally {
 			remove_filter( 'query', $break_digest_delete );
-			remove_filter( 'woocommerce_pos_logging', $capture_log );
+			remove_filter( 'wcpos_logging', $capture_log );
 			$wpdb->suppress_errors( $previous_suppress_errors );
 		}
 
 		$this->assertSame( $previous_suppress_errors, $wpdb->suppress_errors( $previous_suppress_errors ), 'The fixture must restore wpdb error reporting.' );
 		$this->assertFalse( has_filter( 'query', $break_digest_delete ), 'The fixture must remove its broken-query filter.' );
-		$this->assertFalse( has_filter( 'woocommerce_pos_logging', $capture_log ), 'The fixture must remove its log-capture filter.' );
+		$this->assertFalse( has_filter( 'wcpos_logging', $capture_log ), 'The fixture must remove its log-capture filter.' );
 		$this->assertStringContainsString( 'delete stored customer digest failed', implode( "\n", $messages ) );
 		$this->assertStringContainsString( 'delete stored order digest failed', implode( "\n", $messages ) );
 	}

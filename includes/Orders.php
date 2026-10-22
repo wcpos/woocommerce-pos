@@ -1065,13 +1065,14 @@ class Orders {
 		$is_on_sale = (float) $pos_data['price'] < (float) $pos_data['regular_price'];
 		$product    = $product ? $product : $item->get_product();
 
-		return (bool) apply_filters(
-			'woocommerce_pos_item_is_on_sale',
+		$filtered = apply_filters(
+			'wcpos_item_is_on_sale',
 			$is_on_sale,
 			$product,
 			$item,
 			$pos_data
 		);
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_item_is_on_sale', array( $filtered, $product, $item, $pos_data ), '2.0.0', 'wcpos_item_is_on_sale' );
 	}
 
 	/**

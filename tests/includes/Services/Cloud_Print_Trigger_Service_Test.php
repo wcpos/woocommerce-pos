@@ -292,13 +292,13 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 			$reentered = true;
 			$service->handle_order( $order->get_id() );
 		};
-		add_action( 'woocommerce_pos_print_job_created', $callback );
+		add_action( 'wcpos_print_job_created', $callback );
 
 		// Act.
 		try {
 			$service->handle_order( $order->get_id() );
 		} finally {
-			remove_action( 'woocommerce_pos_print_job_created', $callback );
+			remove_action( 'wcpos_print_job_created', $callback );
 		}
 
 		// Assert.
@@ -344,7 +344,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 			throw new \RuntimeException( 'Job-created callback failed.' );
 		};
 		$exception = null;
-		add_action( 'woocommerce_pos_print_job_created', $callback );
+		add_action( 'wcpos_print_job_created', $callback );
 
 		// Act.
 		try {
@@ -352,7 +352,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		} catch ( \RuntimeException $caught ) {
 			$exception = $caught;
 		} finally {
-			remove_action( 'woocommerce_pos_print_job_created', $callback );
+			remove_action( 'wcpos_print_job_created', $callback );
 		}
 		$locked_at = get_option( $lock, false );
 		delete_option( $lock );
@@ -815,7 +815,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			);
 		};
-		add_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
+		add_filter( 'wcpos_cloud_print_assignments', $callback );
 		$service = new Cloud_Print_Trigger_Service();
 		$order   = OrderHelper::create_order();
 
@@ -829,7 +829,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 			$service->handle_order( $order->get_id() );
 			$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
+			remove_filter( 'wcpos_cloud_print_assignments', $callback );
 		}
 	}
 
@@ -923,7 +923,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 
 			return $assignments;
 		};
-		add_filter( 'woocommerce_pos_cloud_print_assignments', $counter, 10, 2 );
+		add_filter( 'wcpos_cloud_print_assignments', $counter, 10, 2 );
 
 		// Act.
 		try {
@@ -935,7 +935,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 			$this->assertSame( 0, $evaluations );
 			$service->flush_deferred();
 		} finally {
-			remove_filter( 'woocommerce_pos_cloud_print_assignments', $counter, 10 );
+			remove_filter( 'wcpos_cloud_print_assignments', $counter, 10 );
 		}
 
 		// Assert — one evaluation, one copy.
@@ -1000,15 +1000,15 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 			throw new \RuntimeException( 'assignments exploded' );
 		};
 		Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
-		add_filter( 'woocommerce_pos_cloud_print_assignments', $throw );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_cloud_print_assignments', $throw );
 
 		// Act.
 		try {
 			$service->defer_order( $order->get_id() );
 		} finally {
-			remove_filter( 'woocommerce_pos_cloud_print_assignments', $throw );
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_cloud_print_assignments', $throw );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			Logger::reset_dedup_state();
 		}
 
@@ -1427,7 +1427,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				),
 			);
 		};
-		add_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
+		add_filter( 'wcpos_cloud_print_assignments', $callback );
 		$order = OrderHelper::create_order();
 
 		// Act + Assert.
@@ -1435,7 +1435,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 			( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
 			$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
+			remove_filter( 'wcpos_cloud_print_assignments', $callback );
 		}
 	}
 

@@ -206,7 +206,7 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		// visibility to hidden (Catalog_Visibility), which makes is_visible() false on every
 		// route before the guard under test runs; opt the product out of that force so this
 		// pins only the request-context decision.
-		add_filter( 'woocommerce_pos_pos_only_catalog_visibility', '__return_null' );
+		add_filter( 'wcpos_pos_only_catalog_visibility', '__return_null' );
 		$this->enable_pos_only_products();
 		$product = ProductHelper::create_simple_product();
 		$this->set_pos_only_product_ids( array( $product->get_id() ) );
@@ -245,7 +245,7 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$query->set( 'post_type', 'product' );
 		$seen = array();
 		add_filter(
-			'woocommerce_pos_hide_pos_only_products',
+			'wcpos_hide_pos_only_products',
 			function ( $hide, $filtered_query ) use ( &$seen ) {
 				$seen = array( $hide, $filtered_query );
 				return false;
@@ -314,14 +314,14 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_pos_only_product_visibility_settings', $filter_callback );
+		add_filter( 'wcpos_pos_only_product_visibility_settings', $filter_callback );
 
 		// POS only product should fail validation
 		$result = $products->prevent_pos_only_add_to_cart( true, $product->get_id() );
 
 		$this->assertFalse( $result );
 
-		remove_filter( 'woocommerce_pos_pos_only_product_visibility_settings', $filter_callback );
+		remove_filter( 'wcpos_pos_only_product_visibility_settings', $filter_callback );
 	}
 
 	/**

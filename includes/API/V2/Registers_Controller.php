@@ -87,7 +87,8 @@ class Registers_Controller extends WP_REST_Controller {
 	 */
 	public function create_item( $request ) {
 		// Free holds one register; Pro binds a repository that holds more.
-		$repository = apply_filters( 'woocommerce_pos_register_repository', new Option_Register_Repository() );
+		$repository = apply_filters( 'wcpos_register_repository', new Option_Register_Repository() );
+		$repository = apply_filters_deprecated( 'woocommerce_pos_register_repository', array( $repository ), '2.0.0', 'wcpos_register_repository' );
 		if ( ! $repository instanceof Register_Repository || $repository instanceof Option_Register_Repository ) {
 			return new WP_Error( 'wcpos_registers_pro', __( 'More registers need WCPOS Pro.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
@@ -122,7 +123,9 @@ class Registers_Controller extends WP_REST_Controller {
 			$args['store_id'] = (int) $request['store_id'];
 		}
 		/** Extension filter for the register list; not an authorization seam. Store_Reach narrows the result. */
-		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', $args, $request ) );
+		$filtered = apply_filters( 'wcpos_registers_list_args', $args, $request );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_registers_list_args', array( $filtered, $request ), '2.0.0', 'wcpos_registers_list_args' );
+		$args = Store_Reach::for_request( $request )->narrow( $filtered );
 		return new WP_REST_Response( ( new Register_Store() )->list( $args ) );
 	}
 
@@ -133,7 +136,9 @@ class Registers_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function get_health( $request ) {
-		$args = Store_Reach::for_request( $request )->narrow( apply_filters( 'woocommerce_pos_registers_list_args', array(), $request ) );
+		$filtered = apply_filters( 'wcpos_registers_list_args', array(), $request );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_registers_list_args', array( $filtered, $request ), '2.0.0', 'wcpos_registers_list_args' );
+		$args = Store_Reach::for_request( $request )->narrow( $filtered );
 		$registers = ( new Register_Store() )->list( $args );
 		$known_ids = ( new Register_Store() )->known_ids();
 		$store_ids = isset( $args['store_id'] ) ? (array) $args['store_id'] : null;
@@ -168,7 +173,8 @@ class Registers_Controller extends WP_REST_Controller {
 		if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
 			return $this->not_found();
 		}
-		$repository = apply_filters( 'woocommerce_pos_register_repository', new Option_Register_Repository() );
+		$repository = apply_filters( 'wcpos_register_repository', new Option_Register_Repository() );
+		$repository = apply_filters_deprecated( 'woocommerce_pos_register_repository', array( $repository ), '2.0.0', 'wcpos_register_repository' );
 		if ( ! $repository instanceof Register_Retirement ) {
 			return new WP_Error( 'wcpos_registers_pro', __( 'More registers need WCPOS Pro.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
@@ -217,7 +223,8 @@ class Registers_Controller extends WP_REST_Controller {
 						return $this->not_found();
 					}
 					/** Filter admin fields; Pro may authorize store reassignment. */
-					$fields = apply_filters( 'woocommerce_pos_register_update_fields', $fields, $row, $request );
+					$fields = apply_filters( 'wcpos_register_update_fields', $fields, $row, $request );
+					$fields = apply_filters_deprecated( 'woocommerce_pos_register_update_fields', array( $fields, $row, $request ), '2.0.0', 'wcpos_register_update_fields' );
 					return new WP_REST_Response( $store->update( $id, $fields ) );
 				},
 				'Register update lock failed.'

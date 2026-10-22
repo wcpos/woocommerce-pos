@@ -29,7 +29,7 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
  * /settings/{slug} whose args come from the section's endpoint_args(), whose
  * reads call read(), and whose writes call write( merge( read(), $patch ) ).
  * Registering a section through the
- * `woocommerce_pos_register_settings_sections` action is therefore all an
+ * `wcpos_register_settings_sections` action is therefore all an
  * extension needs to do to gain an HTTP surface.
  */
 class Settings extends WP_REST_Controller {
@@ -182,7 +182,6 @@ class Settings extends WP_REST_Controller {
 					 * @param bool                $refresh    Request fresh discovery.
 					 * @hook wcpos_payment_gateway_readers
 					 */
-					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments hook.
 					$readers = apply_filters( 'wcpos_payment_gateway_readers', null, $gateway_id, $refresh );
 					if ( null === $readers ) {
 						return new WP_Error( 'wcpos_readers_unavailable', __( 'This payment method does not list terminals.', 'woocommerce-pos' ), array( 'status' => 404 ) );

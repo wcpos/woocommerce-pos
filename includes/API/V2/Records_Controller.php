@@ -120,7 +120,8 @@ class Records_Controller extends WP_REST_Controller {
 			$args[ $key ] = $value;
 		}
 		/** Extension filter for the record list; not an authorization seam. Store_Reach narrows the result below. */
-		$args = apply_filters( 'woocommerce_pos_records_list_args', $args, $request );
+		$args = apply_filters( 'wcpos_records_list_args', $args, $request );
+		$args = apply_filters_deprecated( 'woocommerce_pos_records_list_args', array( $args, $request ), '2.0.0', 'wcpos_records_list_args' );
 		$args = Store_Reach::for_request( $request )->narrow( $args );
 		$store = new Fiscal_Record_Store();
 		$response = new WP_REST_Response( $store->list( $args ) );

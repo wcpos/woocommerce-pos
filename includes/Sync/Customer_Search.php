@@ -15,7 +15,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
  * Both lanes — the wcpos/v1 controller and the wcpos/v2 proxy — append this to their
  * WP_User_Query, so what a cashier can find never depends on which lane the till used.
  * The field list is `Collection_Rules::rules('customers')['search']` (filterable through
- * `woocommerce_pos_search_fields`); the per-site tax-ID meta keys join it at query time.
+ * `wcpos_search_fields`); the per-site tax-ID meta keys join it at query time.
  */
 final class Customer_Search {
 	/** The users columns a declaration may name; any other entry is ignored. */

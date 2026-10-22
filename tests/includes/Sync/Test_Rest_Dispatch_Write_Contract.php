@@ -141,9 +141,9 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 
 			return $controllers;
 		};
-		add_filter( 'woocommerce_pos_rest_api_controllers', $inject, 99 );
+		add_filter( 'wcpos_rest_api_controllers', $inject, 99 );
 		parent::rest_api_init();
-		remove_filter( 'woocommerce_pos_rest_api_controllers', $inject, 99 );
+		remove_filter( 'wcpos_rest_api_controllers', $inject, 99 );
 	}
 
 	public function tearDown(): void {
@@ -152,7 +152,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 			$this->registered_shop_coupon = false;
 		}
 		remove_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1 );
-		remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		remove_filter( 'wcpos_restore_stock_on_delete', '__return_true' );
 		update_option( 'woocommerce_manage_stock', $this->previous_manage_stock_option );
 		if ( null === $this->previous_general_settings ) {
 			delete_option( 'woocommerce_pos_settings_general' );
@@ -495,7 +495,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_order_force_delete_filter_overrides_disabled_setting(): void {
-		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		add_filter( 'wcpos_restore_stock_on_delete', '__return_true' );
 		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request( false );
 
 		$response = $this->server->dispatch( $request );

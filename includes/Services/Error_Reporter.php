@@ -207,7 +207,11 @@ class Error_Reporter {
 			 * @param bool $enabled         Computed default.
 			 * @param bool $consent_allowed Raw consent check.
 			 */
-			return $consent_allowed && (bool) apply_filters( 'woocommerce_pos_error_reporting_enabled', $enabled, $consent_allowed );
+			if ( ! $consent_allowed ) {
+				return false;
+			}
+			$filtered = apply_filters( 'wcpos_error_reporting_enabled', $enabled, $consent_allowed );
+			return (bool) apply_filters_deprecated( 'woocommerce_pos_error_reporting_enabled', array( $filtered, $consent_allowed ), '2.0.0', 'wcpos_error_reporting_enabled' );
 		} catch ( Throwable $throwable ) {
 			return false;
 		}

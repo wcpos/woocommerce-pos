@@ -473,14 +473,14 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			$args['store_id'] = array( 999 );
 			return $args;
 		};
-		add_filter( 'woocommerce_pos_closures_list_args', $scope );
+		add_filter( 'wcpos_closures_list_args', $scope );
 		try {
 			$this->assertSame( 404, $this->document( 'closure:' . $row['id'], 'print' )->get_status() );
 			$open = $this->closure_session();
 			$this->assertSame( 404, $this->document( 'xreport:' . $open['id'] )->get_status() );
 			$this->assertSame( 0, ( new Closure_Store() )->get( $row['id'] )['print_count'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_closures_list_args', $scope );
+			remove_filter( 'wcpos_closures_list_args', $scope );
 		}
 	}
 	/** A blind cashier can neither read an X-report nor a written closure. */
@@ -740,7 +740,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 				$stop();
 			};
 		};
-		add_action( 'woocommerce_pos_after_template_render', $stop );
+		add_action( 'wcpos_after_template_render', $stop );
 		add_filter( 'wp_die_handler', $die );
 		$_GET = $params;
 		ob_start();
@@ -760,7 +760,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			}
 			$_GET = $original_get;
 			$wp->query_vars = $original_vars;
-			remove_action( 'woocommerce_pos_after_template_render', $stop );
+			remove_action( 'wcpos_after_template_render', $stop );
 			remove_filter( 'wp_die_handler', $die );
 		}
 		return $page;
@@ -807,7 +807,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			return array( 'id' => 'wp-overnight-invoice' );
 		};
 		add_filter( 'query', $observe );
-		add_filter( 'woocommerce_pos_storefront_receipt_template', $native_template );
+		add_filter( 'wcpos_storefront_receipt_template', $native_template );
 		try {
 			$page = $this->render_receipt_page(
 				0,
@@ -820,7 +820,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			);
 		} finally {
 			remove_filter( 'query', $observe );
-			remove_filter( 'woocommerce_pos_storefront_receipt_template', $native_template );
+			remove_filter( 'wcpos_storefront_receipt_template', $native_template );
 		}
 		$this->assertSame( 500, $page['status'] );
 		$this->assertNotContains( 'START TRANSACTION', $queries );

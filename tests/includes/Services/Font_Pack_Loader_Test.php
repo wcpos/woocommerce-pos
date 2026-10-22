@@ -261,7 +261,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			$sources['broken'] = 'https://cdn.example.invalid/%s/';
 			return $sources;
 		};
-		add_filter( 'woocommerce_pos_font_pack_sources', $broken );
+		add_filter( 'wcpos_font_pack_sources', $broken );
 		$query = array(
 			'hook'   => Font_Pack_Loader::ACTION,
 			'status' => \ActionScheduler_Store::STATUS_PENDING,
@@ -279,7 +279,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			$this->assertCount( 1, as_get_scheduled_actions( $query, 'ids' ) );
 			$this->assertFalse( $this->loader->installed() );
 		} finally {
-			remove_filter( 'woocommerce_pos_font_pack_sources', $broken );
+			remove_filter( 'wcpos_font_pack_sources', $broken );
 			delete_transient( 'wcpos_font_pack_failed_broken' );
 			delete_transient( 'wcpos_font_pack_lock_broken' );
 		}
@@ -417,7 +417,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 	/** Sites can opt out of all packs without writing anything. */
 	public function test_ensure_all_empty_pack_filter_succeeds_without_installing(): void {
 		// Arrange.
-		add_filter( 'woocommerce_pos_font_packs', '__return_empty_array' );
+		add_filter( 'wcpos_font_packs', '__return_empty_array' );
 		try {
 			// Act.
 			$result = $this->loader->ensure_all();
@@ -426,7 +426,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			$this->assertDirectoryDoesNotExist( $this->loader->dir() );
 			$this->assertSame( array(), $this->requests );
 		} finally {
-			remove_filter( 'woocommerce_pos_font_packs', '__return_empty_array' );
+			remove_filter( 'wcpos_font_packs', '__return_empty_array' );
 		}
 	}
 
@@ -483,7 +483,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			$sources['extra'] = 'https://cdn.example.com/packs/extra@%s/';
 			return $sources;
 		};
-		add_filter( 'woocommerce_pos_font_pack_sources', $filter );
+		add_filter( 'wcpos_font_pack_sources', $filter );
 		try {
 			// Act.
 			$result = $this->loader->ensure( 'extra' );
@@ -493,7 +493,7 @@ class Font_Pack_Loader_Test extends \WP_UnitTestCase {
 			$this->assertStringStartsWith( 'https://cdn.example.com/packs/extra@' . Frontend::cdn_ref() . '/', $this->requests[0] );
 			$this->assertFileExists( $this->loader->dir() . '/extra.json' );
 		} finally {
-			remove_filter( 'woocommerce_pos_font_pack_sources', $filter );
+			remove_filter( 'wcpos_font_pack_sources', $filter );
 		}
 	}
 

@@ -97,7 +97,7 @@ trait Session_Expected_Tests {
 			$settings['gateways']['pos_card']['enabled'] = true;
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_payment_gateways_settings', $enable_card );
+		add_filter( 'wcpos_payment_gateways_settings', $enable_card );
 		try {
 			foreach ( array(
 				'pos_cash' => '50',
@@ -156,7 +156,7 @@ trait Session_Expected_Tests {
 			$this->assertSame( 2, $response->get_data()['sales_count'] );
 			$this->assertCount( 4, $response->get_data()['movements'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable_card );
+			remove_filter( 'wcpos_payment_gateways_settings', $enable_card );
 			global $wpdb;
 			$wpdb->query( 'ROLLBACK' );
 			$wpdb->delete( $store->table_name(), array( 'id' => $session['id'] ) );

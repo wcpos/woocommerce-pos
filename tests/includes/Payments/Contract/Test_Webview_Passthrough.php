@@ -37,7 +37,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		};
 		$lock = new Order_Lock();
 		$this->assertTrue( $lock->acquire( $order->get_id() ) );
-		add_filter( 'woocommerce_pos_logging', $log_filter, 10, 2 );
+		add_filter( 'wcpos_logging', $log_filter, 10, 2 );
 		try {
 			// Act: fire the hook directly so WooCommerce cannot swallow an escaped exception.
 			$this->in_pos_request(
@@ -57,7 +57,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			);
 		} finally {
 			$lock->release( $order->get_id() );
-			remove_filter( 'woocommerce_pos_logging', $log_filter, 10 );
+			remove_filter( 'wcpos_logging', $log_filter, 10 );
 			do_action( 'woocommerce_before_pay_action', null );
 		}
 	}
@@ -87,7 +87,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		};
 		$lock = new Order_Lock();
 		$this->assertTrue( $lock->acquire( $order->get_id() ) );
-		add_filter( 'woocommerce_pos_logging', $log_filter, 10, 2 );
+		add_filter( 'wcpos_logging', $log_filter, 10, 2 );
 		try {
 			// Act: fire the hook directly so WooCommerce cannot swallow an escaped exception.
 			$this->in_pos_request(
@@ -98,7 +98,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			);
 		} finally {
 			$lock->release( $order->get_id() );
-			remove_filter( 'woocommerce_pos_logging', $log_filter, 10 );
+			remove_filter( 'wcpos_logging', $log_filter, 10 );
 			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 		}
 
@@ -137,7 +137,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		};
 		$break    = static fn( $sql ) => false !== strpos( $sql, 'AS meta_id, meta_value FROM' ) && false !== strpos( $sql, Ledger::META_KEY ) ? 'SELECT missing_column FROM wcpos_missing_table' : $sql;
 		$suppress = $wpdb->suppress_errors( true );
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 		add_filter( 'query', $break );
 		try {
 			// Act.
@@ -150,7 +150,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( 'query', $break );
 			$wpdb->suppress_errors( $suppress );
-			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			remove_filter( 'wcpos_logging', $log, 10 );
 			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 		}
 
@@ -188,7 +188,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		};
 		$lock = new Order_Lock();
 		$this->assertTrue( $lock->acquire( $order->get_id() ) );
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 		add_action( 'wp_insert_comment', $note, 10, 2 );
 		try {
 			// Act.
@@ -201,7 +201,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_action( 'wp_insert_comment', $note, 10 );
 			$lock->release( $order->get_id() );
-			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			remove_filter( 'wcpos_logging', $log, 10 );
 			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 		}
 
@@ -239,7 +239,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			}
 			return $total;
 		};
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 		add_filter( 'woocommerce_order_get_total', $crash );
 		try {
 			// Act.
@@ -251,7 +251,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			);
 		} finally {
 			remove_filter( 'woocommerce_order_get_total', $crash );
-			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			remove_filter( 'wcpos_logging', $log, 10 );
 			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 		}
 
@@ -291,7 +291,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			}
 			return $total;
 		};
-		add_filter( 'woocommerce_pos_logging', $log, 10, 2 );
+		add_filter( 'wcpos_logging', $log, 10, 2 );
 		add_filter( 'woocommerce_order_get_total', $crash, 10, 2 );
 		try {
 			// Act.
@@ -303,7 +303,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			);
 		} finally {
 			remove_filter( 'woocommerce_order_get_total', $crash, 10 );
-			remove_filter( 'woocommerce_pos_logging', $log, 10 );
+			remove_filter( 'wcpos_logging', $log, 10 );
 			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 		}
 

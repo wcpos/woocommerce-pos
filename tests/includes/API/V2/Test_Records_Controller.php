@@ -120,13 +120,13 @@ class Test_Records_Controller extends WCPOS_REST_Unit_Test_Case {
 			$args['store_id'] = array( 12 );
 			return $args;
 		};
-		add_filter( 'woocommerce_pos_records_list_args', $filter, 10, 2 );
+		add_filter( 'wcpos_records_list_args', $filter, 10, 2 );
 		try {
 			$response = $this->records( array( 'store_id' => 13 ) );
 			$this->assertSame( array( $one ), $response->get_data() );
 			$this->assertSame( '1', $response->get_headers()['X-WP-Total'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_records_list_args', $filter );
+			remove_filter( 'wcpos_records_list_args', $filter );
 		}
 	}
 

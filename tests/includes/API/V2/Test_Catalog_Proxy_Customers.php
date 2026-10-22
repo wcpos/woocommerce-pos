@@ -659,7 +659,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			$search['users'] = 'user_email';
 			return $search;
 		};
-		add_filter( 'woocommerce_pos_search_fields', $filter );
+		add_filter( 'wcpos_search_fields', $filter );
 
 		try {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
@@ -669,7 +669,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_search_fields', $filter );
+			remove_filter( 'wcpos_search_fields', $filter );
 		}
 	}
 
@@ -700,7 +700,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			}
 			return $search;
 		};
-		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		add_filter( 'wcpos_search_fields', $filter, 10, 2 );
 
 		try {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
@@ -715,7 +715,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+			remove_filter( 'wcpos_search_fields', $filter, 10 );
 		}
 	}
 
@@ -730,7 +730,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			}
 			return $search;
 		};
-		add_filter( 'woocommerce_pos_search_fields', $filter, 10, 2 );
+		add_filter( 'wcpos_search_fields', $filter, 10, 2 );
 
 		try {
 			$request = $this->wp_rest_get_request( '/wcpos/v2/customers' );
@@ -745,7 +745,7 @@ class Test_Catalog_Proxy_Customers extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( array( $customer->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
 		} finally {
-			remove_filter( 'woocommerce_pos_search_fields', $filter, 10 );
+			remove_filter( 'wcpos_search_fields', $filter, 10 );
 		}
 	}
 

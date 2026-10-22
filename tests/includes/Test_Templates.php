@@ -203,8 +203,8 @@ class Test_Templates extends WP_UnitTestCase {
 		// The default-term latch survives between test classes while terms do
 		// not; clearing it lets a later class reseed the terms it relies on.
 		delete_option( Templates::DEFAULT_TERMS_OPTION );
-		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled' );
-		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_document' );
+		remove_all_filters( 'wcpos_wp_overnight_pdf_templates_enabled' );
+		remove_all_filters( 'wcpos_wp_overnight_pdf_document' );
 		remove_filter( 'stylesheet_directory', $this->stylesheet_directory_filter );
 	}
 
@@ -852,7 +852,7 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test WP Overnight templates are not listed when the integration is unavailable.
 	 */
 	public function test_wp_overnight_templates_not_detected_when_integration_unavailable(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_false' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_false' );
 
 		$templates = Templates::detect_filesystem_templates( 'receipt' );
 		$ids       = array_column( $templates, 'id' );
@@ -865,7 +865,7 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test WP Overnight invoice and packing slip templates are listed when the integration is available.
 	 */
 	public function test_wp_overnight_templates_detected_when_integration_available(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$templates = Templates::detect_filesystem_templates( 'receipt' );
 		$by_id     = array_column( $templates, null, 'id' );
@@ -889,9 +889,9 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test the WP Overnight invoice template delegates rendering to the document API.
 	 */
 	public function test_wp_overnight_invoice_template_renders_document_html(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 		add_filter(
-			'woocommerce_pos_wp_overnight_pdf_document',
+			'wcpos_wp_overnight_pdf_document',
 			static function ( $document, string $document_type, $order ) {
 				$GLOBALS['woocommerce_pos_wcpdf_get_document_calls'][] = array(
 					'document_type' => $document_type,

@@ -19,12 +19,12 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 			$settings['barcode_field'] = '_rank_barcode';
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_general_settings', $this->barcode_settings );
+		add_filter( 'wcpos_general_settings', $this->barcode_settings );
 		parent::setUp();
 	}
 
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_general_settings', $this->barcode_settings );
+		remove_filter( 'wcpos_general_settings', $this->barcode_settings );
 		parent::tearDown();
 		$this->uninstall_sync_read_lane();
 		delete_option( 'woocommerce_pos_settings_general' );

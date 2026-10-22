@@ -248,7 +248,8 @@ if ( ! \function_exists( 'wcpos_is_pro_active' ) ) {
 	 * Determine whether WCPOS Pro is active.
 	 */
 	function wcpos_is_pro_active(): bool { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
-		return (bool) apply_filters( 'woocommerce_pos_is_pro_active', \defined( 'WCPOS\WooCommercePOSPro\VERSION' ) );
+		$filtered = apply_filters( 'wcpos_is_pro_active', \defined( 'WCPOS\WooCommercePOSPro\VERSION' ) );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_is_pro_active', array( $filtered ), '2.0.0', 'wcpos_is_pro_active' );
 	}
 }
 
@@ -432,7 +433,7 @@ if ( ! \function_exists( 'wcpos_locate_template' ) ) {
 		/**
 		 * Filters the template path.
 		 *
-		 * @hook woocommerce_pos_locate_template
+		 * @hook wcpos_locate_template
 		 *
 		 * @since 1.0.0
 		 *
@@ -441,7 +442,8 @@ if ( ! \function_exists( 'wcpos_locate_template' ) ) {
 		 *
 		 * @return string $path The full path to the template.
 		 */
-		$filtered_path = apply_filters( 'woocommerce_pos_locate_template', $path, $template ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- legacy hook name.
+		$filtered_path = apply_filters( 'wcpos_locate_template', $path, $template );
+		$filtered_path = apply_filters_deprecated( 'woocommerce_pos_locate_template', array( $filtered_path, $template ), '2.0.0', 'wcpos_locate_template' );
 
 		// Check if the filtered template file exists.
 		if ( file_exists( $filtered_path ) ) {
@@ -574,7 +576,7 @@ if ( ! \function_exists( 'wcpos_get_woocommerce_template' ) ) {
 		 * @param string $template_name Template name.
 		 * @param array  $args          Arguments.
 		 */
-		$template = apply_filters( 'wcpos_locate_woocommerce_template', $template, $template_name, $args ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- uses wcpos_ prefix.
+		$template = apply_filters( 'wcpos_locate_woocommerce_template', $template, $template_name, $args );
 
 		if ( ! file_exists( $template ) ) {
 			Logger::log( \sprintf( 'WooCommerce default template not found: %s', $template ) );

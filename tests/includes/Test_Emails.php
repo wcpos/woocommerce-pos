@@ -921,7 +921,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$order  = $this->create_pos_order();
 
 		add_filter(
-			'woocommerce_pos_admin_email_enabled',
+			'wcpos_admin_email_enabled',
 			function ( $enabled, $email_id, $order, $email_class ) {
 				return false;
 			},
@@ -934,7 +934,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Admin email should be disabled via filter override' );
 
-		remove_all_filters( 'woocommerce_pos_admin_email_enabled' );
+		remove_all_filters( 'wcpos_admin_email_enabled' );
 	}
 
 	/**
@@ -953,7 +953,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$order  = $this->create_pos_order();
 
 		add_filter(
-			'woocommerce_pos_customer_email_enabled',
+			'wcpos_customer_email_enabled',
 			function ( $enabled, $email_id, $order, $email_class ) {
 				return false;
 			},
@@ -966,15 +966,15 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Customer email should be disabled via filter override' );
 
-		remove_all_filters( 'woocommerce_pos_customer_email_enabled' );
+		remove_all_filters( 'wcpos_customer_email_enabled' );
 	}
 
 	/**
-	 * Test that email IDs can be filtered via woocommerce_pos_admin_emails filter.
+	 * Test that email IDs can be filtered via wcpos_admin_emails filter.
 	 */
 	public function test_admin_email_ids_are_filterable(): void {
 		add_filter(
-			'woocommerce_pos_admin_emails',
+			'wcpos_admin_emails',
 			function ( $emails ) {
 				$emails[] = 'custom_admin_email';
 				return $emails;
@@ -988,15 +988,15 @@ class Test_Emails extends WC_Unit_Test_Case {
 			'Custom admin email filter should be registered'
 		);
 
-		remove_all_filters( 'woocommerce_pos_admin_emails' );
+		remove_all_filters( 'wcpos_admin_emails' );
 	}
 
 	/**
-	 * Test that email IDs can be filtered via woocommerce_pos_customer_emails filter.
+	 * Test that email IDs can be filtered via wcpos_customer_emails filter.
 	 */
 	public function test_customer_email_ids_are_filterable(): void {
 		add_filter(
-			'woocommerce_pos_customer_emails',
+			'wcpos_customer_emails',
 			function ( $emails ) {
 				$emails[] = 'custom_customer_email';
 				return $emails;
@@ -1010,7 +1010,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			'Custom customer email filter should be registered'
 		);
 
-		remove_all_filters( 'woocommerce_pos_customer_emails' );
+		remove_all_filters( 'wcpos_customer_emails' );
 	}
 
 	/**

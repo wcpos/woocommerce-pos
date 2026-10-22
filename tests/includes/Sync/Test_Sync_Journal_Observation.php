@@ -71,7 +71,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		$cursor  = $this->journal->head_sequence();
 
-		do_action( 'woocommerce_pos_invalidate', 'product', $product->get_id() );
+		do_action( 'wcpos_invalidate', 'product', $product->get_id() );
 
 		$product_row = $this->latest_row( 'product', $product->get_id(), $cursor );
 		$this->assertSame( 'product', $product_row['object_type'] );
@@ -80,7 +80,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 
 		$order   = wc_create_order();
 		$cursor  = $this->journal->head_sequence();
-		do_action( 'woocommerce_pos_invalidate', 'order', $order->get_id() );
+		do_action( 'wcpos_invalidate', 'order', $order->get_id() );
 		$this->assert_order_row( $this->latest_row( 'order', $order->get_id(), $cursor ), 'invalidate', false );
 	}
 
@@ -94,7 +94,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		);
 		$cursor = $this->journal->head_sequence();
 
-		do_action( 'woocommerce_pos_invalidate', 'customer', $user_id );
+		do_action( 'wcpos_invalidate', 'customer', $user_id );
 
 		$row = $this->latest_row( 'customer', $user_id, $cursor );
 		$this->assertSame( 'invalidate', $row['origin'] );
@@ -114,7 +114,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 		$variation->save();
 		$cursor = $this->journal->head_sequence();
 
-		do_action( 'woocommerce_pos_invalidate', 'variation', $variation->get_id() );
+		do_action( 'wcpos_invalidate', 'variation', $variation->get_id() );
 
 		$variation_row = $this->latest_row( 'variation', $variation->get_id(), $cursor );
 		$this->assertSame( 'invalidate', $variation_row['origin'] );
@@ -128,8 +128,8 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 
 		// A public action handler must never fatal the calling plugin's request:
 		// one-arg, wrong-typed, and unknown-type calls are logged and ignored.
-		do_action( 'woocommerce_pos_invalidate', 'product' );
-		do_action( 'woocommerce_pos_invalidate', array( 'product' ), 'not-an-id' );
+		do_action( 'wcpos_invalidate', 'product' );
+		do_action( 'wcpos_invalidate', array( 'product' ), 'not-an-id' );
 
 		$this->assertSame( array(), $this->journal->page( array(), $cursor, 20 )['rows'] );
 	}
@@ -137,7 +137,7 @@ class Test_Sync_Journal_Observation extends Sync_Store_Test_Case {
 	public function test_public_invalidation_action_ignores_unknown_type(): void {
 		$cursor = $this->journal->head_sequence();
 
-		do_action( 'woocommerce_pos_invalidate', 'unknown_type', 123 );
+		do_action( 'wcpos_invalidate', 'unknown_type', 123 );
 
 		$this->assertSame( array(), $this->journal->page( array(), $cursor, 20 )['rows'] );
 	}

@@ -81,13 +81,13 @@ class Test_Digest_Registry extends WP_UnitTestCase {
 		$method = new \ReflectionMethod( Integrity_Digest::class, 'upsert_pending' );
 		$method->setAccessible( true );
 		Logger::reset_dedup_state();
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 
 		// Act.
 		try {
 			$method->invoke( new Integrity_Digest(), 'unknown-queued-type', 42 );
 		} finally {
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			Logger::reset_dedup_state();
 		}
 

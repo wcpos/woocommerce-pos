@@ -69,7 +69,7 @@ class Test_Owned_Table extends \WP_UnitTestCase {
 		};
 		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
 		add_filter( 'query', $filter );
-		add_filter( 'woocommerce_pos_logging', $capture, 10, 2 );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		$suppress = $wpdb->suppress_errors();
 		try {
 			$wpdb->prefix = $real_prefix . 'site3';
@@ -79,7 +79,7 @@ class Test_Owned_Table extends \WP_UnitTestCase {
 		} finally {
 			$wpdb->prefix = $real_prefix;
 			$wpdb->suppress_errors( $suppress );
-			remove_filter( 'woocommerce_pos_logging', $capture, 10 );
+			remove_filter( 'wcpos_logging', $capture, 10 );
 			remove_filter( 'query', $filter );
 		}
 		$leaked = Health::table_exists( $alt_table );

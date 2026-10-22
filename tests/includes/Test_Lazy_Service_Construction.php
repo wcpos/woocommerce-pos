@@ -51,13 +51,13 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 	public function test_a_storefront_request_constructs_only_the_always_group(): void {
 		$this->force_lane( Request_Lane::STOREFRONT );
 		$emails_before = $this->callback_count( 'woocommerce_email_recipient_new_order' );
-		$ready_before  = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before  = did_action( 'wcpos_order_services_ready' );
 
 		$this->run_init();
 
 		$this->assertSame( array( 'always' ), Service_Groups::constructed() );
 		$this->assertSame( $emails_before, $this->callback_count( 'woocommerce_email_recipient_new_order' ), 'Emails is an order-event service; a shop page never constructs it.' );
-		$this->assertSame( $ready_before, did_action( 'woocommerce_pos_order_services_ready' ) );
+		$this->assertSame( $ready_before, did_action( 'wcpos_order_services_ready' ) );
 		// The always-on group is really there: the read-side order filters and
 		// the reserved-stock filter WooCommerce consults before any order exists.
 		$this->assertGreaterThan( 0, $this->callback_count( 'wc_order_statuses' ) );
@@ -69,7 +69,7 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 		$this->force_lane( Request_Lane::STOREFRONT );
 		$this->run_init();
 		$emails_before = $this->callback_count( 'woocommerce_email_recipient_new_order' );
-		$ready_before  = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before  = did_action( 'wcpos_order_services_ready' );
 
 		// A webhook, a cron spawned from a page view, a plugin creating an order
 		// on template_redirect: none of them wait for the lane classifier.
@@ -77,13 +77,13 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 
 		$this->assertContains( 'order', Service_Groups::constructed(), 'The first order write constructs the order-event services.' );
 		$this->assertSame( $emails_before + 1, $this->callback_count( 'woocommerce_email_recipient_new_order' ) );
-		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ), 'The ready action fires exactly once.' );
+		$this->assertSame( $ready_before + 1, did_action( 'wcpos_order_services_ready' ), 'The ready action fires exactly once.' );
 		$this->assertTrue( post_type_exists( 'wcpos_print_job' ), 'Print_Job_Service registered its post type although init had already run.' );
 
 		// Idempotent: further saves construct nothing again.
 		$order->set_customer_note( 'again' );
 		$order->save();
-		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ) );
+		$this->assertSame( $ready_before + 1, did_action( 'wcpos_order_services_ready' ) );
 		$this->assertSame( $emails_before + 1, $this->callback_count( 'woocommerce_email_recipient_new_order' ) );
 	}
 
@@ -103,13 +103,13 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 		$this->force_lane( Request_Lane::STOREFRONT );
 		$this->run_init();
 		$this->assertSame( array( 'always' ), Service_Groups::constructed(), $label );
-		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before = did_action( 'wcpos_order_services_ready' );
 
 		$write( $order );
 
 		$this->assertContains( 'order', Service_Groups::constructed(), $label );
-		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ), $label );
-		$this->assertGreaterThan( 0, $this->callback_count( 'woocommerce_pos_print_job_created' ), $label . ': the cloud-print relay observer is present.' );
+		$this->assertSame( $ready_before + 1, did_action( 'wcpos_order_services_ready' ), $label );
+		$this->assertGreaterThan( 0, $this->callback_count( 'wcpos_print_job_created' ), $label . ': the cloud-print relay observer is present.' );
 	}
 
 	public function order_writes_without_a_create(): array {
@@ -146,12 +146,12 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 	 */
 	public function test_non_storefront_lanes_construct_every_group_eagerly( string $lane ): void {
 		$this->force_lane( $lane );
-		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before = did_action( 'wcpos_order_services_ready' );
 
 		$this->run_init();
 
 		$this->assertSame( array( 'always', 'order', 'pos' ), Service_Groups::constructed(), $lane );
-		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ), $lane );
+		$this->assertSame( $ready_before + 1, did_action( 'wcpos_order_services_ready' ), $lane );
 	}
 
 	public function eager_lanes(): array {
@@ -202,18 +202,18 @@ class Test_Lazy_Service_Construction extends WC_Unit_Test_Case {
 	public function test_ensure_order_services_is_idempotent_when_called_directly(): void {
 		$this->force_lane( Request_Lane::STOREFRONT );
 		$this->run_init();
-		$ready_before = did_action( 'woocommerce_pos_order_services_ready' );
+		$ready_before = did_action( 'wcpos_order_services_ready' );
 
 		Init::ensure_order_services();
 		Init::ensure_order_services();
 
-		$this->assertSame( $ready_before + 1, did_action( 'woocommerce_pos_order_services_ready' ) );
+		$this->assertSame( $ready_before + 1, did_action( 'wcpos_order_services_ready' ) );
 	}
 
 	private function force_lane( string $lane ): void {
-		remove_all_filters( 'woocommerce_pos_request_lane' );
+		remove_all_filters( 'wcpos_request_lane' );
 		add_filter(
-			'woocommerce_pos_request_lane',
+			'wcpos_request_lane',
 			static function () use ( $lane ): string {
 				return $lane;
 			}

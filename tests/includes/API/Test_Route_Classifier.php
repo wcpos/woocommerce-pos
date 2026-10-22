@@ -89,9 +89,9 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$controllers['auth'] = Route_Classifier_Legacy_Auth_Controller::class;
 			return $controllers;
 		};
-		add_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		add_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		$api = new Route_Classifier_Test_API();
-		remove_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		remove_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		wp_set_current_user( 0 );
 
 		$result = $api->rest_pre_dispatch( null, $this->server, $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
@@ -107,9 +107,9 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$controllers['auth'] = Route_Classifier_Metadata_Auth_Controller::class;
 			return $controllers;
 		};
-		add_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		add_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		$api = new Route_Classifier_Test_API();
-		remove_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		remove_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		wp_set_current_user( 0 );
 
 		$result = $api->rest_pre_dispatch( null, $this->server, $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );

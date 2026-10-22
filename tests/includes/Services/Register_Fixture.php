@@ -23,7 +23,7 @@ trait Register_Fixture {
 		if ( null === $this->register_repository ) {
 			$repository = new Array_Register_Repository();
 			add_filter(
-				'woocommerce_pos_register_repository',
+				'wcpos_register_repository',
 				static function () use ( $repository ) {
 					return $repository;
 				}

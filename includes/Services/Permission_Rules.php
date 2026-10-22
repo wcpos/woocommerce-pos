@@ -323,9 +323,10 @@ class Permission_Rules {
 		 * @param {array} $capabilities
 		 * @returns {array} $capabilities
 		 * @since 1.10.10
-		 * @hook woocommerce_pos_protected_account_capabilities
+		 * @hook wcpos_protected_account_capabilities
 		 */
-		$caps = apply_filters( 'woocommerce_pos_protected_account_capabilities', array( 'manage_options', 'manage_woocommerce', 'edit_users', 'edit_posts' ) );
+		$caps = apply_filters( 'wcpos_protected_account_capabilities', array( 'manage_options', 'manage_woocommerce', 'edit_users', 'edit_posts' ) );
+		$caps = apply_filters_deprecated( 'woocommerce_pos_protected_account_capabilities', array( $caps ), '2.0.0', 'wcpos_protected_account_capabilities' );
 
 		return array_values( array_unique( array_filter( array_map( 'strval', (array) $caps ) ) ) );
 	}

@@ -32,7 +32,7 @@ class Test_Products extends WP_UnitTestCase {
 
 	public function test_pos_only_products(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['pos_only_products'] = true;
 
@@ -95,7 +95,7 @@ class Test_Products extends WP_UnitTestCase {
 
 	public function test_pos_only_variations(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['pos_only_products'] = true;
 
@@ -297,7 +297,7 @@ class Test_Products extends WP_UnitTestCase {
 	 */
 	private function configure_storefront_visibility( array $product_ids, array $variation_ids = array() ): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['pos_only_products'] = true;
 

@@ -56,7 +56,7 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 				return 'de_DE';
 			}
 		);
-		add_filter( 'woocommerce_pos_i18n_maintain', '__return_false' );
+		add_filter( 'wcpos_i18n_maintain', '__return_false' );
 
 		$this->fetched_urls = array();
 		$this->http_spy     = function ( $pre, $args, $url ) {
@@ -78,7 +78,7 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 	public function tearDown(): void {
 		remove_filter( 'query', $this->query_spy );
 		remove_filter( 'pre_http_request', $this->http_spy, 10 );
-		remove_all_filters( 'woocommerce_pos_i18n_maintain' );
+		remove_all_filters( 'wcpos_i18n_maintain' );
 		remove_all_filters( 'locale' );
 		$this->remove_dir( $this->temp_lang_dir );
 		$this->remove_dir( $this->fallback_dir() );
@@ -207,8 +207,8 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 	}
 
 	public function test_maintenance_request_still_downloads_when_the_file_is_missing(): void {
-		remove_all_filters( 'woocommerce_pos_i18n_maintain' );
-		add_filter( 'woocommerce_pos_i18n_maintain', '__return_true' );
+		remove_all_filters( 'wcpos_i18n_maintain' );
+		add_filter( 'wcpos_i18n_maintain', '__return_true' );
 
 		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
@@ -219,20 +219,20 @@ class Test_I18n_Storefront extends WC_Unit_Test_Case {
 	 * @dataProvider maintenance_lanes
 	 */
 	public function test_request_lanes_are_classified( string $label, callable $arrange, bool $expected ): void {
-		remove_all_filters( 'woocommerce_pos_i18n_maintain' );
+		remove_all_filters( 'wcpos_i18n_maintain' );
 		$previous_uri = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- stored only to restore the test environment's value.
 		$previous_get = $_GET;
 		set_current_screen( 'front' );
 
 		$restore = $arrange();
 		// The suite pins the REST lane (tests/bootstrap.php); this case tests detection.
-		remove_filter( 'woocommerce_pos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
+		remove_filter( 'wcpos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
 		Request_Lane::reset();
 		$actual = i18n::is_maintenance_request();
 		if ( \is_callable( $restore ) ) {
 			$restore();
 		}
-		add_filter( 'woocommerce_pos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
+		add_filter( 'wcpos_request_lane', array( \WCPOS\WooCommercePOS\Tests\Bootstrap::class, 'default_request_lane' ) );
 		Request_Lane::reset();
 
 		$_GET = $previous_get; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- restoring the test environment.

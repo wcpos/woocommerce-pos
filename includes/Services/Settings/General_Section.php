@@ -60,7 +60,7 @@ class General_Section extends Abstract_Section {
 	/**
 	 * The PERSISTED tracking consent, bypassing the read view.
 	 *
-	 * `read()` ends by applying `woocommerce_pos_general_settings`, so the
+	 * `read()` ends by applying `wcpos_general_settings`, so the
 	 * ordinary accessor lets any plugin filtering that hook manufacture a
 	 * consent the merchant never gave. Telemetry send-gates must ask the
 	 * database instead. Still runs `migrate()`, so a merchant whose choice

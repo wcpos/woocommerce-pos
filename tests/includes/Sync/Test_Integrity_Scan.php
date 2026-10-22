@@ -29,7 +29,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	 * Enable sync routes and isolate visibility/cron state.
 	 */
 	public function setUp(): void {
-		add_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+		add_filter( 'wcpos_integrity_scan_cache_ttl', '__return_zero' );
 		parent::setUp();
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
 		wp_clear_scheduled_hook( Integrity_Digest::REBUILD_HOOK );
@@ -39,7 +39,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 	 * Remove non-transactional state.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+		remove_filter( 'wcpos_integrity_scan_cache_ttl', '__return_zero' );
 		delete_option( Pos_Visibility::OPTION );
 		delete_option( 'woocommerce_pos_settings_general' );
 		delete_transient( Integrity_Digest::REBUILD_LOCK );
@@ -120,7 +120,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		$id      = $product->get_id();
 		$this->seed_digests( 'products', $id );
-		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+		remove_filter( 'wcpos_integrity_scan_cache_ttl', '__return_zero' );
 
 		$digest_queries = 0;
 		$count_digests  = $this->digest_query_counter( $digest_queries );
@@ -131,7 +131,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 			$this->scan_id( 'products', $id );
 		} finally {
 			remove_filter( 'query', $count_digests );
-			add_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+			add_filter( 'wcpos_integrity_scan_cache_ttl', '__return_zero' );
 			$this->delete_scan_cache_for_id( 'products', $id );
 		}
 
@@ -146,7 +146,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		$id      = $product->get_id();
 		$this->seed_digests( 'products', $id );
-		remove_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+		remove_filter( 'wcpos_integrity_scan_cache_ttl', '__return_zero' );
 
 		try {
 			$before = $this->scan_id( 'products', $id );
@@ -156,7 +156,7 @@ class Test_Integrity_Scan extends Sync_REST_Store_Test_Case {
 			$this->delete_scan_cache_for_id( 'products', $id );
 			$after = $this->scan_id( 'products', $id );
 		} finally {
-			add_filter( 'woocommerce_pos_integrity_scan_cache_ttl', '__return_zero' );
+			add_filter( 'wcpos_integrity_scan_cache_ttl', '__return_zero' );
 			$this->delete_scan_cache_for_id( 'products', $id );
 		}
 

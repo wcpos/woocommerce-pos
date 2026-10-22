@@ -446,6 +446,8 @@ class Consent {
 
 		// Append the WCPOS request flag so the bundle's REST calls register the
 		// now-gated consent routes (see register_routes / Init::init_rest_api).
+		$copy = apply_filters( 'wcpos_consent_copy', array() );
+		$copy = apply_filters_deprecated( 'woocommerce_pos_consent_copy', array( $copy ), '2.0.0', 'wcpos_consent_copy' );
 		$config = array(
 			'restUrl'     => esc_url_raw( add_query_arg( 'wcpos', '1', rest_url( SHORT_NAME . '/v1/consent' ) ) ),
 			'dismissUrl'  => esc_url_raw( add_query_arg( 'wcpos', '1', rest_url( SHORT_NAME . '/v1/consent/dismiss' ) ) ),
@@ -466,7 +468,7 @@ class Consent {
 			 *
 			 * @param array $copy Copy overrides, default empty.
 			 */
-			'copy'        => (object) apply_filters( 'woocommerce_pos_consent_copy', array() ),
+			'copy'        => (object) $copy,
 		);
 
 		return sprintf(

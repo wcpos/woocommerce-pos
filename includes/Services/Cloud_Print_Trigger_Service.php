@@ -292,7 +292,8 @@ class Cloud_Print_Trigger_Service {
 		 * @param array     $assignments Global assignments.
 		 * @param \WC_Order $order       The order being processed.
 		 */
-		$assignments = apply_filters( 'woocommerce_pos_cloud_print_assignments', $assignments, $order );
+		$assignments = apply_filters( 'wcpos_cloud_print_assignments', $assignments, $order );
+		$assignments = apply_filters_deprecated( 'woocommerce_pos_cloud_print_assignments', array( $assignments, $order ), '2.0.0', 'wcpos_cloud_print_assignments' );
 		if ( ! \is_array( $assignments ) ) {
 			$assignments = array();
 		}
@@ -324,7 +325,7 @@ class Cloud_Print_Trigger_Service {
 			}
 			try {
 				// Not a duplicate of the Settings Section's clamp: this one guards
-				// the output of the woocommerce_pos_cloud_print_assignments filter,
+				// the output of the wcpos_cloud_print_assignments filter,
 				// which Pro substitutes rows into (Cloud_Print_Per_Outlet). Rows
 				// that arrive through the filter never passed the section's
 				// sanitizer, so an extension can hand us copies: 999. Keep it.

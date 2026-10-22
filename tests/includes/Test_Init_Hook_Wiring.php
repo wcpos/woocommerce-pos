@@ -81,11 +81,11 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'woocommerce_new_order',
 		'woocommerce_new_product',
 		'woocommerce_new_product_variation',
-		'woocommerce_pos_invalidate',
-		'woocommerce_pos_sync_order_pull_payloads',
-		'woocommerce_pos_sync_proxy_response',
-		'woocommerce_pos_sync_serialized_order',
-		'woocommerce_pos_sync_serialized_product',
+		'wcpos_invalidate',
+		'wcpos_sync_order_pull_payloads',
+		'wcpos_sync_proxy_response',
+		'wcpos_sync_serialized_order',
+		'wcpos_sync_serialized_product',
 		'woocommerce_tax_rate_added',
 		'woocommerce_tax_rate_deleted',
 		'woocommerce_tax_rate_updated',
@@ -269,7 +269,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'woocommerce_before_product_object_save'                => array( 10 ),
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
 			'woocommerce_duplicate_product_exclude_meta'            => array( 10 ),
-			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
+			'wcpos_rest_api_controllers'                  => array( 10 ),
 			'woocommerce_product_duplicate_before_save'             => array( 10 ),
 			'woocommerce_untrash_order'                             => array( 10 ),
 			'woocommerce_update_coupon'                             => array( 10 ),
@@ -373,7 +373,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			function (): array {
 				return array(
 					'product' => $this->callback_labels( Augmentation_Pipeline::SERIALIZED_FILTER, 5 ),
-					'order'   => $this->callback_labels( 'woocommerce_pos_sync_serialized_order', 5 ),
+					'order'   => $this->callback_labels( 'wcpos_sync_serialized_order', 5 ),
 				);
 			}
 		);
@@ -554,7 +554,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'pre_option_' . Sync_Api::SCHEMA_OPTION,
 			function () use ( &$reads ) {
 				++$reads;
-				$this->assertSame( 10, has_filter( 'woocommerce_pos_rest_api_controllers', array( Sync_Api::class, 'register_controllers' ) ) );
+				$this->assertSame( 10, has_filter( 'wcpos_rest_api_controllers', array( Sync_Api::class, 'register_controllers' ) ) );
 				$this->assertSame( 10, has_filter( 'wcpos_manifest_pre_latch_probe', '__return_null' ) );
 				$this->assertFalse( has_filter( 'init' ) );
 				$this->assertFalse( has_filter( 'determine_current_user' ) );
@@ -599,7 +599,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		$this->assertSame( 1, $reads );
 		$this->assertSame( 1, $init->declarations );
 		$this->assertSame( 10, has_filter( 'init', array( $init, 'init' ) ) );
-		$this->assertFalse( has_filter( 'woocommerce_pos_sync_serialized_order' ) );
+		$this->assertFalse( has_filter( 'wcpos_sync_serialized_order' ) );
 	}
 
 	/**
@@ -612,7 +612,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 				$this->assertFalse( has_filter( 'rest_post_dispatch' ) );
 
 				// Act.
-				$controllers = apply_filters( 'woocommerce_pos_rest_api_controllers', array() );
+				$controllers = apply_filters( 'wcpos_rest_api_controllers', array() );
 
 				// Assert.
 				$this->assertSame( Write_Controller::class, $controllers['sync-write'] );

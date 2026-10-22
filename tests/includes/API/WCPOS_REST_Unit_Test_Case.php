@@ -303,7 +303,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	 */
 	protected function setup_decimal_quantity_tests(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['decimal_qty'] = true;
 				return $settings;

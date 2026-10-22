@@ -40,12 +40,12 @@ final class Payments_Sweeper {
 
 	/** Poll oldest-modified in-progress orders within this run's batch budget. */
 	public function run(): void {
-		$threshold = max( 0, (int) apply_filters( 'wcpos_payments_sweep_threshold', 5 * MINUTE_IN_SECONDS ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+		$threshold = max( 0, (int) apply_filters( 'wcpos_payments_sweep_threshold', 5 * MINUTE_IN_SECONDS ) );
 		// Selected by the live-leg index, not by order status: a live leg can stand on an order
 		// whose status moved on (completed by captured tenders, or by an older rule under which
 		// an authorization counted), and it still has to be captured or voided.
 		$order_ids = Payment_Index::order_ids_with_live_legs(
-			max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) ) // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract filter.
+			max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) )
 		);
 		foreach ( $order_ids as $order_id ) {
 			// A busy order is left for the next run; the existing lock owns contention policy.

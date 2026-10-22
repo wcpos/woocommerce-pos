@@ -98,10 +98,11 @@ class Storefront_Receipts {
 		 *
 		 * @since 1.9.11
 		 *
-		 * @hook woocommerce_pos_storefront_receipt_my_account_button
+		 * @hook wcpos_storefront_receipt_my_account_button
 		 */
 		$default_enabled = wp_validate_boolean( wcpos_get_settings( 'general', 'storefront_receipt_enabled' ) );
-		$enabled         = (bool) apply_filters( 'woocommerce_pos_storefront_receipt_my_account_button', $default_enabled, $order );
+		$enabled = apply_filters( 'wcpos_storefront_receipt_my_account_button', $default_enabled, $order );
+		$enabled = (bool) apply_filters_deprecated( 'woocommerce_pos_storefront_receipt_my_account_button', array( $enabled, $order ), '2.0.0', 'wcpos_storefront_receipt_my_account_button' );
 		if ( ! $enabled || null === Templates::get_active_template_id( 'receipt' ) ) {
 			return $actions;
 		}
@@ -116,13 +117,14 @@ class Storefront_Receipts {
 		 *
 		 * @since 1.9.11
 		 *
-		 * @hook woocommerce_pos_storefront_receipt_order_statuses
+		 * @hook wcpos_storefront_receipt_order_statuses
 		 */
-		$statuses = (array) apply_filters(
-			'woocommerce_pos_storefront_receipt_order_statuses',
+		$statuses = apply_filters(
+			'wcpos_storefront_receipt_order_statuses',
 			array( 'processing', 'completed', 'refunded' ),
 			$order
 		);
+		$statuses = (array) apply_filters_deprecated( 'woocommerce_pos_storefront_receipt_order_statuses', array( $statuses, $order ), '2.0.0', 'wcpos_storefront_receipt_order_statuses' );
 		if ( ! $order->has_status( $statuses ) ) {
 			return $actions;
 		}

@@ -48,16 +48,16 @@ class Receipt {
 		$this->order_id = $order_id;
 
 		add_filter( 'show_admin_bar', '__return_false' );
-		add_action( 'woocommerce_pos_receipt_head', array( $this, 'receipt_head' ) );
+		add_action( 'wcpos_receipt_head', array( $this, 'receipt_head' ) );
 	}
 
 	/**
 	 * Adds a script to the head of the WordPress template when the
-	 * 'woocommerce_pos_receipt_head' action is triggered. The script listens for
+	 * 'wcpos_receipt_head' action is triggered. The script listens for
 	 * a 'message' event with a specific action ('wcpos-print-receipt') and, upon
 	 * receiving such an event, triggers the browser's print functionality.
 	 *
-	 * Usage: Call `do_action( 'woocommerce_pos_receipt_head' );` at the desired
+	 * Usage: Call `do_action( 'wcpos_receipt_head' );` at the desired
 	 * location in your template file to include the script.
 	 */
 	public function receipt_head(): void {
@@ -115,9 +115,10 @@ class Receipt {
 			 *
 			 * @since 1.8.0
 			 *
-			 * @hook woocommerce_pos_before_template_render
+			 * @hook wcpos_before_template_render
 			 */
-			do_action( 'woocommerce_pos_before_template_render', $this->order_id, $order );
+			do_action( 'wcpos_before_template_render', $this->order_id, $order );
+			do_action_deprecated( 'woocommerce_pos_before_template_render', array( $this->order_id, $order ), '2.0.0', 'wcpos_before_template_render' );
 
 			/**
 			 * Check for custom template first.
@@ -166,9 +167,10 @@ class Receipt {
 			 *
 			 * @since 1.8.0
 			 *
-			 * @hook woocommerce_pos_after_template_render
+			 * @hook wcpos_after_template_render
 			 */
-			do_action( 'woocommerce_pos_after_template_render', $this->order_id, $order );
+			do_action( 'wcpos_after_template_render', $this->order_id, $order );
+			do_action_deprecated( 'woocommerce_pos_after_template_render', array( $this->order_id, $order ), '2.0.0', 'wcpos_after_template_render' );
 
 			exit;
 		} catch ( Exception $e ) {
@@ -194,7 +196,7 @@ class Receipt {
 		 * Filters the receipt template used for storefront PDF downloads.
 		 *
 		 * Receives the same template array resolved for the HTML receipt surface
-		 * (including the woocommerce_pos_active_receipt_template filter and the
+		 * (including the wcpos_active_receipt_template filter and the
 		 * ?template= query param), so both surfaces stay in sync by default.
 		 *
 		 * @param null|array        $template Resolved template data or null.
@@ -204,9 +206,10 @@ class Receipt {
 		 *
 		 * @since 1.9.11
 		 *
-		 * @hook woocommerce_pos_storefront_receipt_template
+		 * @hook wcpos_storefront_receipt_template
 		 */
-		$template = apply_filters( 'woocommerce_pos_storefront_receipt_template', $this->get_custom_template( ! empty( $receipt_data['fiscal']['is_closure_document'] ) ? 'closure' : 'receipt' ), $order );
+		$template = apply_filters( 'wcpos_storefront_receipt_template', $this->get_custom_template( ! empty( $receipt_data['fiscal']['is_closure_document'] ) ? 'closure' : 'receipt' ), $order );
+		$template = apply_filters_deprecated( 'woocommerce_pos_storefront_receipt_template', array( $template, $order ), '2.0.0', 'wcpos_storefront_receipt_template' );
 		if ( ! \is_array( $template ) || empty( $template ) ) {
 			wp_die(
 				esc_html__( 'No receipt template is configured.', 'woocommerce-pos' ),
@@ -221,9 +224,10 @@ class Receipt {
 		 * @param array|null        $receipt_data Frozen payload, or null to build sale data.
 		 * @param WC_Abstract_Order $order        Order object.
 		 * @returns array|null Prepared receipt data.
-		 * @hook woocommerce_pos_receipt_pdf_data
+		 * @hook wcpos_receipt_pdf_data
 		 */
-		$receipt_data = apply_filters( 'woocommerce_pos_receipt_pdf_data', $receipt_data, $order );
+		$receipt_data = apply_filters( 'wcpos_receipt_pdf_data', $receipt_data, $order );
+		$receipt_data = apply_filters_deprecated( 'woocommerce_pos_receipt_pdf_data', array( $receipt_data, $order ), '2.0.0', 'wcpos_receipt_pdf_data' );
 
 		try {
 			$render = static function ( $data ) use ( $template, $order ): string {
@@ -499,9 +503,10 @@ class Receipt {
 		 *
 		 * @since 1.0.0
 		 *
-		 * @hook woocommerce_pos_print_receipt_path
+		 * @hook wcpos_print_receipt_path
 		 */
-		return apply_filters( 'woocommerce_pos_print_receipt_path', wcpos_locate_template( $file_name ) );
+		$filtered = apply_filters( 'wcpos_print_receipt_path', wcpos_locate_template( $file_name ) );
+		return apply_filters_deprecated( 'woocommerce_pos_print_receipt_path', array( $filtered ), '2.0.0', 'wcpos_print_receipt_path' );
 	}
 
 	/**
@@ -568,9 +573,13 @@ class Receipt {
 		 *
 		 * @since 1.8.0
 		 *
-		 * @hook woocommerce_pos_active_receipt_template
+		 * @hook wcpos_active_receipt_template
 		 */
-		$template = 'receipt' === $type ? apply_filters( 'woocommerce_pos_active_receipt_template', null ) : null;
+		$template = null;
+		if ( 'receipt' === $type ) {
+			$template = apply_filters( 'wcpos_active_receipt_template', null );
+			$template = apply_filters_deprecated( 'woocommerce_pos_active_receipt_template', array( $template ), '2.0.0', 'wcpos_active_receipt_template' );
+		}
 
 		if ( $template ) {
 			return $template;

@@ -140,7 +140,7 @@ class Reports_Controller extends \WP_REST_Controller {
 			if ( ! is_array( $core ) ) {
 				return $this->failed( $key, __( 'The report callback must return an array.', 'woocommerce-pos' ) );
 			}
-			// The builder owns build → woocommerce_pos_report_data → restore identity, so that the
+			// The builder owns build → wcpos_report_data → restore identity, so that the
 			// report path and the closure path protect their documents the same way.
 			$data = ( new Receipt_Data_Builder() )->build_report_document( $key, $report['title'], $scope, $core );
 			$valid = Report_Document_Validator::validate( $data );

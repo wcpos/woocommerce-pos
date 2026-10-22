@@ -1418,7 +1418,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	 * Barcode resolution honours an extension filter that hides a product.
 	 *
 	 * The v2 lanes read visibility through Sync\Pos_Visibility, which reads through
-	 * Services\Settings — so the public `woocommerce_pos_online_only_product_visibility_settings`
+	 * Services\Settings — so the public `wcpos_online_only_product_visibility_settings`
 	 * filter applies here exactly as it always has on the v1 lanes.
 	 */
 	public function test_resolve_barcode_excludes_product_hidden_by_extension_filter(): void {
@@ -1431,14 +1431,14 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_online_only_product_visibility_settings', $filter );
+		add_filter( 'wcpos_online_only_product_visibility_settings', $filter );
 
 		try {
 			$response = ( new Resolve_Controller() )->resolve_barcode(
 				$this->request( array( 'code' => 'SYNC-FILTER-HIDDEN-PRODUCT' ) )
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_online_only_product_visibility_settings', $filter );
+			remove_filter( 'wcpos_online_only_product_visibility_settings', $filter );
 		}
 		$data = $response->get_data();
 

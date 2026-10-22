@@ -319,7 +319,8 @@ class Logs extends WP_REST_Controller {
 		 *
 		 * @param string|null $type 'file' or 'database', or null for auto-detection.
 		 */
-		$type = apply_filters( 'woocommerce_pos_log_handler_type', null );
+		$type = apply_filters( 'wcpos_log_handler_type', null );
+		$type = apply_filters_deprecated( 'woocommerce_pos_log_handler_type', array( $type ), '2.0.0', 'wcpos_log_handler_type' );
 		if ( $type ) {
 			return $type;
 		}

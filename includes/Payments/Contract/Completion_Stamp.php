@@ -306,7 +306,7 @@ final class Completion_Stamp {
 				 * @param WC_Order $order Order, read after the entry was stored.
 				 * @param int      $n     Completion number.
 				 */
-				do_action( 'wcpos_sale_completed', $fresh, $n ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public payments contract action.
+				do_action( 'wcpos_sale_completed', $fresh, $n );
 			} catch ( \Throwable $error ) {
 				Logger::error( sprintf( 'WCPOS completion %d listener failed on order #%d: %s', $n, $id, $error->getMessage() ), array( 'order_id' => $id ) );
 			}
