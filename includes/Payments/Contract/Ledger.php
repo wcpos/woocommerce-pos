@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Save_Hooks;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
@@ -66,6 +67,9 @@ class Ledger {
 	public const KINDS = array( 'cash', 'card', 'stored_value', 'bank_transfer', 'other' );
 	/** Who opened a row: the till, a webview mint, or WooCommerce itself (a tender adopted at reopen, D5). */
 	public const SOURCES = array( 'app', 'webview', 'woocommerce' );
+	/** Write modes: project and maybe complete; or close (may complete zero or on-hold). */
+	public const MODE_AUTO  = 'auto';
+	public const MODE_CLOSE = 'close';
 
 	/**
 	 * Shared instance.
@@ -721,6 +725,7 @@ class Ledger {
 			$rows[]                 = $row;
 			$this->save( $order, $rows );
 			Settlement::instance()->apply_parked( $order, $row['id'] );
+			$row = $this->find( $order, $row['id'] ) ?? $row;
 			Logger::warning( sprintf( 'WCPOS payment %s refused on order #%d: %s (%s %s against %s owed)', $row['id'], $order->get_id(), $row['failure_reason'], $amount, $currency, Money::format( $balance ) ) );
 			/**
 			 * Fires after a new payment row is saved as refused.
@@ -800,8 +805,7 @@ class Ledger {
 				// A new command id on a settled leg changes nothing else, but its entry is still kept.
 				$noted = $this->with_command( $replayed, $command );
 				if ( $noted !== $replayed ) {
-					$this->replace_and_save( $order, $rows, $noted, false );
-					$replayed = $this->find( $order, $replayed['id'] );
+					$replayed = $this->replace_and_save( $order, $rows, $noted, false );
 				}
 				return array(
 					'payment' => $replayed,
@@ -1006,7 +1010,7 @@ class Ledger {
 		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
 			$noted = $this->with_command( $row, $command );
 			if ( $noted !== $row ) {
-				$this->replace_and_save( $order, $rows, $noted, false );
+				$noted = $this->replace_and_save( $order, $rows, $noted, false );
 			}
 			return $noted;
 		}
@@ -1028,8 +1032,7 @@ class Ledger {
 			if ( ! $valid || ! $currency || ( 0 !== $difference && ! $tip ) ) {
 				$applied['status'] = 'failed';
 				$applied['failure_reason'] = 'amount_mismatch';
-				$applied = $this->normalize_row( $order, $applied );
-				$this->replace_and_save( $order, $rows, $applied, $derive );
+				$applied = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $applied ), $derive );
 				$this->release_hold_if_idle( $order );
 				/* translators: 1: payment ID, 2: expected amount/currency, 3: confirmed amount/currency. */
 				$order->add_order_note( sprintf( __( 'WCPOS payment %1$s amount mismatch: expected %2$s, confirmed %3$s.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'], ( is_scalar( $confirmed ) ? (string) $confirmed : 'invalid' ) . ' ' . ( is_string( $new['currency'] ?? null ) ? $new['currency'] : $row['currency'] ) ) );
@@ -1077,8 +1080,7 @@ class Ledger {
 		}
 		$applied = $this->with_command( $applied, $command );
 		if ( $applied !== $row ) {
-			$applied = $this->normalize_row( $order, $applied );
-			$this->replace_and_save( $order, $rows, $applied, $derive );
+			$applied = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $applied ), $derive );
 			if ( in_array( $applied['status'], array( 'failed', 'voided' ), true ) ) {
 				$this->release_hold_if_idle( $order );
 			}
@@ -1112,8 +1114,7 @@ class Ledger {
 				// Already allocated: a new command id changes nothing else, but its entry is kept.
 				$noted = $this->with_command( $row, $command, $refund_id );
 				if ( $noted !== $row ) {
-					$this->replace_and_save( $order, $rows, $noted, false );
-					return $this->find( $order, $row['id'] );
+					return $this->replace_and_save( $order, $rows, $noted, false );
 				}
 				return $row;
 			}
@@ -1214,6 +1215,7 @@ class Ledger {
 			// No hook and no success storage does not hold: the reservation is the guard, re-persisted (§7.16).
 			return $strand( 'the provider settled it, but storage will not keep the settled allocation' );
 		}
+		$row = $this->stored_row( $order->get_id(), $row['id'] ) ?? $row;
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
 		 * (succeeded or failed) through settle_allocation(). $amount is the allocation's
@@ -1532,8 +1534,7 @@ class Ledger {
 			if ( $events ) {
 				$row['events'] = array_merge( $row['events'] ?? array(), $events );
 			}
-			$row = $this->normalize_row( $order, $row );
-			$this->replace_and_save( $order, $rows, $row, false );
+			$row = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $row ), false );
 			if ( 'pending' !== $status ) {
 				$refund = wc_get_order( $refund_id );
 				if ( $refund instanceof \WC_Order_Refund && $refund->get_parent_id() === $order->get_id() ) {
@@ -2119,40 +2120,7 @@ class Ledger {
 			}
 			// Absence is not deletion: a hook may have read before another route appended a leg.
 			$normalized = array_merge( $normalized, array_values( $stored ) );
-			$wire = array_map( array( __CLASS__, 'to_wire' ), $normalized );
-			$order->update_meta_data(
-				self::META_KEY,
-				wp_json_encode(
-					array(
-						'schema' => self::SCHEMA,
-						'payments' => $wire,
-					)
-				)
-			);
-			$this->reindex( $order, $normalized );
-			$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
-			$order->delete_meta_data( self::LIVE_LEG_META_KEY );
-			foreach ( $normalized as $row ) {
-				$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
-				if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
-					$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
-				}
-			}
-			// Money that covers the order: the send whose row paid it is paid, the sends it replaced are superseded.
-			$paid = Money::minor( $this->paid( $normalized ) );
-			if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
-				$history  = Gateway_Submission::read_attempts( $order );
-				$counting = array_column( array_filter( $normalized, static fn( $row ) => in_array( $row['status'], self::COUNTING_STATUSES, true ) ), 'id' );
-				$paying   = array_intersect_key( array_filter( $history, static fn( $state ) => 'sent' === $state ), array_flip( array_map( 'strtolower', $counting ) ) );
-				if ( $paying ) {
-					foreach ( $history as $attempt_id => $state ) {
-						if ( 'sent' === $state ) {
-							$history[ $attempt_id ] = isset( $paying[ $attempt_id ] ) ? 'paid' : 'superseded';
-						}
-					}
-					$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $history );
-				}
-			}
+			$this->stage( $order, $normalized );
 			$order_id = $order->get_id();
 			$this->server_saves[ $order_id ] = ( $this->server_saves[ $order_id ] ?? 0 ) + 1;
 			try {
@@ -2180,6 +2148,366 @@ class Ledger {
 				$this->release_closure_lock( $order );
 			}
 			$lock->release( $order->get_id() );
+		}
+	}
+
+	/**
+	 * The one write of payment rows: lock, fresh read, heal, the change, the rows (S1), the paid transition
+	 * (S2), the completion (S3), unlock. S2 and S3 are functions of storage, so a retry of the same command
+	 * heals a crash between them (ADR 0040, amended). A change breaking a row's invariants (I5) is a LogicException.
+	 *
+	 * @param WC_Order|int  $order  Order or order id; the write reads its own.
+	 * @param callable|null $change fn( Ledger_Draft $draft ): mixed. Pure: no provider call, no save, no hook; it may
+	 *                              run twice. Null is a replay or a sweep: it may complete a sale its rows cover.
+	 * @param string        $mode   MODE_AUTO or MODE_CLOSE (may complete zero or on-hold).
+	 * @throws Ledger_Persistence_Exception Retryable; `stage` names the step that failed.
+	 */
+	public function write( $order, ?callable $change = null, string $mode = self::MODE_AUTO ): Ledger_Written {
+		$id   = $order instanceof WC_Order ? $order->get_id() : (int) $order;
+		$hook = self::order_hook();
+		if ( null !== $hook ) {
+			throw Ledger_Persistence_Exception::at( 'lock', esc_html( sprintf( 'WCPOS payment ledger write refused inside %s; defer it.', $hook ) ) );
+		}
+		$lock = Order_Lock::instance();
+		if ( ! $lock->acquire( $id ) ) {
+			throw Ledger_Persistence_Exception::at( 'lock', 'WCPOS payment ledger is locked.' );
+		}
+		try {
+			$written = $this->locked_write( $id, $change, $mode );
+			if ( null !== $change ) {
+				$this->release_hold_if_idle( $written->order );
+			}
+			return $written;
+		} finally {
+			$lock->release( $id );
+		}
+	}
+
+	/**
+	 * Steps 2 to 7 of a write, under the lock: S1 is retried once from a fresh read on a read-back miss.
+	 *
+	 * @param int           $id     Order id.
+	 * @param callable|null $change The change.
+	 * @param string        $mode   Write mode.
+	 * @throws Ledger_Persistence_Exception When a step does not reach storage.
+	 */
+	private function locked_write( int $id, ?callable $change, string $mode ): Ledger_Written {
+		$before = null;
+		for ( $try = 0; ; ++$try ) {
+			$order  = $this->fresh( $id );
+			$ledger = $this->stored( $id, true );
+			$stored = $ledger['payments'] ?? array();
+			if ( 0 === $try && $this->heal( $order, null !== $ledger ) ) {
+				$order = $this->fresh( $id );
+			}
+			// Covered before this write: from the first read, never from this write's own half-stored S1.
+			$before = $before ?? $this->project( $order, $stored, $mode );
+			$draft  = new Ledger_Draft( $order, $stored );
+			$answer = null === $change ? null : $change( $draft );
+			$rows   = $this->settle( $order, $stored, $draft->rows() );
+			if ( $this->store_rows( $order, $stored, $rows, $this->project( $order, $rows, $mode ), null !== $change ) ) {
+				break;
+			}
+			if ( 0 < $try ) {
+				throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS payment ledger was not persisted.' );
+			}
+		}
+		// S2 is decided from storage: the rows and the order as S1 stored them (I4).
+		$order = $this->fresh( $id );
+		$after = $this->project( $order, $this->read( $order ), $mode );
+		// A sale its rows already covered completes only on a replay, a sweep or a close (rule 3: a
+		// reopened sale its rows still cover is covered and open, and stays open under other writes).
+		if ( $after['completes'] && ( ! $before['completes'] || null === $change || self::MODE_CLOSE === $mode ) ) {
+			$order = $this->complete( $order );
+		}
+		return new Ledger_Written( $order, $this->read( $order ), $answer, Completion_History::of( $order )->standing() );
+	}
+
+	/**
+	 * The rows to store, normalized, an untouched row keeping its stamp, every stored row's invariants held
+	 * (I5): a captured row keeps id, amount, currency and method and moves only to voided, only when manual;
+	 * a row carrying refunds or a closure, or not pending, never vanishes; a closure id is write-once.
+	 *
+	 * @param WC_Order $order  Fresh order.
+	 * @param array    $stored Stored rows.
+	 * @param array    $rows   The draft's rows.
+	 * @throws \LogicException When the draft breaks an invariant: a programming error, never a merchant outcome.
+	 */
+	private function settle( WC_Order $order, array $stored, array $rows ): array {
+		$settled = array();
+		foreach ( $rows as $row ) {
+			$row                   = $this->normalize_row( $order, $row );
+			$settled[ $row['id'] ] = $row;
+		}
+		foreach ( $stored as $old ) {
+			$new  = $settled[ strtolower( (string) $old['id'] ) ] ?? null;
+			$kept = null === $new
+				? 'pending' === ( $old['status'] ?? '' ) && empty( $old['refunds'] ) && empty( $old['closure_id'] )
+				: ( empty( $old['closure_id'] ) || ( $new['closure_id'] ?? null ) === $old['closure_id'] )
+					&& ( 'captured' !== ( $old['status'] ?? '' ) || (
+						Money::minor( $old['amount'] ) === Money::minor( $new['amount'] ) && (string) $old['currency'] === $new['currency'] && (string) $old['method_id'] === $new['method_id']
+						&& ( 'captured' === $new['status'] || ( 'voided' === $new['status'] && 'manual' === ( $old['capture_mode'] ?? '' ) ) )
+					) );
+			if ( ! $kept ) {
+				throw new \LogicException( esc_html( sprintf( 'Payment row %s breaks the ledger invariants.', $old['id'] ) ) );
+			}
+			if ( $new && $this->valid_time( $old['updated_at_gmt'] ?? null ) && $this->same_content( $this->normalize_row( $order, $old ), $new ) ) {
+				$settled[ $new['id'] ]['updated_at_gmt'] = $old['updated_at_gmt'];
+			}
+		}
+		return array_values( $settled );
+	}
+
+	/**
+	 * S1: one save carrying the draft and the projection that does not complete; true once storage
+	 * holds the rows and every staged server-owned key. A replay that changes nothing saves nothing.
+	 *
+	 * @param WC_Order $order      Fresh order, with whatever the change staged on it.
+	 * @param array    $stored     Stored rows.
+	 * @param array    $rows       Settled rows.
+	 * @param array    $projection Projection of the settled rows.
+	 * @param bool     $changed    Whether a change ran.
+	 */
+	private function store_rows( WC_Order $order, array $stored, array $rows, array $projection, bool $changed ): bool {
+		$id     = $order->get_id();
+		$wire   = json_decode( (string) wp_json_encode( array_map( array( __CLASS__, 'to_wire' ), $rows ) ), true );
+		$staged = $wire !== $stored;
+		// The awaiting-customer stamp stays until S3: storage keeps saying POS-owned until the sale completes.
+		if ( null !== $projection['method'] ) {
+			$order->set_payment_method( $projection['method'] );
+			$order->set_payment_method_title( (string) $projection['title'] );
+			$order->set_transaction_id( (string) $projection['txn'] );
+		}
+		if ( null !== $projection['status'] ) {
+			$order->set_status( $projection['status'] );
+		}
+		// A completing write always stores its ledger (empty rows too): heal's marker lands before the paid transition.
+		if ( ! $changed && ! $staged && ! $projection['completes'] && ! $order->get_changes() ) {
+			return true;
+		}
+		$props = $order->get_changes();
+		$this->stage( $order, $rows );
+		// What storage must hold afterwards, as sets (HPOS reuses meta ids): taken now, as the save re-reads the meta.
+		$values = static function ( WC_Order $read, string $key ): array {
+			$list = array_map( static fn( $meta ) => $meta->value, $read->get_meta( $key, false ) );
+			sort( $list );
+			return $list;
+		};
+		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY );
+		$want   = array_map( static fn( $key ) => $values( $order, $key ), $keys );
+		$this->server_saves[ $id ] = ( $this->server_saves[ $id ] ?? 0 ) + 1;
+		try {
+			self::saving( $id, fn() => $order->save() );
+		} finally {
+			if ( 0 === --$this->server_saves[ $id ] ) {
+				unset( $this->server_saves[ $id ] );
+			}
+		}
+		// The rows, their three indexes, the attempt fates their coverage settled, and every order property staged.
+		$check = $this->fresh( $id );
+		$kept  = $this->stored( $id, true );
+		return array_map( static fn( $key ) => $values( $check, $key ), $keys ) === $want && null !== $kept && $kept['payments'] === $wire && self::holds( $check->get_data(), $props );
+	}
+
+	/**
+	 * Whether stored data holds every staged change: a date by its time, a map key by key.
+	 *
+	 * @param mixed $stored Stored value.
+	 * @param mixed $staged Staged value.
+	 */
+	private static function holds( $stored, $staged ): bool {
+		if ( is_array( $staged ) ) {
+			foreach ( $staged as $key => $value ) {
+				if ( ! self::holds( is_array( $stored ) ? ( $stored[ $key ] ?? null ) : null, $value ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		if ( $staged instanceof \DateTimeInterface ) {
+			return $stored instanceof \DateTimeInterface && $stored->getTimestamp() === $staged->getTimestamp();
+		}
+		return (string) $staged === (string) $stored;
+	}
+
+	/**
+	 * S2, the paid transition carrying no ledger meta (I1, I2), then S3.
+	 *
+	 * @param WC_Order $order Order as S1 stored it.
+	 * @throws Ledger_Persistence_Exception When the paid status or the completion does not reach storage.
+	 */
+	private function complete( WC_Order $order ): WC_Order {
+		$id       = $order->get_id();
+		$previous = self::$deriving;
+		// The completion is the ledger's, so it has a register origin (Completion_Stamp::has_origin()).
+		self::$deriving = $id;
+		try {
+			$order->payment_complete();
+		} finally {
+			self::$deriving = $previous;
+		}
+		$order = $this->fresh( $id );
+		if ( ! self::paid_now( $order ) ) {
+			throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid transition was not persisted.' );
+		}
+		return $this->finish( $order );
+	}
+
+	/**
+	 * S3-heal: a paid POS sale the ledger wrote (a zero-total close has no rows) whose completion never
+	 * landed: a crash after or inside S2, whose hooks may never have run. It repairs in storage order: a paid
+	 * status without its paid date gets the date, then stock (idempotent), then S3.
+	 *
+	 * @param WC_Order $order    Fresh order.
+	 * @param bool     $ledgered Whether the ledger has stored this order (WCPOS 1.x never did).
+	 * @return bool Whether it healed.
+	 * @throws Ledger_Persistence_Exception When the paid date does not reach storage.
+	 */
+	private function heal( WC_Order $order, bool $ledgered ): bool {
+		$paid = self::paid_now( $order ) || in_array( $order->get_status(), wc_get_is_paid_statuses(), true );
+		if ( ! $ledgered || ! wcpos_is_pos_order( $order ) || ! $paid || null !== Completion_History::of( $order )->standing() ) {
+			return false;
+		}
+		if ( null === $order->get_date_paid( 'edit' ) ) {
+			$order->set_date_paid( time() );
+			self::saving( $order->get_id(), fn() => $order->save() );
+			$order = $this->fresh( $order->get_id() );
+			if ( ! self::paid_now( $order ) ) {
+				throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid date was not persisted.' );
+			}
+		}
+		wc_maybe_reduce_stock_levels( $order->get_id() );
+		$this->finish( $order );
+		return true;
+	}
+
+	/**
+	 * S3: the completion (idempotent: a listener inside S2 may have stamped it), then the awaiting-customer
+	 * stamp cleared beside it, each read back.
+	 *
+	 * @param WC_Order $order Paid order.
+	 * @throws Ledger_Persistence_Exception When either does not reach storage.
+	 */
+	private function finish( WC_Order $order ): WC_Order {
+		$id       = $order->get_id();
+		$previous = self::$deriving;
+		self::$deriving = $id;
+		try {
+			Completion_Stamp::memoise( $order ); // The completion names the register a sent submit came from.
+			Completion_Stamp::stamp( $order );
+		} finally {
+			self::$deriving = $previous;
+		}
+		$order = $this->fresh( $id );
+		if ( null !== Completion_History::of( $order )->standing() && null !== Gateway_Submission::read_stamp( $order ) ) {
+			Gateway_Submission::clear_stamp( $order );
+			self::saving( $id, fn() => $order->save_meta_data() );
+			$order = $this->fresh( $id );
+		}
+		if ( null === Completion_History::of( $order )->standing() || null !== Gateway_Submission::read_stamp( $order ) ) {
+			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
+		}
+		return $order;
+	}
+
+	/**
+	 * Paid as the completion stamp reads it: a completed status and a paid date.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private static function paid_now( WC_Order $order ): bool {
+		return null !== $order->get_date_paid( 'edit' ) && in_array( $order->get_status(), Completion_Stamp::completed_statuses( $order ), true );
+	}
+
+	/**
+	 * Project rows onto the order as it stands.
+	 *
+	 * @param WC_Order $order Order.
+	 * @param array    $rows  Rows.
+	 * @param string   $mode  Write mode.
+	 */
+	private function project( WC_Order $order, array $rows, string $mode ): array {
+		$title = static function ( $method_id ) {
+			$descriptor = Descriptor_Builder::instance()->get( (string) $method_id );
+			return $descriptor ? $descriptor['title'] : $method_id;
+		};
+		return Projection::of( $rows, (string) $order->get_total(), $order->get_status(), null !== Gateway_Submission::read_stamp( $order ), $mode, $order->is_editable(), $title );
+	}
+
+	/**
+	 * The order and its meta as storage holds them.
+	 *
+	 * @param int $id Order id.
+	 * @throws Ledger_Persistence_Exception When the order cannot be read.
+	 */
+	private function fresh( int $id ): WC_Order {
+		$order = wc_get_order( $id );
+		if ( ! $order instanceof WC_Order ) {
+			throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS order could not be read.' );
+		}
+		$order->read_meta_data( true );
+		return $order;
+	}
+
+	/**
+	 * The innermost order save, transition or payment hook really running (I3). A listener that threw
+	 * out of a hook WooCommerce caught leaves the hook on `$wp_current_filter` (do_action() pops only
+	 * on return), so a listed name there is confirmed against the dispatches on the call stack.
+	 */
+	private static function order_hook(): ?string {
+		if ( ! array_filter( (array) ( $GLOBALS['wp_current_filter'] ?? array() ), array( Save_Hooks::class, 'contains' ) ) ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Only while an order hook name is on the stack: which dispatches are live.
+		foreach ( debug_backtrace( 0 ) as $frame ) {
+			$name = $frame['args'][0] ?? null;
+			if ( ! isset( $frame['class'] ) && in_array( $frame['function'], array( 'do_action', 'do_action_ref_array', 'apply_filters', 'apply_filters_ref_array' ), true ) && Save_Hooks::contains( $name ) ) {
+				return $name;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Stage the rows, their indexes and the attempt fates their coverage settles on the order.
+	 *
+	 * @param WC_Order $order      Order object, saved by the caller.
+	 * @param array    $normalized Normalized rows.
+	 */
+	private function stage( WC_Order $order, array $normalized ): void {
+		$wire = array_map( array( __CLASS__, 'to_wire' ), $normalized );
+		$order->update_meta_data(
+			self::META_KEY,
+			wp_json_encode(
+				array(
+					'schema' => self::SCHEMA,
+					'payments' => $wire,
+				)
+			)
+		);
+		$this->reindex( $order, $normalized );
+		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
+		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
+		foreach ( $normalized as $row ) {
+			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
+			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) ) {
+				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
+			}
+		}
+		// Money that covers the order: the send whose row paid it is paid, the sends it replaced are superseded.
+		$paid = Money::minor( $this->paid( $normalized ) );
+		if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
+			$history  = Gateway_Submission::read_attempts( $order );
+			$counting = array_column( array_filter( $normalized, static fn( $row ) => in_array( $row['status'], self::COUNTING_STATUSES, true ) ), 'id' );
+			$paying   = array_intersect_key( array_filter( $history, static fn( $state ) => 'sent' === $state ), array_flip( array_map( 'strtolower', $counting ) ) );
+			if ( $paying ) {
+				foreach ( $history as $attempt_id => $state ) {
+					if ( 'sent' === $state ) {
+						$history[ $attempt_id ] = isset( $paying[ $attempt_id ] ) ? 'paid' : 'superseded';
+					}
+				}
+				$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $history );
+			}
 		}
 	}
 
@@ -2507,8 +2835,10 @@ class Ledger {
 	 * @param array    $rows        Payment rows.
 	 * @param array    $replacement Replacement payment row.
 	 * @param bool     $derive      Project payment state after saving.
+	 * @return array The row as stored. save() normalizes again under the lock, so the caller's copy
+	 *               may carry another updated_at_gmt: an answer built from it is not what a replay reads (D14).
 	 */
-	private function replace_and_save( WC_Order $order, array $rows, array $replacement, bool $derive = true ): void {
+	private function replace_and_save( WC_Order $order, array $rows, array $replacement, bool $derive = true ): array {
 		foreach ( $rows as &$row ) {
 			if ( $row['id'] === $replacement['id'] ) {
 				$row = $replacement;
@@ -2517,6 +2847,7 @@ class Ledger {
 		}
 		unset( $row );
 		$this->save( $order, $rows, $derive );
+		return $this->find( $order, $replacement['id'] ) ?? $replacement;
 	}
 
 	/**

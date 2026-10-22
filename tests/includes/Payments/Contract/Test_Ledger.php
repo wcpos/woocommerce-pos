@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+require_once __DIR__ . '/ledger-clock.php';
+
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
@@ -993,6 +995,87 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			'over' => array( array( 'amount' => '100.00' ), 'none', true ),
 			'under' => array( array( 'amount' => '90.00' ), 'none', true ),
 			'currency' => array( array( 'currency' => 'EUR' ), 'on_reader', true ),
+		);
+	}
+
+	/**
+	 * A money command answers the row as stored, so a replay answers the same document (ADR 0040
+	 * rule 5, D14). The ticking clock puts every normalization a second after the last: the
+	 * caller's copy and the row save() stores always differ in updated_at_gmt.
+	 *
+	 * @dataProvider stored_row_answers
+	 *
+	 * @param string $command The money command that answers.
+	 */
+	public function test_money_command_answer_on_a_ticking_clock_is_the_stored_row( string $command ): void {
+		// Arrange.
+		$order  = $this->create_pos_order();
+		$ledger = Ledger::instance();
+		$GLOBALS['woocommerce_pos_ledger_clock'] = time();
+		$input  = $this->payment( 'pos_card', '92.95' );
+		$refund = null;
+		if ( in_array( $command, array( 'record refused', 'refund' ), true ) ) {
+			$input = $this->payment( 'pos_cash', 'refund' === $command ? '20.00' : '100.00' );
+		} elseif ( 'settle allocation' === $command ) {
+			list( $order, $seeded, $refund ) = $this->seed_settlement_allocation();
+			$input['id'] = $seeded['id'];
+		} else {
+			$ledger->intent( $order, $input['id'], $input, array() );
+		}
+		if ( 'refund' === $command ) {
+			$ledger->record( $order, $input );
+			$refund = new \WC_Order_Refund();
+			$refund->set_parent_id( $order->get_id() );
+			$refund->set_amount( '20.00' );
+			$refund->save();
+		}
+		$event   = array(
+			'status'   => 'authorized',
+			'amount'   => '92.95',
+			'event_id' => 'evt_d14',
+		);
+		$noted   = array(
+			'id'   => wp_generate_uuid4(),
+			'fp'   => 'fp_d14',
+			'kind' => 'capture',
+		);
+		$answers = array(
+			'capture captured'   => fn() => $ledger->capture( $order, $input['id'], array( 'amount' => '92.95' ) ),
+			'capture mismatch'   => fn() => $ledger->capture( $order, $input['id'], array( 'amount' => '90.00' ) ),
+			'event seen again'   => fn() => $ledger->apply_result( $order, $input['id'], $event, true, $noted ),
+			'record refused'     => fn() => $ledger->record( $order, $input ),
+			'refund'             => fn() => $ledger->refund( $order, $input['id'], $refund->get_id(), '5.00' ),
+			'settle allocation'  => fn() => $ledger->settle_allocation( $order, $input['id'], $refund->get_id(), 'succeeded', 'ref_d14' ),
+		);
+		if ( 'event seen again' === $command ) {
+			$ledger->apply_result( $order, $input['id'], $event );
+		}
+
+		// Act.
+		$answer = $answers[ $command ]();
+		$stored = $ledger->find( wc_get_order( $order->get_id() ), $input['id'] );
+		$replay = in_array( $command, array( 'capture captured', 'event seen again' ), true ) ? null : $answers[ $command ]();
+
+		// Assert.
+		$row = is_wp_error( $answer ) ? $answer->get_error_data()['payment'] : $answer;
+		$this->assertIsArray( $row );
+		$this->assertSame( $stored['updated_at_gmt'], $row['updated_at_gmt'] );
+		// assertEquals for a refusal: to_wire() mints a fresh stdClass for each empty map.
+		$this->assertEquals( is_wp_error( $answer ) ? Ledger::to_wire( $stored ) : $stored, $row );
+		if ( null !== $replay ) {
+			$this->assertEquals( is_wp_error( $answer ) ? $answer->get_error_data() : $answer, is_wp_error( $replay ) ? $replay->get_error_data() : $replay );
+		}
+	}
+
+	/** Every money command that saves a row and answers with it, or with a refusal built from it. */
+	public function stored_row_answers(): array {
+		return array(
+			'capture captured (apply_result tail)'         => array( 'capture captured' ),
+			'capture mismatch (apply_result refusal)'      => array( 'capture mismatch' ),
+			'provider event seen again with a new command' => array( 'event seen again' ),
+			'record refused'                               => array( 'record refused' ),
+			'refund allocated'                             => array( 'refund' ),
+			'settle allocation'                            => array( 'settle allocation' ),
 		);
 	}
 
@@ -3184,6 +3267,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 	/** Drop the probe gateway from WooCommerce's loaded list after the pin that added it. */
 	public function tearDown(): void {
+		unset( $GLOBALS['woocommerce_pos_ledger_clock'] );
 		if ( null !== $this->probe_gateways ) {
 			remove_filter( 'woocommerce_payment_gateways', $this->probe_gateways );
 			\WC_Payment_Gateways::instance()->init();

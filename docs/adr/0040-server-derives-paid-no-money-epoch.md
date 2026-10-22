@@ -200,6 +200,8 @@ an online gateway shows its original tender in the ledger (a synthetic row from
 `_transaction_id`, as the webview passthrough already does for order-pay); and the exact
 refusal codes, which stay 422 on the push lane and 409 on the route family (#2312's ruling).
 
+**Amendment: the order of the ledger write.** The Consequences' "there is no second phase when the status transition happens inside the ledger save" is unsafe under WooCommerce's save mechanics: `WC_Abstract_Order::save()` catches a failed save and `WC_Order::save()` still runs `status_transition()`, which fires the paid hooks (stock, email, the fiscal sale), so rows riding the paid save can half-land while those effects go out. Amended 2026-10-22: the ledger lands its rows in their own save and verifies them before it runs `payment_complete()`, and stamps the completion after it. Each step is a function of storage and idempotent, and a retry of the same command heals a crash between them. This is not the money epoch returning: no row is filtered or archived; it is the order in which one write reaches storage.
+
 Research: `.claude/research/2026-10-19-pos-money-state-models/RESEARCH.md`, committed beside this
 ADR so a fresh checkout can audit the evidence. History:
 #2312 (25 rounds), #2328 (the carve, 5 rounds), the carve handoff
