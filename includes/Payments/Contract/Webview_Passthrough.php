@@ -159,7 +159,7 @@ class Webview_Passthrough {
 			}
 		}
 
-		// A sent attempt this payment answers is the row's id, so Ledger::save() marks the attempt paid.
+		// A sent attempt this payment answers is the row's id, so Ledger::write() marks the attempt paid.
 		$attempt = Completion_Stamp::attempt( $order->get_id() );
 		self::defer_mint( $order, $attempt ? array( 'id' => $attempt['attempt_id'] ) : array() );
 	}
