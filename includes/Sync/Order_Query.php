@@ -70,9 +70,9 @@ final class Order_Query {
 		$checkpoint_modified = gmdate( 'Y-m-d H:i:s', $this->timestamp_from_checkpoint( $updated_at_gmt ) );
 		$limit               = max( 1, min( 251, $limit ) );
 
-		$s   = Order_Meta_Store::schema();
+		$s = Order_Meta_Store::schema();
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers come from Order_Meta_Store.
 		$sql = $wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers come from Order_Meta_Store.
 			"SELECT {$s['id']} FROM {$s['orders']}"
 			. " WHERE {$s['type']} = 'shop_order' AND {$s['status']} NOT IN ('trash', 'auto-draft')"
 			. " AND ({$s['modified']} > %s OR ({$s['modified']} = %s AND {$s['id']} > %d))"
@@ -82,6 +82,7 @@ final class Order_Query {
 			$order_id,
 			$limit
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		/** @var array<int, int|string> $ids Exact compound-key page from the active order store. */
 		$ids = $wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above with bounded values and known table names.

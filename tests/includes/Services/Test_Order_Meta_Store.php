@@ -46,7 +46,13 @@ class Test_Order_Meta_Store extends WC_Unit_Test_Case {
 		$this->order_with( 'beta' );
 
 		// Act.
-		$ids = Order_Meta_Store::order_ids( self::KEY, array( 'value' => 'alpha', 'order' => 'newest' ) );
+		$ids = Order_Meta_Store::order_ids(
+			self::KEY,
+			array(
+				'value' => 'alpha',
+				'order' => 'newest',
+			)
+		);
 
 		// Assert.
 		$this->assertSame( array( $second->get_id(), $first->get_id() ), $ids );
@@ -76,7 +82,13 @@ class Test_Order_Meta_Store extends WC_Unit_Test_Case {
 
 		// Act.
 		$loose = Order_Meta_Store::order_ids( self::KEY, array( 'value' => 'alpha' ) );
-		$ids   = Order_Meta_Store::order_ids( self::KEY, array( 'value' => 'alpha', 'exact_key' => true ) );
+		$ids   = Order_Meta_Store::order_ids(
+			self::KEY,
+			array(
+				'value' => 'alpha',
+				'exact_key' => true,
+			)
+		);
 
 		// Assert.
 		$this->assertContains( $variant->get_id(), $loose );
@@ -97,8 +109,22 @@ class Test_Order_Meta_Store extends WC_Unit_Test_Case {
 		$refund->save();
 
 		// Act.
-		$orders  = Order_Meta_Store::order_ids( self::KEY, array( 'value' => 'alpha', 'type' => 'shop_order', 'exclude' => array( 'trash', 'auto-draft' ), 'order' => 'newest' ) );
-		$refunds = Order_Meta_Store::order_ids( self::KEY, array( 'value' => 'alpha', 'type' => 'shop_order_refund' ) );
+		$orders  = Order_Meta_Store::order_ids(
+			self::KEY,
+			array(
+				'value' => 'alpha',
+				'type' => 'shop_order',
+				'exclude' => array( 'trash', 'auto-draft' ),
+				'order' => 'newest',
+			)
+		);
+		$refunds = Order_Meta_Store::order_ids(
+			self::KEY,
+			array(
+				'value' => 'alpha',
+				'type' => 'shop_order_refund',
+			)
+		);
 
 		// Assert.
 		$this->assertSame( array( $live->get_id() ), $orders );
@@ -117,8 +143,23 @@ class Test_Order_Meta_Store extends WC_Unit_Test_Case {
 		$this->stamp( $this->order_with( 'alpha' )->get_id(), time() - 7200, 'trash' );
 
 		// Act.
-		$all = Order_Meta_Store::order_ids( self::KEY, array( 'type' => 'shop_order', 'exclude' => array( 'trash' ), 'order' => 'modified' ) );
-		$two = Order_Meta_Store::order_ids( self::KEY, array( 'type' => 'shop_order', 'exclude' => array( 'trash' ), 'order' => 'modified', 'limit' => 2 ) );
+		$all = Order_Meta_Store::order_ids(
+			self::KEY,
+			array(
+				'type' => 'shop_order',
+				'exclude' => array( 'trash' ),
+				'order' => 'modified',
+			)
+		);
+		$two = Order_Meta_Store::order_ids(
+			self::KEY,
+			array(
+				'type' => 'shop_order',
+				'exclude' => array( 'trash' ),
+				'order' => 'modified',
+				'limit' => 2,
+			)
+		);
 
 		// Assert.
 		$this->assertSame( array( $oldest->get_id(), $middle->get_id(), $newest->get_id() ), $all );

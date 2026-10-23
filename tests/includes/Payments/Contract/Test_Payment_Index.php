@@ -107,9 +107,23 @@ class Test_Payment_Index extends WC_Unit_Test_Case {
 		$order->save();
 		$stamp = gmdate( 'Y-m-d H:i:s', $modified );
 		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
-			$wpdb->update( $wpdb->prefix . 'wc_orders', array( 'date_updated_gmt' => $stamp, 'status' => $status ), array( 'id' => $order->get_id() ) );
+			$wpdb->update(
+				$wpdb->prefix . 'wc_orders',
+				array(
+					'date_updated_gmt' => $stamp,
+					'status' => $status,
+				),
+				array( 'id' => $order->get_id() )
+			);
 		} else {
-			$wpdb->update( $wpdb->posts, array( 'post_modified_gmt' => $stamp, 'post_status' => $status ), array( 'ID' => $order->get_id() ) );
+			$wpdb->update(
+				$wpdb->posts,
+				array(
+					'post_modified_gmt' => $stamp,
+					'post_status' => $status,
+				),
+				array( 'ID' => $order->get_id() )
+			);
 			clean_post_cache( $order->get_id() );
 		}
 		return $order->get_id();
