@@ -1211,8 +1211,8 @@ class Ledger {
 	}
 
 	/**
-	 * A parked confirmation applied to an arrival on the write's draft, so S1 stores it, its tip fee and
-	 * the totals together and S2 decides from the money it confirms. Verification is apply_result()'s.
+	 * A provider result (apply_result(), or a confirmation parked for an arrival) applied on the write's draft,
+	 * so S1 stores it, its tip fee and the totals together and S2 decides from the money it confirms.
 	 *
 	 * @param Ledger_Draft $draft The write's draft.
 	 * @param string       $id    Payment id.
