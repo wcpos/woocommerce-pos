@@ -686,8 +686,20 @@ class Ledger {
 		);
 		$settled = Settlement::instance()->drain(
 			$row['id'],
-			function ( array $patch ) use ( $order, $row, $parked, $first, &$failed ) {
-				$answer = $patch === $parked ? $first : $this->write( $order, fn( Ledger_Draft $draft ) => $this->confirm( $draft, $row['id'], $patch ) )->answer;
+			function ( array $patch ) use ( $order, $row, $parked, $first, $command, &$failed ) {
+				$answer = $first;
+				if ( $patch !== $parked ) {
+					// The confirmation may complete the sale: its write carries the command, for its origin. The change answers
+					// null, so the command's entry stays the row's own.
+					$this->write(
+						$order,
+						function ( Ledger_Draft $draft ) use ( $row, $patch, &$answer ): void {
+							$answer = $this->confirm( $draft, $row['id'], $patch );
+						},
+						self::MODE_AUTO,
+						$command
+					);
+				}
 				$failed = is_array( $answer ) ? array( $answer, $patch ) : null;
 				return $answer;
 			}
@@ -778,7 +790,9 @@ class Ledger {
 								// The command failed, so it keeps no entry (spec §5.2): its retry is a fresh command.
 								$draft->put( Command_Log::without_on_row( $failed, null === $command ? '' : $command->id() ) );
 							}
-						}
+						},
+						self::MODE_AUTO,
+						$command
 					);
 					$this->refresh( $order );
 				}
@@ -854,7 +868,7 @@ class Ledger {
 			)
 		);
 		// Persist before contacting the provider: a lost answer must not erase the leg.
-		$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ), self::MODE_HOLD );
+		$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ), self::MODE_HOLD, $command );
 		$this->refresh( $order );
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] );
 		$new = $handler ? $handler->intent( $row, $context ) : $this->unsupported();
@@ -877,7 +891,8 @@ class Ledger {
 						$draft->put( $stored );
 					}
 				},
-				$indeterminate ? self::MODE_AUTO : self::MODE_HOLD
+				$indeterminate ? self::MODE_AUTO : self::MODE_HOLD,
+				$command
 			);
 			$this->refresh( $order );
 			return $new;
@@ -1079,15 +1094,25 @@ class Ledger {
 	 * Apply a confirmation parked for a stored row through its own write, under the parking lock; a mismatch
 	 * fails the row (a counted one stays) and is noted. For callers holding the order lock: a replay, the sweep.
 	 *
-	 * @param WC_Order $order      Order.
-	 * @param string   $payment_id Row id.
+	 * @param WC_Order           $order      Order.
+	 * @param string             $payment_id Row id.
+	 * @param Money_Command|null $command    The command replaying the arrival: a drained confirmation that completes the
+	 *                                       sale completes at its origin. The change answers null, so its entry stays.
 	 * @return true|WP_Error
 	 */
-	public function drain_parked( WC_Order $order, string $payment_id ) {
+	public function drain_parked( WC_Order $order, string $payment_id, ?Money_Command $command = null ) {
 		return Settlement::instance()->drain(
 			$payment_id,
-			function ( array $patch ) use ( $order, $payment_id ) {
-				$answer = $this->write( $order, fn( Ledger_Draft $draft ) => $this->confirm( $draft, $payment_id, $patch ) )->answer;
+			function ( array $patch ) use ( $order, $payment_id, $command ) {
+				$answer = null;
+				$this->write(
+					$order,
+					function ( Ledger_Draft $draft ) use ( $payment_id, $patch, &$answer ): void {
+						$answer = $this->confirm( $draft, $payment_id, $patch );
+					},
+					self::MODE_AUTO,
+					$command
+				);
 				if ( is_array( $answer ) ) {
 					$this->note_mismatch( $order, $answer, $patch );
 				}
@@ -1236,7 +1261,7 @@ class Ledger {
 		$strand = fn( string $cause ): array => $this->strand( $order, $held, $reserve, $cause );
 		$locked = new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		try {
-			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $held ), self::MODE_HOLD );
+			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $held ), self::MODE_HOLD, $command );
 			$this->refresh( $order );
 		} catch ( \Throwable $error ) {
 			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch. A write refused
@@ -1279,7 +1304,8 @@ class Ledger {
 		// reopened sale holding money owed back, which this refund returns, completes again on it as a close would.
 		$owed = Money::minor( $order->get_total() ) > 0 && in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && $this->signed_balance( $order, $this->read( $order ) ) < 0;
 		try {
-			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ), $owed ? self::MODE_CLOSE : self::MODE_AUTO );
+			// The command rides the write for its origin (a re-completion names the refunding cashier); put() answers null.
+			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ), $owed ? self::MODE_CLOSE : self::MODE_AUTO, $command );
 		} catch ( \Throwable $error ) {
 			if ( ! $error instanceof Ledger_Persistence_Exception || ! in_array( $error->stage, array( 'paid', 'completion' ), true ) ) {
 				return $strand( 'its settle did not land: ' . $error->getMessage() ); // The stored reservation is the strand state.
@@ -2180,8 +2206,13 @@ class Ledger {
 		if ( $may && $this->project( $order, $this->read( $order ), $mode )['completes'] ) {
 			$order = $this->complete( $order, $rows, $draft->origin() ?? $origin );
 		} elseif ( null !== $draft->origin() && Completion_Stamp::is_paid( $order ) && null === Completion_History::of( $order )->standing() ) {
-			// The completion job's change vouches for a paid transition made outside the ledger: S3 at its origin.
-			$order = $this->finish( $order, $draft->origin() );
+			// The completion job vouches for a paid transition made outside the ledger: S3 at its origin, but only on the
+			// evidence rule 1 decides from, captured money covering the sale. A tender whose row never landed waits.
+			if ( $this->covered( $order, $this->read( $order ) ) ) {
+				$order = $this->finish( $order, $draft->origin() );
+			} else {
+				Logger::warning( sprintf( 'WCPOS order #%d is paid but its payment rows do not cover it; its completion waits for the row.', $id ), array( 'order_id' => $id ) );
+			}
 		}
 		return new Ledger_Written( $order, $this->read( $order ), $answer, Completion_History::of( $order )->standing() );
 	}
@@ -2236,13 +2267,37 @@ class Ledger {
 	public function completion_due( WC_Order $order, array $rows ): bool {
 		$history  = Completion_History::of( $order );
 		$captured = array_filter( $rows, static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) );
-		foreach ( $captured as $row ) {
-			if ( null !== Settlement::instance()->parked( (string) $row['id'] ) ) {
-				return false;
-			}
+		if ( $this->unconfirmed( $captured ) ) {
+			return false;
 		}
 		$uncounted = array_filter( $captured, static fn( $row ) => ! $history->counted( (string) $row['id'] ) );
 		return Command_Log::owing( $order, $rows ) || ( $uncounted && $this->signed_balance( $order, $rows ) <= 0 );
+	}
+
+	/**
+	 * Whether captured rows cover the sale with no confirmation outstanding, counted ones included: a reopened sale
+	 * they still cover is paid (rule 3). The evidence a paid transition seen outside the ledger completes on.
+	 *
+	 * @param WC_Order $order Order as stored.
+	 * @param array    $rows  Stored rows.
+	 */
+	private function covered( WC_Order $order, array $rows ): bool {
+		$captured = array_filter( $rows, static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) );
+		return $captured && ! $this->unconfirmed( $captured ) && $this->signed_balance( $order, $rows ) <= 0;
+	}
+
+	/**
+	 * Whether a confirmation is parked for any of these rows.
+	 *
+	 * @param array $rows Rows.
+	 */
+	private function unconfirmed( array $rows ): bool {
+		foreach ( $rows as $row ) {
+			if ( null !== Settlement::instance()->parked( (string) $row['id'] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

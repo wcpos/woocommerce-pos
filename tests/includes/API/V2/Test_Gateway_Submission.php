@@ -1105,13 +1105,12 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
 			$order->save();
 			$paid = in_array( $status, array( 'processing', 'completed' ), true );
-			// Act: an unpaid terminal status's removal rides the status save itself; a paid one's, the completion's S3.
+			// Act: an unpaid terminal status's removal rides the status save itself; a paid one keeps the stamp for the
+			// completion's S3, which no money covers here.
 			$order->update_status( $status );
-			$at_save = wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' );
 			Ledger::flush_all(); // The request ends: the completion the paid status deferred runs at shutdown.
 			// Assert.
-			$this->assertSame( $paid, '' !== $at_save, $status );
-			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' ), $status );
+			$this->assertSame( $paid, '' !== wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' ), $status );
 		}
 	}
 

@@ -12,6 +12,7 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -1905,6 +1906,87 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertCount( 1, $saved->get_fees() );
 		$this->assertSame( '100.00', $saved->get_total() );
 		$this->assertSame( 'completed', $this->stored_status( $id ) );
+	}
+
+	/** A refund that re-completes a reopened sale completes at its command's origin: the refunding cashier names record 2. */
+	public function test_refund_recompleting_a_reopened_sale_names_the_refunding_cashier(): void {
+		// Arrange: sold by cashier A, reopened at a total 20.00 lower; cashier B refunds the excess.
+		$cashier_a = self::factory()->user->create();
+		$cashier_b = self::factory()->user->create();
+		$order     = $this->create_pos_order();
+		$id        = $order->get_id();
+		$order->update_meta_data( '_pos_user', (string) $cashier_a );
+		$order->save();
+		$row = $this->row( '92.95' );
+		$this->pay( $id, $row );
+		$reopened = $this->fresh( $id );
+		$reopened->set_status( 'pos-open' );
+		$reopened->set_total( '72.95' );
+		$reopened->save();
+		$refund  = wc_create_refund(
+			array(
+				'order_id'       => $id,
+				'amount'         => '20.00',
+				'refund_payment' => false,
+				'restock_items'  => false,
+			)
+		);
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:refund', 'refund', $row['id'], $refund->get_id(), '', new Completion_Origin( array(), false, $cashier_b ) );
+
+		// Act.
+		Ledger::instance()->refund( wc_get_order( $id ), $row['id'], $refund->get_id(), '20.00', $command );
+
+		// Assert.
+		$standing = Completion_History::of( $this->fresh( $id ) )->standing();
+		$this->assertSame( 2, (int) $standing['n'] );
+		$this->assertSame( $cashier_b, $standing['cashier'] ?? null );
+		$this->assertSame( $cashier_b, (int) ( new Fiscal_Record_Store() )->find_sale( $id, $standing['id'] )['cashier_id'] );
+	}
+
+	/** A covering capture parked while an authorized arrival is saved is drained by a write that completes at the command's origin. */
+	public function test_record_authorized_with_capture_parked_during_its_save_completes_at_the_commands_origin(): void {
+		// Arrange: the till's record names register R, session S, its sale time and counter.
+		$order      = $this->create_pos_order();
+		$id         = $order->get_id();
+		$input      = array_merge(
+			$this->tender( '92.95' ),
+			array(
+				'method_id' => 'pos_card',
+				'status'    => 'authorized',
+			)
+		);
+		$provenance = array(
+			'register_id'  => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+			'session_id'   => 'aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa',
+			'sale_time'    => '2026-10-20T09:15:00+02:00',
+			'sale_tz'      => 'Europe/Berlin',
+			'sale_counter' => '42',
+		);
+		$command    = new Money_Command(
+			$input['id'],
+			Command_Log::fingerprint( 'record', '', array( 'payment' => $input, 'provenance' => $provenance ) ),
+			'record',
+			'',
+			null,
+			'',
+			new Completion_Origin( $provenance )
+		);
+		$park       = $this->park_once( $id, $input['id'], array( 'status' => 'captured' ) );
+
+		// Act.
+		try {
+			Ledger::instance()->record( wc_get_order( $id ), $input, array(), $command );
+		} finally {
+			$park();
+		}
+
+		// Assert.
+		$entry = Completion_History::of( $this->fresh( $id ) )->standing();
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$this->assertSame(
+			array( 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa', '2026-10-20T09:15:00+02:00', 'Europe/Berlin', '42' ),
+			array( $entry['register'], $entry['session'], $entry['sale_time'], $entry['sale_tz'], $entry['counter'] )
+		);
 	}
 
 	/**

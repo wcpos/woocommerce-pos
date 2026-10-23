@@ -182,7 +182,7 @@ final class Command_Log {
 		$ledger = Ledger::instance();
 		$kind   = $command->kind();
 		if ( 'record' === $kind && null === $ledger->refusal_error( (array) $ledger->find( $order, $command->id() ), $order ) ) {
-			$drained = $ledger->drain_parked( $order, $command->id() ); // A confirmation its arrival stopped before draining.
+			$drained = $ledger->drain_parked( $order, $command->id(), $command ); // A confirmation its arrival stopped before draining.
 			if ( is_wp_error( $drained ) ) {
 				return $drained;
 			}
