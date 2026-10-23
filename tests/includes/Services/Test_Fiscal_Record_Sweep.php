@@ -214,6 +214,55 @@ class Test_Fiscal_Record_Sweep extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, count( $this->sales( $first->get_id() ) ) + count( $this->sales( $other->get_id() ) ) );
 	}
 
+	/** A parked document that keeps failing never starves the never-written pass, and rotates once tried. */
+	public function test_sweep_chronically_failing_parked_document_rotates_behind_a_never_written_record(): void {
+		// Arrange: A is parked and its insert keeps failing; B's completion was never written.
+		$parked = $this->order();
+		$this->with_sale_inserts_failing(
+			function () use ( $parked ): void {
+				Register_Sale::complete( $parked );
+			}
+		);
+		$unwritten = $this->order();
+		$this->without_the_sale_writer(
+			function () use ( $unwritten ): void {
+				Register_Sale::complete( $unwritten );
+			}
+		);
+		$tries   = 0;
+		$failing = static function ( $snapshot, $order_id ) use ( $parked, &$tries ) {
+			if ( $parked->get_id() === (int) $order_id ) {
+				++$tries;
+				throw new \RuntimeException( 'fiscal service unavailable' );
+			}
+			return $snapshot;
+		};
+		$batch  = static fn() => 1;
+		$minute = static fn() => MINUTE_IN_SECONDS;
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $failing, 10, 2 );
+		add_filter( 'wcpos_payments_sweep_batch_size', $batch );
+
+		// Act: two runs, then a third while A's last attempt is younger than the threshold.
+		try {
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+			$after_two = $tries;
+			add_filter( 'wcpos_payments_sweep_threshold', $minute, 20 );
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', $minute, 20 );
+			remove_filter( 'wcpos_payments_sweep_batch_size', $batch );
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $failing, 10 );
+		}
+
+		// Assert.
+		$this->assertCount( 1, $this->sales( $unwritten->get_id() ) );
+		$this->assertSame( array(), $this->sales( $parked->get_id() ) );
+		$this->assertSame( 1, $after_two );
+		$this->assertSame( 1, $tries );
+		$this->assertArrayHasKey( 'attempted_at', array_values( $this->parked( $parked->get_id() ) )[0] );
+	}
+
 	/** A completion younger than the sweep threshold is still its own request's to record. */
 	public function test_sweep_completion_younger_than_the_threshold_is_left_to_its_request(): void {
 		// Arrange.
