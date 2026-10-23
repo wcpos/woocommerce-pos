@@ -85,8 +85,9 @@ class Gateway_Handler extends Abstract_Capture_Mode_Handler {
 
 	/**
 	 * What became of a gateway attempt, read from the order (the gateway's PHP has no status API; `Attempts::reconcile()`
-	 * asks with the attempt's pseudo row): `captured` for the order total, with its transaction id, only when the order
-	 * is paid, through the attempt's method, and its counting rows do not cover it. Anything else, and any row that is
+	 * asks with the attempt's pseudo row): `captured`, with its transaction id, only when the order is paid, through the
+	 * attempt's method, and its counting rows do not cover it; the amount is the remainder they leave (order total minus
+	 * `Ledger::paid()` of the counting rows, a split tender's cash already counted). Anything else, and any row that is
 	 * not a gateway attempt, is answered unchanged: this provider cannot say.
 	 *
 	 * @param array $row Payment row, or an attempt's `{ id, status, capture_mode, method_id, order_id }`.
@@ -94,10 +95,9 @@ class Gateway_Handler extends Abstract_Capture_Mode_Handler {
 	 * @return array|\WP_Error
 	 */
 	public function status( array $row ) {
-		$order = 'gateway' === ( $row['capture_mode'] ?? '' ) ? wc_get_order( (int) ( $row['order_id'] ?? 0 ) ) : null;
-		if ( ! $order instanceof \WC_Order || ( $row['method_id'] ?? null ) !== $order->get_payment_method() || Money::minor( $order->get_total() ) <= 0
-			|| ! ( Completion_Stamp::is_paid( $order ) || null !== $order->get_date_paid( 'edit' ) )
-			|| Money::minor( Ledger::instance()->paid( Ledger::instance()->read( $order ) ) ) >= Money::minor( $order->get_total() ) ) {
+		$order  = 'gateway' === ( $row['capture_mode'] ?? '' ) ? wc_get_order( (int) ( $row['order_id'] ?? 0 ) ) : null;
+		$remain = $order instanceof \WC_Order ? Money::minor( $order->get_total() ) - Money::minor( Ledger::instance()->paid( Ledger::instance()->read( $order ) ) ) : 0;
+		if ( $remain <= 0 || ( $row['method_id'] ?? null ) !== $order->get_payment_method() || ! ( Completion_Stamp::is_paid( $order ) || null !== $order->get_date_paid( 'edit' ) ) ) {
 			return $row;
 		}
 		$transaction = $order->get_transaction_id();
@@ -105,7 +105,7 @@ class Gateway_Handler extends Abstract_Capture_Mode_Handler {
 			$row,
 			array(
 				'status'        => 'captured',
-				'amount'        => Money::normalize( $order->get_total() ),
+				'amount'        => Money::format( $remain ),
 				'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
 			)
 		);

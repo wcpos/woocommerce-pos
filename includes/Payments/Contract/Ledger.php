@@ -2201,8 +2201,8 @@ class Ledger {
 				throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS payment ledger was not persisted.' );
 			}
 		}
-		// S2 is decided from storage: the rows and the order as S1 stored them (I4).
-		$order = $this->fresh( $id );
+		// S2 is decided from storage: the rows and the order as S1 stored them (I4). The sweep's index follows them.
+		$order = $this->index_live( $this->fresh( $id ) );
 		if ( $may && $this->project( $order, $this->read( $order ), $mode )['completes'] ) {
 			$order = $this->complete( $order, $rows, $draft->origin() ?? $origin );
 		} elseif ( null !== $draft->origin() && Completion_Stamp::is_paid( $order ) && null === Completion_History::of( $order )->standing() ) {
@@ -2350,8 +2350,6 @@ class Ledger {
 		$ledgered = $rows || $projection['completes'] || '' !== $order->get_meta( self::META_KEY );
 		if ( $ledgered ) {
 			$this->stage( $order, $rows );
-		} else {
-			self::index_attempts( $order, true ); // No rows: only attempts select the order for the sweep.
 		}
 		// What storage must hold afterwards, as sets (HPOS reuses meta ids): taken now, as the save re-reads the meta.
 		$values = static function ( WC_Order $read, string $key ): array {
@@ -2359,7 +2357,7 @@ class Ledger {
 			sort( $list );
 			return $list;
 		};
-		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, self::SESSION_META_KEY, Attempts::META_KEY, Command_Log::META_KEY );
+		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::SESSION_META_KEY, Attempts::META_KEY, Command_Log::META_KEY );
 		$want   = array_map( static fn( $key ) => $values( $order, $key ), $keys );
 		$order->save();
 		// The rows, their four indexes, the attempt fates their coverage settled, and every order property staged.
@@ -2499,7 +2497,7 @@ class Ledger {
 	private function tidy( WC_Order $order, array $standing, bool $unstamp ): WC_Order {
 		if ( $this->cleanup( $order, $standing, $unstamp ) ) {
 			self::save_meta( $order );
-			$order = $this->fresh( $order->get_id() );
+			$order = $this->index_live( $this->fresh( $order->get_id() ) );
 		}
 		if ( ( $unstamp && null !== Attempts::of( $order )->awaiting() ) || Command_Log::stale( $order, $this->read( $order ) ) ) {
 			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
@@ -2535,14 +2533,7 @@ class Ledger {
 				'schema'   => self::SCHEMA,
 				'payments' => array_map( array( __CLASS__, 'to_wire' ), $advanced ),
 			);
-			$order->update_meta_data( self::META_KEY, wp_json_encode( $ledger ) );
-			$order->delete_meta_data( self::LIVE_LEG_META_KEY ); // Advanced rows leave the sweep's selection unless still live.
-			foreach ( $advanced as $row ) {
-				if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) ) {
-					$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
-				}
-			}
-			self::index_attempts( $order );
+			$order->update_meta_data( self::META_KEY, wp_json_encode( $ledger ) ); // Advanced rows leave the index after the read-back.
 		}
 		return null !== $advanced;
 	}
@@ -2661,45 +2652,54 @@ class Ledger {
 		);
 		$this->reindex( $order, $normalized );
 		$order->delete_meta_data( self::PAYMENT_ID_META_KEY );
-		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
 		$order->delete_meta_data( self::SESSION_META_KEY );
 		$sessions = array();
 		foreach ( $normalized as $row ) {
 			$order->add_meta_data( self::PAYMENT_ID_META_KEY, $row['id'], false );
-			// An owed row stays in the sweep's selection until its completion advances it.
-			if ( in_array( $row['status'], array( 'pending', 'authorized' ), true ) || in_array( Command_Log::OWED, array_column( $row['commands'] ?? array(), 'phase' ), true ) ) {
-				$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
-			}
 			// Normalized: a lowercase uuid or null. Only counting money is a session leg.
 			if ( null !== $row['session_id'] && in_array( $row['status'], self::COUNTING_STATUSES, true ) && ! in_array( $row['session_id'], $sessions, true ) ) {
 				$sessions[] = $row['session_id'];
 				$order->add_meta_data( self::SESSION_META_KEY, $row['session_id'], false );
 			}
 		}
-		self::index_attempts( $order );
 	}
 
 	/**
-	 * The attempts the resolver still has to ask about (`Attempt_Log::to_index()`) join the sweep's selection, beside
-	 * the live rows; staged on the order, the caller saves.
+	 * The sweep's index, `_wcpos_payment_live`, written last, from storage (the index never claims more than storage
+	 * holds): the rows still live or owed, and the attempts the resolver still has to ask about. Saved meta-only, and
+	 * only when it differs, after a read-back confirmed what it is computed from; a write whose rows did not land never
+	 * reaches here, so the index keeps listing what it listed before.
 	 *
-	 * @param WC_Order $order Order with its attempts staged.
-	 * @param bool     $alone Whether they are the whole index (an order with no ledger): rebuilt only when it differs.
+	 * @param WC_Order $order Order as storage holds it.
+	 * @return WC_Order The order as storage holds it afterwards.
 	 */
-	private static function index_attempts( WC_Order $order, bool $alone = false ): void {
-		$attempts = Attempts::of( $order )->to_index();
-		if ( $alone ) {
-			$live = array_map( static fn( $meta ) => (string) $meta->value, $order->get_meta( self::LIVE_LEG_META_KEY, false ) );
-			sort( $live );
-			sort( $attempts );
-			if ( $live === $attempts ) {
-				return;
+	private function index_live( WC_Order $order ): WC_Order {
+		$want = Attempts::of( $order )->to_index();
+		foreach ( $this->read( $order ) as $row ) {
+			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || in_array( Command_Log::OWED, array_column( $row['commands'] ?? array(), 'phase' ), true ) ) {
+				$want[] = strtolower( (string) $row['id'] );
 			}
-			$order->delete_meta_data( self::LIVE_LEG_META_KEY );
 		}
-		foreach ( $attempts as $attempt ) {
-			$order->add_meta_data( self::LIVE_LEG_META_KEY, $attempt, false );
+		$listed = static fn( WC_Order $read ): array => array_map( static fn( $meta ) => (string) $meta->value, $read->get_meta( self::LIVE_LEG_META_KEY, false ) );
+		$want   = array_values( array_unique( $want ) );
+		$have   = $listed( $order );
+		sort( $want );
+		sort( $have );
+		if ( $want === $have ) {
+			return $order;
 		}
+		$order->delete_meta_data( self::LIVE_LEG_META_KEY );
+		foreach ( $want as $id ) {
+			$order->add_meta_data( self::LIVE_LEG_META_KEY, $id, false );
+		}
+		self::save_meta( $order );
+		$order = $this->fresh( $order->get_id() );
+		$have  = $listed( $order );
+		sort( $have );
+		if ( $want !== $have ) {
+			Logger::warning( sprintf( 'WCPOS payment index on order #%d was not persisted; the next write rewrites it.', $order->get_id() ), array( 'order_id' => $order->get_id() ) );
+		}
+		return $order;
 	}
 
 	/**

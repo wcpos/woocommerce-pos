@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -290,6 +291,73 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
 		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
 		$this->assertSame( array(), $this->live_index( $order->get_id() ) );
+	}
+
+	/**
+	 * The index is written last, from storage: a resolver write whose row never lands (both S1 tries) leaves the sweep's
+	 * list as it was, so a later request's sweep re-mints the row once, the sale completes once, and the attempt leaves.
+	 */
+	public function test_a_resolver_write_that_lost_its_row_leaves_the_order_in_the_sweeps_list(): void {
+		// Arrange: a stranded attempt the gateway paid outside the ledger; the resolver's row write never reaches storage.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+		$this->paid_outside( $order->get_id(), 'wcpos_paid_test' );
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		add_filter( 'query', $lose );
+		try {
+			Attempts::reconcile( wc_get_order( $order->get_id() ), 'replay' );
+			$this->fail( 'Precondition: the row write is lost.' );
+		} catch ( Ledger_Persistence_Exception $lost ) {
+			unset( $lost );
+		} finally {
+			remove_filter( 'query', $lose );
+		}
+		wp_cache_flush(); // A later request: nothing in memory from this one.
+		$listed = $this->live_index( $order->get_id() );
+
+		// Act.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertSame( array( $attempt ), $listed, 'The lost write left the sweep\'s list as it was.' );
+		$stored = $this->fresh( $order->get_id() );
+		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+		$this->assertSame( array(), $this->live_index( $order->get_id() ) );
+	}
+
+	/** A split-tender sale: the attempt the gateway paid is recorded for the remainder its counting rows leave, never the whole total again. */
+	public function test_reconcile_mints_only_the_remainder_a_partial_cash_row_leaves(): void {
+		// Arrange: cash pays part; a sent attempt; WooCommerce marks the order paid through the attempt's method.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::rows( $order, array( $this->row( '30.00' ) ) );
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+		$this->paid_outside( $order->get_id(), 'wcpos_paid_test' );
+
+		// Act.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$stored = $this->fresh( $order->get_id() );
+		$minted = Ledger::instance()->find( $stored, $attempt );
+		$this->assertSame( '62.95', $minted['amount'] ?? null );
+		$this->assertSame( '92.95', Ledger::instance()->paid( Ledger::instance()->read( $stored ) ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
 	}
 
 	/** A provider that refused the attempt cancels it: the sale is no longer in motion. */

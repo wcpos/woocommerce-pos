@@ -275,6 +275,7 @@ final class Attempts {
 							'source'        => 'app',
 							'capture_mode'  => 'gateway',
 							'method_id'     => $now['method_id'],
+							'amount'        => $answer['amount'] ?? $d->order()->get_total(),
 							'provider_refs' => array( 'transaction_id' => $answer['provider_refs']['transaction_id'] ?? null ),
 						);
 						$d->put( Webview_Passthrough::row( $d->order(), $cashier > 0 ? $row + array( 'cashier_id' => $cashier ) : $row ) );
