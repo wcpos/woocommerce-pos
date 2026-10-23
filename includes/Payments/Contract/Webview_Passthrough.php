@@ -159,9 +159,10 @@ class Webview_Passthrough {
 			}
 		}
 
-		// A sent attempt this payment answers is the row's id, so Ledger::write() marks the attempt paid.
-		$attempt = Completion_Stamp::attempt( $order->get_id() );
-		self::defer_mint( $order, $attempt ? array( 'id' => $attempt['attempt_id'] ) : array() );
+		// A sent attempt this payment answers is the row's id, so Ledger::write() marks the attempt paid. The stamp
+		// outlives the paid save; the completion's S3 clears it.
+		$attempt = (string) ( Gateway_Submission::read_stamp( $order )['attempt_id'] ?? '' );
+		self::defer_mint( $order, wp_is_uuid( $attempt ) ? array( 'id' => strtolower( $attempt ) ) : array() );
 	}
 
 	/**
@@ -195,7 +196,8 @@ class Webview_Passthrough {
 
 	/**
 	 * Mint outside the payment or status hook (no save inside it, #2389): when order-pay hands back the
-	 * gateway's result, or at shutdown for a callback. Then stamp the completion the row stands for.
+	 * gateway's result, or at shutdown for a callback. The completion the row stands for is deferred with it
+	 * and runs after it (an asynchronous order-pay has no register origin until the row lands).
 	 *
 	 * @param WC_Order $order     Order the hook named.
 	 * @param array    $overrides Submission-specific row values.
@@ -208,7 +210,9 @@ class Webview_Passthrough {
 		$work = static function () use ( $id, $overrides ): void {
 			$order = wc_get_order( $id );
 			try {
-				$row = $order instanceof WC_Order ? self::mint( $order, $overrides ) : null;
+				if ( $order instanceof WC_Order ) {
+					self::mint( $order, $overrides );
+				}
 			} catch ( Ledger_Persistence_Exception $error ) {
 				return; // mint() already logged and left a recovery note.
 			} catch ( \Throwable $error ) {
@@ -216,12 +220,9 @@ class Webview_Passthrough {
 				Logger::error( sprintf( 'WCPOS webview payment hook failed on order #%d: %s', $id, $error->getMessage() ), array( 'order_id' => $id ) );
 				return;
 			}
-			$order = null === $row ? null : wc_get_order( $id );
-			if ( $order instanceof WC_Order ) {
-				Completion_Stamp::stamp( $order );
-			}
 		};
 		Ledger::defer( $id, $work, __( 'Recording the payment WooCommerce took', 'woocommerce-pos' ) );
+		Completion_Stamp::defer( $id, self::is_paying( $id ) );
 	}
 
 	/**
@@ -251,50 +252,10 @@ class Webview_Passthrough {
 			return null;
 		}
 		// From here WooCommerce has taken money: any failure, building the row included, is recorded loudly.
-		$transaction_id = '';
+		$transaction_id = $order->get_transaction_id();
 		$row            = array();
 		try {
-			$descriptor = Descriptor_Builder::instance()->get( $method_id );
-			$tendered   = null;
-			$change     = null;
-			if ( 'pos_cash' === $method_id ) {
-				$cash_tendered = $order->get_meta( '_pos_cash_amount_tendered' );
-				$cash_change    = $order->get_meta( '_pos_cash_change' );
-				$tendered       = '' === $cash_tendered ? null : $cash_tendered;
-				$change         = '' === $cash_change ? null : $cash_change;
-			}
-			$transaction_id = $order->get_transaction_id();
-			// The order writer records who rang up the sale in `_pos_user` (Orders_Controller);
-			// the order-pay POST runs as the order's customer, so the current user is only a
-			// fallback for an order that never went through the POS writer.
-			$cashier_id = (int) $order->get_meta( '_pos_user' );
-			$now        = gmdate( 'c' );
-			$row = array_merge(
-				array(
-					'id'               => wp_generate_uuid4(),
-					'source'           => 'webview',
-					'method_id'        => $method_id,
-					'kind'             => $descriptor ? $descriptor['kind'] : 'other',
-					'provider'         => $descriptor ? $descriptor['capture']['provider'] : null,
-					'capture_mode'     => 'webview',
-					'transport'        => null,
-					'recorded_offline' => false,
-					'amount'           => $order->get_total(),
-					'currency'         => $order->get_currency(),
-					'tendered'         => $tendered,
-					'change'           => $change,
-					'tip'              => null,
-					'status'           => 'captured',
-					'provider_refs'    => array( 'transaction_id' => '' !== $transaction_id ? $transaction_id : null ),
-					'receipt'          => array(),
-					'cashier_id'       => $cashier_id > 0 ? $cashier_id : get_current_user_id(),
-					'store_id'         => '' === (string) $order->get_meta( '_pos_store' ) ? null : (int) $order->get_meta( '_pos_store' ),
-					'created_at_gmt'   => $now,
-					'captured_at_gmt'  => $now,
-					'updated_at_gmt'   => $now,
-				),
-				$overrides
-			);
+			$row     = self::row( $order, $overrides );
 			$adopted = $ledger->adopt(
 				$order,
 				$row,
@@ -326,5 +287,56 @@ class Webview_Passthrough {
 			throw $error instanceof Ledger_Persistence_Exception ? $error : new Ledger_Persistence_Exception( esc_html( $error->getMessage() ), 0, $error );
 		}
 		return is_wp_error( $adopted ) ? null : $adopted;
+	}
+
+	/**
+	 * The captured row for the order's total that WooCommerce took, for the gateway on the order unless overridden.
+	 *
+	 * @param WC_Order $order     Order object.
+	 * @param array    $overrides Submission-specific row values.
+	 */
+	public static function row( WC_Order $order, array $overrides = array() ): array {
+		$method_id  = $overrides['method_id'] ?? $order->get_payment_method();
+		$descriptor = Descriptor_Builder::instance()->get( $method_id );
+		$tendered   = null;
+		$change     = null;
+		if ( 'pos_cash' === $method_id ) {
+			$cash_tendered = $order->get_meta( '_pos_cash_amount_tendered' );
+			$cash_change   = $order->get_meta( '_pos_cash_change' );
+			$tendered      = '' === $cash_tendered ? null : $cash_tendered;
+			$change        = '' === $cash_change ? null : $cash_change;
+		}
+		$transaction_id = $order->get_transaction_id();
+		// The order writer records who rang up the sale in `_pos_user` (Orders_Controller);
+		// the order-pay POST runs as the order's customer, so the current user is only a
+		// fallback for an order that never went through the POS writer.
+		$cashier_id = (int) $order->get_meta( '_pos_user' );
+		$now        = gmdate( 'c' );
+		return array_merge(
+			array(
+				'id'               => wp_generate_uuid4(),
+				'source'           => 'webview',
+				'method_id'        => $method_id,
+				'kind'             => $descriptor ? $descriptor['kind'] : 'other',
+				'provider'         => $descriptor ? $descriptor['capture']['provider'] : null,
+				'capture_mode'     => 'webview',
+				'transport'        => null,
+				'recorded_offline' => false,
+				'amount'           => $order->get_total(),
+				'currency'         => $order->get_currency(),
+				'tendered'         => $tendered,
+				'change'           => $change,
+				'tip'              => null,
+				'status'           => 'captured',
+				'provider_refs'    => array( 'transaction_id' => '' !== $transaction_id ? $transaction_id : null ),
+				'receipt'          => array(),
+				'cashier_id'       => $cashier_id > 0 ? $cashier_id : get_current_user_id(),
+				'store_id'         => '' === (string) $order->get_meta( '_pos_store' ) ? null : (int) $order->get_meta( '_pos_store' ),
+				'created_at_gmt'   => $now,
+				'captured_at_gmt'  => $now,
+				'updated_at_gmt'   => $now,
+			),
+			$overrides
+		);
 	}
 }

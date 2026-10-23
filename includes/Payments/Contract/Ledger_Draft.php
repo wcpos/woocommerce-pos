@@ -39,6 +39,14 @@ final class Ledger_Draft {
 	private $attempts = array();
 
 	/**
+	 * Where the sale completed, named by a change that vouches for a paid transition made outside the ledger
+	 * (`Completion_Stamp::defer()`); null leaves the write's own origin and its own decision.
+	 *
+	 * @var Completion_Origin|null
+	 */
+	private $origin = null;
+
+	/**
 	 * Build the draft from the locked read.
 	 *
 	 * @param WC_Order $order Fresh order.
@@ -102,5 +110,20 @@ final class Ledger_Draft {
 	/** The staged attempt fates, by attempt id. */
 	public function attempts(): array {
 		return $this->attempts;
+	}
+
+	/**
+	 * Vouch that the sale completed at this origin: a paid order with no standing completion gets one in this
+	 * write's S3, as a sale this write's own paid transition completes does.
+	 *
+	 * @param Completion_Origin $origin The origin.
+	 */
+	public function completes_at( Completion_Origin $origin ): void {
+		$this->origin = $origin;
+	}
+
+	/** The origin the change named, or null. */
+	public function origin(): ?Completion_Origin {
+		return $this->origin;
 	}
 }

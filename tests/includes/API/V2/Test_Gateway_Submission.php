@@ -708,7 +708,6 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$order   = $this->create_pos_order();
 		$attempt = wp_generate_uuid4();
 		$this->assertSame( 'sent', $this->submit( $order, $attempt, array( 'invoice_email' => 'customer@example.com' ) )->get_data()['outcome'] );
-		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reset();
 
 		// Act: a later request lands the paid status without payment_complete(); its row is minted at shutdown.
 		wc_get_order( $order->get_id() )->update_status( 'processing' );
@@ -732,7 +731,6 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$order   = $this->create_pos_order();
 		$attempt = wp_generate_uuid4();
 		$this->assertSame( 'sent', $this->submit( $order, $attempt, array( 'invoice_email' => 'customer@example.com' ) )->get_data()['outcome'] );
-		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reset();
 
 		// Act: the provider's callback in a later request; its row is minted at shutdown.
 		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
@@ -1106,10 +1104,14 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			$order = $this->create_pos_order();
 			$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
 			$order->save();
-			// Act: the stamp's removal rides the status save itself.
+			$paid = in_array( $status, array( 'processing', 'completed' ), true );
+			// Act: an unpaid terminal status's removal rides the status save itself; a paid one's, the completion's S3.
 			$order->update_status( $status );
+			$at_save = wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' );
+			Ledger::flush_all(); // The request ends: the completion the paid status deferred runs at shutdown.
 			// Assert.
-			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' ) );
+			$this->assertSame( $paid, '' !== $at_save, $status );
+			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' ), $status );
 		}
 	}
 

@@ -13,7 +13,6 @@ use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
@@ -40,14 +39,6 @@ class Payments_Controller extends WC_REST_Controller {
 	 * @var string
 	 */
 	protected $rest_base = 'orders';
-
-	/**
-	 * The money commands whose body may carry the completing register's provenance (record, intent,
-	 * capture, submit, close). A status poll, void, refund or cancel completes nothing at a register.
-	 *
-	 * @var string[]
-	 */
-	private const PROVENANCE_HANDLERS = array( 'create_item', 'intent_item', 'capture_item', 'submit_item', 'close_item' );
 
 	/**
 	 * The money command each handler runs (ADR 0040 rules 5 and 6): every one carries the order
@@ -105,15 +96,9 @@ class Payments_Controller extends WC_REST_Controller {
 											return $command;
 										}
 										$handler = fn( ?Money_Command $c ) => $this->{$definition[1]}( $request, $c );
-										// A record with no row id is no command: its handler answers the 400.
-										$work = null === $command ? fn() => $handler( null ) : fn() => Command_Log::run( $order, $command, $handler );
-										if ( in_array( $definition[1], self::PROVENANCE_HANDLERS, true ) ) {
-											// The command's provenance names the register that completes the sale, if it does (rule 1c); a replay's heal too.
-											$provenance = $this->params( $request )['provenance'] ?? null;
-											$result     = Completion_Stamp::with_provenance( is_array( $provenance ) ? $provenance : array(), $work, (int) $request['id'] );
-										} else {
-											$result = $work();
-										}
+										// A record with no row id is no command: its handler answers the 400. The command's origin
+										// (its body's provenance) names the register that completes the sale, if it does; a replay's heal too.
+										$result = null === $command ? $handler( null ) : Command_Log::run( $order, $command, $handler );
 										return $this->answer( $result, $kind, (int) $request['id'] );
 									} catch ( Ledger_Persistence_Exception $error ) {
 										// The payment was not stored: a retryable conflict, never an acknowledgement.
@@ -418,17 +403,6 @@ class Payments_Controller extends WC_REST_Controller {
 			$response->set_data( $data );
 		}
 		return $response;
-	}
-
-	/**
-	 * The request body, JSON or form.
-	 *
-	 * @param WP_REST_Request $request Request object.
-	 */
-	private function params( WP_REST_Request $request ): array {
-		$params = $request->get_json_params();
-		$params = is_array( $params ) ? $params : $request->get_body_params();
-		return is_array( $params ) ? $params : array();
 	}
 
 	/**

@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -18,6 +17,7 @@ use WCPOS\WooCommercePOS\Services\Service_Groups;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
+use WCPOS\WooCommercePOS\Tests\Helpers\Register_Sale;
 
 /** Fiscal lifecycle observers and immutable corrections. */
 class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
@@ -68,13 +68,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	 * @param \WC_Order $order Order.
 	 */
 	private function pay( \WC_Order $order ): void {
-		Completion_Stamp::with_provenance(
-			array(),
-			static function () use ( $order ): void {
-				$order->payment_complete();
-			},
-			$order->get_id()
-		);
+		Register_Sale::complete( $order, array() );
 	}
 
 	/**
@@ -171,17 +165,14 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$reopened = $this->reopen( $order );
 
 		// Act: closed at register B.
-		Completion_Stamp::with_provenance(
+		Register_Sale::complete(
+			$reopened,
 			array(
 				'register_id' => $b,
 				'sale_time' => '2026-10-20T09:15:00+02:00',
 				'sale_tz' => 'Europe/Berlin',
 				'sale_counter' => '42',
-			),
-			static function () use ( $reopened ): void {
-				$reopened->payment_complete();
-			},
-			$reopened->get_id()
+			)
 		);
 
 		// Assert.
@@ -211,13 +202,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		add_action( 'wcpos_sale_completed', $listener, 20 );
 
 		// Act: completed again at another register, after the sale writer (10) built its document.
-		Completion_Stamp::with_provenance(
-			array( 'register_id' => wp_generate_uuid4() ),
-			static function () use ( $reopened ): void {
-				$reopened->payment_complete();
-			},
-			$reopened->get_id()
-		);
+		Register_Sale::complete( $reopened, array( 'register_id' => wp_generate_uuid4() ) );
 		remove_action( 'wcpos_sale_completed', $listener, 20 );
 
 		// Assert.
@@ -235,23 +220,18 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
 		$order->save();
 		$take = static function ( \WC_Order $order, array $session, string $amount ): void {
-			Completion_Stamp::with_provenance(
+			Register_Sale::cash(
+				wc_get_order( $order->get_id() ),
+				array(
+					'id' => wp_generate_uuid4(),
+					'method_id' => 'pos_cash',
+					'amount' => $amount,
+					'session_id' => $session['id'],
+				),
 				array(
 					'register_id' => $session['register_id'],
 					'session_id' => $session['id'],
-				),
-				static function () use ( $order, $session, $amount ): void {
-					Ledger::instance()->record(
-						wc_get_order( $order->get_id() ),
-						array(
-							'id' => wp_generate_uuid4(),
-							'method_id' => 'pos_cash',
-							'amount' => $amount,
-							'session_id' => $session['id'],
-						)
-					);
-				},
-				$order->get_id()
+				)
 			);
 		};
 		$take( $order, $session_a, '100.00' );
@@ -287,23 +267,18 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order->update_meta_data( '_wcpos_session', $session_a['id'] );
 		$order->save();
 		$take = static function ( \WC_Order $order, array $session, string $amount ): void {
-			Completion_Stamp::with_provenance(
+			Register_Sale::cash(
+				wc_get_order( $order->get_id() ),
+				array(
+					'id' => wp_generate_uuid4(),
+					'method_id' => 'pos_cash',
+					'amount' => $amount,
+					'session_id' => $session['id'],
+				),
 				array(
 					'register_id' => $session['register_id'],
 					'session_id' => $session['id'],
-				),
-				static function () use ( $order, $session, $amount ): void {
-					Ledger::instance()->record(
-						wc_get_order( $order->get_id() ),
-						array(
-							'id' => wp_generate_uuid4(),
-							'method_id' => 'pos_cash',
-							'amount' => $amount,
-							'session_id' => $session['id'],
-						)
-					);
-				},
-				$order->get_id()
+				)
 			);
 		};
 
@@ -344,36 +319,31 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->order();
 		$order->update_meta_data( '_wcpos_session', $session['id'] );
 		$order->save();
-		$in_session = static function ( \WC_Order $order, callable $work ) use ( $session ): void {
-			Completion_Stamp::with_provenance(
-				array(
-					'register_id' => $session['register_id'],
-					'session_id' => $session['id'],
-				),
-				$work,
-				$order->get_id()
-			);
-		};
-		$cash = static function ( \WC_Order $order, string $amount ) use ( $session ): void {
-			Ledger::instance()->record(
-				wc_get_order( $order->get_id() ),
+		$at   = array(
+			'register_id' => $session['register_id'],
+			'session_id' => $session['id'],
+		);
+		$cash = static function ( \WC_Order $order, string $amount ) use ( $session, $at ): void {
+			Register_Sale::cash(
+				$order,
 				array(
 					'id' => wp_generate_uuid4(),
 					'method_id' => 'pos_cash',
 					'amount' => $amount,
 					'session_id' => $session['id'],
-				)
+				),
+				$at
 			);
 		};
 
 		// Act: completion 1 (100.00), completion 2 adds 20.00, completion 3 adds nothing.
-		$in_session( $order, static fn() => $cash( $order, '100.00' ) );
+		$cash( $order, '100.00' );
 		$reopened = $this->reopen( $order );
 		$reopened->set_total( '120.00' );
 		$reopened->save();
-		$in_session( $order, static fn() => $cash( $order, '20.00' ) );
+		$cash( $order, '20.00' );
 		$again = $this->reopen( $order );
-		$in_session( $order, static fn() => $again->payment_complete() );
+		Register_Sale::complete( $again, $at );
 
 		// Assert.
 		$this->assertCount( 3, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
@@ -474,26 +444,19 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	 * @return array|\WP_Error The row.
 	 */
 	private function cash_in( \WC_Order $order, array $session, string $amount ) {
-		$row = null;
-		Completion_Stamp::with_provenance(
+		return Register_Sale::cash(
+			wc_get_order( $order->get_id() ),
+			array(
+				'id' => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount' => $amount,
+				'session_id' => $session['id'],
+			),
 			array(
 				'register_id' => $session['register_id'],
 				'session_id' => $session['id'],
-			),
-			static function () use ( $order, $session, $amount, &$row ): void {
-				$row = Ledger::instance()->record(
-					wc_get_order( $order->get_id() ),
-					array(
-						'id' => wp_generate_uuid4(),
-						'method_id' => 'pos_cash',
-						'amount' => $amount,
-						'session_id' => $session['id'],
-					)
-				);
-			},
-			$order->get_id()
+			)
 		);
-		return $row;
 	}
 
 	/** The late correction waits for its completion's own sale row, and lands when recovery writes it. */
@@ -1128,6 +1091,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		wc_get_order( $order->get_id() )->update_status( 'processing' );
+		Ledger::flush_all(); // The request ends: the completion the status hook deferred runs at shutdown.
 
 		// Assert.
 		$this->assertCount( 1, $this->sales( $order->get_id() ) );
@@ -1265,6 +1229,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				false
 			);
 			wc_get_order( $order->get_id() )->payment_complete();
+			Ledger::flush_all(); // The webhook request ends: the completion its hooks deferred runs at shutdown.
 			$this->assertIsArray( ( new Fiscal_Record_Store() )->find_sale( $order->get_id() ) );
 		} finally {
 			$instance->setValue( null, $writers );
@@ -1499,7 +1464,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	/** Admin refunds get independent numbers and sale link. */
 	public function test_admin_refunds_get_independent_numbers_and_sale_link(): void {
 		$order = $this->order();
-		$this->pay( $order );
+		Completion_Fixture::sale( $order ); // A completed sale with no ledger rows: the admin refund allocates nothing.
 		$store = new Fiscal_Record_Store();
 		$sale = $store->find_sale( $order->get_id() );
 		foreach ( array( 1, 2 ) as $number ) {

@@ -12,7 +12,6 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
-use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 
 /**
  * Appends one entry to `_wcpos_completions` each time the server completes a sale at a
@@ -25,144 +24,11 @@ final class Completion_Stamp {
 	public const META_KEY              = '_wcpos_completions';
 	public const COMPLETED_AT_META_KEY = '_wcpos_completed_at';
 
-	/** Entry field => [ request body field, till meta key whose validation it borrows ]. */
-	private const PROVENANCE_FIELDS = array(
-		'register'  => array( 'register_id', '_wcpos_register' ),
-		'session'   => array( 'session_id', '_wcpos_session' ),
-		'sale_time' => array( 'sale_time', '_wcpos_sale_time' ),
-		'sale_tz'   => array( 'sale_tz', '_wcpos_sale_tz' ),
-		'counter'   => array( 'sale_counter', '_wcpos_sale_counter' ),
-	);
-
-	/**
-	 * The money command running in this request: its order id and validated provenance; null outside one.
-	 *
-	 * @var array{order_id: int, provenance: array}|null
-	 */
-	private static $context = null;
-
-	/**
-	 * A sent submit's awaiting-customer stamp, read before the stamp is cleared: its provenance and
-	 * the attempt, method and cashier its row is minted with when no gateway mints one.
-	 *
-	 * @var array<int, array{provenance: array, attempt_id: string, method_id: string, cashier_id: int}>
-	 */
-	private static $attempts = array();
-
-	/**
-	 * Orders whose payment_complete() is running: the passthrough defers their row's mint from payment-complete 10.
-	 *
-	 * @var array<int, bool>
-	 */
-	private static $completing = array();
-
-	/** Arm the completion entry points. */
+	/** Arm the one completion observer. */
 	public static function register_hooks(): void {
-		// Priority 5: memoise a sent submit's provenance (Gateway_Submission memoises it before its
-		// before-save clears the stamp), and mark a reopen, a write's own included.
+		// Priority 5, before the passthrough's mint (status-changed and payment-complete 10): a reopen is marked now,
+		// a completion outside the ledger is deferred to one write's S3. Nothing saves inside the hook for a completion.
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 5, 4 );
-		// Priority 15: stamp a completion; a write stamps its own (S3), and a mint deferred from these
-		// hooks stamps after it lands.
-		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_completed' ), 15, 4 );
-		// Priority 15: a completion whose register origin is already stored; a deferred mint stamps its own.
-		add_action( 'woocommerce_payment_complete', array( __CLASS__, 'on_payment_complete' ), 15, 1 );
-		add_action( 'woocommerce_pre_payment_complete', array( __CLASS__, 'on_pre_payment_complete' ), 10, 1 );
-	}
-
-	/**
-	 * Note that payment_complete() is running on the order (its status changes before its mint).
-	 *
-	 * @param int $id Order ID.
-	 */
-	public static function on_pre_payment_complete( $id ): void {
-		self::$completing[ (int) $id ] = true;
-		// WooCommerce's no-op branch (a status payment_complete() refuses) fires
-		// woocommerce_payment_complete_order_status_{status} instead: clear the flag there too.
-		foreach ( array_keys( wc_get_order_statuses() ) as $status ) {
-			add_action( 'woocommerce_payment_complete_order_status_' . ( 'wc-' === substr( $status, 0, 3 ) ? substr( $status, 3 ) : $status ), array( __CLASS__, 'on_payment_completed' ), 15, 1 );
-		}
-	}
-
-	/**
-	 * The order's payment_complete() has finished, whichever branch it took.
-	 *
-	 * @param int $id Order ID.
-	 */
-	public static function on_payment_completed( $id ): void {
-		unset( self::$completing[ (int) $id ] );
-	}
-
-	/**
-	 * Run a money command with its provenance as the request context.
-	 *
-	 * @param array    $provenance Body `provenance` object (register_id, session_id, sale_time, sale_tz, sale_counter).
-	 * @param callable $work       The command.
-	 * @param int      $order_id   The order the command acts on: the only order it is a register origin for.
-	 * @return mixed
-	 */
-	public static function with_provenance( array $provenance, callable $work, int $order_id ) {
-		$previous      = self::$context;
-		self::$context = array(
-			'order_id'   => $order_id,
-			'provenance' => self::validated( $provenance ),
-		);
-		try {
-			return $work();
-		} finally {
-			self::$context = $previous;
-		}
-	}
-
-	/**
-	 * The validated provenance of the command in flight on this order, entry-shaped; empty otherwise.
-	 *
-	 * @param int $order_id Order ID.
-	 */
-	public static function provenance( int $order_id ): array {
-		return self::in_command( $order_id ) ? self::$context['provenance'] : array();
-	}
-
-	/**
-	 * Whether a money command on this order is running in this request.
-	 *
-	 * @param int $order_id Order ID.
-	 */
-	private static function in_command( int $order_id ): bool {
-		return null !== self::$context && 0 !== $order_id && self::$context['order_id'] === $order_id;
-	}
-
-	/** Test seam: forget the request context and the memoised attempt provenance. */
-	public static function reset(): void {
-		self::$context    = null;
-		self::$attempts   = array();
-		self::$completing = array();
-	}
-
-	/**
-	 * The sent attempt remembered for the order in this request (attempt_id, method_id, cashier_id,
-	 * provenance), or null.
-	 *
-	 * @param int $order_id Order ID.
-	 */
-	public static function attempt( int $order_id ): ?array {
-		return self::$attempts[ $order_id ] ?? null;
-	}
-
-	/**
-	 * Remember the provenance a sent submit left on the order before the stamp is cleared.
-	 *
-	 * @param WC_Order $order Order object.
-	 */
-	public static function memoise( WC_Order $order ): void {
-		$stamp = Gateway_Submission::read_stamp( $order );
-		if ( is_string( $stamp['attempt_id'] ?? null ) && wp_is_uuid( $stamp['attempt_id'] ) ) {
-			self::$attempts[ $order->get_id() ] = array(
-				'provenance' => is_array( $stamp['provenance'] ?? null ) ? self::validated( $stamp['provenance'], true ) : array(),
-				'attempt_id' => strtolower( $stamp['attempt_id'] ),
-				'method_id'  => (string) ( $stamp['method_id'] ?? '' ),
-				'cashier_id' => (int) ( $stamp['cashier_id'] ?? 0 ),
-			);
-		}
 	}
 
 	/**
@@ -175,26 +41,57 @@ final class Completion_Stamp {
 	 */
 	public static function on_status_changed( $id, $from, $to, $order = null ): void {
 		try {
-			$order = $order instanceof WC_Order ? $order : wc_get_order( (int) $id );
+			$id    = (int) $id;
+			$order = $order instanceof WC_Order ? $order : wc_get_order( $id );
 			if ( ! $order instanceof WC_Order ) {
 				return;
 			}
 			$completed = self::completed_statuses( $order );
 			$reopened  = self::reopened_statuses();
-			if ( in_array( (string) $to, $completed, true ) && ! in_array( (string) $from, $completed, true ) ) {
-				self::memoise( $order );
-			} elseif ( in_array( (string) $to, $completed, true ) ) {
-				return; // Completed to completed (processing to a configured on-hold): the sale still stands.
-			} elseif ( in_array( (string) $to, $reopened, true ) && ! in_array( (string) $from, $reopened, true ) ) {
-				self::mark_reopened( $order );
-			} elseif ( in_array( (string) $to, $reopened, true ) && in_array( (string) $from, $completed, true ) ) {
-				// A completed status that is also open (a merchant's POS status stored as on-hold) is
-				// left for another open status: that is a reopen of the standing completion too.
-				self::mark_reopened( $order );
+			$into      = in_array( (string) $to, $completed, true );
+			if ( $into && ! in_array( (string) $from, $completed, true ) ) {
+				// The ledger's own write, and a submit's dispatch (its final write), complete in their own S3. Elsewhere only
+				// a sale with a register origin completes: a sent submit's stamp, a captured row, a POS order's order-pay window.
+				$origin = null !== Gateway_Submission::read_stamp( $order ) || self::captured_ids( $order ) || ( Webview_Passthrough::is_paying( $id ) && wcpos_is_pos_order( $order ) );
+				if ( $origin && ! Ledger::is_writing( $id ) && ! Gateway_Submission::is_submitting( $id ) ) {
+					self::defer( $id, Webview_Passthrough::is_paying( $id ) );
+				}
+			} elseif ( ! $into && in_array( (string) $to, $reopened, true ) && ( ! in_array( (string) $from, $reopened, true ) || in_array( (string) $from, $completed, true ) ) ) {
+				// A completed status that is also open (a merchant's POS status stored as on-hold) left for another open
+				// status is a reopen of the standing completion too. A write's own reopen included.
+				self::reopen( $order );
 			}
 		} catch ( \Throwable $error ) {
 			Logger::error( sprintf( 'WCPOS completion observer failed on order #%d: %s', (int) $id, $error->getMessage() ), array( 'order_id' => (int) $id ) );
 		}
+	}
+
+	/**
+	 * Complete a sale paid outside the ledger in one write's S3, after the order's other deferred work (a mint the
+	 * completion must name) and once per flush: the paid attempt the stamp names is resolved to its row, and the
+	 * write completes the sale if it is still paid with nothing standing.
+	 *
+	 * @param int  $order_id  Order ID.
+	 * @param bool $order_pay Whether order-pay is paying the order (read once, where the transition was seen).
+	 */
+	public static function defer( int $order_id, bool $order_pay ): void {
+		Ledger::defer(
+			$order_id,
+			static function () use ( $order_id, $order_pay ): void {
+				$order = self::fresh( $order_id );
+				if ( $order && null === Completion_History::of( $order )->standing() ) {
+					Ledger::instance()->write(
+						$order,
+						static function ( Ledger_Draft $d ) use ( $order_pay ): bool {
+							$d->completes_at( new Completion_Origin( array(), $order_pay ) );
+							return Gateway_Submission::resolve_paid( $d );
+						}
+					);
+				}
+			},
+			__( 'Recording the completion', 'woocommerce-pos' ),
+			true
+		);
 	}
 
 	/** Statuses a sale is reopened into (the observer marks the latest entry): the open ones, failed and cancelled. */
@@ -203,104 +100,51 @@ final class Completion_Stamp {
 	}
 
 	/**
-	 * Stamp a transition into a completed status (priority 15, after the webview's status mint).
+	 * The standing completion, appended as completion n+1 when none stands (A1): its entry, its time and, once
+	 * stored and read back (A3), `wcpos_sale_completed` under the order lock (A4). The caller decided that the
+	 * sale completed (A5); S3 is the only production caller. The awaiting stamp goes in S3's cleanup.
 	 *
-	 * @param int           $id    Order ID.
-	 * @param string        $from  Previous status.
-	 * @param string        $to    New status.
-	 * @param WC_Order|null $order Order object.
+	 * @param WC_Order          $order  Order object.
+	 * @param Completion_Origin $origin Where the completion happened.
+	 * @throws Ledger_Persistence_Exception With stage `completion` when the lock is taken or the entry is not stored.
 	 */
-	public static function on_completed( $id, $from, $to, $order = null ): void {
-		if ( Ledger::is_writing( (int) $id ) ) {
-			return;
-		}
-		try {
-			$order = $order instanceof WC_Order ? $order : wc_get_order( (int) $id );
-			if ( ! $order instanceof WC_Order ) {
-				return;
-			}
-			$completed = self::completed_statuses( $order );
-			if ( in_array( (string) $to, $completed, true ) && ! in_array( (string) $from, $completed, true ) ) {
-				self::stamp( $order );
-			}
-		} catch ( \Throwable $error ) {
-			Logger::error( sprintf( 'WCPOS completion observer failed on order #%d: %s', (int) $id, $error->getMessage() ), array( 'order_id' => (int) $id ) );
-		}
-	}
-
-	/**
-	 * A completion whose register origin appeared only at payment-complete (an asynchronous order-pay mint).
-	 *
-	 * @param int $id Order ID.
-	 */
-	public static function on_payment_complete( $id ): void {
-		self::on_payment_completed( $id );
-		if ( Ledger::is_writing( (int) $id ) ) {
-			return;
-		}
-		try {
-			$order = wc_get_order( (int) $id );
-			if ( $order instanceof WC_Order ) {
-				self::stamp( $order );
-			}
-		} catch ( \Throwable $error ) {
-			Logger::error( sprintf( 'WCPOS completion observer failed on order #%d: %s', (int) $id, $error->getMessage() ), array( 'order_id' => (int) $id ) );
-		}
-	}
-
-	/**
-	 * Append the next entry when the order is paid at a register and not already complete this cycle.
-	 * Never throws; a failure is logged and noted on the order for a human.
-	 *
-	 * @param WC_Order $order Order object.
-	 */
-	public static function stamp( WC_Order $order ): void {
-		$id = $order->get_id();
-		if ( ! self::is_paid( $order ) || ! self::has_origin( $order ) ) {
-			return;
-		}
+	public static function append( WC_Order $order, Completion_Origin $origin ): array {
+		$id   = $order->get_id();
 		$lock = Order_Lock::instance();
 		if ( ! $lock->acquire( $id ) ) {
-			self::failed( $order, __( 'WCPOS: completion could not be recorded; reconcile manually.', 'woocommerce-pos' ) );
-			return;
+			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion could not take the order lock.' );
 		}
 		try {
-			$fresh = self::fresh( $id );
-			if ( $fresh && self::is_paid( $fresh ) ) {
-				self::mints_attempt( $fresh );
+			$fresh    = self::fresh( $id );
+			$recorded = $fresh ? Completion_History::of( $fresh ) : null;
+			if ( null === $recorded || null !== $recorded->standing() ) {
+				return $recorded ? $recorded->standing() : array();
 			}
-			if ( ! $fresh || ! self::is_paid( $fresh ) || ! self::has_origin( $fresh ) || self::awaits_mint( $fresh ) ) {
-				return;
-			}
-			$recorded = Completion_History::of( $fresh );
-			if ( null !== $recorded->standing() ) {
-				return; // Already complete for this cycle.
-			}
-			$history  = $recorded->entries();
+			$history = $recorded->entries();
 			if ( ! $history && ( new Fiscal_Record_Store() )->find_sale( $id ) ) {
-				// Completed and reopened before this shipped: the earlier completion is entry 1.
+				// Completed and reopened before the history existed: the earlier completion is entry 1.
 				$history[] = self::synthesise( $fresh );
 			}
-			$n          = count( $history ) + 1;
-			$provenance = self::resolve_provenance( $fresh, $n );
-			$entry      = array(
+			$n         = count( $history ) + 1;
+			$from      = $origin->for_entry( $fresh, $n );
+			$entry     = array(
 				'id'              => wp_generate_uuid4(),
 				'n'               => $n,
 				'at_gmt'          => gmdate( 'c' ),
-				'sale_time'       => $provenance['sale_time'],
-				'sale_tz'         => $provenance['sale_tz'],
-				'register'        => $provenance['register'],
-				'session'         => $provenance['session'],
-				'counter'         => $provenance['counter'],
+				'sale_time'       => $from['sale_time'],
+				'sale_tz'         => $from['sale_tz'],
+				'register'        => $from['register'],
+				'session'         => $from['session'],
+				'counter'         => $from['counter'],
 				'total'           => Money::normalize( $fresh->get_total() ),
 				'payment_ids'     => self::captured_ids( $fresh ),
 				'reopened_at_gmt' => null,
-			);
+			) + array_intersect_key( $from, array( 'cashier' => true ) );
 			$history[] = $entry;
 			if ( ! self::persist( $fresh, $history, $entry['at_gmt'] ) ) {
 				/* translators: %d: completion number. */
 				self::failed( $fresh, sprintf( __( 'WCPOS: completion %d could not be recorded; reconcile manually.', 'woocommerce-pos' ), $n ) );
-				return;
+				throw Ledger_Persistence_Exception::at( 'completion', esc_html( sprintf( 'WCPOS completion %d was not persisted.', $n ) ) );
 			}
 			// Fired under the order lock, so no other writer edits the sale before its record is built.
 			try {
@@ -315,17 +159,19 @@ final class Completion_Stamp {
 			} catch ( \Throwable $error ) {
 				Logger::error( sprintf( 'WCPOS completion %d listener failed on order #%d: %s', $n, $id, $error->getMessage() ), array( 'order_id' => $id ) );
 			}
+			return $entry;
 		} finally {
 			$lock->release( $id );
 		}
 	}
 
 	/**
-	 * Mark the latest entry reopened; synthesise the pre-deploy completion first when there is none.
+	 * Mark the latest entry reopened, once (A2); synthesise the pre-deploy completion first when there is none.
+	 * Synchronous and meta-only (H2), so the sale stops standing for the rest of the request. Never throws.
 	 *
 	 * @param WC_Order $order Order object.
 	 */
-	private static function mark_reopened( WC_Order $order ): void {
+	public static function reopen( WC_Order $order ): void {
 		if ( Completion_History::of( $order )->is_empty() && ! self::legacy_candidate( $order ) ) {
 			return;
 		}
@@ -380,8 +226,8 @@ final class Completion_Stamp {
 	private static function synthesise( WC_Order $order ): array {
 		$sale  = ( new Fiscal_Record_Store() )->find_sale( $order->get_id() );
 		$paid  = $order->get_date_paid( 'edit' );
-		$till  = self::till_tuple( $order );
-		$legs  = self::latest_captured( $order );
+		$till  = Completion_Origin::till_tuple( $order );
+		$legs  = Completion_Origin::latest_captured( $order );
 		$total = $sale['payload']['totals']['total_incl'] ?? null;
 		// Per field: the fiscal row, then the till tuple, then (register and session only) the latest
 		// captured leg, so a row that never recorded a session does not blank the one the till sent.
@@ -412,7 +258,7 @@ final class Completion_Stamp {
 	 *
 	 * @param WC_Order $order Order object.
 	 */
-	private static function is_paid( WC_Order $order ): bool {
+	public static function is_paid( WC_Order $order ): bool {
 		$status = $order->get_status();
 		return in_array( $status, self::completed_statuses( $order ), true )
 			&& ( null !== $order->get_date_paid( 'edit' ) || in_array( $status, wc_get_is_paid_statuses(), true ) );
@@ -430,152 +276,6 @@ final class Completion_Stamp {
 			$statuses[] = 'wc-' === substr( $configured, 0, 3 ) ? substr( $configured, 3 ) : $configured;
 		}
 		return $statuses;
-	}
-
-	/**
-	 * Whether this completion happened at a register: a money command in this request, the ledger
-	 * writing, a gateway submit, a POS order's order-pay window, a sent submit's provenance, or a
-	 * captured ledger row. A storefront payment has none and is never stamped.
-	 *
-	 * @param WC_Order $order Order object.
-	 */
-	private static function has_origin( WC_Order $order ): bool {
-		$id = $order->get_id();
-		return self::in_command( $id )
-			|| Ledger::is_writing( $id )
-			|| Gateway_Submission::is_submitting( $id )
-			|| ( Webview_Passthrough::is_paying( $id ) && wcpos_is_pos_order( $order ) )
-			|| isset( self::$attempts[ $id ] )
-			|| self::captured_ids( $order );
-	}
-
-	/**
-	 * A sent attempt the merchant (or a provider) marked paid without payment_complete() has no row:
-	 * nothing else will mint one outside a window. Defer minting it as the submit does for a paying
-	 * gateway, the attempt id as the row id, so the completion names the payment, and stamp after it;
-	 * Ledger::write() marks the attempt paid. Inside payment_complete() the passthrough defers its mint instead.
-	 *
-	 * @param WC_Order $order Fresh order, paid, read under the lock.
-	 */
-	private static function mints_attempt( WC_Order $order ): void {
-		$id      = $order->get_id();
-		$attempt = self::$attempts[ $id ] ?? null;
-		if ( null === $attempt || isset( self::$completing[ $id ] ) || Gateway_Submission::is_submitting( $id ) || Webview_Passthrough::is_paying( $id ) || self::captured_ids( $order ) ) {
-			return;
-		}
-		$mint = static function () use ( $id, $attempt ): void {
-			$order = self::fresh( $id );
-			if ( ! $order || self::captured_ids( $order ) ) {
-				return;
-			}
-			$transaction = $order->get_transaction_id();
-			try {
-				$row = Webview_Passthrough::mint(
-					$order,
-					array(
-						'id'            => $attempt['attempt_id'],
-						'source'        => 'app',
-						'capture_mode'  => 'gateway',
-						'method_id'     => '' !== $attempt['method_id'] ? $attempt['method_id'] : $order->get_payment_method(),
-						'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
-						'cashier_id'    => $attempt['cashier_id'],
-					)
-				);
-			} catch ( \Throwable $error ) {
-				$row = null;
-			}
-			$order = self::fresh( $id );
-			if ( null === $row || ! $order || ! self::captured_ids( $order ) ) {
-				Logger::error( sprintf( 'WCPOS attempt %s on order #%d was marked paid but its row could not be minted; the completion waits for it.', $attempt['attempt_id'], $id ), array( 'order_id' => $id ) );
-				return;
-			}
-			self::stamp( $order );
-		};
-		Ledger::defer( $id, $mint, __( 'Recording the paid attempt', 'woocommerce-pos' ) );
-	}
-
-	/**
-	 * Inside a submit or order-pay window, or for a sent attempt a later callback completes, the
-	 * tender's row is minted after the status lands: the stamp waits for it (the submit stamps after
-	 * its mint, the webview at payment-complete 15 or status-change 15), so the entry and its sale
-	 * record name the payment.
-	 *
-	 * @param WC_Order $order Order object.
-	 */
-	private static function awaits_mint( WC_Order $order ): bool {
-		$id = $order->get_id();
-		return ( Gateway_Submission::is_submitting( $id ) || Webview_Passthrough::is_paying( $id ) || isset( self::$attempts[ $id ] ) ) && ! self::captured_ids( $order );
-	}
-
-	/**
-	 * Provenance for completion n, from the first source that names any of it: the command's body,
-	 * then a sent submit's stored provenance, then (completion 1 and the order-pay webview only) the
-	 * write-once till tuple. Failing all three, the register and session of the latest captured row,
-	 * the register that last took money. Nothing is invented: an absent value stays null.
-	 *
-	 * @param WC_Order $order Order object.
-	 * @param int      $n     Completion number.
-	 */
-	private static function resolve_provenance( WC_Order $order, int $n ): array {
-		$empty   = array_fill_keys( array_keys( self::PROVENANCE_FIELDS ), null );
-		$sources = array( self::provenance( $order->get_id() ), self::$attempts[ $order->get_id() ]['provenance'] ?? array() );
-		if ( 1 === $n || Webview_Passthrough::is_paying( $order->get_id() ) ) {
-			$sources[] = array_filter( self::till_tuple( $order ), static fn( $value ) => null !== $value );
-		}
-		foreach ( $sources as $source ) {
-			if ( $source ) {
-				return array_merge( $empty, $source );
-			}
-		}
-		$latest            = self::latest_captured( $order );
-		$empty['register'] = $latest['register_id'] ?? null;
-		$empty['session']  = $latest['session_id'] ?? null;
-		return $empty;
-	}
-
-	/**
-	 * The most recently captured row on the order, if any: the register that last took money.
-	 *
-	 * @param WC_Order $order Order object.
-	 */
-	private static function latest_captured( WC_Order $order ): ?array {
-		$latest = null;
-		foreach ( Ledger::instance()->read( $order ) as $row ) {
-			if ( 'captured' === ( $row['status'] ?? '' ) && ( null === $latest || strcmp( (string) ( $row['captured_at_gmt'] ?? '' ), (string) ( $latest['captured_at_gmt'] ?? '' ) ) >= 0 ) ) {
-				$latest = $row;
-			}
-		}
-		return $latest;
-	}
-
-	/**
-	 * The write-once till tuple, entry-shaped.
-	 *
-	 * @param WC_Order $order Order object.
-	 */
-	private static function till_tuple( WC_Order $order ): array {
-		$values = array();
-		foreach ( self::PROVENANCE_FIELDS as $field => $keys ) {
-			$values[ $field ] = $order->get_meta( $keys[1], true );
-		}
-		return array_merge( array_fill_keys( array_keys( self::PROVENANCE_FIELDS ), null ), self::validated( $values, true ) );
-	}
-
-	/**
-	 * Keep each provenance field only when it passes the till meta's own validation; drop the rest.
-	 *
-	 * @param array $provenance Body-shaped provenance, or entry-shaped when $entry_shaped.
-	 * @param bool  $entry_shaped Whether the keys are already the entry's.
-	 */
-	private static function validated( array $provenance, bool $entry_shaped = false ): array {
-		$valid = array();
-		foreach ( self::PROVENANCE_FIELDS as $field => $keys ) {
-			$value = $provenance[ $entry_shaped ? $field : $keys[0] ] ?? null;
-			if ( Pos_Order_Audit::is_valid_till_value( $keys[1], $value ) ) {
-				$valid[ $field ] = in_array( $field, array( 'register', 'session' ), true ) ? strtolower( (string) $value ) : (string) $value;
-			}
-		}
-		return $valid;
 	}
 
 	/**

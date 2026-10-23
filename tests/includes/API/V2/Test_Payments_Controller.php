@@ -1032,7 +1032,6 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$cash  = $this->captured_row( '92.95' );
 		Ledger_Seed::rows( $order, array( $cash ), false );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
-		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
 		try {
 			$paid = wc_get_order( $order->get_id() );
 			$paid->set_date_paid( time() );
@@ -1040,7 +1039,6 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			$paid->save();
 		} finally {
 			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
-			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 );
 		}
 		$this->assertSame( array(), Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
 		$this->reopen( $order );

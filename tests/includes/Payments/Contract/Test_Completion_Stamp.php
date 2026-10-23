@@ -47,7 +47,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->configure();
 		parent::setUp();
 		\WC_Payment_Gateways::instance()->init();
-		Completion_Stamp::reset();
 		Stamp_Sent_Gateway::$land_status = 'pending';
 		Stamp_Paid_Gateway::$status_only = false;
 		$this->announced = array();
@@ -61,7 +60,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		remove_filter( 'woocommerce_payment_gateways', array( $this, 'gateways' ) );
 		remove_filter( 'wcpos_payment_method_capture_mode', array( $this, 'mode' ), 10 );
 		remove_filter( 'wcpos_payment_method_fields', array( $this, 'fields' ), 10 );
-		Completion_Stamp::reset();
 		parent::tearDown();
 	}
 
@@ -175,7 +173,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		);
 		Ledger_Seed::rows( $order, array( $cash ), false );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
-		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
 		try {
 			$paid = wc_get_order( $order->get_id() );
 			$paid->set_date_paid( time() );
@@ -183,7 +180,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 			$paid->save();
 		} finally {
 			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
-			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 );
 		}
 		$store = new Fiscal_Record_Store();
 		$store->ensure_installed();
@@ -261,7 +257,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$order    = $this->create_pos_order();
 		$response = $this->submit( $order, wp_generate_uuid4(), 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) );
 		$this->assertSame( 'sent', $response->get_data()['outcome'] );
-		Completion_Stamp::reset(); // The callback is a later request.
 
 		// Act: the provider's callback completes the payment.
 		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
@@ -282,7 +277,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$order    = $this->create_pos_order();
 		$response = $this->submit( $order, wp_generate_uuid4(), 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) );
 		$this->assertSame( 'sent', $response->get_data()['outcome'] );
-		Completion_Stamp::reset();
 
 		// Act.
 		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
@@ -310,7 +304,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$attempt  = wp_generate_uuid4();
 		$response = $this->submit( $order, $attempt, 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) );
 		$this->assertSame( 'sent', $response->get_data()['outcome'] );
-		Completion_Stamp::reset();
 
 		// Act: wp-admin marks the bank transfer paid.
 		wc_get_order( $order->get_id() )->update_status( 'processing' );
@@ -347,7 +340,6 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$order    = $this->create_pos_order();
 		$attempt  = wp_generate_uuid4();
 		$this->assertSame( 'sent', $this->submit( $order, $attempt, 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) )->get_data()['outcome'] );
-		Completion_Stamp::reset();
 		$done = OrderHelper::create_order();
 		$done->set_status( 'completed' );
 		$done->save();
@@ -517,6 +509,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		// Act: complete outside any route lock (a webhook's payment_complete()).
 		Ledger_Seed::rows( $order, array( $this->cash_row( '92.95' ) ), false );
 		wc_get_order( $order->get_id() )->payment_complete();
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 		remove_action( 'wcpos_sale_completed', $listener, 1 );
 
 		// Assert.
@@ -535,6 +528,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		Ledger_Seed::rows( $order, array( $this->cash_row( '92.95' ) ), false );
 		wc_get_order( $order->get_id() )->payment_complete();
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 		remove_action( 'wcpos_sale_completed', $listener, 1 );
 
 		// Assert.
@@ -750,6 +744,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		// Act.
 		$first->payment_complete();
 		$second->payment_complete();
+		Ledger::flush_all(); // The request ends: what its hooks deferred runs at shutdown.
 
 		// Assert.
 		$history = $this->stored_history( $order->get_id() );

@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\V1\Receipts_Controller;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
@@ -178,14 +178,17 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order->save();
 		Completion_Fixture::sale( $order );
 		Completion_Fixture::reopen( $order );
-		Completion_Fixture::seed( $order );
-		$history                 = Completion_History::of( $order )->entries();
-		$history[1]['register']  = $b['id'];
-		$history[1]['counter']   = '7';
-		$history[1]['sale_time'] = '2026-10-21T12:00:00+00:00';
-		$history[1]['sale_tz']   = 'UTC';
-		$order->update_meta_data( Completion_Stamp::META_KEY, wp_json_encode( $history ) );
-		$order->save_meta_data();
+		Completion_Stamp::append(
+			$order,
+			new Completion_Origin(
+				array(
+					'register_id'  => $b['id'],
+					'sale_counter' => '7',
+					'sale_time'    => '2026-10-21T12:00:00+00:00',
+					'sale_tz'      => 'UTC',
+				)
+			)
+		);
 		$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() );
 		$request->set_param( 'mode', 'live' );
 

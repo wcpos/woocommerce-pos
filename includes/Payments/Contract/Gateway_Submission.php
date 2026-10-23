@@ -333,9 +333,9 @@ class Gateway_Submission {
 					'cashier_id' => get_current_user_id(),
 				)
 			);
-			// The gateway's paid transition ran in its own save, so the row's write had no S2 to run; the completion
-			// waited for the row (Completion_Stamp::awaits_mint()), and a write's S3-heal stamps it now.
-			$order = $ledger->write( $order )->order;
+			// The gateway's paid transition ran in its own save, so the row's write had no S2 to run; this write's S3-heal
+			// appends the completion at the command's origin (the observer left the dispatch's completion to it).
+			$order = $ledger->write( $order, null, Ledger::MODE_AUTO, $command )->order;
 		} elseif ( $settled ) {
 			try {
 				$order = $ledger->write(
@@ -366,8 +366,8 @@ class Gateway_Submission {
 				'cashier_id' => get_current_user_id(),
 			);
 			// A callback that completes the order in a later request still names the register that sent it.
-			if ( Completion_Stamp::provenance( $order->get_id() ) ) {
-				$stamp['provenance'] = Completion_Stamp::provenance( $order->get_id() );
+			if ( null !== $command && $command->origin()->provenance() ) {
+				$stamp['provenance'] = $command->origin()->provenance();
 			}
 			try {
 				$order = $ledger->write(
@@ -539,22 +539,50 @@ class Gateway_Submission {
 	}
 
 	/**
-	 * A save moving a stamped order to a paid, cancelled, refunded or trashed status carries the stamp's
-	 * removal itself, so nothing saves again inside its status hooks. A completion first remembers the
-	 * provenance the stamp names (Completion_Stamp::memoise()).
+	 * A save moving a stamped order to a cancelled, refunded or trashed status carries the stamp's removal itself,
+	 * so nothing saves again inside its status hooks. A paid status keeps it: the completion's S3 reads its origin
+	 * from the stamp and clears it.
 	 *
 	 * @param mixed $order Order about to be saved.
 	 */
 	public static function clear_obsolete_stamp( $order ): void {
 		$to = $order instanceof WC_Order ? ( $order->get_changes()['status'] ?? null ) : null;
-		if ( null === $to || ! self::read_stamp( $order ) || ! in_array( $to, array_merge( wc_get_is_paid_statuses(), array( 'cancelled', 'refunded', 'trash' ) ), true ) ) {
-			return;
+		if ( null !== $to && self::read_stamp( $order ) && in_array( $to, array( 'cancelled', 'refunded', 'trash' ), true ) ) {
+			self::clear_stamp( $order );
 		}
-		$completed = Completion_Stamp::completed_statuses( $order );
-		if ( in_array( $to, $completed, true ) && ! in_array( $order->get_data()['status'] ?? '', $completed, true ) ) {
-			Completion_Stamp::memoise( $order );
+	}
+
+	/**
+	 * A sent attempt a callback or the merchant marked paid with no row for it (no gateway minted one): staged on
+	 * the completion write's draft as its captured row, the attempt id as the row id, so the completion names the
+	 * payment and the write marks the attempt paid. The row builder is the passthrough's.
+	 *
+	 * @param Ledger_Draft $d The completion write's draft.
+	 * @return bool Whether a row was staged; false staged nothing.
+	 */
+	public static function resolve_paid( Ledger_Draft $d ): bool {
+		$order   = $d->order();
+		$stamp   = self::read_stamp( $order ) ?? array();
+		$attempt = strtolower( (string) ( $stamp['attempt_id'] ?? '' ) );
+		$sent    = wp_is_uuid( $attempt ) && 'sent' === ( self::read_attempts( $order )[ $attempt ] ?? null );
+		if ( ! $sent || ! Completion_Stamp::is_paid( $order ) || array_filter( $d->rows(), static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) ) ) {
+			return false;
 		}
-		self::clear_stamp( $order );
+		$transaction = $order->get_transaction_id();
+		$d->put(
+			Webview_Passthrough::row(
+				$order,
+				array(
+					'id'            => $attempt,
+					'source'        => 'app',
+					'capture_mode'  => 'gateway',
+					'method_id'     => '' !== (string) ( $stamp['method_id'] ?? '' ) ? (string) $stamp['method_id'] : $order->get_payment_method(),
+					'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
+					'cashier_id'    => (int) ( $stamp['cashier_id'] ?? 0 ),
+				)
+			)
+		);
+		return true;
 	}
 
 	/**

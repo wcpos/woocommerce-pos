@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
+use WCPOS\WooCommercePOS\Tests\Helpers\Register_Sale;
 
 /** Shared tender rules and instance-local source reads. */
 class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
@@ -246,23 +247,18 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$order->set_status( 'pos-open' );
 		$order->set_total( '40.00' );
 		$order->save();
-		Completion_Stamp::with_provenance(
+		Register_Sale::cash(
+			$order,
+			array(
+				'id' => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount' => '40.00',
+				'session_id' => $session['id'],
+			),
 			array(
 				'register_id' => $session['register_id'],
 				'session_id' => $session['id'],
-			),
-			static function () use ( $order, $session ): void {
-				Ledger::instance()->record(
-					$order,
-					array(
-						'id' => wp_generate_uuid4(),
-						'method_id' => 'pos_cash',
-						'amount' => '40.00',
-						'session_id' => $session['id'],
-					)
-				);
-			},
-			$order->get_id()
+			)
 		);
 		return wc_get_order( $order->get_id() );
 	}
@@ -276,15 +272,12 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 	private function recomplete_in( \WC_Order $order, array $session ): void {
 		$order->set_status( 'pos-open' );
 		$order->save();
-		Completion_Stamp::with_provenance(
+		Register_Sale::complete(
+			wc_get_order( $order->get_id() ),
 			array(
 				'register_id' => $session['register_id'],
 				'session_id' => $session['id'],
-			),
-			static function () use ( $order ): void {
-				wc_get_order( $order->get_id() )->payment_complete();
-			},
-			$order->get_id()
+			)
 		);
 	}
 
@@ -338,7 +331,6 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$session = $this->closure_session();
 		$order   = $this->closure_ledger( $session );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
-		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
 		try {
 			$paid = wc_get_order( $order->get_id() );
 			$paid->set_date_paid( time() );
@@ -346,7 +338,6 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			$paid->save();
 		} finally {
 			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 );
-			add_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 );
 		}
 		$store = new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store();
 		$store->ensure_installed();
