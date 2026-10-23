@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /** Writes history only; never changes order or payment state. */
@@ -23,6 +24,13 @@ final class Fiscal_Record_Writers {
 	 * inserted unchanged by recover(), never rebuilt from the order as it is later. Server-owned.
 	 */
 	public const PENDING_META_KEY = '_wcpos_fiscal_pending';
+
+	/**
+	 * How far back the payments sweep looks for a completion whose sale record never landed: a week, so
+	 * a shop closed over a long weekend (no traffic, so no WP-Cron) is still searched when it opens again,
+	 * while each run reads one week of completions through the meta key index, never the order history.
+	 */
+	private const SWEEP_LOOKBACK_SECONDS = 7 * DAY_IN_SECONDS;
 
 	/**
 	 * Singleton keeps the order-service listeners armed once.
@@ -60,7 +68,7 @@ final class Fiscal_Record_Writers {
 	 *
 	 * The business transition has already happened when a writer runs, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
-	 * sale row is recovered by the next money command or refund on the order (recover());
+	 * sale row is recovered by the next money command or refund on the order, or the payments sweep (recover());
 	 * every failure is surfaced as an order note and an action for a recovery job.
 	 *
 	 * @param WC_Order $order  Order the record describes.
@@ -134,6 +142,7 @@ final class Fiscal_Record_Writers {
 						continue;
 					}
 					self::unpark( $fresh, (string) $completion_id );
+					$fresh->add_order_note( __( 'POS fiscal sale record recovered.', 'woocommerce-pos' ) );
 					$entry = $history->by_id( (string) $completion_id );
 					if ( null !== $entry ) {
 						$this->record_sale_safely( $fresh, $entry ); // The row exists now: only its late correction runs.
@@ -144,6 +153,62 @@ final class Fiscal_Record_Writers {
 			}
 		} finally {
 			$lock->release( $order->get_id() );
+		}
+	}
+
+	/**
+	 * The orders the payments sweep retries, at most $limit, parked first: those holding a parked sale
+	 * document (the meta key index), then those whose standing completion has no sale record.
+	 *
+	 * @param int $limit Batch cap.
+	 * @param int $grace Seconds a completion is left to its own request.
+	 * @return int[] Order ids.
+	 */
+	public static function orders_owed_a_sale( int $limit, int $grace ): array {
+		global $wpdb;
+		$store = new Fiscal_Record_Store();
+		$store->ensure_installed();
+		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$meta = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$key  = $hpos ? 'order_id' : 'post_id';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Storage-selected identifiers; an index lookup, never cached.
+		$parked    = $wpdb->get_col( $wpdb->prepare( "SELECT {$key} FROM {$meta} WHERE meta_key = %s ORDER BY {$key} LIMIT %d", self::PENDING_META_KEY, $limit ) );
+		$unwritten = Completion_History::orders_standing_without_a_record( $store->table_name(), time() - self::SWEEP_LOOKBACK_SECONDS, time() - $grace, $limit );
+		return array_slice( array_values( array_unique( array_map( 'intval', array_merge( (array) $parked, $unwritten ) ) ) ), 0, $limit );
+	}
+
+	/**
+	 * The payments sweep's retry of one order, under its order lock (#2378): insert what is parked, then
+	 * build the standing completion's sale record when it never landed (the request died between the
+	 * entry's save and `wcpos_sale_completed`, or the build threw), as record_sale() would have then.
+	 * The store is read first and record() replays by the completion id, so one completion never gets
+	 * two records; a reopened or legacy completion is never built.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public function retry( WC_Order $order ): void {
+		$this->recover( $order );
+		$fresh = wc_get_order( $order->get_id() );
+		if ( ! $fresh instanceof WC_Order ) {
+			return;
+		}
+		$fresh->read_meta_data( true );
+		$standing = Completion_History::of( $fresh )->standing();
+		if ( null === $standing || ! empty( $standing['legacy'] ) || ! is_string( $standing['id'] ?? null ) ) {
+			return;
+		}
+		if ( isset( self::parked( $fresh )[ strtolower( $standing['id'] ) ] ) || null !== $this->store->find_sale( $fresh->get_id(), $standing['id'] ) ) {
+			return; // Recorded, or parked again and left to the next run.
+		}
+		try {
+			$this->record_sale( $fresh, $standing );
+		} catch ( \Throwable $error ) {
+			// Logged, not noted: the next run retries, and a note per run would bury the order's history.
+			Logger::log( sprintf( 'Fiscal sale record for completion %d on order #%d failed again: %s', (int) $standing['n'], $fresh->get_id(), $error->getMessage() ) );
+			return;
+		}
+		if ( null !== $this->store->find_sale( $fresh->get_id(), $standing['id'] ) ) {
+			$fresh->add_order_note( __( 'POS fiscal sale record recovered.', 'woocommerce-pos' ) );
 		}
 	}
 

@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 
 /** Free owns scheduling; registered handlers own provider status, expiry and capture operations. */
 final class Payments_Sweeper {
@@ -44,9 +45,8 @@ final class Payments_Sweeper {
 		// Selected by the live-leg index, not by order status: a live leg can stand on an order
 		// whose status moved on (completed by captured tenders, or by an older rule under which
 		// an authorization counted), and it still has to be captured or voided.
-		$order_ids = Payment_Index::order_ids_with_live_legs(
-			max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) )
-		);
+		$batch     = max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) );
+		$order_ids = Payment_Index::order_ids_with_live_legs( $batch );
 		foreach ( $order_ids as $order_id ) {
 			// A busy order is left for the next run; the existing lock owns contention policy.
 			Order_Lock::instance()->with_lock(
@@ -167,6 +167,40 @@ final class Payments_Sweeper {
 						$ledger->write( $order_id );
 					} catch ( Ledger_Persistence_Exception $error ) {
 						Logger::log( sprintf( 'WCPOS payment sweep on order #%d: %s', $order_id, $error->getMessage() ) );
+					}
+				}
+			);
+		}
+		$this->retry_fiscal_records( $batch, $threshold );
+	}
+
+	/**
+	 * Write the sale records standing completions are still owed (#2378): a parked document, or one a crash
+	 * between the completion entry's save and `wcpos_sale_completed` never wrote. Same batch cap; a
+	 * completion younger than the threshold is left to its own request.
+	 *
+	 * @param int $batch     Batch cap.
+	 * @param int $threshold Seconds a completion is left alone.
+	 */
+	private function retry_fiscal_records( int $batch, int $threshold ): void {
+		try {
+			$order_ids = Fiscal_Record_Writers::orders_owed_a_sale( $batch, $threshold );
+		} catch ( \Throwable $error ) {
+			Logger::log( 'WCPOS fiscal record sweep could not read its candidates: ' . $error->getMessage() );
+			return;
+		}
+		foreach ( $order_ids as $order_id ) {
+			// A busy order is left for the next run, as above.
+			Order_Lock::instance()->with_lock(
+				$order_id,
+				static function () use ( $order_id ): void {
+					try {
+						$order = wc_get_order( $order_id );
+						if ( $order instanceof WC_Order ) {
+							Fiscal_Record_Writers::instance()->retry( $order );
+						}
+					} catch ( \Throwable $error ) {
+						Logger::log( sprintf( 'WCPOS fiscal record sweep on order #%d: %s', $order_id, $error->getMessage() ) );
 					}
 				}
 			);
