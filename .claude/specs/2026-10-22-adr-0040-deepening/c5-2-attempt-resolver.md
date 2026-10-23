@@ -32,6 +32,20 @@ whose `capture_mode` is not `gateway` (a webview row reaching `Webview_Handler`,
 unchanged. A provider-scoped `gateway:<provider>` handler may ask its own API. Pro's `server`/`device` handlers
 are not asked.
 
+## A paid attempt whose row is missing is unresolved (Codex P1 on #2453)
+
+A captured write whose S1 stored the attempt's `paid` fate but lost its row (meta keys save one by one) leaves
+money taken with no row. `Attempt_Log::unresolved()` and `to_index()` therefore read a `paid` entry with no row of
+its id as unresolved (the row ids are read only when a `paid` entry asks). Every caller re-asks it, whatever it
+awaited; the resolver's captured path re-mints the row under the same id and keeps the fate (nothing is charged
+again); a non-captured answer never cancels it. Recovery is across requests; all-or-nothing writes are out of
+scope. Limit: a half-write that also stored the index without the attempt's id leaves the order out of the sweep's
+candidates until a write rebuilds the index; the till's next replay, cancel, submit or close still recovers it,
+since `in_motion()` names the attempt.
+
+`strand()` opens the kept attempt with the cashier the lost row would have named (the order's `_pos_user`, else 0
+so `Webview_Passthrough::row()` decides), never the customer who paid through order-pay (Codex P2 on #2453).
+
 ## How the sweeper finds an attempt
 
 - `Attempt_Log::to_index()`: the `sent` entries neither awaiting nor flagged.

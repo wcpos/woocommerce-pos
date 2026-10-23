@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
+use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -254,6 +255,41 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
 		$this->assertSame( self::REGISTER, Completion_History::of( $stored )->standing()['register'] );
 		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+	}
+
+	/**
+	 * A captured reconciliation whose S1 stored the attempt's `paid` fate but lost its row stays unresolved: a later
+	 * request's sweep mints the row once, the sale completes once, and the attempt leaves the index.
+	 */
+	public function test_a_paid_attempt_whose_row_was_lost_is_recovered_by_a_later_sweep_once(): void {
+		// Arrange: the gateway paid outside the ledger; the resolver's write stored the fate but not the row.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->paid_outside( $order->get_id(), 'wcpos_paid_test' );
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'paid' );
+		$half = $this->fresh( $order->get_id() );
+		wp_cache_flush(); // A later request: nothing in memory from this one.
+
+		// Act.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertSame( array(), Ledger::instance()->read( $half ), 'Precondition: the row is missing.' );
+		$this->assertSame( $attempt, Attempts::of( $half )->unresolved()['id'] ?? null, 'A paid attempt with no row is unresolved.' );
+		$stored = $this->fresh( $order->get_id() );
+		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertSame( 'paid', Attempts::of( $stored )->get( $attempt )['fate'] );
+		$this->assertNull( Attempts::of( $stored )->unresolved() );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+		$this->assertSame( array(), $this->live_index( $order->get_id() ) );
 	}
 
 	/** A provider that refused the attempt cancels it: the sale is no longer in motion. */

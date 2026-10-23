@@ -60,7 +60,7 @@ class Gateway_Submission {
 		$ledger     = Ledger::instance();
 		$fate       = Attempts::of( $order )->get( $attempt_id )['fate'] ?? null;
 		$sent       = Attempts::of( $order )->unresolved();
-		if ( null !== $sent && null === $sent['awaiting'] ) {
+		if ( null !== $sent && ( null === $sent['awaiting'] || 'paid' === $sent['fate'] ) ) {
 			// Rule 7: an outcome nobody knows is asked about before this command answers, or sends anything.
 			$minted = Attempts::reconcile( $order, 'sent' === $fate ? 'replay' : 'submit' );
 			$order  = self::reread( $order );
@@ -74,7 +74,7 @@ class Gateway_Submission {
 			}
 			$fate = Attempts::of( $order )->get( $attempt_id )['fate'] ?? null;
 			$sent = null === $fate ? Attempts::of( $order )->unresolved() : null;
-			if ( null !== $sent && null === $sent['awaiting'] ) {
+			if ( null !== $sent && ( null === $sent['awaiting'] || 'paid' === $sent['fate'] ) ) {
 				return new WP_Error(
 					'wcpos_payment_in_flight',
 					__( 'An earlier payment attempt on this order has no outcome yet.', 'woocommerce-pos' ),

@@ -756,6 +756,43 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( Attempts::of( $stored )->unresolved() );
 	}
 
+	/** A lost order-pay mint paid by a logged-in customer is re-minted for the POS operator who rang the sale, never the customer. */
+	public function test_a_lost_order_pay_mint_paid_by_a_customer_is_re_minted_for_the_pos_operator(): void {
+		// Arrange: the operator rang the sale; the customer pays it logged in; the mint's ledger write is lost.
+		$operator = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$customer = self::factory()->user->create( array( 'role' => 'customer' ) );
+		$order    = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->update_meta_data( '_pos_user', (string) $operator );
+		$order->save();
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		wp_set_current_user( $customer );
+		add_filter( 'query', $lose );
+		try {
+			wc_get_order( $order->get_id() )->payment_complete( 'ch_customer' );
+			Ledger::flush_all();
+		} finally {
+			remove_filter( 'query', $lose );
+		}
+
+		// Act: the sweep, as cron runs it.
+		wp_set_current_user( 0 );
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $operator, (int) $rows[0]['cashier_id'] );
+		$this->assertCount( 1, $history );
+		$this->assertSame( $operator, (int) ( $history[0]['cashier'] ?? 0 ) );
+	}
+
 	/** A storefront order paid through the order-pay window is not a register sale. */
 	public function test_a_storefront_order_pay_payment_in_the_window_writes_no_entry(): void {
 		// Arrange.

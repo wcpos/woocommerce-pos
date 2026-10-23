@@ -59,7 +59,7 @@ final class Attempts {
 				$log[ strtolower( (string) $id ) ] = array_merge( self::DEFAULTS, $entry, array( 'id' => strtolower( (string) $id ) ) );
 			}
 		}
-		return new Attempt_Log( $log );
+		return new Attempt_Log( $log, static fn(): array => array_map( static fn( array $row ): string => strtolower( (string) ( $row['id'] ?? '' ) ), Ledger::instance()->read( $order ) ) );
 	}
 
 	/**
@@ -243,7 +243,8 @@ final class Attempts {
 				$fresh->read_meta_data( true );
 			}
 			$entry = $fresh instanceof WC_Order ? self::of( $fresh )->unresolved() : null;
-			if ( null === $entry || ( 'paid' === $source ) !== ( null !== $entry['awaiting'] ) || ( 'sweep' === $source && null !== $entry['attention_at_gmt'] ) ) {
+			$lost  = 'paid' === ( $entry['fate'] ?? null ); // Its fate was stored, its row was not: every caller re-mints it.
+			if ( null === $entry || ( ! $lost && ( 'paid' === $source ) !== ( null !== $entry['awaiting'] ) ) || ( 'sweep' === $source && null !== $entry['attention_at_gmt'] ) ) {
 				return null;
 			}
 			$handler = Capture_Mode_Registry::instance()->resolve( 'gateway', Descriptor_Builder::instance()->get( $entry['method_id'] )['capture']['provider'] ?? null );
@@ -285,7 +286,7 @@ final class Attempts {
 						}
 						return true;
 					}
-					if ( in_array( $status, array( 'failed', 'voided' ), true ) ) {
+					if ( 'sent' === $now['fate'] && in_array( $status, array( 'failed', 'voided' ), true ) ) {
 						self::resolve( $d, $now['id'], 'cancelled' );
 						return true;
 					}
@@ -294,7 +295,7 @@ final class Attempts {
 					if ( ! $flagged && $asks === (int) $now['asks'] ) {
 						return false;
 					}
-					$d->attempt( $now['id'], 'sent', array( 'asks' => $asks ) + ( $flagged ? array( 'attention_at_gmt' => gmdate( 'c' ) ) : array() ) );
+					$d->attempt( $now['id'], $now['fate'], array( 'asks' => $asks ) + ( $flagged ? array( 'attention_at_gmt' => gmdate( 'c' ) ) : array() ) );
 					return true;
 				},
 				Ledger::MODE_HOLD
@@ -327,6 +328,8 @@ final class Attempts {
 					$entry = self::of( $d->order() )->get( $id );
 					if ( null === $entry ) {
 						self::open( $d, $id, $method_id );
+						// The cashier the lost row would have named (the POS operator who rang the sale), never whoever paid.
+						$d->attempt( $id, 'sent', array( 'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ) ) );
 					} elseif ( 'sent' === $entry['fate'] && null !== $entry['awaiting'] ) {
 						$d->attempt( $id, 'sent', array( 'awaiting' => null ) );
 					}

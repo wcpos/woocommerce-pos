@@ -24,12 +24,21 @@ final class Attempt_Log {
 	private array $entries;
 
 	/**
+	 * The order's row ids, or the callable that reads them once a `paid` entry needs them.
+	 *
+	 * @var callable|string[]|null
+	 */
+	private $row_ids;
+
+	/**
 	 * Wrap decoded entries.
 	 *
 	 * @param array<string, array> $entries Entries by attempt id.
+	 * @param callable|null        $row_ids fn(): string[], the order's payment row ids.
 	 */
-	public function __construct( array $entries ) {
+	public function __construct( array $entries, ?callable $row_ids = null ) {
 		$this->entries = $entries;
+		$this->row_ids = $row_ids;
 	}
 
 	/** Every entry, by attempt id. */
@@ -55,10 +64,13 @@ final class Attempt_Log {
 		return array_map( static fn( array $entry ): string => $entry['fate'], $this->entries );
 	}
 
-	/** The newest attempt whose outcome is not known yet (fate `sent`), or null: money in motion (ADR 0040 rule 3). */
+	/**
+	 * The newest attempt whose outcome is not recorded yet, or null: money in motion (ADR 0040 rule 3). That is a `sent`
+	 * one, or a `paid` one whose row is not stored (a write that stored the fate and lost the row).
+	 */
 	public function unresolved(): ?array {
-		$sent = array_filter( $this->entries, static fn( array $entry ): bool => 'sent' === $entry['fate'] );
-		return $sent ? end( $sent ) : null;
+		$open = array_filter( $this->entries, array( $this, 'owed' ) );
+		return $open ? end( $open ) : null;
 	}
 
 	/**
@@ -68,7 +80,23 @@ final class Attempt_Log {
 	 * @return string[] Attempt ids.
 	 */
 	public function to_index(): array {
-		return array_map( 'strval', array_keys( array_filter( $this->entries, static fn( array $entry ): bool => 'sent' === $entry['fate'] && null === $entry['awaiting'] && null === $entry['attention_at_gmt'] ) ) );
+		$asked = fn( array $entry ): bool => $this->owed( $entry ) && ( 'paid' === $entry['fate'] || null === $entry['awaiting'] ) && null === $entry['attention_at_gmt'];
+		return array_map( 'strval', array_keys( array_filter( $this->entries, $asked ) ) );
+	}
+
+	/**
+	 * Whether an entry's outcome is still owed a record: `sent`, or `paid` with no row of its id.
+	 *
+	 * @param array $entry Entry.
+	 */
+	private function owed( array $entry ): bool {
+		if ( 'paid' !== $entry['fate'] || null === $this->row_ids ) {
+			return 'sent' === $entry['fate'];
+		}
+		if ( is_callable( $this->row_ids ) ) {
+			$this->row_ids = ( $this->row_ids )();
+		}
+		return ! in_array( $entry['id'], $this->row_ids, true );
 	}
 
 	/**
