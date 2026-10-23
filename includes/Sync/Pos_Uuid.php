@@ -169,7 +169,7 @@ class Pos_Uuid {
 		}
 		$object->update_meta_data( self::META_KEY, $uuid );
 		if ( $persist ) {
-			call_user_func( array( $object, 'save_meta_data' ) );
+			self::save_meta_only( $object );
 			// A concurrent first-stamp may have persisted its own uuid between our
 			// read and save. Re-read and converge on the first-valid row so every
 			// racer returns the SAME winner instead of each serving its own mint.
@@ -846,7 +846,52 @@ class Pos_Uuid {
 			}
 		}
 		if ( $deleted && $persist && method_exists( $object, 'save_meta_data' ) ) {
-			$object->save_meta_data();
+			self::save_meta_only( $object );
 		}
+	}
+
+	/**
+	 * Nesting depth of {@see save_meta_only()}, so only the outermost call removes its filter.
+	 *
+	 * @var int
+	 */
+	private static $meta_only_depth = 0;
+
+	/**
+	 * Persist the object's staged meta, and only its meta.
+	 *
+	 * A uuid is identity, not an edit, and it is minted on READS. On HPOS a meta
+	 * write becomes a full `$order->save()` whenever the order's `date_modified` is
+	 * older than the current second (`OrdersTableDataStore::after_meta_change()`),
+	 * which moved `date_modified` and ran every order save listener on a GET — the
+	 * v1 lane's `_pos_user` fill among them, attributing a web order to the reader
+	 * and moving its revision. The posts store never saves the order here; this
+	 * makes HPOS behave the same.
+	 *
+	 * @param mixed $object Object whose staged meta to save.
+	 */
+	private static function save_meta_only( $object ): void {
+		$is_order = $object instanceof \WC_Abstract_Order;
+		if ( $is_order && 0 === self::$meta_only_depth++ ) {
+			add_filter( 'woocommerce_orders_table_datastore_should_save_after_meta_change', array( __CLASS__, 'skip_order_save_after_meta_change' ), PHP_INT_MAX );
+		}
+		try {
+			call_user_func( array( $object, 'save_meta_data' ) );
+		} finally {
+			if ( $is_order && 0 === --self::$meta_only_depth ) {
+				remove_filter( 'woocommerce_orders_table_datastore_should_save_after_meta_change', array( __CLASS__, 'skip_order_save_after_meta_change' ), PHP_INT_MAX );
+			}
+		}
+	}
+
+	/**
+	 * The answer {@see save_meta_only()} gives WooCommerce: no full order save after a meta write.
+	 *
+	 * Public only because WordPress calls it as a filter callback.
+	 *
+	 * @return bool Always false.
+	 */
+	public static function skip_order_save_after_meta_change(): bool {
+		return false;
 	}
 }
