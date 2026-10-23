@@ -184,6 +184,73 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** An attempt's paid facts are attributed only when the order is paid through its method and no counting row covers it. */
+	public function test_gateway_status_attributes_paid_facts_only_when_the_rows_do_not_cover_the_attempts_method(): void {
+		// Arrange: a POS order a gateway paid outside the ledger.
+		$handler = Capture_Mode_Registry::instance()->get( 'gateway' );
+		$order   = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_total( '92.95' );
+		$order->set_payment_method( 'wcpos_paid_test' );
+		$order->set_transaction_id( 'txn_paid' );
+		$order->set_date_paid( time() );
+		$order->set_status( 'processing' );
+		$order->save();
+		$attempt = array(
+			'id'           => wp_generate_uuid4(),
+			'status'       => 'pending',
+			'capture_mode' => 'gateway',
+			'method_id'    => 'wcpos_paid_test',
+			'order_id'     => $order->get_id(),
+		);
+
+		// Act.
+		$paid      = $handler->status( $attempt );
+		$elsewhere = $handler->status( array_merge( $attempt, array( 'method_id' => 'wcpos_sent_test' ) ) );
+		$webview   = $handler->status( array_merge( $attempt, array( 'capture_mode' => 'webview' ) ) );
+		\WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed::rows(
+			$order,
+			array(
+				array(
+					'id'           => wp_generate_uuid4(),
+					'method_id'    => 'pos_cash',
+					'capture_mode' => 'manual',
+					'amount'       => '92.95',
+					'status'       => 'captured',
+				),
+			)
+		);
+		$covered = $handler->status( $attempt );
+
+		// Assert.
+		$this->assertSame( array( 'captured', '92.95', 'txn_paid' ), array( $paid['status'], $paid['amount'], $paid['provider_refs']['transaction_id'] ) );
+		$this->assertSame( $attempt['id'], $paid['id'] );
+		$this->assertSame( 'pending', $elsewhere['status'] );
+		$this->assertSame( 'pending', $webview['status'] );
+		$this->assertSame( 'pending', $covered['status'] );
+	}
+
+	/** An unpaid order gives the attempt no answer. */
+	public function test_gateway_status_leaves_an_attempt_on_an_unpaid_order_unchanged(): void {
+		// Arrange.
+		$order = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
+		$order->set_payment_method( 'wcpos_paid_test' );
+		$order->save();
+		$attempt = array(
+			'id'           => wp_generate_uuid4(),
+			'status'       => 'pending',
+			'capture_mode' => 'gateway',
+			'method_id'    => 'wcpos_paid_test',
+			'order_id'     => $order->get_id(),
+		);
+
+		// Act.
+		$answer = Capture_Mode_Registry::instance()->get( 'gateway' )->status( $attempt );
+
+		// Assert.
+		$this->assertSame( $attempt, $answer );
+	}
+
 	/** Addendum: specialization uses registration, not a describe filter. */
 	public function test_gateway_second_registration_replaces_handler(): void {
 		// Arrange.

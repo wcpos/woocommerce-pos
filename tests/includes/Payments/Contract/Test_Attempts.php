@@ -9,20 +9,34 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
+use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
+use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /**
  * `Attempts` and `Attempt_Log` through `Ledger::write()`, on posts storage (`Test_Attempts_HPOS` re-runs them on the
  * orders table).
  */
 class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
+	use Money_Route_Envelope;
+
 	private const REGISTER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+	/** Put Free's gateway handler back after a test answered for the provider. */
+	public function tearDown(): void {
+		Capture_Mode_Registry::instance()->register( 'gateway', Gateway_Handler::class );
+		Answering_Gateway_Handler::$answer = null;
+		parent::tearDown();
+	}
 
 	/** An opened attempt is stored with its detail by the write that opens it: fate, method, cashier, origin, command. */
 	public function test_open_stores_the_attempt_with_its_detail_in_the_opening_write(): void {
@@ -215,6 +229,159 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'superseded', $log->get( $first )['fate'] );
 	}
 
+	/** Paid facts the rows do not record: the resolver mints the attempt's row once, and its write completes the sale once. */
+	public function test_reconcile_of_a_paid_attempt_mints_its_row_and_completes_the_sale_once(): void {
+		// Arrange: the gateway threw after taking the money; no row recorded it.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent', array( 'register_id' => self::REGISTER ) );
+		$this->paid_outside( $order->get_id(), 'wcpos_paid_test' );
+
+		// Act.
+		$minted = Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' );
+		$again  = Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' );
+		Ledger::flush_all();
+
+		// Assert.
+		$stored = $this->fresh( $order->get_id() );
+		$rows   = Ledger::instance()->read( $stored );
+		$this->assertSame( $attempt, $minted['id'] ?? null );
+		$this->assertNull( $again );
+		$this->assertSame( array( $attempt ), array_column( $rows, 'id' ) );
+		$this->assertSame( array( 'captured', '92.95', 'wcpos_paid_test', 'txn_lost' ), array( $rows[0]['status'], $rows[0]['amount'], $rows[0]['method_id'], $rows[0]['provider_refs']['transaction_id'] ) );
+		$this->assertSame( 'paid', Attempts::of( $stored )->get( $attempt )['fate'] );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertSame( self::REGISTER, Completion_History::of( $stored )->standing()['register'] );
+		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+	}
+
+	/** A provider that refused the attempt cancels it: the sale is no longer in motion. */
+	public function test_reconcile_of_an_attempt_the_provider_failed_cancels_it(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+		Capture_Mode_Registry::instance()->register( 'gateway', Answering_Gateway_Handler::class );
+		Answering_Gateway_Handler::$answer = array( 'status' => 'failed' );
+
+		// Act.
+		$minted = Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' );
+
+		// Assert.
+		$stored = $this->fresh( $order->get_id() );
+		$this->assertNull( $minted );
+		$this->assertSame( 'cancelled', Attempts::of( $stored )->get( $attempt )['fate'] );
+		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
+		$this->assertNull( Ledger::instance()->sale_state( $stored )->in_motion() );
+	}
+
+	/** An indeterminate answer counts an ask and changes nothing else; at the limit a human is asked, once, and the attempt stays in motion. */
+	public function test_reconcile_counts_indeterminate_asks_and_asks_for_attention_at_the_limit(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+		Capture_Mode_Registry::instance()->register( 'gateway', Answering_Gateway_Handler::class );
+		Answering_Gateway_Handler::$answer = new \WP_Error( 'wcpos_provider_error', 'Timeout', array( 'indeterminate' => true ) );
+
+		// Act.
+		Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' );
+		$first = Attempts::of( $this->fresh( $order->get_id() ) )->get( $attempt );
+		for ( $i = 1; $i < Attempts::ASK_LIMIT + 2; ++$i ) {
+			Attempts::reconcile( wc_get_order( $order->get_id() ), 'replay' );
+		}
+
+		// Assert.
+		$stored = $this->fresh( $order->get_id() );
+		$entry  = Attempts::of( $stored )->get( $attempt );
+		$this->assertSame( array( 'sent', 1, null ), array( $first['fate'], $first['asks'], $first['attention_at_gmt'] ) );
+		$this->assertSame( 'sent', $entry['fate'] );
+		$this->assertGreaterThanOrEqual( Attempts::ASK_LIMIT, $entry['asks'] );
+		$this->assertNotNull( $entry['attention_at_gmt'] );
+		$this->assertCount( 1, $this->notes_naming( $order->get_id(), $attempt ) );
+		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
+		$this->assertSame( $attempt, Ledger::instance()->sale_state( $stored )->in_motion()['attempt_id'] );
+	}
+
+	/** A provider that cannot say (an unpaid order) asks a human with one note; the attempt stays in motion, never cancelled, and close refuses. */
+	public function test_reconcile_of_an_unanswered_attempt_notes_it_once_and_never_cancels_it(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+
+		// Act.
+		Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' );
+		Attempts::reconcile( wc_get_order( $order->get_id() ), 'replay' );
+		$close = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
+		$close->set_body_params( $this->envelope( $order ) );
+		$closed = $this->server->dispatch( $close );
+
+		// Assert.
+		$stored = $this->fresh( $order->get_id() );
+		$entry  = Attempts::of( $stored )->get( $attempt );
+		$this->assertSame( 'sent', $entry['fate'] );
+		$this->assertNotNull( $entry['attention_at_gmt'] );
+		$this->assertCount( 1, $this->notes_naming( $order->get_id(), $attempt ) );
+		$this->assertSame( 409, $closed->get_status() );
+		$this->assertSame( 'wcpos_payment_in_flight', $closed->get_data()['code'] );
+		$this->assertSame( $attempt, $closed->get_data()['data']['attempt_id'] );
+	}
+
+	/** The sweep's index lists a sent attempt that awaits no one, never one awaiting the customer, and drops it once a human is asked. */
+	public function test_the_live_index_lists_only_sent_unflagged_attempts_awaiting_no_one(): void {
+		// Arrange.
+		$stranded = $this->create_pos_order();
+		$invoiced = $this->create_pos_order();
+		$attempt  = wp_generate_uuid4();
+		Ledger_Seed::attempt( $stranded, $attempt, 'wcpos_paid_test', 'sent' );
+		Ledger_Seed::attempt( $invoiced, wp_generate_uuid4(), 'wcpos_sent_test' );
+		$indexed = $this->live_index( $stranded->get_id() );
+
+		// Act.
+		Attempts::reconcile( wc_get_order( $stranded->get_id() ), 'sweep' );
+
+		// Assert.
+		$this->assertSame( array( $attempt ), $indexed );
+		$this->assertSame( array(), $this->live_index( $invoiced->get_id() ) );
+		$this->assertSame( array(), $this->live_index( $stranded->get_id() ), 'A flagged attempt leaves the index.' );
+	}
+
+	/**
+	 * The order paid outside the ledger (the gateway's own save), with no row for it.
+	 *
+	 * @param int    $id     Order id.
+	 * @param string $method Payment method.
+	 */
+	private function paid_outside( int $id, string $method ): void {
+		$order = wc_get_order( $id );
+		$order->set_payment_method( $method );
+		$order->set_transaction_id( 'txn_lost' );
+		$order->set_date_paid( time() );
+		$order->set_status( 'processing' );
+		$order->save();
+	}
+
+	/**
+	 * Order notes that name an attempt.
+	 *
+	 * @param int    $id      Order id.
+	 * @param string $attempt Attempt id.
+	 */
+	private function notes_naming( int $id, string $attempt ): array {
+		return array_values( array_filter( wc_get_order_notes( array( 'order_id' => $id ) ), static fn( $note ) => false !== strpos( $note->content, $attempt ) ) );
+	}
+
+	/**
+	 * The sweep's live index as storage holds it.
+	 *
+	 * @param int $id Order id.
+	 */
+	private function live_index( int $id ): array {
+		return array_values( array_map( static fn( $meta ) => $meta->value, $this->fresh( $id )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
+	}
+
 	/**
 	 * The order and its meta as storage holds them.
 	 *
@@ -256,5 +423,25 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$order->set_total( '92.95' );
 		$order->save();
 		return $order;
+	}
+}
+
+/** A gateway handler answering what the test says the provider answered. */
+class Answering_Gateway_Handler extends Gateway_Handler {
+	/**
+	 * The provider's answer.
+	 *
+	 * @var array|\WP_Error|null
+	 */
+	public static $answer = null;
+
+	/**
+	 * Answer for the provider.
+	 *
+	 * @param array $row The attempt's pseudo row.
+	 * @return array|\WP_Error
+	 */
+	public function status( array $row ) {
+		return is_array( self::$answer ) ? array_merge( $row, self::$answer ) : self::$answer;
 	}
 }

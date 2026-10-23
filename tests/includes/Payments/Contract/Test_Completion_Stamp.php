@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
@@ -746,6 +747,47 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
 		$this->assertSame( array( 1 ), $this->announced );
 		$this->assertCount( 1, $this->only_sale( $order->get_id() )['payload']['payments'] );
+		$this->assertNull( Attempts::of( wc_get_order( $order->get_id() ) )->unresolved(), 'The payment the failed mint kept is the one recorded.' );
+	}
+
+	/** The payment a failed order-pay mint kept is re-minted by the sweep, and the sale completes once. */
+	public function test_an_async_order_pay_payment_whose_mint_failed_is_re_minted_by_the_sweep_once(): void {
+		// Arrange: a POS order, no rows; the first mint's ledger write never reaches storage.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		add_filter( 'query', $lose );
+		try {
+			wc_get_order( $order->get_id() )->payment_complete( 'ch_async' );
+			Ledger::flush_all();
+		} finally {
+			remove_filter( 'query', $lose );
+		}
+		$lost = $this->stored_history( $order->get_id() );
+
+		// Act: two sweeps.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$stored  = wc_get_order( $order->get_id() );
+		$rows    = Ledger::instance()->read( $stored );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertSame( array(), $lost, 'No completion without the tender\'s row.' );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( array( 'captured', 'pos_card', 'ch_async' ), array( $rows[0]['status'], $rows[0]['method_id'], $rows[0]['provider_refs']['transaction_id'] ) );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
+		$this->assertSame( array( 1 ), $this->announced );
+		$this->assertCount( 1, $this->only_sale( $order->get_id() )['payload']['payments'] );
+		$this->assertNull( Attempts::of( $stored )->unresolved() );
 	}
 
 	/** A storefront order paid through the order-pay window is not a register sale. */
