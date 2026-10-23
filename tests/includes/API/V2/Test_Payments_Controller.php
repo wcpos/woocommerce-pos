@@ -1335,6 +1335,71 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, array_filter( $commands, static fn( $entry ) => 'capture' === $entry['kind'] ) );
 	}
 
+	/**
+	 * D7: the completion's own save loses the ledger write once. The capture lands its rows in their own save and
+	 * reads them back before `payment_complete()` (ADR 0040, amended), so the loss is never a sale completed and
+	 * recorded over a pending row: the retry of the same command lands one sale record naming the row.
+	 */
+	public function test_capture_whose_read_back_fails_after_completion_retries_to_one_sale_record(): void {
+		// Arrange: a pending route-handler leg for the whole total; storage as it stands before the capture.
+		global $wpdb;
+		$this->use_route_handler();
+		Route_Handler::$captures = 0;
+		$order   = $this->create_pos_order();
+		$payment = $this->intended( $order, '92.95' );
+		$hpos    = \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+		$table   = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$owner   = $hpos ? 'order_id' : 'post_id';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage identifiers selected above.
+		$before = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$table} WHERE {$owner} = %d AND meta_key = %s", $order->get_id(), Ledger::META_KEY ) );
+		$fired  = 0;
+		// One-shot: the first save that leaves the order paid loses the ledger write.
+		$lose = static function ( $saving ) use ( $order, &$fired, $wpdb, $table, $owner, $before ): void {
+			if ( 0 !== $fired || $saving->get_id() !== $order->get_id() || ! $saving->is_paid() ) {
+				return;
+			}
+			++$fired;
+			$wpdb->update(
+				$table,
+				array( 'meta_value' => $before ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_value -- test fixture.
+				array(
+					$owner     => $order->get_id(),
+					'meta_key' => Ledger::META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_key -- test fixture.
+				)
+			);
+		};
+		$body = $this->envelope( $order, array( 'context' => array( 'amount' => '92.95' ) ) );
+		$path = $this->payment_path( $order, $payment['id'] ) . '/capture';
+		add_action( 'woocommerce_after_order_object_save', $lose, 1 );
+
+		// Act: the capture, then its retry with the same command and body.
+		try {
+			$first = $this->command( $path, $body );
+		} finally {
+			remove_action( 'woocommerce_after_order_object_save', $lose, 1 );
+		}
+		$again = $this->command( $path, $body );
+
+		// Assert: one sale record, naming the row; one captured row; the provider charged once.
+		$saved    = wc_get_order( $order->get_id() );
+		$history  = Completion_History::of( $saved )->entries();
+		$sales    = ( new Fiscal_Record_Store() )->count(
+			array(
+				'order_id' => $order->get_id(),
+				'type'     => 'sale',
+			)
+		);
+		$captured = array_filter( Ledger::instance()->read( $saved ), static fn( $row ) => 'captured' === $row['status'] );
+		$this->assertSame( 1, $fired );
+		$this->assertSame( 200, $first->get_status(), wp_json_encode( $first->get_data() ) );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 1, Route_Handler::$captures );
+		$this->assertSame( 1, $sales );
+		$this->assertCount( 1, $history );
+		$this->assertContains( $payment['id'], $history[0]['payment_ids'] );
+		$this->assertCount( 1, $captured );
+	}
+
 	/** Pin 2: the same command id with another body is a 422 and changes nothing. */
 	public function test_capture_replay_with_the_same_command_and_a_different_body_is_422(): void {
 		// Arrange.
