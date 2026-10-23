@@ -890,7 +890,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
 		$intent            = Order_Write_Intent::current();
-		$is_creating_order = null !== $intent && $intent->is_create() && $intent->is_subject( $order );
+		$is_pos_write      = null !== $intent && $intent->is_subject( $order );
+		$is_creating_order = $is_pos_write && $intent->is_create();
 
 		if ( $is_creating_order && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
@@ -908,10 +909,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * being created is always stamped with the authenticated user (any client-
 		 * supplied value was stripped before the write); on later saves only a missing
 		 * value is filled, so an edit under a different user never reassigns the
-		 * recorded cashier. The forced stamp is limited to the exact order prepared
-		 * for this request — an extension saving another new order mid-create must not
-		 * have that order's cashier overwritten.
+		 * recorded cashier. Both are limited to the exact order this request's POS
+		 * write prepared — an extension saving another order mid-write must not have
+		 * that order's cashier overwritten, and a save that is not a POS write (a
+		 * read's side effect, the email route's billing update) records no cashier.
 		 */
+		if ( ! $is_pos_write ) {
+			return;
+		}
 		if ( $is_creating_order || ! $order->get_meta( '_pos_user' ) ) {
 			$order->update_meta_data( '_pos_user', (string) get_current_user_id() );
 		}
