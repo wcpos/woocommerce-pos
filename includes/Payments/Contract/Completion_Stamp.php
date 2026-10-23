@@ -68,8 +68,9 @@ final class Completion_Stamp {
 
 	/**
 	 * Complete a sale paid outside the ledger in one write's S3, after the order's other deferred work (a mint the
-	 * completion must name) and once per flush: the paid attempt the stamp names is resolved to its row, and the
-	 * write completes the sale if it is still paid with nothing standing.
+	 * completion must name) and once per flush: the resolver first mints the row of the attempt that awaited the customer
+	 * when no mint recorded it (`Attempts::reconcile( 'paid' )`, which completes the sale at the attempt's origin), then
+	 * the write completes the sale if it is still paid with nothing standing.
 	 *
 	 * @param int  $order_id  Order ID.
 	 * @param bool $order_pay Whether order-pay is paying the order (read once, where the transition was seen).
@@ -80,11 +81,12 @@ final class Completion_Stamp {
 			static function () use ( $order_id, $order_pay ): void {
 				$order = self::fresh( $order_id );
 				if ( $order && null === Completion_History::of( $order )->standing() ) {
+					Attempts::reconcile( $order, 'paid' );
 					Ledger::instance()->write(
-						$order,
+						$order_id,
 						static function ( Ledger_Draft $d ) use ( $order_pay ): bool {
 							$d->completes_at( new Completion_Origin( array(), $order_pay ) );
-							return Gateway_Submission::resolve_paid( $d );
+							return false; // Stages nothing: S3 only.
 						}
 					);
 				}

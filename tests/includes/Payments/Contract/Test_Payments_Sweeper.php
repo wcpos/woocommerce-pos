@@ -6,6 +6,7 @@
  */
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
@@ -431,6 +432,46 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 	}
 
 	/** The sweep's capture-refusal lines out of everything the logging filter saw. */
+	/** The sweep asks about an attempt only once it is older than the threshold, and never about one awaiting the customer. */
+	public function test_sweeper_asks_only_about_an_indexed_attempt_older_than_the_threshold(): void {
+		// Arrange: a stranded attempt and an invoice awaiting the customer, both just sent; neither order is paid.
+		$stranded = $this->pos_order();
+		$invoiced = $this->pos_order();
+		$attempt  = wp_generate_uuid4();
+		$awaiting = wp_generate_uuid4();
+		Ledger_Seed::attempt( $stranded, $attempt, 'wcpos_paid_test', 'sent' );
+		Ledger_Seed::attempt( $invoiced, $awaiting, 'wcpos_sent_test' );
+
+		// Act: a sweep inside the threshold, then one past it.
+		( new Payments_Sweeper() )->run();
+		$young = Attempts::of( wc_get_order( $stranded->get_id() ) )->get( $attempt );
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert: the unanswered attempt is handed to a human, never cancelled; the invoice is not asked.
+		$this->assertNull( $young['attention_at_gmt'] );
+		$swept = Attempts::of( wc_get_order( $stranded->get_id() ) )->get( $attempt );
+		$this->assertSame( 'sent', $swept['fate'] );
+		$this->assertNotNull( $swept['attention_at_gmt'] );
+		$waiting = Attempts::of( wc_get_order( $invoiced->get_id() ) )->get( $awaiting );
+		$this->assertSame( array( 'sent', null ), array( $waiting['fate'], $waiting['attention_at_gmt'] ) );
+		$this->assertNotNull( $waiting['awaiting'] );
+	}
+
+	/** An open POS order with nothing on it. */
+	private function pos_order(): \WC_Order {
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_total( '92.95' );
+		$order->save();
+		return $order;
+	}
+
 	private function refusal_logs( array $logs ): array {
 		return array_values( array_filter( $logs, static fn( $line ) => false !== strpos( (string) $line, 'capture refused' ) ) );
 	}

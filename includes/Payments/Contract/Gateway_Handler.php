@@ -84,6 +84,53 @@ class Gateway_Handler extends Abstract_Capture_Mode_Handler {
 	}
 
 	/**
+	 * What became of a gateway attempt, read from the order (the gateway's PHP has no status API; `Attempts::reconcile()`
+	 * asks with the attempt's pseudo row): `captured`, with its transaction id, only when the order was paid through the
+	 * attempt's method after the attempt was sent and its counting rows do not cover it; the amount is the remainder they
+	 * leave (order total minus `Ledger::paid()` of the counting rows, a split tender's cash already counted). "After":
+	 * `date_paid` on or after its `sent_at_gmt`, or a paid status with no `date_paid` (a sale takes an attempt only while
+	 * open, so the paid status followed it); on a reopened sale, which keeps its first `date_paid` (WooCommerce never
+	 * moves it), the attempt was sent after the reopen and the order is in a paid status now. Paid facts older than the
+	 * attempt are indeterminate: it may still be paid. No paid facts, and a row with no `sent_at_gmt` (a stored row),
+	 * are answered unchanged: this provider cannot say.
+	 *
+	 * @param array $row Payment row, or an attempt's `{ id, status, capture_mode, method_id, order_id }`.
+	 *
+	 * @return array|\WP_Error
+	 */
+	public function status( array $row ) {
+		$sent   = strtotime( (string) ( $row['sent_at_gmt'] ?? '' ) );
+		$order  = 'gateway' === ( $row['capture_mode'] ?? '' ) && false !== $sent ? wc_get_order( (int) ( $row['order_id'] ?? 0 ) ) : null;
+		$remain = $order instanceof \WC_Order ? Money::minor( $order->get_total() ) - Money::minor( Ledger::instance()->paid( Ledger::instance()->read( $order ) ) ) : 0;
+		$paid   = $order instanceof \WC_Order ? $order->get_date_paid( 'edit' ) : null;
+		$status = $order instanceof \WC_Order && Completion_Stamp::is_paid( $order );
+		if ( $remain <= 0 || ! ( $status || null !== $paid ) || ( $row['method_id'] ?? null ) !== $order->get_payment_method() ) {
+			return $row;
+		}
+		$reopened = strtotime( (string) ( Completion_History::of( $order )->latest()['reopened_at_gmt'] ?? '' ) );
+		$after    = false === $reopened ? null === $paid || $paid->getTimestamp() >= $sent : $reopened <= $sent && $status;
+		if ( ! $after ) {
+			return new \WP_Error(
+				'wcpos_provider_error',
+				__( 'The order was paid before this payment attempt was sent.', 'woocommerce-pos' ),
+				array(
+					'status'        => 502,
+					'indeterminate' => true,
+				)
+			);
+		}
+		$transaction = $order->get_transaction_id();
+		return array_merge(
+			$row,
+			array(
+				'status'        => 'captured',
+				'amount'        => Money::format( $remain ),
+				'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
+			)
+		);
+	}
+
+	/**
 	 * Gateway payments cannot be voided through the contract.
 	 *
 	 * @param array  $row    Payment row.

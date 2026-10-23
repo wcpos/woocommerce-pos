@@ -77,6 +77,7 @@ final class Ledger_Seed {
 			$order,
 			static function ( Ledger_Draft $draft ) use ( $attempt, $method_id, $fate, $command ): void {
 				Attempts::open( $draft, $attempt, $method_id, $command );
+				$draft->order()->set_payment_method( $method_id ); // As the submit's held write assigns the chosen gateway.
 				if ( 'awaiting' === $fate ) {
 					Attempts::await( $draft, $attempt, null );
 				} elseif ( 'sent' !== $fate ) {

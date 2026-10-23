@@ -61,6 +61,17 @@ final class Completion_Origin {
 		$this->cashier    = max( 0, $cashier );
 	}
 
+	/**
+	 * The origin an attempt kept at `Attempts::open()`: its submit's validated provenance and its cashier.
+	 *
+	 * @param array $entry The attempt's entry.
+	 */
+	public static function of_attempt( array $entry ): self {
+		$origin             = new self( array(), false, (int) ( $entry['cashier_id'] ?? 0 ) );
+		$origin->provenance = self::validated( is_array( $entry['origin'] ?? null ) ? $entry['origin'] : array(), true );
+		return $origin;
+	}
+
 	/** The validated provenance, entry-shaped: what a sent submit keeps on its awaiting stamp. */
 	public function provenance(): array {
 		return $this->provenance;
@@ -79,7 +90,8 @@ final class Completion_Origin {
 	public function for_entry( WC_Order $fresh, int $n ): array {
 		$empty   = array_fill_keys( array_keys( self::FIELDS ), null );
 		$stamp   = Attempts::of( $fresh )->awaiting() ?? array();
-		$sources = array( $this->provenance, is_array( $stamp['provenance'] ?? null ) ? self::validated( $stamp['provenance'], true ) : array() );
+		$paying  = self::paying( $fresh );
+		$sources = array( $this->provenance, is_array( $stamp['provenance'] ?? null ) ? self::validated( $stamp['provenance'], true ) : array(), self::validated( $paying['origin'] ?? array(), true ) );
 		if ( 1 === $n || $this->order_pay ) {
 			$sources[] = array_filter( self::till_tuple( $fresh ), static fn( $value ) => null !== $value );
 		}
@@ -96,8 +108,25 @@ final class Completion_Origin {
 			$entry['register'] = $latest['register_id'] ?? null;
 			$entry['session']  = $latest['session_id'] ?? null;
 		}
-		$cashier = $this->cashier ? $this->cashier : (int) ( $stamp['cashier_id'] ?? 0 );
+		$cashier = $this->cashier ? $this->cashier : (int) ( $stamp['cashier_id'] ?? $paying['cashier_id'] ?? 0 );
 		return $cashier > 0 ? $entry + array( 'cashier' => $cashier ) : $entry;
+	}
+
+	/**
+	 * The attempt whose row this completion counts: `paid`, its row stored and counted by no completion yet. It carries
+	 * the submit's provenance when no command or stamp names it (a sweep's heal).
+	 *
+	 * @param WC_Order $fresh Order as storage holds it.
+	 */
+	private static function paying( WC_Order $fresh ): ?array {
+		$history = Completion_History::of( $fresh );
+		$paying  = null;
+		foreach ( Attempts::of( $fresh )->entries() as $entry ) {
+			if ( 'paid' === $entry['fate'] && null !== Ledger::instance()->find( $fresh, $entry['id'] ) && ! $history->counted( $entry['id'] ) ) {
+				$paying = $entry;
+			}
+		}
+		return $paying;
 	}
 
 	/**

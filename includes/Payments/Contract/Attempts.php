@@ -21,6 +21,8 @@ final class Attempts {
 	public const META_KEY = '_wcpos_gateway_attempts';
 	/** Resolved entries the map keeps; older ones fall off (a till does not retry a week-old send). An unresolved one is never evicted. */
 	public const CAP = 50;
+	/** Indeterminate answers (an hour of ten-minute sweeps) before the resolver asks a human instead. */
+	public const ASK_LIMIT = 6;
 	/** The stored value's schema. */
 	private const SCHEMA = 1;
 	/** A staged fate that removes the entry: the attempt never reached the gateway, so a retry dispatches it. */
@@ -35,6 +37,8 @@ final class Attempts {
 		'sent_at_gmt'     => null,
 		'resolved_at_gmt' => null,
 		'awaiting'        => null,
+		'asks'            => 0,
+		'attention_at_gmt' => null,
 	);
 
 	/**
@@ -55,7 +59,7 @@ final class Attempts {
 				$log[ strtolower( (string) $id ) ] = array_merge( self::DEFAULTS, $entry, array( 'id' => strtolower( (string) $id ) ) );
 			}
 		}
-		return new Attempt_Log( $log );
+		return new Attempt_Log( $log, static fn(): array => array_map( static fn( array $row ): string => strtolower( (string) ( $row['id'] ?? '' ) ), Ledger::instance()->read( $order ) ), (string) $order->get_payment_method() );
 	}
 
 	/**
@@ -211,6 +215,151 @@ final class Attempts {
 		}
 		if ( $patches ) {
 			self::store( $order, $patches );
+		}
+	}
+
+	/**
+	 * Rule 7's resolver: what became of the attempt whose outcome is unknown, from its provider's answer, acted on under
+	 * the order lock. `captured` mints its row (the attempt id as the row id) in a write that completes the sale at the
+	 * attempt's origin; `failed` or `voided` cancels it; an indeterminate answer counts an ask; at the sweep (past its
+	 * threshold) an unchanged answer, or the ask limit, flags it for a human with one note and leaves it `sent`. Nothing
+	 * cancels an attempt the provider never answered.
+	 *
+	 * @param WC_Order $order  Order object.
+	 * @param string   $source `paid` asks only about the attempt that awaited the customer, who has paid; `sweep`,
+	 *                         `replay`, `cancel` and `submit` only about one nobody awaits (`sweep` not about a flagged one).
+	 * @return array|null The row it minted, as stored; null when it minted none.
+	 * @throws Ledger_Persistence_Exception When its write does not reach storage.
+	 */
+	public static function reconcile( WC_Order $order, string $source ): ?array {
+		$id   = $order->get_id();
+		$lock = Order_Lock::instance();
+		if ( ! $lock->acquire( $id ) ) {
+			return null; // Busy: the holder or the next sweep asks.
+		}
+		try {
+			$fresh = wc_get_order( $id );
+			if ( $fresh instanceof WC_Order ) {
+				$fresh->read_meta_data( true );
+			}
+			$entry = $fresh instanceof WC_Order ? self::of( $fresh )->eligible( $source ) : null;
+			if ( null === $entry ) {
+				return null;
+			}
+			// A payment whose row was lost is a known fact, never a question: it is minted for the remainder the rows leave,
+			// while WooCommerce's own paid facts stand (a lost save of the paid status leaves nothing to mint from).
+			$remain  = Money::minor( $fresh->get_total() ) - Money::minor( Ledger::instance()->paid( Ledger::instance()->read( $fresh ) ) );
+			$known   = 0 < $remain && ( Completion_Stamp::is_paid( $fresh ) || null !== $fresh->get_date_paid( 'edit' ) ) ? array(
+				'status'        => 'captured',
+				'amount'        => Money::format( $remain ),
+				'provider_refs' => array( 'transaction_id' => '' !== $fresh->get_transaction_id() ? $fresh->get_transaction_id() : null ),
+			) : null;
+			$handler = 'paid' === $entry['fate'] ? null : Capture_Mode_Registry::instance()->resolve( 'gateway', Descriptor_Builder::instance()->get( $entry['method_id'] )['capture']['provider'] ?? null );
+			$answer  = null === $handler ? ( 'paid' === $entry['fate'] ? $known : null ) : $handler->status(
+				array(
+					'id'           => $entry['id'],
+					'status'       => 'pending',
+					'capture_mode' => 'gateway',
+					'method_id'    => $entry['method_id'],
+					'order_id'     => $id,
+					'sent_at_gmt'  => $entry['sent_at_gmt'], // Paid evidence must postdate it.
+				)
+			);
+			$status  = is_array( $answer ) ? (string) ( $answer['status'] ?? '' ) : '';
+			$flagged = false;
+			$sweep   = 'sweep' === $source;
+			$written = Ledger::instance()->write(
+				$id,
+				static function ( Ledger_Draft $d ) use ( $entry, $answer, $status, $sweep, &$flagged ): bool {
+					$now = self::of( $d->order() )->get( $entry['id'] );
+					// Resolved since it was read; a `paid` fate whose row is missing is an S1 that stored only part of itself.
+					if ( 'sent' !== ( $now['fate'] ?? null ) && ! ( 'paid' === $now['fate'] && null === $d->row( $now['id'] ) ) ) {
+						return false;
+					}
+					if ( 'captured' === $status ) {
+						$cashier = (int) $now['cashier_id'];
+						$row     = array(
+							'id'            => $now['id'],
+							'source'        => 'app',
+							'capture_mode'  => 'gateway',
+							'method_id'     => $now['method_id'],
+							'amount'        => $answer['amount'] ?? $d->order()->get_total(),
+							'register_id'   => $now['origin']['register'] ?? null, // Where the submit was taken.
+							'session_id'    => $now['origin']['session'] ?? null,
+							'provider_refs' => array( 'transaction_id' => $answer['provider_refs']['transaction_id'] ?? null ),
+						);
+						$d->put( Webview_Passthrough::row( $d->order(), $cashier > 0 ? $row + array( 'cashier_id' => $cashier ) : $row ) );
+						$d->completes_at( Completion_Origin::of_attempt( $now ) );
+						// The command that sent it recorded this row: its replay answers `recorded` (D6).
+						$held = null === $now['command_id'] ? null : Command_Log::find( $d->order(), array(), (string) $now['command_id'] );
+						if ( null !== $held ) {
+							Command_Log::remember( $d->order(), (string) $now['command_id'], array( 'outcome' => 'recorded' ) + array_diff_key( $held, array( 'payment_id' => true ) ) );
+						}
+						return true;
+					}
+					if ( 'sent' === $now['fate'] && in_array( $status, array( 'failed', 'voided' ), true ) ) {
+						self::resolve( $d, $now['id'], 'cancelled' );
+						return true;
+					}
+					$asks    = (int) $now['asks'] + ( is_array( $answer ) ? 0 : 1 );
+					$flagged = $sweep && null === $now['attention_at_gmt'] && ( is_array( $answer ) || $asks >= self::ASK_LIMIT );
+					if ( ! $flagged && $asks === (int) $now['asks'] ) {
+						return false;
+					}
+					$d->attempt( $now['id'], $now['fate'], array( 'asks' => $asks ) + ( $flagged ? array( 'attention_at_gmt' => gmdate( 'c' ) ) : array() ) );
+					return true;
+				},
+				Ledger::MODE_HOLD
+			);
+			if ( $flagged ) {
+				$title = Descriptor_Builder::instance()->get( $entry['method_id'] )['title'] ?? $entry['method_id'];
+				/* translators: 1: attempt id, 2: payment method title. */
+				$written->order->add_order_note( sprintf( __( 'WCPOS payment attempt %1$s: the outcome is unknown and %2$s cannot say whether money was taken. Check the payment with the provider, then cancel the attempt at the POS if nothing was charged.', 'woocommerce-pos' ), $entry['id'], $title ) );
+			}
+			return 'captured' === $status ? Ledger::instance()->find( $written->order, $entry['id'] ) : null;
+		} finally {
+			$lock->release( $id );
+		}
+	}
+
+	/**
+	 * A payment WooCommerce took whose row did not land (`Webview_Passthrough::mint()` failed) is a known payment whose
+	 * row was lost, not an unanswered attempt: kept `paid` with no row under the row id the mint tried (an attempt that
+	 * stood `sent` for it included), which the sweep lists and the resolver re-mints without asking anyone. One held
+	 * write, best effort.
+	 *
+	 * @param WC_Order $order     Order object.
+	 * @param string   $id        The row id the mint tried.
+	 * @param string   $method_id The payment's method.
+	 */
+	public static function strand( WC_Order $order, string $id, string $method_id ): void {
+		try {
+			Ledger::instance()->write(
+				$order->get_id(),
+				static function ( Ledger_Draft $d ) use ( $id, $method_id ): bool {
+					$entry = self::of( $d->order() )->get( $id );
+					if ( null === $entry ) {
+						self::open( $d, $id, $method_id );
+						// The lost row's own provenance: the operator and till that rang the sale, never whoever paid.
+						$d->attempt(
+							$id,
+							'sent',
+							array(
+								'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
+								'origin'     => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
+							)
+						);
+					}
+					if ( null === $entry || 'sent' === $entry['fate'] ) {
+						self::resolve( $d, $id, 'paid' ); // Awaits no one: the customer paid.
+					}
+					return (bool) $d->attempts();
+				},
+				Ledger::MODE_HOLD
+			);
+		} catch ( \Throwable $error ) {
+			// The mint's own error already names the payment for a human.
+			Logger::warning( sprintf( 'WCPOS could not keep the unrecorded payment %s on order #%d for the resolver: %s', $id, $order->get_id(), $error->getMessage() ) );
 		}
 	}
 

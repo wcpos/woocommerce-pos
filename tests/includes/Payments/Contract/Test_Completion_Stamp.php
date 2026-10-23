@@ -9,9 +9,10 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
-use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
+use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -715,8 +716,8 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1 ), $this->announced );
 	}
 
-	/** An asynchronous order-pay payment whose row is not stored completes nothing; it completes once the row lands. */
-	public function test_an_async_order_pay_completion_waits_for_a_row_whose_mint_failed(): void {
+	/** An asynchronous order-pay payment whose row is not stored completes nothing; the sweep re-mints it and completes the sale, once. */
+	public function test_an_async_order_pay_completion_waits_for_a_row_whose_mint_failed_and_the_sweep_re_mints_it_once(): void {
 		// Arrange: a POS order, no rows; the first mint's ledger write never reaches storage.
 		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
 		$order = $this->create_pos_order();
@@ -733,19 +734,117 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'query', $lose );
 		}
 		$lost = $this->stored_history( $order->get_id() );
-		// The merchant reconciles the payment the failure note names; the next write on the sale completes it.
-		Webview_Passthrough::mint( wc_get_order( $order->get_id() ), array( 'provider_refs' => array( 'transaction_id' => 'ch_async' ) ) );
-		Ledger::instance()->write( $order->get_id() );
+		// The resolver re-mints the payment the failure note names (ADR 0040 rule 7): two sweeps once the store recovers.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
 
 		// Assert.
-		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$stored  = wc_get_order( $order->get_id() );
+		$rows    = Ledger::instance()->read( $stored );
 		$history = $this->stored_history( $order->get_id() );
 		$this->assertSame( array(), $lost, 'No completion without the tender\'s row.' );
 		$this->assertCount( 1, $rows );
+		$this->assertSame( array( 'captured', 'pos_card', 'ch_async' ), array( $rows[0]['status'], $rows[0]['method_id'], $rows[0]['provider_refs']['transaction_id'] ) );
 		$this->assertCount( 1, $history );
 		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
 		$this->assertSame( array( 1 ), $this->announced );
 		$this->assertCount( 1, $this->only_sale( $order->get_id() )['payload']['payments'] );
+		$this->assertNull( Attempts::of( $stored )->unresolved() );
+	}
+
+	/** A lost order-pay mint paid by a logged-in customer is re-minted for the POS operator who rang the sale, never the customer. */
+	public function test_a_lost_order_pay_mint_paid_by_a_customer_is_re_minted_for_the_pos_operator(): void {
+		// Arrange: the operator rang the sale; the customer pays it logged in; the mint's ledger write is lost.
+		$operator = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$customer = self::factory()->user->create( array( 'role' => 'customer' ) );
+		$order    = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->update_meta_data( '_pos_user', (string) $operator );
+		$order->save();
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		wp_set_current_user( $customer );
+		add_filter( 'query', $lose );
+		try {
+			wc_get_order( $order->get_id() )->payment_complete( 'ch_customer' );
+			Ledger::flush_all();
+		} finally {
+			remove_filter( 'query', $lose );
+		}
+
+		// Act: the sweep, as cron runs it.
+		wp_set_current_user( 0 );
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $operator, (int) $rows[0]['cashier_id'] );
+		$this->assertCount( 1, $history );
+		$this->assertSame( $operator, (int) ( $history[0]['cashier'] ?? 0 ) );
+	}
+
+	/**
+	 * A lost mint is a known payment, not an unanswered attempt: a reopened pre-ledger sale charged again through
+	 * order-pay, whose mint fails, is re-minted by one sweep under the kept id, completes once, and leaves the list with
+	 * no ask and no flag (its first `date_paid`, which WooCommerce keeps, is never asked about).
+	 */
+	public function test_a_lost_order_pay_mint_on_a_reopened_pre_ledger_sale_is_re_minted_by_one_sweep(): void {
+		// Arrange: paid and completed before the ledger, an hour ago; reopened; charged again through order-pay; the mint is lost.
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->set_date_paid( time() - HOUR_IN_SECONDS );
+		$order->set_status( 'processing' );
+		$order->save();
+		Completion_Stamp::append( wc_get_order( $order->get_id() ), new Completion_Origin() );
+		wc_get_order( $order->get_id() )->update_status( 'pos-open' );
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		$_POST['payment_method'] = 'pos_card'; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- The order-pay form's field.
+		add_filter( 'query', $lose );
+		try {
+			do_action( 'woocommerce_before_pay_action', wc_get_order( $order->get_id() ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+			wc_get_order( $order->get_id() )->payment_complete( 'ch_again' );
+			apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
+			Ledger::flush_all();
+		} finally {
+			remove_filter( 'query', $lose );
+			unset( $_POST['payment_method'] );
+		}
+		wp_cache_flush(); // A later request.
+		$kept = Attempts::of( wc_get_order( $order->get_id() ) )->entries();
+
+		// Act: one sweep.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertCount( 1, $kept, 'The lost payment is kept.' );
+		$id     = (string) array_key_first( $kept );
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$rows   = Ledger::instance()->read( $stored );
+		$this->assertSame( array( $id ), array_column( $rows, 'id' ) );
+		$this->assertSame( '92.95', $rows[0]['amount'] );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 2, $history, 'The pre-ledger completion, then one for this payment.' );
+		$this->assertSame( array( $id ), $history[1]['payment_ids'] );
+		$entry = Attempts::of( $stored )->get( $id );
+		$this->assertSame( array( 'paid', 0, null ), array( $entry['fate'], $entry['asks'], $entry['attention_at_gmt'] ) );
+		$this->assertSame( array(), array_map( static fn( $meta ) => $meta->value, $stored->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
 	}
 
 	/** A storefront order paid through the order-pay window is not a register sale. */

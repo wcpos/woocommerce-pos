@@ -284,6 +284,8 @@ class Webview_Passthrough {
 			} catch ( \Throwable $note_error ) {
 				Logger::error( sprintf( 'WCPOS could not add the unrecorded-payment note on order #%d: %s', $order->get_id(), $note_error->getMessage() ) );
 			}
+			// Kept as an unresolved attempt, the sweep's resolver mints the row (ADR 0040 rule 7).
+			Attempts::strand( $order, strtolower( (string) ( $row['id'] ?? $overrides['id'] ?? wp_generate_uuid4() ) ), $method_id );
 			throw $error instanceof Ledger_Persistence_Exception ? $error : new Ledger_Persistence_Exception( esc_html( $error->getMessage() ), 0, $error );
 		}
 		return is_wp_error( $adopted ) ? null : $adopted;

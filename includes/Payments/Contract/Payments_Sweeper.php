@@ -159,6 +159,12 @@ final class Payments_Sweeper {
 					// Project the reconciled legs and complete what completion_due() says is due, once every confirmation
 					// parked for the rows is drained (a mismatch is the answer, not a completion).
 					try {
+						// An attempt whose outcome is unknown is asked about once it is older than the threshold (rule 7).
+						$sent = Attempts::of( $order )->eligible( 'sweep' );
+						$at   = strtotime( (string) ( $sent['sent_at_gmt'] ?? '' ) );
+						if ( false !== $at && $at <= time() - $threshold ) {
+							Attempts::reconcile( $order, 'sweep' );
+						}
 						foreach ( $ledger->read( wc_get_order( $order_id ) ) as $row ) {
 							if ( null !== Settlement::instance()->parked( (string) $row['id'] ) && is_wp_error( $ledger->drain_parked( wc_get_order( $order_id ), (string) $row['id'] ) ) ) {
 								return; // The parking lock is busy: the next sweep drains it.
