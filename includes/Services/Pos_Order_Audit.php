@@ -17,7 +17,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
-use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -55,8 +55,7 @@ final class Pos_Order_Audit {
 		Completion_Stamp::COMPLETED_AT_META_KEY,
 		Completion_Stamp::META_KEY,
 		Fiscal_Record_Writers::PENDING_META_KEY,
-		Gateway_Submission::ATTEMPTS_META_KEY,
-		Gateway_Submission::STAMP_META_KEY,
+		Attempts::META_KEY,
 		'_payment_method',
 		'_payment_method_title',
 		'_transaction_id',

@@ -7,10 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
-use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
@@ -510,7 +510,7 @@ class Test_Command_Log extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->fresh( $id );
 		Command_Log::remember( $order, $command_id, $entry );
 		if ( $fates ) {
-			$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $fates );
+			$order->update_meta_data( Attempts::META_KEY, $fates );
 		}
 		Ledger::save_meta( $order );
 	}

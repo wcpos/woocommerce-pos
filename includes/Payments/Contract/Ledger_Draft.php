@@ -32,9 +32,9 @@ final class Ledger_Draft {
 	private $rows = array();
 
 	/**
-	 * Attempt fates to stage, by lowercase attempt id.
+	 * Attempt patches to stage, by lowercase attempt id.
 	 *
-	 * @var array<string, string>
+	 * @var array<string, array>
 	 */
 	private $attempts = array();
 
@@ -98,16 +98,18 @@ final class Ledger_Draft {
 	}
 
 	/**
-	 * Stage an attempt's fate.
+	 * Stage an attempt's fate and detail over what is staged for it already. Only {@see Attempts} calls it.
 	 *
-	 * @param string $id   Attempt id.
-	 * @param string $fate `sent`, `settled`, `paid`, `cancelled` or `superseded`.
+	 * @param string $id     Attempt id.
+	 * @param string $fate   `sent`, `settled`, `paid`, `cancelled` or `superseded`.
+	 * @param array  $detail Entry fields to set.
 	 */
-	public function attempt( string $id, string $fate ): void {
-		$this->attempts[ strtolower( $id ) ] = $fate;
+	public function attempt( string $id, string $fate, array $detail = array() ): void {
+		$id                    = strtolower( $id );
+		$this->attempts[ $id ] = array_merge( $this->attempts[ $id ] ?? array(), $detail, array( 'fate' => $fate ) );
 	}
 
-	/** The staged attempt fates, by attempt id. */
+	/** The staged attempt patches, by attempt id. */
 	public function attempts(): array {
 		return $this->attempts;
 	}

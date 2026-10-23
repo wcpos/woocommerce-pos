@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
@@ -14,7 +16,6 @@ use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
-use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
@@ -658,7 +659,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$id    = $order->get_id();
 		$row   = $this->row( '92.95' );
 		$sent  = array( $row['id'] => 'sent' );
-		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $sent );
+		$order->update_meta_data( Attempts::META_KEY, $sent );
 		$order->save_meta_data();
 		$lost = 0;
 		$lose = static function ( $saving ) use ( $id, $sent, &$lost ): void {
@@ -673,7 +674,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 				array( 'meta_value' => maybe_serialize( $sent ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_value -- test fixture.
 				array(
 					( $hpos ? 'order_id' : 'post_id' ) => $id,
-					'meta_key'                         => Gateway_Submission::ATTEMPTS_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_key -- test fixture.
+					'meta_key'                         => Attempts::META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_key -- test fixture.
 				)
 			);
 		};
@@ -690,7 +691,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 1, $lost );
 		$this->assertSame( 'completed', $this->stored_status( $id ) );
 		$this->assertSame( 1, (int) $written->completion['n'] );
-		$this->assertSame( array( $row['id'] => 'paid' ), Gateway_Submission::read_attempts( $this->fresh( $id ) ) );
+		$this->assertSame( array( $row['id'] => 'paid' ), Attempts::of( $this->fresh( $id ) )->fates() );
 		$this->assertSame( 9, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
 	}
 
@@ -758,7 +759,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( 'completed', $this->stored_status( $id ) );
 		$this->assertSame( 1, (int) $written->completion['n'] );
-		$this->assertNull( Gateway_Submission::read_stamp( $this->fresh( $id ) ) );
+		$this->assertNull( Attempts::of( $this->fresh( $id ) )->awaiting() );
 	}
 
 	/**
@@ -790,7 +791,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$saved = $this->fresh( $id );
 		$this->assertSame( 'completed', $saved->get_status() );
 		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
-		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+		$this->assertNull( Attempts::of( $saved )->awaiting() );
 	}
 
 	/** Failures after S1 (the paid transition) and after S2 (the completion). */
@@ -836,16 +837,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	 * @param int $id Order id.
 	 */
 	private function seed_stamp( int $id ): void {
-		$order = $this->fresh( $id );
-		$order->update_meta_data(
-			Gateway_Submission::STAMP_META_KEY,
-			array(
-				'attempt_id' => wp_generate_uuid4(),
-				'method_id'  => 'pos_cash',
-				'cashier_id' => 1,
-			)
-		);
-		$order->save_meta_data();
+		Ledger_Seed::attempt( $id, wp_generate_uuid4() );
 	}
 
 	/** A POS order a sent gateway submit left on-hold, awaiting the customer, with no paid date. */
@@ -853,15 +845,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$order = $this->create_pos_order();
 		$order->set_status( 'on-hold' );
 		$order->save();
-		$order->update_meta_data(
-			Gateway_Submission::STAMP_META_KEY,
-			array(
-				'attempt_id' => wp_generate_uuid4(),
-				'method_id'  => 'pos_cash',
-				'cashier_id' => 1,
-			)
-		);
-		$order->save_meta_data();
+		Ledger_Seed::attempt( $order->get_id(), wp_generate_uuid4() );
 		$this->assertNull( $this->fresh( $order->get_id() )->get_date_paid( 'edit' ), 'Precondition: unpaid.' );
 		return $order->get_id();
 	}
@@ -1114,17 +1098,8 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$attempt  = wp_generate_uuid4();
 		$order->set_payment_method( 'pos_card' );
 		$order->set_status( 'pending' );
-		$order->update_meta_data(
-			Gateway_Submission::STAMP_META_KEY,
-			array(
-				'attempt_id' => $attempt,
-				'method_id'  => 'pos_card',
-				'cashier_id' => 1,
-				'provenance' => array( 'register' => $register ),
-			)
-		);
-		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'sent' ) );
 		$order->save();
+		Ledger_Seed::attempt( $id, $attempt, 'pos_card', 'awaiting', array( 'register_id' => $register ) );
 		$undo = $this->inject( 'completion', $id );
 
 		// Act: the callback pays; its S3 is lost; then any later write.
@@ -1140,7 +1115,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $saved ), 'id' ) );
 		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
 		$this->assertSame( $register, Completion_History::of( $saved )->standing()['register'] );
-		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+		$this->assertNull( Attempts::of( $saved )->awaiting() );
 	}
 
 	/**
@@ -2413,7 +2388,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$saved = $this->fresh( $id );
 		$this->assertSame( 0, $paid );
 		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
-		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+		$this->assertNull( Attempts::of( $saved )->awaiting() );
 		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ $command ] );
 	}
 
@@ -2434,7 +2409,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->seed_stamp( $id );
 		$saved = $this->fresh( $id );
 		$this->assertSame( 1, (int) Completion_History::of( $saved )->standing()['n'], 'Precondition: completion 1 stands.' );
-		$this->assertNotNull( Gateway_Submission::read_stamp( $saved ), 'Precondition: the stamp was left.' );
+		$this->assertNotNull( Attempts::of( $saved )->awaiting(), 'Precondition: the stamp was left.' );
 		$paid = 0;
 		add_action(
 			'woocommerce_pre_payment_complete',
@@ -2450,7 +2425,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$saved = $this->fresh( $id );
 		$this->assertSame( 0, $paid );
 		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
-		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+		$this->assertNull( Attempts::of( $saved )->awaiting() );
 		$this->assertFalse( Command_Log::stale( $saved, $this->stored_rows( $id ) ) );
 		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ array_key_first( $row['commands'] ) ] );
 	}

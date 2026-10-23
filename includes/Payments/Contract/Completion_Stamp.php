@@ -52,7 +52,7 @@ final class Completion_Stamp {
 			if ( $into && ! in_array( (string) $from, $completed, true ) ) {
 				// The ledger's own write, and a submit's dispatch (its final write), complete in their own S3. Elsewhere only
 				// a sale with a register origin completes: a sent submit's stamp, a captured row, a POS order's order-pay window.
-				$origin = null !== Gateway_Submission::read_stamp( $order ) || self::captured_ids( $order ) || ( Webview_Passthrough::is_paying( $id ) && wcpos_is_pos_order( $order ) );
+				$origin = null !== Attempts::of( $order )->awaiting() || self::captured_ids( $order ) || ( Webview_Passthrough::is_paying( $id ) && wcpos_is_pos_order( $order ) );
 				if ( $origin && ! Ledger::is_writing( $id ) && ! Gateway_Submission::is_submitting( $id ) ) {
 					self::defer( $id, Webview_Passthrough::is_paying( $id ) );
 				}

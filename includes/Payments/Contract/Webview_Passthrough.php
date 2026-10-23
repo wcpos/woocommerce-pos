@@ -159,9 +159,9 @@ class Webview_Passthrough {
 			}
 		}
 
-		// A sent attempt this payment answers is the row's id, so Ledger::write() marks the attempt paid. The stamp
-		// outlives the paid save; the completion's S3 clears it.
-		$attempt = (string) ( Gateway_Submission::read_stamp( $order )['attempt_id'] ?? '' );
+		// A sent attempt this payment answers is the row's id, so Ledger::write() marks the attempt paid. What it
+		// awaited outlives the paid save; the completion's S3 clears it.
+		$attempt = (string) ( Attempts::of( $order )->awaiting()['attempt_id'] ?? '' );
 		self::defer_mint( $order, wp_is_uuid( $attempt ) ? array( 'id' => strtolower( $attempt ) ) : array() );
 	}
 

@@ -78,7 +78,7 @@ final class Completion_Origin {
 	 */
 	public function for_entry( WC_Order $fresh, int $n ): array {
 		$empty   = array_fill_keys( array_keys( self::FIELDS ), null );
-		$stamp   = Gateway_Submission::read_stamp( $fresh ) ?? array();
+		$stamp   = Attempts::of( $fresh )->awaiting() ?? array();
 		$sources = array( $this->provenance, is_array( $stamp['provenance'] ?? null ) ? self::validated( $stamp['provenance'], true ) : array() );
 		if ( 1 === $n || $this->order_pay ) {
 			$sources[] = array_filter( self::till_tuple( $fresh ), static fn( $value ) => null !== $value );

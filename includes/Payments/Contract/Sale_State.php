@@ -11,7 +11,7 @@ use WC_Order;
 
 /**
  * A snapshot of one order, read once by {@see Ledger::sale_state()}: its payment rows, its gateway
- * attempts and awaiting-customer stamp, whether its completion stands, `is_editable()`, its status
+ * attempts (what they await included), whether its completion stands, `is_editable()`, its status
  * and `date_paid`. The push lane and the money-command routes each translate it into their own
  * refusals (ADR 0040 rules 3 and 4).
  *
@@ -37,18 +37,11 @@ final class Sale_State {
 	private array $rows;
 
 	/**
-	 * Gateway attempt id => state.
+	 * Gateway attempts.
 	 *
-	 * @var array<string, string>
+	 * @var Attempt_Log
 	 */
-	private array $attempts;
-
-	/**
-	 * The awaiting-customer stamp.
-	 *
-	 * @var array|null
-	 */
-	private ?array $stamp;
+	private Attempt_Log $attempts;
 
 	/**
 	 * Whether the latest completion stands.
@@ -96,8 +89,7 @@ final class Sale_State {
 	public function __construct( WC_Order $order, array $rows ) {
 		$this->order      = $order;
 		$this->rows       = $rows;
-		$this->attempts   = Gateway_Submission::read_attempts( $order );
-		$this->stamp      = Gateway_Submission::read_stamp( $order );
+		$this->attempts   = Attempts::of( $order );
 		$this->stands     = Completion_History::of( $order )->stands();
 		$this->editable   = $order->is_editable();
 		$this->status     = (string) $order->get_status();
@@ -136,7 +128,7 @@ final class Sale_State {
 	 * sale is editable, in progress, or awaiting a sent submit.
 	 */
 	public function takes_tender(): bool {
-		return ! $this->stands && ( $this->editable || in_array( $this->status, Ledger::IN_PROGRESS_STATUSES, true ) || null !== $this->stamp );
+		return ! $this->stands && ( $this->editable || in_array( $this->status, Ledger::IN_PROGRESS_STATUSES, true ) || null !== $this->attempts->awaiting() );
 	}
 
 	/** Whether the sale was paid: its completion stands, or `date_paid` is set. */
@@ -146,11 +138,11 @@ final class Sale_State {
 
 	/**
 	 * The payment or attempt still in motion, or null: the first `pending` or `authorized` row, or a
-	 * row with a `pending` refund allocation; else the `sent` gateway attempt, or the awaiting stamp's
-	 * attempt. Captured, failed and voided rows are never in motion.
+	 * row with a `pending` refund allocation; else the newest unresolved gateway attempt. Captured, failed
+	 * and voided rows are never in motion.
 	 *
-	 * @return array{payment_id: ?string, attempt_id: mixed}|null `payment_id` is set for a row; for an
-	 *         attempt it is null and `attempt_id` is the attempt (null when the stamp names none).
+	 * @return array{payment_id: ?string, attempt_id: ?string}|null `payment_id` is set for a row; for an
+	 *         attempt it is null and `attempt_id` is the attempt.
 	 */
 	public function in_motion(): ?array {
 		foreach ( $this->rows as $row ) {
@@ -162,24 +154,23 @@ final class Sale_State {
 				);
 			}
 		}
-		$sent = array_search( 'sent', $this->attempts, true );
-		if ( false !== $sent || null !== $this->stamp ) {
+		$sent = $this->attempts->unresolved();
+		if ( null !== $sent ) {
 			return array(
 				'payment_id' => null,
-				'attempt_id' => false !== $sent ? $sent : ( $this->stamp['attempt_id'] ?? null ),
+				'attempt_id' => $sent['id'],
 			);
 		}
 		return null;
 	}
 
 	/**
-	 * Whether any money exists on the order: a ledger row, a gateway attempt or the awaiting-customer
-	 * stamp, or WooCommerce's own paid facts for an order a gateway or an earlier version paid
+	 * Whether any money exists on the order: a ledger row or a gateway attempt, or WooCommerce's own paid facts for an order a gateway or an earlier version paid
 	 * (`date_paid`, a paid status, a transaction id, a refund). The refunds query runs once.
 	 */
 	public function has_money(): bool {
 		if ( null === $this->has_money ) {
-			$this->has_money = $this->rows || $this->attempts || null !== $this->stamp || $this->dated_paid || $this->order->is_paid()
+			$this->has_money = $this->rows || $this->attempts->fates() || $this->dated_paid || $this->order->is_paid()
 				|| '' !== (string) $this->order->get_transaction_id( 'edit' ) || array() !== $this->order->get_refunds();
 		}
 		return $this->has_money;

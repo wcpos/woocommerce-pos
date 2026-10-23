@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -320,7 +321,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'app', $rows[0]['source'] );
 		$this->assertSame( 'gateway', $rows[0]['capture_mode'] );
 		$this->assertSame( 'wcpos_stamp_sent', $rows[0]['method_id'] );
-		$this->assertSame( array( $attempt => 'paid' ), \WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::read_attempts( $stored ) );
+		$this->assertSame( array( $attempt => 'paid' ), Attempts::of( $stored )->fates() );
 		$this->assertCount( 1, $history );
 		$this->assertSame( self::REGISTER_B, $history[0]['register'] );
 		$this->assertSame( array( $attempt ), $history[0]['payment_ids'] );

@@ -8,8 +8,11 @@
 namespace WCPOS\WooCommercePOS\Tests\Helpers;
 
 use WC_Order;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 
 /** Stores rows the way the server writes them: `Ledger::write()`, never raw meta. */
 final class Ledger_Seed {
@@ -55,5 +58,37 @@ final class Ledger_Seed {
 		$order->delete_meta_data( Ledger::META_KEY );
 		$order->save_meta_data();
 		return self::rows( $order, $rows, $project );
+	}
+
+	/**
+	 * Open a gateway attempt as a submit does, then leave it as the gateway's answer would.
+	 *
+	 * @param WC_Order|int $order      Order or order id. An order object is re-read from storage afterwards.
+	 * @param string       $attempt    Attempt id.
+	 * @param string       $method_id  The gateway's method id.
+	 * @param string       $fate       `awaiting` (sent, awaiting the customer), `sent` (stranded: the gateway threw after
+	 *                                 dispatch), or a resolved fate.
+	 * @param array        $provenance Body-shaped provenance of the submit's command (`register_id`, `session_id`).
+	 * @return WC_Order The order as the write left it.
+	 */
+	public static function attempt( $order, string $attempt, string $method_id = 'pos_cash', string $fate = 'awaiting', array $provenance = array() ): WC_Order {
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:seed', 'submit', '', $attempt, '', new Completion_Origin( $provenance ) );
+		$written = Ledger::instance()->write(
+			$order,
+			static function ( Ledger_Draft $draft ) use ( $attempt, $method_id, $fate, $command ): void {
+				Attempts::open( $draft, $attempt, $method_id, $command );
+				if ( 'awaiting' === $fate ) {
+					Attempts::await( $draft, $attempt, null );
+				} elseif ( 'sent' !== $fate ) {
+					Attempts::resolve( $draft, $attempt, $fate );
+				}
+			},
+			Ledger::MODE_HOLD
+		);
+		if ( $order instanceof WC_Order ) {
+			$order->get_data_store()->read( $order );
+			$order->read_meta_data( true );
+		}
+		return $written->order;
 	}
 }
