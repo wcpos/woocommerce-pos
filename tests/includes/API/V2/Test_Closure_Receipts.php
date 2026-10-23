@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Stored figures, live sessions and independent print bookkeeping. */
 class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
@@ -518,7 +519,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$refund['kind'] = 'refund';
 		$refund['refunded_amount'] = '0';
 		$rows[] = $refund;
-		$ledger->save( $order, $rows, false );
+		Ledger_Seed::replace( $order, $rows, false );
 		$data = $this->document( 'xreport:' . $session['id'] )->get_data()['data'];
 		$this->assertSame( 2, $data['closure']['breakdowns']['refund_count'] );
 		$stamp = static function ( $refund ) use ( $session ) {
@@ -662,7 +663,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
 		$rows = $ledger->read( $order );
 		$rows[0]['cashier_id'] = $cashier;
-		$ledger->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 		( new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store() )->create(
 			array(
 				'id' => wp_generate_uuid4(),

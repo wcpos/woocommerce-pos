@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Session and movement REST contracts. */
 class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
@@ -282,7 +283,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 					'session_id' => $id,
 				);
 			}
-			Ledger::instance()->save( $order, $rows, false );
+			Ledger_Seed::rows( $order, $rows, false );
 			// Seed an older stored version without the ledger writer restamping it.
 			$stored = Ledger::instance()->read( $order );
 			foreach ( $stored as &$row ) {
@@ -860,7 +861,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 				'status' => 'pending',
 			)
 		);
-		Ledger::instance()->save( $first, array( $leg( array( 'amount' => '50' ) ), $leg( array( 'amount' => '-4' ) ), $pending ), false );
+		Ledger_Seed::rows( $first, array( $leg( array( 'amount' => '50' ) ), $leg( array( 'amount' => '-4' ) ), $pending ), false );
 		$second = new \WC_Order();
 		$second->set_total( '1000' );
 		$second->save();
@@ -890,7 +891,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 				'amount' => '25',
 			)
 		);
-		Ledger::instance()->save( $second, array( $cod, $card ), false );
+		Ledger_Seed::rows( $second, array( $cod, $card ), false );
 
 		// Act.
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $session['id'] ) );

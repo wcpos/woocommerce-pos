@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Submission reads money from the gateway, not from the verb. */
 class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
@@ -335,7 +336,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 	public function test_paid_attempt_replay_never_dispatches_gateway( bool $row ): void {
 		$order = $this->create_pos_order();
 		$attempt = wp_generate_uuid4();
-		if ( $row ) { Ledger::instance()->save( $order, array( array( 'id' => $attempt, 'method_id' => 'wcpos_sent_test', 'amount' => '92.95', 'status' => 'failed' ) ) ); }
+		if ( $row ) { Ledger_Seed::rows( $order, array( array( 'id' => $attempt, 'method_id' => 'wcpos_sent_test', 'amount' => '92.95', 'status' => 'failed' ) ) ); }
 		$order = wc_get_order( $order->get_id() );
 		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'paid' ) );
 		$order->save();
@@ -960,8 +961,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $this->submit( $order, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
 		$order = wc_get_order( $order->get_id() );
 		// Act / Assert.
-		Ledger::instance()->derive( $order, array() );
-		$this->assertSame( 'pending', $order->get_status() );
+		$this->assertSame( 'pending', Ledger::instance()->write( $order->get_id(), static fn() => null )->order->get_status() );
 		$row = Ledger::instance()->record(
 			$order,
 			array(

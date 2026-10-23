@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 \defined( 'ABSPATH' ) || die;
 
 /**
- * The pure half of `Ledger::derive()`: rows and the order's facts in, the order's payment fields
+ * The pure projection of payment rows: rows and the order's facts in, the order's payment fields
  * and whether the sale completes out. It reads nothing and writes nothing; `Ledger::write()`
  * applies the answer (S1) and runs the paid transition when it completes (S2).
  */

@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** One entry per completion at a register, from every completion path, with its own provenance. */
 class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
@@ -172,7 +173,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 			'amount' => '92.95',
 			'status' => 'captured',
 		);
-		Ledger::instance()->save( $order, array( $cash ), false );
+		Ledger_Seed::rows( $order, array( $cash ), false );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
 		try {
@@ -514,7 +515,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		add_action( 'wcpos_sale_completed', $listener, 1 );
 
 		// Act: complete outside any route lock (a webhook's payment_complete()).
-		Ledger::instance()->save( $order, array( $this->cash_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->cash_row( '92.95' ) ), false );
 		wc_get_order( $order->get_id() )->payment_complete();
 		remove_action( 'wcpos_sale_completed', $listener, 1 );
 
@@ -532,7 +533,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		add_action( 'wcpos_sale_completed', $listener, 1 );
 
 		// Act.
-		Ledger::instance()->save( $order, array( $this->cash_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->cash_row( '92.95' ) ), false );
 		wc_get_order( $order->get_id() )->payment_complete();
 		remove_action( 'wcpos_sale_completed', $listener, 1 );
 

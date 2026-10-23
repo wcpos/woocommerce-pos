@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Exercise owner and v2 detail balances against the same seeded ledger. */
 trait Session_Expected_Tests {
@@ -42,7 +43,7 @@ trait Session_Expected_Tests {
 				'session_id' => $session['id'],
 			);
 		}
-		Ledger::instance()->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 		$this->assertSame(
 			array(
 				'cash' => '120.0000',
@@ -140,7 +141,7 @@ trait Session_Expected_Tests {
 						'amount' => '999',
 					)
 				);
-				$ledger->save( $order, $rows, false );
+				Ledger_Seed::rows( $order, $rows, false );
 			}
 			$this->assertSame(
 				array(

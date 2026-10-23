@@ -13,6 +13,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Refunds charge their own session, never the sale's session. */
 class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
@@ -427,7 +428,7 @@ class Test_Refund_Session_Binding extends WCPOS_REST_Unit_Test_Case {
 				'provider_ref' => null,
 			),
 		);
-		$ledger->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 		$session = ( new Register_Session_Store() )->transition(
 			$session,
 			array(

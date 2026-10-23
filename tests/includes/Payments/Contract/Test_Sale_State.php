@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /**
  * @covers \WCPOS\WooCommercePOS\Payments\Contract\Sale_State
@@ -54,7 +55,7 @@ class Test_Sale_State extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	protected function with_rows( \WC_Order $order, array $rows ): \WC_Order {
-		Ledger::instance()->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 
 		return wc_get_order( $order->get_id() );
 	}

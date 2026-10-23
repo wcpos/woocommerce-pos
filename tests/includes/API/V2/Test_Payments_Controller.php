@@ -18,6 +18,7 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Payments controller tests. */
 class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
@@ -398,7 +399,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 				'capture_mode' => 'manual',
 			)
 		);
-		Ledger::instance()->save( $order, array( $row ) );
+		Ledger_Seed::rows( $order, array( $row ) );
 
 		// Act.
 		$response = $this->void( $order, $row['id'] );
@@ -488,7 +489,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_close_on_a_covered_open_order_completes_it(): void {
 		// Arrange: money recorded without deriving.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
 
 		// Act.
@@ -572,7 +573,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_close_with_balance_outstanding_is_refused_and_writes_nothing(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '50.00' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '50.00' ) ), false );
 
 		// Act.
 		$response = $this->close( $order );
@@ -592,7 +593,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$order   = $this->create_pos_order();
 		$pending = array_merge( $this->captured_row( '92.95' ), array( 'status' => 'pending' ) );
-		Ledger::instance()->save( $order, array( $pending ), false );
+		Ledger_Seed::rows( $order, array( $pending ), false );
 
 		// Act.
 		$response = $this->close( $order );
@@ -720,7 +721,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			'status'       => 'pending',
 			'register_id'  => $register,
 		);
-		Ledger::instance()->save( $order, array( $leg ), false );
+		Ledger_Seed::rows( $order, array( $leg ), false );
 		Route_Handler::$answer = array( 'status' => 'captured' );
 
 		// Act: the poll carries another register's provenance.
@@ -775,7 +776,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->create_pos_order();
 		$order->set_status( 'on-hold' );
 		$order->save();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$this->assertSame( 'on-hold', wc_get_order( $order->get_id() )->get_status() );
 
 		// Act.
@@ -1029,7 +1030,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange: paid with a captured cash row and no completion history.
 		$order = $this->create_pos_order();
 		$cash  = $this->captured_row( '92.95' );
-		Ledger::instance()->save( $order, array( $cash ), false );
+		Ledger_Seed::rows( $order, array( $cash ), false );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5 );
 		remove_action( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15 );
 		try {
@@ -1096,7 +1097,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		Route_Handler::$prompt = $prompt;
 		$order = $this->create_pos_order();
 		$payment = $this->payment( 'pos_cash', '20.00', array( 'capture_mode' => 'route_test', 'status' => 'pending' ) );
-		Ledger::instance()->save( $order, array( $payment ) );
+		Ledger_Seed::rows( $order, array( $payment ) );
 		$response = $this->server->dispatch( $this->wp_rest_get_request( $this->payment_path( $order, $payment['id'] ) . '/status' ) );
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
@@ -1429,7 +1430,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange: a pending leg, then cash recorded against r0 (which moves the revision).
 		$order   = $this->create_pos_order();
 		$pending = $this->payment( 'pos_cash', '40.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
-		Ledger::instance()->save( $order, array( $pending ), false );
+		Ledger_Seed::rows( $order, array( $pending ), false );
 		$r0 = $this->current_revision( $order );
 		$this->assertSame( 200, $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/payments', array( 'payment' => $this->payment( 'pos_cash', '20.00' ), 'revision' => $r0 ) )->get_status() );
 		$path = $this->payment_path( $order, $pending['id'] ) . '/void';
@@ -1459,7 +1460,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$order   = $this->create_pos_order();
 		$pending = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
-		Ledger::instance()->save( $order, array( $pending ), false );
+		Ledger_Seed::rows( $order, array( $pending ), false );
 		$base  = '/wcpos/v2/orders/' . $order->get_id();
 		$paths = array(
 			'record'  => $base . '/payments',
@@ -1503,7 +1504,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$order   = $this->create_pos_order();
 		$pending = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
-		Ledger::instance()->save( $order, array( $pending ), false );
+		Ledger_Seed::rows( $order, array( $pending ), false );
 		$before = $this->current_revision( $order );
 
 		// Act.
@@ -1536,7 +1537,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_close_replays_its_completion_with_a_stale_revision(): void {
 		// Arrange: covered without deriving.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$body      = $this->envelope( $order );
 		$announced = 0;
 		$listener  = static function () use ( &$announced ): void {
@@ -1565,7 +1566,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_close_with_a_fresh_command_and_a_stale_revision_is_409(): void {
 		// Arrange.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$r1   = $this->current_revision( $order );
 		$path = '/wcpos/v2/orders/' . $order->get_id() . '/close';
 		$this->assertSame( 200, $this->command( $path, array( 'command_id' => wp_generate_uuid4(), 'revision' => $r1 ) )->get_status() );
@@ -1594,7 +1595,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		Route_Handler::$refunds = 0;
 		$order = $this->create_pos_order();
 		$row   = array_merge( $this->captured_row( $amount ), array( 'capture_mode' => 'route_test' ) );
-		Ledger::instance()->save( $order, array( $row ), false );
+		Ledger_Seed::rows( $order, array( $row ), false );
 		$refund = wc_create_refund(
 			array(
 				'order_id' => $order->get_id(),
@@ -1946,7 +1947,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 			'amount'       => '92.95',
 			'status'       => 'pending',
 		);
-		Ledger::instance()->save( $order, array( $leg ), false );
+		Ledger_Seed::rows( $order, array( $leg ), false );
 		Route_Handler::$answer = array( 'status' => 'captured' );
 		$before                = $this->current_revision( $order );
 
@@ -1989,7 +1990,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange: rows A and B, refund c6 allocated on A.
 		list( $order, $a, $refund ) = $this->refundable( '50.00' );
 		$b = array_merge( $this->captured_row( '42.95' ), array( 'capture_mode' => 'route_test' ) );
-		Ledger::instance()->save( $order, array( $a, $b ), false );
+		Ledger_Seed::rows( $order, array( $a, $b ), false );
 		$body = $this->envelope(
 			$order,
 			array(
@@ -2026,7 +2027,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Act + Assert: a close replaying the standing completion of a covered sale.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$close = '/wcpos/v2/orders/' . $order->get_id() . '/close';
 		$this->assertSame( 200, $this->command( $close, $this->envelope( $order ) )->get_status() );
 		$c9       = $this->envelope( $order );
@@ -2143,7 +2144,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_a_close_entry_without_its_ref_replays_the_standing_completion(): void {
 		// Arrange: close c4 completes the sale; storage then holds its entry with a null ref.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$body      = $this->envelope( $order );
 		$path      = '/wcpos/v2/orders/' . $order->get_id() . '/close';
 		$announced = 0;
@@ -2248,7 +2249,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_close_failing_after_its_rows_is_completed_by_its_replay(): void {
 		// Arrange: a covered sale; the paid transition is refused once.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$body   = $this->envelope( $order );
 		$path   = '/wcpos/v2/orders/' . $order->get_id() . '/close';
 		$refuse = static fn() => array();
@@ -2276,7 +2277,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_a_close_entry_is_stored_with_the_completion_before_its_ref_is_known(): void {
 		// Arrange: every write of the command map that names a completion fails (the second save is lost).
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$body   = $this->envelope( $order );
 		$path   = '/wcpos/v2/orders/' . $order->get_id() . '/close';
 		$names  = static function ( $value ): bool {
@@ -2313,7 +2314,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_a_close_whose_entry_is_not_stored_is_a_retryable_conflict(): void {
 		// Arrange: a covered sale; every write of the command map fails.
 		$order = $this->create_pos_order();
-		Ledger::instance()->save( $order, array( $this->captured_row( '92.95' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
 		$path       = '/wcpos/v2/orders/' . $order->get_id() . '/close';
 		$refuse_add = static fn( $check, $object_id, $key ) => '_wcpos_commands' === $key ? false : $check;
 		$refuse_mid = static fn( $check, $meta_id, $value, $key ) => '_wcpos_commands' === $key ? false : $check;
@@ -2512,7 +2513,7 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange: a pending row; the order read fails the second time this request asks.
 		$order   = $this->create_pos_order();
 		$pending = $this->payment( 'pos_cash', '10.00', array( 'status' => 'pending', 'kind' => 'cash', 'capture_mode' => 'manual' ) );
-		Ledger::instance()->save( $order, array( $pending ), false );
+		Ledger_Seed::rows( $order, array( $pending ), false );
 		$body  = $this->envelope( $order, array( 'reason' => 'Customer cancelled' ) );
 		$route = '/wc/v3/orders/' . $order->get_id();
 		$reads = 0;

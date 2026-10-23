@@ -17,6 +17,7 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Service_Groups;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Fiscal lifecycle observers and immutable corrections. */
 class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
@@ -1112,7 +1113,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 	public function test_a_status_only_gateway_completion_writes_a_sale(): void {
 		// Arrange: the money is on the order as a captured row.
 		$order = $this->order();
-		Ledger::instance()->save(
+		Ledger_Seed::rows(
 			$order,
 			array(
 				array(
@@ -1251,7 +1252,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		try {
 			// The webhook request has no money command in flight: the captured row is the register origin.
 			$order = $this->order();
-			Ledger::instance()->save(
+			Ledger_Seed::rows(
 				$order,
 				array(
 					array(
@@ -1405,7 +1406,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			},
 			Ledger::instance()->read( $order )
 		);
-		Ledger::instance()->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 		global $wpdb;
 		$this->seed_completion( $order );
 
@@ -1443,7 +1444,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'kind' => 'cash',
 				'capture_mode' => 'manual',
 			);
-			Ledger::instance()->save( $order, array( $row ) );
+			Ledger_Seed::rows( $order, array( $row ) );
 			$before = did_action( 'wcpos_payment_voided' );
 			$applied = Ledger::instance()->void( $order, $row['id'], 'Cancelled' );
 			$this->assertSame( 'voided', $applied['status'] );
@@ -1641,7 +1642,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'status' => $status,
 			);
 		}
-		Ledger::instance()->save( $order, $rows );
+		Ledger_Seed::rows( $order, $rows );
 		$refund = wc_create_refund(
 			array(
 				'order_id' => $order->get_id(),
@@ -1709,7 +1710,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->closure_ledger( $session );
 		$rows = Ledger::instance()->read( $order );
 		$rows[0]['method_id'] = 'extension_cash_drawer';
-		Ledger::instance()->save( $order, $rows, false );
+		Ledger_Seed::replace( $order, $rows, false );
 		$writers = Fiscal_Record_Writers::instance();
 		$this->seed_completion( $order );
 		$writers->record_sale( $order );
@@ -1789,7 +1790,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order = $this->closure_ledger( $session );
 		$ledger = Ledger::instance();
 		$rows = array( $ledger->read( $order )[0] );
-		$ledger->save( $order, $rows, false );
+		Ledger_Seed::replace( $order, $rows, false );
 		$order->set_status( 'pos-partial' );
 		$order->save();
 		$session = ( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->transition(
@@ -1808,7 +1809,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'amount' => '20',
 			)
 		);
-		$ledger->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, array( $rows[1] ), false ); // The counted leg keeps its closure stamp.
 		$this->seed_completion( $order );
 		Fiscal_Record_Writers::instance()->record_sale( $order );
 		$records = ( new Fiscal_Record_Store() )->list(

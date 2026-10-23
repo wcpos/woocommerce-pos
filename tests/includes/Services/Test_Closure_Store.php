@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Provenance_Health;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Immutable numbers, decimal counters and atomic writes. */
 class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
@@ -42,7 +43,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		}
-		$ledger->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
 		$this->assertSame( '80.0000', $closure['period_sales_total'] );
 		$this->assertSame( '12.0000', $closure['period_refunds_total'] );
@@ -88,7 +89,7 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$ledger = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance();
 		$rows = $ledger->read( $order );
 		$rows[0]['amount'] = 'sales' === $kind ? '5.0000' : '-5.0000';
-		$ledger->save( $order, array( $rows[0] ), false, array_column( array_slice( $rows, 1 ), 'id' ) );
+		Ledger_Seed::replace( $order, array( $rows[0] ), false );
 		$second = $store->create( $this->closure_fields( $second_session, 2 ) );
 		// Before the fix this is 5.0000: the late 10.0000 is omitted.
 		$this->assertSame( '15.0000', $second[ 'perpetual_' . $kind . '_total' ] );

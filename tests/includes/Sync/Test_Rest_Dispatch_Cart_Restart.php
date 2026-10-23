@@ -23,6 +23,7 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WP_REST_Request;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /**
  * @covers \WCPOS\WooCommercePOS\API\V2\Writers\Order_Writer
@@ -246,7 +247,7 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 		$product  = ProductHelper::create_simple_product();
 		$order_id = $this->make_order( 'pos-open', array( array( $product, 1 ) ) );
 		$order    = wc_get_order( $order_id );
-		Ledger::instance()->save( $order, array( $this->pending_card_row() ), false );
+		Ledger_Seed::rows( $order, array( $this->pending_card_row() ), false );
 		$order->save();
 		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order_id ) ) );
 		$this->assertSame( 'pos-open', wc_get_order( $order_id )->get_status() );
@@ -287,7 +288,7 @@ class Test_Rest_Dispatch_Cart_Restart extends Sync_REST_Store_Test_Case {
 			function ( $response, $handler, $request ) use ( $order_id, $row, &$landed ) {
 				if ( 'PUT' === $request->get_method() && '/wc/v3/orders/' . $order_id === $request->get_route() ) {
 					$order = wc_get_order( $order_id );
-					Ledger::instance()->save( $order, array( $row ), false );
+					Ledger_Seed::rows( $order, array( $row ), false );
 					$order->save();
 					++$landed;
 				}

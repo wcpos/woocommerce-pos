@@ -428,7 +428,7 @@ final class Session_Figures {
 		return 'cash' === ( $row['kind'] ?? '' ) ? 'cash' : ( array( 'pos_card' => 'card' )[ $method ] ?? $method );
 	}
 
-	/** Raw Ledger::save() rows can carry refund kind or negative amounts, unlike validated legs.
+	/** Raw stored rows can carry refund kind or negative amounts, unlike validated legs.
 	 *
 	 * @param array $row Tender row.
 	 */
