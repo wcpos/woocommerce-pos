@@ -2590,8 +2590,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			$order = $this->create_pos_order();
 			$order->set_total( '100' );
 			$attempt = wp_generate_uuid4();
-			$order->update_meta_data( '_wcpos_gateway_attempts', array( $attempt => 'sent' ) );
 			$order->save();
+			Ledger_Seed::attempt( $order, $attempt, 'pos_cash', 'sent' );
 			$stale = wc_get_order( $order->get_id() );
 			$stale->update_meta_data( '_wcpos_test_staged', 'kept' );
 			$fresh = wc_get_order( $order->get_id() );
@@ -2603,7 +2603,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			$saved = wc_get_order( $order->get_id() );
 			$this->assertSame( 'pos-partial', $saved->get_status() );
 			$this->assertNull( $saved->get_date_paid() );
-			$this->assertSame( 'sent', $saved->get_meta( '_wcpos_gateway_attempts' )[ $attempt ] );
+			$this->assertSame( 'sent', \WCPOS\WooCommercePOS\Payments\Contract\Attempts::of( $saved )->get( $attempt )['fate'] );
 			$this->assertSame( 'kept', $saved->get_meta( '_wcpos_test_staged' ) );
 			$this->assertSame( '200.00', $stale->get_total() );
 			$this->assertSame( $saved->get_status(), $stale->get_status() );

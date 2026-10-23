@@ -9,9 +9,9 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact scenarios.
 
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
-use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
@@ -124,8 +124,7 @@ class Test_Sale_State extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$attempt = wp_generate_uuid4();
 		$order   = $this->sale( 'pos-open' );
-		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'sent' ) );
-		$order->save();
+		Ledger_Seed::attempt( $order, $attempt, 'pos_cash', 'sent' );
 
 		// Act.
 		$state = Ledger::instance()->sale_state( wc_get_order( $order->get_id() ) );

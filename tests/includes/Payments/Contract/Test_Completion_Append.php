@@ -7,12 +7,12 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
-use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -276,7 +276,7 @@ class Test_Completion_Append extends WC_Unit_Test_Case {
 		$this->assertSame( 'completion', $caught ? $caught->stage : null );
 		$this->assertSame( array(), $this->announced );
 		$this->assertSame( array(), $this->entries( $order->get_id() ) );
-		$this->assertNotNull( Gateway_Submission::read_stamp( $this->fresh( $order->get_id() ) ) );
+		$this->assertNotNull( Attempts::of( $this->fresh( $order->get_id() ) )->awaiting() );
 	}
 
 	/** A4: the action fires once, after the entry and its time are stored, while the order lock is held. */
@@ -361,17 +361,16 @@ class Test_Completion_Append extends WC_Unit_Test_Case {
 	 * @param array $provenance Entry-shaped provenance.
 	 */
 	private function stamp( int $id, array $provenance ): void {
-		$order = $this->fresh( $id );
-		$order->update_meta_data(
-			Gateway_Submission::STAMP_META_KEY,
+		Ledger_Seed::attempt(
+			$id,
+			wp_generate_uuid4(),
+			'pos_cash',
+			'awaiting',
 			array(
-				'attempt_id' => wp_generate_uuid4(),
-				'method_id'  => 'pos_cash',
-				'cashier_id' => 1,
-				'provenance' => $provenance,
+				'register_id' => $provenance['register'],
+				'session_id'  => $provenance['session'],
 			)
 		);
-		$order->save_meta_data();
 	}
 
 	/**

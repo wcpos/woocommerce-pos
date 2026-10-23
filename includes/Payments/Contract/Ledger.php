@@ -2326,13 +2326,9 @@ class Ledger {
 	private function store_rows( WC_Order $order, array $stored, array $rows, Ledger_Draft $draft, array $projection, bool $changed ): bool {
 		$id     = $order->get_id();
 		$wire   = json_decode( (string) wp_json_encode( array_map( array( __CLASS__, 'to_wire' ), $rows ) ), true );
+		// The rows settle the attempts' fates, staged with the change's own; they land in this save.
+		Attempts::settle( $draft, $projection );
 		$staged = $draft->attempts() || $wire !== $stored;
-		// The awaiting-customer stamp stays until S3 on a completing write: storage keeps saying POS-owned until
-		// the sale completes. Money that does not complete it projects the sale back into progress, so it goes now.
-		$unstamped = null !== $projection['method'] && ! $projection['completes'] && null !== Gateway_Submission::read_stamp( $order );
-		if ( $unstamped ) {
-			Gateway_Submission::clear_stamp( $order );
-		}
 		if ( null !== $projection['method'] ) {
 			$order->set_payment_method( $projection['method'] );
 			$order->set_payment_method_title( (string) $projection['title'] );
@@ -2342,18 +2338,13 @@ class Ledger {
 			$order->set_status( $projection['status'] );
 		}
 		// A completing write always stores its ledger (empty rows too): heal's marker lands before the paid transition.
-		if ( ! $changed && ! $staged && ! $unstamped && ! $projection['completes'] && ! $order->get_changes() ) {
+		if ( ! $changed && ! $staged && ! $projection['completes'] && ! $order->get_changes() ) {
 			return true;
 		}
 		// The total is read back even when a change saved it (a drained tip's recalculation lands before S1).
 		$props = $order->get_changes() + array( 'total' => $order->get_total( 'edit' ) );
 		if ( $draft->attempts() ) {
-			$history = Gateway_Submission::read_attempts( $order );
-			foreach ( $draft->attempts() as $attempt_id => $fate ) {
-				unset( $history[ $attempt_id ] );
-				$history[ $attempt_id ] = $fate;
-			}
-			$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array_slice( $history, - Gateway_Submission::ATTEMPTS_CAP, null, true ) );
+			Attempts::store( $order, $draft->attempts() );
 		}
 		// An order with no ledger gets none from a write that holds no rows and does not complete (an attempt's held write).
 		$ledgered = $rows || $projection['completes'] || '' !== $order->get_meta( self::META_KEY );
@@ -2366,7 +2357,7 @@ class Ledger {
 			sort( $list );
 			return $list;
 		};
-		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, self::SESSION_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY, Command_Log::META_KEY );
+		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, self::SESSION_META_KEY, Attempts::META_KEY, Command_Log::META_KEY );
 		$want   = array_map( static fn( $key ) => $values( $order, $key ), $keys );
 		$order->save();
 		// The rows, their four indexes, the attempt fates their coverage settled, and every order property staged.
@@ -2449,7 +2440,8 @@ class Ledger {
 			return true;
 		}
 		if ( null !== $standing ) {
-			$stamped = null !== Gateway_Submission::read_stamp( $order ) && ! in_array( 'sent', Gateway_Submission::read_attempts( $order ), true );
+			$log     = Attempts::of( $order );
+			$stamped = null !== $log->awaiting() && null === $log->unresolved();
 			if ( ! $stamped && ! Command_Log::stale( $order, $this->read( $order ) ) ) {
 				return false;
 			}
@@ -2507,7 +2499,7 @@ class Ledger {
 			self::save_meta( $order );
 			$order = $this->fresh( $order->get_id() );
 		}
-		if ( ( $unstamp && null !== Gateway_Submission::read_stamp( $order ) ) || Command_Log::stale( $order, $this->read( $order ) ) ) {
+		if ( ( $unstamp && null !== Attempts::of( $order )->awaiting() ) || Command_Log::stale( $order, $this->read( $order ) ) ) {
 			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
 		}
 		return $order;
@@ -2523,11 +2515,7 @@ class Ledger {
 	 */
 	private function cleanup( WC_Order $order, array $standing, bool $unstamp ): bool {
 		$staged = $this->advance( $order, $this->stored( $order->get_id(), true )['payments'] ?? array(), $standing );
-		if ( $unstamp && null !== Gateway_Submission::read_stamp( $order ) ) {
-			Gateway_Submission::clear_stamp( $order );
-			$staged = true;
-		}
-		return $staged;
+		return ( $unstamp && Attempts::unstamp( $order ) ) || $staged;
 	}
 
 	/**
@@ -2577,7 +2565,7 @@ class Ledger {
 			$descriptor = Descriptor_Builder::instance()->get( (string) $method_id );
 			return $descriptor ? $descriptor['title'] : $method_id;
 		};
-		return Projection::of( $rows, (string) $order->get_total(), $order->get_status(), null !== Gateway_Submission::read_stamp( $order ), $mode, $order->is_editable(), $title );
+		return Projection::of( $rows, (string) $order->get_total(), $order->get_status(), null !== Attempts::of( $order )->awaiting(), $mode, $order->is_editable(), $title );
 	}
 
 	/**
@@ -2652,7 +2640,7 @@ class Ledger {
 	}
 
 	/**
-	 * Stage the rows, their indexes and the attempt fates their coverage settles on the order.
+	 * Stage the rows and their indexes on the order.
 	 *
 	 * @param WC_Order $order      Order object, saved by the caller.
 	 * @param array    $normalized Normalized rows.
@@ -2683,21 +2671,6 @@ class Ledger {
 			if ( null !== $row['session_id'] && in_array( $row['status'], self::COUNTING_STATUSES, true ) && ! in_array( $row['session_id'], $sessions, true ) ) {
 				$sessions[] = $row['session_id'];
 				$order->add_meta_data( self::SESSION_META_KEY, $row['session_id'], false );
-			}
-		}
-		// Money that covers the order: the send whose row paid it is paid, the sends it replaced are superseded.
-		$paid = Money::minor( $this->paid( $normalized ) );
-		if ( $paid > 0 && $paid >= Money::minor( $order->get_total() ) ) {
-			$history  = Gateway_Submission::read_attempts( $order );
-			$counting = array_column( array_filter( $normalized, static fn( $row ) => in_array( $row['status'], self::COUNTING_STATUSES, true ) ), 'id' );
-			$paying   = array_intersect_key( array_filter( $history, static fn( $state ) => 'sent' === $state ), array_flip( array_map( 'strtolower', $counting ) ) );
-			if ( $paying ) {
-				foreach ( $history as $attempt_id => $state ) {
-					if ( 'sent' === $state ) {
-						$history[ $attempt_id ] = isset( $paying[ $attempt_id ] ) ? 'paid' : 'superseded';
-					}
-				}
-				$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, $history );
 			}
 		}
 	}

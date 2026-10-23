@@ -234,7 +234,7 @@ final class Command_Log {
 		}
 		// Submit: the attempt's fate, except to the command that first answered `recorded` (D6).
 		$attempt = (string) $entry['ref'];
-		$fate    = Gateway_Submission::read_attempts( $order )[ $attempt ] ?? null;
+		$fate    = Attempts::of( $order )->get( $attempt )['fate'] ?? null;
 		$minted   = $ledger->find( $order, $attempt );
 		$recorded = $minted && ( 'paid' !== $fate || 'recorded' === $entry['outcome'] );
 		if ( ! $recorded && in_array( $fate, array( 'cancelled', 'superseded' ), true ) ) {

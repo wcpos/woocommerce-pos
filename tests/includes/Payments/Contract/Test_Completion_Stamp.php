@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -271,6 +272,27 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1 ), $this->announced );
 	}
 
+	/** A submit that pays after an earlier invoice was sent completes at its own register and cashier, never the invoice's. */
+	public function test_a_paying_submit_after_an_awaited_invoice_completes_at_its_own_origin(): void {
+		// Arrange: register B sent an invoice; then another cashier at register A pays through another gateway.
+		$order   = $this->create_pos_order();
+		$invoice = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $invoice, 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) )->get_data()['outcome'] );
+		$cashier = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $cashier );
+
+		// Act.
+		$response = $this->submit( $order, wp_generate_uuid4(), 'wcpos_stamp_paid', $this->provenance( self::REGISTER_A, self::SESSION_A ) );
+
+		// Assert.
+		$this->assertSame( 'recorded', $response->get_data()['outcome'], wp_json_encode( $response->get_data() ) );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 1, $history );
+		$this->assertSame( array( self::REGISTER_A, self::SESSION_A, $cashier ), array( $history[0]['register'], $history[0]['session'], (int) ( $history[0]['cashier'] ?? 0 ) ) );
+		$this->assertSame( 'superseded', \WCPOS\WooCommercePOS\Payments\Contract\Attempts::of( wc_get_order( $order->get_id() ) )->get( $invoice )['fate'] );
+		$this->assertSame( array( 1 ), $this->announced );
+	}
+
 	/** A sent attempt completed by a later callback is stamped after the passthrough mints its row. */
 	public function test_a_sent_attempt_callback_stamps_after_the_mint_with_its_row(): void {
 		// Arrange: submit from register B answers sent; the callback is a later request.
@@ -320,7 +342,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'app', $rows[0]['source'] );
 		$this->assertSame( 'gateway', $rows[0]['capture_mode'] );
 		$this->assertSame( 'wcpos_stamp_sent', $rows[0]['method_id'] );
-		$this->assertSame( array( $attempt => 'paid' ), \WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::read_attempts( $stored ) );
+		$this->assertSame( array( $attempt => 'paid' ), Attempts::of( $stored )->fates() );
 		$this->assertCount( 1, $history );
 		$this->assertSame( self::REGISTER_B, $history[0]['register'] );
 		$this->assertSame( array( $attempt ), $history[0]['payment_ids'] );

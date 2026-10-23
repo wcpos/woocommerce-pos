@@ -416,7 +416,7 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$classes  = array(
 			\WCPOS\WooCommercePOS\Payments\Contract\Ledger::class,
 			\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::class,
-			\WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission::class,
+			\WCPOS\WooCommercePOS\Payments\Contract\Attempts::class,
 			\WCPOS\WooCommercePOS\Payments\Contract\Command_Log::class,
 			\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::class,
 			\WCPOS\WooCommercePOS\Payments\Checkout_State_Repository::class,

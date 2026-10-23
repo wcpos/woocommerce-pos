@@ -14,7 +14,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact pin scenarios.
 
-use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
@@ -134,7 +134,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 
 	/** Every server-owned meta key (ADR 0040 rule 2), spelled out so the pin does not trust the constant it pins. */
 	protected function server_money_meta_keys(): array {
-		return array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_payment_session', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_fiscal_pending', '_wcpos_gateway_attempts', '_wcpos_awaiting_customer', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date', '_wcpos_checkout_state' );
+		return array( '_wcpos_payments', '_wcpos_payment_method', '_wcpos_payment_id', '_wcpos_payment_live', '_wcpos_payment_session', '_wcpos_commands', '_wcpos_completed_at', '_wcpos_completions', '_wcpos_fiscal_pending', '_wcpos_gateway_attempts', '_payment_method', '_payment_method_title', '_transaction_id', '_date_paid', '_paid_date', '_wcpos_checkout_state' );
 	}
 
 	/** Every top-level wc/v3 money field, set to a value that would mark the order paid. */
@@ -221,17 +221,16 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_update_carrying_every_server_owned_key_by_key_and_by_meta_id_leaves_storage_unchanged(): void {
-		// Arrange: a pos-open order with a captured row, an attempt in history and a stamp.
+		// Arrange: a pos-open order with a captured row and an attempt in history.
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
 		$order    = wc_get_order( $order_id );
 		Ledger_Seed::rows( $order, array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
 		$order = wc_get_order( $order_id );
 		$order->update_meta_data( '_wcpos_gateway_attempts', array( wp_generate_uuid4() => 'cancelled' ) );
-		$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
 		$order->save();
 		$keys   = $this->server_money_meta_keys();
 		$before = $this->stored_meta_rows( $order_id, $keys );
-		$this->assertGreaterThanOrEqual( 4, count( $before ), 'the ledger, its index, the attempts and the stamp are stored' );
+		$this->assertGreaterThanOrEqual( 4, count( $before ), 'the ledger, its indexes and the attempts are stored' );
 		$meta = $this->uuid_meta();
 		foreach ( $keys as $key ) {
 			$meta[] = array(
@@ -1147,8 +1146,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$order_id = $this->paid_order( 'processing', array( array( $this->product(), 1 ) ) );
 		$attempt  = wp_generate_uuid4();
 		$order    = wc_get_order( $order_id );
-		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'sent' ) );
-		$order->save();
+		Ledger_Seed::attempt( $order, $attempt, 'pos_cash', 'sent' );
 
 		// Act.
 		$response = $this->push_status( $order_id, 'pos-open' );
@@ -1569,8 +1567,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 1 ) ) );
 		$attempt  = wp_generate_uuid4();
 		$order    = wc_get_order( $order_id );
-		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'sent' ) );
-		$order->save();
+		Ledger_Seed::attempt( $order, $attempt, 'pos_cash', 'sent' );
 
 		// Act.
 		$response = $this->push_delete( $order_id );
@@ -1709,8 +1706,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		// Arrange.
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
 		$order    = wc_get_order( $order_id );
-		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( wp_generate_uuid4() => 'cancelled' ) );
-		$order->save();
+		Ledger_Seed::attempt( $order, wp_generate_uuid4(), 'pos_cash', 'cancelled' );
 
 		// Act.
 		$response = $this->push_envelope( 'update', $this->currency_and_quantity_edit( $order_id ), $this->order_revision( $order_id ) );
@@ -2449,7 +2445,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 	 * @dataProvider push_operations
 	 */
 	public function test_push_naming_every_server_owned_key_in_every_form_writes_none_of_them_without_the_keeper( string $operation ): void {
-		// Arrange: on update, a pos-open order holding a captured row, attempts, a stamp and a line with a stock baseline.
+		// Arrange: on update, a pos-open order holding a captured row, attempts and a line with a stock baseline.
 		$order_keys = array_values( array_unique( array_merge( $this->server_money_meta_keys(), ( new \WC_Order() )->get_data_store()->get_internal_meta_keys() ) ) );
 		$product    = $this->product();
 		$order_id   = 0;
@@ -2461,7 +2457,6 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 			Ledger_Seed::rows( wc_get_order( $order_id ), array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
 			$order = wc_get_order( $order_id );
 			$order->update_meta_data( '_wcpos_gateway_attempts', array( wp_generate_uuid4() => 'cancelled' ) );
-			$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
 			$order->update_meta_data( '_wcpos_checkout_state', array( 'status' => 'failed' ) );
 			$item_id = (int) array_key_first( $order->get_items() );
 			$order->save();
@@ -2470,7 +2465,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 			$item->save();
 			$before    = $this->stored_meta_rows( $order_id, $order_keys );
 			$line_rows = $this->stored_item_meta_rows( $item_id );
-			$this->assertGreaterThanOrEqual( 5, count( $before ), 'the ledger, its index, the attempts, the stamp and the checkout state are stored' );
+			$this->assertGreaterThanOrEqual( 5, count( $before ), 'the ledger, its indexes, the attempts and the checkout state are stored' );
 			$this->assertContains( '_reduced_stock', array_column( $line_rows, 1 ) );
 		}
 		$paid_before = 'update' === $operation ? wc_get_order( $order_id )->get_date_paid( 'edit' ) : null;

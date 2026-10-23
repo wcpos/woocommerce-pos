@@ -78,7 +78,7 @@ needs no new concept.
    notes and status changes among open statuses. Every **server-owned key** in a pushed document
    is dropped before the write, whether sent by key or as an id-addressed edit or tombstone of an
    existing meta row: `_wcpos_payments` and the ledger index keys, `_wcpos_completed_at` and
-   `_wcpos_completions`, `_wcpos_gateway_attempts`, `_wcpos_awaiting_customer`, and the
+   `_wcpos_completions`, `_wcpos_gateway_attempts` (which also holds what an attempt awaits), and the
    WooCommerce money fields `date_paid`, `set_paid` and `transaction_id`. This is a key list and a
    strip, not the fail-closed guard of #2312: the list is the design's own, and a new server-owned
    key joins it in the same change that introduces it.
