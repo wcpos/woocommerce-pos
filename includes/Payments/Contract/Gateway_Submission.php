@@ -434,20 +434,23 @@ class Gateway_Submission {
 		$order = self::reread( $order );
 		$rows  = Ledger::instance()->read( $order );
 		$stamp = Attempts::of( $order )->awaiting();
-		// A send whose gateway threw after dispatch never awaited the customer; its entry still says `sent`.
-		// Accepted only where it could still await them (Attempts::on_status_changed() clears that on these statuses).
-		$stranded = ! $stamp && 'sent' === ( Attempts::of( $order )->get( $attempt_id )['fate'] ?? null )
-			&& ! $order->has_status( array( 'cancelled', 'refunded', 'trash' ) );
+		// A send whose gateway threw after dispatch never awaited the customer; its entry still says `sent`. A lost payment
+		// (`paid`, its row missing) is owed a record the same way. Accepted only where it could still await them
+		// (Attempts::on_status_changed() clears that on these statuses).
+		$log      = Attempts::of( $order );
+		$lost     = $log->owes( $attempt_id ) && 'paid' === ( $log->get( $attempt_id )['fate'] ?? null );
+		$stranded = ! $stamp && $log->owes( $attempt_id ) && ! $order->has_status( array( 'cancelled', 'refunded', 'trash' ) );
 		if ( $stranded && ( $order->is_paid() || $order->get_date_paid( 'edit' ) ) && Money::minor( Ledger::instance()->paid( $rows ) ) < Money::minor( $order->get_total() ) ) {
 			// The gateway paid but no row records it: cancelling would reopen the sale for a second charge.
 			/* translators: %s: attempt id. */
 			return new WP_Error( 'wcpos_invalid_transition', sprintf( __( 'Payment attempt %s may already have been paid by the gateway; reconcile the payment before cancelling it.', 'woocommerce-pos' ), strtolower( $attempt_id ) ), array( 'status' => 409 ) );
 		}
-		// A stranded send the sweep handed to staff, on a sale its rows already cover: staff close it once they have checked
-		// the gateway. Only the attempt closes: the sale, its rows and its stock stay as they are.
-		$closing = $stranded && null !== Attempts::of( $order )->get( $attempt_id )['attention_at_gmt']
-			&& Money::minor( $order->get_total() ) > 0 && Money::minor( Ledger::instance()->paid( $rows ) ) >= Money::minor( $order->get_total() );
-		if ( ! $closing && ( ( ! $stamp && ! $stranded ) || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) ) {
+		// Every attempt the sweep flags has exactly one exit, this staff clear, which never attributes or removes money: a
+		// stranded send on a sale its rows already cover, or a lost payment WooCommerce never recorded (the refusal above
+		// keeps one it did record for the sweep's re-mint). Only the attempt closes: the sale, its rows and its stock stay.
+		$covered = Money::minor( $order->get_total() ) > 0 && Money::minor( Ledger::instance()->paid( $rows ) ) >= Money::minor( $order->get_total() );
+		$closing = $stranded && null !== $log->get( $attempt_id )['attention_at_gmt'] && ( $covered || $lost );
+		if ( ! $closing && ( ( ! $stamp && ! $stranded ) || $lost || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) ) {
 			return new WP_Error( 'wcpos_invalid_transition', __( 'This invoice cannot be cancelled.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		if ( $stamp && ( $stamp['method_id'] ?? null ) !== $descriptor['id'] ) {

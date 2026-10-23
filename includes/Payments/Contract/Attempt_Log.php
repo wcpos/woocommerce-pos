@@ -128,6 +128,16 @@ final class Attempt_Log {
 	}
 
 	/**
+	 * Whether an attempt's outcome is still owed a record (the predicate `unresolved()` and `eligible()` read).
+	 *
+	 * @param string $id Attempt id.
+	 */
+	public function owes( string $id ): bool {
+		$entry = $this->get( $id );
+		return null !== $entry && $this->owed( $entry );
+	}
+
+	/**
 	 * Whether an entry's outcome is still owed a record: `sent`, or `paid` with no row of its id.
 	 *
 	 * @param array $entry Entry.

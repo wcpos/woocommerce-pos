@@ -121,7 +121,9 @@ so `Webview_Passthrough::row()` decides), never the customer who paid through or
    closed it (the command origin's cashier, else the current user). An attempt not yet flagged (still within the
    threshold) is refused as before: it waits for the resolver. Nothing attributes money by inference, so no
    webhook mint ever reuses an attempt id. This clear is the only way the "in motion" state ends on a covered
-   sale.
+   sale. Every attempt the sweep flags has exactly this one exit, and it never attributes or removes money: a lost
+   payment WooCommerce never recorded (`paid`, no row, no paid facts on the order) is refused until flagged, then
+   closed the same way, leaving an uncovered sale open for the cashier to take payment again.
 3. **A new `submit`**: when an unresolved entry that is not awaiting stands, it reconciles; if one still stands,
    409 `wcpos_payment_in_flight` with `attempt_id`, before any check that reads the sale. "Send again" over an
    awaiting invoice is unchanged (an awaiting entry is not asked).

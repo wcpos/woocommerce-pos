@@ -1055,6 +1055,49 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Paid_Test_Gateway::$calls, 'Dispatched once, and only once storage healed.' );
 	}
 
+	/**
+	 * Every attempt the sweep flags has exactly one exit, the staff clear, which never attributes or removes money: a lost
+	 * payment WooCommerce never recorded (`paid`, no row, the order not paid) is refused until flagged, then closed by
+	 * the till's cancel, leaving the sale open for a fresh payment.
+	 */
+	public function test_cancel_closes_a_flagged_lost_payment_woocommerce_never_recorded(): void {
+		// Arrange: a lost payment whose WooCommerce paid save was lost too.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'paid' );
+		$blocked = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+		$early   = $this->cancel( $order, $attempt, 'wcpos_paid_test' );
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			for ( $i = 0; $i < Attempts::ASK_LIMIT; ++$i ) {
+				( new Payments_Sweeper() )->run();
+			}
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+		$flagged = Attempts::of( wc_get_order( $order->get_id() ) )->get( $attempt );
+
+		// Act.
+		$closed = $this->cancel( $order, $attempt, 'wcpos_paid_test' );
+
+		// Assert.
+		$this->assertSame( 409, $blocked->get_status() );
+		$this->assertSame( 'wcpos_payment_in_flight', $blocked->get_data()['code'] );
+		$this->assertSame( 409, $early->get_status(), 'Not flagged yet: it waits for the resolver.' );
+		$this->assertNotNull( $flagged['attention_at_gmt'] );
+		$this->assertSame( 200, $closed->get_status(), wp_json_encode( $closed->get_data() ) );
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$this->assertSame( 'cancelled', Attempts::of( $stored )->get( $attempt )['fate'] );
+		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
+		$this->assertNull( $stored->get_date_paid( 'edit' ) );
+		$this->assertSame( array(), array_map( static fn( $meta ) => $meta->value, $stored->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
+		$this->assertCount( 1, array_filter( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), static fn( $note ) => false !== strpos( $note->content, 'closed at the POS' ) ) );
+		$fresh = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+		$this->assertSame( 'recorded', $fresh->get_data()['outcome'], wp_json_encode( $fresh->get_data() ) );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+	}
+
 	/** D1: a send whose gateway threw after dispatch has no stamp, yet the till can still cancel it. */
 	public function test_submit_that_threw_after_dispatch_can_be_cancelled(): void {
 		// Arrange: the gateway throws once dispatch has started, leaving the attempt `sent` with no stamp.
