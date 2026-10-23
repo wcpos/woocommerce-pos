@@ -59,7 +59,7 @@ final class Attempts {
 				$log[ strtolower( (string) $id ) ] = array_merge( self::DEFAULTS, $entry, array( 'id' => strtolower( (string) $id ) ) );
 			}
 		}
-		return new Attempt_Log( $log, static fn(): array => array_map( static fn( array $row ): string => strtolower( (string) ( $row['id'] ?? '' ) ), Ledger::instance()->read( $order ) ) );
+		return new Attempt_Log( $log, static fn(): array => array_map( static fn( array $row ): string => strtolower( (string) ( $row['id'] ?? '' ) ), Ledger::instance()->read( $order ) ), (string) $order->get_payment_method() );
 	}
 
 	/**
@@ -242,12 +242,8 @@ final class Attempts {
 			if ( $fresh instanceof WC_Order ) {
 				$fresh->read_meta_data( true );
 			}
-			$log = $fresh instanceof WC_Order ? self::of( $fresh ) : new Attempt_Log( array() );
-			// A paid status answers the attempt that awaited the customer, never a later send that stranded beside it.
-			$entry = 'paid' === $source ? $log->get( (string) ( $log->awaiting()['attempt_id'] ?? '' ) ) : $log->unresolved();
-			$owed  = null !== $entry && ( 'sent' === $entry['fate'] || ( 'paid' === $entry['fate'] && null === Ledger::instance()->find( $fresh, $entry['id'] ) ) );
-			$lost  = $owed && 'paid' === $entry['fate']; // Its fate was stored, its row was not: every caller re-mints it.
-			if ( ! $owed || ( ! $lost && 'paid' !== $source && null !== $entry['awaiting'] ) || ( 'sweep' === $source && null !== $entry['attention_at_gmt'] ) ) {
+			$entry = $fresh instanceof WC_Order ? self::of( $fresh )->eligible( $source ) : null;
+			if ( null === $entry ) {
 				return null;
 			}
 			$handler = Capture_Mode_Registry::instance()->resolve( 'gateway', Descriptor_Builder::instance()->get( $entry['method_id'] )['capture']['provider'] ?? null );
@@ -258,6 +254,7 @@ final class Attempts {
 					'capture_mode' => 'gateway',
 					'method_id'    => $entry['method_id'],
 					'order_id'     => $id,
+					'sent_at_gmt'  => $entry['sent_at_gmt'], // Paid evidence must postdate it.
 				)
 			);
 			$status  = is_array( $answer ) ? (string) ( $answer['status'] ?? '' ) : '';
@@ -279,6 +276,8 @@ final class Attempts {
 							'capture_mode'  => 'gateway',
 							'method_id'     => $now['method_id'],
 							'amount'        => $answer['amount'] ?? $d->order()->get_total(),
+							'register_id'   => $now['origin']['register'] ?? null, // Where the submit was taken.
+							'session_id'    => $now['origin']['session'] ?? null,
 							'provider_refs' => array( 'transaction_id' => $answer['provider_refs']['transaction_id'] ?? null ),
 						);
 						$d->put( Webview_Passthrough::row( $d->order(), $cashier > 0 ? $row + array( 'cashier_id' => $cashier ) : $row ) );
@@ -332,8 +331,18 @@ final class Attempts {
 					$entry = self::of( $d->order() )->get( $id );
 					if ( null === $entry ) {
 						self::open( $d, $id, $method_id );
-						// The cashier the lost row would have named (the POS operator who rang the sale), never whoever paid.
-						$d->attempt( $id, 'sent', array( 'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ) ) );
+						// The lost row's own provenance: the operator and till that rang the sale (never whoever paid), and the
+						// payment's time, the evidence it answers.
+						$paid_at = $d->order()->get_date_paid( 'edit' );
+						$d->attempt(
+							$id,
+							'sent',
+							array(
+								'cashier_id'  => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
+								'origin'      => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
+								'sent_at_gmt' => gmdate( 'c', $paid_at ? $paid_at->getTimestamp() : time() ),
+							)
+						);
 					} elseif ( 'sent' === $entry['fate'] && null !== $entry['awaiting'] ) {
 						$d->attempt( $id, 'sent', array( 'awaiting' => null ) );
 					}

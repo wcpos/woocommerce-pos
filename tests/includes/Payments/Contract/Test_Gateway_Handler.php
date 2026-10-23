@@ -202,6 +202,7 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 			'capture_mode' => 'gateway',
 			'method_id'    => 'wcpos_paid_test',
 			'order_id'     => $order->get_id(),
+			'sent_at_gmt'  => gmdate( 'c', time() - 60 ),
 		);
 
 		// Act.
@@ -242,6 +243,7 @@ class Test_Gateway_Handler extends WCPOS_REST_Unit_Test_Case {
 			'capture_mode' => 'gateway',
 			'method_id'    => 'wcpos_paid_test',
 			'order_id'     => $order->get_id(),
+			'sent_at_gmt'  => gmdate( 'c', time() - 60 ),
 		);
 
 		// Act.

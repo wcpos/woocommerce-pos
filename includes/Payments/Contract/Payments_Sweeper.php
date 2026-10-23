@@ -160,7 +160,7 @@ final class Payments_Sweeper {
 					// parked for the rows is drained (a mismatch is the answer, not a completion).
 					try {
 						// An attempt whose outcome is unknown is asked about once it is older than the threshold (rule 7).
-						$sent = Attempts::of( $order )->unresolved();
+						$sent = Attempts::of( $order )->eligible( 'sweep' );
 						$at   = strtotime( (string) ( $sent['sent_at_gmt'] ?? '' ) );
 						if ( false !== $at && $at <= time() - $threshold ) {
 							Attempts::reconcile( $order, 'sweep' );

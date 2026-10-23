@@ -21,13 +21,43 @@ function, `Attempts::reconcile( $order, $source )`, and nothing else decides its
 It runs under the order lock on a fresh read, asks the handler outside the write (a write's change is pure),
 and re-checks the entry inside the write (a concurrent resolution wins).
 
+## One selection per source: `Attempt_Log::eligible( $source )`
+
+The resolver acts on exactly the attempt `eligible()` returns; its predicate per source IS the eligibility, so
+nothing is selected and then rejected.
+
+- `paid`: the newest attempt awaiting the customer, or one whose row was lost.
+- `sweep`: among the attempts `to_index()` lists (owed, nobody awaiting them or their row lost, not flagged), the
+  newest one the handler can answer for (its row lost, or its method the order's), else the newest listed. An
+  attempt the handler cannot answer never starves an older one it can. It is flagged in its turn and leaves the list,
+  so an order holding only flagged attempts leaves the sweep (the staff clear is its exit).
+- `replay`, `cancel`, `submit`: the newest owed attempt nobody awaits (a lost one included).
+
+`to_index()` and `eligible( 'sweep' )` share one predicate, so the index never lists an order the sweep would skip.
+
+## The attempt carries its origin
+
+`open()` keeps the submit's validated provenance and cashier on the entry; `strand()` keeps the order's till tuple and
+`_pos_user` (the sale that was rung), never the customer who paid. The resolver's row takes the entry's register and
+session. `Completion_Origin::for_entry()` reads, after the command's and the stamp's, the provenance of the `paid`
+attempt whose stored row no completion has counted, so a completion healed by the sweep names the submit's register,
+session and cashier, and the fiscal sale does too.
+
 ## The provider: `Gateway_Handler::status()`
 
 The resolver hands `Capture_Mode_Registry::resolve( 'gateway', provider )->status()` the pseudo row
-`{ id: attempt id, status: pending, capture_mode: gateway, method_id, order_id }`. Free's `Gateway_Handler`
-reads the order (the gateway's PHP has no status API) and answers `captured` (amount = order total, the order's
-`_transaction_id`) only when all three hold: the order is paid (`Completion_Stamp::is_paid()` or `date_paid`),
-its `payment_method` is the attempt's, and the counting rows do not cover the total. Anything else, and any row
+`{ id: attempt id, status: pending, capture_mode: gateway, method_id, order_id, sent_at_gmt }`. Free's
+`Gateway_Handler` reads the order (the gateway's PHP has no status API) and answers `captured` (the order's
+`_transaction_id`) only when all three hold: its `payment_method` is the attempt's, the counting rows do not cover
+the total, and the order was paid after the attempt was sent. Paid after the attempt means one of:
+
+- with no reopen, `date_paid` on or after `sent_at_gmt`, or a paid status with no `date_paid` (a wp-admin status
+  change; the sale took the attempt while open, so the paid status followed it);
+- on a reopened sale, which keeps its first `date_paid` because WooCommerce never moves it, the attempt was sent
+  after the reopen and the order is in a paid status now (a sale takes an attempt only while open).
+
+Paid facts older than the attempt are indeterminate (an ask), not unchanged. A row with no `sent_at_gmt` (a stored
+row) is answered unchanged. Anything else, and any row
 whose `capture_mode` is not `gateway` (a webview row reaching `Webview_Handler`, its subclass), is answered
 unchanged. A provider-scoped `gateway:<provider>` handler may ask its own API. Pro's `server`/`device` handlers
 are not asked.

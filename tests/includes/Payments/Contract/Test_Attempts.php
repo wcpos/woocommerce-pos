@@ -33,6 +33,8 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 	use Money_Route_Envelope;
 
 	private const REGISTER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+	private const SESSION  = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+	private const TILL     = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 	/** Put Free's gateway handler back after a test answered for the provider. */
 	public function tearDown(): void {
@@ -340,9 +342,11 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 	public function test_a_recovered_row_whose_completion_was_lost_keeps_the_order_listed_until_the_sweep_completes_it(): void {
 		// Arrange: a stranded attempt the gateway paid; the sweep recovers its row, but the completion's save is lost.
 		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
-		$order   = $this->create_pos_order();
+		$order = $this->create_pos_order();
+		$order->update_meta_data( '_wcpos_register', self::TILL ); // The till tuple names another register than the submit did.
+		$order->save();
 		$attempt = wp_generate_uuid4();
-		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent', array( 'register_id' => self::REGISTER, 'session_id' => self::SESSION ) );
 		$this->paid_outside( $order->get_id(), 'wcpos_paid_test' );
 		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Completion_Stamp::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
 		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
@@ -354,7 +358,8 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 				remove_filter( 'query', $lose );
 			}
 			wp_cache_flush(); // A later request.
-			$recovered = $this->fresh( $order->get_id() );
+			$recovered     = $this->fresh( $order->get_id() );
+			$recovered_row = Ledger::instance()->find( $recovered, $attempt );
 			$listed    = $this->live_index( $order->get_id() );
 
 			// Act.
@@ -370,8 +375,100 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotSame( array(), $listed, 'The completion it owes keeps the order in the sweep\'s list.' );
 		$stored = $this->fresh( $order->get_id() );
 		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
-		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+		$sales = ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) );
+		$this->assertCount( 1, $sales );
+		$this->assertSame( array( self::REGISTER, self::SESSION ), array( Completion_History::of( $stored )->standing()['register'], Completion_History::of( $stored )->standing()['session'] ), 'The healed completion names the submit, not the till tuple.' );
+		$this->assertSame( self::REGISTER, $sales[0]['register_id'] );
+		$this->assertSame( array( self::REGISTER, self::SESSION ), array( $recovered_row['register_id'] ?? null, $recovered_row['session_id'] ?? null ), 'The minted row takes the submit\'s provenance.' );
 		$this->assertSame( array(), $this->live_index( $order->get_id() ) );
+	}
+
+	/**
+	 * One selection per source: an older attempt the handler can answer for is never starved by a newer one it cannot. An
+	 * invoice whose order-pay mint was lost (kept, no longer awaiting) and a later send through another method: the sweep
+	 * mints the invoice, hands the other send to staff, and the order leaves the sweep's list.
+	 */
+	public function test_the_sweep_mints_an_older_answerable_attempt_beside_a_newer_one_it_cannot_answer(): void {
+		// Arrange: A awaited the customer; B, through another method, stranded after it; A's mint was lost and kept.
+		$order   = $this->create_pos_order();
+		$invoice = wp_generate_uuid4();
+		$send    = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $invoice, 'wcpos_sent_test' );
+		Ledger_Seed::attempt( $order, $send, 'wcpos_paid_test', 'sent' );
+		$restored = wc_get_order( $order->get_id() );
+		$restored->set_payment_method( 'wcpos_sent_test' ); // B's undo put A's method back.
+		$restored->save();
+		Attempts::strand( wc_get_order( $order->get_id() ), $invoice, 'wcpos_sent_test' );
+		$this->paid_outside( $order->get_id(), 'wcpos_sent_test' );
+
+		// Act.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$stored = $this->fresh( $order->get_id() );
+		$this->assertSame( array( $invoice ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$other = Attempts::of( $stored )->get( $send );
+		$this->assertSame( 'sent', $other['fate'] );
+		$this->assertNotNull( $other['attention_at_gmt'] );
+		$this->assertSame( array(), $this->live_index( $order->get_id() ) );
+	}
+
+	/**
+	 * Paid evidence must postdate the attempt: a reopened sale keeps its old `date_paid` (WooCommerce never moves it), so
+	 * a new attempt is not answered `captured` on it; a real payment after the attempt, which moves the reopened sale back
+	 * to a paid status, is, for the remainder, once.
+	 */
+	public function test_a_new_attempt_on_a_reopened_sale_is_not_captured_on_the_old_paid_date(): void {
+		// Arrange: a gateway paid and completed the sale; it is reopened and a line raises the total.
+		$order = $this->create_pos_order();
+		$first = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $first, 'wcpos_paid_test', 'sent' );
+		$this->paid_outside( $order->get_id(), 'wcpos_paid_test' );
+		$this->sweep_now();
+		wc_get_order( $order->get_id() )->update_status( 'pos-open' );
+		$raised = wc_get_order( $order->get_id() );
+		$raised->set_total( '120.00' );
+		$raised->save();
+		$again = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order->get_id(), $again, 'wcpos_paid_test', 'sent' );
+
+		// Act: a sweep on the old paid date, then a real payment and a sweep.
+		$this->sweep_now();
+		$before = $this->fresh( $order->get_id() );
+		wc_get_order( $order->get_id() )->payment_complete( 'txn_again' );
+		Ledger::flush_all();
+		$this->sweep_now();
+		$this->sweep_now();
+
+		// Assert.
+		$this->assertCount( 1, Completion_History::of( $before )->entries(), 'The old paid date completes nothing.' );
+		$this->assertSame( 'sent', Attempts::of( $before )->get( $again )['fate'] );
+		$this->assertNull( Attempts::of( $before )->get( $again )['attention_at_gmt'] );
+		$this->assertNull( Completion_History::of( $before )->standing() );
+		$this->assertSame( array( $first ), array_column( Ledger::instance()->read( $before ), 'id' ) );
+		$stored = $this->fresh( $order->get_id() );
+		$minted = Ledger::instance()->find( $stored, $again );
+		$this->assertSame( '27.05', $minted['amount'] ?? null );
+		$this->assertCount( 2, Ledger::instance()->read( $stored ) );
+		$this->assertCount( 2, Completion_History::of( $stored )->entries() );
+		$this->assertNotNull( Completion_History::of( $stored )->standing() );
+	}
+
+	/** One sweep with no threshold. */
+	private function sweep_now(): void {
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
 	}
 
 	/** A split-tender sale: the attempt the gateway paid is recorded for the remainder its counting rows leave, never the whole total again. */

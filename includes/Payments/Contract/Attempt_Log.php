@@ -31,14 +31,23 @@ final class Attempt_Log {
 	private $row_ids;
 
 	/**
+	 * The order's payment method: the one paid facts on the order can be attributed to.
+	 *
+	 * @var string
+	 */
+	private $method;
+
+	/**
 	 * Wrap decoded entries.
 	 *
 	 * @param array<string, array> $entries Entries by attempt id.
 	 * @param callable|null        $row_ids fn(): string[], the order's payment row ids.
+	 * @param string               $method  The order's payment method.
 	 */
-	public function __construct( array $entries, ?callable $row_ids = null ) {
+	public function __construct( array $entries, ?callable $row_ids = null, string $method = '' ) {
 		$this->entries = $entries;
 		$this->row_ids = $row_ids;
+		$this->method  = $method;
 	}
 
 	/** Every entry, by attempt id. */
@@ -80,8 +89,42 @@ final class Attempt_Log {
 	 * @return string[] Attempt ids.
 	 */
 	public function to_index(): array {
-		$asked = fn( array $entry ): bool => $this->owed( $entry ) && ( 'paid' === $entry['fate'] || null === $entry['awaiting'] ) && null === $entry['attention_at_gmt'];
-		return array_map( 'strval', array_keys( array_filter( $this->entries, $asked ) ) );
+		return array_map( 'strval', array_keys( $this->sweepable() ) );
+	}
+
+	/**
+	 * The one attempt a resolver caller acts on, or null: the predicate per source is the eligibility, so nothing is
+	 * selected and then rejected. `paid`: the newest awaiting the customer, or one whose row was lost. `sweep`: the
+	 * newest the sweep lists (`to_index()`), preferring one the handler can answer for (its row lost, or its method
+	 * the order's), so an attempt it cannot answer never starves an older one it can. `replay`, `cancel`, `submit`:
+	 * the newest owed one nobody awaits.
+	 *
+	 * @param string $source `paid`, `sweep`, `replay`, `cancel` or `submit`.
+	 */
+	public function eligible( string $source ): ?array {
+		$owed = array_filter( $this->entries, array( $this, 'owed' ) );
+		if ( 'paid' === $source ) {
+			return self::newest( array_filter( $owed, static fn( array $entry ): bool => null !== $entry['awaiting'] || 'paid' === $entry['fate'] ) );
+		}
+		if ( 'sweep' !== $source ) {
+			return self::newest( array_filter( $owed, static fn( array $entry ): bool => null === $entry['awaiting'] || 'paid' === $entry['fate'] ) );
+		}
+		$listed = $this->sweepable();
+		return self::newest( array_filter( $listed, fn( array $entry ): bool => 'paid' === $entry['fate'] || $this->method === $entry['method_id'] ) ) ?? self::newest( $listed );
+	}
+
+	/** The owed entries the sweep asks about: nobody awaits them (or their row was lost) and no human was asked yet. */
+	private function sweepable(): array {
+		return array_filter( $this->entries, fn( array $entry ): bool => $this->owed( $entry ) && ( 'paid' === $entry['fate'] || null === $entry['awaiting'] ) && null === $entry['attention_at_gmt'] );
+	}
+
+	/**
+	 * The last of a set of entries, in the order they were staged.
+	 *
+	 * @param array $entries Entries.
+	 */
+	private static function newest( array $entries ): ?array {
+		return $entries ? end( $entries ) : null;
 	}
 
 	/**
