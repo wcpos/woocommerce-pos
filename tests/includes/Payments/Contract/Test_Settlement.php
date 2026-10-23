@@ -8,8 +8,10 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\API\V2\Payments_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
+use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Settlement;
 
@@ -256,15 +258,17 @@ class Test_Settlement extends \WP_UnitTestCase {
 	public function test_settlement_record_replay_finishes_projection_after_parking_lock_contention(): void {
 		$order = $this->order();
 		$input = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_card', 'amount' => '20.00' );
+		$command = new Money_Command( $input['id'], 'sha256:record', 'record' );
 		$lock = new Order_Lock();
 		$this->assertTrue( $lock->acquire( 0 ) );
 		try {
-			$error = Ledger::instance()->record( $order, $input );
+			$error = Ledger::instance()->record( $order, $input, array(), $command );
 			$this->assertSame( 'wcpos_payment_locked', $error->get_error_code() );
 		} finally {
 			$lock->release( 0 );
 		}
-		$this->assertIsArray( Ledger::instance()->record( $order, $input ) );
+		// The same record again, as the route runs it: Command_Log::run() heals the replay, then record() answers the row.
+		$this->assertIsArray( Command_Log::run( $order, $command, fn( Money_Command $c ) => Ledger::instance()->record( $order, $input, array(), $c ) ) );
 		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
 	}
 

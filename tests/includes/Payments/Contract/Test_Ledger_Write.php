@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -279,7 +280,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$undo    = $this->inject( 'completion', $order->get_id() );
 		$caught  = null;
 		try {
-			Ledger::instance()->write( $order->get_id(), fn( Ledger_Draft $draft ) => $draft->command( $command, Command_Log::entry( 'sha256:close', 'close' ) ), Ledger::MODE_CLOSE );
+			Ledger::instance()->write( $order->get_id(), static fn(): bool => true, Ledger::MODE_CLOSE, new Money_Command( $command, 'sha256:close', 'close' ) );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			$caught = $error;
 		} finally {
@@ -735,7 +736,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$undo   = $this->inject( 'completion', $order->get_id() );
 		$caught = null;
 		try {
-			Ledger::instance()->write( $order->get_id(), static fn( Ledger_Draft $draft ) => $draft->command( wp_generate_uuid4(), Command_Log::entry( 'sha256:close', 'close' ) ), Ledger::MODE_CLOSE );
+			Ledger::instance()->write( $order->get_id(), static fn(): bool => true, Ledger::MODE_CLOSE, new Money_Command( wp_generate_uuid4(), 'sha256:close', 'close' ) );
 		} catch ( Ledger_Persistence_Exception $error ) {
 			$caught = $error;
 		} finally {
@@ -1126,7 +1127,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 			$undo();
 		}
 		$wpdb->last_error = '';
-		$replayed = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $command );
+		$replayed = $this->replay_record( $id, $input );
 
 		// Assert.
 		$this->assertSame( $stage, $caught ? $caught->stage : null );
@@ -1202,18 +1203,14 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		// Arrange.
 		$order = $this->create_pos_order();
 		$this->seed_rows( $order->get_id(), array( $this->row( '92.95' ) ) );
-		$command = array(
-			'id'   => wp_generate_uuid4(),
-			'fp'   => 'sha256:close',
-			'kind' => 'close',
-		);
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:close', 'close' );
 
 		// Act.
 		$closed = Ledger::instance()->close( wc_get_order( $order->get_id() ), $command );
 
 		// Assert.
 		$saved = $this->fresh( $order->get_id() );
-		$entry = Command_Log::find( $saved, Ledger::instance()->read( $saved ), $command['id'] );
+		$entry = Command_Log::find( $saved, Ledger::instance()->read( $saved ), $command->id() );
 		$this->assertSame( 1, $closed['completion']['n'] );
 		$this->assertSame( Completion_History::of( $saved )->standing()['id'], $closed['completion']['id'] );
 		$this->assertSame( $closed['completion']['id'], $entry['ref'] );
@@ -1235,11 +1232,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$order = $this->create_pos_order();
 		$id    = $order->get_id();
 		$this->seed_rows( $id, array( $this->row( '92.95' ) ) );
-		$command = array(
-			'id'   => wp_generate_uuid4(),
-			'fp'   => 'sha256:close',
-			'kind' => 'close',
-		);
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:close', 'close' );
 		$undo    = $this->inject( 'paid', $id );
 		$caught  = null;
 		try {
@@ -1249,7 +1242,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		} finally {
 			$undo();
 		}
-		$owed = Command_Log::find( $this->fresh( $id ), $this->stored_rows( $id ), $command['id'] );
+		$owed = Command_Log::find( $this->fresh( $id ), $this->stored_rows( $id ), $command->id() );
 
 		// Act.
 		$closed = Ledger::instance()->close( wc_get_order( $id ), $command );
@@ -1259,7 +1252,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 'rows', $owed['phase'] ?? null );
 		$saved = $this->fresh( $id );
 		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
-		$this->assertSame( $closed['completion']['id'], Command_Log::find( $saved, $this->stored_rows( $id ), $command['id'] )['ref'] );
+		$this->assertSame( $closed['completion']['id'], Command_Log::find( $saved, $this->stored_rows( $id ), $command->id() )['ref'] );
 	}
 
 	/** The sweeper on an order whose write stopped after S1 runs the paid transition, then the completion, once. */
@@ -1772,7 +1765,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$live  = array_map( static fn( $meta ) => $meta->value, $this->fresh( $id )->get_meta( Ledger::LIVE_LEG_META_KEY, false ) );
 
 		// Act.
-		Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		$this->replay_record( $id, $input );
 
 		// Assert.
 		$this->assertSame( 'captured', $rows[0]['status'] );
@@ -1809,7 +1802,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$before = $this->stored_rows( $id );
 
 		// Act.
-		$replayed = Ledger::instance()->record( wc_get_order( $id ), $input, array(), $this->record_command( $input ) );
+		$replayed = $this->replay_record( $id, $input );
 
 		// Assert.
 		$this->assertSame( $before, $this->stored_rows( $id ) );
@@ -2091,16 +2084,8 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$paid->set_date_paid( time() );
 		$paid->set_status( 'completed' );
 		$this->as_if_paid_hooks_never_ran( fn() => $paid->save() );
-		$first  = array(
-			'id' => wp_generate_uuid4(),
-			'fp' => 'sha256:one',
-			'kind' => 'close',
-		);
-		$second = array(
-			'id' => wp_generate_uuid4(),
-			'fp' => 'sha256:two',
-			'kind' => 'close',
-		);
+		$first  = new Money_Command( wp_generate_uuid4(), 'sha256:one', 'close' );
+		$second = new Money_Command( wp_generate_uuid4(), 'sha256:two', 'close' );
 
 		// Act.
 		Ledger::instance()->close( wc_get_order( $id ), $first );
@@ -2120,8 +2105,8 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 			)
 		);
 		foreach ( array( $first, $second ) as $command ) {
-			$entry = Command_Log::find( $saved, array(), $command['id'] );
-			$this->assertSame( $command['fp'], $entry['fp'] );
+			$entry = Command_Log::find( $saved, array(), $command->id() );
+			$this->assertSame( $command->fp(), $entry['fp'] );
 			$this->assertArrayNotHasKey( 'phase', $entry );
 			$this->assertArrayNotHasKey( 'owed_at_n', $entry );
 		}
@@ -2326,12 +2311,20 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	 *
 	 * @param array $input Tender input.
 	 */
-	private function record_command( array $input ): array {
-		return array(
-			'id'   => $input['id'],
-			'fp'   => Command_Log::fingerprint( 'record', '', array( 'payment' => $input ) ),
-			'kind' => 'record',
-		);
+	private function record_command( array $input ): Money_Command {
+		return new Money_Command( $input['id'], Command_Log::fingerprint( 'record', '', array( 'payment' => $input ) ), 'record' );
+	}
+
+	/**
+	 * The same `record` sent again as the route runs it (`Command_Log::run()`, which heals a replay; a replay
+	 * never meets the revision). Answers what `record()` answers from the stored row.
+	 *
+	 * @param int   $id    Order id.
+	 * @param array $input Tender input.
+	 * @return mixed
+	 */
+	private function replay_record( int $id, array $input ) {
+		return Command_Log::run( wc_get_order( $id ), $this->record_command( $input ), fn( Money_Command $c ) => Ledger::instance()->record( wc_get_order( $id ), $input, array(), $c ) );
 	}
 
 	/**
