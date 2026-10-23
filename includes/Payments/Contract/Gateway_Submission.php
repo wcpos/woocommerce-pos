@@ -13,6 +13,7 @@ use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WCPOS\WooCommercePOS\Payments\Paid_Date_Suppression;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WP_Error;
 
 /** Reads what a Woo gateway did, within the route's existing order lock. */
@@ -195,6 +196,12 @@ class Gateway_Submission {
 					}
 				}
 				return self::invalid_fields( $errors );
+			}
+			// Prevent-overselling holds the sale's stock before the gateway can take money for it, as record and
+			// intent do (§7.5). A definite failure or a refused redirect undoes the attempt, and that write releases it.
+			$held = Stock_Validator::instance()->validate_checkout( $order );
+			if ( is_wp_error( $held ) ) {
+				return $held;
 			}
 			// WooCommerce's own pay form assigns the chosen gateway before process_payment();
 			// the invoice email, the pay link and wp-admin read it from the order. Remembered so

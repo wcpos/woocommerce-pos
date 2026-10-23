@@ -1584,6 +1584,93 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * With prevent-overselling on, a submission holds the sale's stock before the gateway takes money, as record and
+	 * intent do (§7.5): stock another sale holds refuses it with the same error, and the gateway is never called.
+	 */
+	public function test_submit_with_its_stock_held_elsewhere_is_refused_before_the_gateway(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange: A holds the one unit; B is about to pay for it through a gateway that takes money.
+				$attempt = wp_generate_uuid4();
+				$method  = $b->get_payment_method();
+
+				// Act.
+				$refused = $this->submit( $b, $attempt, array(), 'wcpos_paid_test' );
+
+				// Assert.
+				$this->assertSame( 400, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+				$this->assertSame( 'wcpos_insufficient_stock', $refused->get_data()['code'] );
+				$this->assertSame( 0, Paid_Test_Gateway::$calls );
+				$stored = wc_get_order( $b->get_id() );
+				$this->assertSame( 'pos-open', $stored->get_status() );
+				$this->assertSame( $method, $stored->get_payment_method() );
+				$this->assertSame( array(), Gateway_Submission::read_attempts( $stored ) );
+				$this->assertSame( array(), Ledger::instance()->read( $stored ) );
+				$this->assertSame( array(), $this->stored_commands( $b->get_id() ) );
+				$this->assertSame( 1, wc_get_product( current( $b->get_items() )->get_product_id() )->get_stock_quantity() );
+			}
+		);
+	}
+
+	/** A sale nothing has held yet holds its stock when the submission sends, before the customer pays. */
+	public function test_submit_takes_the_stock_hold_for_a_sale_nothing_held_yet(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange: nothing holds the unit.
+				Stock_Validator::instance()->release_checkout_stock( $a );
+
+				// Act.
+				$sent = $this->submit( $a, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+				$held = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+
+				// Assert.
+				$this->assertSame( 'sent', $sent->get_data()['outcome'], wp_json_encode( $sent->get_data() ) );
+				$this->assertSame( 1, Sent_Test_Gateway::$calls );
+				$this->assertWPError( $held );
+				$this->assertSame( 'wcpos_insufficient_stock', $held->get_error_code() );
+			}
+		);
+	}
+
+	/** A definite gateway failure closes the attempt, so the hold it took goes back to the shelf. */
+	public function test_submit_definite_failure_releases_the_stock_hold(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange.
+				Stock_Validator::instance()->release_checkout_stock( $a );
+				Sent_Test_Gateway::$failure = 'failure';
+
+				// Act.
+				$failed  = $this->submit( $a, wp_generate_uuid4(), array( 'invoice_email' => 'buyer@example.com' ) );
+				$shelved = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+
+				// Assert.
+				$this->assertSame( 502, $failed->get_status(), wp_json_encode( $failed->get_data() ) );
+				$this->assertSame( 1, Sent_Test_Gateway::$calls );
+				$this->assertInstanceOf( \WC_Order::class, $shelved );
+			}
+		);
+	}
+
+	/** With prevent-overselling off, a submission takes no hold and pays as before. */
+	public function test_submit_with_prevent_overselling_off_is_not_held(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange.
+				update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => false ) );
+
+				// Act.
+				$paid = $this->submit( $b, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+
+				// Assert.
+				$this->assertSame( 200, $paid->get_status(), wp_json_encode( $paid->get_data() ) );
+				$this->assertSame( 'recorded', $paid->get_data()['outcome'] );
+				$this->assertSame( 1, Paid_Test_Gateway::$calls );
+			}
+		);
+	}
+
+	/**
 	 * With prevent-overselling on and one unit of stock, run $work with two open POS orders for it; A holds the unit.
 	 *
 	 * @param callable $work Receives the two orders (a, b).
