@@ -256,12 +256,15 @@ back. What already exists and what is still missing:
   audited as such, it refreshes only a receipt tab that still exists and prints nothing.
   wcpos/monorepo#2869 is rule 4: the refusal becomes a durable needs-attention row in Orders
   (store-local document, "Open order" / "Handled", never a Retry).
-- *Missing 4:* a live e2e spec that cuts the network mid-tender and reconnects.
+- *Built 4 (slice C, 2026-10-23):* wcpos/monorepo#2894 is the live spec: with the browser offline a cash
+  sale is offered as "sent later", confirmed, journalled and shown as awaiting the store while the
+  store's copy stays unpaid with no ledger row and no payments request; on reconnect the app re-sends
+  on its own and the store adopts one captured leg on a paid order. A cashier who starts the next sale
+  before the link returns still has it adopted, and no receipt tab is re-added.
 - *Missing 5, SumUp:* the leg starts a session when the till is offline and the method opts in
   (`capabilities.offline === 'queue'`), then one day on a physical Solo.
 
-Remaining: *Missing 4* (slice C, the live network-cut spec) and *Missing 5* (slice D, one SumUp
-slice plus a hardware day).
+Remaining: *Missing 5* (slice D, one SumUp slice plus a hardware day).
 
 *Decided 2 (owner, 2026-10-23): a deferred record stays with its cashier.* The till's store database
 is keyed per signed-in credential, so the money journal, the pending completions and the
