@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Settlement;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 class Test_Settlement extends \WP_UnitTestCase {
 	public function setUp(): void {
@@ -249,10 +250,11 @@ class Test_Settlement extends \WP_UnitTestCase {
 		foreach ( array( 'pending', 'authorized', 'captured', 'failed', 'voided' ) as $status ) {
 			$rows[] = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_card', 'amount' => '1.00', 'status' => $status );
 		}
-		Ledger::instance()->save( $order, $rows );
+		Ledger_Seed::rows( $order, $rows );
 		$this->assertSame( array_column( $rows, 'id' ), array_values( wp_list_pluck( $order->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
-		Ledger::instance()->save( $order, array( $rows[4] ), true, array_column( array_slice( $rows, 0, 4 ), 'id' ) );
-		$this->assertSame( array( $rows[4]['id'] ), array_values( wp_list_pluck( $order->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
+		// Only a pending row may vanish (I5): the index is rebuilt without it.
+		Ledger_Seed::rows( $order, array(), true, array( $rows[0]['id'] ) );
+		$this->assertSame( array_column( array_slice( $rows, 1 ), 'id' ), array_values( wp_list_pluck( $order->get_meta( Ledger::PAYMENT_ID_META_KEY, false ), 'value' ) ) );
 	}
 
 	public function test_settlement_record_replay_finishes_projection_after_parking_lock_contention(): void {
@@ -296,7 +298,7 @@ class Test_Settlement extends \WP_UnitTestCase {
 		$order = $this->order();
 		$row = array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_card', 'capture_mode' => 'settlement_test', 'amount' => '20.00', 'status' => 'pending' );
 		$row['provider_refs'] = $refs;
-		Ledger::instance()->save( $order, array( $row ) );
+		Ledger_Seed::rows( $order, array( $row ) );
 		return array( $order, Ledger::instance()->find( $order, $row['id'] ) );
 	}
 }

@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 class Test_Payments_Sweeper extends \WP_UnitTestCase {
 	public function setUp(): void {
@@ -120,7 +121,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 			'amount'       => '1.00',
 			'status'       => 'captured',
 		);
-		Ledger::instance()->save( $order, $rows );
+		Ledger_Seed::rows( $order, $rows );
 
 		( new Payments_Sweeper() )->run();
 
@@ -264,7 +265,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$expired = array_merge( $rows[0], array( 'id' => wp_generate_uuid4(), 'amount' => '80.00', 'status' => 'authorized', 'expires_at' => gmdate( 'c', time() - 60 ) ) );
 		$order->set_total( '100.00' );
 		$order->save(); // The ledger save reads core totals from storage.
-		Ledger::instance()->save( $order, array( $rows[0], $expired ) );
+		Ledger_Seed::rows( $order, array( $rows[0], $expired ) );
 		$rows = Ledger::instance()->read( $order );
 		foreach ( $rows as &$row ) { $row['updated_at_gmt'] = gmdate( 'c', time() - 600 ); }
 		unset( $row );
@@ -314,7 +315,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 			'amount'       => '92.95',
 			'status'       => 'captured',
 		);
-		Ledger::instance()->save( wc_get_order( $order->get_id() ), $rows, false );
+		Ledger_Seed::rows( wc_get_order( $order->get_id() ), $rows, false );
 		$order = wc_get_order( $order->get_id() );
 		$order->set_status( 'processing' );
 		$order->save();
@@ -459,7 +460,7 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$order->set_total( '92.95' );
 		$order->save(); // The ledger save reads core totals from storage.
 		$row = array_merge( array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_card', 'capture_mode' => 'sweep_test', 'amount' => '20.00', 'status' => 'pending' ), $extra );
-		Ledger::instance()->save( $order, array( $row ) );
+		Ledger_Seed::rows( $order, array( $row ) );
 		$rows = Ledger::instance()->read( $order );
 		$rows[0]['updated_at_gmt'] = gmdate( 'c', time() - $age );
 		$rows[0]['created_at_gmt'] = gmdate( 'c', time() - $age );

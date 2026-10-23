@@ -127,7 +127,7 @@ class Order_Writer extends Null_Writer {
 	}
 
 	/**
-	 * Hold the order lock (the one the money commands and the ledger keeper hold) from the
+	 * Hold the order lock (the one the money commands hold) from the
 	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b),
 	 * so a capture cannot land between the compare and the write. The Mutation_Store record
 	 * lock is already held; Order_Lock falls back to its option lease on servers that cannot
@@ -166,25 +166,12 @@ class Order_Writer extends Null_Writer {
 		$payload = $prepared['payload'];
 		$declared['requested_status'] = isset( $payload['status'] ) ? (string) $payload['status'] : '';
 		$prepared['context']          = $declared;
-		if ( isset( $declared['id'] ) ) {
-			Ledger::save_was_refused( (int) $declared['id'] ); // A stale refusal from earlier in this request must not leak.
-		}
-		$response = Order_Write_Intent::open(
+		return Order_Write_Intent::open(
 			$declared,
 			function () use ( $prepared, $forward ) {
 				return $this->forward_with_reserved_stock( $prepared, $forward );
 			}
 		);
-		$id = 0;
-		if ( $response instanceof WP_REST_Response && $response->get_status() >= 200 && $response->get_status() < 300 ) {
-			$data = $response->get_data();
-			$id   = (int) ( ( is_array( $data ) ? ( $data['id'] ?? null ) : null ) ?? $declared['id'] ?? 0 );
-		}
-		// WooCommerce swallows the keeper's refusal and answers 2xx with nothing written.
-		if ( $id > 0 && Ledger::save_was_refused( $id ) ) {
-			return new WP_Error( 'woo_rxdb_sync_record_locked', 'Order save was refused while its payment ledger was locked; retry shortly.', array( 'status' => 409 ) );
-		}
-		return $response;
 	}
 
 	/**
@@ -304,7 +291,7 @@ class Order_Writer extends Null_Writer {
 				foreach ( $context['frozen_addresses'] as $type => $address ) {
 					$order->set_address( $address, $type );
 				}
-				Ledger::saving( $id, fn() => $order->save() );
+				$order->save();
 			}
 		}
 		if ( ! empty( $context['clear_email'] ) ) {
@@ -818,7 +805,7 @@ class Order_Writer extends Null_Writer {
 			$order->update_meta_data( '_pos_store', (string) $change['_pos_store'] );
 		}
 		if ( $cashier_changed || $store_changed ) {
-			Ledger::saving( $order->get_id(), fn() => $order->save() );
+			$order->save();
 		}
 		if ( 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' ) ) {
 			Order_Notes::add_reopen_note( $order, $current_user, $order->get_meta( '_pos_store' ) );

@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /**
  * Webview payments retain their descriptor and refund through their gateway.
@@ -60,7 +61,7 @@ class Test_Webview_Handler extends WCPOS_REST_Unit_Test_Case {
 			}
 			$order->save();
 			$id = wp_generate_uuid4();
-			Ledger::instance()->save(
+			Ledger_Seed::rows(
 				$order,
 				array(
 					array(

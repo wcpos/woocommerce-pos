@@ -456,7 +456,7 @@ class Mutation_Store {
 				if ( is_object( $order ) && method_exists( $order, 'update_meta_data' ) ) {
 					$order->update_meta_data( $key, $uuid );
 					if ( method_exists( $order, 'save' ) ) {
-						\WCPOS\WooCommercePOS\Payments\Contract\Ledger::saving( $order->get_id(), fn() => $order->save() );
+						$order->save();
 					}
 					return method_exists( $order, 'get_meta' ) && (string) $order->get_meta( $key, true ) === $uuid;
 				}
@@ -500,7 +500,7 @@ class Mutation_Store {
 			$changed = true;
 		}
 		if ( $changed && method_exists( $order, 'save' ) ) {
-			\WCPOS\WooCommercePOS\Payments\Contract\Ledger::saving( $order->get_id(), fn() => $order->save() );
+			$order->save();
 		}
 	}
 

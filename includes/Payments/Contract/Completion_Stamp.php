@@ -434,7 +434,7 @@ final class Completion_Stamp {
 
 	/**
 	 * Whether this completion happened at a register: a money command in this request, the ledger
-	 * deriving, a gateway submit, a POS order's order-pay window, a sent submit's provenance, or a
+	 * writing, a gateway submit, a POS order's order-pay window, a sent submit's provenance, or a
 	 * captured ledger row. A storefront payment has none and is never stamped.
 	 *
 	 * @param WC_Order $order Order object.
@@ -442,7 +442,7 @@ final class Completion_Stamp {
 	private static function has_origin( WC_Order $order ): bool {
 		$id = $order->get_id();
 		return self::in_command( $id )
-			|| Ledger::is_deriving( $id )
+			|| Ledger::is_writing( $id )
 			|| Gateway_Submission::is_submitting( $id )
 			|| ( Webview_Passthrough::is_paying( $id ) && wcpos_is_pos_order( $order ) )
 			|| isset( self::$attempts[ $id ] )

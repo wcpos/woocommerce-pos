@@ -27,6 +27,7 @@ use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Tests\Helpers\Adopt_Refund_Test_Gateway;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WP_REST_Request;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /**
  * @covers \WCPOS\WooCommercePOS\API\V2\Writers\Order_Writer
@@ -223,7 +224,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		// Arrange: a pos-open order with a captured row, an attempt in history and a stamp.
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
 		$order    = wc_get_order( $order_id );
-		Ledger::instance()->save( $order, array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
+		Ledger_Seed::rows( $order, array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
 		$order = wc_get_order( $order_id );
 		$order->update_meta_data( '_wcpos_gateway_attempts', array( wp_generate_uuid4() => 'cancelled' ) );
 		$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
@@ -1046,7 +1047,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 
 	/** Seed rows the way the server writes them, without projecting the order's status. */
 	protected function seed_rows( int $order_id, array $rows ): void {
-		Ledger::instance()->save( wc_get_order( $order_id ), $rows, false );
+		Ledger_Seed::rows( wc_get_order( $order_id ), $rows, false );
 	}
 
 	protected function push_status( int $order_id, string $status ) {
@@ -1198,7 +1199,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 	public function test_reopen_of_a_paid_sale_with_captured_rows_is_accepted_with_rows_and_balance_unchanged(): void {
 		// Arrange: two captured tenders cover the total and complete the sale.
 		$order_id = $this->make_order( 'pos-open', array( array( $this->product(), 2 ) ) );
-		Ledger::instance()->save( wc_get_order( $order_id ), array( $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ), $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ) ) );
+		Ledger_Seed::rows( wc_get_order( $order_id ), array( $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ), $this->cash_payment( '10.00' ) + array( 'status' => 'captured' ) ) );
 		$order = wc_get_order( $order_id );
 		$order->set_status( 'processing' );
 		$order->save();
@@ -2457,7 +2458,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$line_rows  = array();
 		if ( 'update' === $operation ) {
 			$order_id = $this->make_order( 'pos-open', array( array( $product, 1 ) ) );
-			Ledger::instance()->save( wc_get_order( $order_id ), array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
+			Ledger_Seed::rows( wc_get_order( $order_id ), array( $this->cash_payment( '5.00' ) + array( 'status' => 'captured' ) ), false );
 			$order = wc_get_order( $order_id );
 			$order->update_meta_data( '_wcpos_gateway_attempts', array( wp_generate_uuid4() => 'cancelled' ) );
 			$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
@@ -2487,7 +2488,7 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$counter     = static function () use ( &$completed ): void {
 			++$completed;
 		};
-		$keeper      = array( Ledger::instance(), 'keep_closure_stamps' );
+		$keeper      = array( Ledger::instance(), 'keep_server_fields' );
 		remove_action( 'woocommerce_before_order_object_save', $keeper, 10 );
 		add_action( 'woocommerce_payment_complete', $counter );
 

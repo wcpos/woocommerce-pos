@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Real database fixtures, including cleanup of committed transactions. */
 trait Closure_Test_Fixture {
@@ -159,7 +160,7 @@ trait Closure_Test_Fixture {
 		) as $fields ) {
 			$rows[] = array_merge( $base, $fields, array( 'id' => wp_generate_uuid4() ) );
 		}
-		Ledger::instance()->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 		return $order;
 	}
 }

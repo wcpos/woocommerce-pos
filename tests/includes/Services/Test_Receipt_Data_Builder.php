@@ -20,6 +20,7 @@ use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WC_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /**
  * Test_Receipt_Data_Builder class.
@@ -320,7 +321,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$order->set_payment_method_title( 'Cash' );
 		$order->set_total( '92.95' );
 		$order->save();
-		Ledger::instance()->save(
+		Ledger_Seed::rows(
 			$order,
 			array(
 				array(

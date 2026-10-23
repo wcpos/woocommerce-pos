@@ -93,27 +93,6 @@ class Ledger {
 	private $logged_invalid_ledgers = array();
 
 	/**
-	 * Keeper acquisitions held until after-save, keyed by order id.
-	 *
-	 * @var array<int, int>
-	 */
-	private $closure_locks = array();
-
-	/**
-	 * Ledger-owned saves in progress, keyed by order id: only these may write server-owned row fields.
-	 *
-	 * @var array<int, int>
-	 */
-	private $server_saves = array();
-
-	/**
-	 * Orders whose save the keeper refused in this request (WooCommerce swallows the throw).
-	 *
-	 * @var array<int, bool>
-	 */
-	private static $refused = array();
-
-	/**
 	 * Writes in progress, by order id; a nested write counts.
 	 *
 	 * @var array<int, int>
@@ -143,23 +122,6 @@ class Ledger {
 	}
 
 	/**
-	 * Whether order state is currently being derived.
-	 *
-	 * @var int The order derive() is running payment_complete() on, 0 when none — lets hooks skip re-entry.
-	 */
-	private static $deriving = 0;
-
-	/**
-	 * Whether the ledger is deriving order state (inside payment_complete()): for this order when one
-	 * is named, for any order otherwise.
-	 *
-	 * @param int|null $order_id Order ID, or null for any order.
-	 */
-	public static function is_deriving( ?int $order_id = null ): bool {
-		return null === $order_id ? 0 !== self::$deriving : ( 0 !== $order_id && self::$deriving === $order_id );
-	}
-
-	/**
 	 * Read stored payment rows. An order without a ledger reads as empty, silently.
 	 *
 	 * @param WC_Order $order Order object.
@@ -183,11 +145,9 @@ class Ledger {
 		return $decoded['payments'];
 	}
 
-	/** Keep server stamps on every order-writing lane. */
+	/** Keep server-owned row fields on every order-writing lane. */
 	public static function register_hooks(): void {
-		add_action( 'woocommerce_before_order_object_save', array( self::instance(), 'keep_closure_stamps' ), 10, 1 );
-		add_action( 'woocommerce_after_order_object_save', array( self::instance(), 'release_closure_lock' ), 10, 1 );
-		add_action( 'shutdown', array( self::instance(), 'release_closure_lock' ), 10, 0 );
+		add_action( 'woocommerce_before_order_object_save', array( self::instance(), 'keep_server_fields' ), 10, 1 );
 	}
 
 	/** Decode both typed meta and the stored JSON form.
@@ -296,13 +256,12 @@ class Ledger {
 		}
 	}
 
-	/** Hold Order_Lock across the storage read and save; stamps come only from storage.
+	/** Server-owned row fields and closure stamps come only from storage, except in the ledger's own write.
 	 * Keep every stored stamped leg, even when the writer omits it or sends an undecodable ledger.
 	 *
 	 * @param mixed $order Order about to be saved.
-	 * @throws \RuntimeException When the order lock cannot be acquired.
 	 */
-	public function keep_closure_stamps( $order ): void {
+	public function keep_server_fields( $order ): void {
 		if ( ! $order instanceof WC_Order ) {
 			return;
 		}
@@ -375,14 +334,6 @@ class Ledger {
 			return;
 		}
 		$order_id = $order->get_id();
-		if ( Order_Lock::instance()->acquire( $order_id ) ) {
-			$this->closure_locks[ $order_id ] = ( $this->closure_locks[ $order_id ] ?? 0 ) + 1;
-		} else {
-			$message = sprintf( 'WCPOS payment ledger locked on order #%d; the save was refused', $order_id );
-			Logger::error( $message, array( 'order_id' => $order_id ) );
-			self::$refused[ $order_id ] = true;
-			throw new \RuntimeException( esc_html( $message ) );
-		}
 		$stored = $this->stored( $order->get_id(), false );
 		if ( $stored ) {
 			$stored['payments'] = $this->unique_rows( $stored['payments'], $order_id, $warned );
@@ -414,7 +365,7 @@ class Ledger {
 		foreach ( $value['payments'] as &$row ) {
 			$id = strtolower( $row['id'] );
 			$present[ $id ] = true;
-			if ( empty( $this->server_saves[ $order_id ] ) ) {
+			if ( ! self::is_writing( $order_id ) ) {
 				// Event history, the change stamp and refund allocations are server-owned, not order-write intent.
 				$previous = $stored_rows[ $id ] ?? null;
 				foreach ( array( 'seen_events', 'events', 'commands' ) as $field ) {
@@ -452,17 +403,6 @@ class Ledger {
 		$this->reindex( $order, $value['payments'] );
 	}
 
-	/**
-	 * Whether the keeper refused a save of this order since the last check; reading clears it.
-	 *
-	 * @param int $order_id Order id.
-	 */
-	public static function save_was_refused( int $order_id ): bool {
-		$refused = isset( self::$refused[ $order_id ] );
-		unset( self::$refused[ $order_id ] );
-		return $refused;
-	}
-
 	/** Keep the first occurrence of each row id on the order-write lane.
 	 *
 	 * @param array $rows     Pushed rows.
@@ -493,54 +433,6 @@ class Ledger {
 			$unique[ $id ] = $row;
 		}
 		return array_values( $unique );
-	}
-
-	/**
-	 * Run a plugin-owned order save; a failed save releases only the keeper locks it took.
-	 *
-	 * WooCommerce catches save exceptions without an after-save hook, so the keeper's own
-	 * acquisition would otherwise outlive the save. An enclosing caller keeps its lock.
-	 *
-	 * @param int      $order_id Order being saved.
-	 * @param callable $work     Plugin-owned save operation.
-	 * @return mixed
-	 */
-	public static function saving( int $order_id, callable $work ) {
-		$ledger = self::instance();
-		$count  = $ledger->closure_locks[ $order_id ] ?? 0;
-		try {
-			return $work();
-		} finally {
-			while ( ( $ledger->closure_locks[ $order_id ] ?? 0 ) > $count ) {
-				Order_Lock::instance()->release( $order_id );
-				if ( 0 === --$ledger->closure_locks[ $order_id ] ) {
-					unset( $ledger->closure_locks[ $order_id ] );
-				}
-			}
-		}
-	}
-
-	/** Release a keeper acquisition after saving, or all remaining acquisitions on shutdown.
-	 *
-	 * @param mixed $order Saved order, or null at shutdown.
-	 */
-	public function release_closure_lock( $order = null ): void {
-		if ( null !== $order && ! $order instanceof WC_Order ) {
-			return;
-		}
-		$orders = null === $order ? $this->closure_locks : array( $order->get_id() => 1 );
-		foreach ( $orders as $order_id => $count ) {
-			if ( ! isset( $this->closure_locks[ $order_id ] ) ) {
-				continue;
-			}
-			for ( $i = 0; $i < $count; ++$i ) {
-				Order_Lock::instance()->release( $order_id );
-				--$this->closure_locks[ $order_id ];
-			}
-			if ( 0 === $this->closure_locks[ $order_id ] ) {
-				unset( $this->closure_locks[ $order_id ] );
-			}
-		}
 	}
 
 	/**
@@ -2101,115 +1993,6 @@ class Ledger {
 	}
 
 	/**
-	 * Normalize, persist, index, and derive a ledger.
-	 *
-	 * @internal The persistence step behind the Ledger's verbs, and the seeding seam
-	 * for tests. Code outside this class writes rows through a verb (record, intent,
-	 * capture, apply_result, refund, settle_allocation, adopt, append_events, void).
-	 * A raw save() skips the transition table, the refund caps and the hooks.
-	 *
-	 * @param WC_Order   $order Order object.
-	 * @param array      $rows  Payment rows.
-	 * @param bool       $derive Whether to project payment state (deferred during offline arrival).
-	 * @param array      $deleted_ids Explicitly removed payment ids (a refused intent only).
-	 * @param array|null $read_rows Original rows read by an unlocked caller; null treats all rows as edited.
-	 * @throws Ledger_Persistence_Exception When the ledger cannot be locked or persisted.
-	 */
-	public function save( WC_Order $order, array $rows, bool $derive = true, array $deleted_ids = array(), ?array $read_rows = null ): void {
-		$lock = Order_Lock::instance();
-		$keeper_count = $this->closure_locks[ $order->get_id() ] ?? 0;
-		if ( ! $lock->acquire( $order->get_id() ) ) {
-			throw new Ledger_Persistence_Exception( 'WCPOS payment ledger is locked.' );
-		}
-		try {
-			$fresh = wc_get_order( $order->get_id() );
-			$fresh = $fresh instanceof WC_Order ? $fresh : $order;
-			$fresh->read_meta_data( true );
-			// updated_at_gmt is when a leg last changed. normalize_row() stamps now, so a row whose
-			// content is what is already stored keeps its stored stamp: a write to one leg must not
-			// make every other leg on the order look fresh to Payments_Sweeper.
-			$stored = array();
-			foreach ( $this->stored( $order->get_id(), false )['payments'] ?? array() as $existing ) {
-				if ( is_array( $existing ) && isset( $existing['id'] ) ) {
-					$stored[ strtolower( (string) $existing['id'] ) ] = $existing;
-				}
-			}
-			// Refresh meta ids too: an object loaded before the first row otherwise inserts
-			// a second ledger meta entry on HPOS. Core totals/status must also come from the locked read.
-			$this->carry_staged_meta( $order, $fresh );
-			$caller = $order;
-			$order  = $fresh;
-			$original = array();
-			foreach ( $read_rows ?? array() as $read_row ) {
-				$original[ strtolower( (string) $read_row['id'] ) ] = $read_row;
-			}
-			$normalized = array();
-			foreach ( $rows as $row ) {
-				$requested_stamp = $row['updated_at_gmt'] ?? null;
-				$row      = $this->normalize_row( $fresh, $row );
-				$previous = $stored[ $row['id'] ] ?? null;
-				$read_row = $original[ $row['id'] ] ?? null;
-				if ( null !== $previous && null !== $read_row ) {
-					$base = $this->normalize_row( $fresh, $read_row );
-					$latest = $this->normalize_row( $fresh, $previous );
-					if ( $this->same_content( $row, $base ) ) {
-						$row = $latest;
-					} else {
-						// Carry concurrent server updates unless this writer explicitly edited them.
-						foreach ( array( 'refunded_amount', 'refunds', 'events', 'seen_events', 'commands' ) as $key ) {
-							if ( $row[ $key ] === $base[ $key ] ) {
-								$row[ $key ] = $latest[ $key ];
-							}
-						}
-						if ( ( $read_row['updated_at_gmt'] ?? null ) === $requested_stamp && $this->valid_time( $previous['updated_at_gmt'] ?? null ) ) {
-							$row['updated_at_gmt'] = $previous['updated_at_gmt'];
-						}
-					}
-				}
-				$stamp    = null === $previous ? null : $this->valid_time( $previous['updated_at_gmt'] ?? null );
-				if ( null !== $stamp && $this->same_content( $this->normalize_row( $fresh, $previous ), $row ) ) {
-					$row['updated_at_gmt'] = $stamp;
-				}
-				$normalized[] = $row;
-				unset( $stored[ $row['id'] ] );
-			}
-			foreach ( $deleted_ids as $id ) {
-				unset( $stored[ strtolower( $id ) ] );
-			}
-			// Absence is not deletion: a hook may have read before another route appended a leg.
-			$normalized = array_merge( $normalized, array_values( $stored ) );
-			$this->stage( $order, $normalized );
-			$order_id = $order->get_id();
-			$this->server_saves[ $order_id ] = ( $this->server_saves[ $order_id ] ?? 0 ) + 1;
-			try {
-				if ( $derive ) {
-					$this->derive( $order, $normalized );
-				}
-				// The before-save keeper rebuilds this index again from the final ledger; that is intentional.
-				$order->save();
-			} finally {
-				if ( 0 === --$this->server_saves[ $order_id ] ) {
-					unset( $this->server_saves[ $order_id ] );
-				}
-			}
-			// record()/adopt() return through the supplied object; refresh core and meta together.
-			$caller->get_data_store()->read( $caller );
-			$caller->read_meta_data( true );
-			// The keeper may legitimately restore closure stamps during save.
-			if ( ( $this->stored( $order->get_id(), false )['payments'] ?? null ) !== $this->read( $order ) ) {
-				throw new Ledger_Persistence_Exception( 'WCPOS payment ledger was not persisted.' );
-			}
-		} finally {
-			// A failed WC save can skip after-save, including nested payment_complete() saves.
-			// Release only keeper acquisitions made here; an enclosing save still owns its lock.
-			while ( ( $this->closure_locks[ $order->get_id() ] ?? 0 ) > $keeper_count ) {
-				$this->release_closure_lock( $order );
-			}
-			$lock->release( $order->get_id() );
-		}
-	}
-
-	/**
 	 * The one write of payment rows: lock, fresh read, heal, the change, the rows (S1), the paid transition
 	 * (S2), the completion (S3), deferred work, unlock. S2 and S3 are functions of storage, so a retry of the same command
 	 * heals a crash between them (ADR 0040, amended). A change breaking a row's invariants (I5) is a LogicException.
@@ -2507,14 +2290,7 @@ class Ledger {
 		};
 		$keys   = array( self::INDEX_META_KEY, self::PAYMENT_ID_META_KEY, self::LIVE_LEG_META_KEY, self::SESSION_META_KEY, Gateway_Submission::ATTEMPTS_META_KEY, Command_Log::META_KEY );
 		$want   = array_map( static fn( $key ) => $values( $order, $key ), $keys );
-		$this->server_saves[ $id ] = ( $this->server_saves[ $id ] ?? 0 ) + 1;
-		try {
-			self::saving( $id, fn() => $order->save() );
-		} finally {
-			if ( 0 === --$this->server_saves[ $id ] ) {
-				unset( $this->server_saves[ $id ] );
-			}
-		}
+		$order->save();
 		// The rows, their four indexes, the attempt fates their coverage settled, and every order property staged.
 		$check = $this->fresh( $id );
 		$kept  = $this->stored( $id, true );
@@ -2551,15 +2327,9 @@ class Ledger {
 	 * @throws Ledger_Persistence_Exception When the paid status, the rows or the completion does not reach storage.
 	 */
 	private function complete( WC_Order $order, array $rows ): WC_Order {
-		$id       = $order->get_id();
-		$previous = self::$deriving;
-		// The completion is the ledger's, so it has a register origin (Completion_Stamp::has_origin()).
-		self::$deriving = $id;
-		try {
-			$order->payment_complete();
-		} finally {
-			self::$deriving = $previous;
-		}
+		$id = $order->get_id();
+		// The completion is the ledger's, so it has a register origin (Completion_Stamp::has_origin(): is_writing()).
+		$order->payment_complete();
 		$order = $this->fresh( $id );
 		if ( ! self::paid_now( $order ) ) {
 			throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid transition was not persisted.' );
@@ -2610,7 +2380,7 @@ class Ledger {
 		}
 		if ( null === $order->get_date_paid( 'edit' ) ) {
 			$order->set_date_paid( time() );
-			self::saving( $order->get_id(), fn() => $order->save() );
+			$order->save();
 			$order = $this->fresh( $order->get_id() );
 			if ( ! self::paid_now( $order ) ) {
 				throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid date was not persisted.' );
@@ -2631,15 +2401,9 @@ class Ledger {
 	 * @throws Ledger_Persistence_Exception When any of it does not reach storage.
 	 */
 	private function finish( WC_Order $order ): WC_Order {
-		$id       = $order->get_id();
-		$previous = self::$deriving;
-		self::$deriving = $id;
-		try {
-			Completion_Stamp::memoise( $order ); // The completion names the register a sent submit came from.
-			Completion_Stamp::stamp( $order );
-		} finally {
-			self::$deriving = $previous;
-		}
+		$id = $order->get_id();
+		Completion_Stamp::memoise( $order ); // The completion names the register a sent submit came from.
+		Completion_Stamp::stamp( $order );
 		$order    = $this->fresh( $id );
 		$standing = Completion_History::of( $order )->standing();
 		if ( null === $standing ) {
@@ -2871,100 +2635,6 @@ class Ledger {
 				$order->add_meta_data( self::INDEX_META_KEY, $method, false );
 			}
 		}
-	}
-
-	/**
-	 * Derive WooCommerce fields without changing the order total.
-	 *
-	 * @param WC_Order $order   Order object.
-	 * @param array    $rows    Payment rows.
-	 * @param bool     $closing Whether `close` asked: only it may complete an editable order outside the projected set (on-hold).
-	 */
-	public function derive( WC_Order $order, array $rows, bool $closing = false ): void {
-		$counting = array_values(
-			array_filter(
-				$rows,
-				static function ( array $row ): bool {
-					return in_array( $row['status'] ?? '', self::COUNTING_STATUSES, true );
-				}
-			)
-		);
-		$candidates = array_values(
-			array_filter(
-				$counting,
-				static function ( array $row ): bool {
-					return 'stored_value' !== ( $row['kind'] ?? '' );
-				}
-			)
-		);
-		$candidates = $candidates ? $candidates : $counting;
-		$selected   = null;
-		foreach ( $candidates as $row ) {
-			$amount = Money::minor( $row['amount'] );
-			$time   = $this->timestamp( $row['captured_at_gmt'] ?? null );
-			if ( null === $selected || $amount > Money::minor( $selected['amount'] ) || ( Money::minor( $selected['amount'] ) === $amount && $time < $this->timestamp( $selected['captured_at_gmt'] ?? null ) ) ) {
-				$selected = $row;
-			}
-		}
-		// A sent gateway order (awaiting the customer off-till) is POS-owned whatever status
-		// the gateway left it in, so it re-enters the projection the moment money lands.
-		$stamped = null !== Gateway_Submission::read_stamp( $order );
-		// No counting rows: leave payment_method/title untouched (the cart, or every leg voided).
-		if ( $selected ) {
-			// The completion this may cause still names the register a sent submit came from.
-			Completion_Stamp::memoise( $order );
-			Gateway_Submission::clear_stamp( $order );
-			$titles = array();
-			foreach ( $counting as $row ) {
-				$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
-				$title      = $descriptor ? $descriptor['title'] : $row['method_id'];
-				if ( ! in_array( $title, $titles, true ) ) {
-					$titles[] = $title;
-				}
-			}
-			$order->set_payment_method( $selected['method_id'] );
-			$order->set_payment_method_title( implode( ' + ', $titles ) );
-			$refs = is_array( $selected['provider_refs'] ?? null ) ? $selected['provider_refs'] : array();
-			$order->set_transaction_id( (string) ( $refs['payment_intent'] ?? $refs['transaction_id'] ?? '' ) );
-		}
-
-		// Only the ledger-managed states are projected; a completed/processing/on-hold/refunded
-		// order is never pulled back by a later ledger write (a refused row, a void of a leg).
-		if ( ! in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && ! $stamped && ! ( $closing && $order->is_editable() ) ) {
-			return;
-		}
-		$paid  = Money::minor( $this->paid( $rows ) );
-		$total = Money::minor( $order->get_total() );
-		// Covered on the signed balance: a refund allocated after an earlier completion is money
-		// that left, so gross captured money alone does not complete a reopened sale again.
-		// A close completes a zero total through payment_complete(), the way WooCommerce's
-		// process_order_without_payment() does; a money write never does.
-		if ( ( $total > 0 || $closing ) && $this->signed_balance( $order, $rows ) <= 0 ) {
-			if ( 0 === self::$deriving ) {
-				self::$deriving = $order->get_id();
-				try {
-					// Woo sets date_paid, reduces stock and fires woocommerce_payment_complete;
-					// Orders::payment_complete_order_status() lands the per-gateway status
-					// because payment_method was set above.
-					$order->payment_complete();
-				} finally {
-					self::$deriving = 0;
-				}
-				// A completion reached outside write() still settles the commands that owed it; the caller saves.
-				$this->advance( $order, $rows, Completion_History::of( $this->fresh( $order->get_id() ) )->standing() );
-			}
-			return;
-		}
-		$pending = (bool) array_filter(
-			$rows,
-			static function ( array $row ): bool {
-				return 'pending' === ( $row['status'] ?? '' );
-			}
-		);
-		if ( ! $selected && $stamped ) {
-			return;
-		}
-		$order->set_status( $pending ? 'pending' : ( $paid > 0 ? 'pos-partial' : 'pos-open' ) );
 	}
 
 	/**
@@ -3229,16 +2899,6 @@ class Ledger {
 	 */
 	private function valid_time( $value ): ?string {
 		return is_string( $value ) && false !== strtotime( $value ) ? $value : null;
-	}
-
-	/**
-	 * Sort missing timestamps after real timestamps.
-	 *
-	 * @param mixed $value Time value.
-	 */
-	private function timestamp( $value ): int {
-		$timestamp = is_string( $value ) ? strtotime( $value ) : false;
-		return false === $timestamp ? PHP_INT_MAX : $timestamp;
 	}
 
 	/**

@@ -202,8 +202,8 @@ class Webview_Passthrough {
 	 */
 	private static function defer_mint( WC_Order $order, array $overrides ): void {
 		$id = $order->get_id();
-		if ( ! wcpos_is_pos_order( $order ) || Ledger::is_deriving( $id ) || Gateway_Submission::is_submitting( $id ) ) {
-			return; // The ledger's own transition, or the submit, records this payment itself.
+		if ( ! wcpos_is_pos_order( $order ) || Ledger::is_writing( $id ) || Gateway_Submission::is_submitting( $id ) ) {
+			return; // The ledger's own write, or the submit, records this payment itself.
 		}
 		$work = static function () use ( $id, $overrides ): void {
 			$order = wc_get_order( $id );
@@ -242,7 +242,7 @@ class Webview_Passthrough {
 				return null;
 			}
 		}
-		if ( Ledger::is_deriving( $order->get_id() ) || Gateway_Submission::is_submitting( $order->get_id() ) ) {
+		if ( Ledger::is_writing( $order->get_id() ) || Gateway_Submission::is_submitting( $order->get_id() ) ) {
 			return null;
 		}
 

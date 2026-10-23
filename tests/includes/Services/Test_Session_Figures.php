@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Shared tender rules and instance-local source reads. */
 class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
@@ -390,7 +391,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		}
-		$ledger->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 		$refund = new \WC_Order_Refund();
 		$refund->set_parent_id( $order->get_id() );
 		$refund->set_amount( '3' );
@@ -448,7 +449,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			'amount' => '10',
 			'status' => 'captured',
 		);
-		Ledger::instance()->save( $order, array_map( static fn( $fields ) => array_merge( $base, $fields, array( 'id' => wp_generate_uuid4() ) ), $rows ), false );
+		Ledger_Seed::rows( $order, array_map( static fn( $fields ) => array_merge( $base, $fields, array( 'id' => wp_generate_uuid4() ) ), $rows ), false );
 		return wc_get_order( $order->get_id() );
 	}
 
@@ -554,7 +555,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$rows[0]['status'] = 'captured';
 
 		// Act.
-		Ledger::instance()->save( $order, $rows, false );
+		Ledger_Seed::rows( $order, $rows, false );
 
 		// Assert.
 		$this->assertSame( array( $session['id'] ), $this->indexed_sessions( $order ) );

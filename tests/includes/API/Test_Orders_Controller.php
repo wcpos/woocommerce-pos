@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 use const WCPOS\WooCommercePOS\VERSION;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /**
  * @internal
@@ -2482,7 +2483,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		// Act.
-		\WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->save( wc_get_order( $order->get_id() ), $rows, false );
+		Ledger_Seed::rows( wc_get_order( $order->get_id() ), $rows, false );
 		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
 		$request->set_param( 'payment_method', 'stripe' );
 		$response = $this->server->dispatch( $request );

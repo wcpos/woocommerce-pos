@@ -1448,14 +1448,10 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A command owing S2 whose sale then completed by another path is settled: after a reopen its rows
-	 * still cover, a write with no change runs no paid transition (rule 3), whatever the clock says.
-	 *
-	 * @dataProvider other_completions
-	 *
-	 * @param string $path How the sale completed: the ledger's derive() inside a save, or a status set outside the ledger.
+	 * A command owing S2 whose sale then completed by a status set outside the ledger is settled: after a reopen
+	 * its rows still cover, a write with no change runs no paid transition (rule 3), whatever the clock says.
 	 */
-	public function test_write_without_change_after_owed_sale_completed_elsewhere_runs_no_paid_transition( string $path ): void {
+	public function test_write_without_change_after_owed_sale_completed_elsewhere_runs_no_paid_transition(): void {
 		// Arrange: a record that stored its rows and owes S2.
 		$order = $this->create_pos_order();
 		$id    = $order->get_id();
@@ -1470,12 +1466,8 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		}
 		$this->assertSame( 'rows', $this->stored_rows( $id )[0]['commands'][ $input['id'] ]['phase'] ?? null, 'Precondition: owed.' );
 		$elsewhere = $this->fresh( $id );
-		if ( 'derive' === $path ) {
-			Ledger::instance()->save( $elsewhere, $this->stored_rows( $id ) );
-		} else {
-			$elsewhere->set_status( 'completed' );
-			$elsewhere->save();
-		}
+		$elsewhere->set_status( 'completed' );
+		$elsewhere->save();
 		$this->assertSame( 1, (int) Completion_History::of( $this->fresh( $id ) )->standing()['n'], 'Precondition: completed elsewhere.' );
 		$reopened = $this->fresh( $id );
 		$reopened->set_status( 'pos-open' );
@@ -1496,37 +1488,6 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( 'pos-open', $this->stored_status( $id ) );
 		$this->assertNull( $written->completion );
 		$this->assertCount( 1, Completion_History::of( $this->fresh( $id ) )->entries() );
-	}
-
-	/** Completions that do not run through write(). */
-	public function other_completions(): array {
-		return array(
-			'derive() inside a ledger save' => array( 'derive' ),
-			'a status set outside the ledger' => array( 'status' ),
-		);
-	}
-
-	/** A sale the ledger's derive() completes advances the commands owing it, as S3 does. */
-	public function test_derive_completing_an_owed_sale_advances_its_commands(): void {
-		// Arrange.
-		$order = $this->create_pos_order();
-		$id    = $order->get_id();
-		$input = $this->tender( '92.95' );
-		$undo  = $this->inject( 'paid', $id );
-		try {
-			Ledger::instance()->record( $order, $input, array(), $this->record_command( $input ) );
-		} catch ( Ledger_Persistence_Exception $error ) {
-			unset( $error );
-		} finally {
-			$undo();
-		}
-
-		// Act.
-		Ledger::instance()->save( $this->fresh( $id ), $this->stored_rows( $id ) );
-
-		// Assert.
-		$this->assertSame( 'completed', $this->stored_status( $id ) );
-		$this->assertArrayNotHasKey( 'phase', $this->stored_rows( $id )[0]['commands'][ $input['id'] ] );
 	}
 
 	/** An authorized offline record whose parked webhook captured the balance completes the sale once; its replay is a no-op. */
