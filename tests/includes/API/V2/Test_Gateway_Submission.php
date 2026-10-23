@@ -8,9 +8,14 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
@@ -1150,6 +1155,41 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 409, $this->cancel( $order, $attempt )->get_status() );
 	}
 
+	/** A submit settled on the gateway's stored Pending status, replayed with the same command, reads its answer and moves nothing. */
+	public function test_submit_settled_on_stored_pending_replayed_with_the_same_command_leaves_the_status(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$first       = $this->gateway_command( $order, 'submit', $body );
+		$transitions = array();
+		$observe     = static function ( $id, $from, $to ) use ( &$transitions ): void {
+			$transitions[] = $from . '>' . $to;
+		};
+		add_action( 'woocommerce_order_status_changed', $observe, 10, 3 );
+
+		// Act.
+		try {
+			$replayed = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_order_status_changed', $observe, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 'settled', $first->get_data()['outcome'], wp_json_encode( $first->get_data() ) );
+		$this->assertSame( 200, $replayed->get_status(), wp_json_encode( $replayed->get_data() ) );
+		$this->assertSame( 'settled', $replayed->get_data()['outcome'] );
+		$this->assertSame( array(), $transitions );
+		$this->assertSame( 'pending', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
 	/** A stored status the gateway did not reach is the ordinary send-and-leave. */
 	public function test_submit_stored_status_not_reached_is_sent(): void {
 		// Arrange.
@@ -1472,6 +1512,215 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		return array();
+	}
+
+	/** A sent attempt is money in motion, so the sale keeps its prevent-overselling hold; cancelling it gives the stock back. */
+	public function test_submit_sent_keeps_the_stock_hold_and_cancel_releases_it(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange.
+				$attempt = wp_generate_uuid4();
+
+				// Act.
+				$sent    = $this->submit( $a, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+				$held    = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+				$cancel  = $this->cancel( $a, $attempt );
+				$shelved = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+
+				// Assert.
+				$this->assertSame( 'sent', $sent->get_data()['outcome'], wp_json_encode( $sent->get_data() ) );
+				$this->assertWPError( $held );
+				$this->assertSame( 'wcpos_insufficient_stock', $held->get_error_code() );
+				$this->assertSame( 200, $cancel->get_status(), wp_json_encode( $cancel->get_data() ) );
+				$this->assertInstanceOf( \WC_Order::class, $shelved );
+			}
+		);
+	}
+
+	/**
+	 * A settle whose write fails after the gateway ran leaves the attempt stranded with a note for staff; cancelling it
+	 * closes the attempt and gives the stock back without reopening the sale the gateway settled.
+	 */
+	public function test_settled_write_failing_after_dispatch_strands_the_attempt_and_cancel_keeps_the_settled_status(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange: the gateway lands the stored Pending status; every save carrying the settled fate is lost.
+				$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
+				$attempt = wp_generate_uuid4();
+				$lose    = static function ( $saving ) use ( $attempt ): void {
+					if ( 'settled' === ( Gateway_Submission::read_attempts( $saving )[ $attempt ] ?? null ) ) {
+						throw new \RuntimeException( 'Simulated lost settle' ); // WooCommerce swallows it.
+					}
+				};
+				add_action( 'woocommerce_before_order_object_save', $lose, PHP_INT_MAX );
+
+				// Act.
+				try {
+					$failed = $this->submit( $a, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+				} finally {
+					remove_action( 'woocommerce_before_order_object_save', $lose, PHP_INT_MAX );
+				}
+				$stranded = wc_get_order( $a->get_id() );
+				$held     = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+				$cancel   = $this->cancel( $a, $attempt );
+				$shelved  = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+
+				// Assert.
+				$this->assertSame( 409, $failed->get_status(), wp_json_encode( $failed->get_data() ) );
+				$this->assertSame( 'woo_rxdb_sync_record_locked', $failed->get_data()['code'] );
+				$this->assertSame( array( $attempt => 'sent' ), Gateway_Submission::read_attempts( $stranded ) );
+				$this->assertNull( Gateway_Submission::read_stamp( $stranded ) );
+				$notes = implode( "\n", wp_list_pluck( wc_get_order_notes( array( 'order_id' => $a->get_id() ) ), 'content' ) );
+				$this->assertStringContainsString( 'the POS could not record it', $notes );
+				$this->assertWPError( $held );
+				$this->assertSame( 200, $cancel->get_status(), wp_json_encode( $cancel->get_data() ) );
+				$cancelled = wc_get_order( $a->get_id() );
+				$this->assertSame( 'pending', $cancelled->get_status() );
+				$this->assertSame( array( $attempt => 'cancelled' ), Gateway_Submission::read_attempts( $cancelled ) );
+				$this->assertInstanceOf( \WC_Order::class, $shelved );
+				$this->assertSame( 1, Sent_Test_Gateway::$calls );
+			}
+		);
+	}
+
+	/**
+	 * With prevent-overselling on and one unit of stock, run $work with two open POS orders for it; A holds the unit.
+	 *
+	 * @param callable $work Receives the two orders (a, b).
+	 */
+	private function with_one_unit_on_two_orders( callable $work ): void {
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		try {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( '10' );
+			$product->set_price( '10' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$orders = array();
+			foreach ( array( 'a', 'b' ) as $key ) {
+				$orders[ $key ] = wc_create_order();
+				$orders[ $key ]->set_created_via( 'woocommerce-pos' );
+				$orders[ $key ]->set_status( 'pos-open' );
+				$orders[ $key ]->add_product( $product, 1 );
+				$orders[ $key ]->calculate_totals( false );
+				$orders[ $key ]->save();
+			}
+			$this->assertInstanceOf( \WC_Order::class, Stock_Validator::instance()->validate_checkout( $orders['a'] ) );
+			$work( $orders['a'], $orders['b'] );
+		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
+	}
+
+	/**
+	 * A paying submit failing at the held write, at the gateway's own paid save, or at the minted row's completion,
+	 * then retried with the same command: dispatched once, one row, one completion, one fiscal sale, stock reduced once.
+	 *
+	 * @dataProvider paying_submit_failures
+	 *
+	 * @param string $stage  Where the first request fails.
+	 * @param int    $status The first request's answer.
+	 */
+	public function test_paying_submit_failing_at_stage_then_retried_records_once( string $stage, int $status ): void {
+		// Arrange: ten units of a managed-stock product, one sold on an open POS order.
+		global $wpdb;
+		$product = ProductHelper::create_simple_product();
+		$product->set_regular_price( '92.95' );
+		$product->set_price( '92.95' );
+		$product->set_manage_stock( true );
+		$product->set_stock_quantity( 10 );
+		$product->save();
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( false );
+		$order->save();
+		$id      = $order->get_id();
+		$attempt = wp_generate_uuid4();
+		$body    = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'values'     => array(),
+			)
+		);
+		$undo = $this->fail_paying_submit_at( $stage, $id, $attempt );
+
+		// Act.
+		try {
+			$first = $this->gateway_command( $order, 'submit', $body, 'wcpos_paid_test' );
+		} finally {
+			$undo();
+		}
+		$wpdb->last_error = '';
+		$retried          = $this->gateway_command( $order, 'submit', $body, 'wcpos_paid_test' );
+
+		// Assert.
+		$this->assertSame( $status, $first->get_status(), wp_json_encode( $first->get_data() ) );
+		$this->assertSame( 200, $retried->get_status(), wp_json_encode( $retried->get_data() ) );
+		$this->assertSame( 'recorded', $retried->get_data()['outcome'] );
+		$this->assertSame( $attempt, $retried->get_data()['payment']['id'] ?? null );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+		$stored = wc_get_order( $id );
+		$this->assertContains( $stored->get_status(), wc_get_is_paid_statuses() );
+		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertSame( array( $attempt => 'paid' ), Gateway_Submission::read_attempts( $stored ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertSame( array( $attempt ), Completion_History::of( $stored )->standing()['payment_ids'] );
+		$this->assertSame(
+			1,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type'     => 'sale',
+				)
+			)
+		);
+		$this->assertSame( 9, wc_get_product( $product->get_id() )->get_stock_quantity() );
+	}
+
+	/** The held write's attempt lost; the gateway's own paid save lost (the row's write carries the paid transition); the completion lost. */
+	public function paying_submit_failures(): array {
+		return array(
+			'at the held write'               => array( 'held', 409 ),
+			'at the gateway paid save'        => array( 'paid', 200 ),
+			'at the minted row\'s completion' => array( 'completion', 409 ),
+		);
+	}
+
+	/**
+	 * Make one step of the next paying submit fail.
+	 *
+	 * @param string $stage   `held`, `paid` or `completion`.
+	 * @param int    $id      Order id.
+	 * @param string $attempt Attempt id.
+	 * @return callable Undo.
+	 */
+	private function fail_paying_submit_at( string $stage, int $id, string $attempt ): callable {
+		if ( 'completion' === $stage ) {
+			// Every write of the completion history reaches nothing.
+			$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Completion_Stamp::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+			add_filter( 'query', $lose );
+			return static fn() => remove_filter( 'query', $lose );
+		}
+		$fail = static function ( $saving ) use ( $stage, $id, $attempt ): void {
+			if ( $saving->get_id() !== $id ) {
+				return;
+			}
+			if ( 'held' === $stage && 'sent' === ( Gateway_Submission::read_attempts( $saving )[ $attempt ] ?? null ) ) {
+				$saving->delete_meta_data( Gateway_Submission::ATTEMPTS_META_KEY );
+			}
+			if ( 'paid' === $stage && Gateway_Submission::is_submitting( $id ) && $saving->get_date_paid( 'edit' ) ) {
+				throw new \RuntimeException( 'The gateway paid save was lost' ); // WooCommerce swallows it.
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $fail, PHP_INT_MAX );
+		return static fn() => remove_action( 'woocommerce_before_order_object_save', $fail, PHP_INT_MAX );
 	}
 
 	/** Pin 8: a submit that answered `sent` replays from the command map, even once the attempt history lost it. */
