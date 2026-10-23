@@ -3908,10 +3908,10 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
-	/** #2362 review: a derive save after a landed settle that strips the allocation and entry is repaired before the hook fires. */
+	/** #2362 review: a paid save after a landed settle that strips the allocation and entry is repaired before the hook fires. */
 	public function test_a_derive_save_that_strips_the_settled_allocation_is_repaired(): void {
 		// Arrange: count the order's saves after the provider call; strip the refund and every command entry on the
-		// saves derive() makes (payment_complete() inside Ledger::is_deriving()), leaving the status they carry.
+		// save payment_complete() makes (inside Ledger::is_deriving()), leaving the status it carries.
 		list( $order, $row, $refund ) = $this->reopened_sale_owing_twenty();
 		$command   = $this->refund_command();
 		$order_id  = $order->get_id();
@@ -3945,9 +3945,10 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$stored = $this->stored_row_of( $order_id, $row['id'] );
 		$again  = Ledger::instance()->refund( wc_get_order( $order_id ), $row['id'], $refund_id, '20.00', $this->refund_command() );
 
-		// Assert: save 1 after the call is the settle, save 2 is derive()'s payment_complete() save, save 3 the re-persist.
+		// Assert: save 1 after the call is the settle's rows (S1), save 2 the paid save (S2); the rows S1 stored are
+		// restored meta-only before the completion counts them (ADR 0040 amendment), so no third save.
 		$this->assertSame( array( 2 ), $stripped );
-		$this->assertSame( 3, $after );
+		$this->assertSame( 2, $after );
 		$this->assertSame( 'succeeded', $this->allocations_of( $result, $refund_id )[0]['status'] );
 		$this->assertSame( 'succeeded', $this->allocations_of( $stored, $refund_id )[0]['status'] );
 		$this->assertArrayHasKey( $command->id(), $stored['commands'] );
@@ -3957,8 +3958,12 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
-	/** #2362 review: a settled refund that storage will not keep after the derive save falls back to its reservation. */
-	public function test_a_settled_refund_storage_will_not_keep_falls_back_to_its_reservation(): void {
+	/**
+	 * #2362 review, re-expressed through write() (c2-4): a settled refund that every save after its rows save strips is
+	 * kept, because the paid save carries no ledger meta and the rows S1 read back are restored before S3 counts them.
+	 * (Before c2-4 the settle and the paid transition were separate saves, and this fell back to the reservation.)
+	 */
+	public function test_a_settled_refund_later_saves_strip_stands_and_the_sale_completes_once(): void {
 		// Arrange: the settle (the first save after the provider call) lands; every later save that carries
 		// the refund's allocation as succeeded has it stripped, and a pending allocation goes through.
 		list( $order, $row, $refund ) = $this->reopened_sale_owing_twenty();
@@ -3993,17 +3998,17 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$again  = Ledger::instance()->refund( wc_get_order( $order_id ), $row['id'], $refund_id, '20.00', $this->refund_command() );
 		remove_action( 'woocommerce_before_order_object_save', $strip, PHP_INT_MAX );
 
-		// Assert: the derive save and both re-persists of the settled row lost it; the reservation landed.
-		$this->assertSame( 3, $lost );
-		$this->assertSame( array( $this->reservation( $refund_id, '20.00' ) ), $this->allocations_of( $result, $refund_id ) );
-		$this->assertSame( array( $this->reservation( $refund_id, '20.00' ) ), $this->allocations_of( $stored, $refund_id ) );
+		// Assert: only the paid save (S2) lost the settled row; the restored rows are what the completion counted.
+		$this->assertSame( 1, $lost );
+		$this->assertSame( 'succeeded', $this->allocations_of( $result, $refund_id )[0]['status'] );
+		$this->assertSame( 'succeeded', $this->allocations_of( $stored, $refund_id )[0]['status'] );
+		$this->assertCount( 1, $this->allocations_of( $stored, $refund_id ) );
 		$this->assertArrayHasKey( $command->id(), $stored['commands'] );
-		$logs = $this->stranded_logs();
-		$this->assertCount( 1, $logs );
-		$this->assertStringContainsString( 'the provider settled it, but storage will not keep the settled allocation', $logs[0] );
-		$this->assertCount( 1, $this->stranded_notes( $order_id ) );
-		$this->assertSame( array(), $seen );
-		$this->assertSame( 'pending', $this->allocations_of( $again, $refund_id )[0]['status'] );
+		$this->assertSame( array(), $this->stranded_logs() );
+		$this->assertSame( array(), $this->stranded_notes( $order_id ) );
+		$this->assertSame( array( 'succeeded' ), $seen );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_History::of( wc_get_order( $order_id ) )->entries(), 'n' ) );
+		$this->assertSame( 'succeeded', $this->allocations_of( $again, $refund_id )[0]['status'] );
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 

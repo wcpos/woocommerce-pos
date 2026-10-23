@@ -453,7 +453,7 @@ final class Completion_Stamp {
 	 * A sent attempt the merchant (or a provider) marked paid without payment_complete() has no row:
 	 * nothing else will mint one outside a window. Defer minting it as the submit does for a paying
 	 * gateway, the attempt id as the row id, so the completion names the payment, and stamp after it;
-	 * Ledger::save() marks the attempt paid. Inside payment_complete() the passthrough defers its mint instead.
+	 * Ledger::write() marks the attempt paid. Inside payment_complete() the passthrough defers its mint instead.
 	 *
 	 * @param WC_Order $order Fresh order, paid, read under the lock.
 	 */

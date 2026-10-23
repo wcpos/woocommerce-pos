@@ -867,18 +867,21 @@ class Ledger {
 				// side: a determinate refusal on the retry ends it, as the sweeper would, so it
 				// stops reserving the balance. An answered row keeps its provider object.
 				if ( self::is_unanswered( $replayed ) && true !== ( $resumed->get_error_data()['indeterminate'] ?? false ) ) {
-					$failed = $this->apply_transition(
-						$replayed,
-						array(
-							'status' => 'failed',
-							'failure_reason' => $resumed->get_error_code(),
-						)
+					$fail = array(
+						'status'         => 'failed',
+						'failure_reason' => $resumed->get_error_code(),
 					);
-					if ( ! is_wp_error( $failed ) ) {
-						// The command failed, so it keeps no entry (spec §5.2): its retry is a fresh command.
-						$this->replace_and_save( $order, $rows, $this->normalize_row( $order, Command_Log::without_on_row( $failed, null === $command ? '' : $command->id() ) ) );
-						$this->release_hold_if_idle( $order );
-					}
+					$this->write(
+						$order,
+						function ( Ledger_Draft $draft ) use ( $id, $fail, $command ): void {
+							$failed = $this->apply_transition( (array) $draft->row( $id ), $fail );
+							if ( ! is_wp_error( $failed ) ) {
+								// The command failed, so it keeps no entry (spec §5.2): its retry is a fresh command.
+								$draft->put( Command_Log::without_on_row( $failed, null === $command ? '' : $command->id() ) );
+							}
+						}
+					);
+					$this->refresh( $order );
 				}
 				return $resumed;
 			}
@@ -952,26 +955,32 @@ class Ledger {
 			)
 		);
 		// Persist before contacting the provider: a lost answer must not erase the leg.
-		$rows[] = $row;
-		$this->save( $order, $rows, false );
+		$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ), self::MODE_HOLD );
+		$this->refresh( $order );
 		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] );
 		$new = $handler ? $handler->intent( $row, $context ) : $this->unsupported();
 		if ( is_wp_error( $new ) ) {
-			if ( true === ( $new->get_error_data()['indeterminate'] ?? false ) ) {
-				$row['events'][] = array(
-					't' => gmdate( 'c' ),
-					'level' => 'warning',
-					'message' => 'Provider did not answer: ' . $new->get_error_code(),
-				);
-				$this->replace_and_save( $order, $rows, $row, false );
-				$this->derive( $order, $this->read( $order ) );
-				self::saving( $order->get_id(), fn() => $order->save() );
-			} else {
-				$rows = array_filter( $rows, static fn( $saved ) => $saved['id'] !== $row['id'] );
-				// Delete only this refused intent; omitted concurrent rows must survive.
-				$this->save( $order, $rows, false, array( $row['id'] ) );
-				$this->release_hold_if_idle( $order );
-			}
+			$indeterminate = true === ( $new->get_error_data()['indeterminate'] ?? false );
+			$event         = array(
+				't'       => gmdate( 'c' ),
+				'level'   => 'warning',
+				'message' => 'Provider did not answer: ' . $new->get_error_code(),
+			);
+			// Unanswered, the leg stays with a warning and the order projects it; refused, only this intent goes.
+			$this->write(
+				$order,
+				static function ( Ledger_Draft $draft ) use ( $row, $indeterminate, $event ): void {
+					$stored = $draft->row( $row['id'] );
+					if ( ! $indeterminate ) {
+						$draft->drop( $row['id'] );
+					} elseif ( $stored ) {
+						$stored['events'][] = $event;
+						$draft->put( $stored );
+					}
+				},
+				$indeterminate ? self::MODE_AUTO : self::MODE_HOLD
+			);
+			$this->refresh( $order );
 			return $new;
 		}
 		$handoff = $new['handoff'] ?? array();
@@ -985,8 +994,8 @@ class Ledger {
 		if ( is_wp_error( $settled ) ) {
 			return $settled;
 		}
-		$this->derive( $order, $this->read( $order ) );
-		self::saving( $order->get_id(), fn() => $order->save() );
+		$this->write( $order );
+		$this->refresh( $order );
 		return array(
 			'payment' => $this->find( $order, $row['id'] ),
 			'handoff' => $handoff,
@@ -1049,8 +1058,7 @@ class Ledger {
 	 * @return array|WP_Error
 	 */
 	public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true, ?Money_Command $command = null ) {
-		$rows = $this->read( $order );
-		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		$row = $this->find( $order, $id );
 		if ( ! $row ) {
 			return $this->not_found();
 		}
@@ -1066,37 +1074,35 @@ class Ledger {
 		if ( is_wp_error( $confirmed ) ) {
 			return $confirmed;
 		}
-		list( $applied, $tip, $mismatch ) = $confirmed;
+		list( $applied, , $mismatch ) = $confirmed;
 		if ( $mismatch && Completion_History::of( $order )->counted( $row['id'] ) ) {
 			$this->note_mismatch( $order, $row, $new ); // Counted money leaves only through a refund.
 			return $row;
 		}
-		if ( $mismatch ) {
-			$applied = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $applied ), $derive );
-			$this->release_hold_if_idle( $order );
+		if ( ! $mismatch && ! is_string( $event ) && $this->with_command( $applied, $command ) === $row ) {
+			return $row; // Nothing to store: a status poll that changed nothing writes nothing.
+		}
+		// One write: the result, its tip fee and totals (confirm()), and the command's entry land in S1; only a mismatch keeps no entry.
+		$failed = $this->write(
+			$order,
+			function ( Ledger_Draft $draft ) use ( $id, $new, $command ) {
+				$failed = $this->confirm( $draft, $id, $new );
+				$row    = $draft->row( $id );
+				if ( null === $failed && $row ) {
+					$draft->put( $this->with_command( $row, $command ) );
+				}
+				return $failed;
+			},
+			$derive ? self::MODE_AUTO : self::MODE_HOLD
+		)->answer;
+		$this->refresh( $order );
+		if ( is_wp_error( $failed ) ) {
+			return $failed;
+		}
+		$applied = $this->find( $order, $id ) ?? $applied;
+		if ( null !== $failed ) {
 			$this->note_mismatch( $order, $row, $new );
 			return $this->refusal_error( $applied, $order );
-		}
-		if ( $tip > 0 ) {
-			// update_taxes() and calculate_totals() each save the order before the row: a retry after a
-			// failed row save finds the fee and adds none, but still recalculates (either save may have failed).
-			$fee = $this->tip_fee( $order, $row, $tip );
-			if ( $fee ) {
-				$order->add_item( $fee );
-			}
-			$order->update_taxes();
-			$order->calculate_totals( false );
-		}
-		if ( is_string( $event ) ) {
-			$applied['seen_events'][] = $event;
-			$applied['seen_events'] = array_slice( $applied['seen_events'], -self::SEEN_EVENTS_MAX );
-		}
-		$applied = $this->with_command( $applied, $command );
-		if ( $applied !== $row ) {
-			$applied = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $applied ), $derive );
-			if ( in_array( $applied['status'], array( 'failed', 'voided' ), true ) ) {
-				$this->release_hold_if_idle( $order );
-			}
 		}
 		return $applied;
 	}
@@ -1263,9 +1269,9 @@ class Ledger {
 	}
 
 	/**
-	 * Allocate an existing WooCommerce refund to a payment row, in two verified saves around the
-	 * provider (ADR 0040 rule 8): reserved `pending` before the call, the answer after. Nothing
-	 * thrown escapes; an outcome the server cannot know returns the stored, still pending row.
+	 * Allocate an existing WooCommerce refund to a payment row, in two writes around the provider
+	 * (ADR 0040 rules 7 and 8): reserved `pending` before the call, the answer after. Nothing thrown
+	 * escapes; when the second write fails, the stored reservation is the answer, marked for a human.
 	 *
 	 * @param WC_Order           $order     Order object.
 	 * @param string             $id        Payment ID.
@@ -1315,22 +1321,26 @@ class Ledger {
 		if ( ! $handler ) {
 			return $this->unsupported();
 		}
-		// Rule 8, save 1: the allocation is reserved `pending`, with the command's entry, before the provider is asked.
+		// Rule 8, write 1: the allocation is reserved `pending`, with the command's entry, before the provider is asked.
 		$reserve = array(
 			'id'           => $refund_id,
 			'amount'       => Money::normalize( $amount ),
 			'status'       => 'pending',
 			'provider_ref' => null,
 		);
-		$entry   = null === $command ? null : $command->id();
-		$held    = $this->with_command( $row, $command, $refund_id );
+		$held              = $this->with_command( $row, $command, $refund_id );
 		$held['refunds'][] = $reserve;
 		// No money moved: take the reservation and its entry back out, so the same command runs again (§7.13).
-		$refuse = fn( WP_Error $answer ): WP_Error => $this->withdraw( $order, $rows, $row, $reserve, $entry, $answer );
-		$strand = fn( string $cause ): array => $this->strand( $order, $rows, $held, $reserve, $entry, $cause );
-		if ( ! $this->persist( $order, $rows, $held, false, fn( ?array $stored ) => $this->reserved( $stored, $reserve, $held, $entry ) ) ) {
-			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch.
-			return $refuse( new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) ) );
+		$refuse = fn( WP_Error $answer ): WP_Error => $this->withdraw( $order, $row, $reserve, $answer );
+		$strand = fn( string $cause ): array => $this->strand( $order, $held, $reserve, $cause );
+		$locked = new WP_Error( 'woo_rxdb_sync_record_locked', __( 'The refund could not be reserved; retry.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		try {
+			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $held ), self::MODE_HOLD );
+			$this->refresh( $order );
+		} catch ( \Throwable $error ) {
+			// Returned, never thrown: Pro allocates one leg at a time inside WooCommerce's deleting catch. A write refused
+			// at its lock stored nothing, so there is nothing to withdraw.
+			return $error instanceof Ledger_Persistence_Exception && 'lock' === $error->stage ? $locked : $refuse( $locked );
 		}
 		try {
 			// The row as it was before the reservation: every handler appends its own allocation.
@@ -1363,28 +1373,25 @@ class Ledger {
 			return $fail( new WP_Error( 'wcpos_refund_not_allocatable', __( 'Refund amount cannot be allocated to this payment.', 'woocommerce-pos' ), array( 'status' => 400 ) ) );
 		}
 		$row['refunded_amount'] = Money::format( $refunded );
-		$row = $this->normalize_row( $order, $this->with_command( $row, $command, $refund_id ) );
-		// Save 2: the handler's allocation replaces the reservation; storage must hold it whole, with the command's entry.
-		$answer = current( array_filter( $row['refunds'], static fn( $allocation ) => (int) $allocation['id'] === $refund_id ) );
-		// Not derived in the same save: a settle attempt that misses must not have completed the sale (rule 3).
-		$settled = fn( ?array $stored ): bool => $this->reserved( $stored, $answer, $row, $entry );
-		if ( ! $this->persist( $order, $rows, $row, false, $settled ) ) {
-			return $strand( 'its settle did not land' );
-		}
-		// The allocation has landed; derive on its own save, as Payments_Sweeper::run() does.
-		$derive = function () use ( $order ): ?string {
-			$this->derive( $order, $this->read( $order ) );
-			if ( $order->get_changes() ) {
-				self::saving( $order->get_id(), fn() => $order->save() );
+		$row = $this->with_command( $row, $command, $refund_id );
+		// Write 2: the handler's allocation replaces the reservation, read back before any paid transition (rule 1). A
+		// reopened sale holding money owed back, which this refund returns, completes again on it as a close would.
+		$owed = Money::minor( $order->get_total() ) > 0 && in_array( $order->get_status(), self::IN_PROGRESS_STATUSES, true ) && $this->signed_balance( $order, $this->read( $order ) ) < 0;
+		try {
+			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ), $owed ? self::MODE_CLOSE : self::MODE_AUTO );
+		} catch ( \Throwable $error ) {
+			if ( ! $error instanceof Ledger_Persistence_Exception || ! in_array( $error->stage, array( 'paid', 'completion' ), true ) ) {
+				return $strand( 'its settle did not land: ' . $error->getMessage() ); // The stored reservation is the strand state.
 			}
-			$derived = wc_get_order( $order->get_id() );
-			return $derived instanceof WC_Order && $derived->get_status() === $order->get_status() ? null : 'the derived status was not stored';
-		};
-		if ( ! $this->after_settle( $order, $rows, $row, $settled, $derive ) ) {
-			// No hook and no success storage does not hold: the reservation is the guard, re-persisted (§7.16).
-			return $strand( 'the provider settled it, but storage will not keep the settled allocation' );
+			// The allocation is stored; the replay, `close` or the sweep finishes the paid transition (rule 1).
+			$this->report( $order, sprintf( 'WCPOS refund settled on order #%d, payment %s, but the paid transition after it failed: %s', $order->get_id(), $row['id'], $error->getMessage() ), false );
 		}
-		$row = $this->stored_row( $order->get_id(), $row['id'] ) ?? $row;
+		try {
+			$this->refresh( $order );
+			$row = $this->find( $order, $row['id'] ) ?? $row;
+		} catch ( \Throwable $error ) {
+			unset( $error ); // The settle was read back: the handler's row is what storage holds.
+		}
 		/**
 		 * Fires after an allocation is saved, and again when a pending allocation settles
 		 * (succeeded or failed) through settle_allocation(). $amount is the allocation's
@@ -1408,183 +1415,57 @@ class Ledger {
 	}
 
 	/**
-	 * Write a refund's row whole and verify it from storage, once more on a miss. A save that
-	 * throws is a miss like one that does not land: nothing escapes refund() (rule 8).
-	 *
-	 * @param WC_Order $order       Order object.
-	 * @param array    $rows        Payment rows as read.
-	 * @param array    $replacement The row to store.
-	 * @param bool     $derive      Project payment state.
-	 * @param callable $landed      Whether the stored row (null when unreadable) is what was written.
-	 */
-	private function persist( WC_Order $order, array $rows, array $replacement, bool $derive, callable $landed ): bool {
-		for ( $try = 0; $try < 2; ++$try ) {
-			try {
-				$this->replace_and_save( $order, $rows, $replacement, $derive );
-			} catch ( \Throwable $error ) {
-				$this->report( $order, sprintf( 'WCPOS refund save on order #%d failed: %s', $order->get_id(), $error->getMessage() ), false );
-			}
-			if ( $landed( $this->stored_row( $order->get_id(), $replacement['id'] ) ) ) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Every save refund() makes once its settle has landed runs through here: the save inside a
-	 * Throwable guard (a failure is a warning; the next money command or `close` re-derives,
-	 * rule 1), then storage must still hold the settled row, re-persisted with derive off when
-	 * a save lost it.
+	 * A refund whose answer storage does not hold, marked for a human in one log line and one order note (a comment
+	 * row, written by its own query). Sent (the provider was, or may have been, asked): the reservation is written
+	 * again in case the failed write took it, and the stored row is the answer, never an error (Pro's hook would throw
+	 * and WooCommerce delete the refund; spec §7.16). Not sent: a refusal whose withdrawal did not land.
 	 *
 	 * @param WC_Order $order   Order object.
-	 * @param array    $rows    Payment rows as read.
-	 * @param array    $row     The settled row.
-	 * @param callable $settled Whether a stored row holds the settle (allocation whole, entry).
-	 * @param callable $save    The save; returns why it did not land, or null.
-	 * @return bool Whether storage holds the settled row.
-	 */
-	private function after_settle( WC_Order $order, array $rows, array $row, callable $settled, callable $save ): bool {
-		try {
-			$failed = $save();
-		} catch ( \Throwable $error ) {
-			$failed = $error->getMessage();
-		}
-		if ( null !== $failed ) {
-			$this->report( $order, sprintf( 'WCPOS refund settled on order #%d, payment %s, but a save after it failed: %s', $order->get_id(), $row['id'], $failed ), false );
-		}
-		return $settled( $this->stored_row( $order->get_id(), $row['id'] ) ) || $this->persist( $order, $rows, $row, false, $settled );
-	}
-
-	/**
-	 * One row as storage holds it; null when absent or unreadable.
-	 *
-	 * @param int    $order_id Order id.
-	 * @param string $id       Payment ID.
-	 */
-	private function stored_row( int $order_id, string $id ): ?array {
-		try {
-			return $this->find_in_rows( $this->stored( $order_id, false )['payments'] ?? array(), $id );
-		} catch ( \Throwable $error ) {
-			return null;
-		}
-	}
-
-	/**
-	 * A refund the provider was (or may have been) asked for, whose answer is not in storage:
-	 * the reservation stands, marked for a human, and the stored row is the answer, never an
-	 * error (Pro's hook would throw an error and WooCommerce delete the refund; spec §7.16).
-	 *
-	 * Storage must still hold the reservation (a settle can land with it stripped): when it does
-	 * not, the reserved row is written again; when that does not land either, the answer is the
-	 * reserved row, so it still says pending.
-	 *
-	 * @param WC_Order    $order   Order object.
-	 * @param array       $rows    Payment rows as read.
-	 * @param array       $held    The reserved row.
-	 * @param array       $reserve The reservation.
-	 * @param string|null $entry   The command id, if any.
-	 * @param string      $cause   What happened.
-	 */
-	private function strand( WC_Order $order, array $rows, array $held, array $reserve, ?string $entry, string $cause ): array {
-		$this->mark( $order, $held, $reserve, $cause . '; the allocation stays pending until it is confirmed with the provider' );
-		$kept = fn( ?array $stored ): bool => $this->reserved( $stored, $reserve, $held, $entry );
-		if ( $kept( $this->stored_row( $order->get_id(), $held['id'] ) ) || $this->persist( $order, $rows, $held, false, $kept ) ) {
-			return $this->stored_row( $order->get_id(), $held['id'] ) ?? $held;
-		}
-		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: storage will not keep the reservation; the provider may have refunded with no allocation stored.', $reserve['id'], $reserve['amount'], $order->get_id(), $held['id'] ) );
-		return $held;
-	}
-
-	/**
-	 * Whether a stored row holds this allocation whole and alone (the reservation, or the settled
-	 * answer) and, when there is a command, its entry as written.
-	 *
-	 * @param array|null  $stored  Stored row.
-	 * @param array       $reserve The allocation.
-	 * @param array       $written The row that was written.
-	 * @param string|null $entry   The command id, if any.
-	 */
-	private function reserved( ?array $stored, array $reserve, array $written, ?string $entry ): bool {
-		if ( ! $this->same_allocation( $reserve, $stored, (int) $reserve['id'] ) ) {
-			return false;
-		}
-		if ( null === $entry ) {
-			return true;
-		}
-		// The entry as written, not just its key: Command_Log::find() trusts what is stored. at_gmt is not
-		// compared (the settle's entry is minted again, so its stamp may be a second later than the reservation's).
-		$want = $written['commands'][ $entry ] ?? null;
-		$got  = $stored['commands'][ $entry ] ?? null;
-		foreach ( array( 'fp', 'kind', 'ref' ) as $field ) {
-			if ( ! is_array( $want ) || ! is_array( $got ) || ( $want[ $field ] ?? null ) !== ( $got[ $field ] ?? null ) ) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	/**
-	 * Whether a stored row holds this allocation for the refund: status, reference and amount.
-	 *
-	 * @param array      $allocation Expected allocation.
-	 * @param array|null $stored     Stored row.
-	 * @param int        $refund_id  WooCommerce refund ID.
-	 */
-	private function same_allocation( array $allocation, ?array $stored, int $refund_id ): bool {
-		// Exactly one allocation for the refund: a merged duplicate would keep counting in the caps and refund_pending.
-		$found = array_values( array_filter( (array) ( $stored['refunds'] ?? array() ), static fn( $kept ) => (int) ( $kept['id'] ?? 0 ) === $refund_id ) );
-		if ( 1 !== count( $found ) ) {
-			return false;
-		}
-		$kept = $found[0];
-		return ( $allocation['status'] ?? null ) === ( $kept['status'] ?? null ) && (string) ( $allocation['provider_ref'] ?? '' ) === (string) ( $kept['provider_ref'] ?? '' ) && Money::minor( $allocation['amount'] ?? 0 ) === Money::minor( $kept['amount'] ?? 0 );
-	}
-
-	/**
-	 * Take a reservation back out (no money moved): the row as it was before it, without the
-	 * command's entry. A withdrawal that does not land is logged and noted; the answer stands.
-	 *
-	 * @param WC_Order    $order   Order object.
-	 * @param array       $rows    Payment rows as read.
-	 * @param array       $row     The row before the reservation.
-	 * @param array       $reserve The reservation.
-	 * @param string|null $entry   The command id, if any.
-	 * @param WP_Error    $answer  The refusal to answer.
-	 */
-	private function withdraw( WC_Order $order, array $rows, array $row, array $reserve, ?string $entry, WP_Error $answer ): WP_Error {
-		$gone = static fn( ?array $stored ): bool => null !== $stored && ! array_filter( $stored['refunds'] ?? array(), static fn( $kept ) => (int) ( $kept['id'] ?? 0 ) === $reserve['id'] ) && ( null === $entry || ! isset( $stored['commands'][ $entry ] ) );
-		if ( ! $this->persist( $order, $rows, $row, false, $gone ) ) {
-			$this->mark( $order, $row, $reserve, 'it was refused (' . $answer->get_error_code() . '), but its reservation could not be withdrawn; the allocation stays pending until it is confirmed with the provider', false );
-		}
-		return $answer;
-	}
-
-	/**
-	 * Mark a refund outcome storage does not hold as it should, for a human: an error log line and an order
-	 * note (a comment row, written by its own query, so it survives an order save that did not land).
-	 *
-	 * @param WC_Order $order   Order object.
-	 * @param array    $row     Payment row.
+	 * @param array    $held    The reserved row (sent), or the row before the reservation.
 	 * @param array    $reserve The reservation.
 	 * @param string   $cause   What happened.
-	 * @param bool     $sent    Whether the provider was (or may have been) asked; false for a refusal whose withdrawal did not land.
+	 * @param bool     $sent    Whether the provider was (or may have been) asked.
 	 */
-	private function mark( WC_Order $order, array $row, array $reserve, string $cause, bool $sent = true ): void {
-		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s.', $reserve['id'], $reserve['amount'], $order->get_id(), $row['id'], $cause ) );
-		if ( $sent ) {
-			/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
-			$note = __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' );
-		} else {
-			/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
-			$note = __( 'WCPOS: refund #%1$d for %2$s did not go through %3$s but its reservation could not be removed; check the payment before retrying.', 'woocommerce-pos' );
-		}
+	private function strand( WC_Order $order, array $held, array $reserve, string $cause, bool $sent = true ): array {
+		$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: %s.', $reserve['id'], $reserve['amount'], $order->get_id(), $held['id'], $sent ? $cause . '; the allocation stays pending until it is confirmed with the provider' : $cause ) );
+		/* translators: 1: refund ID, 2: amount with currency, 3: payment method ID */
+		$note = $sent ? __( 'WCPOS: refund #%1$d for %2$s was sent to %3$s; confirm it with the provider before retrying.', 'woocommerce-pos' ) : __( 'WCPOS: refund #%1$d for %2$s did not go through %3$s but its reservation could not be removed; check the payment before retrying.', 'woocommerce-pos' );
 		try {
-			$order->add_order_note( sprintf( $note, $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $row['method_id'] ) );
+			$order->add_order_note( sprintf( $note, $reserve['id'], $reserve['amount'] . ' ' . $order->get_currency(), $held['method_id'] ) );
 		} catch ( \Throwable $error ) {
 			// Note hooks run inside add_order_note(); their throw must not escape refund() (rule 8).
 			$this->report( $order, sprintf( 'WCPOS refund #%d on order #%d: its order note failed: %s', $reserve['id'], $order->get_id(), $error->getMessage() ) );
 		}
+		if ( ! $sent ) {
+			return $held;
+		}
+		try {
+			$written = $this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $held ), self::MODE_HOLD );
+			$this->refresh( $order );
+			return $this->find_in_rows( $written->rows, $held['id'] ) ?? $held;
+		} catch ( \Throwable $error ) {
+			$this->report( $order, sprintf( 'WCPOS refund #%d of %s on order #%d, payment %s: storage will not keep the reservation; the provider may have refunded with no allocation stored.', $reserve['id'], $reserve['amount'], $order->get_id(), $held['id'] ) );
+			return $held;
+		}
+	}
+
+	/**
+	 * Take a reservation back out (no money moved): the row as it was before it, without the command's entry. A
+	 * withdrawal that does not land is marked; the refusal is the answer either way.
+	 *
+	 * @param WC_Order $order   Order object.
+	 * @param array    $row     The row before the reservation.
+	 * @param array    $reserve The reservation.
+	 * @param WP_Error $answer  The refusal to answer.
+	 */
+	private function withdraw( WC_Order $order, array $row, array $reserve, WP_Error $answer ): WP_Error {
+		try {
+			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ), self::MODE_HOLD );
+			$this->refresh( $order );
+		} catch ( \Throwable $error ) {
+			$this->strand( $order, $row, $reserve, 'it was refused (' . $answer->get_error_code() . '), but its reservation could not be withdrawn; the allocation stays pending until it is confirmed with the provider', false );
+		}
+		return $answer;
 	}
 
 	/**
@@ -1611,13 +1492,13 @@ class Ledger {
 	 * (payment_complete(), the order-pay page), or a provider attempt started outside
 	 * the POS. It does no balance check and no handler call. The caller decides that
 	 * the payment is not already represented, with an optional locked identity recheck.
-	 * One $order->save(), so order meta the caller staged rides the same write.
+	 * One write(), so order meta the caller staged rides its S1 with the row.
 	 *
 	 * @param WC_Order      $order    Order object.
 	 * @param array         $row      Payment row.
 	 * @param bool          $derive   Whether to project payment state.
 	 * @param callable|null $identity Whether a stored row already represents this payment.
-	 * @throws Ledger_Persistence_Exception When the order lock cannot be acquired.
+	 * @throws Ledger_Persistence_Exception When the order lock cannot be acquired or a step of the write does not land.
 	 * @return array|WP_Error
 	 */
 	public function adopt( WC_Order $order, array $row, bool $derive = true, ?callable $identity = null ) {
@@ -1652,9 +1533,16 @@ class Ledger {
 				);
 			}
 			$row['id'] = $id;
-			$read_rows = $rows;
-			$rows[] = $row;
-			$this->save( $order, $rows, $derive, array(), $read_rows );
+			// Meta the caller staged on its order rides the write's S1 with the row.
+			$this->write(
+				$order,
+				function ( Ledger_Draft $draft ) use ( $order, $row ): void {
+					$this->carry_staged_meta( $order, $draft->order() );
+					$draft->put( $row );
+				},
+				$derive ? self::MODE_AUTO : self::MODE_HOLD
+			);
+			$this->refresh( $order );
 			return $this->find( $order, $id );
 		} finally {
 			$lock->release( $order->get_id() );
@@ -1681,38 +1569,54 @@ class Ledger {
 		if ( ! in_array( $status, array( 'pending', 'succeeded', 'failed' ), true ) ) {
 			return $this->invalid( __( 'Refund status is invalid.', 'woocommerce-pos' ) );
 		}
-		$rows = $this->read( $order );
-		$row = $this->find_in_rows( $rows, strtolower( $id ) );
+		$row = $this->find( $order, $id );
 		if ( ! $row ) {
 			return $this->not_found();
 		}
 		$answered = null !== $provider_ref && '' !== $provider_ref ? $provider_ref : null;
-		foreach ( $row['refunds'] ?? array() as $i => $allocation ) {
-			if ( (int) $allocation['id'] !== $refund_id || 'pending' !== ( $allocation['status'] ?? '' ) ) {
-				continue;
-			}
-			if ( 'pending' === $status ) {
-				if ( null === $answered || ! in_array( $allocation['provider_ref'] ?? null, array( null, '' ), true ) ) {
-					return $row;
+		// The answer applied to a row: null when it changes nothing (no pending allocation, or a reference it already has).
+		$settle = static function ( array $row ) use ( $refund_id, $status, $answered, $events ): ?array {
+			foreach ( $row['refunds'] ?? array() as $i => $allocation ) {
+				if ( (int) $allocation['id'] !== $refund_id || 'pending' !== ( $allocation['status'] ?? '' ) ) {
+					continue;
 				}
-				$row['refunds'][ $i ]['provider_ref'] = $answered;
-			} else {
-				$row['refunds'][ $i ]['status'] = $status;
-				$row['refunds'][ $i ]['provider_ref'] = $answered ?? ( $allocation['provider_ref'] ?? null );
-				$row['refunded_amount'] = Money::format( self::refunded_total( $row ) );
-			}
-			if ( $events ) {
+				if ( 'pending' === $status ) {
+					if ( null === $answered || ! in_array( $allocation['provider_ref'] ?? null, array( null, '' ), true ) ) {
+						return null;
+					}
+					$row['refunds'][ $i ]['provider_ref'] = $answered;
+				} else {
+					$row['refunds'][ $i ]['status']       = $status;
+					$row['refunds'][ $i ]['provider_ref'] = $answered ?? ( $allocation['provider_ref'] ?? null );
+					$row['refunded_amount']               = Money::format( self::refunded_total( $row ) );
+				}
 				$row['events'] = array_merge( $row['events'] ?? array(), $events );
+				return $row;
 			}
-			$row = $this->replace_and_save( $order, $rows, $this->normalize_row( $order, $row ), false );
-			if ( 'pending' !== $status ) {
-				$refund = wc_get_order( $refund_id );
-				if ( $refund instanceof \WC_Order_Refund && $refund->get_parent_id() === $order->get_id() ) {
-					do_action( 'wcpos_refund_allocated', $order, $row, $refund, Money::format( Money::minor( $allocation['amount'] ) ) );
-					do_action_deprecated( 'woocommerce_pos_refund_allocated', array( $order, $row, $refund, Money::format( Money::minor( $allocation['amount'] ) ) ), '2.0.0', 'wcpos_refund_allocated' );
-				}
-			}
+			return null;
+		};
+		$pending = current( array_filter( $row['refunds'] ?? array(), static fn( $allocation ) => (int) $allocation['id'] === $refund_id && 'pending' === ( $allocation['status'] ?? '' ) ) );
+		if ( null === $settle( $row ) ) {
 			return $row;
+		}
+		$this->write(
+			$order,
+			static function ( Ledger_Draft $draft ) use ( $id, $settle ): void {
+				$settled = $settle( (array) $draft->row( $id ) );
+				if ( null !== $settled ) {
+					$draft->put( $settled );
+				}
+			},
+			self::MODE_HOLD
+		);
+		$this->refresh( $order );
+		$row = $this->find( $order, $id ) ?? $row;
+		if ( 'pending' !== $status ) {
+			$refund = wc_get_order( $refund_id );
+			if ( $refund instanceof \WC_Order_Refund && $refund->get_parent_id() === $order->get_id() ) {
+				do_action( 'wcpos_refund_allocated', $order, $row, $refund, Money::format( Money::minor( $pending['amount'] ) ) );
+				do_action_deprecated( 'woocommerce_pos_refund_allocated', array( $order, $row, $refund, Money::format( Money::minor( $pending['amount'] ) ) ), '2.0.0', 'wcpos_refund_allocated' );
+			}
 		}
 		return $row;
 	}
@@ -1739,13 +1643,21 @@ class Ledger {
 		if ( ! $events ) {
 			return;
 		}
-		$rows = $this->read( $order );
-		$row = $this->find_in_rows( $rows, strtolower( $id ) );
-		if ( ! $row ) {
+		if ( ! $this->find( $order, $id ) ) {
 			return;
 		}
-		$row['events'] = array_merge( $row['events'] ?? array(), $events );
-		$this->replace_and_save( $order, $rows, $this->normalize_row( $order, $row ), false );
+		$this->write(
+			$order,
+			static function ( Ledger_Draft $draft ) use ( $id, $events ): void {
+				$row = $draft->row( $id );
+				if ( $row ) {
+					$row['events'] = array_merge( $row['events'] ?? array(), $events );
+					$draft->put( $row );
+				}
+			},
+			self::MODE_HOLD
+		);
+		$this->refresh( $order );
 	}
 
 	/**
@@ -1978,6 +1890,10 @@ class Ledger {
 	private function refresh( WC_Order $order ): void {
 		$order->get_data_store()->read( $order );
 		$order->read_meta_data( true );
+		// Its items too (a tip fee the write added): WooCommerce reads them again on the next get_items().
+		$items = new \ReflectionProperty( \WC_Abstract_Order::class, 'items' );
+		$items->setAccessible( true );
+		$items->setValue( $order, array() );
 	}
 
 	/**
@@ -2096,8 +2012,6 @@ class Ledger {
 					/* translators: 1: payment row uuid, 2: void reason given by the cashier. */
 					: sprintf( __( 'WCPOS payment %1$s voided: %2$s', 'woocommerce-pos' ), $row['id'], $reason )
 			);
-			self::saving( $order->get_id(), fn() => $order->save() );
-			$this->release_hold_if_idle( $order );
 			Logger::log( sprintf( 'WCPOS payment %s voided on order #%d: %s %s%s', $row['id'], $order->get_id(), $row['amount'], $row['currency'], '' === $reason ? '' : ': ' . $reason ) );
 			do_action( 'wcpos_payment_voided', $order, $row, $applied, $reason );
 			do_action_deprecated( 'woocommerce_pos_payment_voided', array( $order, $row, $applied, $reason ), '2.0.0', 'wcpos_payment_voided' );
@@ -2220,22 +2134,10 @@ class Ledger {
 				}
 			}
 			// Refresh meta ids too: an object loaded before the first row otherwise inserts
-			// a second ledger meta entry on HPOS. Keep meta deliberately staged by adopt's caller.
-			$property = new \ReflectionProperty( \WC_Data::class, 'meta_data' );
-			$property->setAccessible( true );
-			$pending = array_filter( $property->getValue( $order ) ?? array(), static fn( $meta ) => ! $meta->id || $meta->get_changes() || null === $meta->value );
-			// Core totals/status must also come from the locked read, not the waiting caller.
+			// a second ledger meta entry on HPOS. Core totals/status must also come from the locked read.
+			$this->carry_staged_meta( $order, $fresh );
 			$caller = $order;
-			$order = $fresh;
-			foreach ( $pending as $meta ) {
-				if ( null === $meta->value ) {
-					$order->delete_meta_data_by_mid( $meta->id );
-				} elseif ( $meta->id ) {
-					$order->update_meta_data( $meta->key, $meta->value, $meta->id );
-				} else {
-					$order->add_meta_data( $meta->key, $meta->value, false );
-				}
-			}
+			$order  = $fresh;
 			$original = array();
 			foreach ( $read_rows ?? array() as $read_row ) {
 				$original[ strtolower( (string) $read_row['id'] ) ] = $read_row;
@@ -2471,7 +2373,7 @@ class Ledger {
 		// S2 is decided from storage: the rows and the order as S1 stored them (I4).
 		$order = $this->fresh( $id );
 		if ( $may && $this->project( $order, $this->read( $order ), $mode )['completes'] ) {
-			$order = $this->complete( $order );
+			$order = $this->complete( $order, $rows );
 		}
 		return new Ledger_Written( $order, $this->read( $order ), $answer, Completion_History::of( $order )->standing() );
 	}
@@ -2636,12 +2538,14 @@ class Ledger {
 	}
 
 	/**
-	 * S2, the paid transition carrying no ledger meta (I1, I2), then S3.
+	 * S2, the paid transition carrying no ledger meta (I1, I2), then S3. The rows S1 read back are read again
+	 * before S3 counts them: a paid save that lost them (another writer's stale meta) has them restored, meta only.
 	 *
 	 * @param WC_Order $order Order as S1 stored it.
-	 * @throws Ledger_Persistence_Exception When the paid status or the completion does not reach storage.
+	 * @param array    $rows  The rows S1 stored.
+	 * @throws Ledger_Persistence_Exception When the paid status, the rows or the completion does not reach storage.
 	 */
-	private function complete( WC_Order $order ): WC_Order {
+	private function complete( WC_Order $order, array $rows ): WC_Order {
 		$id       = $order->get_id();
 		$previous = self::$deriving;
 		// The completion is the ledger's, so it has a register origin (Completion_Stamp::has_origin()).
@@ -2654,6 +2558,15 @@ class Ledger {
 		$order = $this->fresh( $id );
 		if ( ! self::paid_now( $order ) ) {
 			throw Ledger_Persistence_Exception::at( 'paid', 'WCPOS paid transition was not persisted.' );
+		}
+		$wire = json_decode( (string) wp_json_encode( array_map( array( __CLASS__, 'to_wire' ), $rows ) ), true );
+		if ( ( $this->stored( $id, true )['payments'] ?? null ) !== $wire ) {
+			$this->stage( $order, $rows );
+			self::save_meta( $order );
+			$order = $this->fresh( $id );
+			if ( ( $this->stored( $id, true )['payments'] ?? null ) !== $wire ) {
+				throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS payment ledger was not persisted.' );
+			}
 		}
 		return $this->finish( $order );
 	}
@@ -3264,25 +3177,23 @@ class Ledger {
 	}
 
 	/**
-	 * Replace a row and persist the ledger.
+	 * Move the meta a caller staged on its order object (added, changed or deleted) onto the order a write saves.
 	 *
-	 * @param WC_Order $order       Order object.
-	 * @param array    $rows        Payment rows.
-	 * @param array    $replacement Replacement payment row.
-	 * @param bool     $derive      Project payment state after saving.
-	 * @return array The row as stored. save() normalizes again under the lock, so the caller's copy
-	 *               may carry another updated_at_gmt: an answer built from it is not what a replay reads (D14).
+	 * @param WC_Order $from The caller's order.
+	 * @param WC_Order $to   The order read under the lock.
 	 */
-	private function replace_and_save( WC_Order $order, array $rows, array $replacement, bool $derive = true ): array {
-		foreach ( $rows as &$row ) {
-			if ( $row['id'] === $replacement['id'] ) {
-				$row = $replacement;
-				break;
+	private function carry_staged_meta( WC_Order $from, WC_Order $to ): void {
+		$property = new \ReflectionProperty( \WC_Data::class, 'meta_data' );
+		$property->setAccessible( true );
+		foreach ( $property->getValue( $from ) ?? array() as $meta ) {
+			if ( null === $meta->value ) {
+				$to->delete_meta_data_by_mid( $meta->id );
+			} elseif ( ! $meta->id ) {
+				$to->add_meta_data( $meta->key, $meta->value, false );
+			} elseif ( $meta->get_changes() ) {
+				$to->update_meta_data( $meta->key, $meta->value, $meta->id );
 			}
 		}
-		unset( $row );
-		$this->save( $order, $rows, $derive );
-		return $this->find( $order, $replacement['id'] ) ?? $replacement;
 	}
 
 	/**
