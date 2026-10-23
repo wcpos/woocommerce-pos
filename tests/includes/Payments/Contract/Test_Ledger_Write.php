@@ -1161,6 +1161,126 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * `capture` (one `apply_result()` write) failing after S1, after S2 or after S3 (its answer lost), then replayed
+	 * with the same command: the provider asked once, one completion naming the row, one fiscal sale, stock reduced once.
+	 *
+	 * @dataProvider record_failures
+	 *
+	 * @param string|null $stage The step that fails once; null when only the answer is lost.
+	 */
+	public function test_capture_failing_at_stage_then_replayed_lands_one_completion( ?string $stage ): void {
+		// Arrange: a pending provider leg for the whole total.
+		global $wpdb;
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$row   = $this->row( '92.95', 'pending', array( 'capture_mode' => 'capture_test' ) );
+		Capture_Mode_Registry::instance()->register( 'capture_test', Capture_Test_Handler::class );
+		Capture_Test_Handler::$captures = 0;
+		Ledger::instance()->write( $id, static fn( Ledger_Draft $draft ) => $draft->put( $row ), Ledger::MODE_HOLD );
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:capture', 'capture', $row['id'] );
+		$capture = static fn( Money_Command $c ) => Ledger::instance()->capture( wc_get_order( $id ), $row['id'], array(), $c );
+		$undo    = null === $stage ? static fn() => null : $this->inject( $stage, $id );
+		$caught  = null;
+
+		// Act.
+		try {
+			$capture( $command );
+		} catch ( Ledger_Persistence_Exception $error ) {
+			$caught = $error;
+		} finally {
+			$undo();
+		}
+		$wpdb->last_error = '';
+		$replayed = Command_Log::run( wc_get_order( $id ), $command, $capture );
+
+		// Assert.
+		$this->assertSame( $stage, $caught ? $caught->stage : null );
+		$this->assertSame( 1, Capture_Test_Handler::$captures );
+		$saved = $this->fresh( $id );
+		$this->assertSame( 'completed', $saved->get_status() );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertSame( array( $row['id'] ), Completion_History::of( $saved )->standing()['payment_ids'] );
+		$this->assertSame(
+			1,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type'     => 'sale',
+				)
+			)
+		);
+		$this->assertSame( 9, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
+		$rows = $this->stored_rows( $id );
+		$this->assertSame( 'captured', $rows[0]['status'] );
+		$this->assertSame( 'captured', $replayed['payment']['status'] );
+		$this->assertArrayNotHasKey( 'phase', $rows[0]['commands'][ $command->id() ], 'S3 advanced the command past its rows.' );
+	}
+
+	/**
+	 * A refund that returns the money a reopened sale owed back completes it again; its settle write failing after
+	 * S1 or after S2, the same command replayed completes it once more and no more (rules 1 and 8). Nothing escapes.
+	 *
+	 * @dataProvider record_failures
+	 *
+	 * @param string|null $stage The step that fails once; null when only the answer is lost.
+	 */
+	public function test_refund_returning_money_owed_back_failing_at_stage_then_replayed_completes_once( ?string $stage ): void {
+		// Arrange: a cash sale paid and completed, reopened at a total 20.00 lower, and a 20.00 refund of the excess.
+		global $wpdb;
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$row   = $this->row( '92.95' );
+		$this->pay( $id, $row );
+		$reopened = $this->fresh( $id );
+		$reopened->set_status( 'pos-open' );
+		$reopened->set_total( '72.95' );
+		$reopened->save();
+		$stock  = wc_get_product( $this->product->get_id() )->get_stock_quantity();
+		$refund = wc_create_refund(
+			array(
+				'order_id'       => $id,
+				'amount'         => '20.00',
+				'refund_payment' => false,
+				'restock_items'  => false,
+			)
+		);
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:refund', 'refund', $row['id'], $refund->get_id() );
+		$allot   = static fn( Money_Command $c ) => Ledger::instance()->refund( wc_get_order( $id ), $row['id'], $refund->get_id(), '20.00', $c );
+		$undo    = null === $stage ? static fn() => null : $this->inject( $stage, $id );
+
+		// Act.
+		try {
+			$first = $allot( $command );
+		} finally {
+			$undo();
+		}
+		$wpdb->last_error = '';
+		$replayed = Command_Log::run( wc_get_order( $id ), $command, $allot );
+
+		// Assert.
+		$this->assertSame( 'succeeded', $first['refunds'][0]['status'], 'The settled allocation is the answer, never a throw.' );
+		$this->assertSame( 'succeeded', $replayed['payment']['refunds'][0]['status'] );
+		$saved = $this->fresh( $id );
+		$this->assertSame( 'completed', $saved->get_status() );
+		$this->assertSame( array( 1, 2 ), array_column( Completion_History::of( $saved )->entries(), 'n' ) );
+		$this->assertSame( 2, (int) Completion_History::of( $saved )->standing()['n'] );
+		$this->assertSame(
+			2,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type'     => 'sale',
+				)
+			)
+		);
+		$this->assertSame( $stock, wc_get_product( $this->product->get_id() )->get_stock_quantity() );
+		$stored = $this->stored_rows( $id )[0];
+		$this->assertCount( 1, $stored['refunds'] );
+		$this->assertSame( '20.00', $stored['refunded_amount'] );
+		$this->assertArrayNotHasKey( 'phase', $stored['commands'][ $command->id() ] );
+	}
+
 	/** A `record` whose S2 failed leaves its command entry saying `rows`: storage knows the paid transition is owed. */
 	public function test_record_failing_after_rows_leaves_its_command_owing_the_paid_transition(): void {
 		// Arrange.
@@ -2475,5 +2595,26 @@ class Tip_Test_Handler extends Manual_Handler {
 		$descriptor['capture']['mode']      = 'tip_test';
 		$descriptor['capabilities']['tips'] = 'on_reader';
 		return $descriptor;
+	}
+}
+
+/** A provider leg whose capture the provider confirms, counted. */
+class Capture_Test_Handler extends Manual_Handler {
+	/**
+	 * Provider capture calls.
+	 *
+	 * @var int
+	 */
+	public static $captures = 0;
+
+	/**
+	 * The provider confirms the capture.
+	 *
+	 * @param array $row     Payment row.
+	 * @param array $context Provider context.
+	 */
+	public function capture( array $row, array $context ) {
+		++self::$captures;
+		return array( 'status' => 'captured' );
 	}
 }
