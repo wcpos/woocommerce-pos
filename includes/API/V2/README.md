@@ -169,6 +169,8 @@ one note for staff and the attempt stays in motion, never cancelled by the serve
 
 - A new `submit` while such an attempt stands: 409 `wcpos_payment_in_flight` with `attempt_id`, nothing
   dispatched. An attempt awaiting the customer (an invoice sent) does not block "send again".
+- `cancel` of an attempt the sweep has noted, on a sale its payments already cover: 200; only the attempt is
+  cancelled (the sale is not reopened) and a note names who closed it. Before the sweep has noted it: 409.
 
 ## Refund allocations: two saves around the provider (2.0.0, ADR 0040 rule 8)
 

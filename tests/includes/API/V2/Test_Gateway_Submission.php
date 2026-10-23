@@ -946,6 +946,60 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 
+	/**
+	 * A stranded send on a sale its rows already cover waits for the resolver; once the sweep has handed it to staff,
+	 * the till's cancel closes it without reopening the sale or touching its rows, and the note names who closed it.
+	 */
+	public function test_cancel_closes_a_flagged_attempt_on_a_covered_sale_without_reopening_it(): void {
+		// Arrange: the send's gateway threw after dispatch; cash then covers and completes the sale.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Sent_Test_Gateway::$failure = 'throw';
+		$this->assertSame( 502, $this->submit( $order, $attempt, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		Sent_Test_Gateway::$failure = '';
+		$cash = array(
+			'id'              => wp_generate_uuid4(),
+			'method_id'       => 'pos_cash',
+			'kind'            => 'cash',
+			'capture_mode'    => 'manual',
+			'amount'          => '92.95',
+			'currency'        => get_woocommerce_currency(),
+			'status'          => 'captured',
+			'captured_at_gmt' => gmdate( 'c' ),
+		);
+		Ledger_Seed::rows( $order, array( $cash ) );
+		$covered = wc_get_order( $order->get_id() );
+		$status  = $covered->get_status();
+		$cashier = wp_get_current_user();
+
+		// Act: a cancel before the sweep has noted it, the sweep, then the cancel.
+		$early = $this->cancel( $order, $attempt );
+		$waits = Attempts::of( wc_get_order( $order->get_id() ) )->get( $attempt );
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+		$closed = $this->cancel( $order, $attempt );
+
+		// Assert.
+		$this->assertSame( 409, $early->get_status(), wp_json_encode( $early->get_data() ) );
+		$this->assertSame( array( 'sent', null ), array( $waits['fate'], $waits['attention_at_gmt'] ), 'An attempt not yet noted waits for the resolver.' );
+		$this->assertSame( 200, $closed->get_status(), wp_json_encode( $closed->get_data() ) );
+		$stored = wc_get_order( $order->get_id() );
+		$this->assertSame( 'cancelled', Attempts::of( $stored )->get( $attempt )['fate'] );
+		$this->assertSame( $status, $stored->get_status() );
+		$this->assertSame( array( $cash['id'] ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertNull( Completion_History::of( $stored )->standing()['reopened_at_gmt'] );
+		$this->assertNull( ( new Sale_State( $stored, Ledger::instance()->read( $stored ) ) )->in_motion() );
+		$notes = array_values( array_filter( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), static fn( $note ) => false !== strpos( $note->content, $attempt ) ) );
+		$this->assertCount( 1, array_filter( $notes, static fn( $note ) => false !== strpos( $note->content, 'outcome is unknown' ) ) );
+		$this->assertCount( 1, array_filter( $notes, static fn( $note ) => false !== strpos( $note->content, 'closed at the POS' ) && false !== strpos( $note->content, $cashier->display_name ) ) );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
 	/** D1: a send whose gateway threw after dispatch has no stamp, yet the till can still cancel it. */
 	public function test_submit_that_threw_after_dispatch_can_be_cancelled(): void {
 		// Arrange: the gateway throws once dispatch has started, leaving the attempt `sent` with no stamp.

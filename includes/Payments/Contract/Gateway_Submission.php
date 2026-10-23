@@ -444,7 +444,11 @@ class Gateway_Submission {
 			/* translators: %s: attempt id. */
 			return new WP_Error( 'wcpos_invalid_transition', sprintf( __( 'Payment attempt %s may already have been paid by the gateway; reconcile the payment before cancelling it.', 'woocommerce-pos' ), strtolower( $attempt_id ) ), array( 'status' => 409 ) );
 		}
-		if ( ( ! $stamp && ! $stranded ) || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) {
+		// A stranded send the sweep handed to staff, on a sale its rows already cover: staff close it once they have checked
+		// the gateway. Only the attempt closes: the sale, its rows and its stock stay as they are.
+		$closing = $stranded && null !== Attempts::of( $order )->get( $attempt_id )['attention_at_gmt']
+			&& Money::minor( $order->get_total() ) > 0 && Money::minor( Ledger::instance()->paid( $rows ) ) >= Money::minor( $order->get_total() );
+		if ( ! $closing && ( ( ! $stamp && ! $stranded ) || array_filter( $rows, static fn( $row ) => in_array( $row['status'], Ledger::COUNTING_STATUSES, true ) ) ) ) {
 			return new WP_Error( 'wcpos_invalid_transition', __( 'This invoice cannot be cancelled.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		if ( $stamp && ( $stamp['method_id'] ?? null ) !== $descriptor['id'] ) {
@@ -463,10 +467,10 @@ class Gateway_Submission {
 		try {
 			$written = Ledger::instance()->write(
 				$order,
-				static function ( Ledger_Draft $draft ) use ( $attempt_id, $note, $settled ): array {
+				static function ( Ledger_Draft $draft ) use ( $attempt_id, $note, $settled, $closing ): array {
 					// The entry outlives what it awaited: a late retry of this send must never send again.
 					Attempts::resolve( $draft, $attempt_id, 'cancelled' );
-					if ( ! $settled ) {
+					if ( ! $settled && ! $closing ) {
 						$draft->order()->set_status( 'pos-open', $note );
 					}
 					return array();
@@ -487,6 +491,12 @@ class Gateway_Submission {
 		}
 		if ( $settled ) {
 			$written->order->add_order_note( $note );
+		}
+		if ( $closing ) {
+			$cashier = null === $command ? 0 : (int) ( $command->origin()->for_entry( $written->order, 1 )['cashier'] ?? 0 );
+			$user    = get_userdata( $cashier > 0 ? $cashier : get_current_user_id() );
+			/* translators: 1: attempt id, 2: the staff member's display name, 3: the cashier's reason. */
+			$written->order->add_order_note( trim( sprintf( __( 'WCPOS payment attempt %1$s closed at the POS by %2$s: nothing more was charged, and the sale\'s payments already cover it. %3$s', 'woocommerce-pos' ), $attempt_id, $user ? $user->display_name : __( 'an unknown user', 'woocommerce-pos' ), $reason ) ) );
 		}
 		return array( 'order' => Ledger::instance()->summary( $written->order ) );
 	}

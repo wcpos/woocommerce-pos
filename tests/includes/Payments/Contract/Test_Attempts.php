@@ -289,7 +289,7 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' );
 		$first = Attempts::of( $this->fresh( $order->get_id() ) )->get( $attempt );
 		for ( $i = 1; $i < Attempts::ASK_LIMIT + 2; ++$i ) {
-			Attempts::reconcile( wc_get_order( $order->get_id() ), 'replay' );
+			Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' ); // A flagged attempt is not swept again.
 		}
 
 		// Assert.
@@ -297,14 +297,14 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$entry  = Attempts::of( $stored )->get( $attempt );
 		$this->assertSame( array( 'sent', 1, null ), array( $first['fate'], $first['asks'], $first['attention_at_gmt'] ) );
 		$this->assertSame( 'sent', $entry['fate'] );
-		$this->assertGreaterThanOrEqual( Attempts::ASK_LIMIT, $entry['asks'] );
+		$this->assertSame( Attempts::ASK_LIMIT, $entry['asks'] );
 		$this->assertNotNull( $entry['attention_at_gmt'] );
 		$this->assertCount( 1, $this->notes_naming( $order->get_id(), $attempt ) );
 		$this->assertSame( array(), Ledger::instance()->read( $stored ) );
 		$this->assertSame( $attempt, Ledger::instance()->sale_state( $stored )->in_motion()['attempt_id'] );
 	}
 
-	/** A provider that cannot say (an unpaid order) asks a human with one note; the attempt stays in motion, never cancelled, and close refuses. */
+	/** A provider that cannot say (an unpaid order) asks a human with one note, from the sweep only; the attempt stays in motion, never cancelled, and close refuses. */
 	public function test_reconcile_of_an_unanswered_attempt_notes_it_once_and_never_cancels_it(): void {
 		// Arrange.
 		$order   = $this->create_pos_order();
@@ -312,6 +312,8 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
 
 		// Act.
+		Attempts::reconcile( wc_get_order( $order->get_id() ), 'replay' );
+		$asked = Attempts::of( $this->fresh( $order->get_id() ) )->get( $attempt );
 		Attempts::reconcile( wc_get_order( $order->get_id() ), 'sweep' );
 		Attempts::reconcile( wc_get_order( $order->get_id() ), 'replay' );
 		$close = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
@@ -321,6 +323,7 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$stored = $this->fresh( $order->get_id() );
 		$entry  = Attempts::of( $stored )->get( $attempt );
+		$this->assertNull( $asked['attention_at_gmt'], 'Only the sweep hands an attempt to a human.' );
 		$this->assertSame( 'sent', $entry['fate'] );
 		$this->assertNotNull( $entry['attention_at_gmt'] );
 		$this->assertCount( 1, $this->notes_naming( $order->get_id(), $attempt ) );

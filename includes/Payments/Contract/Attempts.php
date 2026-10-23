@@ -221,9 +221,9 @@ final class Attempts {
 	/**
 	 * Rule 7's resolver: what became of the attempt whose outcome is unknown, from its provider's answer, acted on under
 	 * the order lock. `captured` mints its row (the attempt id as the row id) in a write that completes the sale at the
-	 * attempt's origin; `failed` or `voided` cancels it; an indeterminate answer counts an ask; an unchanged answer, or
-	 * the ask limit, flags it for a human with one note and leaves it `sent`. Nothing cancels an attempt the provider
-	 * never answered.
+	 * attempt's origin; `failed` or `voided` cancels it; an indeterminate answer counts an ask; at the sweep (past its
+	 * threshold) an unchanged answer, or the ask limit, flags it for a human with one note and leaves it `sent`. Nothing
+	 * cancels an attempt the provider never answered.
 	 *
 	 * @param WC_Order $order  Order object.
 	 * @param string   $source `paid` asks only about the attempt that awaited the customer, who has paid; `sweep`,
@@ -258,9 +258,10 @@ final class Attempts {
 			);
 			$status  = is_array( $answer ) ? (string) ( $answer['status'] ?? '' ) : '';
 			$flagged = false;
+			$sweep   = 'sweep' === $source;
 			$written = Ledger::instance()->write(
 				$id,
-				static function ( Ledger_Draft $d ) use ( $entry, $answer, $status, &$flagged ): bool {
+				static function ( Ledger_Draft $d ) use ( $entry, $answer, $status, $sweep, &$flagged ): bool {
 					$now = self::of( $d->order() )->get( $entry['id'] );
 					// Resolved since it was read; a `paid` fate whose row is missing is an S1 that stored only part of itself.
 					if ( 'sent' !== ( $now['fate'] ?? null ) && ! ( 'paid' === $now['fate'] && null === $d->row( $now['id'] ) ) ) {
@@ -289,7 +290,7 @@ final class Attempts {
 						return true;
 					}
 					$asks    = (int) $now['asks'] + ( is_array( $answer ) ? 0 : 1 );
-					$flagged = null === $now['attention_at_gmt'] && ( is_array( $answer ) || $asks >= self::ASK_LIMIT );
+					$flagged = $sweep && null === $now['attention_at_gmt'] && ( is_array( $answer ) || $asks >= self::ASK_LIMIT );
 					if ( ! $flagged && $asks === (int) $now['asks'] ) {
 						return false;
 					}

@@ -14,7 +14,7 @@ function, `Attempts::reconcile( $order, $source )`, and nothing else decides its
 | `captured` | One `write()` puts the row: the attempt id as the row id, the entry's method and cashier, the answer's transaction id; `completes_at()` names the entry's origin, so S3 appends the completion (the c4-2 path). `settle()` marks the attempt `paid`; the command that sent it answers `recorded` on replay. `put()` replaces by id: a second run changes nothing. |
 | `failed` / `voided` | The attempt becomes `cancelled`; the write's idle check releases the stock hold. |
 | indeterminate (a `WP_Error`, or no handler) | `asks++`. |
-| unchanged, or `asks` reaches `ASK_LIMIT` (6) | `attention_at_gmt` is set and ONE order note is added. The entry stays `sent`: in motion, still locked by rule 3; `close` answers `wcpos_payment_in_flight`. |
+| unchanged, or `asks` reaches `ASK_LIMIT` (6) | at the sweep only (past its threshold): `attention_at_gmt` is set and ONE order note is added. The entry stays `sent`: in motion, still locked by rule 3; `close` answers `wcpos_payment_in_flight`. Other callers leave it unflagged. |
 
 **No path cancels an attempt the provider never answered.**
 
@@ -49,7 +49,13 @@ are not asked.
    409 `wcpos_payment_conflict`; otherwise the fate as before.
 2. **`cancel()`**: reconciles first. A minted row trips the existing refusal ("This invoice cannot be
    cancelled."); the D1 paid-facts refusal stays for paid facts the resolver could not attribute (another
-   method).
+   method). **Staff clear (ruling 2026-10-23, option b):** a stranded attempt the sweep has flagged, on a sale
+   whose counting rows already cover the total, is marked `cancelled` by `cancel()` without reopening the sale
+   and without touching its rows or stock. The sweep's note stays as the audit trail and one more note names who
+   closed it (the command origin's cashier, else the current user). An attempt not yet flagged (still within the
+   threshold) is refused as before: it waits for the resolver. Nothing attributes money by inference, so no
+   webhook mint ever reuses an attempt id. This clear is the only way the "in motion" state ends on a covered
+   sale.
 3. **A new `submit`**: when an unresolved entry that is not awaiting stands, it reconciles; if one still stands,
    409 `wcpos_payment_in_flight` with `attempt_id`, before any check that reads the sale. "Send again" over an
    awaiting invoice is unchanged (an awaiting entry is not asked).
