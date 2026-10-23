@@ -328,6 +328,9 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
 		$this->assertStringContainsString( 'WCPOS: payment pos_card', $notes );
 		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		// The payment the failed mint named is kept for the resolver, `paid` with no row (the hook fired on an order
+		// WooCommerce never marked paid, so there is nothing to mint it from yet).
+		$this->assertSame( array( 'paid' ), array_values( \WCPOS\WooCommercePOS\Payments\Contract\Attempts::of( wc_get_order( $order->get_id() ) )->fates() ) );
 	}
 
 	/** Hook entry points that must contain ledger persistence errors. */

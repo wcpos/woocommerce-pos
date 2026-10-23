@@ -134,9 +134,14 @@ A payment WooCommerce took whose deferred mint failed leaves a paid POS order wi
 is a no-op on a `processing` order, so a retried webhook never re-mints. Under c5-2:
 
 - `Webview_Passthrough::mint()`'s failure path (after its loud note) calls `Attempts::strand( $order, $id,
-  $method )`: one held write that keeps the payment as an unresolved attempt (the row id the mint tried, its
-  method) or, when the attempt already stands awaiting the customer, stops it awaiting (the customer paid).
-  Best effort: a failure is logged; the note stands.
+  $method )`: one held write. A lost mint is a known payment whose row was lost, not an unanswered attempt, so the
+  attempt (the row id the mint tried, or the attempt that stood `sent` for it) is kept `paid` with no row, awaiting
+  no one, `sent_at_gmt` the moment of the mint, with the sale's till tuple and `_pos_user`. `eligible()` lists it and
+  the resolver re-mints its row under that id for the remainder the rows leave, keeping the fate and never asking
+  `status()`, while WooCommerce's own paid facts stand (`is_paid()` or `date_paid`; a lost save of the paid status
+  leaves nothing to mint from, and the attempt is asked about and flagged like any other). A submit that saw the
+  gateway take the money and lost the row keeps its attempt `paid` the same way, and its replay answers `paid`. So the reopen rule in `status()` governs only attempts the till sent. Best effort: a failure is
+  logged; the note stands.
 - The sweep then finds it: the resolver's `captured` answer IS the re-mint, and its write completes the sale,
   once. When the handler cannot answer (the order is no longer paid through that method), the attention path
   applies: one note, never a guess.

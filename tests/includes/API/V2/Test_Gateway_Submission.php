@@ -459,8 +459,9 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 		$replay = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
-		$this->assertSame( 'sent', $replay->get_data()['outcome'] );
-		$this->assertSame( 'sent', Attempts::of( wc_get_order( $order->get_id() ) )->fates()[ $attempt ] );
+		// The gateway took the money and its row was lost: a known payment, terminal for the till, kept for the resolver.
+		$this->assertSame( 'paid', $replay->get_data()['outcome'] );
+		$this->assertSame( 'paid', Attempts::of( wc_get_order( $order->get_id() ) )->fates()[ $attempt ] );
 	}
 
 	public function test_clean_provider_failure_leaves_terminal_attempt(): void {
@@ -506,7 +507,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 409, $response->get_status() );
 		$this->assertSame(
-			'sent',
+			'paid', // A known payment whose row was lost.
 			Attempts::of( $saved )->fates()[ $attempt ] ?? null
 		);
 		$this->assertSame( array(), Ledger::instance()->read( $saved ) );
@@ -658,7 +659,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 409, $response->get_status() );
 		$saved = wc_get_order( $order->get_id() );
-		$this->assertSame( 'sent', Attempts::of( $saved )->fates()[ $attempt ] ?? null );
+		$this->assertSame( 'paid', Attempts::of( $saved )->fates()[ $attempt ] ?? null ); // A known payment whose row was lost.
 		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
 		$this->assertStringContainsString( 'WCPOS: payment gateway-transaction (92.95 ', $notes );
 		$this->assertNotEmpty( array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'gateway-transaction (92.95 ' ) && false !== strpos( $message, 'simulated' ) ) );
@@ -721,7 +722,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 409, $response->get_status() );
 		$this->assertSame( 'woo_rxdb_sync_record_locked', $response->get_data()['code'] );
 		$saved = wc_get_order( $order->get_id() );
-		$this->assertSame( 'sent', Attempts::of( $saved )->fates()[ $attempt ] ?? null );
+		$this->assertSame( 'paid', Attempts::of( $saved )->fates()[ $attempt ] ?? null ); // A known payment whose row was lost.
 		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
 		$this->assertStringContainsString( 'WCPOS: payment gateway-transaction', $notes );
 		$this->assertSame( 1, Paid_Test_Gateway::$calls );
@@ -1100,7 +1101,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			remove_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
 		}
 		$paid = wc_get_order( $order->get_id() );
-		$this->assertSame( 'sent', Attempts::of( $paid )->fates()[ $attempt ] ?? null );
+		$this->assertSame( 'paid', Attempts::of( $paid )->fates()[ $attempt ] ?? null ); // A known payment whose row was lost.
 		$this->assertNull( Attempts::of( $paid )->awaiting() );
 		$this->assertSame( array(), Ledger::instance()->read( $paid ) );
 		$this->assertNotNull( $paid->get_date_paid( 'edit' ) );

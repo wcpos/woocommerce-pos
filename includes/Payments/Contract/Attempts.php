@@ -246,8 +246,16 @@ final class Attempts {
 			if ( null === $entry ) {
 				return null;
 			}
-			$handler = Capture_Mode_Registry::instance()->resolve( 'gateway', Descriptor_Builder::instance()->get( $entry['method_id'] )['capture']['provider'] ?? null );
-			$answer  = null === $handler ? null : $handler->status(
+			// A payment whose row was lost is a known fact, never a question: it is minted for the remainder the rows leave,
+			// while WooCommerce's own paid facts stand (a lost save of the paid status leaves nothing to mint from).
+			$remain  = Money::minor( $fresh->get_total() ) - Money::minor( Ledger::instance()->paid( Ledger::instance()->read( $fresh ) ) );
+			$known   = 0 < $remain && ( Completion_Stamp::is_paid( $fresh ) || null !== $fresh->get_date_paid( 'edit' ) ) ? array(
+				'status'        => 'captured',
+				'amount'        => Money::format( $remain ),
+				'provider_refs' => array( 'transaction_id' => '' !== $fresh->get_transaction_id() ? $fresh->get_transaction_id() : null ),
+			) : null;
+			$handler = 'paid' === $entry['fate'] ? null : Capture_Mode_Registry::instance()->resolve( 'gateway', Descriptor_Builder::instance()->get( $entry['method_id'] )['capture']['provider'] ?? null );
+			$answer  = null === $handler ? ( 'paid' === $entry['fate'] ? $known : null ) : $handler->status(
 				array(
 					'id'           => $entry['id'],
 					'status'       => 'pending',
@@ -315,9 +323,10 @@ final class Attempts {
 	}
 
 	/**
-	 * A payment WooCommerce took whose row did not land (`Webview_Passthrough::mint()` failed) stays an unresolved
-	 * attempt the sweep finds, so the resolver mints its row: opened `sent` under the row id the mint tried, or, when
-	 * that attempt stands awaiting the customer, no longer awaiting them (they paid). One held write, best effort.
+	 * A payment WooCommerce took whose row did not land (`Webview_Passthrough::mint()` failed) is a known payment whose
+	 * row was lost, not an unanswered attempt: kept `paid` with no row under the row id the mint tried (an attempt that
+	 * stood `sent` for it included), which the sweep lists and the resolver re-mints without asking anyone. One held
+	 * write, best effort.
 	 *
 	 * @param WC_Order $order     Order object.
 	 * @param string   $id        The row id the mint tried.
@@ -331,20 +340,18 @@ final class Attempts {
 					$entry = self::of( $d->order() )->get( $id );
 					if ( null === $entry ) {
 						self::open( $d, $id, $method_id );
-						// The lost row's own provenance: the operator and till that rang the sale (never whoever paid), and the
-						// payment's time, the evidence it answers.
-						$paid_at = $d->order()->get_date_paid( 'edit' );
+						// The lost row's own provenance: the operator and till that rang the sale, never whoever paid.
 						$d->attempt(
 							$id,
 							'sent',
 							array(
-								'cashier_id'  => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
-								'origin'      => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
-								'sent_at_gmt' => gmdate( 'c', $paid_at ? $paid_at->getTimestamp() : time() ),
+								'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
+								'origin'     => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
 							)
 						);
-					} elseif ( 'sent' === $entry['fate'] && null !== $entry['awaiting'] ) {
-						$d->attempt( $id, 'sent', array( 'awaiting' => null ) );
+					}
+					if ( null === $entry || 'sent' === $entry['fate'] ) {
+						self::resolve( $d, $id, 'paid' ); // Awaits no one: the customer paid.
 					}
 					return (bool) $d->attempts();
 				},

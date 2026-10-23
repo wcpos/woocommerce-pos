@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
@@ -791,6 +792,59 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $operator, (int) $rows[0]['cashier_id'] );
 		$this->assertCount( 1, $history );
 		$this->assertSame( $operator, (int) ( $history[0]['cashier'] ?? 0 ) );
+	}
+
+	/**
+	 * A lost mint is a known payment, not an unanswered attempt: a reopened pre-ledger sale charged again through
+	 * order-pay, whose mint fails, is re-minted by one sweep under the kept id, completes once, and leaves the list with
+	 * no ask and no flag (its first `date_paid`, which WooCommerce keeps, is never asked about).
+	 */
+	public function test_a_lost_order_pay_mint_on_a_reopened_pre_ledger_sale_is_re_minted_by_one_sweep(): void {
+		// Arrange: paid and completed before the ledger, an hour ago; reopened; charged again through order-pay; the mint is lost.
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->set_date_paid( time() - HOUR_IN_SECONDS );
+		$order->set_status( 'processing' );
+		$order->save();
+		Completion_Stamp::append( wc_get_order( $order->get_id() ), new Completion_Origin() );
+		wc_get_order( $order->get_id() )->update_status( 'pos-open' );
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		$_POST['payment_method'] = 'pos_card'; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- The order-pay form's field.
+		add_filter( 'query', $lose );
+		try {
+			do_action( 'woocommerce_before_pay_action', wc_get_order( $order->get_id() ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+			wc_get_order( $order->get_id() )->payment_complete( 'ch_again' );
+			apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
+			Ledger::flush_all();
+		} finally {
+			remove_filter( 'query', $lose );
+			unset( $_POST['payment_method'] );
+		}
+		wp_cache_flush(); // A later request.
+		$kept = Attempts::of( wc_get_order( $order->get_id() ) )->entries();
+
+		// Act: one sweep.
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertCount( 1, $kept, 'The lost payment is kept.' );
+		$id     = (string) array_key_first( $kept );
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$rows   = Ledger::instance()->read( $stored );
+		$this->assertSame( array( $id ), array_column( $rows, 'id' ) );
+		$this->assertSame( '92.95', $rows[0]['amount'] );
+		$history = $this->stored_history( $order->get_id() );
+		$this->assertCount( 2, $history, 'The pre-ledger completion, then one for this payment.' );
+		$this->assertSame( array( $id ), $history[1]['payment_ids'] );
+		$entry = Attempts::of( $stored )->get( $id );
+		$this->assertSame( array( 'paid', 0, null ), array( $entry['fate'], $entry['asks'], $entry['attention_at_gmt'] ) );
+		$this->assertSame( array(), array_map( static fn( $meta ) => $meta->value, $stored->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
 	}
 
 	/** A storefront order paid through the order-pay window is not a register sale. */
