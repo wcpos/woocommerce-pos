@@ -79,13 +79,17 @@ class Test_Order_Read_Uuid_Mint_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$order    = $this->create_web_order_modified_a_while_ago();
 		$modified = $order->get_date_modified()->getTimestamp();
 
-		// Act: a v1 read (1.11.x tills, the credential probe), then the till's own v2 read.
-		$v1  = $this->server->dispatch( $this->wp_rest_get_request( '/' . Controller_Registry::V1_NAMESPACE . '/orders/' . $order->get_id() ) );
+		// Act: a v1 read (1.11.x tills, the credential probe).
+		$v1 = $this->server->dispatch( $this->wp_rest_get_request( '/' . Controller_Registry::V1_NAMESPACE . '/orders/' . $order->get_id() ) );
+
+		// Assert the v1 mint before the till's own v2 read, which would otherwise mint it too.
+		$this->assertSame( 200, $v1->get_status() );
+		$this->assert_minted_without_a_save( $order, $modified );
+
+		// Act: the till's own v2 read, in a later request.
 		$row = $this->read_v2_order_row( $order );
 
 		// Assert.
-		$this->assertSame( 200, $v1->get_status() );
-		$this->assert_minted_without_a_save( $order, $modified );
 		$this->assertSame( '', (string) $this->meta_value( $row, '_pos_user' ), 'the v2 row carries no cashier for a web order' );
 	}
 
