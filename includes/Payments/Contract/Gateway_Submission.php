@@ -565,7 +565,8 @@ class Gateway_Submission {
 		$stamp   = self::read_stamp( $order ) ?? array();
 		$attempt = strtolower( (string) ( $stamp['attempt_id'] ?? '' ) );
 		$sent    = wp_is_uuid( $attempt ) && 'sent' === ( self::read_attempts( $order )[ $attempt ] ?? null );
-		if ( ! $sent || ! Completion_Stamp::is_paid( $order ) || array_filter( $d->rows(), static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) ) ) {
+		// As the passthrough's mint: a zero total took no money, so it has no row.
+		if ( ! $sent || (float) $order->get_total() <= 0 || ! Completion_Stamp::is_paid( $order ) || array_filter( $d->rows(), static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) ) ) {
 			return false;
 		}
 		$transaction = $order->get_transaction_id();
