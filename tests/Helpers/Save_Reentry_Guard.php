@@ -91,15 +91,6 @@ class Save_Reentry_Guard {
 	private static $is_reentry_hook = array();
 
 	/**
-	 * Directories under a watched one that the guard does NOT police, normalized like
-	 * `$watched_dir`. Each entry is a ruled, tracked exemption, never a convenience: the
-	 * bootstrap names the issue that removes it.
-	 *
-	 * @var string[]
-	 */
-	private static $excepted_dirs = array();
-
-	/**
 	 * Hook the save entry points. Call once from the bootstrap after WP has loaded;
 	 * WP_UnitTestCase snapshots hooks per test, so hooks present at bootstrap survive
 	 * every test's hook restore.
@@ -162,38 +153,6 @@ class Save_Reentry_Guard {
 	}
 
 	/**
-	 * Stop policing one directory under a watched one. A save from a file under it is
-	 * neither reported nor thrown. Survives `watch_directory()` (a self-test that re-points
-	 * the guard at a fixture never trips on an excepted plugin directory anyway).
-	 *
-	 * @param string $dir Directory to leave alone.
-	 */
-	public static function except( string $dir ): void {
-		$dir = self::normalize_dir( $dir );
-		if ( ! \in_array( $dir, self::$excepted_dirs, true ) ) {
-			self::$excepted_dirs[] = $dir;
-		}
-	}
-
-	/**
-	 * Run work with every excepted directory policed again, to prove that a site an exemption still
-	 * covers no longer saves inside a hook (#2389 removes the last exemption).
-	 *
-	 * @param callable $work Work.
-	 *
-	 * @return mixed What the work returns.
-	 */
-	public static function strictly( callable $work ) {
-		$excepted            = self::$excepted_dirs;
-		self::$excepted_dirs = array();
-		try {
-			return $work();
-		} finally {
-			self::$excepted_dirs = $excepted;
-		}
-	}
-
-	/**
 	 * A directory as the backtrace reports it: realpath()'d, with one trailing slash.
 	 *
 	 * @param string $dir Directory.
@@ -225,11 +184,6 @@ class Save_Reentry_Guard {
 		}
 		if ( '' === $match ) {
 			return null;
-		}
-		foreach ( self::$excepted_dirs as $dir ) {
-			if ( 0 === strpos( $file, $dir ) ) {
-				return null;
-			}
 		}
 		$base = empty( self::$extra_dirs ) ? \dirname( $match ) : \dirname( $match, 2 );
 		return substr( $file, \strlen( $base ) + 1 );

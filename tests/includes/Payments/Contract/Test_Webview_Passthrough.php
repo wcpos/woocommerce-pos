@@ -15,7 +15,6 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
-use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
 
 /** Webview payment passthrough tests. */
 class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
@@ -378,7 +377,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$order->save();
 
 		// Act.
-		Save_Reentry_Guard::strictly( fn() => $order->payment_complete() );
+		$order->payment_complete();
 		$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
 		Ledger::flush_all();
 		// The hook mints on its own wc_get_order() instance; re-read, as any later request would.
@@ -469,12 +468,8 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				// Act: WooCommerce fires this after the pay nonce and order key check,
 				// immediately before it calls the gateway's process_payment().
 				do_action( 'woocommerce_before_pay_action', $order );
-				Save_Reentry_Guard::strictly(
-					static function () use ( $order ): void {
-						$order->set_status( 'processing' );
-						$order->save();
-					}
-				);
+				$order->set_status( 'processing' );
+				$order->save();
 				$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
 				apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order->get_id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 
@@ -505,7 +500,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		do_action( 'woocommerce_before_pay_action', $order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
-		Save_Reentry_Guard::strictly( fn() => wc_get_order( $id )->payment_complete() );
+		wc_get_order( $id )->payment_complete();
 		$result = apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
 		remove_action( 'woocommerce_payment_complete', $look, 99 );
 

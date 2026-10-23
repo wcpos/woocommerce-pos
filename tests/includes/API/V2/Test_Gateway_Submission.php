@@ -18,7 +18,6 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
-use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /** Submission reads money from the gateway, not from the verb. */
@@ -712,7 +711,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reset();
 
 		// Act: a later request lands the paid status without payment_complete(); its row is minted at shutdown.
-		Save_Reentry_Guard::strictly( fn() => wc_get_order( $order->get_id() )->update_status( 'processing' ) );
+		wc_get_order( $order->get_id() )->update_status( 'processing' );
 		$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
 		Ledger::flush_all();
 
@@ -736,7 +735,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reset();
 
 		// Act: the provider's callback in a later request; its row is minted at shutdown.
-		Save_Reentry_Guard::strictly( fn() => wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' ) );
+		wc_get_order( $order->get_id() )->payment_complete( 'txn_callback' );
 		$during = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
 		Ledger::flush_all();
 
@@ -1108,7 +1107,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			$order->update_meta_data( '_wcpos_awaiting_customer', array( 'attempt_id' => wp_generate_uuid4() ) );
 			$order->save();
 			// Act: the stamp's removal rides the status save itself.
-			Save_Reentry_Guard::strictly( fn() => $order->update_status( $status ) );
+			$order->update_status( $status );
 			// Assert.
 			$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_awaiting_customer' ) );
 		}
