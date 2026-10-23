@@ -242,19 +242,28 @@ back. What already exists and what is still missing:
      voided meanwhile, a payment the gateway rejects), the sale moves to a "needs attention" row
      in the orders screen with the refusal reason, the tender is never retried on its own, and
      the cashier resolves it there. Nothing is dropped silently and nothing is re-applied silently.
-- *Missing 2:* a tender journals while offline instead of being refused: `OFFLINE_TENDERS_QUEUE`
-  true, the manual record path and the terminal service journal instead of throwing
-  (`record-manual-payment.ts`, `use-terminal-payments-service.ts`, `void-payments.ts` each carry a
-  "do not queue" refusal today), device tiles stay gated by their own connectivity.
-- *Missing 3:* the provisional state on the till (receipt stage, chip, close) and the recovery
-  bridge finishing the sale when the answer lands; most of it is the existing awaiting-adoption
-  path with a new entry.
+- *Built 2 and 3 (slices A and B, 2026-10-23):* wcpos/monorepo#2865 built the envelope behind a
+  switch (the poster's `defer` journals a record as sent with no revision and a `deferredAt`; the
+  offline `recordManualPayment` mirrors the derived status locally; the completion attempt awaits
+  adoption; the recovery re-sends the deferred record and raises a refusal as the needs-attention
+  story). wcpos/monorepo#2870 deleted the switch and rendered rule 1: the register-bar pill counts
+  the sales the store has still to hear, the receipt stage, the open-orders chip and every printed
+  path carry "Awaiting store" while the order's journal holds a deferred entry (never read from the
+  order status, which flickers on reconnect; never from an online sale's in-flight send), the
+  enabled tile says "Sent later · Store may refuse", and the cashier confirms the recorded amount in
+  a dialog the tender flow owns. A cart the store has never seen (no server id) stays disabled: its
+  record would have no route. The bridge's second completion on the store's answer is a replay:
+  audited as such, it refreshes only a receipt tab that still exists and prints nothing.
+  wcpos/monorepo#2869 is rule 4: the refusal becomes a durable needs-attention row in Orders
+  (store-local document, "Open order" / "Handled", never a Retry).
 - *Missing 4:* a live e2e spec that cuts the network mid-tender and reconnects.
 - *Missing 5, SumUp:* the leg starts a session when the till is offline and the method opts in
   (`capabilities.offline === 'queue'`), then one day on a physical Solo.
 
-Estimate: three to four slice PRs for cash and manual tenders once *Missing 1* is written, one
-more slice and a hardware day for SumUp.
+Remaining: *Missing 4* (slice C, the live network-cut spec) and *Missing 5* (slice D, one SumUp
+slice plus a hardware day). Open question for the owner: after a cashier switch, a deferred record
+waits for its own cashier's session to re-send it; whether the till should send it under whichever
+cashier is active is undecided.
 
 **Amendment: the order of the ledger write.** The Consequences' "there is no second phase when the status transition happens inside the ledger save" is unsafe under WooCommerce's save mechanics: `WC_Abstract_Order::save()` catches a failed save and `WC_Order::save()` still runs `status_transition()`, which fires the paid hooks (stock, email, the fiscal sale), so rows riding the paid save can half-land while those effects go out. Amended 2026-10-22: the ledger lands its rows in their own save and verifies them before it runs `payment_complete()`, and stamps the completion after it. Each step is a function of storage and idempotent, and a retry of the same command heals a crash between them. This is not the money epoch returning: no row is filtered or archived; it is the order in which one write reaches storage.
 
