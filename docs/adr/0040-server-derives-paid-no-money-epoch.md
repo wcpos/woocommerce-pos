@@ -261,9 +261,20 @@ back. What already exists and what is still missing:
   (`capabilities.offline === 'queue'`), then one day on a physical Solo.
 
 Remaining: *Missing 4* (slice C, the live network-cut spec) and *Missing 5* (slice D, one SumUp
-slice plus a hardware day). Open question for the owner: after a cashier switch, a deferred record
-waits for its own cashier's session to re-send it; whether the till should send it under whichever
-cashier is active is undecided.
+slice plus a hardware day).
+
+*Decided 2 (owner, 2026-10-23): a deferred record stays with its cashier.* The till's store database
+is keyed per signed-in credential, so the money journal, the pending completions and the
+needs-attention rows belong to the cashier who took the sale; another cashier signing in on the same
+till opens a different database and sees none of them. The owner's call: *"If the cashier switches,
+they would expect to see it when they switch back."* So the record is re-sent only by its own
+cashier's session (reconnect, session start, the recovery's backoff), never under another cashier,
+and the switch is not held. Sending under the active cashier was costed and rejected: the other
+cashier's offline cart edits sit in their own scope queue and must reach the store first, which
+needs a second engine on that scope, a way to release a non-active scope database, a write-drain
+driver and a barrier for their return. Rule 1 is kept by telling the cashier who holds the money, in
+the cashier sheet: "Awaiting store · n sales. Kept for you on this till. Sent when you are signed in
+and the store is reachable." (wcpos/monorepo#2871, slice B3).
 
 **Amendment: the order of the ledger write.** The Consequences' "there is no second phase when the status transition happens inside the ledger save" is unsafe under WooCommerce's save mechanics: `WC_Abstract_Order::save()` catches a failed save and `WC_Order::save()` still runs `status_transition()`, which fires the paid hooks (stock, email, the fiscal sale), so rows riding the paid save can half-land while those effects go out. Amended 2026-10-22: the ledger lands its rows in their own save and verifies them before it runs `payment_complete()`, and stamps the completion after it. Each step is a function of storage and idempotent, and a retry of the same command heals a crash between them. This is not the money epoch returning: no row is filtered or archived; it is the order in which one write reaches storage.
 
