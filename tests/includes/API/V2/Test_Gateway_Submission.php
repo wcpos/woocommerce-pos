@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
@@ -1476,6 +1477,49 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		return array();
+	}
+
+	/** A sent attempt is money in motion, so the sale keeps its prevent-overselling hold; cancelling it gives the stock back. */
+	public function test_submit_sent_keeps_the_stock_hold_and_cancel_releases_it(): void {
+		// Arrange: one unit of stock on two open POS orders; A holds it.
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		try {
+			$product = ProductHelper::create_simple_product();
+			$product->set_regular_price( '10' );
+			$product->set_price( '10' );
+			$product->set_manage_stock( true );
+			$product->set_stock_quantity( 1 );
+			$product->save();
+			$orders = array();
+			foreach ( array( 'a', 'b' ) as $key ) {
+				$orders[ $key ] = wc_create_order();
+				$orders[ $key ]->set_created_via( 'woocommerce-pos' );
+				$orders[ $key ]->set_status( 'pos-open' );
+				$orders[ $key ]->add_product( $product, 1 );
+				$orders[ $key ]->calculate_totals( false );
+				$orders[ $key ]->save();
+			}
+			$this->assertInstanceOf( \WC_Order::class, Stock_Validator::instance()->validate_checkout( $orders['a'] ) );
+			$attempt = wp_generate_uuid4();
+
+			// Act.
+			$sent    = $this->submit( $orders['a'], $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+			$held    = Stock_Validator::instance()->validate_checkout( wc_get_order( $orders['b']->get_id() ) );
+			$cancel  = $this->cancel( $orders['a'], $attempt );
+			$shelved = Stock_Validator::instance()->validate_checkout( wc_get_order( $orders['b']->get_id() ) );
+
+			// Assert.
+			$this->assertSame( 'sent', $sent->get_data()['outcome'], wp_json_encode( $sent->get_data() ) );
+			$this->assertWPError( $held );
+			$this->assertSame( 'wcpos_insufficient_stock', $held->get_error_code() );
+			$this->assertSame( 200, $cancel->get_status(), wp_json_encode( $cancel->get_data() ) );
+			$this->assertInstanceOf( \WC_Order::class, $shelved );
+		} finally {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+			update_option( 'woocommerce_pos_settings_checkout', $settings );
+		}
 	}
 
 	/**

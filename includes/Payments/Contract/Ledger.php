@@ -2020,13 +2020,14 @@ class Ledger {
 	}
 
 	/**
-	 * Nothing is paying for the sale any more (no pending, authorized or captured row) and its stock
-	 * was never reduced: the prevent-overselling hold goes back to the shelf.
+	 * Nothing is paying for the sale any more (no pending, authorized or captured row, and no money in motion:
+	 * a sent gateway attempt or its awaiting-customer stamp) and its stock was never reduced: the
+	 * prevent-overselling hold goes back to the shelf.
 	 *
 	 * @param WC_Order $order Order object.
 	 */
 	private function release_hold_if_idle( WC_Order $order ): void {
-		if ( array_filter( $this->read( $order ), static fn( $live ) => in_array( $live['status'] ?? '', self::LIVE_STATUSES, true ) ) ) {
+		if ( array_filter( $this->read( $order ), static fn( $live ) => in_array( $live['status'] ?? '', self::LIVE_STATUSES, true ) ) || null !== $this->sale_state( $order )->in_motion() ) {
 			return;
 		}
 		if ( ! $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) {
