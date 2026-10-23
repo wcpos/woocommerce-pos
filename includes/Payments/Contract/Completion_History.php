@@ -87,20 +87,21 @@ final class Completion_History {
 
 	/**
 	 * The ids of the orders whose latest entry stands, completed between $since and $until, with no
-	 * `sale` row in $records naming it, oldest completion first. The window is read through the
+	 * `sale` row in $records naming it and no $parked meta (the parked pass owns those), oldest completion first. The window is read through the
 	 * `_wcpos_completed_at` meta key index; the latest entry is the text after the last `{"id":"`
 	 * (Completion_Stamp writes the id first and no entry nests an object), and its row is looked up by
 	 * the record store's unique (type, source_id) index, so a completion that has its record never
 	 * comes back. Its id is compared as ASCII so a records table collated unlike the meta table still compares.
 	 *
 	 * @param string $records Fiscal record table.
+	 * @param string $parked  Meta key of a parked sale document.
 	 * @param int    $since   Earliest completion time, a timestamp.
 	 * @param int    $until   Latest completion time, a timestamp.
 	 * @param int    $limit   Batch cap.
 	 * @return int[]
 	 * @throws \RuntimeException On read failure.
 	 */
-	public static function orders_standing_without_a_record( string $records, int $since, int $until, int $limit ): array {
+	public static function orders_standing_without_a_record( string $records, string $parked, int $since, int $until, int $limit ): array {
 		global $wpdb;
 		$hpos   = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
 		$table  = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
@@ -112,6 +113,7 @@ final class Completion_History {
 				"SELECT c.{$key} FROM {$table} c JOIN {$table} h ON h.{$key} = c.{$key} AND h.meta_key = %s"
 				. " WHERE c.meta_key = %s AND c.meta_value BETWEEN %s AND %s AND {$latest} LIKE %s"
 				. " AND NOT EXISTS ( SELECT 1 FROM {$records} f WHERE f.type = 'sale' AND f.source_id = CONVERT( LEFT( {$latest}, 36 ) USING ascii ) )"
+				. " AND NOT EXISTS ( SELECT 1 FROM {$table} p WHERE p.{$key} = c.{$key} AND p.meta_key = %s )"
 				. ' ORDER BY c.meta_value LIMIT %d',
 				Completion_Stamp::META_KEY,
 				Completion_Stamp::COMPLETED_AT_META_KEY,
@@ -120,6 +122,7 @@ final class Completion_History {
 				'{"id":"',
 				'%' . $wpdb->esc_like( '"reopened_at_gmt":null' ) . '%',
 				'{"id":"',
+				$parked,
 				$limit
 			)
 		);

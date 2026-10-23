@@ -33,6 +33,20 @@ final class Fiscal_Record_Writers {
 	private const SWEEP_LOOKBACK_SECONDS = 7 * DAY_IN_SECONDS;
 
 	/**
+	 * The share of a sweep's batch, in percent (rounded down), the parked pass is given first; the
+	 * never-written pass takes the rest, and either pass's unused share goes to the other. Half each,
+	 * so neither a run of chronically failing parked documents nor a run of unwritten completions
+	 * can take a whole batch while the other has candidates.
+	 */
+	private const SWEEP_PARKED_SHARE_PERCENT = 50;
+
+	/**
+	 * The parked document's first key once a recovery attempt has failed: when it was tried (a `c`
+	 * date), so the sweep tries the never-tried and the longest-waiting first. Not a record field.
+	 */
+	private const ATTEMPTED_AT = 'attempted_at';
+
+	/**
 	 * Singleton keeps the order-service listeners armed once.
 	 *
 	 * @var self|null
@@ -139,6 +153,7 @@ final class Fiscal_Record_Writers {
 				try {
 					if ( null === $this->store->record( self::fields_of( $order, (array) $document ) ) ) {
 						Logger::log( sprintf( 'Fiscal sale recovery for completion %s on order #%d failed again.', $completion_id, $order->get_id() ) );
+						self::attempted( $fresh, (string) $completion_id );
 						continue;
 					}
 					self::unpark( $fresh, (string) $completion_id );
@@ -149,6 +164,7 @@ final class Fiscal_Record_Writers {
 					}
 				} catch ( \Throwable $error ) {
 					Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
+					self::attempted( $fresh, (string) $completion_id );
 				}
 			}
 		} finally {
@@ -157,24 +173,43 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * The orders the payments sweep retries, at most $limit, parked first: those holding a parked sale
-	 * document (the meta key index), then those whose standing completion has no sale record.
+	 * The orders the payments sweep retries, at most $limit, the batch shared by two passes
+	 * (SWEEP_PARKED_SHARE_PERCENT): orders holding a parked sale document, never-tried first, then by
+	 * their last attempt, skipping any tried within $grace; and orders whose standing completion has no
+	 * sale record and nothing parked. A parked document that keeps failing so moves to the back.
 	 *
 	 * @param int $limit Batch cap.
-	 * @param int $grace Seconds a completion is left to its own request.
+	 * @param int $grace Seconds a completion, or a parked document's last attempt, is left alone.
 	 * @return int[] Order ids.
 	 */
 	public static function orders_owed_a_sale( int $limit, int $grace ): array {
 		global $wpdb;
 		$store = new Fiscal_Record_Store();
 		$store->ensure_installed();
-		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$meta = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$key  = $hpos ? 'order_id' : 'post_id';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Storage-selected identifiers; an index lookup, never cached.
-		$parked    = $wpdb->get_col( $wpdb->prepare( "SELECT {$key} FROM {$meta} WHERE meta_key = %s ORDER BY {$key} LIMIT %d", self::PENDING_META_KEY, $limit ) );
-		$unwritten = Completion_History::orders_standing_without_a_record( $store->table_name(), time() - self::SWEEP_LOOKBACK_SECONDS, time() - $grace, $limit );
-		return array_slice( array_values( array_unique( array_map( 'intval', array_merge( (array) $parked, $unwritten ) ) ) ), 0, $limit );
+		$hpos   = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
+		$meta   = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
+		$key    = $hpos ? 'order_id' : 'post_id';
+		$marker = '"' . self::ATTEMPTED_AT . '":"';
+		// The first document's leading key (attempted() writes it there), else '' (never tried): `c` dates compare as strings.
+		$attempt = 'IF( LOCATE( %s, LEFT( meta_value, 100 ) ) > 0, SUBSTRING( meta_value, LOCATE( %s, meta_value ) + %d, 25 ), \'\' )';
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Storage-selected identifiers; an index lookup, never cached.
+		$parked = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT k FROM ( SELECT {$key} AS k, {$attempt} AS attempt FROM {$meta} WHERE meta_key = %s ) a WHERE a.attempt < %s ORDER BY a.attempt, a.k LIMIT %d",
+				$marker,
+				$marker,
+				strlen( $marker ),
+				self::PENDING_META_KEY,
+				gmdate( 'c', time() - $grace ),
+				$limit
+			)
+		);
+		// phpcs:enable
+		$parked    = array_map( 'intval', (array) $parked );
+		$unwritten = Completion_History::orders_standing_without_a_record( $store->table_name(), self::PENDING_META_KEY, time() - self::SWEEP_LOOKBACK_SECONDS, time() - $grace, $limit );
+		$share     = intdiv( $limit * self::SWEEP_PARKED_SHARE_PERCENT, 100 );
+		$unwritten = array_slice( $unwritten, 0, $limit - min( count( $parked ), $share ) );
+		return array_merge( array_slice( $parked, 0, $limit - count( $unwritten ) ), $unwritten );
 	}
 
 	/**
@@ -586,6 +621,23 @@ final class Fiscal_Record_Writers {
 		$parked                                 = self::parked( $order );
 		$parked[ strtolower( $completion_id ) ] = $document;
 		$order->update_meta_data( self::PENDING_META_KEY, wp_json_encode( $parked ) );
+		Ledger::save_meta( $order );
+	}
+
+	/**
+	 * Stamp a parked document's failed recovery attempt as its first key, and its document first in the map.
+	 *
+	 * @param WC_Order $order         Order.
+	 * @param string   $completion_id Completion entry id.
+	 */
+	private static function attempted( WC_Order $order, string $completion_id ): void {
+		$parked = self::parked( $order );
+		if ( ! isset( $parked[ $completion_id ] ) ) {
+			return;
+		}
+		$document = array( self::ATTEMPTED_AT => gmdate( 'c' ) ) + array_diff_key( (array) $parked[ $completion_id ], array( self::ATTEMPTED_AT => true ) );
+		unset( $parked[ $completion_id ] );
+		$order->update_meta_data( self::PENDING_META_KEY, wp_json_encode( array( $completion_id => $document ) + $parked ) );
 		Ledger::save_meta( $order );
 	}
 
