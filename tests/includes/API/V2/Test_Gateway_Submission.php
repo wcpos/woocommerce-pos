@@ -8,9 +8,13 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard;
@@ -1472,6 +1476,113 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		return array();
+	}
+
+	/**
+	 * A paying submit failing at the held write, at the gateway's own paid save, or at the minted row's completion,
+	 * then retried with the same command: dispatched once, one row, one completion, one fiscal sale, stock reduced once.
+	 *
+	 * @dataProvider paying_submit_failures
+	 *
+	 * @param string $stage  Where the first request fails.
+	 * @param int    $status The first request's answer.
+	 */
+	public function test_paying_submit_failing_at_stage_then_retried_records_once( string $stage, int $status ): void {
+		// Arrange: ten units of a managed-stock product, one sold on an open POS order.
+		global $wpdb;
+		$product = ProductHelper::create_simple_product();
+		$product->set_regular_price( '92.95' );
+		$product->set_price( '92.95' );
+		$product->set_manage_stock( true );
+		$product->set_stock_quantity( 10 );
+		$product->save();
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( false );
+		$order->save();
+		$id      = $order->get_id();
+		$attempt = wp_generate_uuid4();
+		$body    = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => $attempt,
+				'values'     => array(),
+			)
+		);
+		$undo = $this->fail_paying_submit_at( $stage, $id, $attempt );
+
+		// Act.
+		try {
+			$first = $this->gateway_command( $order, 'submit', $body, 'wcpos_paid_test' );
+		} finally {
+			$undo();
+		}
+		$wpdb->last_error = '';
+		$retried          = $this->gateway_command( $order, 'submit', $body, 'wcpos_paid_test' );
+
+		// Assert.
+		$this->assertSame( $status, $first->get_status(), wp_json_encode( $first->get_data() ) );
+		$this->assertSame( 200, $retried->get_status(), wp_json_encode( $retried->get_data() ) );
+		$this->assertSame( 'recorded', $retried->get_data()['outcome'] );
+		$this->assertSame( $attempt, $retried->get_data()['payment']['id'] ?? null );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls );
+		$stored = wc_get_order( $id );
+		$this->assertContains( $stored->get_status(), wc_get_is_paid_statuses() );
+		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertSame( array( $attempt => 'paid' ), Gateway_Submission::read_attempts( $stored ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertSame( array( $attempt ), Completion_History::of( $stored )->standing()['payment_ids'] );
+		$this->assertSame(
+			1,
+			( new Fiscal_Record_Store() )->count(
+				array(
+					'order_id' => $id,
+					'type'     => 'sale',
+				)
+			)
+		);
+		$this->assertSame( 9, wc_get_product( $product->get_id() )->get_stock_quantity() );
+	}
+
+	/** The held write's attempt lost; the gateway's own paid save lost (the row's write carries the paid transition); the completion lost. */
+	public function paying_submit_failures(): array {
+		return array(
+			'at the held write'               => array( 'held', 409 ),
+			'at the gateway paid save'        => array( 'paid', 200 ),
+			'at the minted row\'s completion' => array( 'completion', 409 ),
+		);
+	}
+
+	/**
+	 * Make one step of the next paying submit fail.
+	 *
+	 * @param string $stage   `held`, `paid` or `completion`.
+	 * @param int    $id      Order id.
+	 * @param string $attempt Attempt id.
+	 * @return callable Undo.
+	 */
+	private function fail_paying_submit_at( string $stage, int $id, string $attempt ): callable {
+		if ( 'completion' === $stage ) {
+			// Every write of the completion history reaches nothing.
+			$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Completion_Stamp::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+			add_filter( 'query', $lose );
+			return static fn() => remove_filter( 'query', $lose );
+		}
+		$fail = static function ( $saving ) use ( $stage, $id, $attempt ): void {
+			if ( $saving->get_id() !== $id ) {
+				return;
+			}
+			if ( 'held' === $stage && 'sent' === ( Gateway_Submission::read_attempts( $saving )[ $attempt ] ?? null ) ) {
+				$saving->delete_meta_data( Gateway_Submission::ATTEMPTS_META_KEY );
+			}
+			if ( 'paid' === $stage && Gateway_Submission::is_submitting( $id ) && $saving->get_date_paid( 'edit' ) ) {
+				throw new \RuntimeException( 'The gateway paid save was lost' ); // WooCommerce swallows it.
+			}
+		};
+		add_action( 'woocommerce_before_order_object_save', $fail, PHP_INT_MAX );
+		return static fn() => remove_action( 'woocommerce_before_order_object_save', $fail, PHP_INT_MAX );
 	}
 
 	/** Pin 8: a submit that answered `sent` replays from the command map, even once the attempt history lost it. */

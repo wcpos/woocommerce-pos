@@ -2493,7 +2493,11 @@ class Ledger {
 			}
 			$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array_slice( $history, - Gateway_Submission::ATTEMPTS_CAP, null, true ) );
 		}
-		$this->stage( $order, $rows );
+		// An order with no ledger gets none from a write that holds no rows and does not complete (an attempt's held write).
+		$ledgered = $rows || $projection['completes'] || '' !== $order->get_meta( self::META_KEY );
+		if ( $ledgered ) {
+			$this->stage( $order, $rows );
+		}
 		// What storage must hold afterwards, as sets (HPOS reuses meta ids): taken now, as the save re-reads the meta.
 		$values = static function ( WC_Order $read, string $key ): array {
 			$list = array_map( static fn( $meta ) => $meta->value, $read->get_meta( $key, false ) );
@@ -2513,7 +2517,7 @@ class Ledger {
 		// The rows, their four indexes, the attempt fates their coverage settled, and every order property staged.
 		$check = $this->fresh( $id );
 		$kept  = $this->stored( $id, true );
-		return array_map( static fn( $key ) => $values( $check, $key ), $keys ) === $want && null !== $kept && $kept['payments'] === $wire && self::holds( $check->get_data(), $props );
+		return array_map( static fn( $key ) => $values( $check, $key ), $keys ) === $want && ( $ledgered ? null !== $kept && $kept['payments'] === $wire : null === $kept ) && self::holds( $check->get_data(), $props );
 	}
 
 	/**
