@@ -1155,6 +1155,41 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 409, $this->cancel( $order, $attempt )->get_status() );
 	}
 
+	/** A submit settled on the gateway's stored Pending status, replayed with the same command, reads its answer and moves nothing. */
+	public function test_submit_settled_on_stored_pending_replayed_with_the_same_command_leaves_the_status(): void {
+		// Arrange.
+		$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
+		$order = $this->create_pos_order();
+		$body  = $this->envelope(
+			$order,
+			array(
+				'attempt_id' => wp_generate_uuid4(),
+				'values'     => array( 'invoice_email' => 'buyer@example.com' ),
+			)
+		);
+		$first       = $this->gateway_command( $order, 'submit', $body );
+		$transitions = array();
+		$observe     = static function ( $id, $from, $to ) use ( &$transitions ): void {
+			$transitions[] = $from . '>' . $to;
+		};
+		add_action( 'woocommerce_order_status_changed', $observe, 10, 3 );
+
+		// Act.
+		try {
+			$replayed = $this->gateway_command( $order, 'submit', $body );
+		} finally {
+			remove_action( 'woocommerce_order_status_changed', $observe, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 'settled', $first->get_data()['outcome'], wp_json_encode( $first->get_data() ) );
+		$this->assertSame( 200, $replayed->get_status(), wp_json_encode( $replayed->get_data() ) );
+		$this->assertSame( 'settled', $replayed->get_data()['outcome'] );
+		$this->assertSame( array(), $transitions );
+		$this->assertSame( 'pending', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertSame( 1, Sent_Test_Gateway::$calls );
+	}
+
 	/** A stored status the gateway did not reach is the ordinary send-and-leave. */
 	public function test_submit_stored_status_not_reached_is_sent(): void {
 		// Arrange.

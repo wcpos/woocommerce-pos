@@ -166,9 +166,9 @@ final class Command_Log {
 	}
 
 	/**
-	 * A command's stored outcome, from storage. A record, a submit (its minted row's completion), or an entry still
-	 * owing the paid transition its write's rows covered, first heals through a write (it saves nothing on a healthy
-	 * order and completes the sale only while a command owes it, or stamps a paid sale's missing completion). A record, and an intent still pending, answer
+	 * A command's stored outcome, from storage. A record, a submit whose minted row has no completion yet, or an entry
+	 * still owing the paid transition its write's rows covered, first heals through a write (it saves nothing on a
+	 * healthy order and completes the sale only while a command owes it, or stamps a paid sale's missing completion). A record, and an intent still pending, answer
 	 * through their handler: the record from its stored row, the intent by resuming at the provider (handlers
 	 * key the call on the row id, so it hands back the same intent and the handoff the till lost).
 	 *
@@ -187,7 +187,10 @@ final class Command_Log {
 				return $drained;
 			}
 		}
-		if ( in_array( $kind, array( 'record', 'submit' ), true ) || self::owes( $order, $entry ) ) {
+		// A submit heals only while its attempt's row stands with no completion (S3 lost after the mint): a write on a
+		// sale with no row would project an unpaid settled status (`pending`) back into progress.
+		$minted = 'submit' === $kind && null !== $ledger->find( $order, (string) $entry['ref'] ) && null === Completion_History::of( $order )->standing();
+		if ( 'record' === $kind || $minted || self::owes( $order, $entry ) ) {
 			$order = $ledger->write( $order, null, 'close' === $kind ? Ledger::MODE_CLOSE : Ledger::MODE_AUTO )->order;
 		}
 		$row = null === $entry['payment_id'] ? null : $ledger->find( $order, $entry['payment_id'] );
