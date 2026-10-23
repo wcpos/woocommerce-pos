@@ -11,7 +11,6 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
-use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 
 /**
  * One instance shares the session snapshot; movements and closure serialize on the register.
@@ -546,15 +545,15 @@ final class Session_Figures {
 			return $this->memo['refund_records'];
 		}
 		$session = $this->session;
-		global $wpdb;
-		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$key = $hpos ? 'order_id' : 'post_id';
-		$orders = $hpos ? $wpdb->prefix . 'wc_orders' : $wpdb->posts;
-		$type = $hpos ? 'type' : 'post_type';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT m.{$key} FROM {$table} m INNER JOIN {$orders} o ON o.id = m.{$key} WHERE m.meta_key = %s AND LOWER(m.meta_value) = %s AND o.{$type} = %s ORDER BY m.{$key} DESC", '_wcpos_session', strtolower( $session['id'] ), 'shop_order_refund' ) );
-		if ( '' !== $wpdb->last_error ) {
+		$ids = Order_Meta_Store::order_ids(
+			'_wcpos_session',
+			array(
+				'value_ci' => $session['id'],
+				'type'     => 'shop_order_refund',
+				'order'    => 'newest',
+			)
+		);
+		if ( null === $ids ) {
 			throw new \RuntimeException( 'Session refunds read failed.' );
 		}
 		$result = array();
@@ -578,14 +577,15 @@ final class Session_Figures {
 			return $this->memo['legs'];
 		}
 		$session = $this->session;
-		global $wpdb;
-		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$key = $hpos ? 'order_id' : 'post_id';
 		// The index narrows the candidates; the ledger rows below stay the truth.
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value = %s ORDER BY {$key} DESC", Ledger::SESSION_META_KEY, strtolower( $session['id'] ) ) );
-		if ( '' !== $wpdb->last_error ) {
+		$ids = Order_Meta_Store::order_ids(
+			Ledger::SESSION_META_KEY,
+			array(
+				'value' => strtolower( $session['id'] ),
+				'order' => 'newest',
+			)
+		);
+		if ( null === $ids ) {
 			throw new \RuntimeException( 'Session ledger read failed.' );
 		}
 		$result = array();

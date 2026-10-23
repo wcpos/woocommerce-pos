@@ -10,7 +10,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 \defined( 'ABSPATH' ) || die;
 
 use WC_Order;
-use WCPOS\WooCommercePOS\Sync\Collection_Rules;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 
 /**
  * One decode of `_wcpos_completions` (ADR 0040 rule 1c), oldest entry first, and every question
@@ -73,16 +73,11 @@ final class Completion_History {
 	 * @throws \RuntimeException On read failure.
 	 */
 	public static function orders_in_session( string $session_id ): array {
-		global $wpdb;
-		$hpos  = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$key   = $hpos ? 'order_id' : 'post_id';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Storage-selected identifiers.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$key} FROM {$table} WHERE meta_key = %s AND meta_value LIKE %s", Completion_Stamp::META_KEY, '%' . $wpdb->esc_like( '"session":"' . $session_id . '"' ) . '%' ) );
-		if ( '' !== $wpdb->last_error ) {
+		$ids = Order_Meta_Store::order_ids( Completion_Stamp::META_KEY, array( 'contains' => '"session":"' . $session_id . '"' ) );
+		if ( null === $ids ) {
 			throw new \RuntimeException( 'Session completion read failed.' );
 		}
-		return array_map( 'intval', $ids );
+		return $ids;
 	}
 
 	/**
@@ -103,9 +98,9 @@ final class Completion_History {
 	 */
 	public static function orders_standing_without_a_record( string $records, string $parked, int $since, int $until, int $limit ): array {
 		global $wpdb;
-		$hpos   = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$table  = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$key    = $hpos ? 'order_id' : 'post_id';
+		$store  = Order_Meta_Store::schema();
+		$table  = $store['meta'];
+		$key    = $store['owner'];
 		$latest = 'SUBSTRING_INDEX( h.meta_value, %s, -1 )';
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Storage-selected and class-owned identifiers; an index lookup, never cached.
 		$ids = $wpdb->get_col(

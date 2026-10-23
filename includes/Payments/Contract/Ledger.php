@@ -11,10 +11,10 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WCPOS\WooCommercePOS\Services\Save_Hooks;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
-use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_Error;
 
 /** Persists payment legs and derives WooCommerce order payment state. */
@@ -175,10 +175,10 @@ class Ledger {
 	 */
 	private function stored( int $order_id, bool $lock ): ?array {
 		global $wpdb;
-		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$table = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$id = $hpos ? 'id' : 'meta_id';
-		$owner = $hpos ? 'order_id' : 'post_id';
+		$store = Order_Meta_Store::schema();
+		$table = $store['meta'];
+		$id = $store['meta_id'];
+		$owner = $store['owner'];
 		$suffix = $lock ? ' FOR UPDATE' : '';
 		// `meta_key` compares under a `_ci` PAD SPACE collation, so `_WCPOS_PAYMENTS` matches too: the
 		// binary comparison keeps only the exact key, and the plain one keeps the index usable.
