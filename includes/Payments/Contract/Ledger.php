@@ -2670,10 +2670,14 @@ class Ledger {
 	 * holds): the rows still live or owed, the uncounted captured rows of a completion that is due but not stored
 	 * (`completion_due()`: the sweep's trailing write completes it), and the attempts the resolver still has to ask about.
 	 * Saved meta-only, and only when it differs, after a read-back confirmed what it is computed from; a write whose rows
-	 * did not land never reaches here, so the index keeps listing what it listed before.
+	 * did not land never reaches here, so the index keeps listing what it listed before. The index is the sweep's only way
+	 * back to this order, so a write that leaves something live must prove the index lists it: a read-back that does not
+	 * hold a non-empty index fails the write closed, before anything is dispatched. One emptying the index only warns: a
+	 * stale entry costs the sweep one look, and the next write recomputes it.
 	 *
 	 * @param WC_Order $order Order as storage holds it.
 	 * @return WC_Order The order as storage holds it afterwards.
+	 * @throws Ledger_Persistence_Exception When the order keeps something live and its index did not reach storage.
 	 */
 	private function index_live( WC_Order $order ): WC_Order {
 		$want = Attempts::of( $order )->to_index();
@@ -2701,8 +2705,11 @@ class Ledger {
 		$order = $this->fresh( $order->get_id() );
 		$have  = $listed( $order );
 		sort( $have );
+		if ( $want !== $have && $want ) {
+			throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS payment index was not persisted.' );
+		}
 		if ( $want !== $have ) {
-			Logger::warning( sprintf( 'WCPOS payment index on order #%d was not persisted; the next write rewrites it.', $order->get_id() ), array( 'order_id' => $order->get_id() ) );
+			Logger::warning( sprintf( 'WCPOS payment index on order #%d was not emptied; the next write rewrites it.', $order->get_id() ), array( 'order_id' => $order->get_id() ) );
 		}
 		return $order;
 	}

@@ -78,6 +78,13 @@ land on both S1 tries never reaches it, so the index keeps listing the attempt i
 sweep re-mints the row. The index never claims more than storage holds. The extra meta save happens only on writes
 that change the live set.
 
+**A write that leaves something live must prove the index lists it.** The index is the sweep's only way back to an
+order (`Payment_Index::order_ids_with_live_legs()` selects through that key alone). So when the index read-back does
+not hold a non-empty computed index (an unresolved attempt, a live intent, or completion debt), the write fails closed
+with `Ledger_Persistence_Exception`, as a lost row does. A submit's held write fails before dispatch, its attempt is
+withdrawn, and the till gets the retryable 409. When the computed index is empty (the order leaving the list), a
+mismatch is a logged warning: a stale entry costs the sweep one look, and the next write recomputes it.
+
 **The index carries completion debt.** While `completion_due()` holds (captured rows cover the sale and no
 completion counted them), the uncounted captured rows stay in the index; S3 recomputes it after its own read-back
 and drops them once the completion stands. If S3 throws, the order stays listed and the sweep's trailing write

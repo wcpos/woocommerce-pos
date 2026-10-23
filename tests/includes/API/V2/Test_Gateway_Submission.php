@@ -1026,6 +1026,35 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( $send, array_map( static fn( $meta ) => $meta->value, $stored->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ), 'The stranded send is left to the sweep.' );
 	}
 
+	/**
+	 * The index is the sweep's only way back to an order: a held write that leaves an attempt live must prove the index
+	 * lists it. When that index save is lost, the submit fails closed before dispatch; once storage heals, it dispatches once.
+	 */
+	public function test_a_submit_whose_index_save_is_lost_fails_closed_before_dispatch(): void {
+		// Arrange: every insert into the sweep's index is lost.
+		$order = $this->create_pos_order();
+		$lose  = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::LIVE_LEG_META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		add_filter( 'query', $lose );
+		try {
+			// Act.
+			$refused = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+		} finally {
+			remove_filter( 'query', $lose );
+		}
+		$after = wc_get_order( $order->get_id() );
+		$after->read_meta_data( true );
+		$fates = Attempts::of( $after )->fates();
+		$paid  = $this->submit( $order, wp_generate_uuid4(), array(), 'wcpos_paid_test' );
+
+		// Assert.
+		$this->assertSame( 409, $refused->get_status(), wp_json_encode( $refused->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_data()['code'] );
+		$this->assertSame( array(), $fates, 'Nothing is left sent without an index entry.' );
+		$this->assertSame( 200, $paid->get_status(), wp_json_encode( $paid->get_data() ) );
+		$this->assertSame( 'recorded', $paid->get_data()['outcome'] );
+		$this->assertSame( 1, Paid_Test_Gateway::$calls, 'Dispatched once, and only once storage healed.' );
+	}
+
 	/** D1: a send whose gateway threw after dispatch has no stamp, yet the till can still cancel it. */
 	public function test_submit_that_threw_after_dispatch_can_be_cancelled(): void {
 		// Arrange: the gateway throws once dispatch has started, leaving the attempt `sent` with no stamp.

@@ -471,6 +471,35 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** A write that empties the index and whose index save is lost only warns: a stale entry costs the sweep one look. */
+	public function test_an_emptying_write_whose_index_save_is_lost_warns_and_succeeds(): void {
+		// Arrange: a listed attempt; its cancel's index delete is lost.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+		$warnings = array();
+		$log      = static function ( $enabled, $message ) use ( &$warnings ) {
+			if ( 'warning' === \WCPOS\WooCommercePOS\Logger::$log_level ) {
+				$warnings[] = $message;
+			}
+			return false;
+		};
+		$lose = static fn( $sql ) => is_string( $sql ) && preg_match( '/^\s*DELETE/i', $sql ) && false !== strpos( $sql, 'meta' ) ? 'SELECT 0' : $sql;
+		add_filter( 'wcpos_logging', $log, 10, 2 );
+		add_filter( 'query', $lose );
+		try {
+			// Act.
+			Ledger::instance()->write( $order->get_id(), static fn( Ledger_Draft $d ) => Attempts::resolve( $d, $attempt, 'cancelled' ), Ledger::MODE_HOLD );
+		} finally {
+			remove_filter( 'query', $lose );
+			remove_filter( 'wcpos_logging', $log, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 'cancelled', Attempts::of( $this->fresh( $order->get_id() ) )->get( $attempt )['fate'] );
+		$this->assertCount( 1, array_filter( $warnings, static fn( $message ) => false !== strpos( $message, 'payment index' ) ) );
+	}
+
 	/** A split-tender sale: the attempt the gateway paid is recorded for the remainder its counting rows leave, never the whole total again. */
 	public function test_reconcile_mints_only_the_remainder_a_partial_cash_row_leaves(): void {
 		// Arrange: cash pays part; a sent attempt; WooCommerce marks the order paid through the attempt's method.
