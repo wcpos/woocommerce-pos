@@ -27,6 +27,12 @@ final class Command_Log {
 	public const ORDER_KINDS = array( 'submit', 'cancel', 'close' );
 	/** The order-level map, in `Pos_Order_Audit::SERVER_MONEY_META_KEYS` so a push cannot write it. */
 	public const META_KEY = '_wcpos_commands';
+	/**
+	 * An entry's `phase` while the write it rode stored its rows (S1) and still owes the paid transition
+	 * (S2): the replay of that command completes the sale. The completion (S3) advances it. `owed_at_n`
+	 * names the completion count the debt was taken at, so one that landed by any other path settles it.
+	 */
+	public const OWED = 'rows';
 
 	/**
 	 * The body fingerprint: route, target and the body as sent (keys sorted at every depth, values
@@ -154,6 +160,132 @@ final class Command_Log {
 			unset( $map[ strtolower( $command_id ) ] );
 			$order->update_meta_data( self::META_KEY, (string) wp_json_encode( (object) $map ) );
 		}
+	}
+
+	/**
+	 * Mark the commands of the write that covers the sale as owing the paid transition: the draft's
+	 * order-level entries, and every entry on each row the write changes (one storage already holds too,
+	 * when its row's confirmation is what covers the sale). Returns the rows.
+	 *
+	 * @param Ledger_Draft $draft  The write's draft.
+	 * @param array        $rows   Settled rows.
+	 * @param array        $stored Stored rows.
+	 */
+	public static function owe( Ledger_Draft $draft, array $rows, array $stored ): array {
+		$owed = array(
+			'phase'     => self::OWED,
+			'owed_at_n' => self::completions( $draft->order() ),
+		);
+		foreach ( $draft->commands() as $command_id => $entry ) {
+			$draft->command( $command_id, array_merge( $entry, $owed ) );
+		}
+		$held = array_column( $stored, null, 'id' );
+		foreach ( $rows as &$row ) {
+			if ( ( $held[ $row['id'] ] ?? null ) !== json_decode( (string) wp_json_encode( Ledger::to_wire( $row ) ), true ) ) {
+				$row['commands'] = array_map( static fn( $entry ) => array_merge( $entry, $owed ), $row['commands'] );
+			}
+		}
+		unset( $row );
+		return $rows;
+	}
+
+	/**
+	 * Whether a command on the order still owes the paid transition: its entry says so and the order has
+	 * as many completions as when the debt was taken (one more, by any path, settled it).
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	public static function owing( WC_Order $order, array $rows ): bool {
+		$n = self::completions( $order );
+		foreach ( self::entries( $order, $rows ) as $entry ) {
+			if ( self::OWED === ( $entry['phase'] ?? null ) && isset( $entry['owed_at_n'] ) && (int) $entry['owed_at_n'] === $n ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether this entry itself still owes the paid transition, at the order's current completion count.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $entry Command entry.
+	 */
+	public static function owes( WC_Order $order, array $entry ): bool {
+		return self::OWED === ( $entry['phase'] ?? null ) && isset( $entry['owed_at_n'] ) && self::completions( $order ) === (int) $entry['owed_at_n'];
+	}
+
+	/**
+	 * Whether a mark outlived the completion it owed: taken at a count below the order's latest.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	public static function stale( WC_Order $order, array $rows ): bool {
+		$n = self::completions( $order );
+		foreach ( self::entries( $order, $rows ) as $entry ) {
+			if ( self::OWED === ( $entry['phase'] ?? null ) && (int) ( $entry['owed_at_n'] ?? -1 ) < $n ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Advance every owing entry once the completion stands: stage the order map (a close naming the
+	 * completion it answered) and return the rows advanced; null when nothing owed.
+	 *
+	 * @param WC_Order $order         Order object; the map is staged on it, the caller saves.
+	 * @param array    $rows          Stored rows.
+	 * @param string   $completion_id The standing completion.
+	 */
+	public static function advance( WC_Order $order, array $rows, string $completion_id ): ?array {
+		$map  = self::read( $order );
+		$owed = false;
+		foreach ( $map as $command_id => $entry ) {
+			if ( self::OWED === ( $entry['phase'] ?? null ) ) {
+				unset( $map[ $command_id ]['phase'], $map[ $command_id ]['owed_at_n'] );
+				$map[ $command_id ]['ref'] = 'close' === ( $entry['kind'] ?? '' ) ? $completion_id : ( $entry['ref'] ?? null );
+				$owed                      = true;
+			}
+		}
+		if ( $owed ) {
+			$order->update_meta_data( self::META_KEY, (string) wp_json_encode( (object) $map ) );
+		}
+		foreach ( $rows as &$row ) {
+			foreach ( is_array( $row['commands'] ?? null ) ? $row['commands'] : array() as $command_id => $entry ) {
+				if ( self::OWED === ( $entry['phase'] ?? null ) ) {
+					unset( $row['commands'][ $command_id ]['phase'], $row['commands'][ $command_id ]['owed_at_n'] );
+					$owed = true;
+				}
+			}
+		}
+		unset( $row );
+		return $owed ? $rows : null;
+	}
+
+	/**
+	 * Every entry on the order: the order map's, then each row's.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $rows  Payment rows.
+	 */
+	private static function entries( WC_Order $order, array $rows ): array {
+		$entries = array_values( self::read( $order ) );
+		foreach ( $rows as $row ) {
+			$entries = array_merge( $entries, array_values( array_filter( is_array( $row['commands'] ?? null ) ? $row['commands'] : array(), 'is_array' ) ) );
+		}
+		return $entries;
+	}
+
+	/**
+	 * How many completions the order has had (the latest entry's number; 0 for none).
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	private static function completions( WC_Order $order ): int {
+		return (int) ( Completion_History::of( $order )->latest()['n'] ?? 0 );
 	}
 
 	/**

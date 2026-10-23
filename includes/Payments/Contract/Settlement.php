@@ -97,6 +97,38 @@ class Settlement {
 	}
 
 	/**
+	 * The confirmation parked for a payment that has not arrived, read without the parking lock.
+	 *
+	 * @param string $payment_id Payment UUID.
+	 */
+	public function parked( string $payment_id ): ?array {
+		return $this->pending()[ strtolower( $payment_id ) ]['patch'] ?? null;
+	}
+
+	/**
+	 * Under the parking lock, hand an arrival's parked confirmation to `$apply` and forget it. Called once
+	 * the arrival's index is stored, so a confirmation parked before that is seen here and any later one
+	 * finds the row. The caller holds the order lock (record takes them in that order).
+	 *
+	 * @param string   $payment_id Payment UUID.
+	 * @param callable $apply      fn( array $patch ): mixed; a WP_Error is the answer.
+	 * @return true|WP_Error
+	 */
+	public function drain( string $payment_id, callable $apply ) {
+		return Order_Lock::instance()->with_lock(
+			self::PARK_LOCK_ID,
+			function () use ( $payment_id, $apply ) {
+				$pending = $this->pending();
+				$result  = isset( $pending[ $payment_id ] ) ? $apply( $pending[ $payment_id ]['patch'] ) : true;
+				$pending = $this->pending(); // Written back pruned, as apply_parked() does.
+				unset( $pending[ $payment_id ] );
+				$saved = $this->write_pending( $pending );
+				return is_wp_error( $result ) ? $result : $saved;
+			}
+		);
+	}
+
+	/**
 	 * Drain an arrival's parked confirmation; record's caller already holds the order lock.
 	 *
 	 * @param WC_Order $order      Freshly stored order.
