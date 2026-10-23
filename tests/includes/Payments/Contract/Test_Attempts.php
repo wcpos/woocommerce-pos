@@ -195,6 +195,26 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'sent', $log->get( $attempt )['fate'] );
 	}
 
+	/** The deferred clear belongs to the cancellation it saw: a sale reopened and sent a new invoice before it runs keeps that invoice awaiting. */
+	public function test_a_deferred_cancel_clear_leaves_a_new_invoice_sent_after_a_reopen_awaiting(): void {
+		// Arrange: an invoice awaits the customer; the order is cancelled, and the clear waits for the request's end.
+		$order = $this->create_pos_order();
+		$first = wp_generate_uuid4();
+		$again = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $first, 'wcpos_sent_test' );
+		wc_get_order( $order->get_id() )->update_status( 'cancelled' );
+
+		// Act: in the same request the sale is reopened and a new invoice sent (its write flushes the deferred clear).
+		wc_get_order( $order->get_id() )->update_status( 'pos-open' );
+		Ledger_Seed::attempt( $order->get_id(), $again, 'wcpos_sent_test' );
+		Ledger::flush_all();
+
+		// Assert.
+		$log = Attempts::of( $this->fresh( $order->get_id() ) );
+		$this->assertSame( $again, $log->awaiting()['attempt_id'] ?? null );
+		$this->assertSame( 'superseded', $log->get( $first )['fate'] );
+	}
+
 	/**
 	 * The order and its meta as storage holds them.
 	 *

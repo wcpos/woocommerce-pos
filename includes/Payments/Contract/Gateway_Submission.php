@@ -310,7 +310,10 @@ class Gateway_Submission {
 		$settled = ! $paid && '' !== $settled_status && $order->has_status( $settled_status );
 		if ( $paid ) {
 			// Staged on the order the mint carries into its write (S1, read back with the row): a retry after a
-			// later step failed answers `recorded`. The row settles the attempt `paid` and supersedes an earlier send.
+			// later step failed answers `recorded`. The row settles the attempt `paid`; the sends awaiting the customer
+			// are replaced in the same S1, so the mint's write cannot complete the sale as an earlier invoice's (the
+			// completion stays with this command's write).
+			Attempts::replace( $order, $attempt_id );
 			if ( null !== $command ) {
 				Command_Log::remember( $order, $command->id(), Command_Log::entry( $command->fp(), $command->kind(), $attempt_id, 'recorded' ) );
 			}

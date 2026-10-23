@@ -196,6 +196,24 @@ final class Attempts {
 		return (bool) $patches;
 	}
 
+	/**
+	 * A submit's own payment replaces the sends that await the customer: staged on the order the paying write
+	 * carries (`Webview_Passthrough::mint()`), so no write completes the sale as the replaced invoice's.
+	 *
+	 * @param WC_Order $order   The order the mint carries into its write.
+	 * @param string   $current The attempt that paid.
+	 */
+	public static function replace( WC_Order $order, string $current ): void {
+		$patches = array_diff_key( self::clearing( $order ), array( strtolower( $current ) => true ) );
+		foreach ( $patches as $id => $patch ) {
+			$patches[ $id ]['fate'] = 'sent' === $patch['fate'] ? 'superseded' : $patch['fate'];
+			Logger::warning( sprintf( 'WCPOS gateway attempt %s on order #%d superseded by a payment; invoice cancellation is unavailable for gateway submissions.', $id, $order->get_id() ) );
+		}
+		if ( $patches ) {
+			self::store( $order, $patches );
+		}
+	}
+
 	/** Arm the terminal-status listener. */
 	public static function register_hooks(): void {
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'on_status_changed' ), 10, 4 );
@@ -203,8 +221,10 @@ final class Attempts {
 
 	/**
 	 * An order that awaits the customer and reaches a terminal status: nothing awaits them on a cancelled, refunded or
-	 * trashed order, so a deferred write clears it (nothing saves inside the hook). A paid status keeps it: the
-	 * completion resolves the attempt in its S1 and clears what it awaited in S3.
+	 * trashed order, so a deferred write clears it (nothing saves inside the hook): only for the attempts awaiting
+	 * now, and only while the order still has this status when it runs (a sale reopened and sent a new invoice
+	 * before the request ends keeps that invoice). A paid status keeps it: the completion resolves the attempt in its
+	 * S1 and clears what it awaited in S3.
 	 *
 	 * @param int           $id    Order ID.
 	 * @param string        $from  Previous status.
@@ -214,18 +234,22 @@ final class Attempts {
 	public static function on_status_changed( $id, $from, $to, $order = null ): void {
 		$id    = (int) $id;
 		$order = $order instanceof WC_Order ? $order : wc_get_order( $id );
-		if ( ! in_array( (string) $to, array( 'cancelled', 'refunded', 'trash' ), true ) || ! $order instanceof WC_Order || null === self::of( $order )->awaiting() ) {
+		$to    = (string) $to;
+		$seen  = $order instanceof WC_Order ? array_keys( self::clearing( $order ) ) : array();
+		if ( ! in_array( $to, array( 'cancelled', 'refunded', 'trash' ), true ) || ! $seen ) {
 			return;
 		}
 		Ledger::defer(
 			$id,
-			static function () use ( $id ): void {
+			static function () use ( $id, $to, $seen ): void {
 				Ledger::instance()->write(
 					$id,
-					static function ( Ledger_Draft $d ): void {
-						foreach ( self::clearing( $d->order() ) as $attempt => $patch ) {
-							$d->attempt( $attempt, $patch['fate'], $patch );
+					static function ( Ledger_Draft $d ) use ( $to, $seen ): bool {
+						$patches = $d->order()->has_status( $to ) ? array_intersect_key( self::clearing( $d->order() ), array_flip( $seen ) ) : array();
+						foreach ( $patches as $attempt => $patch ) {
+							$d->attempt( (string) $attempt, $patch['fate'], $patch );
 						}
+						return (bool) $patches; // False stages nothing: no save.
 					},
 					Ledger::MODE_HOLD
 				);
