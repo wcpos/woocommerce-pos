@@ -242,9 +242,12 @@ final class Attempts {
 			if ( $fresh instanceof WC_Order ) {
 				$fresh->read_meta_data( true );
 			}
-			$entry = $fresh instanceof WC_Order ? self::of( $fresh )->unresolved() : null;
-			$lost  = 'paid' === ( $entry['fate'] ?? null ); // Its fate was stored, its row was not: every caller re-mints it.
-			if ( null === $entry || ( ! $lost && ( 'paid' === $source ) !== ( null !== $entry['awaiting'] ) ) || ( 'sweep' === $source && null !== $entry['attention_at_gmt'] ) ) {
+			$log = $fresh instanceof WC_Order ? self::of( $fresh ) : new Attempt_Log( array() );
+			// A paid status answers the attempt that awaited the customer, never a later send that stranded beside it.
+			$entry = 'paid' === $source ? $log->get( (string) ( $log->awaiting()['attempt_id'] ?? '' ) ) : $log->unresolved();
+			$owed  = null !== $entry && ( 'sent' === $entry['fate'] || ( 'paid' === $entry['fate'] && null === Ledger::instance()->find( $fresh, $entry['id'] ) ) );
+			$lost  = $owed && 'paid' === $entry['fate']; // Its fate was stored, its row was not: every caller re-mints it.
+			if ( ! $owed || ( ! $lost && 'paid' !== $source && null !== $entry['awaiting'] ) || ( 'sweep' === $source && null !== $entry['attention_at_gmt'] ) ) {
 				return null;
 			}
 			$handler = Capture_Mode_Registry::instance()->resolve( 'gateway', Descriptor_Builder::instance()->get( $entry['method_id'] )['capture']['provider'] ?? null );

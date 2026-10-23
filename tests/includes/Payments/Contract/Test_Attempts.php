@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Handler;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
@@ -330,6 +331,44 @@ class Test_Attempts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( $attempt ), $listed, 'The lost write left the sweep\'s list as it was.' );
 		$stored = $this->fresh( $order->get_id() );
 		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
+		$this->assertSame( array(), $this->live_index( $order->get_id() ) );
+	}
+
+	/** The index carries completion debt: a recovered row whose completion was lost keeps the order listed until a later sweep completes it once. */
+	public function test_a_recovered_row_whose_completion_was_lost_keeps_the_order_listed_until_the_sweep_completes_it(): void {
+		// Arrange: a stranded attempt the gateway paid; the sweep recovers its row, but the completion's save is lost.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		Ledger_Seed::attempt( $order, $attempt, 'wcpos_paid_test', 'sent' );
+		$this->paid_outside( $order->get_id(), 'wcpos_paid_test' );
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Completion_Stamp::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			add_filter( 'query', $lose );
+			try {
+				( new Payments_Sweeper() )->run();
+			} finally {
+				remove_filter( 'query', $lose );
+			}
+			wp_cache_flush(); // A later request.
+			$recovered = $this->fresh( $order->get_id() );
+			$listed    = $this->live_index( $order->get_id() );
+
+			// Act.
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $recovered ), 'id' ), 'Precondition: the row was recovered.' );
+		$this->assertSame( array(), Completion_History::of( $recovered )->entries(), 'Precondition: its completion was lost.' );
+		$this->assertNotSame( array(), $listed, 'The completion it owes keeps the order in the sweep\'s list.' );
+		$stored = $this->fresh( $order->get_id() );
 		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
 		$this->assertCount( 1, ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id(), 'type' => 'sale' ) ) );
 		$this->assertSame( array(), $this->live_index( $order->get_id() ) );

@@ -48,6 +48,11 @@ land on both S1 tries never reaches it, so the index keeps listing the attempt i
 sweep re-mints the row. The index never claims more than storage holds. The extra meta save happens only on writes
 that change the live set.
 
+**The index carries completion debt.** While `completion_due()` holds (captured rows cover the sale and no
+completion counted them), the uncounted captured rows stay in the index; S3 recomputes it after its own read-back
+and drops them once the completion stands. If S3 throws, the order stays listed and the sweep's trailing write
+(its `heal()`) completes the sale once, writing the fiscal sale.
+
 `strand()` opens the kept attempt with the cashier the lost row would have named (the order's `_pos_user`, else 0
 so `Webview_Passthrough::row()` decides), never the customer who paid through order-pay (Codex P2 on #2453).
 
@@ -87,7 +92,9 @@ so `Webview_Passthrough::row()` decides), never the customer who paid through or
    `reconcile( 'paid' )` before its completing write. It runs after the order's other deferred work, so a
    callback's own mint lands first (its webview row, the attempt id as the row id) and the resolver then finds
    nothing to do; a paid status written without `payment_complete()` (wp-admin, a status-only gateway) is
-   minted by the resolver. With `paid` the resolver asks only about the attempt that awaited the customer.
+   minted by the resolver. With `paid` the resolver selects the attempt `awaiting()` names (the one that awaited
+   the customer, as `resolve_paid()` did), never the newest unresolved entry: a later send stranded beside an
+   awaited invoice stays `sent` for the sweep.
 
 `Gateway_Submission::resolve_paid()` is deleted: the resolver is its only replacement.
 

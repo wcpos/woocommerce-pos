@@ -1000,6 +1000,31 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 1, Sent_Test_Gateway::$calls );
 	}
 
+	/** A paid status for the invoice that awaits the customer mints that invoice's row, even when a later send stranded after it. */
+	public function test_a_paid_status_mints_the_awaited_invoice_not_a_later_stranded_send(): void {
+		// Arrange: invoice A awaits the customer; a later send B throws after dispatch and stays `sent`.
+		$order   = $this->create_pos_order();
+		$invoice = wp_generate_uuid4();
+		$send    = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $invoice, array( 'invoice_email' => 'buyer@example.com' ) )->get_data()['outcome'] );
+		Sent_Test_Gateway::$failure = 'throw';
+		$this->assertSame( 502, $this->submit( $order, $send, array( 'invoice_email' => 'buyer@example.com' ) )->get_status() );
+		Sent_Test_Gateway::$failure = '';
+
+		// Act: the merchant marks A's bank transfer paid.
+		wc_get_order( $order->get_id() )->update_status( 'processing' );
+		Ledger::flush_all(); // The request ends: what the status change deferred runs at shutdown.
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$this->assertSame( array( $invoice ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertSame( 'paid', Attempts::of( $stored )->get( $invoice )['fate'] );
+		$this->assertCount( 1, Completion_History::of( $stored )->entries() );
+		$this->assertSame( 'sent', Attempts::of( $stored )->get( $send )['fate'] );
+		$this->assertContains( $send, array_map( static fn( $meta ) => $meta->value, $stored->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ), 'The stranded send is left to the sweep.' );
+	}
+
 	/** D1: a send whose gateway threw after dispatch has no stamp, yet the till can still cancel it. */
 	public function test_submit_that_threw_after_dispatch_can_be_cancelled(): void {
 		// Arrange: the gateway throws once dispatch has started, leaving the attempt `sent` with no stamp.

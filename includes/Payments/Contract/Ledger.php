@@ -2497,8 +2497,9 @@ class Ledger {
 	private function tidy( WC_Order $order, array $standing, bool $unstamp ): WC_Order {
 		if ( $this->cleanup( $order, $standing, $unstamp ) ) {
 			self::save_meta( $order );
-			$order = $this->index_live( $this->fresh( $order->get_id() ) );
+			$order = $this->fresh( $order->get_id() );
 		}
+		$order = $this->index_live( $order ); // The completion stands: the debt the index carried for it goes.
 		if ( ( $unstamp && null !== Attempts::of( $order )->awaiting() ) || Command_Log::stale( $order, $this->read( $order ) ) ) {
 			throw Ledger_Persistence_Exception::at( 'completion', 'WCPOS completion was not persisted.' );
 		}
@@ -2666,17 +2667,21 @@ class Ledger {
 
 	/**
 	 * The sweep's index, `_wcpos_payment_live`, written last, from storage (the index never claims more than storage
-	 * holds): the rows still live or owed, and the attempts the resolver still has to ask about. Saved meta-only, and
-	 * only when it differs, after a read-back confirmed what it is computed from; a write whose rows did not land never
-	 * reaches here, so the index keeps listing what it listed before.
+	 * holds): the rows still live or owed, the uncounted captured rows of a completion that is due but not stored
+	 * (`completion_due()`: the sweep's trailing write completes it), and the attempts the resolver still has to ask about.
+	 * Saved meta-only, and only when it differs, after a read-back confirmed what it is computed from; a write whose rows
+	 * did not land never reaches here, so the index keeps listing what it listed before.
 	 *
 	 * @param WC_Order $order Order as storage holds it.
 	 * @return WC_Order The order as storage holds it afterwards.
 	 */
 	private function index_live( WC_Order $order ): WC_Order {
 		$want = Attempts::of( $order )->to_index();
-		foreach ( $this->read( $order ) as $row ) {
-			if ( in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || in_array( Command_Log::OWED, array_column( $row['commands'] ?? array(), 'phase' ), true ) ) {
+		$rows = $this->read( $order );
+		$due  = $rows && $this->completion_due( $order, $rows );
+		foreach ( $rows as $row ) {
+			$debt = $due && 'captured' === ( $row['status'] ?? '' ) && ! Completion_History::of( $order )->counted( (string) $row['id'] );
+			if ( $debt || in_array( $row['status'] ?? '', array( 'pending', 'authorized' ), true ) || in_array( Command_Log::OWED, array_column( $row['commands'] ?? array(), 'phase' ), true ) ) {
 				$want[] = strtolower( (string) $row['id'] );
 			}
 		}
