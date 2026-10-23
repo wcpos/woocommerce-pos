@@ -53,7 +53,10 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			// Assert.
 			$this->assertSame( $before, wc_get_order( $order->get_id() )->get_meta( Ledger::META_KEY, true ) );
 			$errors = array_column( array_filter( $logs, static fn( $log ) => 'error' === $log[0] ), 1 );
-			$this->assertCount( 1, $errors ); // mint() names the payment once; the hook adds nothing for a known refusal.
+			// mint() names the payment once; the hook adds nothing for a known refusal; the completion deferred with the
+			// mint cannot take the lock either, and says so once.
+			$this->assertCount( 2, $errors );
+			$this->assertStringContainsString( '"Recording the completion" failed', $errors[1] );
 			$this->assertMatchesRegularExpression(
 				sprintf( '/^WCPOS payment [0-9a-f-]{36} \\(92\\.95 [A-Z]{3}\\) captured but not recorded in the ledger on order #%d; reconcile manually: WCPOS payment ledger is locked\\. \\| Context: \\{"order_id":%d\\}$/', $order->get_id(), $order->get_id() ),
 				$errors[0]

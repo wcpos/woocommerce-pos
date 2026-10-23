@@ -220,7 +220,8 @@ final class Fiscal_Record_Writers {
 				'device_time'        => $completion['sale_time'] ?? null,
 				'device_tz'          => $completion['sale_tz'] ?? null,
 				'store_id'           => $provenance['store_id'],
-				'cashier_id'         => $provenance['cashier_id'],
+				// A later completion names its own cashier when its entry carries one; the sale's `_pos_user` otherwise.
+				'cashier_id'         => $n >= 2 && ! empty( $completion['cashier'] ) ? (int) $completion['cashier'] : $provenance['cashier_id'],
 				'n'                  => $n,
 				'supersedes'         => $supersedes,
 				'adjustment'         => $adjustment,

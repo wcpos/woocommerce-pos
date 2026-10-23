@@ -18,6 +18,9 @@ use WP_REST_Request;
  * attempt it names, and the order revision it was built against. Immutable.
  */
 final class Money_Command {
+	/** The kinds whose body may name the register that completes the sale; the rest complete nothing at a register. */
+	private const PROVENANCE_KINDS = array( 'record', 'intent', 'capture', 'submit', 'close' );
+
 	/**
 	 * The command's facts, read through the getters.
 	 *
@@ -26,19 +29,28 @@ final class Money_Command {
 	private $facts;
 
 	/**
+	 * Where a completion this command makes happened.
+	 *
+	 * @var Completion_Origin
+	 */
+	private $origin;
+
+	/**
 	 * Hold one command.
 	 *
-	 * @param string          $id       Command id.
-	 * @param string          $fp       Body fingerprint.
-	 * @param string          $kind     Command kind.
-	 * @param string          $target   Row id, method id or ''.
-	 * @param int|string|null $ref      Refund id or attempt id.
-	 * @param string          $revision Order revision.
+	 * @param string            $id       Command id.
+	 * @param string            $fp       Body fingerprint.
+	 * @param string            $kind     Command kind.
+	 * @param string            $target   Row id, method id or ''.
+	 * @param int|string|null   $ref      Refund id or attempt id.
+	 * @param string            $revision Order revision.
+	 * @param Completion_Origin $origin   Where a completion it makes happened; the storage chain when null.
 	 */
-	public function __construct( string $id, string $fp, string $kind, string $target = '', $ref = null, string $revision = '' ) {
-		$id          = strtolower( $id );
-		$target      = strtolower( $target );
-		$this->facts = compact( 'id', 'fp', 'kind', 'target', 'ref', 'revision' );
+	public function __construct( string $id, string $fp, string $kind, string $target = '', $ref = null, string $revision = '', ?Completion_Origin $origin = null ) {
+		$id           = strtolower( $id );
+		$target       = strtolower( $target );
+		$this->facts  = compact( 'id', 'fp', 'kind', 'target', 'ref', 'revision' );
+		$this->origin = $origin ?? new Completion_Origin();
 	}
 
 	/**
@@ -73,7 +85,9 @@ final class Money_Command {
 		} elseif ( in_array( $kind, array( 'submit', 'cancel' ), true ) && is_string( $params['attempt_id'] ?? null ) ) {
 			$ref = strtolower( $params['attempt_id'] );
 		}
-		return new self( $id, Command_Log::fingerprint( $kind, $target, $params ), $kind, $target, $ref, $revision );
+		// The body's provenance is fingerprinted, so a same-id replay completes at the same origin.
+		$provenance = in_array( $kind, self::PROVENANCE_KINDS, true ) && is_array( $params['provenance'] ?? null ) ? $params['provenance'] : array();
+		return new self( $id, Command_Log::fingerprint( $kind, $target, $params ), $kind, $target, $ref, $revision, new Completion_Origin( $provenance, false, get_current_user_id() ) );
 	}
 
 	/** The command id. */
@@ -108,5 +122,10 @@ final class Money_Command {
 	/** The order revision the command was built against. */
 	public function revision(): string {
 		return $this->facts['revision'];
+	}
+
+	/** Where a completion this command makes happened: the body's provenance and the cashier sending it. */
+	public function origin(): Completion_Origin {
+		return $this->origin;
 	}
 }

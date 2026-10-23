@@ -182,7 +182,7 @@ final class Command_Log {
 		$ledger = Ledger::instance();
 		$kind   = $command->kind();
 		if ( 'record' === $kind && null === $ledger->refusal_error( (array) $ledger->find( $order, $command->id() ), $order ) ) {
-			$drained = $ledger->drain_parked( $order, $command->id() ); // A confirmation its arrival stopped before draining.
+			$drained = $ledger->drain_parked( $order, $command->id(), $command ); // A confirmation its arrival stopped before draining.
 			if ( is_wp_error( $drained ) ) {
 				return $drained;
 			}
@@ -191,7 +191,8 @@ final class Command_Log {
 		// sale with no row would project an unpaid settled status (`pending`) back into progress.
 		$minted = 'submit' === $kind && null !== $ledger->find( $order, (string) $entry['ref'] ) && null === Completion_History::of( $order )->standing();
 		if ( 'record' === $kind || $minted || self::owes( $order, $entry ) ) {
-			$order = $ledger->write( $order, null, 'close' === $kind ? Ledger::MODE_CLOSE : Ledger::MODE_AUTO )->order;
+			// The command rides the heal so its completion names the origin its fingerprinted body carried.
+			$order = $ledger->write( $order, null, 'close' === $kind ? Ledger::MODE_CLOSE : Ledger::MODE_AUTO, $command )->order;
 		}
 		$row = null === $entry['payment_id'] ? null : $ledger->find( $order, $entry['payment_id'] );
 		if ( 'record' === $kind || ( 'intent' === $kind && 'pending' === ( $row['status'] ?? '' ) ) ) {

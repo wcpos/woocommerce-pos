@@ -12,6 +12,7 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -39,17 +40,10 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	 */
 	private $product;
 
-	/** Fresh request context per test. */
+	/** Stock is managed. */
 	public function setUp(): void {
 		parent::setUp();
 		update_option( 'woocommerce_manage_stock', 'yes' );
-		Completion_Stamp::reset();
-	}
-
-	/** Forget the request context. */
-	public function tearDown(): void {
-		Completion_Stamp::reset();
-		parent::tearDown();
 	}
 
 	/** Listeners on the paid hooks read storage: rows before the paid transition, the paid status before the completion. */
@@ -1053,6 +1047,102 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertContains( 'WCPOS: Recording the test payment did not complete; reconcile manually.', $notes );
 	}
 
+	/** A completion job runs after the order's other deferred work, and once per flush however often it was queued. */
+	public function test_defer_completion_job_runs_last_and_once_per_flush(): void {
+		// Arrange.
+		$id  = $this->create_pos_order()->get_id();
+		$ran = array();
+		foreach ( array( 'completion', 'completion again', 'mint', 'note' ) as $job ) {
+			Ledger::defer(
+				$id,
+				static function () use ( $job, &$ran ): void {
+					$ran[] = $job;
+				},
+				'the test job',
+				0 === strpos( $job, 'completion' )
+			);
+		}
+
+		// Act.
+		Ledger::flush_all();
+
+		// Assert.
+		$this->assertSame( array( 'mint', 'note', 'completion' ), $ran );
+	}
+
+	/** A completion job queued while the ledger writes the sale finds the write's S3 standing and does nothing. */
+	public function test_completion_job_queued_inside_a_write_is_a_no_op_after_its_s3(): void {
+		// Arrange.
+		$order     = $this->create_pos_order();
+		$id        = $order->get_id();
+		$announced = array();
+		$saves     = 0;
+		$announce  = static function ( $completed, $n ) use ( &$announced ): void {
+			$announced[] = $n;
+		};
+		$count     = static function () use ( &$announced, &$saves ): void {
+			$saves += $announced ? 1 : 0;
+		};
+		add_action( 'wcpos_sale_completed', $announce, 10, 2 );
+		add_action( 'woocommerce_before_order_object_save', $count );
+
+		// Act.
+		$written = Ledger::instance()->write(
+			$order,
+			function ( Ledger_Draft $draft ) use ( $id ): void {
+				Completion_Stamp::defer( $id, false );
+				$draft->put( $this->row( '92.95' ) );
+			}
+		);
+		Ledger::flush_all();
+		remove_action( 'wcpos_sale_completed', $announce, 10 );
+		remove_action( 'woocommerce_before_order_object_save', $count );
+
+		// Assert.
+		$this->assertSame( 1, (int) $written->completion['n'] );
+		$this->assertCount( 1, Completion_History::of( $this->fresh( $id ) )->entries() );
+		$this->assertSame( array( 1 ), $announced );
+		$this->assertSame( 0, $saves, 'Nothing saves the order after its S3.' );
+	}
+
+	/** A sent attempt a callback pays whose S3 is lost is completed by the next write, naming the submit's register. */
+	public function test_sent_attempt_whose_completion_failed_is_retried_naming_the_submits_register(): void {
+		// Arrange: the submit from register B answered sent; the provider's callback is a later request.
+		$register = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+		$order    = $this->create_pos_order();
+		$id       = $order->get_id();
+		$attempt  = wp_generate_uuid4();
+		$order->set_payment_method( 'pos_card' );
+		$order->set_status( 'pending' );
+		$order->update_meta_data(
+			Gateway_Submission::STAMP_META_KEY,
+			array(
+				'attempt_id' => $attempt,
+				'method_id'  => 'pos_card',
+				'cashier_id' => 1,
+				'provenance' => array( 'register' => $register ),
+			)
+		);
+		$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array( $attempt => 'sent' ) );
+		$order->save();
+		$undo = $this->inject( 'completion', $id );
+
+		// Act: the callback pays; its S3 is lost; then any later write.
+		$this->fresh( $id )->payment_complete( 'txn_callback' );
+		Ledger::flush_all();
+		$undo();
+		$lost = Completion_History::of( $this->fresh( $id ) )->entries();
+		Ledger::instance()->write( $id );
+
+		// Assert.
+		$saved = $this->fresh( $id );
+		$this->assertSame( array(), $lost, 'Precondition: the completion was lost.' );
+		$this->assertSame( array( $attempt ), array_column( Ledger::instance()->read( $saved ), 'id' ) );
+		$this->assertCount( 1, Completion_History::of( $saved )->entries() );
+		$this->assertSame( $register, Completion_History::of( $saved )->standing()['register'] );
+		$this->assertNull( Gateway_Submission::read_stamp( $saved ) );
+	}
+
 	/**
 	 * H2: a ledger meta write inside a status hook writes the meta only. On HPOS WooCommerce re-saves the whole
 	 * order after a meta change whenever date_modified is older than now; WooCommerce's own saves inside the
@@ -1075,9 +1165,10 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->fresh( $order->get_id() )->update_status( 'processing' );
 		remove_action( 'woocommerce_before_order_object_save', $count );
 		remove_filter( 'woocommerce_orders_table_datastore_should_save_after_meta_change', '__return_true' );
+		Ledger::flush_all(); // The request ends: the completion the status hook deferred runs at shutdown, outside it.
 
 		// Assert.
-		$this->assertNotNull( Completion_History::of( $this->fresh( $order->get_id() ) )->standing(), 'Precondition: the status hook stamped the completion.' );
+		$this->assertNotNull( Completion_History::of( $this->fresh( $order->get_id() ) )->standing(), 'Precondition: the completion the status hook deferred landed.' );
 		$this->assertSame( array(), $nested );
 	}
 
@@ -1468,6 +1559,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$elsewhere = $this->fresh( $id );
 		$elsewhere->set_status( 'completed' );
 		$elsewhere->save();
+		Ledger::flush_all(); // That request ends: the completion its status hook deferred runs at shutdown.
 		$this->assertSame( 1, (int) Completion_History::of( $this->fresh( $id ) )->standing()['n'], 'Precondition: completed elsewhere.' );
 		$reopened = $this->fresh( $id );
 		$reopened->set_status( 'pos-open' );
@@ -1814,6 +1906,87 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertCount( 1, $saved->get_fees() );
 		$this->assertSame( '100.00', $saved->get_total() );
 		$this->assertSame( 'completed', $this->stored_status( $id ) );
+	}
+
+	/** A refund that re-completes a reopened sale completes at its command's origin: the refunding cashier names record 2. */
+	public function test_refund_recompleting_a_reopened_sale_names_the_refunding_cashier(): void {
+		// Arrange: sold by cashier A, reopened at a total 20.00 lower; cashier B refunds the excess.
+		$cashier_a = self::factory()->user->create();
+		$cashier_b = self::factory()->user->create();
+		$order     = $this->create_pos_order();
+		$id        = $order->get_id();
+		$order->update_meta_data( '_pos_user', (string) $cashier_a );
+		$order->save();
+		$row = $this->row( '92.95' );
+		$this->pay( $id, $row );
+		$reopened = $this->fresh( $id );
+		$reopened->set_status( 'pos-open' );
+		$reopened->set_total( '72.95' );
+		$reopened->save();
+		$refund  = wc_create_refund(
+			array(
+				'order_id'       => $id,
+				'amount'         => '20.00',
+				'refund_payment' => false,
+				'restock_items'  => false,
+			)
+		);
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:refund', 'refund', $row['id'], $refund->get_id(), '', new Completion_Origin( array(), false, $cashier_b ) );
+
+		// Act.
+		Ledger::instance()->refund( wc_get_order( $id ), $row['id'], $refund->get_id(), '20.00', $command );
+
+		// Assert.
+		$standing = Completion_History::of( $this->fresh( $id ) )->standing();
+		$this->assertSame( 2, (int) $standing['n'] );
+		$this->assertSame( $cashier_b, $standing['cashier'] ?? null );
+		$this->assertSame( $cashier_b, (int) ( new Fiscal_Record_Store() )->find_sale( $id, $standing['id'] )['cashier_id'] );
+	}
+
+	/** A covering capture parked while an authorized arrival is saved is drained by a write that completes at the command's origin. */
+	public function test_record_authorized_with_capture_parked_during_its_save_completes_at_the_commands_origin(): void {
+		// Arrange: the till's record names register R, session S, its sale time and counter.
+		$order      = $this->create_pos_order();
+		$id         = $order->get_id();
+		$input      = array_merge(
+			$this->tender( '92.95' ),
+			array(
+				'method_id' => 'pos_card',
+				'status'    => 'authorized',
+			)
+		);
+		$provenance = array(
+			'register_id'  => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+			'session_id'   => 'aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa',
+			'sale_time'    => '2026-10-20T09:15:00+02:00',
+			'sale_tz'      => 'Europe/Berlin',
+			'sale_counter' => '42',
+		);
+		$command    = new Money_Command(
+			$input['id'],
+			Command_Log::fingerprint( 'record', '', array( 'payment' => $input, 'provenance' => $provenance ) ),
+			'record',
+			'',
+			null,
+			'',
+			new Completion_Origin( $provenance )
+		);
+		$park       = $this->park_once( $id, $input['id'], array( 'status' => 'captured' ) );
+
+		// Act.
+		try {
+			Ledger::instance()->record( wc_get_order( $id ), $input, array(), $command );
+		} finally {
+			$park();
+		}
+
+		// Assert.
+		$entry = Completion_History::of( $this->fresh( $id ) )->standing();
+		$this->assertSame( 'completed', $this->stored_status( $id ) );
+		$this->assertSame(
+			array( 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa', '2026-10-20T09:15:00+02:00', 'Europe/Berlin', '42' ),
+			array( $entry['register'], $entry['session'], $entry['sale_time'], $entry['sale_tz'], $entry['counter'] )
+		);
 	}
 
 	/**
@@ -2356,8 +2529,7 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 	 */
 	private function as_if_paid_hooks_never_ran( callable $work ): void {
 		$listeners = array(
-			array( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_completed' ), 15, 4 ),
-			array( 'woocommerce_payment_complete', array( Completion_Stamp::class, 'on_payment_complete' ), 15, 1 ),
+			array( 'woocommerce_order_status_changed', array( Completion_Stamp::class, 'on_status_changed' ), 5, 4 ),
 			array( 'woocommerce_order_status_processing', 'wc_maybe_reduce_stock_levels', 10, 1 ),
 			array( 'woocommerce_order_status_completed', 'wc_maybe_reduce_stock_levels', 10, 1 ),
 			array( 'woocommerce_payment_complete', 'wc_maybe_reduce_stock_levels', 10, 1 ),
