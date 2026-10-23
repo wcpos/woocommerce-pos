@@ -151,6 +151,9 @@ is a no-op on a `processing` order, so a retried webhook never re-mints. Under c
   leaves nothing to mint from, and the attempt is asked about and flagged like any other). A submit that saw the
   gateway take the money and lost the row keeps its attempt `paid` the same way, and its replay answers `paid`. So the reopen rule in `status()` governs only attempts the till sent. Best effort: a failure is
   logged; the note stands.
+- One payment, one recovery identity: every mint deferred for one payment in a request (order-pay's status change and
+  its `payment_complete()`) uses one row id (`Webview_Passthrough::payment_id()`: the awaited attempt's, else one new
+  id, released when the row lands), so if none lands they keep one attempt, never two.
 - The sweep then finds it: the resolver's `captured` answer IS the re-mint, and its write completes the sale,
   once. When the handler cannot answer (the order is no longer paid through that method), the attention path
   applies: one note, never a guess.
