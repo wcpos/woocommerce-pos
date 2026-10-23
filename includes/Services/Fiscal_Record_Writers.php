@@ -14,7 +14,6 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
-use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /** Writes history only; never changes order or payment state. */
@@ -186,9 +185,9 @@ final class Fiscal_Record_Writers {
 		global $wpdb;
 		$store = new Fiscal_Record_Store();
 		$store->ensure_installed();
-		$hpos   = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$meta   = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$key    = $hpos ? 'order_id' : 'post_id';
+		$schema = Order_Meta_Store::schema();
+		$meta   = $schema['meta'];
+		$key    = $schema['owner'];
 		$marker = '"' . self::ATTEMPTED_AT . '":"';
 		// The first document's leading key (attempted() writes it there), else '' (never tried): `c` dates compare as strings.
 		$attempt = 'IF( LOCATE( %s, LEFT( meta_value, 100 ) ) > 0, SUBSTRING( meta_value, LOCATE( %s, meta_value ) + %d, 25 ), \'\' )';

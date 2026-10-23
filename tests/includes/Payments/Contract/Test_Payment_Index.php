@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Payment_Index;
 use WC_Unit_Test_Case;
 
@@ -57,5 +59,73 @@ class Test_Payment_Index extends WC_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( $order->get_id(), $found );
+	}
+
+	/** The sweep reaches live orders holding the live-leg index, least recently modified first. */
+	public function test_order_ids_with_live_legs_live_orders_come_oldest_modified_first(): void {
+		// Arrange.
+		$newest = $this->live_leg_order( time() - 60 );
+		$oldest = $this->live_leg_order( time() - 3600 );
+		$middle = $this->live_leg_order( time() - 600 );
+		$this->live_leg_order( time() - 7200, 'trash' );
+		$this->live_leg_order( time() - 7200, 'auto-draft' );
+		$settled = wc_create_order();
+
+		// Act.
+		$ids = Payment_Index::order_ids_with_live_legs( 10 );
+
+		// Assert.
+		$this->assertSame( array( $oldest, $middle, $newest ), $ids );
+		$this->assertNotContains( $settled->get_id(), $ids );
+	}
+
+	/** The batch cap keeps the oldest; a cap below one selects nothing. */
+	public function test_order_ids_with_live_legs_the_cap_keeps_the_oldest(): void {
+		// Arrange.
+		$this->live_leg_order( time() - 60 );
+		$oldest = $this->live_leg_order( time() - 3600 );
+
+		// Act.
+		$one  = Payment_Index::order_ids_with_live_legs( 1 );
+		$none = Payment_Index::order_ids_with_live_legs( 0 );
+
+		// Assert.
+		$this->assertSame( array( $oldest ), $one );
+		$this->assertSame( array(), $none );
+	}
+
+	/**
+	 * An order holding the live-leg index, its modified time and status written straight to storage.
+	 *
+	 * @param int    $modified Modified timestamp.
+	 * @param string $status   Stored status.
+	 */
+	private function live_leg_order( int $modified, string $status = 'wc-pending' ): int {
+		global $wpdb;
+		$order = wc_create_order();
+		$order->add_meta_data( Ledger::LIVE_LEG_META_KEY, '1' );
+		$order->save();
+		$stamp = gmdate( 'Y-m-d H:i:s', $modified );
+		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$wpdb->update(
+				$wpdb->prefix . 'wc_orders',
+				array(
+					'date_updated_gmt' => $stamp,
+					'status' => $status,
+				),
+				array( 'id' => $order->get_id() )
+			);
+		} else {
+			$wpdb->update(
+				$wpdb->posts,
+				array(
+					'post_modified_gmt' => $stamp,
+					'post_status' => $status,
+				),
+				array( 'ID' => $order->get_id() )
+			);
+			clean_post_cache( $order->get_id() );
+		}
+		return $order->get_id();
 	}
 }

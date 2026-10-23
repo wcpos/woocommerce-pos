@@ -7,9 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WP_REST_Request;
 
 /**
@@ -667,8 +667,6 @@ final class Collection_Rules {
 			return self::STORAGE_POSTS;
 		}
 
-		return class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled()
-			? self::STORAGE_HPOS
-			: self::STORAGE_POSTS;
+		return Order_Meta_Store::hpos() ? self::STORAGE_HPOS : self::STORAGE_POSTS;
 	}
 }
