@@ -222,11 +222,26 @@ back. What already exists and what is still missing:
   `authorized` outcome for a checkout taken inside a session, and the native module's four
   offline methods, validated on a physical Solo in wcpos/monorepo#2495. Kept dormant on purpose
   (wcpos/monorepo#2847 closed unmerged, Paul 2026-10-23); Pro settles the uploaded rows.
-- *Missing 1, the product decision:* what the cashier sees for a sale the store has not heard (a
-  provisional receipt and open-orders chip; the close held until the record is answered; the
-  drawer still opens for cash), and the one failed story when the store later refuses the record,
-  for example an order another till paid or voided meanwhile. This is Paul's call and the reason
-  the outbox is parked; nothing below should be built before it is written here.
+- *Decided 1, the product decision (Paul, 2026-10-23):* a sale the store has not heard completes
+  on the till, and the cashier always knows it. The rules, in the order they bind:
+  1. *The cashier is never unaware.* The till shows its online/offline state at all times, and
+     the receipt stage, the open-orders chip and the printed receipt of a sale taken offline all
+     carry an "awaiting store" mark until the record is answered. Completing an offline sale is a
+     deliberate act: the tender tile says the sale will be sent later and what that risks (the
+     store may refuse it), and the cashier confirms before the tender is journaled. A cashier
+     must not be able to complete an order offline without knowing it carries that risk.
+  2. *A gateway with no offline option cannot complete offline.* The method's
+     `capabilities.offline` decides: `none` keeps the tile disabled with the `offline` reason
+     exactly as today; `record` (manual tenders such as cash) journals the record and completes;
+     `queue` (a SumUp Solo offline session) journals and completes only when the method opts in
+     and the reader has a session. Online-only gateways never gain an offline path by accident.
+  3. *The close is not held.* The cashier can start the next sale; the journal entry stays
+     leased and the recovery bridge finishes the sale when the answer lands. The drawer opens for
+     cash as usual.
+  4. *One failed story.* When the store later refuses the record (an order another till paid or
+     voided meanwhile, a payment the gateway rejects), the sale moves to a "needs attention" row
+     in the orders screen with the refusal reason, the tender is never retried on its own, and
+     the cashier resolves it there. Nothing is dropped silently and nothing is re-applied silently.
 - *Missing 2:* a tender journals while offline instead of being refused: `OFFLINE_TENDERS_QUEUE`
   true, the manual record path and the terminal service journal instead of throwing
   (`record-manual-payment.ts`, `use-terminal-payments-service.ts`, `void-payments.ts` each carry a
