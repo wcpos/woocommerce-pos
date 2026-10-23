@@ -11,8 +11,8 @@ namespace WCPOS\WooCommercePOS\Sync;
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Queries use internal table names and generated SQL fragments.
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Database failures are passed to exceptions, not rendered.
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 
 final class Sync_Journal {
 	/** Persisted order backfill cursor. */
@@ -800,7 +800,7 @@ final class Sync_Journal {
 		);
 		$posts_where = null;
 		if ( $last_order_id > 0 ) {
-			if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			if ( Order_Meta_Store::hpos() ) {
 				$query_args['field_query'] = array(
 					array(
 						'field' => 'id',

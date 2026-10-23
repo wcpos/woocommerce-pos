@@ -7,10 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\API\V1\Traits;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
@@ -319,13 +319,9 @@ trait WCPOS_REST_API {
 
 		switch ( $object_type ) {
 			case 'order':
-				if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-					$table  = "{$wpdb->prefix}wc_orders_meta";
-					$column = 'order_id';
-				} else {
-					$table  = $wpdb->postmeta;
-					$column = 'post_id';
-				}
+				$schema = Order_Meta_Store::schema();
+				$table  = $schema['meta'];
+				$column = $schema['owner'];
 				break;
 
 			case 'user':
@@ -368,15 +364,10 @@ trait WCPOS_REST_API {
 
 		switch ( $object_type ) {
 			case 'order':
-				if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-					$table   = "{$wpdb->prefix}wc_orders_meta";
-					$id_col  = 'order_id';
-					$meta_id = 'id';
-				} else {
-					$table   = $wpdb->postmeta;
-					$id_col  = 'post_id';
-					$meta_id = 'meta_id';
-				}
+				$schema  = Order_Meta_Store::schema();
+				$table   = $schema['meta'];
+				$id_col  = $schema['owner'];
+				$meta_id = $schema['meta_id'];
 				// The audit keys come from the shared authority so a new audit key
 				// reaches this degraded-meta read path without a second edit. The
 				// server-owned money keys are stripped from writes, not read here.

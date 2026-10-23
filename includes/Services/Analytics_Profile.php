@@ -24,7 +24,6 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
@@ -111,7 +110,7 @@ class Analytics_Profile {
 
 			// Environment shape.
 			'multisite'          => is_multisite(),
-			'hpos_enabled'       => $this->is_hpos_enabled(),
+			'hpos_enabled'       => Order_Meta_Store::hpos(),
 			'tax_enabled'        => function_exists( 'wc_tax_enabled' ) ? wc_tax_enabled() : false,
 			'multi_currency'     => $this->has_multi_currency(),
 
@@ -282,19 +281,6 @@ class Analytics_Profile {
 		}
 
 		return (string) WC()->countries->get_base_country();
-	}
-
-	/**
-	 * Whether WooCommerce High-Performance Order Storage is in use.
-	 *
-	 * @return bool
-	 */
-	private function is_hpos_enabled(): bool {
-		if ( ! class_exists( OrderUtil::class ) ) {
-			return false;
-		}
-
-		return OrderUtil::custom_orders_table_usage_is_enabled();
 	}
 
 	/**

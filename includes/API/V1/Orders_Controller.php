@@ -14,7 +14,6 @@ if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
 }
 
 use WCPOS\WooCommercePOS\Services\Permission_Rules;
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use Exception;
 use WC_Abstract_Order;
 use WC_Data;
@@ -24,6 +23,7 @@ use WC_Order_Item;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Quick_Discount;
@@ -108,7 +108,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function __construct() {
 		$this->order_payload = new Order_Write_Payload();
-		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$this->hpos_enabled = Order_Meta_Store::hpos();
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
@@ -256,7 +256,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		$this->wcpos_request = $request;
 		// set hpos_enabled again for tests to work @TODO - fix this.
-		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$this->hpos_enabled = Order_Meta_Store::hpos();
 
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
@@ -971,7 +971,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		$start_time = microtime( true );
 
-		$hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$hpos_enabled = Order_Meta_Store::hpos();
 		$sql          = '';
 		$register     = sanitize_key( (string) $request->get_param( 'pos_register' ) );
 

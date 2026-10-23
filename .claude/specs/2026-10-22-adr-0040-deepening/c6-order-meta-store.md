@@ -4,7 +4,9 @@ ADR 0040 deepening, candidate c6. Reads only; writes still go through the order 
 
 ## Friction
 
-Before this change, 22 places in 19 `includes/` files each decided "HPOS or posts?" for themselves. They used four detection idioms (`class_exists( OrderUtil::class ) && …`, `method_exists` + `call_user_func` on the class name string, `Collection_Rules::detect_storage( 'orders' )`, and a private `hpos()` / `orders_are_hpos()` / `is_hpos_enabled()`), and then each hand-picked `wc_orders_meta` vs `postmeta`, `order_id` vs `post_id`, `id` vs `meta_id`, and `status/type/date_updated_gmt` vs `post_status/post_type/post_modified_gmt`. Seven of them wrote the same query twice, once per storage.
+Before this change, 24 places in 19 `includes/` files each decided "HPOS or posts?" for themselves. They used four detection idioms (`class_exists( OrderUtil::class ) && …`, `method_exists` + `call_user_func` on the class name string, `Collection_Rules::detect_storage( 'orders' )`, and a private `hpos()` / `orders_are_hpos()` / `is_hpos_enabled()`), and then each hand-picked `wc_orders_meta` vs `postmeta`, `order_id` vs `post_id`, `id` vs `meta_id`, and `status/type/date_updated_gmt` vs `post_status/post_type/post_modified_gmt`. Seven of them wrote the same query twice, once per storage.
+
+After it, one place does: `Order_Meta_Store::hpos()`. The 19 files call the module 29 times (13 `hpos()`, 10 `schema()`, 6 `order_ids()`), and `includes/` is 27 lines shorter.
 
 ## Interface (`includes/Services/Order_Meta_Store.php`)
 

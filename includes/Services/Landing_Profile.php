@@ -13,7 +13,6 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
@@ -204,7 +203,7 @@ class Landing_Profile {
 	private function get_pos_order_count(): int {
 		global $wpdb;
 
-		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			/* @phpstan-ignore-next-line */
 			$orders_table = method_exists( OrdersTableDataStore::class, 'get_orders_table_name' )
 				? OrdersTableDataStore::get_orders_table_name()

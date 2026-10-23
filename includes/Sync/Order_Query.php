@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
@@ -70,29 +70,18 @@ final class Order_Query {
 		$checkpoint_modified = gmdate( 'Y-m-d H:i:s', $this->timestamp_from_checkpoint( $updated_at_gmt ) );
 		$limit               = max( 1, min( 251, $limit ) );
 
-		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-			$sql = $wpdb->prepare(
-				"SELECT id FROM {$wpdb->prefix}wc_orders"
-				. " WHERE type = 'shop_order' AND status NOT IN ('trash', 'auto-draft')"
-				. ' AND (date_updated_gmt > %s OR (date_updated_gmt = %s AND id > %d))'
-				. ' ORDER BY date_updated_gmt ASC, id ASC LIMIT %d',
-				$checkpoint_modified,
-				$checkpoint_modified,
-				$order_id,
-				$limit
-			);
-		} else {
-			$sql = $wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts}"
-				. " WHERE post_type = 'shop_order' AND post_status NOT IN ('trash', 'auto-draft')"
-				. ' AND (post_modified_gmt > %s OR (post_modified_gmt = %s AND ID > %d))'
-				. ' ORDER BY post_modified_gmt ASC, ID ASC LIMIT %d',
-				$checkpoint_modified,
-				$checkpoint_modified,
-				$order_id,
-				$limit
-			);
-		}
+		$s   = Order_Meta_Store::schema();
+		$sql = $wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers come from Order_Meta_Store.
+			"SELECT {$s['id']} FROM {$s['orders']}"
+			. " WHERE {$s['type']} = 'shop_order' AND {$s['status']} NOT IN ('trash', 'auto-draft')"
+			. " AND ({$s['modified']} > %s OR ({$s['modified']} = %s AND {$s['id']} > %d))"
+			. " ORDER BY {$s['modified']} ASC, {$s['id']} ASC LIMIT %d",
+			$checkpoint_modified,
+			$checkpoint_modified,
+			$order_id,
+			$limit
+		);
 
 		/** @var array<int, int|string> $ids Exact compound-key page from the active order store. */
 		$ids = $wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above with bounded values and known table names.

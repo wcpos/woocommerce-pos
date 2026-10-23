@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Queries use internal table names and generated SQL fragments.
@@ -300,7 +301,7 @@ final class Digest_Index {
 	 */
 	public function order_digest_select_sql( string $id_condition = '' ): string {
 		global $wpdb;
-		$hpos = $this->orders_are_hpos();
+		$hpos = Order_Meta_Store::hpos();
 		$id_col = $hpos ? 'o.id' : 'p.ID';
 		$condition = '' === $id_condition ? '' : ' AND ' . str_replace( '{id}', $id_col, $id_condition );
 
@@ -505,7 +506,7 @@ final class Digest_Index {
 	 */
 	public function order_live_row_exists_sql( string $id_expr ): string {
 		global $wpdb;
-		if ( $this->orders_are_hpos() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return "EXISTS (SELECT 1 FROM {$orders_table} lo WHERE lo.id = {$id_expr}"
 				. ' AND ' . $this->live_order_predicate_sql( 'lo' ) . ')';
@@ -868,7 +869,7 @@ final class Digest_Index {
 	 * {@see live_product_predicate_sql}.
 	 */
 	private function live_order_predicate_sql( string $alias ): string {
-		if ( $this->orders_are_hpos() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			return "{$alias}.type = 'shop_order' AND {$alias}.status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
 		}
 
@@ -929,7 +930,7 @@ final class Digest_Index {
 
 	private function order_live_max_id_sql(): array {
 		global $wpdb;
-		if ( $this->orders_are_hpos() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return array(
 				'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' ),
@@ -994,14 +995,5 @@ final class Digest_Index {
 				)
 			)
 		);
-	}
-
-	/** True when orders use HPOS (WooCommerce's own tables); false → legacy CPT (wp_posts). */
-	private function orders_are_hpos(): bool {
-		$order_util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
-		if ( class_exists( $order_util ) && method_exists( $order_util, 'custom_orders_table_usage_is_enabled' ) ) {
-			return (bool) call_user_func( array( $order_util, 'custom_orders_table_usage_is_enabled' ) );
-		}
-		return false; // no WC / older WC → CPT
 	}
 }

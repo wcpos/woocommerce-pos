@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use DateTimeImmutable;
 use DateTimeZone;
-use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 
 /** Reports observed counters and clock skew without correcting orders. */
 final class Provenance_Health {
@@ -89,12 +88,12 @@ final class Provenance_Health {
 	 */
 	private function provenance_rows(): array {
 		global $wpdb;
-		$hpos = Collection_Rules::STORAGE_HPOS === Collection_Rules::detect_storage( 'orders' );
-		$orders = $hpos ? $wpdb->prefix . 'wc_orders' : $wpdb->posts;
-		$meta = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$foreign_key = $hpos ? 'order_id' : 'post_id';
-		$date = $hpos ? 'date_created_gmt' : 'post_date_gmt';
-		$type = $hpos ? 'type' : 'post_type';
+		$schema = Order_Meta_Store::schema();
+		$orders = $schema['orders'];
+		$meta = $schema['meta'];
+		$foreign_key = $schema['owner'];
+		$date = $schema['created'];
+		$type = $schema['type'];
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers are chosen above, never supplied by a request.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(

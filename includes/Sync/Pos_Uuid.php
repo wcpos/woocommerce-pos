@@ -12,6 +12,7 @@ use Ramsey\Uuid\Uuid;
 use WC_Customer;
 use WC_Order_Item;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Queries are prepared before execution.
@@ -472,11 +473,8 @@ class Pos_Uuid {
 	 * Return at most two order ids carrying a UUID. The legacy create controller
 	 * treats two results as an ambiguous identity and fails closed.
 	 *
-	 * Datastore-aware direct meta lookup: under HPOS the uuid lives in
-	 * `wc_orders_meta`, otherwise in `wp_postmeta`. `wc_get_orders()` with a
-	 * `meta_query` is NOT supported on the CPT order datastore (it fires a
-	 * `doing_it_wrong` and returns unfiltered results), so we query the meta table
-	 * directly — the same shape the plugin's other order-uuid lookups use.
+	 * A direct meta lookup through {@see Order_Meta_Store}: `wc_get_orders()` with a
+	 * `meta_query` is NOT supported on the CPT order datastore.
 	 *
 	 * DELIBERATELY UNORDERED — do not add an `ORDER BY` back (#1725). Every caller
 	 * asks a counting question ("does a DIFFERENT record hold this uuid?", "is this
@@ -487,7 +485,7 @@ class Pos_Uuid {
 	 * it never reaches two and walks the whole table: 887,404 rows and ~1.0 s per
 	 * call on a real store, versus ~51 ms without the clause. HPOS escapes it only
 	 * because `wc_orders_meta` carries a composite `(meta_key, meta_value)` index —
-	 * by data, not by code — so the clause is gone from both branches.
+	 * by data, not by code — so the lookup asks for no order.
 	 */
 	public static function get_order_ids_by_uuid( string $uuid ): array {
 		global $wpdb;
@@ -495,38 +493,17 @@ class Pos_Uuid {
 			return array();
 		}
 
-		$order_util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
-		$hpos       = class_exists( $order_util )
-			&& method_exists( $order_util, 'custom_orders_table_usage_is_enabled' )
-			&& call_user_func( array( $order_util, 'custom_orders_table_usage_is_enabled' ) );
+		$ids = Order_Meta_Store::order_ids(
+			self::META_KEY,
+			array(
+				'value'   => $uuid,
+				'type'    => 'shop_order',
+				'exclude' => array( 'trash', 'auto-draft' ),
+				'limit'   => 2,
+			)
+		);
 
-		if ( $hpos ) {
-			$ids = $wpdb->get_col(
-				$wpdb->prepare(
-					"SELECT DISTINCT m.order_id FROM {$wpdb->prefix}wc_orders_meta m"
-					. " JOIN {$wpdb->prefix}wc_orders o ON o.id = m.order_id AND o.type = 'shop_order'"
-					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
-					. " AND o.status NOT IN ('trash','auto-draft')"
-					. ' LIMIT 2',
-					self::META_KEY,
-					$uuid
-				)
-			);
-		} else {
-			$ids = $wpdb->get_col(
-				$wpdb->prepare(
-					"SELECT DISTINCT m.post_id FROM {$wpdb->postmeta} m"
-					. " JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type = 'shop_order'"
-					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
-					. " AND p.post_status NOT IN ('trash','auto-draft')"
-					. ' LIMIT 2',
-					self::META_KEY,
-					$uuid
-				)
-			);
-		}
-
-		return \is_array( $ids ) ? array_values( $ids ) : array();
+		return array_map( 'strval', $ids ?? array() );
 	}
 
 	/**
