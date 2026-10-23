@@ -1516,7 +1516,79 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 
 	/** A sent attempt is money in motion, so the sale keeps its prevent-overselling hold; cancelling it gives the stock back. */
 	public function test_submit_sent_keeps_the_stock_hold_and_cancel_releases_it(): void {
-		// Arrange: one unit of stock on two open POS orders; A holds it.
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange.
+				$attempt = wp_generate_uuid4();
+
+				// Act.
+				$sent    = $this->submit( $a, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+				$held    = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+				$cancel  = $this->cancel( $a, $attempt );
+				$shelved = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+
+				// Assert.
+				$this->assertSame( 'sent', $sent->get_data()['outcome'], wp_json_encode( $sent->get_data() ) );
+				$this->assertWPError( $held );
+				$this->assertSame( 'wcpos_insufficient_stock', $held->get_error_code() );
+				$this->assertSame( 200, $cancel->get_status(), wp_json_encode( $cancel->get_data() ) );
+				$this->assertInstanceOf( \WC_Order::class, $shelved );
+			}
+		);
+	}
+
+	/**
+	 * A settle whose write fails after the gateway ran leaves the attempt stranded with a note for staff; cancelling it
+	 * closes the attempt and gives the stock back without reopening the sale the gateway settled.
+	 */
+	public function test_settled_write_failing_after_dispatch_strands_the_attempt_and_cancel_keeps_the_settled_status(): void {
+		$this->with_one_unit_on_two_orders(
+			function ( \WC_Order $a, \WC_Order $b ): void {
+				// Arrange: the gateway lands the stored Pending status; every save carrying the settled fate is lost.
+				$this->enable_for_pos( true, array( 'wcpos_sent_test' => 'wc-pending' ) );
+				$attempt = wp_generate_uuid4();
+				$lose    = static function ( $saving ) use ( $attempt ): void {
+					if ( 'settled' === ( Gateway_Submission::read_attempts( $saving )[ $attempt ] ?? null ) ) {
+						throw new \RuntimeException( 'Simulated lost settle' ); // WooCommerce swallows it.
+					}
+				};
+				add_action( 'woocommerce_before_order_object_save', $lose, PHP_INT_MAX );
+
+				// Act.
+				try {
+					$failed = $this->submit( $a, $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
+				} finally {
+					remove_action( 'woocommerce_before_order_object_save', $lose, PHP_INT_MAX );
+				}
+				$stranded = wc_get_order( $a->get_id() );
+				$held     = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+				$cancel   = $this->cancel( $a, $attempt );
+				$shelved  = Stock_Validator::instance()->validate_checkout( wc_get_order( $b->get_id() ) );
+
+				// Assert.
+				$this->assertSame( 409, $failed->get_status(), wp_json_encode( $failed->get_data() ) );
+				$this->assertSame( 'woo_rxdb_sync_record_locked', $failed->get_data()['code'] );
+				$this->assertSame( array( $attempt => 'sent' ), Gateway_Submission::read_attempts( $stranded ) );
+				$this->assertNull( Gateway_Submission::read_stamp( $stranded ) );
+				$notes = implode( "\n", wp_list_pluck( wc_get_order_notes( array( 'order_id' => $a->get_id() ) ), 'content' ) );
+				$this->assertStringContainsString( 'the POS could not record it', $notes );
+				$this->assertWPError( $held );
+				$this->assertSame( 200, $cancel->get_status(), wp_json_encode( $cancel->get_data() ) );
+				$cancelled = wc_get_order( $a->get_id() );
+				$this->assertSame( 'pending', $cancelled->get_status() );
+				$this->assertSame( array( $attempt => 'cancelled' ), Gateway_Submission::read_attempts( $cancelled ) );
+				$this->assertInstanceOf( \WC_Order::class, $shelved );
+				$this->assertSame( 1, Sent_Test_Gateway::$calls );
+			}
+		);
+	}
+
+	/**
+	 * With prevent-overselling on and one unit of stock, run $work with two open POS orders for it; A holds the unit.
+	 *
+	 * @param callable $work Receives the two orders (a, b).
+	 */
+	private function with_one_unit_on_two_orders( callable $work ): void {
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 		$settings                = get_option( 'woocommerce_pos_settings_checkout' );
 		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
@@ -1537,20 +1609,7 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 				$orders[ $key ]->save();
 			}
 			$this->assertInstanceOf( \WC_Order::class, Stock_Validator::instance()->validate_checkout( $orders['a'] ) );
-			$attempt = wp_generate_uuid4();
-
-			// Act.
-			$sent    = $this->submit( $orders['a'], $attempt, array( 'invoice_email' => 'buyer@example.com' ) );
-			$held    = Stock_Validator::instance()->validate_checkout( wc_get_order( $orders['b']->get_id() ) );
-			$cancel  = $this->cancel( $orders['a'], $attempt );
-			$shelved = Stock_Validator::instance()->validate_checkout( wc_get_order( $orders['b']->get_id() ) );
-
-			// Assert.
-			$this->assertSame( 'sent', $sent->get_data()['outcome'], wp_json_encode( $sent->get_data() ) );
-			$this->assertWPError( $held );
-			$this->assertSame( 'wcpos_insufficient_stock', $held->get_error_code() );
-			$this->assertSame( 200, $cancel->get_status(), wp_json_encode( $cancel->get_data() ) );
-			$this->assertInstanceOf( \WC_Order::class, $shelved );
+			$work( $orders['a'], $orders['b'] );
 		} finally {
 			unset( $_SERVER['HTTP_X_WCPOS'] );
 			update_option( 'woocommerce_pos_settings_checkout', $settings );
