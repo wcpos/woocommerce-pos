@@ -38,20 +38,30 @@ A captured write whose S1 stored the attempt's `paid` fate but lost its row (met
 money taken with no row. `Attempt_Log::unresolved()` and `to_index()` therefore read a `paid` entry with no row of
 its id as unresolved (the row ids are read only when a `paid` entry asks). Every caller re-asks it, whatever it
 awaited; the resolver's captured path re-mints the row under the same id and keeps the fate (nothing is charged
-again); a non-captured answer never cancels it. Recovery is across requests; all-or-nothing writes are out of
-scope. Limit: a half-write that also stored the index without the attempt's id leaves the order out of the sweep's
-candidates until a write rebuilds the index; the till's next replay, cancel, submit or close still recovers it,
-since `in_motion()` names the attempt.
+again); a non-captured answer never cancels it. Recovery is across requests, by the sweep.
+
+**The index is written last, from read-back state.** S1 no longer writes `_wcpos_payment_live`. Once S1's read-back
+confirms the rows and attempts landed, `Ledger::index_live()` computes the index from storage (rows pending,
+authorized or owed, plus `Attempt_Log::to_index()`) and saves that one key meta-only (`Ledger::save_meta`), only
+when it differs, then reads it back. S3's cleanup does the same after its own read-back. A write whose rows did not
+land on both S1 tries never reaches it, so the index keeps listing the attempt it listed while `sent`, and the next
+sweep re-mints the row. The index never claims more than storage holds. The extra meta save happens only on writes
+that change the live set.
 
 `strand()` opens the kept attempt with the cashier the lost row would have named (the order's `_pos_user`, else 0
 so `Webview_Passthrough::row()` decides), never the customer who paid through order-pay (Codex P2 on #2453).
 
+## The captured amount on a split tender (CodeRabbit on #2453)
+
+`Gateway_Handler::status()` answers `captured` for the remainder the counting rows leave (order total minus
+`Ledger::paid()`), never the whole total again: a cash row plus a gateway attempt the webhook paid sums to the total.
+
 ## How the sweeper finds an attempt
 
-- `Attempt_Log::to_index()`: the `sent` entries neither awaiting nor flagged.
-- S1 adds them to the EXISTING `_wcpos_payment_live` index next to the live rows: `stage()`, `advance()`, and a
-  held write on an order with no ledger (the first attempt on a sale). No new key or option. Flagged entries
-  leave the index, so they cannot starve the batch; awaiting entries never join it.
+- `Attempt_Log::to_index()`: the unresolved entries (`sent`, or `paid` with no row) neither awaiting nor flagged.
+- They join the EXISTING `_wcpos_payment_live` index next to the live rows, written last from read-back state (see
+  above). No new key or option. Flagged entries leave the index, so they cannot starve the batch; awaiting entries
+  never join it.
 - `Payments_Sweeper::run()` gains one step, inside the order's lock, before its trailing write: when
   `unresolved()` is older than the threshold, `reconcile( 'sweep' )`. The candidate list is the same index, so
   the step shares the live-leg batch; #2448's fiscal pass is untouched.
