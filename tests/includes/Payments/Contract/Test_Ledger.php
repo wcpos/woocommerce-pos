@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 require_once __DIR__ . '/ledger-clock.php';
 
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler;
@@ -1034,11 +1035,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 			'amount'   => '92.95',
 			'event_id' => 'evt_d14',
 		);
-		$noted   = array(
-			'id'   => wp_generate_uuid4(),
-			'fp'   => 'fp_d14',
-			'kind' => 'capture',
-		);
+		$noted   = new Money_Command( wp_generate_uuid4(), 'fp_d14', 'capture' );
 		$answers = array(
 			'capture captured'   => fn() => $ledger->capture( $order, $input['id'], array( 'amount' => '92.95' ) ),
 			'capture mismatch'   => fn() => $ledger->capture( $order, $input['id'], array( 'amount' => '90.00' ) ),
@@ -3407,12 +3404,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * A till command for a ledger call.
 	 */
-	private function refund_command(): array {
-		return array(
-			'id'   => wp_generate_uuid4(),
-			'fp'   => 'sha256:' . str_repeat( 'a', 64 ),
-			'kind' => 'refund',
-		);
+	private function refund_command(): Money_Command {
+		return new Money_Command( wp_generate_uuid4(), 'sha256:' . str_repeat( 'a', 64 ), 'refund' );
 	}
 
 	/**
@@ -3453,12 +3446,12 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $during, $refund->get_id() ) );
-		$this->assertArrayHasKey( $command['id'], $during['commands'] );
+		$this->assertArrayHasKey( $command->id(), $during['commands'] );
 		$stored = $this->stored_row_of( $order->get_id(), $row['id'] );
 		$this->assertSame( 'succeeded', $this->allocations_of( $stored, $refund->get_id() )[0]['status'] );
 		$this->assertCount( 1, $this->allocations_of( $stored, $refund->get_id() ) );
 		$this->assertSame( '10.00', $stored['refunded_amount'] );
-		$this->assertArrayHasKey( $command['id'], $stored['commands'] );
+		$this->assertArrayHasKey( $command->id(), $stored['commands'] );
 		$this->assertSame( 'succeeded', $result['refunds'][0]['status'] );
 		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
 		$this->assertSame( array( 'succeeded' ), $seen );
@@ -3482,7 +3475,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'woo_rxdb_sync_record_locked', $error->get_error_code() );
 		$this->assertSame( 409, $error->get_error_data()['status'] );
 		$this->assertSame( array(), $this->allocations_of( $stored, $refund->get_id() ) );
-		$this->assertArrayNotHasKey( $command['id'], $stored['commands'] );
+		$this->assertArrayNotHasKey( $command->id(), $stored['commands'] );
 		$this->assertSame( 'succeeded', $retry['refunds'][0]['status'] );
 		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
 	}
@@ -3546,7 +3539,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsArray( $result );
 		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $result, $refund->get_id() ) );
 		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $stored, $refund->get_id() ) );
-		$this->assertArrayHasKey( $command['id'], $stored['commands'] );
+		$this->assertArrayHasKey( $command->id(), $stored['commands'] );
 		$this->assertIsArray( $again );
 		$this->assertSame( 'pending', $this->allocations_of( $again, $refund->get_id() )[0]['status'] );
 		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
@@ -3616,7 +3609,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_provider_error', $error->get_error_code() );
 		$this->assertSame( 502, $error->get_error_data()['status'] );
 		$this->assertSame( array(), $this->allocations_of( $stored, $refund->get_id() ) );
-		$this->assertArrayNotHasKey( $command['id'], $stored['commands'] );
+		$this->assertArrayNotHasKey( $command->id(), $stored['commands'] );
 		$this->assertSame( 'succeeded', $retry['refunds'][0]['status'] );
 		$this->assertSame( 2, Refund_Probe_Gateway::$calls );
 		$this->assertSame( array(), $this->stranded_notes( $order->get_id() ) );
@@ -3761,7 +3754,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 400, $error->get_error_data()['status'] );
 		$stored = $this->stored_row_of( $order->get_id(), $row['id'] );
 		$this->assertSame( array(), $this->allocations_of( $stored, $refund->get_id() ) );
-		$this->assertArrayNotHasKey( $command['id'], $stored['commands'] );
+		$this->assertArrayNotHasKey( $command->id(), $stored['commands'] );
 		$this->assertSame( 1, Refund_Answer_Handler::$calls );
 	}
 
@@ -3957,7 +3950,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 3, $after );
 		$this->assertSame( 'succeeded', $this->allocations_of( $result, $refund_id )[0]['status'] );
 		$this->assertSame( 'succeeded', $this->allocations_of( $stored, $refund_id )[0]['status'] );
-		$this->assertArrayHasKey( $command['id'], $stored['commands'] );
+		$this->assertArrayHasKey( $command->id(), $stored['commands'] );
 		$this->assertTrue( wc_get_order( $order_id )->is_paid() );
 		$this->assertSame( array( 'succeeded' ), $seen );
 		$this->assertIsArray( $again );
@@ -4004,7 +3997,7 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 3, $lost );
 		$this->assertSame( array( $this->reservation( $refund_id, '20.00' ) ), $this->allocations_of( $result, $refund_id ) );
 		$this->assertSame( array( $this->reservation( $refund_id, '20.00' ) ), $this->allocations_of( $stored, $refund_id ) );
-		$this->assertArrayHasKey( $command['id'], $stored['commands'] );
+		$this->assertArrayHasKey( $command->id(), $stored['commands'] );
 		$logs = $this->stranded_logs();
 		$this->assertCount( 1, $logs );
 		$this->assertStringContainsString( 'the provider settled it, but storage will not keep the settled allocation', $logs[0] );
@@ -4056,8 +4049,8 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		list( $order, $row, $refund ) = $this->probed_refundable();
 		$command = $this->refund_command();
 		$forge   = static function ( array $payment ) use ( $command ): array {
-			if ( isset( $payment['commands'][ $command['id'] ] ) ) {
-				$payment['commands'][ $command['id'] ]['fp'] = 'sha256:' . str_repeat( 'f', 64 );
+			if ( isset( $payment['commands'][ $command->id() ] ) ) {
+				$payment['commands'][ $command->id() ]['fp'] = 'sha256:' . str_repeat( 'f', 64 );
 			}
 			return $payment;
 		};
@@ -4071,15 +4064,15 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$stored = $this->stored_row_of( $order->get_id(), $row['id'] );
 		$this->assertSame( 'pending', $this->allocations_of( $result, $refund->get_id() )[0]['status'] );
 		$this->assertSame( array( $this->reservation( $refund->get_id(), '10.00' ) ), $this->allocations_of( $stored, $refund->get_id() ) );
-		$this->assertSame( $command['fp'], $stored['commands'][ $command['id'] ]['fp'] );
+		$this->assertSame( $command->fp(), $stored['commands'][ $command->id() ]['fp'] );
 		$this->assertSame( 1, Refund_Probe_Gateway::$calls );
 
 		// Arrange: a second refund whose reservation saves all land with the entry rewritten.
 		$second  = $this->refund_of( wc_get_order( $order->get_id() ), '5.00' );
 		$command = $this->refund_command();
 		$forge   = static function ( array $payment ) use ( $command ): array {
-			if ( isset( $payment['commands'][ $command['id'] ] ) ) {
-				$payment['commands'][ $command['id'] ]['fp'] = 'sha256:' . str_repeat( 'f', 64 );
+			if ( isset( $payment['commands'][ $command->id() ] ) ) {
+				$payment['commands'][ $command->id() ]['fp'] = 'sha256:' . str_repeat( 'f', 64 );
 			}
 			return $payment;
 		};

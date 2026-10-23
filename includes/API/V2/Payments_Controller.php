@@ -13,15 +13,14 @@ use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
-use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
-use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -96,20 +95,22 @@ class Payments_Controller extends WC_REST_Controller {
 								(int) $request['id'],
 								function () use ( $request, $definition ) {
 									try {
-										$kind    = self::COMMANDS[ $definition[1] ] ?? null;
-										$command = null === $kind ? array() : $this->admit( $request, $kind );
-										if ( ! is_array( $command ) ) {
-											// A refusal, or a replay answered from the stored outcome.
-											return $this->answer( $command, $kind, (int) $request['id'] );
+										if ( 'get_status' === $definition[1] ) {
+											return $this->answer( $this->get_status( $request ), null, (int) $request['id'] ); // The status poll is not a command.
 										}
-										$args = null === $kind ? array( $request ) : array( $request, $command ); // The status poll takes no command.
-										$work = fn() => $this->{$definition[1]}( ...$args );
+										$kind    = self::COMMANDS[ $definition[1] ];
+										$order   = $this->get_order( (int) $request['id'] );
+										$command = is_wp_error( $order ) ? $order : Money_Command::parse( $kind, $request );
+										if ( is_wp_error( $command ) ) {
+											return $command;
+										}
+										$handler = fn( ?Money_Command $c ) => $this->{$definition[1]}( $request, $c );
+										// A record with no row id is no command: its handler answers the 400.
+										$work = null === $command ? fn() => $handler( null ) : fn() => Command_Log::run( $order, $command, $handler );
 										if ( in_array( $definition[1], self::PROVENANCE_HANDLERS, true ) ) {
-											// The command's provenance names the register that completes the sale, if it does (rule 1c).
-											$params     = $request->get_json_params();
-											$params     = is_array( $params ) ? $params : $request->get_body_params();
-											$provenance = is_array( $params['provenance'] ?? null ) ? $params['provenance'] : array();
-											$result     = Completion_Stamp::with_provenance( $provenance, $work, (int) $request['id'] );
+											// The command's provenance names the register that completes the sale, if it does (rule 1c); a replay's heal too.
+											$provenance = $this->params( $request )['provenance'] ?? null;
+											$result     = Completion_Stamp::with_provenance( is_array( $provenance ) ? $provenance : array(), $work, (int) $request['id'] );
 										} else {
 											$result = $work();
 										}
@@ -144,12 +145,12 @@ class Payments_Controller extends WC_REST_Controller {
 	/**
 	 * Record money already taken by a manual payment method.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command; its id is the row id.
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command; its id is the row id.
 	 *
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function create_item( $request, array $command = array() ) {
+	public function create_item( $request, ?Money_Command $command = null ) {
 		$order = $this->get_order( (int) $request['id'] );
 		if ( is_wp_error( $order ) ) {
 			return $order;
@@ -179,19 +180,14 @@ class Payments_Controller extends WC_REST_Controller {
 	/**
 	 * Close a sale: no money moves; a covered order completes (ADR 0040 rule 1, D2).
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command (id, fingerprint, kind).
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	public function close_item( $request, array $command = array() ) {
+	public function close_item( $request, ?Money_Command $command = null ) {
 		$order = $this->get_order( (int) $request['id'] );
 		if ( is_wp_error( $order ) ) {
 			return $order;
-		}
-		if ( ! empty( $command['heal'] ) ) {
-			// A close that stored its entry and still owes the paid transition: the replay heals from storage.
-			$order = Ledger::instance()->write( $order, null, Ledger::MODE_CLOSE )->order;
-			return $this->replay( $order, 'close', (array) Command_Log::find( $order, Ledger::instance()->read( $order ), $command['id'] ) );
 		}
 		$result = Ledger::instance()->close( $order, $command );
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
@@ -200,34 +196,34 @@ class Payments_Controller extends WC_REST_Controller {
 	/**
 	 * Submit a gateway's declared fields.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command.
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	public function submit_item( $request, array $command = array() ) {
+	public function submit_item( $request, ?Money_Command $command = null ) {
 		return $this->gateway_item( $request, 'submit', $command );
 	}
 
 	/**
 	 * Cancel an awaiting-customer outcome.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command.
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	public function cancel_item( $request, array $command = array() ) {
+	public function cancel_item( $request, ?Money_Command $command = null ) {
 		return $this->gateway_item( $request, 'cancel', $command );
 	}
 
 	/**
 	 * Dispatch a gateway operation inside the route lock.
 	 *
-	 * @param WP_REST_Request $request   Request object.
-	 * @param string          $operation Submit or cancel.
-	 * @param array           $command   The admitted command.
+	 * @param WP_REST_Request    $request   Request object.
+	 * @param string             $operation Submit or cancel.
+	 * @param Money_Command|null $command   The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	private function gateway_item( WP_REST_Request $request, string $operation, array $command = array() ) {
+	private function gateway_item( WP_REST_Request $request, string $operation, ?Money_Command $command = null ) {
 		$order = $this->get_order( (int) $request['id'] );
 		if ( is_wp_error( $order ) ) {
 			return $order;
@@ -284,12 +280,12 @@ class Payments_Controller extends WC_REST_Controller {
 	/**
 	 * Void one pending or authorized payment row.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command.
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command.
 	 *
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function void_item( $request, array $command = array() ) {
+	public function void_item( $request, ?Money_Command $command = null ) {
 		$order = $this->get_order( (int) $request['id'] );
 		if ( is_wp_error( $order ) ) {
 			return $order;
@@ -307,45 +303,45 @@ class Payments_Controller extends WC_REST_Controller {
 	/**
 	 * Create a payment intent and return its transient handoff.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command.
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	public function intent_item( $request, array $command = array() ) {
+	public function intent_item( $request, ?Money_Command $command = null ) {
 		return $this->provider_item( $request, 'intent', $command );
 	}
 
 	/**
 	 * Capture a payment through its handler.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command.
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	public function capture_item( $request, array $command = array() ) {
+	public function capture_item( $request, ?Money_Command $command = null ) {
 		return $this->provider_item( $request, 'capture', $command );
 	}
 
 	/**
 	 * Allocate a refund through its handler.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param array           $command The admitted command.
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	public function refund_item( $request, array $command = array() ) {
+	public function refund_item( $request, ?Money_Command $command = null ) {
 		return $this->provider_item( $request, 'refund', $command );
 	}
 
 	/**
 	 * Dispatch the new provider operations, inside the route's order lock.
 	 *
-	 * @param WP_REST_Request $request   Request object.
-	 * @param string          $operation Ledger operation.
-	 * @param array           $command   The admitted command.
+	 * @param WP_REST_Request    $request   Request object.
+	 * @param string             $operation Ledger operation.
+	 * @param Money_Command|null $command   The command.
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	private function provider_item( WP_REST_Request $request, string $operation, array $command = array() ) {
+	private function provider_item( WP_REST_Request $request, string $operation, ?Money_Command $command = null ) {
 		$order = $this->get_order( (int) $request['id'] );
 		if ( is_wp_error( $order ) ) {
 			return $order;
@@ -382,137 +378,7 @@ class Payments_Controller extends WC_REST_Controller {
 	}
 
 	/**
-	 * Admit a money command, under the route lock and before any ledger call: parse the envelope,
-	 * answer a replay from its stored outcome (before the revision, ADR 0040 rule 6: a retry carries
-	 * the revision from before its own effect), and refuse a fresh command built on a stale order.
-	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @param string          $kind    Command kind.
-	 * @return array|WP_Error|\WP_REST_Response The command to run (empty for `record`), a refusal, or a replay.
-	 */
-	private function admit( WP_REST_Request $request, string $kind ) {
-		$order = $this->get_order( (int) $request['id'] );
-		if ( is_wp_error( $order ) ) {
-			return $order;
-		}
-		$params  = $this->params( $request );
-		$command = array();
-		if ( 'record' === $kind && is_array( $params['payment'] ?? null ) && is_string( $params['payment']['id'] ?? null ) ) {
-			// A recorded row's id is its command id (rule 5), and its whole body the fingerprint.
-			$command = array(
-				'id'   => strtolower( $params['payment']['id'] ),
-				'fp'   => Command_Log::fingerprint( 'record', '', $params ),
-				'kind' => 'record',
-			);
-		} elseif ( 'record' !== $kind ) {
-			$id = $params['command_id'] ?? null;
-			if ( ! is_string( $id ) || ! wp_is_uuid( strtolower( $id ) ) ) {
-				return new WP_Error( 'rest_invalid_param', __( 'Command ID must be a UUID.', 'woocommerce-pos' ), array( 'status' => 400 ) );
-			}
-			$target  = in_array( $kind, Command_Log::ROW_KINDS, true ) ? (string) $request['uuid'] : (string) $request['method'];
-			$command = array(
-				'id'   => strtolower( $id ),
-				'fp'   => Command_Log::fingerprint( $kind, $target, $params ),
-				'kind' => $kind,
-			);
-		}
-		$revision = $params['revision'] ?? null;
-		if ( ! is_string( $revision ) || '' === $revision ) {
-			return new WP_Error( 'wcpos_revision_required', __( 'A payment command needs the order revision it was built against.', 'woocommerce-pos' ), array( 'status' => 428 ) );
-		}
-		$stored = $command ? Command_Log::find( $order, Ledger::instance()->read( $order ), $command['id'] ) : null;
-		if ( $stored && $stored['fp'] !== $command['fp'] ) {
-			$data = array(
-				'status'     => 422,
-				'command_id' => $command['id'],
-				'kind'       => $kind,
-			);
-			if ( 'record' === $kind && null !== $stored['payment_id'] ) {
-				$data['payment'] = Ledger::to_wire( (array) Ledger::instance()->find( $order, $stored['payment_id'] ) );
-			}
-			return new WP_Error( 'wcpos_command_conflict', __( 'This command ID was already used with a different request.', 'woocommerce-pos' ), $data );
-		}
-		if ( $stored && 'close' === $kind && Command_Log::owes( $order, $stored ) ) {
-			return array_merge( $command, array( 'heal' => true ) ); // Healed in close_item(), under the body's provenance.
-		}
-		if ( $stored && ! in_array( $kind, array( 'record', 'intent', 'submit' ), true ) ) {
-			return $this->replay( $order, $kind, $stored );
-		}
-		// Only a command that has not run meets the revision; record, intent and submit replays are called through.
-		if ( ! $stored ) {
-			$stale = $this->stale( $order, $revision );
-			if ( $stale ) {
-				return $stale;
-			}
-		}
-		return $command;
-	}
-
-	/**
-	 * A replay's answer, from the order as it now stands.
-	 *
-	 * @param WC_Order $order Order object.
-	 * @param string   $kind  Command kind (capture, void, refund, cancel or close).
-	 * @param array    $entry The stored entry.
-	 */
-	private function replay( WC_Order $order, string $kind, array $entry ): \WP_REST_Response {
-		$summary = Ledger::instance()->summary( $order );
-		if ( 'cancel' === $kind ) {
-			return rest_ensure_response( array( 'order' => $summary ) );
-		}
-		if ( 'close' === $kind ) {
-			$history = Completion_History::of( $order );
-			// A null ref is a close that crashed between its two saves: it names what stands, as close() would.
-			$completed  = null === $entry['ref'] ? $history->standing() : $history->by_id( (string) $entry['ref'] );
-			$completion = null === $completed ? null : array(
-				'n'  => (int) $completed['n'],
-				'id' => (string) $completed['id'],
-			);
-			return rest_ensure_response(
-				array(
-					'order'      => $summary,
-					'completion' => $completion,
-				)
-			);
-		}
-		$row = Ledger::to_wire( (array) Ledger::instance()->find( $order, (string) $entry['payment_id'] ) );
-		return rest_ensure_response(
-			'refund' === $kind ? array( 'payment' => $row ) : array(
-				'payment' => $row,
-				'order'   => $summary,
-			)
-		);
-	}
-
-	/**
-	 * Refuse a fresh command built against another revision of the order; propagate a failed read.
-	 *
-	 * @param WC_Order $order    Order object.
-	 * @param string   $revision The revision the command was built against.
-	 */
-	private function stale( WC_Order $order, string $revision ): ?WP_Error {
-		$current = Order_Serializer::current_state( $order->get_id() );
-		if ( is_wp_error( $current ) ) {
-			return $current;
-		}
-		$facts = Revision::stale( $revision, $current['revision'], $current['document'] );
-		if ( null === $facts ) {
-			return null;
-		}
-		return new WP_Error(
-			'wcpos_revision_stale',
-			__( 'The order changed since this command was built; read it again.', 'woocommerce-pos' ),
-			array(
-				'status'          => 409,
-				'currentRevision' => $facts['currentRevision'],
-				'current'         => $facts['current'],
-				'order'           => Ledger::instance()->summary( $order ),
-			)
-		);
-	}
-
-	/**
-	 * Finish a route answer: keep the command maps out of the wire, recover a parked sale record,
+	 * Finish a route answer: keep the command maps out of the wire (`Ledger::to_answer()`), recover a parked sale record,
 	 * and give every 2xx command answer the revision after it, read once recovery has run (§5.3).
 	 * The status poll's answer carries it too, so a void or capture after a poll that settled the
 	 * row goes out under the current revision instead of meeting a stale 409 and re-sending.
@@ -526,7 +392,7 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( is_wp_error( $result ) ) {
 			$data = $result->get_error_data();
 			if ( is_array( $data ) && is_array( $data['payment'] ?? null ) ) {
-				unset( $data['payment']['commands'] );
+				$data['payment'] = Ledger::to_answer( $data['payment'] );
 				$result->add_data( $data );
 			}
 			return $result;
@@ -540,7 +406,7 @@ class Payments_Controller extends WC_REST_Controller {
 		$data = $response->get_data();
 		if ( is_array( $data ) ) {
 			if ( is_array( $data['payment'] ?? null ) ) {
-				unset( $data['payment']['commands'] );
+				$data['payment'] = Ledger::to_answer( $data['payment'] );
 			}
 			$state = $response->get_status() < 300 && $order ? Order_Serializer::current_state( $order_id ) : null;
 			if ( is_wp_error( $state ) && null !== $kind ) {

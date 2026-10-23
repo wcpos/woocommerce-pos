@@ -13,7 +13,8 @@ use WC_Order;
 
 /**
  * Handed to a write's change: the order and its rows as storage held them under the lock. The
- * change stages on it and saves nothing; `Ledger::write()` stores it all in one save (S1).
+ * change stages on it and saves nothing; `Ledger::write()` stores it all in one save (S1), with the entry of
+ * the command it runs for (`Command_Log::stage()`).
  */
 final class Ledger_Draft {
 	/**
@@ -36,13 +37,6 @@ final class Ledger_Draft {
 	 * @var array<string, string>
 	 */
 	private $attempts = array();
-
-	/**
-	 * Order-level command entries to stage, by lowercase command id.
-	 *
-	 * @var array<string, array>
-	 */
-	private $commands = array();
 
 	/**
 	 * Build the draft from the locked read.
@@ -105,23 +99,8 @@ final class Ledger_Draft {
 		$this->attempts[ strtolower( $id ) ] = $fate;
 	}
 
-	/**
-	 * Stage an order-level command entry (`Command_Log::ORDER_KINDS`); a row's entry rides the row.
-	 *
-	 * @param string $id    Command id.
-	 * @param array  $entry `Command_Log::entry()`.
-	 */
-	public function command( string $id, array $entry ): void {
-		$this->commands[ strtolower( $id ) ] = $entry;
-	}
-
 	/** The staged attempt fates, by attempt id. */
 	public function attempts(): array {
 		return $this->attempts;
-	}
-
-	/** The staged order-level command entries, by command id. */
-	public function commands(): array {
-		return $this->commands;
 	}
 }

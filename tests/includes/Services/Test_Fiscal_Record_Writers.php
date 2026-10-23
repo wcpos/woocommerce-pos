@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
@@ -1367,12 +1368,12 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				'amount' => '20.00',
 			),
 			array(),
-			array( 'id' => $id, 'fp' => 'sha256:record', 'kind' => 'record' )
+			new Money_Command( $id, 'sha256:record', 'record' )
 		);
 		$this->assertArrayHasKey( $id, $row['commands'] );
 
 		// Act.
-		Ledger::instance()->void( $order, $id, 'Changed mind', array( 'id' => wp_generate_uuid4(), 'fp' => 'sha256:void', 'kind' => 'void' ) );
+		Ledger::instance()->void( $order, $id, 'Changed mind', new Money_Command( wp_generate_uuid4(), 'sha256:void', 'void' ) );
 
 		// Assert.
 		$records = ( new Fiscal_Record_Store() )->list(

@@ -643,15 +643,15 @@ class Ledger {
 	/**
 	 * Validate and record money already taken.
 	 *
-	 * @param WC_Order $order   Order object.
-	 * @param array    $input   Payment input.
-	 * @param array    $context Payment context.
-	 * @param array    $command The till's command (row id, body fingerprint); its entry rides the row's save.
+	 * @param WC_Order           $order   Order object.
+	 * @param array              $input   Payment input.
+	 * @param array              $context Payment context.
+	 * @param Money_Command|null $command The till's command (its id is the row id); its entry rides the row's save.
 	 *
 	 * @return array|\WP_Error
 	 * @throws Ledger_Persistence_Exception Retryable: the replay of the same command heals from storage.
 	 */
-	public function record( WC_Order $order, array $input, array $context = array(), array $command = array() ) {
+	public function record( WC_Order $order, array $input, array $context = array(), ?Money_Command $command = null ) {
 		// The till's row carries server-derived fields too (source, kind, change, refunds…); only these are inputs.
 		$input = array_intersect_key( $input, array_flip( self::RECORD_INPUT_KEYS ) );
 		$validated = $this->validate_input( $order, $input );
@@ -662,19 +662,7 @@ class Ledger {
 		$rows   = $this->read( $order );
 		$stored = $this->find_in_rows( $rows, strtolower( $input['id'] ) );
 		if ( $stored ) {
-			$replayed = $this->replay( $order, $stored, $input, $amount, $currency );
-			if ( is_wp_error( $replayed ) ) {
-				return $replayed;
-			}
-			// A confirmation still parked for the row (its arrival stopped before draining it) is applied first.
-			$settled = $this->drain_parked( $order, $stored['id'] );
-			if ( is_wp_error( $settled ) ) {
-				return $settled;
-			}
-			// The replay changes nothing: it runs the paid transition only when its entry still owes it.
-			$this->write( $order );
-			$this->refresh( $order );
-			return $this->find( $order, $stored['id'] );
+			return $this->replay( $order, $stored, $input, $amount, $currency ); // A route replay heals in Command_Log::run().
 		}
 		// A closed sale takes no new tender (§4.2). A paid one keeps the refused-row record below
 		// (offline cash may already be in the drawer); one never paid is refused outright.
@@ -750,8 +738,15 @@ class Ledger {
 			$row['failure_reason']  = 0 === $balance ? 'order_already_paid' : ( Money::minor( $amount ) > $balance ? 'amount_exceeds_balance' : 'payment_in_flight' );
 			$row['captured_at_gmt'] = null;
 			// The refusal is the command's stored outcome: its replay answers the same refusal.
-			$row = $this->with_command( $row, $command );
-			$this->write( $order, static fn( Ledger_Draft $draft ) => $draft->put( $row ) );
+			$this->write(
+				$order,
+				static function ( Ledger_Draft $draft ) use ( $row ): array {
+					$draft->put( $row );
+					return $row;
+				},
+				self::MODE_AUTO,
+				$command
+			);
 			$this->refresh( $order );
 			Settlement::instance()->apply_parked( $order, $row['id'] );
 			$row = $this->find( $order, $row['id'] ) ?? $row;
@@ -774,20 +769,22 @@ class Ledger {
 		if ( is_wp_error( $held ) ) {
 			return $held;
 		}
-		$row = $this->with_command( $row, $command );
-		// The arrival is stored and indexed without completing, a confirmation already parked for it applied on
-		// the draft. Only then is parking checked again under its lock: one parked meanwhile is applied before
-		// the paid transition, and any later one finds the row. The sale completes from storage after that.
+		// The arrival is stored and indexed with its entry, without completing, a confirmation already parked for
+		// it applied on the draft. Only then is parking checked again under its lock: one parked meanwhile is
+		// applied before the paid transition, and any later one finds the row. The sale completes from storage.
 		$parked = Settlement::instance()->parked( $row['id'] );
 		$failed = null;
-		$first  = $this->write(
+		$first  = null;
+		$this->write(
 			$order,
-			function ( Ledger_Draft $draft ) use ( $row, $parked ) {
+			function ( Ledger_Draft $draft ) use ( $row, $parked, &$first ): array {
 				$draft->put( $row );
-				return null === $parked ? null : $this->confirm( $draft, $row['id'], $parked );
+				$first = null === $parked ? null : $this->confirm( $draft, $row['id'], $parked );
+				return $row;
 			},
-			self::MODE_HOLD
-		)->answer;
+			self::MODE_HOLD,
+			$command
+		);
 		$settled = Settlement::instance()->drain(
 			$row['id'],
 			function ( array $patch ) use ( $order, $row, $parked, $first, &$failed ) {
@@ -828,14 +825,14 @@ class Ledger {
 	/**
 	 * Start a provider payment without recording money before the handler succeeds.
 	 *
-	 * @param WC_Order $order   Order object.
-	 * @param string   $id      Payment ID.
-	 * @param array    $input   Payment input.
-	 * @param array    $context Provider context.
-	 * @param array    $command The till's command (`id`, `fp`, `kind`); empty stores no entry.
+	 * @param WC_Order           $order   Order object.
+	 * @param string             $id      Payment ID.
+	 * @param array              $input   Payment input.
+	 * @param array              $context Provider context.
+	 * @param Money_Command|null $command The till's command; null stores no entry.
 	 * @return array|WP_Error
 	 */
-	public function intent( WC_Order $order, string $id, array $input, array $context, array $command = array() ) {
+	public function intent( WC_Order $order, string $id, array $input, array $context, ?Money_Command $command = null ) {
 		$input['id'] = $id;
 		$validated = $this->validate_input( $order, $input );
 		if ( is_wp_error( $validated ) ) {
@@ -858,11 +855,6 @@ class Ledger {
 			// provider intent — and with it the handoff the app lost when the first
 			// response never arrived. A settled leg has nothing left to hand off.
 			if ( 'pending' !== ( $replayed['status'] ?? '' ) ) {
-				// A new command id on a settled leg changes nothing else, but its entry is still kept.
-				$noted = $this->with_command( $replayed, $command );
-				if ( $noted !== $replayed ) {
-					$replayed = $this->replace_and_save( $order, $rows, $noted, false );
-				}
 				return array(
 					'payment' => $replayed,
 					'handoff' => array(),
@@ -884,7 +876,7 @@ class Ledger {
 					);
 					if ( ! is_wp_error( $failed ) ) {
 						// The command failed, so it keeps no entry (spec §5.2): its retry is a fresh command.
-						$this->replace_and_save( $order, $rows, $this->normalize_row( $order, Command_Log::without_on_row( $failed, (string) ( $command['id'] ?? '' ) ) ) );
+						$this->replace_and_save( $order, $rows, $this->normalize_row( $order, Command_Log::without_on_row( $failed, null === $command ? '' : $command->id() ) ) );
 						$this->release_hold_if_idle( $order );
 					}
 				}
@@ -1004,13 +996,13 @@ class Ledger {
 	/**
 	 * Capture and verify provider-confirmed money before it counts toward payment.
 	 *
-	 * @param WC_Order $order   Order object.
-	 * @param string   $id      Payment ID.
-	 * @param array    $context Provider context.
-	 * @param array    $command The till's command; empty stores no entry.
+	 * @param WC_Order           $order   Order object.
+	 * @param string             $id      Payment ID.
+	 * @param array              $context Provider context.
+	 * @param Money_Command|null $command The till's command; null stores no entry.
 	 * @return array|WP_Error
 	 */
-	public function capture( WC_Order $order, string $id, array $context, array $command = array() ) {
+	public function capture( WC_Order $order, string $id, array $context, ?Money_Command $command = null ) {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -1049,14 +1041,14 @@ class Ledger {
 	/**
 	 * Apply provider state under the caller's order lock, sharing capture verification.
 	 *
-	 * @param WC_Order $order Order object.
-	 * @param string   $id    Payment ID.
-	 * @param array    $new   Provider result.
-	 * @param bool     $derive Project payment state after applying.
-	 * @param array    $command The command this result answers; its entry rides the result's save.
+	 * @param WC_Order           $order   Order object.
+	 * @param string             $id      Payment ID.
+	 * @param array              $new     Provider result.
+	 * @param bool               $derive  Project payment state after applying.
+	 * @param Money_Command|null $command The command this result answers; its entry rides the result's save.
 	 * @return array|WP_Error
 	 */
-	public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true, array $command = array() ) {
+	public function apply_result( WC_Order $order, string $id, array $new, bool $derive = true, ?Money_Command $command = null ) {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -1064,11 +1056,7 @@ class Ledger {
 		}
 		$event = $new['event_id'] ?? null;
 		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
-			$noted = $this->with_command( $row, $command );
-			if ( $noted !== $row ) {
-				$noted = $this->replace_and_save( $order, $rows, $noted, false );
-			}
-			return $noted;
+			return $row;
 		}
 		$refusal = $this->refusal_error( $row, $order );
 		if ( $refusal ) {
@@ -1279,14 +1267,14 @@ class Ledger {
 	 * provider (ADR 0040 rule 8): reserved `pending` before the call, the answer after. Nothing
 	 * thrown escapes; an outcome the server cannot know returns the stored, still pending row.
 	 *
-	 * @param WC_Order $order     Order object.
-	 * @param string   $id        Payment ID.
-	 * @param int      $refund_id WooCommerce refund ID.
-	 * @param string   $amount    Allocation amount.
-	 * @param array    $command   The till's command; empty (Pro's callers) stores no entry.
+	 * @param WC_Order           $order     Order object.
+	 * @param string             $id        Payment ID.
+	 * @param int                $refund_id WooCommerce refund ID.
+	 * @param string             $amount    Allocation amount.
+	 * @param Money_Command|null $command   The till's command; null (Pro's callers) stores no entry.
 	 * @return array|WP_Error
 	 */
-	public function refund( WC_Order $order, string $id, int $refund_id, string $amount, array $command = array() ) {
+	public function refund( WC_Order $order, string $id, int $refund_id, string $amount, ?Money_Command $command = null ) {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -1297,12 +1285,7 @@ class Ledger {
 		}
 		foreach ( $row['refunds'] ?? array() as $refund ) {
 			if ( (int) $refund['id'] === $refund_id ) {
-				// Already allocated: a new command id changes nothing else, but its entry is kept.
-				$noted = $this->with_command( $row, $command, $refund_id );
-				if ( $noted !== $row ) {
-					return $this->replace_and_save( $order, $rows, $noted, false );
-				}
-				return $row;
+				return $row; // Already allocated.
 			}
 		}
 		$available = self::available_for_refund( $row );
@@ -1339,7 +1322,7 @@ class Ledger {
 			'status'       => 'pending',
 			'provider_ref' => null,
 		);
-		$entry   = empty( $command['id'] ) ? null : strtolower( $command['id'] );
+		$entry   = null === $command ? null : $command->id();
 		$held    = $this->with_command( $row, $command, $refund_id );
 		$held['refunds'][] = $reserve;
 		// No money moved: take the reservation and its entry back out, so the same command runs again (§7.13).
@@ -1938,32 +1921,25 @@ class Ledger {
 	 * motion, with `wcpos_balance_outstanding` when uncovered or the total is negative, and
 	 * `wcpos_insufficient_stock` when prevent-overselling cannot hold the sale's stock.
 	 *
-	 * @param WC_Order $order   Order object, read under the route's order lock.
-	 * @param array    $command The till's command; its entry names the completion it answered.
+	 * @param WC_Order           $order   Order object, read under the route's order lock.
+	 * @param Money_Command|null $command The till's command; its entry names the completion it answered.
 	 * @return array|WP_Error `{ order: summary, completion: { n, id } }`.
 	 * @throws Ledger_Persistence_Exception Retryable: the replay of the same command heals from storage.
 	 */
-	public function close( WC_Order $order, array $command = array() ) {
+	public function close( WC_Order $order, ?Money_Command $command = null ) {
 		$rows  = $this->read( $order );
 		$state = new Sale_State( $order, $rows );
 		// A standing completion is replayed whatever its status (a merchant's POS status may be on-hold).
 		// A sale paid before the history existed stands too: it replays with no completion to name.
 		if ( $state->stands() ) {
-			$standing = Completion_History::of( $order )->standing();
-			if ( empty( $command['id'] ) ) {
-				return $this->closed( $order, $rows, $standing ?? false );
+			$standing = fn( WC_Order $read, array $held ): array => $this->closed( $read, $held, Completion_History::of( $read )->standing() ?? false );
+			if ( null === $command ) {
+				return $standing( $order, $rows );
 			}
-			// The entry names what stands after the write's own heal, and moves nothing.
-			$written = $this->write(
-				$order,
-				static function ( Ledger_Draft $draft ) use ( $command ): void {
-					$standing = Completion_History::of( $draft->order() )->standing();
-					$draft->command( $command['id'], Command_Log::entry( $command['fp'], 'close', $standing ? (string) $standing['id'] : null ) );
-				},
-				self::MODE_HOLD
-			);
+			// The answer, and the entry naming its completion, are what stands after the write's own heal; nothing moves.
+			$answer = $this->write( $order, static fn( Ledger_Draft $draft ): array => $standing( $draft->order(), $draft->rows() ), self::MODE_HOLD, $command )->answer;
 			$this->refresh( $order );
-			return $this->closed( $written->order, $written->rows, $written->completion ?? false );
+			return $answer;
 		}
 		if ( ! $state->open() ) {
 			return $this->invalid_transition(); // Never completed, or its completion was reopened (a cancel).
@@ -1989,8 +1965,7 @@ class Ledger {
 			return $held;
 		}
 		// The entry rides S1 owing the paid transition; S3 names the completion it answered (§5.2).
-		$stage   = static fn( Ledger_Draft $draft ) => $draft->command( $command['id'], Command_Log::entry( $command['fp'], 'close' ) );
-		$written = $this->write( $order, empty( $command['id'] ) ? null : $stage, self::MODE_CLOSE );
+		$written = $this->write( $order, null === $command ? null : static fn(): bool => true, self::MODE_CLOSE, $command );
 		$this->refresh( $order );
 		return $this->closed( $written->order, $written->rows, $written->completion ?? false );
 	}
@@ -2008,12 +1983,12 @@ class Ledger {
 	/**
 	 * The row with the command's entry, when there is a command and the row does not hold it yet.
 	 *
-	 * @param array $row     Payment row.
-	 * @param array $command The till's command (`id`, `fp`, `kind`); empty for callers without one.
-	 * @param mixed $ref     The refund id a refund allocated.
+	 * @param array              $row     Payment row.
+	 * @param Money_Command|null $command The till's command; null for callers without one.
+	 * @param mixed              $ref     The refund id a refund allocated.
 	 */
-	private function with_command( array $row, array $command, $ref = null ): array {
-		return empty( $command['id'] ) ? $row : Command_Log::with_on_row( $row, $command['id'], Command_Log::entry( $command['fp'], $command['kind'], $ref ) );
+	private function with_command( array $row, ?Money_Command $command, $ref = null ): array {
+		return null === $command ? $row : Command_Log::with_on_row( $row, $command->id(), Command_Log::entry( $command->fp(), $command->kind(), $ref ) );
 	}
 
 	/**
@@ -2082,14 +2057,14 @@ class Ledger {
 	 * cash back and nothing at a provider needs reversing (wcpos/roadmap#107 rule 6).
 	 * Provider-captured rows are never voided; they are refunded.
 	 *
-	 * @param WC_Order $order  Order object.
-	 * @param string   $id     Payment ID.
-	 * @param string   $reason Void reason.
-	 * @param array    $command The till's command; empty (Pro's callers) stores no entry.
+	 * @param WC_Order           $order   Order object.
+	 * @param string             $id      Payment ID.
+	 * @param string             $reason  Void reason.
+	 * @param Money_Command|null $command The till's command; null (Pro's callers) stores no entry.
 	 *
 	 * @return array|\WP_Error
 	 */
-	public function void( WC_Order $order, string $id, string $reason, array $command = array() ) {
+	public function void( WC_Order $order, string $id, string $reason, ?Money_Command $command = null ) {
 		$rows = $this->read( $order );
 		$row  = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( ! $row ) {
@@ -2336,14 +2311,16 @@ class Ledger {
 	 * (S2), the completion (S3), deferred work, unlock. S2 and S3 are functions of storage, so a retry of the same command
 	 * heals a crash between them (ADR 0040, amended). A change breaking a row's invariants (I5) is a LogicException.
 	 *
-	 * @param WC_Order|int  $order  Order or order id; the write reads its own.
-	 * @param callable|null $change fn( Ledger_Draft $draft ): mixed. Pure: no provider call, no save, no hook; it may
-	 *                              run twice. Null is a replay: it completes a sale its rows cover only while a
-	 *                              command's entry still owes the paid transition (`Command_Log::OWED`).
-	 * @param string        $mode   MODE_AUTO, MODE_HOLD (stage only) or MODE_CLOSE (may complete zero or on-hold).
+	 * @param WC_Order|int       $order   Order or order id; the write reads its own.
+	 * @param callable|null      $change  fn( Ledger_Draft $draft ): mixed. Pure: no provider call, no save, no hook; it
+	 *                                    may run twice. Null is a replay: it completes a sale its rows cover only while
+	 *                                    a command's entry still owes the paid transition (`Command_Log::OWED`).
+	 * @param string             $mode    MODE_AUTO, MODE_HOLD (stage only) or MODE_CLOSE (may complete zero or on-hold).
+	 * @param Money_Command|null $command The command the change runs for: its entry follows what the change answers
+	 *                                    (`Command_Log::stage()`) and lands in S1 with the rows.
 	 * @throws Ledger_Persistence_Exception Retryable; `stage` names the step that failed.
 	 */
-	public function write( $order, ?callable $change = null, string $mode = self::MODE_AUTO ): Ledger_Written {
+	public function write( $order, ?callable $change = null, string $mode = self::MODE_AUTO, ?Money_Command $command = null ): Ledger_Written {
 		$id   = $order instanceof WC_Order ? $order->get_id() : (int) $order;
 		$hook = self::order_hook();
 		if ( null !== $hook ) {
@@ -2357,7 +2334,7 @@ class Ledger {
 		try {
 			self::$writing[ $id ] = $depth;
 			try {
-				$written = $this->locked_write( $id, $change, $mode );
+				$written = $this->locked_write( $id, $change, $mode, $command );
 			} finally {
 				self::$writing[ $id ] = $depth - 1;
 				if ( 1 === $depth ) {
@@ -2453,12 +2430,13 @@ class Ledger {
 	/**
 	 * Steps 2 to 7 of a write, under the lock: S1 is retried once from a fresh read on a read-back miss.
 	 *
-	 * @param int           $id     Order id.
-	 * @param callable|null $change The change.
-	 * @param string        $mode   Write mode.
+	 * @param int                $id      Order id.
+	 * @param callable|null      $change  The change.
+	 * @param string             $mode    Write mode.
+	 * @param Money_Command|null $command The write's command.
 	 * @throws Ledger_Persistence_Exception When a step does not reach storage.
 	 */
-	private function locked_write( int $id, ?callable $change, string $mode ): Ledger_Written {
+	private function locked_write( int $id, ?callable $change, string $mode, ?Money_Command $command ): Ledger_Written {
 		// A held write never completes, but the command it stages owes the paid transition its rows cover.
 		$covering = self::MODE_HOLD === $mode ? self::MODE_AUTO : $mode;
 		$may      = null;
@@ -2476,9 +2454,12 @@ class Ledger {
 			$may    = $may ?? ( ! $this->project( $order, $stored, $covering )['completes'] || self::MODE_CLOSE === $mode || ( null === $change && $this->completion_due( $order, $stored ) ) );
 			$draft  = new Ledger_Draft( $order, $stored );
 			$answer = null === $change ? null : $change( $draft );
-			$rows   = $this->settle( $order, $stored, $draft->rows() );
+			if ( null !== $command ) {
+				Command_Log::stage( $draft, $command, $answer );
+			}
+			$rows = $this->settle( $order, $stored, $draft->rows() );
 			if ( $may && $this->project( $order, $rows, $covering )['completes'] ) {
-				$rows = Command_Log::owe( $draft, $rows, $stored );
+				$rows = Command_Log::owe( $draft, $rows, $stored, $command );
 			}
 			if ( $this->store_rows( $order, $stored, $rows, $draft, $this->project( $order, $rows, $mode ), null !== $change ) ) {
 				break;
@@ -2580,7 +2561,7 @@ class Ledger {
 	private function store_rows( WC_Order $order, array $stored, array $rows, Ledger_Draft $draft, array $projection, bool $changed ): bool {
 		$id     = $order->get_id();
 		$wire   = json_decode( (string) wp_json_encode( array_map( array( __CLASS__, 'to_wire' ), $rows ) ), true );
-		$staged = $draft->attempts() || $draft->commands() || $wire !== $stored;
+		$staged = $draft->attempts() || $wire !== $stored;
 		// The awaiting-customer stamp stays until S3 on a completing write: storage keeps saying POS-owned until
 		// the sale completes. Money that does not complete it projects the sale back into progress, so it goes now.
 		$unstamped = null !== $projection['method'] && ! $projection['completes'] && null !== Gateway_Submission::read_stamp( $order );
@@ -2609,9 +2590,6 @@ class Ledger {
 				$history[ $attempt_id ] = $fate;
 			}
 			$order->update_meta_data( Gateway_Submission::ATTEMPTS_META_KEY, array_slice( $history, - Gateway_Submission::ATTEMPTS_CAP, null, true ) );
-		}
-		foreach ( $draft->commands() as $command_id => $entry ) {
-			Command_Log::remember( $order, $command_id, $entry );
 		}
 		$this->stage( $order, $rows );
 		// What storage must hold afterwards, as sets (HPOS reuses meta ids): taken now, as the save re-reads the meta.
@@ -3085,6 +3063,17 @@ class Ledger {
 			}
 		}
 		return $row;
+	}
+
+	/**
+	 * A row as a route answers it: the wire shape without the command map, which only replay reads
+	 * (`payment.commands` is never answered). `to_wire()` also shapes the stored rows, so it keeps it.
+	 *
+	 * @param array $row Payment row.
+	 */
+	public static function to_answer( array $row ): array {
+		unset( $row['commands'] );
+		return self::to_wire( $row );
 	}
 
 	/**

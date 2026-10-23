@@ -10,7 +10,9 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 \defined( 'ABSPATH' ) || die;
 
 use WC_Order;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Revision;
+use WP_Error;
 
 /**
  * ADR 0040 rule 5: every money command is idempotent by a till-minted command id for as long as
@@ -73,6 +75,199 @@ final class Command_Log {
 			$entry['outcome'] = $outcome;
 		}
 		return $entry;
+	}
+
+	/**
+	 * Answer a money command by its id, under the route's order lock (ADR 0040 rules 5 and 6): a used id
+	 * with another body is 422; a used id replays its stored outcome whatever the revision it carries (a
+	 * retry carries the one from before its own effect); a fresh id built on a stale revision is 409;
+	 * otherwise the work runs. A 2xx whose writes kept no entry (it changed nothing) gets one, so the id
+	 * is never free for another body.
+	 *
+	 * @param WC_Order      $order   Order, read under the lock.
+	 * @param Money_Command $command The command.
+	 * @param callable      $work    fn( Money_Command ): the handler's answer.
+	 * @return mixed A refusal, a replay, or the work's answer.
+	 * @throws Ledger_Persistence_Exception When an entry does not reach storage: the retry replays.
+	 */
+	public static function run( WC_Order $order, Money_Command $command, callable $work ) {
+		$ledger = Ledger::instance();
+		$stored = self::find( $order, $ledger->read( $order ), $command->id() );
+		if ( null !== $stored && $stored['fp'] !== $command->fp() ) {
+			$data = array(
+				'status'     => 422,
+				'command_id' => $command->id(),
+				'kind'       => $command->kind(),
+			);
+			if ( 'record' === $command->kind() && null !== $stored['payment_id'] ) {
+				$data['payment'] = Ledger::to_answer( (array) $ledger->find( $order, $stored['payment_id'] ) );
+			}
+			return new WP_Error( 'wcpos_command_conflict', __( 'This command ID was already used with a different request.', 'woocommerce-pos' ), $data );
+		}
+		if ( null !== $stored ) {
+			return self::replay( $order, $command, $stored, $work );
+		}
+		$stale = self::outdated( $order, $command->revision() );
+		if ( null !== $stale ) {
+			return $stale;
+		}
+		$answer = $work( $command );
+		$fresh  = is_wp_error( $answer ) ? null : wc_get_order( $order->get_id() );
+		if ( $fresh instanceof WC_Order ) {
+			$fresh->read_meta_data( true );
+			if ( $command->fp() !== ( self::find( $fresh, $ledger->read( $fresh ), $command->id() )['fp'] ?? null ) ) {
+				$data = $answer instanceof \WP_REST_Response ? $answer->get_data() : $answer;
+				$ledger->write( $fresh, static fn() => $data, Ledger::MODE_HOLD, $command );
+			}
+		}
+		return $answer;
+	}
+
+	/**
+	 * Stage a command's entry on a write's draft from what the write's change answered (`Ledger::write()`, S1,
+	 * read back with the rows): an error removes it (a definite failure keeps none), null leaves storage as it
+	 * is, anything else puts `{ fp, kind, ref, outcome?, at_gmt }`. `record` keeps it on the row it created, the
+	 * row kinds on their target row, the order kinds in the order map. A stored entry keeps its time and debt.
+	 *
+	 * @param Ledger_Draft  $draft   The write's draft.
+	 * @param Money_Command $command The command.
+	 * @param mixed         $answer  The change's answer.
+	 * @throws \LogicException When a row command answers with no row to keep its entry.
+	 */
+	public static function stage( Ledger_Draft $draft, Money_Command $command, $answer ): void {
+		if ( null === $answer ) {
+			return;
+		}
+		$id    = $command->id();
+		$kind  = $command->kind();
+		$order = in_array( $kind, self::ORDER_KINDS, true );
+		$row   = $order ? null : $draft->row( 'record' === $kind ? $id : $command->target() );
+		$held  = $order ? ( self::read( $draft->order() )[ $id ] ?? null ) : ( $row['commands'][ $id ] ?? null );
+		if ( is_wp_error( $answer ) ) {
+			if ( $order ) {
+				self::forget( $draft->order(), $id );
+			} elseif ( null !== $row ) {
+				$draft->put( self::without_on_row( $row, $id ) );
+			}
+			return;
+		}
+		if ( ! $order && null === $row ) {
+			throw new \LogicException( esc_html( sprintf( 'WCPOS %s command %s answered with no payment row to keep its entry.', $kind, $id ) ) );
+		}
+		$ref   = 'close' === $kind ? ( is_array( $answer ) ? ( $answer['completion']['id'] ?? null ) : null ) : $command->ref();
+		$entry = self::entry( $command->fp(), $kind, $ref ?? ( $held['ref'] ?? null ), 'submit' === $kind && is_array( $answer ) ? ( $answer['outcome'] ?? null ) : null );
+		$entry = array_merge( $entry, array_intersect_key( (array) $held, array_flip( array( 'at_gmt', 'phase', 'owed_at_n' ) ) ) );
+		if ( $order ) {
+			self::remember( $draft->order(), $id, $entry );
+			return;
+		}
+		$row['commands'][ $id ] = $entry;
+		$draft->put( $row );
+	}
+
+	/**
+	 * A command's stored outcome, from storage. A record, or an entry still owing the paid transition its write's
+	 * rows covered, first heals through a write (it saves nothing on a healthy order and completes the sale only
+	 * while a command owes it; c2's heal table). A record, and an intent still pending, answer
+	 * through their handler: the record from its stored row, the intent by resuming at the provider (handlers
+	 * key the call on the row id, so it hands back the same intent and the handoff the till lost).
+	 *
+	 * @param WC_Order      $order   Order.
+	 * @param Money_Command $command The command.
+	 * @param array         $entry   Its stored entry.
+	 * @param callable      $work    The handler.
+	 * @return mixed
+	 */
+	private static function replay( WC_Order $order, Money_Command $command, array $entry, callable $work ) {
+		$ledger = Ledger::instance();
+		$kind   = $command->kind();
+		if ( 'record' === $kind && null === $ledger->refusal_error( (array) $ledger->find( $order, $command->id() ), $order ) ) {
+			$drained = $ledger->drain_parked( $order, $command->id() ); // A confirmation its arrival stopped before draining.
+			if ( is_wp_error( $drained ) ) {
+				return $drained;
+			}
+		}
+		if ( 'record' === $kind || self::owes( $order, $entry ) ) {
+			$order = $ledger->write( $order, null, 'close' === $kind ? Ledger::MODE_CLOSE : Ledger::MODE_AUTO )->order;
+		}
+		$row = null === $entry['payment_id'] ? null : $ledger->find( $order, $entry['payment_id'] );
+		if ( 'record' === $kind || ( 'intent' === $kind && 'pending' === ( $row['status'] ?? '' ) ) ) {
+			return $work( $command );
+		}
+		$refusal = 'intent' === $kind ? $ledger->refusal_error( (array) $row, $order ) : null;
+		if ( $refusal ) {
+			return $refusal;
+		}
+		$payment = Ledger::to_answer( (array) $row );
+		$summary = $ledger->summary( $order );
+		switch ( $kind ) {
+			case 'capture':
+			case 'void':
+				return array(
+					'payment' => $payment,
+					'order'   => $summary,
+				);
+			case 'intent':
+				return array(
+					'payment' => $payment,
+					'order'   => $summary,
+					'handoff' => new \stdClass(),
+				);
+			case 'refund':
+				return array( 'payment' => $payment );
+			case 'cancel':
+				return array( 'order' => $summary );
+			case 'close':
+				$history   = Completion_History::of( $order );
+				$completed = null === $entry['ref'] ? $history->standing() : $history->by_id( (string) $entry['ref'] );
+				return array(
+					'order'      => $summary,
+					'completion' => null === $completed ? null : array(
+						'n'  => (int) $completed['n'],
+						'id' => (string) $completed['id'],
+					),
+				);
+		}
+		// Submit: the attempt's fate, except to the command that first answered `recorded` (D6).
+		$attempt = (string) $entry['ref'];
+		$fate    = Gateway_Submission::read_attempts( $order )[ $attempt ] ?? null;
+		$minted   = $ledger->find( $order, $attempt );
+		$recorded = $minted && ( 'paid' !== $fate || 'recorded' === $entry['outcome'] );
+		if ( ! $recorded && in_array( $fate, array( 'cancelled', 'superseded' ), true ) ) {
+			return new WP_Error( 'wcpos_payment_conflict', __( 'This attempt was cancelled or superseded at the till.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		return array(
+			'outcome' => $recorded ? 'recorded' : ( in_array( $fate, array( 'sent', 'settled', 'paid' ), true ) ? $fate : $entry['outcome'] ),
+			'payment' => $recorded ? Ledger::to_answer( $minted ) : null,
+			'order'   => $summary,
+		);
+	}
+
+	/**
+	 * Refuse a fresh command built against another revision of the order; propagate a failed read.
+	 *
+	 * @param WC_Order $order    Order object.
+	 * @param string   $revision The revision the command was built against.
+	 */
+	private static function outdated( WC_Order $order, string $revision ): ?WP_Error {
+		$current = Order_Serializer::current_state( $order->get_id() );
+		if ( is_wp_error( $current ) ) {
+			return $current;
+		}
+		$facts = Revision::stale( $revision, $current['revision'], $current['document'] );
+		if ( null === $facts ) {
+			return null;
+		}
+		return new WP_Error(
+			'wcpos_revision_stale',
+			__( 'The order changed since this command was built; read it again.', 'woocommerce-pos' ),
+			array(
+				'status'          => 409,
+				'currentRevision' => $facts['currentRevision'],
+				'current'         => $facts['current'],
+				'order'           => Ledger::instance()->summary( $order ),
+			)
+		);
 	}
 
 	/**
@@ -163,21 +358,23 @@ final class Command_Log {
 	}
 
 	/**
-	 * Mark the commands of the write that covers the sale as owing the paid transition: the draft's
-	 * order-level entries, and every entry on each row the write changes (one storage already holds too,
+	 * Mark the commands of the write that covers the sale as owing the paid transition: the write's own
+	 * order-level entry, and every entry on each row the write changes (one storage already holds too,
 	 * when its row's confirmation is what covers the sale). Returns the rows.
 	 *
-	 * @param Ledger_Draft $draft  The write's draft.
-	 * @param array        $rows   Settled rows.
-	 * @param array        $stored Stored rows.
+	 * @param Ledger_Draft       $draft   The write's draft.
+	 * @param array              $rows    Settled rows.
+	 * @param array              $stored  Stored rows.
+	 * @param Money_Command|null $command The write's command.
 	 */
-	public static function owe( Ledger_Draft $draft, array $rows, array $stored ): array {
+	public static function owe( Ledger_Draft $draft, array $rows, array $stored, ?Money_Command $command = null ): array {
 		$owed = array(
 			'phase'     => self::OWED,
 			'owed_at_n' => self::completions( $draft->order() ),
 		);
-		foreach ( $draft->commands() as $command_id => $entry ) {
-			$draft->command( $command_id, array_merge( $entry, $owed ) );
+		$entry = null === $command ? null : ( self::read( $draft->order() )[ $command->id() ] ?? null );
+		if ( null !== $entry ) {
+			self::remember( $draft->order(), $command->id(), array_merge( $entry, $owed ) );
 		}
 		$held = array_column( $stored, null, 'id' );
 		foreach ( $rows as &$row ) {
