@@ -847,6 +847,85 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), array_map( static fn( $meta ) => $meta->value, $stored->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
 	}
 
+	/**
+	 * One payment, one recovery identity: order-pay's status change and its payment_complete() both defer a mint for the
+	 * same payment. With every ledger write lost, exactly one `paid` attempt is kept; once storage heals, the sweep
+	 * records it once and leaves nothing for staff.
+	 */
+	public function test_both_deferred_mints_of_one_order_pay_payment_keep_one_attempt(): void {
+		// Arrange.
+		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
+
+		// Act: order-pay takes the payment; both hooks defer a mint; every ledger write of the request is lost.
+		add_filter( 'query', $lose );
+		try {
+			$this->pay_through_order_pay( $order->get_id() );
+		} finally {
+			remove_filter( 'query', $lose );
+		}
+		wp_cache_flush(); // A later request.
+		$kept = Attempts::of( wc_get_order( $order->get_id() ) )->fates();
+		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		try {
+			( new Payments_Sweeper() )->run();
+			( new Payments_Sweeper() )->run();
+		} finally {
+			remove_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertSame( array( 'paid' ), array_values( $kept ), 'One payment keeps one attempt.' );
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$this->assertSame( array_keys( $kept ), array_column( Ledger::instance()->read( $stored ), 'id' ) );
+		$this->assertCount( 1, $this->stored_history( $order->get_id() ) );
+		$this->assertNull( Attempts::of( $stored )->get( (string) array_key_first( $kept ) )['attention_at_gmt'] );
+		$this->assertSame( array(), array_map( static fn( $meta ) => $meta->value, $stored->get_meta( Ledger::LIVE_LEG_META_KEY, false ) ) );
+	}
+
+	/** With storage healthy, the two deferred mints of one order-pay payment record one row and keep no attempt. */
+	public function test_both_deferred_mints_of_one_healthy_order_pay_payment_record_one_row(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->set_payment_method( 'pos_card' );
+		$order->save();
+
+		// Act.
+		$this->pay_through_order_pay( $order->get_id() );
+
+		// Assert.
+		$stored = wc_get_order( $order->get_id() );
+		$stored->read_meta_data( true );
+		$this->assertCount( 1, Ledger::instance()->read( $stored ) );
+		$this->assertCount( 1, $this->stored_history( $order->get_id() ) );
+		$this->assertSame( array(), Attempts::of( $stored )->fates() );
+	}
+
+	/**
+	 * Pay a POS order through WooCommerce's order-pay form, as a POS request, to the end of the request.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function pay_through_order_pay( int $order_id ): void {
+		$_POST['payment_method'] = 'pos_card'; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- The order-pay form's field.
+		try {
+			$this->in_pos_request(
+				static function () use ( $order_id ): void {
+					do_action( 'woocommerce_before_pay_action', wc_get_order( $order_id ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
+					wc_get_order( $order_id )->payment_complete( 'ch_order_pay' );
+					apply_filters( 'woocommerce_payment_successful_result', array( 'result' => 'success' ), $order_id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
+				}
+			);
+			Ledger::flush_all();
+		} finally {
+			unset( $_POST['payment_method'] );
+		}
+	}
+
 	/** A storefront order paid through the order-pay window is not a register sale. */
 	public function test_a_storefront_order_pay_payment_in_the_window_writes_no_entry(): void {
 		// Arrange.

@@ -323,14 +323,16 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			do_action( 'woocommerce_before_pay_action', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's hook.
 		}
 
-		// Assert.
-		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'WCPOS payment pos_card' ) && false !== strpos( $message, 'captured but not recorded' ) && false !== strpos( $message, 'total unavailable' ) ) );
+		// Assert: the error and the note name the payment by the id its kept attempt carries.
+		$kept = \WCPOS\WooCommercePOS\Payments\Contract\Attempts::of( wc_get_order( $order->get_id() ) )->fates();
+		$id   = (string) array_key_first( $kept );
+		$this->assertCount( 1, array_filter( $errors, static fn( $message ) => false !== strpos( $message, 'WCPOS payment ' . $id . ' ' ) && false !== strpos( $message, 'captured but not recorded' ) && false !== strpos( $message, 'total unavailable' ) ) );
 		$notes = implode( "\n", array_column( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
-		$this->assertStringContainsString( 'WCPOS: payment pos_card', $notes );
+		$this->assertStringContainsString( 'WCPOS: payment ' . $id . ' ', $notes );
 		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 		// The payment the failed mint named is kept for the resolver, `paid` with no row (the hook fired on an order
 		// WooCommerce never marked paid, so there is nothing to mint it from yet).
-		$this->assertSame( array( 'paid' ), array_values( \WCPOS\WooCommercePOS\Payments\Contract\Attempts::of( wc_get_order( $order->get_id() ) )->fates() ) );
+		$this->assertSame( array( 'paid' ), array_values( $kept ) );
 	}
 
 	/** Hook entry points that must contain ledger persistence errors. */

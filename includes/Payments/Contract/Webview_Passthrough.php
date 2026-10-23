@@ -23,6 +23,15 @@ class Webview_Passthrough {
 	private static $paying_order_id = 0;
 
 	/**
+	 * The row id of the payment being recorded on each order in this request, until its row lands: one payment, one
+	 * recovery identity. Order-pay's status change and its payment_complete() both defer a mint for the same payment, so
+	 * when neither lands both keep the same attempt (`Attempts::strand()`), never two.
+	 *
+	 * @var array<int, string>
+	 */
+	private static $payment_ids = array();
+
+	/**
 	 * Whether WooCommerce's order-pay form is running a gateway against this order right now.
 	 *
 	 * @param int $order_id Order ID.
@@ -159,10 +168,23 @@ class Webview_Passthrough {
 			}
 		}
 
-		// A sent attempt this payment answers is the row's id, so Ledger::write() marks the attempt paid. What it
-		// awaited outlives the paid save; the completion's S3 clears it.
-		$attempt = (string) ( Attempts::of( $order )->awaiting()['attempt_id'] ?? '' );
-		self::defer_mint( $order, wp_is_uuid( $attempt ) ? array( 'id' => strtolower( $attempt ) ) : array() );
+		self::defer_mint( $order, array() );
+	}
+
+	/**
+	 * The row id of the payment this request is recording on the order: the sent attempt it answers (so Ledger::write()
+	 * marks that attempt paid; what it awaited outlives the paid save and the completion's S3 clears it), else one new id,
+	 * the same for every mint deferred for it.
+	 *
+	 * @param WC_Order $order Order being paid.
+	 */
+	private static function payment_id( WC_Order $order ): string {
+		$id = $order->get_id();
+		if ( ! isset( self::$payment_ids[ $id ] ) ) {
+			$attempt                  = strtolower( (string) ( Attempts::of( $order )->awaiting()['attempt_id'] ?? '' ) );
+			self::$payment_ids[ $id ] = wp_is_uuid( $attempt ) ? $attempt : wp_generate_uuid4();
+		}
+		return self::$payment_ids[ $id ];
 	}
 
 	/**
@@ -207,7 +229,8 @@ class Webview_Passthrough {
 		if ( ! wcpos_is_pos_order( $order ) || Ledger::is_writing( $id ) || Gateway_Submission::is_submitting( $id ) ) {
 			return; // The ledger's own write, or the submit, records this payment itself.
 		}
-		$work = static function () use ( $id, $overrides ): void {
+		$overrides += array( 'id' => self::payment_id( $order ) );
+		$work       = static function () use ( $id, $overrides ): void {
 			$order = wc_get_order( $id );
 			try {
 				if ( $order instanceof WC_Order ) {
@@ -288,6 +311,7 @@ class Webview_Passthrough {
 			Attempts::strand( $order, strtolower( (string) ( $row['id'] ?? $overrides['id'] ?? wp_generate_uuid4() ) ), $method_id );
 			throw $error instanceof Ledger_Persistence_Exception ? $error : new Ledger_Persistence_Exception( esc_html( $error->getMessage() ), 0, $error );
 		}
+		unset( self::$payment_ids[ $order->get_id() ] ); // Its row landed: a later payment in this request is another one.
 		return is_wp_error( $adopted ) ? null : $adopted;
 	}
 
