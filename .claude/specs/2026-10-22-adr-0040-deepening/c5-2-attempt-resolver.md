@@ -57,8 +57,7 @@ are not asked.
    `reconcile( 'paid' )` before its completing write. It runs after the order's other deferred work, so a
    callback's own mint lands first (its webview row, the attempt id as the row id) and the resolver then finds
    nothing to do; a paid status written without `payment_complete()` (wp-admin, a status-only gateway) is
-   minted by the resolver. With `paid` the resolver also asks an attempt that awaits the customer. The observer
-   also defers for an order holding an unresolved attempt (a stranded send later marked paid).
+   minted by the resolver. With `paid` the resolver asks only about the attempt that awaited the customer.
 
 `Gateway_Submission::resolve_paid()` is deleted: the resolver is its only replacement.
 
@@ -74,9 +73,12 @@ is a no-op on a `processing` order, so a retried webhook never re-mints. Under c
 - The sweep then finds it: the resolver's `captured` answer IS the re-mint, and its write completes the sale,
   once. When the handler cannot answer (the order is no longer paid through that method), the attention path
   applies: one note, never a guess.
-- `mint()` without an explicit id adopts the id of the unresolved attempt of the same method: a callback that
-  answers a stranded send, or a later mint of the payment a failed one kept, marks that attempt `paid` instead of
-  leaving it in motion forever beside the row that records its money.
+- The paid listener asks only about the attempt that awaited the customer: an attempt nobody awaited (a stranded
+  send, or the payment a failed mint kept) is the sweep's, so a resolver write never runs inside the same outage that
+  just refused the mint. A write that stores only part of S1 (the attempt `paid`, its row missing) is redone by the
+  resolver's in-write re-check instead of being read as resolved.
+- `mint()` adopts no attempt id it was not given: a payment that is not the attempt's (a webview payment beside a
+  stranded send of the same method) must never mark that attempt `paid` and hide a charge.
 
 ## Tests (both storages where the class has an HPOS twin; new tests dispatch `wcpos/v2`)
 

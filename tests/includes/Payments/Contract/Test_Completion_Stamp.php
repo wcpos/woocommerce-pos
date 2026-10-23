@@ -12,7 +12,6 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
-use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -716,8 +715,8 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 1 ), $this->announced );
 	}
 
-	/** An asynchronous order-pay payment whose row is not stored completes nothing; it completes once the row lands. */
-	public function test_an_async_order_pay_completion_waits_for_a_row_whose_mint_failed(): void {
+	/** An asynchronous order-pay payment whose row is not stored completes nothing; the sweep re-mints it and completes the sale, once. */
+	public function test_an_async_order_pay_completion_waits_for_a_row_whose_mint_failed_and_the_sweep_re_mints_it_once(): void {
 		// Arrange: a POS order, no rows; the first mint's ledger write never reaches storage.
 		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
 		$order = $this->create_pos_order();
@@ -734,40 +733,7 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'query', $lose );
 		}
 		$lost = $this->stored_history( $order->get_id() );
-		// The merchant reconciles the payment the failure note names; the next write on the sale completes it.
-		Webview_Passthrough::mint( wc_get_order( $order->get_id() ), array( 'provider_refs' => array( 'transaction_id' => 'ch_async' ) ) );
-		Ledger::instance()->write( $order->get_id() );
-
-		// Assert.
-		$rows    = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
-		$history = $this->stored_history( $order->get_id() );
-		$this->assertSame( array(), $lost, 'No completion without the tender\'s row.' );
-		$this->assertCount( 1, $rows );
-		$this->assertCount( 1, $history );
-		$this->assertSame( array( $rows[0]['id'] ), $history[0]['payment_ids'] );
-		$this->assertSame( array( 1 ), $this->announced );
-		$this->assertCount( 1, $this->only_sale( $order->get_id() )['payload']['payments'] );
-		$this->assertNull( Attempts::of( wc_get_order( $order->get_id() ) )->unresolved(), 'The payment the failed mint kept is the one recorded.' );
-	}
-
-	/** The payment a failed order-pay mint kept is re-minted by the sweep, and the sale completes once. */
-	public function test_an_async_order_pay_payment_whose_mint_failed_is_re_minted_by_the_sweep_once(): void {
-		// Arrange: a POS order, no rows; the first mint's ledger write never reaches storage.
-		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
-		$order = $this->create_pos_order();
-		$order->set_payment_method( 'pos_card' );
-		$order->save();
-		$lose = static fn( $sql ) => is_string( $sql ) && false !== strpos( $sql, Ledger::META_KEY ) && preg_match( '/^\s*(INSERT|UPDATE)/i', $sql ) ? 'SELECT 0' : $sql;
-		add_filter( 'query', $lose );
-		try {
-			wc_get_order( $order->get_id() )->payment_complete( 'ch_async' );
-			Ledger::flush_all();
-		} finally {
-			remove_filter( 'query', $lose );
-		}
-		$lost = $this->stored_history( $order->get_id() );
-
-		// Act: two sweeps.
+		// The resolver re-mints the payment the failure note names (ADR 0040 rule 7): two sweeps once the store recovers.
 		add_filter( 'wcpos_payments_sweep_threshold', '__return_zero' );
 		try {
 			( new Payments_Sweeper() )->run();

@@ -158,6 +158,18 @@ wire (`payment.commands` is never answered). `record`'s mismatched replay is 422
 `wcpos_command_conflict` (was 409 `wcpos_payment_conflict`); `wcpos_payment_conflict` remains the
 state conflict (a `submit` of a cancelled or superseded attempt, a live payment on the order).
 
+## Gateway attempts whose outcome is unknown (2.0.0, ADR 0040 rule 7)
+
+A `submit` attempt is stored `sent` before the gateway runs. When the gateway's answer is lost (it threw after
+dispatch, or the row's write failed), the attempt stays `sent` and the sale stays in motion until the resolver
+learns its outcome from the provider: the sweep (every ten minutes, for an attempt older than five), a `submit`
+naming the attempt, and `cancel` ask first. Money the provider took is recorded as the attempt's row (a replay
+then answers `recorded` with it); a refused attempt is cancelled; when the provider cannot say, the order gets
+one note for staff and the attempt stays in motion, never cancelled by the server.
+
+- A new `submit` while such an attempt stands: 409 `wcpos_payment_in_flight` with `attempt_id`, nothing
+  dispatched. An attempt awaiting the customer (an invoice sent) does not block "send again".
+
 ## Refund allocations: two saves around the provider (2.0.0, ADR 0040 rule 8)
 
 `POST …/payments/{uuid}/refund` (`refund_id`, `amount`) writes the allocation `pending`, with the

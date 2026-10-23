@@ -58,9 +58,35 @@ class Gateway_Submission {
 		}
 		$attempt_id = strtolower( $attempt_id );
 		$ledger     = Ledger::instance();
-		$rows       = $ledger->read( $order );
+		$fate       = Attempts::of( $order )->get( $attempt_id )['fate'] ?? null;
+		$sent       = Attempts::of( $order )->unresolved();
+		if ( null !== $sent && null === $sent['awaiting'] ) {
+			// Rule 7: an outcome nobody knows is asked about before this command answers, or sends anything.
+			$minted = Attempts::reconcile( $order, 'sent' === $fate ? 'replay' : 'submit' );
+			$order  = self::reread( $order );
+			if ( ( $minted['id'] ?? null ) === $attempt_id ) {
+				// This command recorded the row the resolver minted (D6).
+				return array(
+					'outcome' => 'recorded',
+					'payment' => $minted,
+					'order'   => $ledger->summary( $order ),
+				);
+			}
+			$fate = Attempts::of( $order )->get( $attempt_id )['fate'] ?? null;
+			$sent = null === $fate ? Attempts::of( $order )->unresolved() : null;
+			if ( null !== $sent && null === $sent['awaiting'] ) {
+				return new WP_Error(
+					'wcpos_payment_in_flight',
+					__( 'An earlier payment attempt on this order has no outcome yet.', 'woocommerce-pos' ),
+					array(
+						'status'     => 409,
+						'attempt_id' => $sent['id'],
+					)
+				);
+			}
+		}
+		$rows = $ledger->read( $order );
 		// A recorded attempt is the row itself: the attempt id is the client-minted row id.
-		$fate     = Attempts::of( $order )->get( $attempt_id )['fate'] ?? null;
 		$recorded = $ledger->find( $order, $attempt_id );
 		// A new command naming a known attempt answers its fate (a paid one `paid`); Command_Log::run() keeps its entry.
 		if ( $recorded && 'paid' !== $fate ) {
@@ -404,6 +430,9 @@ class Gateway_Submission {
 	 * @throws Ledger_Persistence_Exception When the attempt's fate, the status or the entry did not reach storage.
 	 */
 	public static function cancel( WC_Order $order, array $descriptor, string $attempt_id, string $reason, ?Money_Command $command = null ) {
+		// The resolver asks first: a row it mints for money the gateway took refuses the cancel below.
+		Attempts::reconcile( $order, 'cancel' );
+		$order = self::reread( $order );
 		$rows  = Ledger::instance()->read( $order );
 		$stamp = Attempts::of( $order )->awaiting();
 		// A send whose gateway threw after dispatch never awaited the customer; its entry still says `sent`.
@@ -471,37 +500,15 @@ class Gateway_Submission {
 	}
 
 	/**
-	 * A sent attempt a callback or the merchant marked paid with no row for it (no gateway minted one): staged on
-	 * the completion write's draft as its captured row, the attempt id as the row id, so the completion names the
-	 * payment and the write marks the attempt paid. The row builder is the passthrough's.
+	 * The order as storage holds it, after the resolver may have written it.
 	 *
-	 * @param Ledger_Draft $d The completion write's draft.
-	 * @return bool Whether a row was staged; false staged nothing.
+	 * @param WC_Order $order Order object.
 	 */
-	public static function resolve_paid( Ledger_Draft $d ): bool {
-		$order   = $d->order();
-		$stamp   = Attempts::of( $order )->awaiting() ?? array();
-		$attempt = strtolower( (string) ( $stamp['attempt_id'] ?? '' ) );
-		$sent    = wp_is_uuid( $attempt ) && 'sent' === ( Attempts::of( $order )->get( $attempt )['fate'] ?? null );
-		// As the passthrough's mint: a zero total took no money, so it has no row.
-		if ( ! $sent || (float) $order->get_total() <= 0 || ! Completion_Stamp::is_paid( $order ) || array_filter( $d->rows(), static fn( $row ) => 'captured' === ( $row['status'] ?? '' ) ) ) {
-			return false;
-		}
-		$transaction = $order->get_transaction_id();
-		$d->put(
-			Webview_Passthrough::row(
-				$order,
-				array(
-					'id'            => $attempt,
-					'source'        => 'app',
-					'capture_mode'  => 'gateway',
-					'method_id'     => '' !== (string) ( $stamp['method_id'] ?? '' ) ? (string) $stamp['method_id'] : $order->get_payment_method(),
-					'provider_refs' => array( 'transaction_id' => '' !== $transaction ? $transaction : null ),
-					'cashier_id'    => (int) ( $stamp['cashier_id'] ?? 0 ),
-				)
-			)
-		);
-		return true;
+	private static function reread( WC_Order $order ): WC_Order {
+		$fresh = wc_get_order( $order->get_id() );
+		$fresh = $fresh instanceof WC_Order ? $fresh : $order;
+		$fresh->read_meta_data( true );
+		return $fresh;
 	}
 
 	/**

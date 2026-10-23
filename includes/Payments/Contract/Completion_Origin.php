@@ -61,6 +61,17 @@ final class Completion_Origin {
 		$this->cashier    = max( 0, $cashier );
 	}
 
+	/**
+	 * The origin an attempt kept at `Attempts::open()`: its submit's validated provenance and its cashier.
+	 *
+	 * @param array $entry The attempt's entry.
+	 */
+	public static function of_attempt( array $entry ): self {
+		$origin             = new self( array(), false, (int) ( $entry['cashier_id'] ?? 0 ) );
+		$origin->provenance = self::validated( is_array( $entry['origin'] ?? null ) ? $entry['origin'] : array(), true );
+		return $origin;
+	}
+
 	/** The validated provenance, entry-shaped: what a sent submit keeps on its awaiting stamp. */
 	public function provenance(): array {
 		return $this->provenance;

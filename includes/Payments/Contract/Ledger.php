@@ -2350,6 +2350,8 @@ class Ledger {
 		$ledgered = $rows || $projection['completes'] || '' !== $order->get_meta( self::META_KEY );
 		if ( $ledgered ) {
 			$this->stage( $order, $rows );
+		} else {
+			self::index_attempts( $order, true ); // No rows: only attempts select the order for the sweep.
 		}
 		// What storage must hold afterwards, as sets (HPOS reuses meta ids): taken now, as the save re-reads the meta.
 		$values = static function ( WC_Order $read, string $key ): array {
@@ -2540,6 +2542,7 @@ class Ledger {
 					$order->add_meta_data( self::LIVE_LEG_META_KEY, $row['id'], false );
 				}
 			}
+			self::index_attempts( $order );
 		}
 		return null !== $advanced;
 	}
@@ -2672,6 +2675,30 @@ class Ledger {
 				$sessions[] = $row['session_id'];
 				$order->add_meta_data( self::SESSION_META_KEY, $row['session_id'], false );
 			}
+		}
+		self::index_attempts( $order );
+	}
+
+	/**
+	 * The attempts the resolver still has to ask about (`Attempt_Log::to_index()`) join the sweep's selection, beside
+	 * the live rows; staged on the order, the caller saves.
+	 *
+	 * @param WC_Order $order Order with its attempts staged.
+	 * @param bool     $alone Whether they are the whole index (an order with no ledger): rebuilt only when it differs.
+	 */
+	private static function index_attempts( WC_Order $order, bool $alone = false ): void {
+		$attempts = Attempts::of( $order )->to_index();
+		if ( $alone ) {
+			$live = array_map( static fn( $meta ) => (string) $meta->value, $order->get_meta( self::LIVE_LEG_META_KEY, false ) );
+			sort( $live );
+			sort( $attempts );
+			if ( $live === $attempts ) {
+				return;
+			}
+			$order->delete_meta_data( self::LIVE_LEG_META_KEY );
+		}
+		foreach ( $attempts as $attempt ) {
+			$order->add_meta_data( self::LIVE_LEG_META_KEY, $attempt, false );
 		}
 	}
 

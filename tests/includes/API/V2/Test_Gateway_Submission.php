@@ -500,11 +500,11 @@ class Test_Gateway_Submission extends WCPOS_REST_Unit_Test_Case {
 			remove_action( 'woocommerce_before_order_object_save', $deny, PHP_INT_MAX );
 			remove_filter( 'wcpos_logging', $log, 10 );
 		}
+		$saved = wc_get_order( $order->get_id() );
 		$retry = $this->submit( $order, $attempt, array(), 'wcpos_paid_test' );
 
 		// Assert.
 		$this->assertSame( 409, $response->get_status() );
-		$saved = wc_get_order( $order->get_id() );
 		$this->assertSame(
 			'sent',
 			Attempts::of( $saved )->fates()[ $attempt ] ?? null

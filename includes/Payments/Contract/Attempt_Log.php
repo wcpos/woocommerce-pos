@@ -11,8 +11,9 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 
 /**
  * A read of `_wcpos_gateway_attempts`, built by {@see Attempts::of()}. Each entry is
- * `{ id, fate, method_id, cashier_id, origin, command_id, sent_at_gmt, resolved_at_gmt, awaiting }`, in the order
- * they were last staged; `awaiting` is null or `{ destination, at_gmt }`. Valid until the order is next saved.
+ * `{ id, fate, method_id, cashier_id, origin, command_id, sent_at_gmt, resolved_at_gmt, awaiting, asks, attention_at_gmt }`,
+ * in the order they were last staged; `awaiting` is null or `{ destination, at_gmt }`; `asks` counts the resolver's
+ * indeterminate answers and `attention_at_gmt` is when it asked a human. Valid until the order is next saved.
  */
 final class Attempt_Log {
 	/**
@@ -58,6 +59,16 @@ final class Attempt_Log {
 	public function unresolved(): ?array {
 		$sent = array_filter( $this->entries, static fn( array $entry ): bool => 'sent' === $entry['fate'] );
 		return $sent ? end( $sent ) : null;
+	}
+
+	/**
+	 * The attempts the sweep still asks about (S1 lists them in the live-leg index): `sent`, awaiting no one, and not
+	 * yet handed to a human.
+	 *
+	 * @return string[] Attempt ids.
+	 */
+	public function to_index(): array {
+		return array_map( 'strval', array_keys( array_filter( $this->entries, static fn( array $entry ): bool => 'sent' === $entry['fate'] && null === $entry['awaiting'] && null === $entry['attention_at_gmt'] ) ) );
 	}
 
 	/**
