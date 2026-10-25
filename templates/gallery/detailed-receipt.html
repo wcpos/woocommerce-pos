@@ -285,7 +285,7 @@ inline styles on the wrapping element.
 	<!-- ── Payments + Order barcode ─────────────── -->
 	<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb; align-items: start;">
 		<div>
-			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
+			{{#payments.0}}<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>{{/payments.0}}
 			<div style="font-size: 12px;">
 				{{#payments}}
 				<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span><strong>{{method_title}}</strong></span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
