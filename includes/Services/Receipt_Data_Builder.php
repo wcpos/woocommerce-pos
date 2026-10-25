@@ -474,6 +474,8 @@ class Receipt_Data_Builder {
 			'needs_payment' => method_exists( $order, 'needs_payment' ) ? (bool) $order->needs_payment() : false,
 			'payment_url'   => method_exists( $order, 'get_checkout_payment_url' ) ? (string) $order->get_checkout_payment_url() : '',
 		);
+		// WooCommerce's own definition of "still payable": a payable status with a positive total.
+		$needs_payment = method_exists( $order, 'needs_payment' ) && $order->needs_payment();
 
 		$display_incl       = 'incl' === $store_resolver->resolve_store_option_string(
 			'get_tax_display_cart',
@@ -694,23 +696,28 @@ class Receipt_Data_Builder {
 				),
 				'tax_total' => $tax_total,
 				'total' => $total,
-				'paid_total' => $total,
+				'paid_total' => $needs_payment ? 0.0 : $total,
 				'change_total' => (float) $order->get_meta( '_pos_cash_change' ),
 				'refund_total' => $refund_total,
 			),
 			$display_incl
 		);
 
-		$payments = array(
-			Receipt_Sections::payment(
-				$order->get_payment_method(),
-				$order->get_payment_method_title(),
-				$total,
-				(string) $order->get_transaction_id(),
-				(float) $order->get_meta( '_pos_cash_amount_tendered' ),
-				(float) $order->get_meta( '_pos_cash_change' )
-			),
-		);
+		// A payable order has taken no payment yet: an empty list, so templates skip their PAID block
+		// ({{#payments.0}}) instead of printing the total as if it had been received. Ledger rows,
+		// when the order has them, still replace this below.
+		$payments = $needs_payment
+			? array()
+			: array(
+				Receipt_Sections::payment(
+					$order->get_payment_method(),
+					$order->get_payment_method_title(),
+					$total,
+					(string) $order->get_transaction_id(),
+					(float) $order->get_meta( '_pos_cash_amount_tendered' ),
+					(float) $order->get_meta( '_pos_cash_change' )
+				),
+			);
 		$ledger_rows = $order instanceof \WC_Order ? Ledger::instance()->read( $order ) : array();
 		$counting     = array_values(
 			array_filter(

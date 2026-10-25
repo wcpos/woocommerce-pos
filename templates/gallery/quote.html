@@ -55,7 +55,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 		</div>
 		<div style="flex: 0 0 auto; text-align: right;">
 			<div style="font-size: 16px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;">{{i18n.quote}}</div>
-			<div style="font-size: 22px; font-weight: 700; margin-top: 4px;">#{{order.number}}</div>
+			{{#order.number}}<div style="font-size: 22px; font-weight: 700; margin-top: 4px;">#{{order.number}}</div>{{/order.number}}
 			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
 		</div>
 	</header>

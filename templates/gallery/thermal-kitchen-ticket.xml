@@ -5,7 +5,7 @@
     <bold><size width="2" height="2"><text>{{i18n.kitchen}}</text></size></bold>
   </align>
   <line style="double" />
-  <bold><text>{{order.number}}</text></bold>
+  {{#order.number}}<bold><text>{{order.number}}</text></bold>{{/order.number}}
   <row>
     <col width="*">{{i18n.date}}</col>
     <col width="18" align="right">{{order.created.datetime}}</col>

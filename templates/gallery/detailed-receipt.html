@@ -65,7 +65,7 @@ inline styles on the wrapping element.
 			{{#fiscal.is_refund_document}}
 			{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
 			{{/fiscal.is_refund_document}}
-			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</div>
+			{{#order.number}}<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</div>{{/order.number}}
 			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{i18n.date}} {{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</div>
 		</div>
 	</header>
@@ -289,7 +289,7 @@ inline styles on the wrapping element.
 	<!-- ── Payments + Order barcode ─────────────── -->
 	<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb; align-items: start;">
 		<div>
-			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</div>
+			{{#payments.0}}<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</div>{{/payments.0}}
 			<div style="font-size: 12px;">
 				{{#payments}}
 				<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span><strong>{{method_title}}</strong></span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
@@ -305,11 +305,11 @@ inline styles on the wrapping element.
 			the SVG inside; we cap that wrapper's width and float it to the
 			right via flex.
 		-->
-		<div style="display: flex; justify-content: flex-end;">
+		{{#order.number}}<div style="display: flex; justify-content: flex-end;">
 			<div style="width: 220px;">
 				<barcode type="code128" height="40">{{order.number}}</barcode>
 			</div>
-		</div>
+		</div>{{/order.number}}
 	</div>
 
 	{{#fiscal.qr_payload}}<div style="text-align: center;"><barcode type="qrcode" scale="2">{{fiscal.qr_payload}}</barcode></div>{{/fiscal.qr_payload}}

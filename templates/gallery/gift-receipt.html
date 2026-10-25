@@ -55,7 +55,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 	<!-- ── Order meta strip ─────────────── -->
 	<div style="display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 14px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px;">
-		<div><span style="color: #6b6b6b;">{{i18n.order}}</span> &nbsp;<strong>#{{order.number}}</strong></div>
+		{{#order.number}}<div><span style="color: #6b6b6b;">{{i18n.order}}</span> &nbsp;<strong>#{{order.number}}</strong></div>{{/order.number}}
 		<div><span style="color: #6b6b6b;">{{i18n.date}}</span> &nbsp;<strong>{{order.created.datetime_long}}</strong></div>
 		{{#cashier.name}}
 		<div><span style="color: #6b6b6b;">{{i18n.cashier}}</span> &nbsp;<strong>{{cashier.name}}</strong></div>
@@ -107,7 +107,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{#store.policies_and_conditions}}{{store.policies_and_conditions}}{{/store.policies_and_conditions}}
 			{{^store.policies_and_conditions}}{{i18n.gift_return_policy}}{{/store.policies_and_conditions}}
 		</div>
-		<div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap;">#{{order.number}} &middot; {{order.created.date_ymd}}</div>
+		<div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap;">{{#order.number}}#{{order.number}} &middot; {{/order.number}}{{order.created.date_ymd}}</div>
 	</div>
 
 	{{#store.footer_imprint}}
