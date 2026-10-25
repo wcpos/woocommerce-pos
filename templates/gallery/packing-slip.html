@@ -45,7 +45,7 @@ inline styles on the wrapping element.
 		</div>
 		<div style="flex: 0 0 auto; text-align: right;">
 			<div style="font-size: 16px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;">{{i18n.packing_slip}}</div>
-			<div style="font-size: 22px; font-weight: 700; margin-top: 4px;">#{{order.number}}</div>
+			{{#order.number}}<div style="font-size: 22px; font-weight: 700; margin-top: 4px;">#{{order.number}}</div>{{/order.number}}
 			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
 		</div>
 	</header>
@@ -166,14 +166,14 @@ inline styles on the wrapping element.
 			Order barcode — the receipt-renderer pipeline converts <barcode> elements
 			into a centered <div> with the SVG inside; the grid column caps its width.
 		-->
-		<div style="text-align: center;">
+		{{#order.number}}<div style="text-align: center;">
 			<barcode type="code128" height="40">{{order.number}}</barcode>
-		</div>
+		</div>{{/order.number}}
 	</div>
 
 	<!-- ── Footer ─────────────── -->
 	<footer style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; gap: 24px; font-size: 11px; color: #6b7280;">
-		<div>Order #{{order.number}}</div>
+		{{#order.number}}<div>Order #{{order.number}}</div>{{/order.number}}
 		{{#order.printed.datetime}}<div>{{i18n.printed}} {{order.printed.datetime}}</div>{{/order.printed.datetime}}
 	</footer>
 

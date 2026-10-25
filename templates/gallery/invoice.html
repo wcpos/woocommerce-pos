@@ -60,7 +60,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{#fiscal.is_refund_document}}
 			{{#fiscal.corrects}}<div style="text-align: center; font-size: 11px;">{{i18n.corrects}} {{fiscal.corrects}}</div>{{/fiscal.corrects}}
 			{{/fiscal.is_refund_document}}
-			<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-top: 4px; line-height: 1;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</div>
+			{{#order.number}}<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-top: 4px; line-height: 1;">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</div>{{/order.number}}
 			{{#order.status_label}}
 			<div style="display: inline-block; margin-top: 10px; padding: 3px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;">{{order.status_label}}</div>
 			{{/order.status_label}}
@@ -225,7 +225,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 					<tr><td style="color: #6b7280; padding-right: 14px;">{{i18n.account}}</td><td>{{store.name}}</td></tr>
 					<tr><td style="color: #6b7280; padding-right: 14px;">FAKE SAMPLE IBAN</td><td style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">XX00 FAKE 0000 0000 0000 00</td></tr>
 					<tr><td style="color: #6b7280; padding-right: 14px;">FAKE SAMPLE BIC</td><td style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">FAKEBANKXXX</td></tr>
-					<tr><td style="color: #6b7280; padding-right: 14px;">{{i18n.reference}}</td><td><strong>#{{order.number}}</strong></td></tr>
+					{{#order.number}}<tr><td style="color: #6b7280; padding-right: 14px;">{{i18n.reference}}</td><td><strong>#{{order.number}}</strong></td></tr>{{/order.number}}
 				</table>
 			</div>
 			<div style="flex: 1; display: flex; gap: 16px; align-items: flex-start;">

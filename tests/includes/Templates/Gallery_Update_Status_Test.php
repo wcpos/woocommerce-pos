@@ -50,9 +50,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	/**
 	 * Bump the bundled version of the test's gallery key.
 	 *
-	 * Every shipped entry is at version 1, so without this there is no way to be behind and the
-	 * comparison could not be exercised until the first real bump — which is precisely when a
-	 * mistake here would reach merchants.
+	 * Simulate a later bundled version so installed copies exercise the update paths.
 	 *
 	 * @param int $version The version to report.
 	 *
@@ -101,8 +99,8 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		);
 		// Start a fresh request-local version snapshot after changing the filter.
 		wp_cache_delete( 'registry-versions', 'wcpos-gallery' );
-		$this->assertSame( 1, Gallery_Update_Status::registry_version( $this->gallery_key ) );
-		$this->assertSame( 1, Gallery_Update_Status::registry_version( $this->gallery_key ) );
+		$this->assertSame( 2, Gallery_Update_Status::registry_version( $this->gallery_key ) );
+		$this->assertSame( 2, Gallery_Update_Status::registry_version( $this->gallery_key ) );
 		$this->assertSame( 1, $calls );
 	}
 
@@ -171,15 +169,15 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	public function test_status_for_untouched_copy_behind_bundled_version_is_untouched(): void {
 		// Arrange.
 		$template_id = $this->install();
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		$status = Gallery_Update_Status::status_for( $template_id );
 
 		// Assert.
 		$this->assertSame( Gallery_Update_Status::STATUS_UNTOUCHED, $status['status'] );
-		$this->assertSame( 1, $status['installed_version'] );
-		$this->assertSame( 2, $status['latest_version'] );
+		$this->assertSame( 2, $status['installed_version'] );
+		$this->assertSame( 3, $status['latest_version'] );
 	}
 
 	/**
@@ -191,7 +189,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		// Arrange.
 		$template_id = $this->install();
 		Templates::save_raw_post_content( $template_id, '<receipt><text>Mine now</text></receipt>' );
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		$status = Gallery_Update_Status::status_for( $template_id );
@@ -209,7 +207,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		// Arrange.
 		$template_id = $this->install();
 		delete_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_HASH );
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		$status = Gallery_Update_Status::status_for( $template_id );
@@ -249,7 +247,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		$edited_id    = $this->install();
 		$edited_body  = '<receipt><text>Mine now</text></receipt>';
 		Templates::save_raw_post_content( $edited_id, $edited_body );
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		$updated = Gallery_Update_Status::sync_untouched();
@@ -260,7 +258,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 			Gallery_Update_Status::STATUS_CURRENT,
 			Gallery_Update_Status::status_for( $untouched_id )['status']
 		);
-		$this->assertSame( 2, (int) get_post_meta( $untouched_id, Gallery_Update_Status::META_GALLERY_VERSION, true ) );
+		$this->assertSame( 3, (int) get_post_meta( $untouched_id, Gallery_Update_Status::META_GALLERY_VERSION, true ) );
 
 		// The merchant's content is untouched, and it still reports as theirs.
 		$this->assertSame( $edited_body, get_post( $edited_id )->post_content );
@@ -280,7 +278,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 	public function test_sync_untouched_is_idempotent(): void {
 		// Arrange.
 		$this->install();
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		$first  = Gallery_Update_Status::sync_untouched();
@@ -314,7 +312,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 			array( 'ID' => $template_id )
 		);
 		clean_post_cache( $template_id );
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		Gallery_Update_Status::sync_untouched();
@@ -343,7 +341,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 			'wcpos_gallery_templates',
 			function ( $catalogue ) use ( $empty_file ) {
 				if ( isset( $catalogue[ $this->gallery_key ] ) ) {
-					$catalogue[ $this->gallery_key ]['version']      = 2;
+					$catalogue[ $this->gallery_key ]['version']      = 3;
 					$catalogue[ $this->gallery_key ]['content_file'] = $empty_file;
 				}
 
@@ -376,7 +374,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		// Arrange.
 		delete_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE );
 		$template_id = $this->install();
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		Gallery_Update_Status::maintain();
@@ -387,7 +385,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		Gallery_Update_Status::maintain();
 
 		// Assert.
-		$this->assertSame( 2, $after_first );
+		$this->assertSame( 3, $after_first );
 		$this->assertNotEmpty( $signature );
 		$this->assertSame( $signature, get_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE ) );
 	}
@@ -411,7 +409,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 			'wcpos_gallery_templates',
 			function ( $catalogue ) use ( $empty_file ) {
 				if ( isset( $catalogue[ $this->gallery_key ] ) ) {
-					$catalogue[ $this->gallery_key ]['version']      = 2;
+					$catalogue[ $this->gallery_key ]['version']      = 3;
 					$catalogue[ $this->gallery_key ]['content_file'] = $empty_file;
 				}
 
@@ -444,7 +442,7 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		$template_id = $this->install();
 		update_post_meta( $template_id, Gallery_Update_Status::META_SOURCE_LOCALE, 'fr_FR' );
 		Gallery_Update_Status::record_source_hash( $template_id );
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		Gallery_Update_Status::sync_untouched();
@@ -465,13 +463,13 @@ class Gallery_Update_Status_Test extends WP_UnitTestCase {
 		// Arrange: a previous release completed maintenance.
 		update_option( Gallery_Update_Status::OPTION_SYNCED_SIGNATURE, 'stale-signature' );
 		$template_id = $this->install();
-		$this->set_bundled_version( 2 );
+		$this->set_bundled_version( 3 );
 
 		// Act.
 		Gallery_Update_Status::maintain();
 
 		// Assert.
-		$this->assertSame( 2, (int) get_post_meta( $template_id, Gallery_Update_Status::META_GALLERY_VERSION, true ) );
+		$this->assertSame( 3, (int) get_post_meta( $template_id, Gallery_Update_Status::META_GALLERY_VERSION, true ) );
 	}
 
 	/**

@@ -1403,11 +1403,9 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertEquals( 'Standard Receipt', $post->post_title );
 		$this->assertNotEmpty( $post->post_content );
 
-
 		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ), 'install_gallery_template_sets_metadata' );
-		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ), 'install_gallery_template_sets_metadata' );
+		$this->assertEquals( \WCPOS\WooCommercePOS\Templates\Gallery_Registry::all()['standard-receipt']['version'], (int) get_post_meta( $post_id, '_template_gallery_version', true ), 'install_gallery_template_sets_metadata' );
 		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ), 'install_gallery_template_sets_metadata' );
-
 
 		$type_terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
 		$this->assertEquals( 'receipt', $type_terms[0]->slug, 'install_gallery_template_sets_taxonomies' );
