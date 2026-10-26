@@ -18,7 +18,8 @@ use WP_Term;
  */
 final class Terms_Proxy_Behavior extends Scoped_Proxy_Behavior {
 	/**
-	 * Add POS-visible product counts, including descendants, without changing Woo's count.
+	 * Add POS-visible product counts, including descendants, without changing Woo's count. The
+	 * V2 term routes are collections only (Catalog_Proxy_Controller registers no single-term path).
 	 *
 	 * @param mixed $data Response data.
 	 *
@@ -29,8 +30,7 @@ final class Terms_Proxy_Behavior extends Scoped_Proxy_Behavior {
 			return $data;
 		}
 
-		$single   = isset( $data['id'] );
-		$rows     = $single ? array( $data ) : $data;
+		$rows     = $data;
 		$owners   = array();
 		$products = array();
 		foreach ( $rows as $key => $row ) {
@@ -81,7 +81,7 @@ final class Terms_Proxy_Behavior extends Scoped_Proxy_Behavior {
 			$rows[ $key ]['pos_count'] = count( $ids );
 		}
 
-		return $single ? $rows[0] : $rows;
+		return $rows;
 	}
 
 	/**

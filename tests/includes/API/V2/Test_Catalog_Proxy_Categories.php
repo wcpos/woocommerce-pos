@@ -165,10 +165,6 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 3, $rows[ $parent_id ]['pos_count'] );
 		$this->assertSame( 2, $rows[ $child_id ]['pos_count'] );
 		$this->assertArrayHasKey( 'count', $rows[ $parent_id ] );
-
-		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/products/categories/' . $parent_id ) );
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 3, $response->get_data()['pos_count'] );
 	}
 
 	/**
