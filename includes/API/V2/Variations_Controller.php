@@ -250,6 +250,9 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			$query_request->set_param( 'offset', 0 );
 			$query_request->set_param( 'orderby', 'include' );
 			$query_request->set_param( 'order', 'asc' );
+			// WooCommerce 11.3 applies `on_sale` to `post__in` as a filter (true keeps only on-sale
+			// ids, false drops them), which would skip named ids; earlier versions widened it.
+			$query_request->set_param( 'on_sale', null );
 			$args = $this->prepare_objects_query( $query_request );
 
 			/*
