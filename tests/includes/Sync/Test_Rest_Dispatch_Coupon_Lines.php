@@ -482,4 +482,73 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $coupon_line_id, (int) $coupon_lines[0]['id'] );
 		$this->assertSame( 60.0, (float) $coupon_lines[0]['discount'] );
 	}
+
+	public function test_update_rejected_by_wc_leaves_the_coupon_line_as_it_was(): void {
+		$coupon = new WC_Coupon();
+		$coupon->set_code( 'grows' );
+		$coupon->set_discount_type( 'percent' );
+		$coupon->set_amount( 10 );
+		$coupon->save();
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price'         => 50,
+			)
+		);
+		$created = $this->push_envelope(
+			'create',
+			array(
+				'status'       => 'pending',
+				'line_items'   => array(
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'coupon_lines' => array( array( 'code' => 'grows' ) ),
+				'meta_data'    => $this->uuid_meta(),
+			)
+		);
+		$document = $created->get_data()['document'];
+		// Raised since the sale started: a re-apply would now take 20%.
+		$coupon->set_amount( 20 );
+		$coupon->save();
+		// wc/v3 refuses the write before it saves; rest_do_request() hands back a WP_REST_Response.
+		add_filter(
+			'woocommerce_rest_pre_insert_shop_order_object',
+			static function () {
+				return new \WP_Error( 'refused', 'Refused.', array( 'status' => 400 ) );
+			},
+			99
+		);
+
+		$response = $this->push_envelope(
+			'update',
+			array(
+				'line_items'   => array(
+					array(
+						'id'         => $document['line_items'][0]['id'],
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'coupon_lines' => array(
+					array(
+						'id'   => $document['coupon_lines'][0]['id'],
+						'code' => 'grows',
+					),
+				),
+				'meta_data'    => $this->uuid_meta(),
+			),
+			$this->order_revision( (int) $document['id'] )
+		);
+
+		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
+		$coupons = array_values( wc_get_order( (int) $document['id'] )->get_items( 'coupon' ) );
+		$this->assertSame( 5.0, (float) $coupons[0]->get_discount() );
+	}
 }

@@ -419,7 +419,9 @@ class Order_Writer extends Null_Writer {
 			$response = $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
 			// After the write, not in a wc/v3 hook: recalculate_coupons() saves, and it reads a line this
 			// push added by its id. It matches coupon items by code, so the acked coupon line ids survive.
-			$order = ! empty( $context['recalculate_coupons'] ) && ! is_wp_error( $response ) ? wc_get_order( $context['id'] ) : null;
+			// rest_do_request() answers a refused write with an error response, not a WP_Error.
+			$written = ! is_wp_error( $response ) && ! ( $response instanceof \WP_REST_Response && $response->is_error() );
+			$order   = ! empty( $context['recalculate_coupons'] ) && $written ? wc_get_order( $context['id'] ) : null;
 			if ( $order instanceof \WC_Order ) {
 				$order->recalculate_coupons();
 			}
