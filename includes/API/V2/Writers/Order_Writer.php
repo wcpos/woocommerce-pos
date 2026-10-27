@@ -268,7 +268,18 @@ class Order_Writer extends Null_Writer {
 			add_action( 'woocommerce_before_order_object_save', $created_via );
 		}
 		try {
-			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
+			$response = $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
+			// An unchanged coupon set is not forwarded, so wc/v3 never re-applies it. This runs after the
+			// write, not in a wc/v3 hook: the re-apply saves, and it reads a line this push added by its id.
+			// rest_do_request() answers a refused write with an error response, not a WP_Error.
+			$written = ! is_wp_error( $response ) && ! ( $response instanceof WP_REST_Response && $response->is_error() );
+			$order   = 'update' === $context['operation'] && $written && ! isset( $prepared['payload']['coupon_lines'] )
+				? wc_get_order( $context['id'] )
+				: null;
+			if ( $order instanceof \WC_Order ) {
+				Order_Write_Payload::reapply_unchanged_coupons( $prepared['payload'], $order );
+			}
+			return $response;
 		} finally {
 			if ( 'create' === $context['operation'] ) {
 				remove_action( 'woocommerce_before_order_object_save', $created_via );

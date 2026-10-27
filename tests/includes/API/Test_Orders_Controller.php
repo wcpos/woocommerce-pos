@@ -1455,6 +1455,102 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Create a $50 sale with a 10% coupon through v1, then send back the full lines with a second
+	 * $50 line added and the coupon lines as returned.
+	 *
+	 * @param string $status       Status the sale is created in.
+	 * @param bool   $add_a_line   Whether the update adds the second line.
+	 * @param float  $later_amount Coupon amount the store sets between the two requests.
+	 *
+	 * @return array [coupon line id before, update response data].
+	 */
+	private function update_a_couponed_sale( string $status, bool $add_a_line, float $later_amount = 10 ): array {
+		$coupon_id = CouponHelper::create_coupon(
+			'tenpercent',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => 10,
+			)
+		)->get_id();
+		$first     = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price' => 50,
+			)
+		);
+		$second    = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price' => 50,
+			)
+		);
+		$request   = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'status'       => $status,
+				'line_items'   => array(
+					array(
+						'product_id' => $first->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'coupon_lines' => array( array( 'code' => 'tenpercent' ) ),
+			)
+		);
+		$data = $this->server->dispatch( $request )->get_data();
+		$this->assertSame( 5.0, (float) $data['coupon_lines'][0]['discount'] );
+		$coupon = new \WC_Coupon( $coupon_id );
+		$coupon->set_amount( $later_amount );
+		$coupon->save();
+
+		$lines = array(
+			array(
+				'id'         => $data['line_items'][0]['id'],
+				'product_id' => $first->get_id(),
+				'quantity'   => 1,
+				'subtotal'   => '50.00',
+				'total'      => '45.00',
+			),
+		);
+		if ( $add_a_line ) {
+			$lines[] = array(
+				'product_id' => $second->get_id(),
+				'quantity'   => 1,
+				'subtotal'   => '50.00',
+				'total'      => '45.00',
+			);
+		}
+		$update = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $data['id'] );
+		$update->set_body_params(
+			array(
+				'line_items'   => $lines,
+				'coupon_lines' => $data['coupon_lines'],
+			)
+		);
+		$response = $this->server->dispatch( $update );
+		$this->assertSame( 200, $response->get_status() );
+
+		return array( (int) $data['coupon_lines'][0]['id'], $response->get_data() );
+	}
+
+	public function test_update_order_adding_a_line_under_a_saved_coupon_rescales_the_coupon_line(): void {
+		list( $coupon_line_id, $data ) = $this->update_a_couponed_sale( 'pending', true );
+
+		$this->assertSame( $coupon_line_id, (int) $data['coupon_lines'][0]['id'] );
+		$this->assertSame( 10.0, (float) $data['coupon_lines'][0]['discount'] );
+		$this->assertSame( 90.0, (float) $data['total'] );
+	}
+
+	public function test_update_paid_order_with_unchanged_coupon_keeps_its_discount(): void {
+		// The store raised the coupon to 20% after the sale was paid: posting its lines again must not re-price it.
+		list( , $data ) = $this->update_a_couponed_sale( 'completed', false, 20 );
+
+		$this->assertSame( 5.0, (float) $data['coupon_lines'][0]['discount'] );
+		$this->assertSame( 45.0, (float) $data['total'] );
+	}
+
+	/**
 	 * Adding a new coupon to an order that already has one should work.
 	 *
 	 * When the coupon codes change, calculate_coupons should do the full
