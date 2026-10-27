@@ -5,9 +5,9 @@ import { t } from '../translations';
 
 const tabs = [
 	{ id: 'receipt', labelKey: 'tabs.receipts', enabled: true },
+	{ id: 'report', labelKey: 'tabs.reports', enabled: true },
 	{ id: 'closure', labelKey: 'tabs.closures', enabled: true },
 	{ id: 'display', labelKey: 'tabs.display', enabled: true },
-	{ id: 'report', labelKey: 'tabs.reports', enabled: true },
 	{ id: 'email', labelKey: 'tabs.email', enabled: false },
 ] as const;
 
