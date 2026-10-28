@@ -1180,10 +1180,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		sort( $requested_codes );
 		sort( $existing_codes );
 
-		// If the coupon codes haven't changed, skip recalculation entirely.
+		// If the coupon codes haven't changed, skip the remove-and-reapply.
 		// This preserves stable coupon line item IDs across saves.
 		if ( $requested_codes === $existing_codes ) {
-			return false;
+			return Order_Write_Payload::reapply_unchanged_coupons( $request, $order );
 		}
 
 		// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
