@@ -109,6 +109,11 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 			$fields[] = 'gallery_image_ids';
 		}
 
+		// The customs fields were added to the product and variation REST API responses in WC 11.3.0.
+		if ( version_compare( WC_VERSION, '11.3.0-beta.1', '>=' ) ) {
+			array_push( $fields, 'customs_commodity_code', 'customs_country_of_origin', 'customs_description' );
+		}
+
 		return $fields;
 	}
 
