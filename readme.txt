@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.6
+Stable tag: 1.11.7
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,17 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.11.7 - 2026/10/28 =
+
+- **Reading an order from the POS no longer saves it on stores using WooCommerce's High-Performance Order Storage.** The first read of a web or admin order could attribute it to the cashier who opened it and make the till's next change to that order fail as out of date.
+- **A line added to a sale that already has a coupon re-applies the coupon**, so the coupon's discount matches the order total (a 10% coupon on a $50 sale stayed at 5.00 after a second $50 line).
+- **A receipt printed for an order that still needs payment no longer shows a "PAID" row**; the Invoice template shows "Amount due" instead. The bundled Detailed Receipt template is updated.
+- **Variations load correctly on WooCommerce 11.3.** A change in how WooCommerce 11.3 applies its on-sale filter dropped variations from the POS's catalogue read, and the till treated them as removed.
+- **A sale is no longer marked paid when the store's payment check answers with an order that has no status.** The pay page's fallback check now waits for a real order status.
+- **A receipt opened from the device's own data for an order that still needs payment no longer prints a "PAID" row.** Offline, or before the store's receipt data arrives, a pending or open order printed "PAID" and the Invoice template hid its "Amount due".
+- **The loading screen's progress bar is readable on a device in dark mode.**
+- Developers: the translation template (POT) is updated; Electron desktop runtime 43.8.1.
 
 = 1.11.6 - 2026/10/21 =
 
