@@ -933,6 +933,31 @@ class Test_Variations_Search extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * `on_sale=false` cannot drop a named on-sale variation from the include ask either:
+	 * WooCommerce 11.3 removes on-sale ids from `post__in` for it.
+	 */
+	public function test_include_lane_serves_on_sale_ids_despite_on_sale_false(): void {
+		$product     = ProductHelper::create_variation_product();
+		$include_ids = array_map( 'intval', $product->get_children() );
+		sort( $include_ids );
+		$on_sale = wc_get_product( $include_ids[0] );
+		$on_sale->set_regular_price( '20' );
+		$on_sale->set_sale_price( '10' );
+		$on_sale->save();
+		delete_transient( 'wc_products_onsale' );
+
+		$response = $this->variations_request(
+			array(
+				'include' => $include_ids,
+				'on_sale' => 'false',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $include_ids, array_column( $response->get_data(), 'id' ) );
+	}
+
+	/**
 	 * Include mode returns bare records without collection pagination headers.
 	 */
 	public function test_include_mode_returns_bare_records(): void {

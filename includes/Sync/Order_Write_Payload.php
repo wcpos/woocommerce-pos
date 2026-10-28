@@ -879,6 +879,28 @@ final class Order_Write_Payload {
 	}
 
 	/**
+	 * Re-apply an unchanged coupon set when the update posts lines to an unpaid order.
+	 *
+	 * Without it, a line added under a saved coupon moves the totals but leaves each coupon
+	 * line at its old discount. recalculate_coupons() matches coupon items by code, so their
+	 * ids survive. It saves and reads the lines by id, so call it once the posted lines are
+	 * saved and outside any save hook. A paid order is never re-priced.
+	 *
+	 * @param \WP_REST_Request|array $posted The v1 request, or the forwarded v2 payload.
+	 * @param \WC_Abstract_Order     $order  The order the update wrote.
+	 *
+	 * @return bool True if coupons were recalculated.
+	 */
+	public static function reapply_unchanged_coupons( $posted, \WC_Abstract_Order $order ): bool {
+		$posts_lines = isset( $posted['line_items'] ) || isset( $posted['fee_lines'] ) || isset( $posted['shipping_lines'] );
+		if ( ! $posts_lines || array() === $order->get_coupons() || ! $order->needs_payment() ) {
+			return false;
+		}
+		$order->recalculate_coupons();
+		return true;
+	}
+
+	/**
 	 * Whether a posted coupon line is a deletion marker: a synced line (a canonical
 	 * positive integer id, as an int or a digit string) whose `code` key is present
 	 * and null. Anything else — no `code` key, an empty code, a missing, zero,
