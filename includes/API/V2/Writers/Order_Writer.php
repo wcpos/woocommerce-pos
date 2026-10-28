@@ -416,7 +416,16 @@ class Order_Writer extends Null_Writer {
 			if ( ! empty( $context['adjust_stock'] ) ) {
 				add_action( 'woocommerce_rest_insert_shop_order_object', $adjust_stock, 10, 3 );
 			}
-			return $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
+			$response = $forward( $prepared['method'], $prepared['route'], $prepared['payload'] );
+			// After the write, not in a wc/v3 hook: recalculate_coupons() saves, and it reads a line this
+			// push added by its id. It matches coupon items by code, so the acked coupon line ids survive.
+			// rest_do_request() answers a refused write with an error response, not a WP_Error.
+			$written = ! is_wp_error( $response ) && ! ( $response instanceof \WP_REST_Response && $response->is_error() );
+			$order   = ! empty( $context['recalculate_coupons'] ) && $written ? wc_get_order( $context['id'] ) : null;
+			if ( $order instanceof \WC_Order ) {
+				$order->recalculate_coupons();
+			}
+			return $response;
 		} finally {
 			$qd->clear();
 			remove_action( 'woocommerce_rest_insert_shop_order_object', $persist_discount, 10 );
@@ -710,6 +719,9 @@ class Order_Writer extends Null_Writer {
 				return new WP_Error( 'rest_invalid_param', 'Invalid parameter(s): billing', array( 'status' => 400 ) );
 			}
 		}
+		// An unchanged coupon set is not forwarded, so wc/v3 never re-applies it: a line edit would keep
+		// each coupon line's old discount while the totals move. It is re-applied in place after the write.
+		$context['recalculate_coupons'] = $lines_changed && ! isset( $forward['coupon_lines'] ) && array() !== $order->get_coupons();
 		// Stock already reduced (a paid or reopened sale): the line edit moves stock by its delta (rule 4b).
 		$context['adjust_stock'] = $lines_changed && (bool) $order->get_data_store()->get_stock_reduced( $id );
 		// wc/v3 saves an updated line before the pre-insert filters run: keep each reduced line's binding as read.

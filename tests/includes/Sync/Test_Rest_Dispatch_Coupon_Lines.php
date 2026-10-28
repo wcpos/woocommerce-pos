@@ -20,6 +20,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WC_Coupon;
 use WP_REST_Request;
 
@@ -375,5 +376,179 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array(), array_values( wc_get_order( $order_id )->get_items( 'coupon' ) ) );
+	}
+
+	/**
+	 * A sale with one $50 line and a saved coupon; the till adds a second $50 line and pushes the
+	 * whole document, the coupon line as acked. Returns [coupon line id, coupon line after the push].
+	 */
+	private function add_a_line_under_a_saved_coupon( string $type, float $amount, string $line_total ): array {
+		$coupon = new WC_Coupon();
+		$coupon->set_code( 'grows' );
+		$coupon->set_discount_type( $type );
+		$coupon->set_amount( $amount );
+		$coupon->save();
+		$first  = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price' => 50,
+			)
+		);
+		$second = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price' => 50,
+			)
+		);
+		$created = $this->push_envelope(
+			'create',
+			array(
+				'status'       => 'pending',
+				'line_items'   => array(
+					array(
+						'product_id' => $first->get_id(),
+						'quantity' => 1,
+					),
+				),
+				'coupon_lines' => array( array( 'code' => 'grows' ) ),
+				'meta_data'    => $this->uuid_meta(),
+			)
+		);
+		$this->assertSame( 201, $created->get_status() );
+		$document = $created->get_data()['document'];
+
+		$response = $this->push_envelope(
+			'update',
+			array(
+				'line_items'   => array(
+					array(
+						'id'         => $document['line_items'][0]['id'],
+						'product_id' => $first->get_id(),
+						'quantity'   => 1,
+						'subtotal'   => '50.00',
+						'total'      => $line_total,
+					),
+					array(
+						'product_id' => $second->get_id(),
+						'quantity'   => 1,
+						'subtotal'   => '50.00',
+						'total'      => $line_total,
+					),
+				),
+				'coupon_lines' => array(
+					array(
+						'id'   => $document['coupon_lines'][0]['id'],
+						'code' => 'grows',
+					),
+				),
+				'meta_data'    => $this->uuid_meta(),
+			),
+			$this->order_revision( (int) $document['id'] )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( (float) $line_total * 2, (float) $response->get_data()['document']['total'] - (float) $response->get_data()['document']['total_tax'] );
+
+		return array( (int) $document['coupon_lines'][0]['id'], $response->get_data()['document']['coupon_lines'] );
+	}
+
+	public function test_update_adding_a_line_under_a_saved_percent_coupon_rescales_the_coupon_line(): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_tax_based_on', 'base' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => '',
+				'rate'     => '10.0000',
+				'name'     => 'Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		list( $coupon_line_id, $coupon_lines ) = $this->add_a_line_under_a_saved_coupon( 'percent', 10, '45.00' );
+
+		// The coupon line re-applied in place: same line, the discount of both items (was 5.00 / 0.50).
+		$this->assertCount( 1, $coupon_lines );
+		$this->assertSame( $coupon_line_id, (int) $coupon_lines[0]['id'] );
+		$this->assertSame( 10.0, (float) $coupon_lines[0]['discount'] );
+		$this->assertSame( 1.0, (float) $coupon_lines[0]['discount_tax'] );
+	}
+
+	public function test_update_adding_a_line_under_a_capped_fixed_cart_coupon_rescales_the_coupon_line(): void {
+		// $60 off a $50 sale caps at $50; with a second $50 line the full $60 applies.
+		list( $coupon_line_id, $coupon_lines ) = $this->add_a_line_under_a_saved_coupon( 'fixed_cart', 60, '20.00' );
+
+		$this->assertSame( $coupon_line_id, (int) $coupon_lines[0]['id'] );
+		$this->assertSame( 60.0, (float) $coupon_lines[0]['discount'] );
+	}
+
+	public function test_update_rejected_by_wc_leaves_the_coupon_line_as_it_was(): void {
+		$coupon = new WC_Coupon();
+		$coupon->set_code( 'grows' );
+		$coupon->set_discount_type( 'percent' );
+		$coupon->set_amount( 10 );
+		$coupon->save();
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price'         => 50,
+			)
+		);
+		$created = $this->push_envelope(
+			'create',
+			array(
+				'status'       => 'pending',
+				'line_items'   => array(
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'coupon_lines' => array( array( 'code' => 'grows' ) ),
+				'meta_data'    => $this->uuid_meta(),
+			)
+		);
+		$document = $created->get_data()['document'];
+		// Raised since the sale started: a re-apply would now take 20%.
+		$coupon->set_amount( 20 );
+		$coupon->save();
+		// wc/v3 refuses the write before it saves; rest_do_request() hands back a WP_REST_Response.
+		add_filter(
+			'woocommerce_rest_pre_insert_shop_order_object',
+			static function () {
+				return new \WP_Error( 'refused', 'Refused.', array( 'status' => 400 ) );
+			},
+			99
+		);
+
+		$response = $this->push_envelope(
+			'update',
+			array(
+				'line_items'   => array(
+					array(
+						'id'         => $document['line_items'][0]['id'],
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'coupon_lines' => array(
+					array(
+						'id'   => $document['coupon_lines'][0]['id'],
+						'code' => 'grows',
+					),
+				),
+				'meta_data'    => $this->uuid_meta(),
+			),
+			$this->order_revision( (int) $document['id'] )
+		);
+
+		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
+		$coupons = array_values( wc_get_order( (int) $document['id'] )->get_items( 'coupon' ) );
+		$this->assertSame( 5.0, (float) $coupons[0]->get_discount() );
 	}
 }
