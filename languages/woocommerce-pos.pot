@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-25T10:55:21+00:00\n"
+"POT-Creation-Date: 2026-10-28T10:06:45+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1215,7 +1215,7 @@ msgid "The session request could not be completed."
 msgstr ""
 
 #. translators: 1: line name, 2: units.
-#: includes/API/V2/Writers/Order_Writer.php:577
+#: includes/API/V2/Writers/Order_Writer.php:586
 #, php-format
 msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
 msgstr ""
