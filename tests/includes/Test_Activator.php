@@ -1483,6 +1483,38 @@ class Test_Activator extends WP_UnitTestCase {
 		}
 	}
 
+	/** Schema 13 installs gain nullable carry provenance without rewriting rows. */
+	public function test_schema_thirteen_upgrade_adds_the_carry_columns(): void {
+		global $wpdb;
+		$store = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$store->install();
+		$table = $store->table_name();
+		$columns = array(
+			'float_source' => 'VARCHAR(16) NULL',
+			'carried_from_closure_id' => 'CHAR(36) NULL',
+		);
+		try {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed DDL.
+			$wpdb->query( "ALTER TABLE {$table} DROP COLUMN float_source, DROP COLUMN carried_from_closure_id" );
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, '13' );
+			( new Activator() )->install_sync_schema();
+			foreach ( $columns as $column => $definition ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed column.
+				$this->assertSame( $column, $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE '{$column}'" ) );
+			}
+			$this->assertSame( '14', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+		} finally {
+			foreach ( $columns as $column => $definition ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test-owned table, fixed column.
+				if ( null === $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE '{$column}'" ) ) {
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Restore DDL that survives rollback.
+					$wpdb->query( "ALTER TABLE {$table} ADD COLUMN {$column} {$definition}" );
+				}
+			}
+			update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
+		}
+	}
+
 	/** A fresh install creates the closure columns and indexes; step 10 then issues no DDL. */
 	public function test_fresh_session_schema_carries_closure_columns_and_indexes(): void {
 		// Arrange.
@@ -1512,6 +1544,8 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertSame( 0, $alterations );
 			foreach ( array(
 				'counting_by' => array( 'bigint', 'YES' ),
+				'float_source' => array( 'varchar', 'YES' ),
+				'carried_from_closure_id' => array( 'char', 'YES' ),
 				'number' => array( 'bigint', 'YES' ),
 				'printed_number' => array( 'bigint', 'YES' ),
 				'print_count' => array( 'int', 'NO' ),
