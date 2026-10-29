@@ -143,6 +143,22 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $source, ( new Register_Session_Store() )->get( $source['id'] ) );
 	}
 
+	/** A closure id that belongs to another session is refused and the source resumes selling. */
+	public function test_carry_refuses_a_foreign_closure_id_and_resumes_selling(): void {
+		$other = $this->closure_session();
+		$foreign = ( new Closure_Store() )->create( $this->closure_fields( $other ) );
+		$source = $this->closure_session( null, 'open' );
+		$ids = array_merge( $this->ids(), array( 'closure_id' => $foreign['id'] ) );
+		$result = ( new Session_Carry() )->carry( $source, $this->target(), $ids, '2026-09-11 12:00:00' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_closure_session_invalid', $result->get_error_code() );
+		$after = ( new Register_Session_Store() )->get( $source['id'] );
+		$this->assertSame( 'open', $after['status'] );
+		$this->assertNull( $after['counting_by'] );
+		$this->assertNull( $after['closure_id'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $ids['session_id'] ) );
+	}
+
 	/** Losing the target after the close returns the committed closure, never reopens. */
 	public function test_target_open_race_returns_error_with_the_committed_closure(): void {
 		$source = $this->closure_session( null, 'open' );

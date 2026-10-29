@@ -63,28 +63,38 @@ final class Session_Carry {
 			return $result;
 		}
 		$session = $sessions->get( $session['id'] );
-		$closure = $closures->create(
-			array(
-				'id' => $ids['closure_id'],
-				'session_id' => $session['id'],
-				'business_day' => $session['business_day'],
-				'software_version' => 'woocommerce-pos/' . \WCPOS\WooCommercePOS\VERSION . ' carry',
-				'breakdowns' => array(),
-				'number' => $closures->last_number( $session['register_id'] ) + 1,
-				'unsynced_count' => 0,
-				'unsynced_total' => '0.0000',
-				'first_sale_counter' => null,
-				'last_sale_counter' => null,
-				'opened_at_gmt' => $session['opened_at_gmt'],
-				'closed_at_gmt' => $at_gmt,
-				'printed_at_gmt' => null,
-				'till_expected' => $expected,
-				'counted' => $expected,
-				'reason' => 'store_switch',
-				'carried_to_register_id' => $target['id'],
-			)
-		);
+		try {
+			$closure = $closures->create(
+				array(
+					'id' => $ids['closure_id'],
+					'session_id' => $session['id'],
+					'business_day' => $session['business_day'],
+					'software_version' => 'woocommerce-pos/' . \WCPOS\WooCommercePOS\VERSION . ' carry',
+					'breakdowns' => array(),
+					'number' => $closures->last_number( $session['register_id'] ) + 1,
+					'unsynced_count' => 0,
+					'unsynced_total' => '0.0000',
+					'first_sale_counter' => null,
+					'last_sale_counter' => null,
+					'opened_at_gmt' => $session['opened_at_gmt'],
+					'closed_at_gmt' => $at_gmt,
+					'printed_at_gmt' => null,
+					'till_expected' => $expected,
+					'counted' => $expected,
+					'reason' => 'store_switch',
+					'carried_to_register_id' => $target['id'],
+				)
+			);
+		} catch ( \RuntimeException $error ) {
+			$this->back_to_selling( $sessions, $session );
+			throw $error;
+		}
+		// A replayed id that belongs to another session is not this drawer's closure.
+		if ( ! is_wp_error( $closure ) && $closure['session_id'] !== $session['id'] ) {
+			$closure = new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
 		if ( is_wp_error( $closure ) ) {
+			$this->back_to_selling( $sessions, $session );
 			return $closure;
 		}
 		$opened = $sessions->create(
@@ -108,6 +118,22 @@ final class Session_Carry {
 		return array(
 			'closure' => $closure,
 			'session' => $opened,
+		);
+	}
+
+	/** A failure before the switch leaves everything as it was (spec § 4.6): the count is undone.
+	 *
+	 * @param Register_Session_Store $sessions Store.
+	 * @param array                  $session The counting source row.
+	 */
+	private function back_to_selling( Register_Session_Store $sessions, array $session ): void {
+		$sessions->transition(
+			$session,
+			array(
+				'status' => 'open',
+				'counting_started_at_gmt' => null,
+				'counting_by' => null,
+			)
 		);
 	}
 }
