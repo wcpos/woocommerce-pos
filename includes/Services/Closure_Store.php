@@ -690,7 +690,9 @@ final class Closure_Store {
 						'requested_closure_id' => $fields['id'],
 					)
 				);
-				$this->recount( $existing, $fields['id'], $fields['counted'], '' );
+				if ( null !== $fields['counted'] ) {
+					$this->recount( $existing, $fields['id'], $fields['counted'], '' );
+				}
 				return new \WP_Error(
 					'wcpos_closure_exists',
 					__( 'This session already has a closure; the count was recorded as a recount.', 'woocommerce-pos' ),
@@ -751,6 +753,9 @@ final class Closure_Store {
 			}
 			$figures = Session_Figures::for_session( $session );
 			$fields['expected'] = $figures->expected();
+			// A carry counts the drawer at the snapshot's own expected: no count is taken outside it.
+			$fields['counted'] = $fields['counted'] ?? $fields['expected'];
+			$fields['till_expected'] = $fields['till_expected'] ?? $fields['expected'];
 			$fields['variance'] = $this->variance( $fields['counted'], $fields['expected'] );
 			$totals = $figures->period_amounts();
 			$figures->stamp( $fields['id'] );

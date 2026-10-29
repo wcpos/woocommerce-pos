@@ -243,7 +243,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( ( new Register_Session_Store() )->get( $fields['session_id'] ) );
 	}
 
-	/** Accessible route parameters do not authorize replaying rows from another store. */
+	/** Ids that name another store's rows are refused by identity, before any row is read or returned. */
 	public function test_carry_replay_checks_the_returned_rows_store_reach(): void {
 		$hidden = $this->fields( 456 );
 		$this->post( 'sessions', $hidden );
@@ -262,7 +262,8 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( Store_Reach::FILTER, $reach );
 		}
-		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_closure_session_invalid', $response->get_data()['code'] );
 		$this->assertArrayNotHasKey( 'closure', $response->get_data() );
 		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $source['id'] )['status'] );
 	}

@@ -23,6 +23,13 @@ final class Session_Carry {
 		$sessions = new Register_Session_Store();
 		$closure = $closures->get( $ids['closure_id'] );
 		$opened = $sessions->get( $ids['session_id'] );
+		// An id that already names something else is refused before the drawer changes.
+		if ( $closure && ( $closure['session_id'] !== $session['id'] || 'store_switch' !== $closure['reason'] ) ) {
+			return new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
+		if ( $opened && ( $opened['register_id'] !== $target['id'] || $opened['carried_from_closure_id'] !== $ids['closure_id'] ) ) {
+			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
 		if ( $closure && $opened ) {
 			$closures->log_replay( $closure );
 			$sessions->log_replay( $opened );
@@ -50,7 +57,59 @@ final class Session_Carry {
 				)
 			);
 		}
-		$expected = Session_Figures::for_session( $session )->expected();
+		$closure = $this->close( $closures, $sessions, $session, $target, $ids['closure_id'], $at_gmt );
+		if ( is_wp_error( $closure ) ) {
+			return $closure;
+		}
+		$opened = $sessions->create(
+			array(
+				'id' => $ids['session_id'],
+				'business_day' => $session['business_day'],
+				'register_id' => $target['id'],
+				'store_id' => $target['store_id'],
+				'opened_at_gmt' => $at_gmt,
+				'opened_by' => get_current_user_id(),
+				'counted_float' => $closure['counted']['cash'] ?? '0.0000',
+				'expected_float' => $closure['counted']['cash'] ?? '0.0000',
+				'float_source' => 'carried',
+				'carried_from_closure_id' => $ids['closure_id'],
+			),
+			function ( $fields ) use ( $target ) {
+				// Re-read under the target's lock: a register retired meanwhile takes no session.
+				return ( new Register_Store() )->get( $target['id'] )
+					? $fields
+					: new \WP_Error(
+						'rest_invalid_param',
+						__( 'Invalid parameter.', 'woocommerce-pos' ),
+						array(
+							'status' => 400,
+							'param' => 'to_register_id',
+						)
+					);
+			}
+		);
+		if ( is_wp_error( $opened ) ) {
+			$opened->add_data( array_merge( (array) $opened->get_error_data(), array( 'closure' => $closure ) ) );
+			return $opened;
+		}
+		return array(
+			'closure' => $closure,
+			'session' => $opened,
+		);
+	}
+
+	/** Close the open source at the snapshot's expected; a refused, failed or foreign closure resumes selling.
+	 *
+	 * @param Closure_Store          $closures Closures.
+	 * @param Register_Session_Store $sessions Sessions.
+	 * @param array                  $session The open source row.
+	 * @param array                  $target The target register.
+	 * @param string                 $closure_id Client-minted closure id.
+	 * @param string                 $at_gmt Closing time.
+	 * @return array|\WP_Error
+	 * @throws \RuntimeException On database failure.
+	 */
+	private function close( Closure_Store $closures, Register_Session_Store $sessions, array $session, array $target, string $closure_id, string $at_gmt ) {
 		$result = $sessions->transition(
 			$session,
 			array(
@@ -66,7 +125,7 @@ final class Session_Carry {
 		try {
 			$closure = $closures->create(
 				array(
-					'id' => $ids['closure_id'],
+					'id' => $closure_id,
 					'session_id' => $session['id'],
 					'business_day' => $session['business_day'],
 					'software_version' => 'woocommerce-pos/' . \WCPOS\WooCommercePOS\VERSION . ' carry',
@@ -79,8 +138,8 @@ final class Session_Carry {
 					'opened_at_gmt' => $session['opened_at_gmt'],
 					'closed_at_gmt' => $at_gmt,
 					'printed_at_gmt' => null,
-					'till_expected' => $expected,
-					'counted' => $expected,
+					'till_expected' => null,
+					'counted' => null,
 					'reason' => 'store_switch',
 					'carried_to_register_id' => $target['id'],
 				)
@@ -89,36 +148,13 @@ final class Session_Carry {
 			$this->back_to_selling( $sessions, $session );
 			throw $error;
 		}
-		// A replayed id that belongs to another session is not this drawer's closure.
 		if ( ! is_wp_error( $closure ) && $closure['session_id'] !== $session['id'] ) {
 			$closure = new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		if ( is_wp_error( $closure ) ) {
 			$this->back_to_selling( $sessions, $session );
-			return $closure;
 		}
-		$opened = $sessions->create(
-			array(
-				'id' => $ids['session_id'],
-				'business_day' => $session['business_day'],
-				'register_id' => $target['id'],
-				'store_id' => $target['store_id'],
-				'opened_at_gmt' => $at_gmt,
-				'opened_by' => get_current_user_id(),
-				'counted_float' => $expected['cash'] ?? '0.0000',
-				'expected_float' => $expected['cash'] ?? '0.0000',
-				'float_source' => 'carried',
-				'carried_from_closure_id' => $ids['closure_id'],
-			)
-		);
-		if ( is_wp_error( $opened ) ) {
-			$opened->add_data( array_merge( (array) $opened->get_error_data(), array( 'closure' => $closure ) ) );
-			return $opened;
-		}
-		return array(
-			'closure' => $closure,
-			'session' => $opened,
-		);
+		return $closure;
 	}
 
 	/** A failure before the switch leaves everything as it was (spec § 4.6): the count is undone.

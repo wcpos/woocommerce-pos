@@ -164,11 +164,6 @@ class Sessions_Controller extends \WP_REST_Controller {
 			gmdate( 'Y-m-d H:i:s', strtotime( $request['at'] ) )
 		);
 		$data = is_wp_error( $result ) ? (array) $result->get_error_data() : $result;
-		foreach ( array( 'closure', 'session' ) as $key ) {
-			if ( isset( $data[ $key ] ) && ! $reach->admits( $data[ $key ]['store_id'] ) ) {
-				return $this->error( 'wcpos_session_not_found', 404 );
-			}
-		}
 		if ( isset( $data['closure'] ) ) {
 			$data['closure'] = Closures_Controller::visible( $data['closure'] );
 		}

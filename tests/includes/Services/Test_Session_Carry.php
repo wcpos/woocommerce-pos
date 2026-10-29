@@ -159,6 +159,85 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( ( new Register_Session_Store() )->get( $ids['session_id'] ) );
 	}
 
+	/** A session id that already names another session is refused before the source changes. */
+	public function test_carry_refuses_a_session_id_that_names_another_session(): void {
+		$source = $this->closure_session( null, 'open' );
+		$ids = array_merge( $this->ids(), array( 'session_id' => $source['id'] ) );
+		$result = ( new Session_Carry() )->carry( $source, $this->target(), $ids, '2026-09-11 12:00:00' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_session_transition_refused', $result->get_error_code() );
+		$this->assertSame( $source, ( new Register_Session_Store() )->get( $source['id'] ) );
+		$this->assertNull( ( new Closure_Store() )->get( $ids['closure_id'] ) );
+	}
+
+	/** A sale landing between the request and the closure is in the carried cash. */
+	public function test_carry_counts_the_snapshot_expected_not_an_earlier_read(): void {
+		global $wpdb;
+		$sessions = new Register_Session_Store();
+		$source = $this->closure_session( null, 'open' );
+		$wpdb->update( $sessions->table_name(), array( 'counted_float' => '0' ), array( 'id' => $source['id'] ) );
+		$source = $sessions->get( $source['id'] );
+		$target = $this->target();
+		$ids = $this->ids();
+		$landed = false;
+		$late = function ( $sql ) use ( $source, &$landed ) {
+			if ( ! $landed && false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $source['register_id'] ) ) {
+				$landed = true;
+				$order = new \WC_Order();
+				$order->set_total( '20' );
+				$order->save();
+				Ledger::instance()->record(
+					$order,
+					array(
+						'id' => wp_generate_uuid4(),
+						'method_id' => 'pos_cash',
+						'amount' => '20',
+						'session_id' => $source['id'],
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $late );
+		try {
+			$result = ( new Session_Carry() )->carry( $source, $target, $ids, '2026-09-11 12:00:00' );
+		} finally {
+			remove_filter( 'query', $late );
+		}
+		$this->assertTrue( $landed );
+		$this->assertIsArray( $result );
+		$this->assertSame( '20.0000', $result['closure']['counted']['cash'] );
+		$this->assertSame( '20.0000', $result['closure']['expected']['cash'] );
+		$this->assertSame( '20.0000', $result['session']['counted_float'] );
+	}
+
+	/** A target retired between validation and the opening takes no session. */
+	public function test_carry_refuses_a_target_retired_under_the_lock(): void {
+		$source = $this->closure_session( null, 'open' );
+		$target = $this->target();
+		$ids = $this->ids();
+		$retired = false;
+		$retire = function ( $sql ) use ( $target, &$retired ) {
+			if ( ! $retired && false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $target['id'] ) ) {
+				$retired = true;
+				( new \WCPOS\WooCommercePOS\Services\Register_Store() )->retire( $target['id'] );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $retire );
+		try {
+			$result = ( new Session_Carry() )->carry( $source, $target, $ids, '2026-09-11 12:00:00' );
+		} finally {
+			remove_filter( 'query', $retire );
+		}
+		$this->assertTrue( $retired );
+		$this->assertWPError( $result );
+		$this->assertSame( 'rest_invalid_param', $result->get_error_code() );
+		$this->assertSame( 'to_register_id', $result->get_error_data()['param'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $ids['session_id'] ) );
+		$this->assertSame( $ids['closure_id'], $result->get_error_data()['closure']['id'] );
+	}
+
 	/** Losing the target after the close returns the committed closure, never reopens. */
 	public function test_target_open_race_returns_error_with_the_committed_closure(): void {
 		$source = $this->closure_session( null, 'open' );
