@@ -44,6 +44,8 @@ final class Closure_Store {
 		'opened_by' => 'opened_by',
 		'closed_by' => null,
 		'approved_by' => null,
+		'reason' => null,
+		'carried_to_register_id' => null,
 		'expected' => null,
 		'till_expected' => null,
 		'counted' => null,
@@ -97,6 +99,7 @@ final class Closure_Store {
 		foreach ( self::ROW as $key => $column ) {
 			$row[ $key ] = null === $column ? ( $document[ $key ] ?? null ) : $session[ $column ];
 		}
+		$row['reason'] = $row['reason'] ?? 'end_of_day';
 		return self::normalize( $row );
 	}
 
@@ -752,6 +755,7 @@ final class Closure_Store {
 			$totals = $figures->period_amounts();
 			$figures->stamp( $fields['id'] );
 			$carried = $this->carry_corrections( $session['register_id'], $fields['id'] );
+			$fields['reason'] = $fields['reason'] ?? 'end_of_day';
 			$findings = array();
 			foreach ( $totals as $kind => $amounts ) {
 				$period = self::sum( $amounts );
@@ -771,7 +775,7 @@ final class Closure_Store {
 						);
 						throw new \RuntimeException( 'Closure total exceeds storage precision.' );
 					}
-					if ( '0.0000' !== self::sum( array( $fields[ $key ], '-' . $derived ) ) ) {
+					if ( isset( $fields[ $key ] ) && '0.0000' !== self::sum( array( $fields[ $key ], '-' . $derived ) ) ) {
 						$findings['total_mismatch'][ $key ] = array(
 							'reported' => $fields[ $key ],
 							'derived' => $derived,

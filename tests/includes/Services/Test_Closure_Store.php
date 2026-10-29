@@ -19,6 +19,35 @@ use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/** New and historical documents always expose an ordinary close reason. */
+	public function test_create_records_end_of_day_by_default_and_hydrates_an_old_document_without_reason(): void {
+		global $wpdb;
+		$session = $this->closure_session();
+		$store = new Closure_Store();
+		$row = $store->create( $this->closure_fields( $session ) );
+		$this->assertSame( 'end_of_day', $row['reason'] );
+		$this->assertNull( $row['carried_to_register_id'] );
+		$document = Closure_Store::document( $row );
+		unset( $document['reason'] );
+		$wpdb->update( ( new Register_Session_Store() )->table_name(), array( 'closure' => wp_json_encode( $document ) ), array( 'id' => $session['id'] ) );
+		$this->assertSame( 'end_of_day', $store->get( $row['id'] )['reason'] );
+	}
+
+	/** Server-only closes derive totals without inventing a reported mismatch. */
+	public function test_create_derives_totals_when_none_are_reported(): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$fields = $this->closure_fields( $session );
+		unset( $fields['period_sales_total'], $fields['period_refunds_total'], $fields['perpetual_sales_total'], $fields['perpetual_refunds_total'] );
+		$row = ( new Closure_Store() )->create( $fields );
+		$this->assertSame( '80.0000', $row['period_sales_total'] );
+		$this->assertSame( '80.0000', $row['perpetual_sales_total'] );
+		$this->assertSame( '0.0000', $row['period_refunds_total'] );
+		$this->assertSame( '0.0000', $row['perpetual_refunds_total'] );
+		$this->assertNull( $row['findings'] );
+		$order->delete( true );
+	}
+
 	/** Break the one session UPDATE that writes a closure document. */
 	private static function fail_closure_write(): callable {
 		$table = ( new Register_Session_Store() )->table_name();
