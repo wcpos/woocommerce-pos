@@ -18,7 +18,7 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
 	/** The session columns a read returned before closures folded into the session row. */
-	public const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+	public const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
 
 	/** A closure on the session row never widens a session read. */
 	public function test_session_read_after_closure_returns_exactly_the_session_columns(): void {
@@ -227,8 +227,10 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 				array(
 					'status' => $status,
 					'counting_started_at_gmt' => 'counting' === $status ? '2026-09-11 11:00:00' : null,
+					'counting_by' => 'counting' === $status ? get_current_user_id() : null,
 				)
 			);
+			$this->assertSame( 'counting' === $status ? get_current_user_id() : null, $row['counting_by'] );
 			$error = $store->create( $fields );
 			$this->assertWPError( $error );
 			$this->assertSame( 'wcpos_session_already_open', $error->get_error_code() );
@@ -239,9 +241,11 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 			array(
 				'status' => 'open',
 				'counting_started_at_gmt' => null,
+				'counting_by' => null,
 			)
 		);
 		$this->assertNull( $row['counting_started_at_gmt'] );
+		$this->assertNull( $row['counting_by'] );
 		$stale = $row;
 		$row = $store->transition( $row, array( 'status' => 'counting' ) );
 		$row = $store->transition(
@@ -260,5 +264,18 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'cash' => '101.0000' ), $row['counted'] );
 		$fields['expected_float'] = null;
 		$this->assertNull( $store->create( $fields )['opening_variance'] );
+	}
+	/** A read the table cannot answer (a column a stalled upgrade has not added) throws; it is never an empty list. */
+	public function test_list_throws_when_the_read_fails(): void {
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$table = $store->table_name();
+		$wpdb->query( "ALTER TABLE {$table} DROP COLUMN counting_by" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, test setup.
+		try {
+			$this->expectException( \RuntimeException::class );
+			$store->list( array() );
+		} finally {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN counting_by BIGINT NULL AFTER counting_started_at_gmt" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, test teardown.
+		}
 	}
 }

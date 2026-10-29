@@ -1511,6 +1511,7 @@ class Test_Activator extends WP_UnitTestCase {
 			// Assert.
 			$this->assertSame( 0, $alterations );
 			foreach ( array(
+				'counting_by' => array( 'bigint', 'YES' ),
 				'number' => array( 'bigint', 'YES' ),
 				'printed_number' => array( 'bigint', 'YES' ),
 				'print_count' => array( 'int', 'NO' ),
@@ -2337,7 +2338,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$option = get_option( self::REGISTER_OPTION );
 			// The stored row keeps the dev site's store for Pro's adoption; Free serves it with none.
@@ -2360,7 +2361,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertSame( $option, get_option( self::REGISTER_OPTION ) );
 		} finally {
 			$this->restore_register_schema( $fixture );
@@ -2437,7 +2438,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( get_option( self::REGISTER_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 		} finally {
@@ -2489,7 +2490,7 @@ class Test_Activator extends WP_UnitTestCase {
 			( new Activator() )->install_sync_schema();
 
 			// Assert.
-			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] . '_folded' ) );
 			$option = get_option( self::REGISTER_OPTION );
 			$this->assertSame( $fixture['rows']['recent'], $option['register'] );
@@ -2528,7 +2529,7 @@ class Test_Activator extends WP_UnitTestCase {
 
 			// Assert.
 			$this->assertFalse( $late );
-			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$option = get_option( self::REGISTER_OPTION );
 			$this->assertNotContains( 'Late till', array_merge( array( $option['register']['name'] ), array_column( $option['retired'], 'name' ) ) );
 		} finally {
@@ -2565,7 +2566,7 @@ class Test_Activator extends WP_UnitTestCase {
 			$this->assertSame( '11', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertTrue( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			( new Activator() )->install_sync_schema();
-			$this->assertSame( '12', get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
+			$this->assertSame( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION ) );
 			$this->assertFalse( \WCPOS\WooCommercePOS\Sync\Health::table_exists( $fixture['legacy'] ) );
 			$option = get_option( self::REGISTER_OPTION );
 			$this->assertSame( $fixture['rows']['recent']['id'], $option['register']['id'] );
