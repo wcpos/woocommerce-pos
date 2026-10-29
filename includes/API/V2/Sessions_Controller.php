@@ -307,6 +307,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			);
 		} else {
 			$fields['counting_started_at_gmt'] = 'counting' === $status ? $at : null;
+			$fields['counting_by'] = 'counting' === $status ? get_current_user_id() : null;
 		}
 		if ( 'closed' === $status && $request->has_param( 'approver_token' ) ) {
 			$token = is_string( $request['approver_token'] ) ? Auth::instance()->validate_token( $request['approver_token'] ) : null;

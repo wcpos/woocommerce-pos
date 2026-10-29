@@ -33,7 +33,8 @@ final class Api {
 	// 10: closures fold into their session rows; the legacy closures table is copied and dropped.
 	// 11: cash movements fold into a JSON array on their session rows; the legacy movements table is copied and dropped.
 	// 12: Free's one register moves into the wcpos_register option; the legacy registers table is copied and dropped.
-	public const SCHEMA_VERSION  = '12';
+	// 13: sessions record who started the count (counting_by) beside when.
+	public const SCHEMA_VERSION  = '13';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

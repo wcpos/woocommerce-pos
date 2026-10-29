@@ -268,6 +268,10 @@ class Activator {
 			return;
 		}
 
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '13', '<' ) ) {
+			$this->add_column_if_missing( ( new Register_Session_Store() )->table_name(), 'counting_by', 'BIGINT NULL', 'Counting cashier column' );
+		}
+
 		if ( ! Sync_Health::is_healthy() ) {
 			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
 				delete_option( Sync_Api::SCHEMA_OPTION );

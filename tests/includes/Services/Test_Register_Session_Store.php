@@ -18,7 +18,7 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
 	/** The session columns a read returned before closures folded into the session row. */
-	public const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+	public const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
 
 	/** A closure on the session row never widens a session read. */
 	public function test_session_read_after_closure_returns_exactly_the_session_columns(): void {
@@ -227,8 +227,10 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 				array(
 					'status' => $status,
 					'counting_started_at_gmt' => 'counting' === $status ? '2026-09-11 11:00:00' : null,
+					'counting_by' => 'counting' === $status ? get_current_user_id() : null,
 				)
 			);
+			$this->assertSame( 'counting' === $status ? get_current_user_id() : null, $row['counting_by'] );
 			$error = $store->create( $fields );
 			$this->assertWPError( $error );
 			$this->assertSame( 'wcpos_session_already_open', $error->get_error_code() );
@@ -239,9 +241,11 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 			array(
 				'status' => 'open',
 				'counting_started_at_gmt' => null,
+				'counting_by' => null,
 			)
 		);
 		$this->assertNull( $row['counting_started_at_gmt'] );
+		$this->assertNull( $row['counting_by'] );
 		$stale = $row;
 		$row = $store->transition( $row, array( 'status' => 'counting' ) );
 		$row = $store->transition(

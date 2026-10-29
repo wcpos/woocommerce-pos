@@ -21,7 +21,7 @@ final class Register_Session_Store {
 	 * Closure_Store, and the movements array is read only through Cash_Movement_Store,
 	 * so a session route never selects them.
 	 */
-	private const COLUMNS = 'id, register_id, store_id, status, opened_at_gmt, business_day, opened_by, expected_float, counted_float, opening_variance, counting_started_at_gmt, closed_at_gmt, closed_by, approved_by, approved_counted, approved_expected, counted, closure_id, created_at_gmt';
+	private const COLUMNS = 'id, register_id, store_id, status, opened_at_gmt, business_day, opened_by, expected_float, counted_float, opening_variance, counting_started_at_gmt, counting_by, closed_at_gmt, closed_by, approved_by, approved_counted, approved_expected, counted, closure_id, created_at_gmt';
 
 	/** Build the schema.
 	 *
@@ -41,6 +41,7 @@ final class Register_Session_Store {
 			counted_float DECIMAL(19,4) NOT NULL,
 			opening_variance DECIMAL(19,4) NULL,
 			counting_started_at_gmt DATETIME NULL,
+			counting_by BIGINT NULL,
 			closed_at_gmt DATETIME NULL,
 			closed_by BIGINT NULL,
 			approved_by BIGINT NULL,
@@ -137,7 +138,7 @@ final class Register_Session_Store {
 	 * @param array $row Raw session row.
 	 */
 	private static function normalize_row( array $row ): array {
-		foreach ( array( 'store_id', 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
+		foreach ( array( 'store_id', 'opened_by', 'counting_by', 'closed_by', 'approved_by' ) as $key ) {
 			$row[ $key ] = null === $row[ $key ] ? null : (int) $row[ $key ];
 		}
 		foreach ( array( 'counted', 'approved_counted', 'approved_expected' ) as $key ) {

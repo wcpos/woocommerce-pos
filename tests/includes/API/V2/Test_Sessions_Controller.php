@@ -586,7 +586,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$closure = array( 'number', 'printed_number', 'print_count', 'last_printed_at_gmt', 'closure', 'movements' );
 		// Every session column a read returned before closures folded into the session row.
-		$session_keys = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+		$session_keys = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
 		$this->assertSame(
 			1,
 			$wpdb->update(
@@ -670,7 +670,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** Keys of a stored session row, as the store reads it. */
-	private const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+	private const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
 
 	/** Keys of a stored movement row, as the store reads it. */
 	private const MOVEMENT_KEYS = array( 'id', 'session_id', 'type', 'amount', 'reason', 'actor', 'voids', 'voided_by', 'created_at_gmt' );
@@ -1120,6 +1120,8 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$result = $this->post( $route, $fields );
 			$this->assertSame( 200, $result->get_status() );
 			$this->assertSame( 'open' === $status ? null : '2026-09-11 11:00:00', $result->get_data()['counting_started_at_gmt'] );
+			$this->assertArrayHasKey( 'counting_by', $result->get_data() );
+			$this->assertSame( 'counting' === $status ? get_current_user_id() : null, $result->get_data()['counting_by'] );
 			$this->assertSame( $result->get_data(), $this->post( $route, array( 'status' => $status ) )->get_data() );
 		}
 		$fields['status'] = 'closed';
@@ -1133,6 +1135,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$result = $this->post( $route, $fields );
 		$this->assertSame( 200, $result->get_status() );
 		$this->assertSame( get_current_user_id(), $result->get_data()['closed_by'] );
+		$this->assertSame( get_current_user_id(), $result->get_data()['counting_by'] );
 		$this->assertSame( '2026-09-11 11:00:00', $result->get_data()['closed_at_gmt'] );
 		$this->assertSame( array( 'cash' => '100.0000' ), $result->get_data()['counted'] );
 		$this->assertSame( $result->get_data(), $this->post( $route, array( 'status' => 'closed' ) )->get_data() );
