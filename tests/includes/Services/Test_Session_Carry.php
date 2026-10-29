@@ -211,6 +211,42 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '20.0000', $result['session']['counted_float'] );
 	}
 
+	/** A count another device starts under the source lock is left alone. */
+	public function test_carry_refuses_a_source_that_starts_counting_under_the_lock(): void {
+		$source = $this->closure_session( null, 'open' );
+		$target = $this->target();
+		$ids = $this->ids();
+		$counted = false;
+		$count = function ( $sql ) use ( $source, &$counted ) {
+			if ( ! $counted && false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $source['register_id'] ) ) {
+				$counted = true;
+				( new Register_Session_Store() )->transition(
+					$source,
+					array(
+						'status' => 'counting',
+						'counting_started_at_gmt' => '2026-09-11 11:59:00',
+						'counting_by' => 77,
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $count );
+		try {
+			$result = ( new Session_Carry() )->carry( $source, $target, $ids, '2026-09-11 12:00:00' );
+		} finally {
+			remove_filter( 'query', $count );
+		}
+		$this->assertTrue( $counted );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_session_transition_refused', $result->get_error_code() );
+		$after = ( new Register_Session_Store() )->get( $source['id'] );
+		$this->assertSame( 'counting', $after['status'] );
+		$this->assertSame( 77, (int) $after['counting_by'] );
+		$this->assertNull( ( new Closure_Store() )->get( $ids['closure_id'] ) );
+		$this->assertNull( ( new Register_Session_Store() )->get( $ids['session_id'] ) );
+	}
+
 	/** A target retired between validation and the opening takes no session. */
 	public function test_carry_refuses_a_target_retired_under_the_lock(): void {
 		$source = $this->closure_session( null, 'open' );

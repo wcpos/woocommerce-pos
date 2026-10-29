@@ -98,7 +98,7 @@ final class Session_Carry {
 		);
 	}
 
-	/** Close the open source at the snapshot's expected; a refused, failed or foreign closure resumes selling.
+	/** Close the open source at the snapshot's expected; a refused, failed or foreign closure resumes selling. A count another device started under the lock reads as a successful transition and is refused by its stamp.
 	 *
 	 * @param Closure_Store          $closures Closures.
 	 * @param Register_Session_Store $sessions Sessions.
@@ -122,6 +122,9 @@ final class Session_Carry {
 			return $result;
 		}
 		$session = $sessions->get( $session['id'] );
+		if ( get_current_user_id() !== (int) $session['counting_by'] || $at_gmt !== $session['counting_started_at_gmt'] ) {
+			return new \WP_Error( 'wcpos_session_transition_refused', __( 'The session state has changed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
+		}
 		try {
 			$closure = $closures->create(
 				array(
