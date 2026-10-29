@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
+use WCPOS\WooCommercePOS\Services\Session_Carry;
 use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
@@ -40,6 +41,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			'/sessions/(?P<id>[0-9a-fA-F-]{36})' => 'GET',
 			'/sessions/(?P<id>[0-9a-fA-F-]{36})/status' => 'POST',
 			'/sessions/(?P<id>[0-9a-fA-F-]{36})/approve' => 'POST',
+			'/sessions/(?P<id>[0-9a-fA-F-]{36})/carry' => 'POST',
 			'/sessions/(?P<id>[0-9a-fA-F-]{36})/movements' => 'GET',
 			'/movements' => 'POST',
 		) as $route => $methods ) {
@@ -99,6 +101,9 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( substr( rtrim( $request->get_route(), '/' ), -8 ) === '/approve' ) {
 				return $row ? $this->approve( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
+			if ( substr( rtrim( $request->get_route(), '/' ), -6 ) === '/carry' ) {
+				return $row ? $this->carry( $request, $row ) : $this->error( 'wcpos_session_not_found', 404 );
+			}
 			if ( $row ) {
 				$store->log_replay( $row );
 				return new WP_REST_Response( $this->visible_row( $row ) );
@@ -122,6 +127,57 @@ class Sessions_Controller extends \WP_REST_Controller {
 		} catch ( \RuntimeException $error ) {
 			return $this->error( 'POST' === $request->get_method() ? 'wcpos_session_write_failed' : 'wcpos_session_read_failed', 500 );
 		}
+	}
+
+	/** Validate and carry a drawer, keeping success and partial-failure figures blind.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @param array            $row Source session.
+	 * @return WP_REST_Response|WP_Error
+	 * @throws \RuntimeException On database failure, handled by dispatch.
+	 */
+	private function carry( $request, array $row ) {
+		$reach = Store_Reach::for_request( $request );
+		if ( ! $reach->admits( $row['store_id'] ) ) {
+			return $this->error( 'wcpos_session_not_found', 404 );
+		}
+		foreach ( array( 'to_register_id', 'closure_id', 'session_id' ) as $key ) {
+			if ( ! Pos_Uuid::is_uuid( $request[ $key ] ) ) {
+				return $this->error( 'rest_invalid_param', 400, $key );
+			}
+			$request->set_param( $key, strtolower( $request[ $key ] ) );
+		}
+		if ( ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request['at'] ) ) {
+			return $this->error( 'rest_invalid_param', 400, 'at' );
+		}
+		$target = ( new Register_Store() )->get( $request['to_register_id'] );
+		if ( ! $target || ! $reach->admits( $target['store_id'] ) || $target['id'] === $row['register_id'] ) {
+			return $this->error( 'rest_invalid_param', 400, 'to_register_id' );
+		}
+		$result = ( new Session_Carry() )->carry(
+			$row,
+			$target,
+			array(
+				'closure_id' => $request['closure_id'],
+				'session_id' => $request['session_id'],
+			),
+			gmdate( 'Y-m-d H:i:s', strtotime( $request['at'] ) )
+		);
+		$data = is_wp_error( $result ) ? (array) $result->get_error_data() : $result;
+		foreach ( array( 'closure', 'session' ) as $key ) {
+			if ( isset( $data[ $key ] ) && ! $reach->admits( $data[ $key ]['store_id'] ) ) {
+				return $this->error( 'wcpos_session_not_found', 404 );
+			}
+		}
+		if ( isset( $data['closure'] ) ) {
+			$data['closure'] = Closures_Controller::visible( $data['closure'] );
+		}
+		if ( is_wp_error( $result ) ) {
+			// Replacing data on the original error retains hidden figures in additional_data.
+			return new WP_Error( $result->get_error_code(), $result->get_error_message(), Closures_Controller::visible( $data ) );
+		}
+		$data['session'] = $this->visible_row( $data['session'] );
+		return new WP_REST_Response( $data, 201 );
 	}
 
 	/** Read collection, details or the movement log.
@@ -197,10 +253,14 @@ class Sessions_Controller extends \WP_REST_Controller {
 	 * One helper serves both shapes: session rows carry no amount or reason, movement rows no floats.
 	 *
 	 * @param array $row Response row.
+	 * @throws \RuntimeException On closure read failure.
 	 */
 	private function visible_row( array $row ): array {
 		if ( ! current_user_can( 'view_woocommerce_pos_reports' ) ) {
 			unset( $row['approved_expected'], $row['counted_float'], $row['expected_float'], $row['opening_variance'], $row['amount'], $row['reason'] );
+			if ( ! empty( $row['closure_id'] ) && 'store_switch' === ( ( new Closure_Store() )->get( $row['closure_id'] )['reason'] ?? null ) ) {
+				unset( $row['counted'] );
+			}
 		}
 		return $row;
 	}

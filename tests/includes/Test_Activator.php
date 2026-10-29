@@ -730,6 +730,8 @@ class Test_Activator extends WP_UnitTestCase {
 					'opened_by' => 1,
 					'closed_by' => 1,
 					'approved_by' => null,
+					'reason' => 'end_of_day',
+					'carried_to_register_id' => null,
 					'expected' => array( 'cash' => '150.0000' ),
 					'till_expected' => array( 'cash' => '100.0000' ),
 					'counted' => array( 'cash' => '101.0000' ),

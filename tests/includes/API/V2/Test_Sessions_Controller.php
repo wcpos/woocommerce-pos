@@ -81,6 +81,265 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** Client fields for a carry onto a newly created, empty register. */
+	private function carry_fields(): array {
+		return array(
+			'to_register_id' => $this->fields()['register_id'],
+			'closure_id' => wp_generate_uuid4(),
+			'session_id' => wp_generate_uuid4(),
+			'at' => '2026-09-11T12:00:00Z',
+		);
+	}
+
+	/** The route is discoverable and an identical act replays both rows. */
+	public function test_carry_closes_the_source_and_opens_the_target(): void {
+		$id = $this->counting_session_with_cash_sale();
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'open',
+				'at' => '2026-09-11T11:30:00Z',
+			)
+		);
+		$fields = $this->carry_fields();
+		$route = 'sessions/' . $id . '/carry';
+		$response = $this->post( $route, $fields );
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'store_switch', $data['closure']['reason'] );
+		$this->assertSame( 'carried', $data['session']['float_source'] );
+		$this->assertSame( '100.0000', $data['session']['counted_float'] );
+		$this->assertSame( $fields['closure_id'], $data['closure']['id'] );
+		$this->assertSame( $fields['session_id'], $data['session']['id'] );
+		$replay = $this->post( $route, $fields );
+		$this->assertSame( 201, $replay->get_status() );
+		$this->assertSame( $data, $replay->get_data() );
+	}
+
+	/** Invalid or inaccessible targets cannot identify another store's register. */
+	public function test_carry_refuses_the_same_register_an_unknown_target_and_a_target_out_of_reach(): void {
+		$source = $this->fields( 789 );
+		$this->post( 'sessions', $source );
+		$fields = $this->carry_fields();
+		$hidden = $this->fields( 456 );
+		$reach = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $reach );
+		try {
+			foreach ( array( $source['register_id'], wp_generate_uuid4(), $hidden['register_id'] ) as $target_id ) {
+				$fields['to_register_id'] = $target_id;
+				$response = $this->post( 'sessions/' . $source['id'] . '/carry', $fields );
+				$this->assertSame( 400, $response->get_status() );
+				$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+				$this->assertArrayHasKey( 'to_register_id', $response->get_data()['data']['params'] );
+			}
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+		}
+		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $source['id'] )['status'] );
+	}
+
+	/** Counts and occupied targets are refused without closing the source. */
+	public function test_carry_refuses_a_counting_source_and_an_open_target(): void {
+		$id = $this->counting_session_with_cash_sale();
+		$fields = $this->carry_fields();
+		$route = 'sessions/' . $id . '/carry';
+		$response = $this->post( $route, $fields );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_session_transition_refused', $response->get_data()['code'] );
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'open',
+				'at' => '2026-09-11T11:30:00Z',
+			)
+		);
+		$target = $this->fields();
+		$this->post( 'sessions', $target );
+		$fields['to_register_id'] = $target['register_id'];
+		$response = $this->post( $route, $fields );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_session_already_open', $response->get_data()['code'] );
+		$this->assertSame( $target['id'], $response->get_data()['data']['session_id'] );
+		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $id )['status'] );
+	}
+
+	/** The server-supplied count is a hidden expectation, including on replay. */
+	public function test_blind_carry_response_omits_figures(): void {
+		$id = $this->counting_session_with_cash_sale();
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'open',
+				'at' => '2026-09-11T11:30:00Z',
+			)
+		);
+		$fields = $this->carry_fields();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos_cash' );
+		wp_set_current_user( $user->ID );
+		foreach ( array( 1, 2 ) as $attempt ) {
+			$response = $this->post( 'sessions/' . $id . '/carry', $fields );
+			$this->assertSame( 201, $response->get_status() );
+			$data = $response->get_data();
+			foreach ( array( 'counted', 'expected', 'till_expected', 'variance', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'breakdowns', 'findings' ) as $key ) {
+				$this->assertArrayNotHasKey( $key, $data['closure'] );
+			}
+			foreach ( array( 'counted_float', 'expected_float', 'opening_variance', 'approved_expected' ) as $key ) {
+				$this->assertArrayNotHasKey( $key, $data['session'] );
+			}
+			$this->assertSame( 'store_switch', $data['closure']['reason'] );
+		}
+	}
+
+	/** Persisted server counts remain hidden through the ordinary read/replay routes.
+	 *
+	 * @dataProvider carried_figure_routes
+	 * @param string $route Route shape to read after carrying.
+	 */
+	public function test_blind_carried_count_stays_hidden_on_other_routes( string $route ): void {
+		$source = $this->fields();
+		$this->post( 'sessions', $source );
+		$fields = $this->carry_fields();
+		$this->assertSame( 201, $this->post( 'sessions/' . $source['id'] . '/carry', $fields )->get_status() );
+		$user = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos_cash' );
+		wp_set_current_user( $user->ID );
+		if ( 'detail' === $route ) {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $source['id'] ) );
+		} else {
+			$response = $this->post( $route, array( 'id' => 'closures' === $route ? $fields['closure_id'] : $source['id'] ) );
+		}
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'counted', $response->get_data() );
+	}
+
+	/** Paths that otherwise expose the immutable carried count. */
+	public static function carried_figure_routes(): array {
+		return array( array( 'closures' ), array( 'sessions' ), array( 'detail' ) );
+	}
+
+	/** A target in reach does not authorize closing a source in another store. */
+	public function test_carry_refuses_an_out_of_reach_source(): void {
+		$source = $this->fields( 456 );
+		$this->post( 'sessions', $source );
+		$fields = $this->carry_fields();
+		$fields['to_register_id'] = $this->fields( 789 )['register_id'];
+		$reach = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $reach );
+		try {
+			$response = $this->post( 'sessions/' . $source['id'] . '/carry', $fields );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+		}
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $source['id'] )['status'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $fields['session_id'] ) );
+	}
+
+	/** Accessible route parameters do not authorize replaying rows from another store. */
+	public function test_carry_replay_checks_the_returned_rows_store_reach(): void {
+		$hidden = $this->fields( 456 );
+		$this->post( 'sessions', $hidden );
+		$fields = $this->carry_fields();
+		$fields['to_register_id'] = $this->fields( 456 )['register_id'];
+		$this->assertSame( 201, $this->post( 'sessions/' . $hidden['id'] . '/carry', $fields )->get_status() );
+		$source = $this->fields( 789 );
+		$this->post( 'sessions', $source );
+		$fields['to_register_id'] = $this->fields( 789 )['register_id'];
+		$reach = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $reach );
+		try {
+			$response = $this->post( 'sessions/' . $source['id'] . '/carry', $fields );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+		}
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertArrayNotHasKey( 'closure', $response->get_data() );
+		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $source['id'] )['status'] );
+	}
+
+	/** Every client field is validated before the drawer changes. */
+	public function test_carry_validates_uuids_and_timestamp(): void {
+		$source = $this->fields();
+		$this->post( 'sessions', $source );
+		$fields = $this->carry_fields();
+		foreach ( array( 'to_register_id', 'closure_id', 'session_id', 'at' ) as $key ) {
+			foreach ( array( null, 'invalid', array() ) as $invalid ) {
+				$response = $this->post( 'sessions/' . $source['id'] . '/carry', array_merge( $fields, array( $key => $invalid ) ) );
+				$this->assertSame( 400, $response->get_status() );
+				$this->assertArrayHasKey( $key, $response->get_data()['data']['params'] );
+			}
+		}
+		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $source['id'] )['status'] );
+	}
+
+	/** A write requires cash management even when the requester can view reports. */
+	public function test_carry_requires_cash_management(): void {
+		$source = $this->fields();
+		$this->post( 'sessions', $source );
+		$fields = $this->carry_fields();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'view_woocommerce_pos_reports' );
+		wp_set_current_user( $user->ID );
+		$response = $this->post( 'sessions/' . $source['id'] . '/carry', $fields );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $source['id'] )['status'] );
+	}
+
+	/** A carried closure in a failed opening is just as blind as a success. */
+	public function test_blind_carry_open_race_omits_figures_from_error_closure(): void {
+		$source = $this->fields();
+		$this->post( 'sessions', $source );
+		$fields = $this->carry_fields();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos_cash' );
+		wp_set_current_user( $user->ID );
+		$occupied = null;
+		$race = static function ( $sql ) use ( $fields, &$occupied ) {
+			if ( null === $occupied && false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $fields['to_register_id'] ) ) {
+				$occupied = true;
+				$occupied = ( new Register_Session_Store() )->create(
+					array(
+						'id' => wp_generate_uuid4(),
+						'register_id' => $fields['to_register_id'],
+						'opened_at_gmt' => '2026-09-11 12:00:00',
+						'opened_by' => get_current_user_id(),
+						'counted_float' => '0',
+						'expected_float' => null,
+					)
+				);
+			}
+			return $sql;
+		};
+		add_filter( 'query', $race );
+		try {
+			$response = $this->post( 'sessions/' . $source['id'] . '/carry', $fields );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_session_already_open', $response->get_data()['code'] );
+		$this->assertStringNotContainsString( '"counted"', wp_json_encode( $response->get_data() ) );
+		$closure = $response->get_data()['data']['closure'];
+		$this->assertSame( $fields['closure_id'], $closure['id'] );
+		foreach ( array( 'counted', 'expected', 'variance', 'till_expected', 'period_sales_total', 'breakdowns', 'findings' ) as $key ) {
+			$this->assertArrayNotHasKey( $key, $closure );
+		}
+		$this->assertSame( 'closed', ( new Register_Session_Store() )->get( $source['id'] )['status'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $fields['session_id'] ) );
+	}
+
 	/** The register owns both the returned and persisted session store. */
 	public function test_session_opening_takes_the_store_from_its_register(): void {
 		// Arrange.
@@ -586,7 +845,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$closure = array( 'number', 'printed_number', 'print_count', 'last_printed_at_gmt', 'closure', 'movements' );
 		// Every session column a read returned before closures folded into the session row.
-		$session_keys = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+		$session_keys = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'float_source', 'carried_from_closure_id', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
 		$this->assertSame(
 			1,
 			$wpdb->update(
@@ -670,7 +929,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/** Keys of a stored session row, as the store reads it. */
-	private const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+	private const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'float_source', 'carried_from_closure_id', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
 
 	/** Keys of a stored movement row, as the store reads it. */
 	private const MOVEMENT_KEYS = array( 'id', 'session_id', 'type', 'amount', 'reason', 'actor', 'voids', 'voided_by', 'created_at_gmt' );
