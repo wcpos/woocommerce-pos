@@ -520,7 +520,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_get_current_user()->add_cap( 'view_woocommerce_pos_reports' );
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id ) );
 		$this->assertSame( 500, $response->get_status() );
-		$this->assertSame( 'wcpos_session_write_failed', $response->get_data()['code'] );
+		$this->assertSame( 'wcpos_session_read_failed', $response->get_data()['code'] );
 	}
 
 	/** The device's business day is optional, but supplied values must be date strings. */
@@ -1798,6 +1798,21 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			} finally {
 				remove_filter( Store_Reach::FILTER, $filter );
 			}
+		}
+	}
+	/** A read the table cannot answer is a 500 with the read code, never a 404 for a session that exists. */
+	public function test_failed_read_is_a_read_error_not_a_missing_session(): void {
+		global $wpdb;
+		$id = $this->post( 'sessions', $this->fields() )->get_data()['id'];
+		$store = new \WCPOS\WooCommercePOS\Services\Register_Session_Store();
+		$table = $store->table_name();
+		$wpdb->query( "ALTER TABLE {$table} DROP COLUMN counting_by" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, test setup.
+		try {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/sessions/' . $id ) );
+			$this->assertSame( 500, $response->get_status() );
+			$this->assertSame( 'wcpos_session_read_failed', $response->get_data()['code'] );
+		} finally {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN counting_by BIGINT NULL AFTER counting_started_at_gmt" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, test teardown.
 		}
 	}
 }

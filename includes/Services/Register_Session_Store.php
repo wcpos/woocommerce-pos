@@ -77,6 +77,7 @@ final class Register_Session_Store {
 	/** List newest sessions with optional equality filters.
 	 *
 	 * @param array $args Filters and pagination.
+	 * @throws \RuntimeException When the read fails (a column a stalled upgrade has not added).
 	 */
 	public function list( array $args ): array {
 		global $wpdb;
@@ -100,6 +101,11 @@ final class Register_Session_Store {
 		$columns = self::COLUMNS;
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, fixed columns, prepared predicates, integer pagination.
 		$rows = $wpdb->get_results( "SELECT {$columns} FROM {$table} WHERE {$where} ORDER BY opened_at_gmt DESC, id DESC LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+		// A failed read (a column a stalled upgrade has not added yet) is an error, never an
+		// empty list that the detail route would answer 404 for (CodeRabbit, #2479).
+		if ( '' !== $wpdb->last_error ) {
+			throw new \RuntimeException( 'Register session read failed.' );
+		}
 		return array_map( array( self::class, 'normalize_row' ), $rows );
 	}
 

@@ -120,7 +120,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 			);
 			return is_wp_error( $result ) ? $result : new WP_REST_Response( $this->visible_row( $result ), 201 );
 		} catch ( \RuntimeException $error ) {
-			return $this->error( 'wcpos_session_write_failed', 500 );
+			return $this->error( 'POST' === $request->get_method() ? 'wcpos_session_write_failed' : 'wcpos_session_read_failed', 500 );
 		}
 	}
 

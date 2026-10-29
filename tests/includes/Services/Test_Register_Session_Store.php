@@ -265,4 +265,17 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 		$fields['expected_float'] = null;
 		$this->assertNull( $store->create( $fields )['opening_variance'] );
 	}
+	/** A read the table cannot answer (a column a stalled upgrade has not added) throws; it is never an empty list. */
+	public function test_list_throws_when_the_read_fails(): void {
+		global $wpdb;
+		$store = new Register_Session_Store();
+		$table = $store->table_name();
+		$wpdb->query( "ALTER TABLE {$table} DROP COLUMN counting_by" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, test setup.
+		try {
+			$this->expectException( \RuntimeException::class );
+			$store->list( array() );
+		} finally {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN counting_by BIGINT NULL AFTER counting_started_at_gmt" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned table, test teardown.
+		}
+	}
 }
