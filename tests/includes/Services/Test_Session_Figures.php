@@ -221,6 +221,63 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/**
+	 * Session refunds reduce the tax table even when the sale belongs to another session.
+	 *
+	 * @param bool  $same_session Whether the sale and full refund share a session.
+	 * @param array $expected Expected net, tax and gross amounts.
+	 * @testWith [true, ["0.0000", "0.0000", "0.0000"]]
+	 *           [false, ["-50.0000", "-10.0000", "-60.0000"]]
+	 */
+	public function test_tax_rates_session_refunds_reduce_net_tax_and_gross( bool $same_session, array $expected ): void {
+		$sale_session = $this->closure_session();
+		$session = $same_session ? $sale_session : $this->closure_session();
+		$order = $this->order_with_legs(
+			array(
+				array(
+					'session_id' => $sale_session['id'],
+					'amount' => '120',
+				),
+			)
+		);
+		$order->set_total( '120' );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( $same_session ? '120' : '60' );
+		$refund->set_total( $same_session ? '-120' : '-60' );
+		$refund->update_meta_data( '_wcpos_session', $session['id'] );
+		foreach ( array(
+			array( $order, '100', '20' ),
+			array( $refund, $same_session ? '-100' : '-50', $same_session ? '-20' : '-10' ),
+		) as list( $document, $net, $tax ) ) {
+			$item = new \WC_Order_Item_Product();
+			$item->set_total( $net );
+			$item->set_subtotal( $net );
+			$item->set_taxes(
+				array(
+					'total' => array( 1 => $tax ),
+					'subtotal' => array( 1 => $tax ),
+				)
+			);
+			$document->add_item( $item );
+			$line = new \WC_Order_Item_Tax();
+			$line->set_rate_id( 1 );
+			$line->set_label( 'VAT 20%' );
+			$line->set_rate_percent( '20' );
+			$line->set_tax_total( $tax );
+			$document->add_item( $line );
+			$document->save();
+		}
+
+		$rates = Session_Figures::for_session( $session )->tax_rates();
+
+		$this->assertCount( 1, $rates );
+		$this->assertSame( 'VAT 20%', $rates[1]['name'] );
+		$this->assertSame( $expected[0], $rates[1]['net'] );
+		$this->assertSame( $expected[1], $rates[1]['tax'] );
+		$this->assertSame( $expected[2], $rates[1]['gross'] );
+	}
+
 	/** Re-completed sales with no legs in this session still contribute their quantities. */
 	public function test_items_sold_includes_completion_history_only_orders(): void {
 		$first = $this->closure_session( null, 'open' );

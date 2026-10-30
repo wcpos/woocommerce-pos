@@ -205,30 +205,44 @@ final class Session_Figures {
 		}
 		$rates = array();
 		foreach ( $this->orders() as $order ) {
-			$net_by_rate = array();
-			foreach ( $order ? $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) : array() as $item ) {
-				foreach ( array_keys( $item->get_taxes()['total'] ) as $id ) {
-					$net_by_rate[ $id ][] = (string) $item->get_total();
-				}
+			if ( $order ) {
+				$this->add_order_tax_rates( $order, $rates );
 			}
-			foreach ( $order ? $order->get_items( 'tax' ) : array() as $line ) {
-				$id = $line->get_rate_id();
-				$amount = Closure_Store::sum( array( $line->get_tax_total(), $line->get_shipping_tax_total() ) );
-				$net = Closure_Store::sum( $net_by_rate[ $id ] ?? array() );
-				$rates[ $id ] = $rates[ $id ] ?? array(
-					'rate' => $id,
-					'name' => $line->get_label(),
-					'net' => '0.0000',
-					'tax' => '0.0000',
-					'gross' => '0.0000',
-				);
-				$rates[ $id ]['net'] = Closure_Store::sum( array( $rates[ $id ]['net'], $net ) );
-				$rates[ $id ]['tax'] = Closure_Store::sum( array( $rates[ $id ]['tax'], $amount ) );
-				$rates[ $id ]['gross'] = Closure_Store::sum( array( $rates[ $id ]['net'], $rates[ $id ]['tax'] ) );
-			}
+		}
+		foreach ( $this->refunds() as $refund ) {
+			$this->add_order_tax_rates( $refund['refund'], $rates );
 		}
 		$this->memo['tax_rates'] = $rates;
 		return $rates;
+	}
+
+	/** Add a sale's or refund's signed tax amounts to the session rates.
+	 *
+	 * @param \WC_Abstract_Order $order Sale or refund.
+	 * @param array              $rates Accumulated rates.
+	 */
+	private function add_order_tax_rates( \WC_Abstract_Order $order, array &$rates ): void {
+		$net_by_rate = array();
+		foreach ( $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) as $item ) {
+			foreach ( array_keys( $item->get_taxes()['total'] ) as $id ) {
+				$net_by_rate[ $id ][] = (string) $item->get_total();
+			}
+		}
+		foreach ( $order->get_items( 'tax' ) as $line ) {
+			$id = $line->get_rate_id();
+			$amount = Closure_Store::sum( array( $line->get_tax_total(), $line->get_shipping_tax_total() ) );
+			$net = Closure_Store::sum( $net_by_rate[ $id ] ?? array() );
+			$rates[ $id ] = $rates[ $id ] ?? array(
+				'rate' => $id,
+				'name' => $line->get_label(),
+				'net' => '0.0000',
+				'tax' => '0.0000',
+				'gross' => '0.0000',
+			);
+			$rates[ $id ]['net'] = Closure_Store::sum( array( $rates[ $id ]['net'], $net ) );
+			$rates[ $id ]['tax'] = Closure_Store::sum( array( $rates[ $id ]['tax'], $amount ) );
+			$rates[ $id ]['gross'] = Closure_Store::sum( array( $rates[ $id ]['net'], $rates[ $id ]['tax'] ) );
+		}
 	}
 
 	/** Coupon-line count and gross order discounts, without subtracting refunds. */
