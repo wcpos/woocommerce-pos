@@ -441,7 +441,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** A thin X-report needs no closure, number or count. */
+	/** A live X-report needs no closure, number or count, and carries the session tenders. */
 	public function test_xreport_live_session_and_missing_or_scoped_documents(): void {
 		$session = $this->closure_session();
 		$order = $this->closure_ledger( $session );
@@ -452,7 +452,8 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $data['closure']['has_sales'] );
 		$this->assertFalse( $data['closure']['has_tax_rates'] );
 		$this->assertFalse( $data['closure']['has_perpetual'] );
-		$this->assertFalse( $data['closure']['has_payment_methods'] );
+		// The live X-report carries the session's tenders, as the stored closure does.
+		$this->assertTrue( $data['closure']['has_payment_methods'] );
 		$this->assertTrue( $data['fiscal']['is_closure_document'] );
 		$this->assertTrue( $data['fiscal']['is_x_report'] );
 		$this->assertSame( '', $data['fiscal']['receipt_number'] );
