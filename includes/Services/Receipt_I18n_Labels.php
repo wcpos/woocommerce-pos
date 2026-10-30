@@ -57,6 +57,7 @@ class Receipt_I18n_Labels {
 			'count_slip' => __( 'Count slip', 'woocommerce-pos' ),
 			'counters' => __( 'Counters', 'woocommerce-pos' ),
 			'net_sales' => __( 'Net sales', 'woocommerce-pos' ),
+			'cash' => __( 'Cash', 'woocommerce-pos' ),
 			'x_report' => __( 'X-report', 'woocommerce-pos' ),
 			'closure' => __( 'Closure', 'woocommerce-pos' ),
 			'opened' => __( 'Opened', 'woocommerce-pos' ),
