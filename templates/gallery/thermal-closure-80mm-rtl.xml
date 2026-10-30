@@ -39,8 +39,8 @@ these star columns with hard-coded widths.
   {{#closure.period_refunds_total_display}}<row><col width="*" align="left">{{closure.period_refunds_total_display}}</col><col width="*" align="right">{{i18n.period_refunds}}</col></row>{{/closure.period_refunds_total_display}}
   {{#closure.has_discounts}}<row><col width="*" align="left">{{closure.breakdowns.discounts.amount_display}}</col><col width="*" align="right">{{i18n.discounts}} · {{closure.breakdowns.discounts.count}}</col></row>{{/closure.has_discounts}}
   {{#closure.net_sales_display}}<bold><row><col width="*" align="left">{{closure.net_sales_display}}</col><col width="*" align="right">{{i18n.net_sales}}</col></row></bold>{{/closure.net_sales_display}}
-  {{#closure.breakdowns.transaction_count}}<row><col width="*" align="left">{{closure.breakdowns.transaction_count}}</col><col width="*" align="right">{{i18n.transactions}}</col></row>{{/closure.breakdowns.transaction_count}}
-  {{#closure.breakdowns.refund_count}}<row><col width="*" align="left">{{closure.breakdowns.refund_count}}</col><col width="*" align="right">{{i18n.refunds}}</col></row>{{/closure.breakdowns.refund_count}}
+  <row><col width="*" align="left">{{closure.breakdowns.transaction_count}}</col><col width="*" align="right">{{i18n.transactions}}</col></row>
+  <row><col width="*" align="left">{{closure.breakdowns.refund_count}}</col><col width="*" align="right">{{i18n.refunds}}</col></row>
   {{#closure.breakdowns.items_sold}}<row><col width="*" align="left">{{closure.breakdowns.items_sold}}</col><col width="*" align="right">{{i18n.items_sold}}</col></row>{{/closure.breakdowns.items_sold}}
   {{#closure.breakdowns.average_sale_display}}<row><col width="*" align="left">{{closure.breakdowns.average_sale_display}}</col><col width="*" align="right">{{i18n.average_sale}}</col></row>{{/closure.breakdowns.average_sale_display}}
   {{/closure.has_sales}}

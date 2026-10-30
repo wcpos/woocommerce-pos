@@ -18,8 +18,8 @@
   {{#closure.period_refunds_total_display}}<row><col width="*">{{i18n.period_refunds}}</col><col width="*" align="right">{{closure.period_refunds_total_display}}</col></row>{{/closure.period_refunds_total_display}}
   {{#closure.has_discounts}}<row><col width="*">{{i18n.discounts}} · {{closure.breakdowns.discounts.count}}</col><col width="*" align="right">{{closure.breakdowns.discounts.amount_display}}</col></row>{{/closure.has_discounts}}
   {{#closure.net_sales_display}}<bold><row><col width="*">{{i18n.net_sales}}</col><col width="*" align="right">{{closure.net_sales_display}}</col></row></bold>{{/closure.net_sales_display}}
-  {{#closure.breakdowns.transaction_count}}<row><col width="*">{{i18n.transactions}}</col><col width="*" align="right">{{closure.breakdowns.transaction_count}}</col></row>{{/closure.breakdowns.transaction_count}}
-  {{#closure.breakdowns.refund_count}}<row><col width="*">{{i18n.refunds}}</col><col width="*" align="right">{{closure.breakdowns.refund_count}}</col></row>{{/closure.breakdowns.refund_count}}
+  <row><col width="*">{{i18n.transactions}}</col><col width="*" align="right">{{closure.breakdowns.transaction_count}}</col></row>
+  <row><col width="*">{{i18n.refunds}}</col><col width="*" align="right">{{closure.breakdowns.refund_count}}</col></row>
   {{#closure.breakdowns.items_sold}}<row><col width="*">{{i18n.items_sold}}</col><col width="*" align="right">{{closure.breakdowns.items_sold}}</col></row>{{/closure.breakdowns.items_sold}}
   {{#closure.breakdowns.average_sale_display}}<row><col width="*">{{i18n.average_sale}}</col><col width="*" align="right">{{closure.breakdowns.average_sale_display}}</col></row>{{/closure.breakdowns.average_sale_display}}
   {{/closure.has_sales}}

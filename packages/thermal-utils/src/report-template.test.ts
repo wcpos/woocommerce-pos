@@ -27,7 +27,9 @@ describe.each([
 			for (const row of rows) expect(row.children.length).toBe(2);
 			expect(rows[0].textContent).toBe('Payments3');
 			expect(root.textContent!.match(/Visa/g)).toHaveLength(1);
-			expect(root.textContent!.match(/Subtotal/g)).toHaveLength(2);
+			// A summary row's heading is its own first cell, never a generic word.
+			expect(root.textContent!.match(/Card subtotal|Cash subtotal/g)).toHaveLength(2);
+			expect(root.textContent).not.toContain('Subtotal');
 		} else {
 			for (const text of ['123 Bean Street', '020 1234 5678', 'Generated', 'Alex']) expect(html).toContain(text);
 		}
@@ -49,7 +51,9 @@ describe.each([
 		const data = structuredClone(fixture);
 		data.i18n = { subtotal: 'Sous-total', total: 'Somme', generated: 'Généré' };
 		const html = render(template, data);
-		expect(html).toContain(file.endsWith('.xml') ? 'Sous-total' : 'Généré');
+		// The 58 mm paper prints the summary rows' own labels, so its only i18n word is none;
+		// the letterhead prints the generated line.
+		if (!file.endsWith('.xml')) expect(html).toContain('Généré');
 		data.fiscal.is_report_document = false;
 		expect(render(template, data)).not.toContain('Sales report');
 	});

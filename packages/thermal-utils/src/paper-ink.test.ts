@@ -21,7 +21,8 @@ describe.each(papers)('%s', (file) => {
 	});
 
 	it('prints no fills: no background on any element', () => {
+		// print-color-adjust stays on the wrapper (the renderer test requires it so rules print);
+		// with no background anywhere it has nothing to force.
 		expect(html).not.toMatch(/background(?:-color)?\s*:/);
-		expect(html).not.toMatch(/print-color-adjust/);
 	});
 });
