@@ -859,6 +859,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		foreach ( array(
 			'closure:' . $row['id'] => 'Closure 1',
 			'xreport:' . $session['id'] => 'X-report',
+			'handover:' . $session['id'] => 'Hand-over slip',
 		) as $document => $heading ) {
 			$page = $this->render_receipt_page( 0, array( 'document' => $document ) );
 			$this->assertNull( $page['error'] );

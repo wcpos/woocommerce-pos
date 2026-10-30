@@ -40,7 +40,7 @@ class Template_Pdf_Service {
 
 		// Prepared sale data is also passed by the PDF route; only frozen documents (refund, closure,
 		// X-report) must not fall back to a native integration that would render the sale.
-		if ( in_array( $receipt_data['fiscal']['document_type'] ?? '', array( 'refund', 'closure', 'xreport' ), true ) && $this->is_native( $template ) ) {
+		if ( in_array( $receipt_data['fiscal']['document_type'] ?? '', array( 'refund', 'closure', 'xreport', 'handover' ), true ) && $this->is_native( $template ) ) {
 			throw new \RuntimeException( 'WP Overnight templates cannot render frozen receipt documents.' );
 		}
 		$wp_overnight_pdf = $this->maybe_render_wp_overnight_pdf( $template, $order );
