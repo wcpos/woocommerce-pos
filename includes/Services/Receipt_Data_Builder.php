@@ -353,12 +353,18 @@ class Receipt_Data_Builder {
 
 		// A cell carries its column's label so a narrow template can print "Label  value" lines.
 		$column_labels = array_column( $data['report']['columns'] ?? array(), 'label' );
-		$mark_first = static function ( array $entries ) use ( $column_labels ): array {
+		$column_types  = array_column( $data['report']['columns'] ?? array(), 'type' );
+		// `is_label`: the first cell merely repeats the heading a narrow template prints above the
+		// row (a row whose label IS its first cell; a subtotal or total whose first column is text),
+		// so that template may leave it out. A first cell that carries its own value (the time on a
+		// cash-movements row, the count on an ungrouped sales row) keeps `is_label` false.
+		$mark_first = static function ( array $entries, ?string $row_label = null, bool $summary = false ) use ( $column_labels, $column_types ): array {
 			$first = true;
 			foreach ( $entries as $index => &$entry ) {
 				$entry['is_first'] = $first;
 				if ( isset( $entry['formatted'], $column_labels[ $index ] ) ) {
-					$entry['label'] = $entry['label'] ?? $column_labels[ $index ];
+					$entry['label']    = $entry['label'] ?? $column_labels[ $index ];
+					$entry['is_label'] = $first && ( $summary ? 'text' === ( $column_types[ $index ] ?? '' ) : (string) $entry['formatted'] === (string) $row_label );
 				}
 				$first = false;
 			}
@@ -367,7 +373,7 @@ class Receipt_Data_Builder {
 		$mark_rows = static function ( array $rows ) use ( $mark_first ): array {
 			foreach ( $rows as &$row ) {
 				if ( isset( $row['cells'] ) ) {
-					$row['cells'] = $mark_first( $row['cells'] );
+					$row['cells'] = $mark_first( $row['cells'], (string) ( $row['label'] ?? '' ) );
 				}
 			}
 			return $rows;
@@ -381,12 +387,12 @@ class Receipt_Data_Builder {
 		foreach ( $data['report']['groups'] ?? array() as $group_key => $group ) {
 			$group['rows'] = $mark_rows( $group['rows'] ?? array() );
 			if ( isset( $group['subtotal']['cells'] ) ) {
-				$group['subtotal']['cells'] = $mark_first( $group['subtotal']['cells'] );
+				$group['subtotal']['cells'] = $mark_first( $group['subtotal']['cells'], null, true );
 			}
 			$data['report']['groups'][ $group_key ] = $group;
 		}
 		if ( isset( $data['report']['totals']['cells'] ) ) {
-			$data['report']['totals']['cells'] = $mark_first( $data['report']['totals']['cells'] );
+			$data['report']['totals']['cells'] = $mark_first( $data['report']['totals']['cells'], null, true );
 		}
 
 		/**

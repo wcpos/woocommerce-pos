@@ -59,9 +59,15 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 		'thermal-simple-80mm',
 		'thermal-simple-80mm-rtl',
 		'report-default',
+		'report-letterhead',
 		'thermal-report-80mm',
+		'thermal-report-58mm',
 		'closure-default',
+		'closure-detailed',
 		'thermal-closure-80mm',
+		'thermal-count-slip-80mm',
+		'thermal-closure-80mm-rtl',
+		'thermal-closure-58mm',
 	);
 
 	/**

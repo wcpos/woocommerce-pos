@@ -1,0 +1,74 @@
+<article style="font-family: sans-serif; color: #111827; max-width: 746px; margin: auto; padding: 24px; print-color-adjust: exact; -webkit-print-color-adjust: exact;">
+{{#fiscal.is_closure_document}}
+  <header style="border-bottom: 1px solid #d1d5db; padding-bottom: 16px; margin-bottom: 20px;">
+    <strong style="font-size: 18px;">{{store.name}}</strong>
+    {{#store.address_lines}}<div style="font-size: 12px;">{{.}}</div>{{/store.address_lines}}
+    {{#store.tax_ids}}<div style="font-size: 12px; color: #6b7280;">{{#label}}{{label}}: {{/label}}{{value}}</div>{{/store.tax_ids}}
+    <h1 style="font-size: 24px; margin: 16px 0 8px;">{{#fiscal.is_x_report}}{{i18n.x_report}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure}} {{closure.number}}{{/fiscal.is_x_report}}</h1>
+    <p style="font-size: 12px; color: #6b7280;">{{#fiscal.is_x_report}}{{i18n.x_report_subtitle}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure_subtitle}}{{/fiscal.is_x_report}}</p>
+    <strong>{{register.name}}</strong>
+    {{#fiscal.is_reprint}}<p><strong>{{i18n.copy}} {{fiscal.reprint_count}}</strong> · {{order.printed.datetime}}</p>{{/fiscal.is_reprint}}
+    {{#closure.opened_at.datetime}}<p style="font-size: 12px; margin: 8px 0;">{{i18n.opened}}: {{closure.opened_at.datetime}} · {{closure.breakdowns.labels.opened_by_name}}</p>{{/closure.opened_at.datetime}}
+    {{#closure.closed_at.datetime}}<p style="font-size: 12px; margin: 8px 0;">{{i18n.closed}}: {{closure.closed_at.datetime}} · {{closure.breakdowns.labels.closed_by_name}}</p>{{/closure.closed_at.datetime}}
+    {{#closure.approved_by}}<p style="font-size: 12px; margin: 8px 0;">{{i18n.approver}}: {{closure.breakdowns.labels.approved_by_name}}</p>{{/closure.approved_by}}
+  </header>
+  {{#closure.has_sales}}
+  <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.sales}}</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><tbody>
+    {{#closure.period_sales_total_display}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.period_sales}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.period_sales_total_display}}</td></tr>{{/closure.period_sales_total_display}}
+    {{#closure.period_refunds_total_display}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.period_refunds}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.period_refunds_total_display}}</td></tr>{{/closure.period_refunds_total_display}}
+    {{#closure.has_discounts}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.discounts}} <span style="color: #6b7280;">· {{closure.breakdowns.discounts.count}}</span></td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.breakdowns.discounts.amount_display}}</td></tr>{{/closure.has_discounts}}
+    {{#closure.net_sales_display}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;"><strong>{{i18n.net_sales}}</strong></td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;"><strong>{{closure.net_sales_display}}</strong></td></tr>{{/closure.net_sales_display}}
+  </tbody><tbody>
+    <tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.transactions}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.breakdowns.transaction_count}}</td></tr>
+    <tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.refunds}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.breakdowns.refund_count}}</td></tr>
+    {{#closure.breakdowns.items_sold}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.items_sold}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.breakdowns.items_sold}}</td></tr>{{/closure.breakdowns.items_sold}}
+    {{#closure.breakdowns.average_sale_display}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.average_sale}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.breakdowns.average_sale_display}}</td></tr>{{/closure.breakdowns.average_sale_display}}
+  </tbody></table>
+  {{/closure.has_sales}}
+  {{#closure.has_tax_rates}}
+  <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.tax_rates}}</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><thead><tr><th style="text-align: left; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.tax_rate}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.net}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.tax}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.gross}}</th></tr></thead><tbody>
+    {{#closure.breakdowns.tax_rates}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{#name}}{{name}}{{/name}}{{^name}}{{rate}}{{/name}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{net_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{tax_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{gross_display}}</td></tr>{{/closure.breakdowns.tax_rates}}
+  </tbody></table>
+  {{/closure.has_tax_rates}}
+  <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.tenders}}</h2>
+  {{#closure.has_payment_methods}}
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><thead><tr><th style="text-align: left; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.payment_method}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.sales}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.refunds}}</th></tr></thead><tbody>
+    {{#closure.breakdowns.payment_methods}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{#name}}{{name}}{{/name}}{{^name}}{{method}}{{/name}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{sales_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{refunds_display}}</td></tr>{{/closure.breakdowns.payment_methods}}
+  </tbody></table>
+  {{/closure.has_payment_methods}}
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><thead><tr><th style="text-align: left; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.tender}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.expected}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.counted}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.variance}}</th></tr></thead><tbody>
+    {{#closure.tenders}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{label}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{expected_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{counted_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{variance_display}} {{variance_label}}</td></tr>{{/closure.tenders}}
+  </tbody></table>
+  {{#closure.breakdowns.opening_float}}
+  <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.opening_float}}</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><thead><tr><th style="text-align: left; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.expected}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.counted}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.variance}}</th></tr></thead><tbody><tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{expected_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{counted_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{variance_display}}</td></tr></tbody></table>
+  {{/closure.breakdowns.opening_float}}
+  {{#closure.has_denominations}}
+  <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.denominations}}</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><thead><tr><th style="text-align: left; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.denominations}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.pieces}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.amount}}</th></tr></thead><tbody>
+    {{#closure.breakdowns.denominations}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{value_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{pieces}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{amount_display}}</td></tr>{{/closure.breakdowns.denominations}}
+  </tbody></table>
+  {{/closure.has_denominations}}
+  {{#closure.has_movements}}
+  <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.cash_movements}}</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><thead><tr><th style="text-align: left; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.time}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.type}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.amount}}</th><th style="text-align: right; padding: 6px 4px; border-bottom: 1px solid #d1d5db;">{{i18n.reason}}</th></tr></thead><tbody>
+    {{#closure.breakdowns.movements}}<tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{created_at.time}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{type_label}}{{#voided}} · {{i18n.voided}}{{/voided}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{amount_display}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{reason}}</td></tr>{{/closure.breakdowns.movements}}
+  </tbody></table>
+  {{/closure.has_movements}}
+  {{#closure.breakdowns.drawer_openings}}<p style="font-size: 12px;">{{i18n.drawer_openings}} · {{closure.breakdowns.drawer_openings}}</p>{{/closure.breakdowns.drawer_openings}}
+  {{#closure.has_variance_note}}<p style="font-size: 12px; color: #6b7280; font-variant: small-caps;">{{i18n.variance_note}}</p><blockquote style="margin: 8px 0; font-size: 12px;">{{closure.breakdowns.variance_note}}</blockquote>{{/closure.has_variance_note}}
+  {{#closure.has_perpetual}}
+  <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.perpetual_totals}}</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><tbody><tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.perpetual_sales}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.perpetual_sales_total_display}}</td></tr><tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.perpetual_refunds}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.perpetual_refunds_total_display}}</td></tr></tbody></table>
+  {{/closure.has_perpetual}}
+  {{#closure.unsynced_count}}<p>{{closure.unsynced_count}} {{i18n.unsynced_sales}} · {{closure.unsynced_total_display}}</p>{{/closure.unsynced_count}}
+  <footer style="border-top: 1px solid #d1d5db; padding-top: 12px; margin-top: 24px; font-size: 11px; color: #111827;">
+  {{#closure.has_sales}}<p style="font-size: 12px;">{{i18n.cashiers}}: {{#closure.breakdowns.cashiers}}<span>{{name}} </span>{{/closure.breakdowns.cashiers}}</p>{{/closure.has_sales}}
+  {{#fiscal.hash}}<p>{{i18n.record_hash}}: {{fiscal.hash}}</p>{{/fiscal.hash}}
+  <table style="width: 100%; margin: 32px 0 16px;"><tbody><tr><td><div style="border-bottom: 1px solid #111827; width: 240px; height: 24px;"></div><p>{{i18n.cashier_signature}}</p></td><td><div style="border-bottom: 1px solid #111827; width: 240px; height: 24px;"></div><p>{{i18n.manager_signature}}</p></td></tr></tbody></table>
+  <p style="color: #6b7280;">{{i18n.management_report}}</p>
+  {{software.name}} {{software.plugin_version}} · {{order.printed.datetime}}</footer>
+{{/fiscal.is_closure_document}}
+</article>

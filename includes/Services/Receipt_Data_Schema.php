@@ -1838,6 +1838,10 @@ class Receipt_Data_Schema {
 					'type' => 'string',
 					'label' => __( 'Column label', 'woocommerce-pos' ),
 				),
+				'is_label' => array(
+					'type' => 'boolean',
+					'label' => __( 'Repeats the row heading', 'woocommerce-pos' ),
+				),
 				'value' => array(
 					'type' => 'string',
 					'label' => __( 'Value', 'woocommerce-pos' ),
@@ -2025,7 +2029,7 @@ class Receipt_Data_Schema {
 	private static function require_report_fields( array $schema ): array {
 		if ( isset( $schema['properties'] ) ) {
 			// is_first and a cell's column label are builder decoration, not required in older producer/preview documents.
-			$optional = isset( $schema['properties']['formatted'] ) ? array( 'is_first', 'label' ) : array( 'is_first' );
+			$optional = isset( $schema['properties']['formatted'] ) ? array( 'is_first', 'label', 'is_label' ) : array( 'is_first' );
 			$schema['required'] = array_values( array_diff( array_keys( $schema['properties'] ), $optional ) );
 			$schema['properties'] = array_map( array( self::class, 'require_report_fields' ), $schema['properties'] );
 		}

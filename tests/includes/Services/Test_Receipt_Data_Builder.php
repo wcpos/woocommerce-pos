@@ -288,6 +288,16 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 				$this->assertSame( 0 === $index, $entry['is_first'] );
 			}
 		}
+		// A first cell that repeats the row heading is marked so a narrow template may omit it;
+		// one that carries its own value (a time on a movements row) is not.
+		$first_row = $report['groups'][0]['rows'][0];
+		$this->assertTrue( $first_row['cells'][0]['is_label'] );
+		$this->assertFalse( $first_row['cells'][1]['is_label'] );
+		$this->assertTrue( $report['totals']['cells'][0]['is_label'] );
+		$moved = $core;
+		$moved['report']['groups'][0]['rows'][0]['label'] = 'Petty cash';
+		$document_moved = $this->builder->build_report_document( 'sales', 'Sales', $scope, $moved );
+		$this->assertFalse( $document_moved['report']['groups'][0]['rows'][0]['cells'][0]['is_label'] );
 		$this->assertTrue( \WCPOS\WooCommercePOS\Services\Report_Document_Validator::validate( $document ) );
 	}
 

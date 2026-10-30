@@ -1,0 +1,76 @@
+<receipt paper-width="32">
+  {{#fiscal.is_closure_document}}
+  <align mode="center">
+    <bold><text>{{store.name}}</text></bold>
+    {{#store.address_lines}}<text>{{.}}</text>{{/store.address_lines}}
+    {{#store.tax_ids}}<text>{{#label}}{{label}}: {{/label}}{{value}}</text>{{/store.tax_ids}}
+    <bold><text>{{#fiscal.is_x_report}}{{i18n.x_report}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure}} {{closure.number}}{{/fiscal.is_x_report}}</text></bold>
+    <text>{{#fiscal.is_x_report}}{{i18n.x_report_subtitle}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure_subtitle}}{{/fiscal.is_x_report}}</text>
+    <text>{{register.name}}</text>
+    {{#fiscal.is_reprint}}<bold><text>{{i18n.copy}} {{fiscal.reprint_count}}</text></bold><text>{{order.printed.datetime}}</text>{{/fiscal.is_reprint}}
+  </align>
+  {{#closure.opened_at.datetime}}<text>{{i18n.opened}}: {{closure.opened_at.datetime}}</text><text>{{closure.breakdowns.labels.opened_by_name}}</text>{{/closure.opened_at.datetime}}
+  {{#closure.closed_at.datetime}}<text>{{i18n.closed}}: {{closure.closed_at.datetime}}</text><text>{{closure.breakdowns.labels.closed_by_name}}</text>{{/closure.closed_at.datetime}}
+  {{#closure.approved_by}}<text>{{i18n.approver}}: {{closure.breakdowns.labels.approved_by_name}}</text>{{/closure.approved_by}}
+  {{#closure.has_sales}}
+  <line /><bold><text>{{i18n.sales}}</text></bold>
+  {{#closure.period_sales_total_display}}<row><col width="*">{{i18n.period_sales}}</col><col width="*" align="right">{{closure.period_sales_total_display}}</col></row>{{/closure.period_sales_total_display}}
+  {{#closure.period_refunds_total_display}}<row><col width="*">{{i18n.period_refunds}}</col><col width="*" align="right">{{closure.period_refunds_total_display}}</col></row>{{/closure.period_refunds_total_display}}
+  {{#closure.has_discounts}}<row><col width="*">{{i18n.discounts}} · {{closure.breakdowns.discounts.count}}</col><col width="*" align="right">{{closure.breakdowns.discounts.amount_display}}</col></row>{{/closure.has_discounts}}
+  {{#closure.net_sales_display}}<bold><row><col width="*">{{i18n.net_sales}}</col><col width="*" align="right">{{closure.net_sales_display}}</col></row></bold>{{/closure.net_sales_display}}
+  <row><col width="*">{{i18n.transactions}}</col><col width="*" align="right">{{closure.breakdowns.transaction_count}}</col></row>
+  <row><col width="*">{{i18n.refunds}}</col><col width="*" align="right">{{closure.breakdowns.refund_count}}</col></row>
+  {{#closure.breakdowns.items_sold}}<row><col width="*">{{i18n.items_sold}}</col><col width="*" align="right">{{closure.breakdowns.items_sold}}</col></row>{{/closure.breakdowns.items_sold}}
+  {{#closure.breakdowns.average_sale_display}}<row><col width="*">{{i18n.average_sale}}</col><col width="*" align="right">{{closure.breakdowns.average_sale_display}}</col></row>{{/closure.breakdowns.average_sale_display}}
+  {{/closure.has_sales}}
+  {{#closure.has_tax_rates}}
+  <line /><bold><text>{{i18n.tax_rates}}</text></bold>
+  {{#closure.breakdowns.tax_rates}}<bold><text>{{#name}}{{name}}{{/name}}{{^name}}{{rate}}{{/name}}</text></bold>
+  <row><col width="*">{{i18n.net}}</col><col width="*" align="right">{{net_display}}</col></row>
+  <row><col width="*">{{i18n.tax}}</col><col width="*" align="right">{{tax_display}}</col></row>
+  <row><col width="*">{{i18n.gross}}</col><col width="*" align="right">{{gross_display}}</col></row>
+  {{/closure.breakdowns.tax_rates}}
+  {{/closure.has_tax_rates}}
+  <line /><bold><text>{{i18n.tenders}}</text></bold>
+  {{#closure.has_payment_methods}}
+  <bold><text>{{i18n.payment_method}}</text></bold>
+  {{#closure.breakdowns.payment_methods}}<bold><text>{{#name}}{{name}}{{/name}}{{^name}}{{method}}{{/name}}</text></bold>
+  <row><col width="*">{{i18n.sales}}</col><col width="*" align="right">{{sales_display}}</col></row>
+  <row><col width="*">{{i18n.refunds}}</col><col width="*" align="right">{{refunds_display}}</col></row>
+  {{/closure.breakdowns.payment_methods}}
+  {{/closure.has_payment_methods}}
+  <text>{{i18n.counted}}</text>
+  {{#closure.tenders}}<bold><text>{{label}}</text></bold>
+  <row><col width="*">{{i18n.expected}}</col><col width="*" align="right">{{expected_display}}</col></row>
+  <row><col width="*">{{i18n.counted}}</col><col width="*" align="right">{{counted_display}}</col></row>
+  <row><col width="*">{{i18n.variance}}</col><col width="*" align="right">{{variance_display}}</col></row>
+  {{#has_variance}}<text>{{variance_label}} {{variance_absolute_display}}</text>{{/has_variance}}{{/closure.tenders}}
+  {{#closure.breakdowns.opening_float}}
+  <line /><bold><text>{{i18n.opening_float}}</text></bold>
+  <row><col width="*">{{i18n.expected}}</col><col width="*" align="right">{{expected_display}}</col></row>
+  <row><col width="*">{{i18n.counted}}</col><col width="*" align="right">{{counted_display}}</col></row>
+  <row><col width="*">{{i18n.variance}}</col><col width="*" align="right">{{variance_display}}</col></row>
+  {{/closure.breakdowns.opening_float}}
+  {{#closure.has_movements}}
+  <line /><bold><text>{{i18n.cash_movements}}</text></bold>
+  {{#closure.breakdowns.movements}}
+  <text>{{created_at.time}}</text>
+  <row><col width="*">{{type_label}}{{#voided}} · {{i18n.voided}}{{/voided}}</col><col width="*" align="right">{{amount_display}}</col></row>
+  <text>{{reason}}</text>
+  {{/closure.breakdowns.movements}}
+  {{/closure.has_movements}}
+  {{#closure.breakdowns.drawer_openings}}<row><col width="*">{{i18n.drawer_openings}}</col><col width="*" align="right">{{closure.breakdowns.drawer_openings}}</col></row>{{/closure.breakdowns.drawer_openings}}
+  {{#closure.has_variance_note}}<text>{{i18n.variance_note}}</text><text>{{closure.breakdowns.variance_note}}</text>{{/closure.has_variance_note}}
+  {{#closure.has_perpetual}}
+  <line /><bold><text>{{i18n.perpetual_totals}}</text></bold>
+  <row><col width="*">{{i18n.perpetual_sales}}</col><col width="*" align="right">{{closure.perpetual_sales_total_display}}</col></row>
+  <row><col width="*">{{i18n.perpetual_refunds}}</col><col width="*" align="right">{{closure.perpetual_refunds_total_display}}</col></row>
+  {{/closure.has_perpetual}}
+  {{#closure.unsynced_count}}<text>{{closure.unsynced_count}} {{i18n.unsynced_sales}} · {{closure.unsynced_total_display}}</text>{{/closure.unsynced_count}}
+  <line />
+  {{#closure.has_sales}}<text>{{i18n.cashiers}}</text>{{#closure.breakdowns.cashiers}}<text>{{name}}</text>{{/closure.breakdowns.cashiers}}{{/closure.has_sales}}
+  {{#fiscal.hash}}<text>{{i18n.record_hash}}: {{fiscal.hash}}</text>{{/fiscal.hash}}
+  <align mode="center"><text>{{i18n.management_report}}</text><text>{{software.name}} {{software.plugin_version}}</text><text>{{order.printed.datetime}}</text></align>
+  <feed lines="3" /><cut />
+  {{/fiscal.is_closure_document}}
+</receipt>

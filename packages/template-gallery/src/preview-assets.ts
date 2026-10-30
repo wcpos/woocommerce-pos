@@ -39,6 +39,12 @@ const previewKeys = new Set([
 	'thermal-report-80mm',
 	'closure-default',
 	'thermal-closure-80mm',
+	'closure-detailed',
+	'thermal-closure-58mm',
+	'thermal-closure-80mm-rtl',
+	'thermal-count-slip-80mm',
+	'report-letterhead',
+	'thermal-report-58mm',
 ]);
 
 function getPreviewBaseUrl(): string | undefined {
