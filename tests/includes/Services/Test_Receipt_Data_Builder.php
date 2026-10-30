@@ -83,7 +83,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertTrue( $row['has_variance_note'] );
 		$this->assertTrue( $row['has_denominations'] );
 		$this->assertSame( 3, $row['breakdowns']['discounts']['count'] );
-		$this->assertSame( 47, $row['breakdowns']['items_sold'] );
+		$this->assertSame( '47', $row['breakdowns']['items_sold'] );
 		$this->assertSame( 2, $row['breakdowns']['drawer_openings'] );
 		$this->assertSame( '£12.50', $row['breakdowns']['discounts']['amount_display'] );
 		$this->assertSame( '£20.83', $row['breakdowns']['average_sale_display'] );
@@ -106,6 +106,68 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		) as $discounts ) {
 			$input['breakdowns']['discounts'] = $discounts;
 			$this->assertSame( 0 !== $discounts['count'] || '0.0000' !== $discounts['amount'], $this->builder->build_closure_document( $input )['closure']['has_discounts'] );
+		}
+	}
+
+	/**
+	 * Stored quantities remain decimals independently of the money precision.
+	 *
+	 * @param mixed  $quantity Stored quantity.
+	 * @param string $expected Trimmed quantity.
+	 * @testWith [47, "47"]
+	 *           [47.5, "47.5"]
+	 *           ["47.5000", "47.5"]
+	 *           ["0.5000", "0.5"]
+	 *           ["0.0000", "0"]
+	 *           ["20", "20"]
+	 */
+	public function test_closure_items_sold_normalizes_decimal_strings_and_numbers( $quantity, string $expected ): void {
+		$row = $this->builder->build_closure_document(
+			array(
+				'number' => 1,
+				'breakdowns' => array( 'items_sold' => $quantity ),
+			)
+		)['closure'];
+		$this->assertSame( $expected, $row['breakdowns']['items_sold'] );
+	}
+
+	/**
+	 * Rate labels use rate precision, not the currency's decimal places.
+	 *
+	 * @param string $rate Stored rate.
+	 * @param int    $decimals Currency precision.
+	 * @param string $expected Expected label.
+	 * @testWith ["9.9750", 2, "VAT 9.975%"]
+	 *           ["7.5000", 0, "VAT 7.5%"]
+	 */
+	public function test_closure_tax_rate_label_preserves_rate_precision( string $rate, int $decimals, string $expected ): void {
+		$original = get_option( 'woocommerce_price_num_decimals' );
+		update_option( 'woocommerce_price_num_decimals', $decimals );
+		$id = TaxHelper::create_tax_rate(
+			array(
+				'name' => 'VAT',
+				'rate' => $rate,
+			)
+		);
+		try {
+			$row = $this->builder->build_closure_document(
+				array(
+					'number' => 1,
+					'breakdowns' => array(
+						'tax_rates' => array(
+							$id => array(
+								'net' => '10',
+								'tax' => '0',
+								'gross' => '10',
+							),
+						),
+					),
+				)
+			)['closure'];
+			$this->assertSame( $expected, $row['breakdowns']['tax_rates'][0]['name'] );
+		} finally {
+			update_option( 'woocommerce_price_num_decimals', $original );
+			\WC_Tax::_delete_tax_rate( $id );
 		}
 	}
 
@@ -181,7 +243,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( '80.0000', $row['breakdowns']['average_sale'] );
 		$this->assertNotEmpty( $row['breakdowns']['average_sale_display'] );
 		$this->assertNotEmpty( $row['breakdowns']['discounts']['amount_display'] );
-		$this->assertSame( 0, $row['breakdowns']['items_sold'] );
+		$this->assertSame( '0', $row['breakdowns']['items_sold'] );
 		$this->assertSame( 0, $row['breakdowns']['drawer_openings'] );
 		$this->assertFalse( $row['has_variance_note'] );
 		$this->assertFalse( $row['has_denominations'] );

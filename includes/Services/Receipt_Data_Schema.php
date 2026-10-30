@@ -1305,7 +1305,7 @@ class Receipt_Data_Schema {
 			$field_types = array_fill_keys( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ), 'money' );
 			$field_types += array_fill_keys( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ), 'number' );
 			$field_types += array_fill_keys( array( 'breakdowns.discounts.amount', 'breakdowns.average_sale', 'net_sales' ), 'money' );
-			$field_types += array_fill_keys( array( 'breakdowns.discounts.count', 'breakdowns.items_sold', 'breakdowns.drawer_openings' ), 'number' );
+			$field_types += array_fill_keys( array( 'breakdowns.discounts.count', 'breakdowns.drawer_openings' ), 'number' );
 			foreach ( array(
 				'id' => __( 'Closure ID', 'woocommerce-pos' ),
 				'number' => __( 'Closure Number', 'woocommerce-pos' ),

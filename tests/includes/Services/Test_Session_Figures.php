@@ -68,13 +68,30 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			$item = new \WC_Order_Item_Product();
 			$item->set_name( 'Test item' );
 			$item->set_quantity( 3 );
+			$item->set_total( '10' );
+			$item->set_taxes(
+				array(
+					'total' => array(
+						1 => '2',
+						2 => '0.50',
+					),
+				)
+			);
 			$order->add_item( $item );
+			$shipping = new \WC_Order_Item_Shipping();
+			$shipping->set_total( '5' );
+			$shipping->set_taxes( array( 'total' => array( 1 => '1' ) ) );
+			$order->add_item( $shipping );
+			$fee = new \WC_Order_Item_Fee();
+			$fee->set_total( '2' );
+			$fee->set_taxes( array( 'total' => array( 1 => '0.40' ) ) );
+			$order->add_item( $fee );
 			foreach ( array( 'first', 'second' ) as $code ) {
 				$coupon = new \WC_Order_Item_Coupon();
 				$coupon->set_code( $code );
 				$order->add_item( $coupon );
 			}
-			foreach ( array( array( 1, '20', '2', '1' ), array( 2, '5', '0.50', '0' ), array( 3, '0', '0', '0' ) ) as list( $id, $percent, $tax, $shipping ) ) {
+			foreach ( array( array( 1, '20', '2.40', '1' ), array( 2, '5', '0.50', '0' ), array( 3, '0', '0', '0' ) ) as list( $id, $percent, $tax, $shipping ) ) {
 				$item = new \WC_Order_Item_Tax();
 				$item->set_rate_id( $id );
 				$item->set_label( 'VAT ' . $percent . '%' );
@@ -97,12 +114,12 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			),
 			$figures->discounts()
 		);
-		$this->assertSame( 6, $figures->items_sold() );
+		$this->assertSame( '6', $figures->items_sold() );
 		$this->assertSame( '80.0000', $figures->average_sale() );
 		$rates = $figures->tax_rates();
-		$this->assertSame( '30.0000', $rates[1]['net'] );
-		$this->assertSame( '6.0000', $rates[1]['tax'] );
-		$this->assertSame( '36.0000', $rates[1]['gross'] );
+		$this->assertSame( '34.0000', $rates[1]['net'] );
+		$this->assertSame( '6.8000', $rates[1]['tax'] );
+		$this->assertSame( '40.8000', $rates[1]['gross'] );
 		$this->assertSame( '20.0000', $rates[2]['net'] );
 		$this->assertSame( '1.0000', $rates[2]['tax'] );
 		$this->assertSame( '0.0000', $rates[3]['net'] );
@@ -116,12 +133,92 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 3, $document['breakdowns']['tax_rates'] );
 		$this->assertSame( '160.0000', $document['period_sales_total'] );
 		$this->assertSame( '80.0000', $document['breakdowns']['average_sale'] );
-		$this->assertSame( 6, $document['breakdowns']['items_sold'] );
+		$this->assertSame( '6', $document['breakdowns']['items_sold'] );
 		$this->assertSame( 0, $document['breakdowns']['drawer_openings'] );
 		$this->assertNotEmpty( $document['breakdowns']['discounts']['amount_display'] );
 		$this->assertNotEmpty( $document['breakdowns']['average_sale_display'] );
 		$this->assertArrayNotHasKey( 'variance_note', $document['breakdowns'] );
 		$this->assertEmpty( $document['breakdowns']['denominations'] ?? array() );
+	}
+
+	/**
+	 * Fractional quantities retain their sum rather than becoming integer counts.
+	 *
+	 * @param array  $quantities Sold quantities.
+	 * @param string $expected Trimmed decimal sum.
+	 * @testWith [[0.5], "0.5"]
+	 *           [[0.5, 1.5], "2"]
+	 *           [[46, 1.5], "47.5"]
+	 *           [[0.1, 0.2], "0.3"]
+	 */
+	public function test_items_sold_fractional_quantities_return_decimal_string( array $quantities, string $expected ): void {
+		$priority = has_filter( 'woocommerce_stock_amount', 'intval' );
+		remove_filter( 'woocommerce_stock_amount', 'intval', $priority );
+		try {
+			$session = $this->closure_session();
+			$order = $this->closure_ledger( $session );
+			foreach ( $quantities as $quantity ) {
+				$item = new \WC_Order_Item_Product();
+				$item->set_quantity( $quantity );
+				$order->add_item( $item );
+			}
+			$order->save();
+
+			$figures = Session_Figures::for_session( $session );
+
+			$this->assertSame( $expected, $figures->items_sold() );
+		} finally {
+			if ( false !== $priority ) {
+				add_filter( 'woocommerce_stock_amount', 'intval', $priority );
+			}
+		}
+	}
+
+	/** A zero-rated line retains its sales base alongside a taxed line. */
+	public function test_tax_rates_zero_rated_line_keeps_net_and_gross(): void {
+		$zero = \WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper::create_tax_rate(
+			array(
+				'rate' => '0.0000',
+				'name' => 'Zero VAT',
+				'class' => 'zero-rate',
+			)
+		);
+		$standard = \WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper::create_tax_rate(
+			array(
+				'rate' => '20.0000',
+				'name' => 'VAT',
+			)
+		);
+		try {
+			$session = $this->closure_session();
+			$order = $this->closure_ledger( $session );
+			foreach ( array( array( $zero, '10', '' ), array( $standard, '20', '4' ) ) as list( $id, $net, $tax ) ) {
+				$item = new \WC_Order_Item_Product();
+				$item->set_total( $net );
+				$item->set_subtotal( $net );
+				$item->set_taxes(
+					array(
+						'total' => array( $id => $tax ),
+						'subtotal' => array( $id => $tax ),
+					)
+				);
+				$order->add_item( $item );
+			}
+			$order->update_taxes();
+			$order->save();
+
+			$rates = Session_Figures::for_session( $session )->tax_rates();
+
+			$this->assertSame( '10.0000', $rates[ $zero ]['net'] );
+			$this->assertSame( '0.0000', $rates[ $zero ]['tax'] );
+			$this->assertSame( '10.0000', $rates[ $zero ]['gross'] );
+			$this->assertSame( '20.0000', $rates[ $standard ]['net'] );
+			$this->assertSame( '4.0000', $rates[ $standard ]['tax'] );
+			$this->assertSame( '24.0000', $rates[ $standard ]['gross'] );
+		} finally {
+			\WC_Tax::_delete_tax_rate( $zero );
+			\WC_Tax::_delete_tax_rate( $standard );
+		}
 	}
 
 	/** Re-completed sales with no legs in this session still contribute their quantities. */
@@ -138,7 +235,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		$figures = Session_Figures::for_session( $second );
 		$this->assertSame( array(), $figures->legs() );
 		$this->assertSame( 1, $figures->sales_count() );
-		$this->assertSame( 2, $figures->items_sold() );
+		$this->assertSame( '2', $figures->items_sold() );
 	}
 
 	/** Empty sessions and repeating decimal averages keep four-place strings. */
@@ -153,7 +250,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			),
 			$empty->discounts()
 		);
-		$this->assertSame( 0, $empty->items_sold() );
+		$this->assertSame( '0', $empty->items_sold() );
 		$this->assertSame( array(), $empty->tax_rates() );
 		foreach ( array( '1', '0', '0' ) as $amount ) {
 			$this->order_with_legs(

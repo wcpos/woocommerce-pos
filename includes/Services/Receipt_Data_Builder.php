@@ -106,7 +106,7 @@ class Receipt_Data_Builder {
 		foreach ( $row['breakdowns']['tax_rates'] as $key => &$rate ) {
 			if ( empty( $rate['name'] ) ) {
 				$stored = \WC_Tax::_get_tax_rate( $rate['rate'] ?? $key );
-				$rate['name'] = ! empty( $stored['tax_rate_name'] ) ? $stored['tax_rate_name'] . ' ' . wc_format_decimal( $stored['tax_rate'], wc_get_price_decimals(), true ) . '%' : (string) $key;
+				$rate['name'] = ! empty( $stored['tax_rate_name'] ) ? $stored['tax_rate_name'] . ' ' . self::trim_decimal( (string) $stored['tax_rate'] ) . '%' : (string) $key;
 			}
 		}
 		unset( $rate );
@@ -146,10 +146,11 @@ class Receipt_Data_Builder {
 			$discounts['count'] = (int) ( $discounts['count'] ?? 0 );
 			$row['breakdowns']['discounts'] = $with_money( $discounts, array( 'amount' ) );
 		}
-		foreach ( array( 'items_sold', 'drawer_openings' ) as $field ) {
-			if ( isset( $row['breakdowns'][ $field ] ) ) {
-				$row['breakdowns'][ $field ] = (int) $row['breakdowns'][ $field ];
-			}
+		if ( isset( $row['breakdowns']['items_sold'] ) ) {
+			$row['breakdowns']['items_sold'] = self::trim_decimal( (string) $row['breakdowns']['items_sold'] );
+		}
+		if ( isset( $row['breakdowns']['drawer_openings'] ) ) {
+			$row['breakdowns']['drawer_openings'] = (int) $row['breakdowns']['drawer_openings'];
 		}
 		if ( isset( $row['breakdowns']['average_sale'] ) ) {
 			$row['breakdowns'] = $with_money( $row['breakdowns'], array( 'average_sale' ) );
@@ -253,6 +254,15 @@ class Receipt_Data_Builder {
 		$data['fiscal']['is_x_report'] = $xreport;
 		$data['fiscal']['is_closure_document'] = true;
 		return $data;
+	}
+
+	/** Trim fractional zeros without rounding quantities or tax percentages.
+	 *
+	 * @param string $value Decimal value.
+	 */
+	private static function trim_decimal( string $value ): string {
+		$value = false !== strpos( $value, '.' ) ? rtrim( rtrim( $value, '0' ), '.' ) : $value;
+		return '' === $value ? '0' : $value;
 	}
 
 	/**

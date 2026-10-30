@@ -35,7 +35,7 @@
     "breakdowns": {
       "currency": "GBP",
       "discounts": {"count": 3, "amount": "12.5000"},
-      "items_sold": 47,
+      "items_sold": "47",
       "average_sale": "20.8333",
       "drawer_openings": 2,
       "variance_note": "Two £5 notes found under the drawer",

@@ -198,17 +198,23 @@ final class Session_Figures {
 		return $methods;
 	}
 
-	/** Tax-line amounts include shipping; net follows the app's four-place rate calculation. */
+	/** Tax-line amounts include shipping; each applied rate gets the line's full net base. */
 	public function tax_rates(): array {
 		if ( isset( $this->memo['tax_rates'] ) ) {
 			return $this->memo['tax_rates'];
 		}
 		$rates = array();
 		foreach ( $this->orders() as $order ) {
+			$net_by_rate = array();
+			foreach ( $order ? $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) : array() as $item ) {
+				foreach ( array_keys( $item->get_taxes()['total'] ) as $id ) {
+					$net_by_rate[ $id ][] = (string) $item->get_total();
+				}
+			}
 			foreach ( $order ? $order->get_items( 'tax' ) : array() as $line ) {
 				$id = $line->get_rate_id();
 				$amount = Closure_Store::sum( array( $line->get_tax_total(), $line->get_shipping_tax_total() ) );
-				$net = self::divide( $amount, (string) $line->get_rate_percent(), 100 );
+				$net = Closure_Store::sum( $net_by_rate[ $id ] ?? array() );
 				$rates[ $id ] = $rates[ $id ] ?? array(
 					'rate' => $id,
 					'name' => $line->get_label(),
@@ -246,15 +252,17 @@ final class Session_Figures {
 	}
 
 	/** Sale quantities, without subtracting refund quantities. */
-	public function items_sold(): int {
+	public function items_sold(): string {
 		if ( ! isset( $this->memo['items_sold'] ) ) {
-			$quantity = 0;
+			$quantities = array();
 			foreach ( $this->orders() as $order ) {
 				foreach ( $order ? $order->get_items() : array() as $item ) {
-					$quantity += $item->get_quantity();
+					$quantities[] = (string) $item->get_quantity();
 				}
 			}
-			$this->memo['items_sold'] = (int) $quantity;
+			$sum = Closure_Store::sum( $quantities );
+			$quantity = rtrim( rtrim( $sum, '0' ), '.' );
+			$this->memo['items_sold'] = '' === $quantity ? '0' : $quantity;
 		}
 		return $this->memo['items_sold'];
 	}
@@ -274,12 +282,11 @@ final class Session_Figures {
 	 *
 	 * @param string $amount Decimal numerator.
 	 * @param string $divisor Decimal divisor; zero produces zero.
-	 * @param int    $factor Numerator multiplier for percentage rates.
 	 * @throws \RuntimeException On calculation failure.
 	 */
-	private static function divide( string $amount, string $divisor, int $factor = 1 ): string {
+	private static function divide( string $amount, string $divisor ): string {
 		global $wpdb;
-		$result = $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(COALESCE(CAST(%s AS DECIMAL(65,4)) * %d / NULLIF(CAST(%s AS DECIMAL(65,4)), 0), 0) AS DECIMAL(65,4))', $amount, $factor, $divisor ) );
+		$result = $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(COALESCE(CAST(%s AS DECIMAL(65,4)) / NULLIF(CAST(%s AS DECIMAL(65,4)), 0), 0) AS DECIMAL(65,4))', $amount, $divisor ) );
 		if ( null === $result ) {
 			throw new \RuntimeException( 'Session division failed.' );
 		}

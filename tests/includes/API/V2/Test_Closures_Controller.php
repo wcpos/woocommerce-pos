@@ -447,7 +447,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 				'count' => 3,
 				'amount' => '12.5000',
 			),
-			'items_sold' => 47,
+			'items_sold' => '47.5',
 			'average_sale' => '20.8333',
 			'drawer_openings' => 2,
 			'variance_note' => 'Two notes found',
@@ -458,7 +458,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$expected = array(
 			'discount_count' => '3',
 			'discount_total' => '12.5000',
-			'items_sold' => '47',
+			'items_sold' => '47.5',
 			'average_sale' => '20.8333',
 			'drawer_openings' => '2',
 			'variance_note' => 'Two notes found',

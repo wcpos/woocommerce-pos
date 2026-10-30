@@ -26,7 +26,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		foreach ( array(
 			'breakdowns.discounts.count' => 'number',
 			'breakdowns.discounts.amount' => 'money',
-			'breakdowns.items_sold' => 'number',
+			'breakdowns.items_sold' => 'string',
 			'breakdowns.average_sale' => 'money',
 			'breakdowns.drawer_openings' => 'number',
 			'breakdowns.variance_note' => 'string',
