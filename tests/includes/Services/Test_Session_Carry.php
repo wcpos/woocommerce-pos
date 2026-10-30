@@ -274,6 +274,22 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( ( new Register_Session_Store() )->get( $ids['session_id'] ) );
 	}
 
+	/** The same closure id against a second target funds nothing twice. */
+	public function test_carry_refuses_a_replayed_closure_against_another_target(): void {
+		$source = $this->closure_session( null, 'open' );
+		$ids = $this->ids();
+		$first = ( new Session_Carry() )->carry( $source, $this->target(), $ids, '2026-09-11 12:00:00' );
+		$this->assertIsArray( $first );
+		$other = $this->target();
+		$again = array_merge( $ids, array( 'session_id' => wp_generate_uuid4() ) );
+		$closed = ( new Register_Session_Store() )->get( $source['id'] );
+		$result = ( new Session_Carry() )->carry( $closed, $other, $again, '2026-09-11 12:00:00' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_closure_session_invalid', $result->get_error_code() );
+		$this->assertNull( ( new Register_Session_Store() )->get( $again['session_id'] ) );
+		$this->assertSame( array(), ( new Register_Session_Store() )->list( array( 'register_id' => $other['id'] ) ) );
+	}
+
 	/** A target retired between validation and the opening takes no session. */
 	public function test_carry_refuses_a_target_retired_under_the_lock(): void {
 		$source = $this->closure_session( null, 'open' );

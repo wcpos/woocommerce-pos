@@ -24,7 +24,7 @@ final class Session_Carry {
 		$closure = $closures->get( $ids['closure_id'] );
 		$opened = $sessions->get( $ids['session_id'] );
 		// An id that already names something else is refused before the drawer changes.
-		if ( $closure && ( $closure['session_id'] !== $session['id'] || 'store_switch' !== $closure['reason'] ) ) {
+		if ( $closure && ( $closure['session_id'] !== $session['id'] || 'store_switch' !== $closure['reason'] || $closure['carried_to_register_id'] !== $target['id'] ) ) {
 			return new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		if ( $opened && ( $opened['register_id'] !== $target['id'] || $opened['carried_from_closure_id'] !== $ids['closure_id'] ) ) {
@@ -98,7 +98,7 @@ final class Session_Carry {
 		);
 	}
 
-	/** Close the open source at the snapshot's expected; a refused, failed or foreign closure resumes selling. A count another device started under the lock reads as a successful transition and is refused by its stamp.
+	/** Close the open source at the snapshot's expected; a refused, failed or foreign closure resumes selling. A count another device started under the lock reads as a successful transition and is refused by its stamp; a replayed closure to another target funds nothing twice.
 	 *
 	 * @param Closure_Store          $closures Closures.
 	 * @param Register_Session_Store $sessions Sessions.
@@ -151,7 +151,7 @@ final class Session_Carry {
 			$this->back_to_selling( $sessions, $session );
 			throw $error;
 		}
-		if ( ! is_wp_error( $closure ) && $closure['session_id'] !== $session['id'] ) {
+		if ( ! is_wp_error( $closure ) && ( $closure['session_id'] !== $session['id'] || 'store_switch' !== $closure['reason'] || $closure['carried_to_register_id'] !== $target['id'] ) ) {
 			$closure = new \WP_Error( 'wcpos_closure_session_invalid', __( 'The session cannot be closed.', 'woocommerce-pos' ), array( 'status' => 409 ) );
 		}
 		if ( is_wp_error( $closure ) ) {
