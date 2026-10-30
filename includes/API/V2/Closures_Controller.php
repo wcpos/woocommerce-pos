@@ -106,9 +106,13 @@ class Closures_Controller extends \WP_REST_Controller {
 	 * @param array|null $row Closure row.
 	 * @return array|null
 	 */
-	private function visible( $row ) {
+	public static function visible( $row ) {
 		if ( ! is_array( $row ) || current_user_can( 'view_woocommerce_pos_reports' ) ) {
 			return $row;
+		}
+		// A carried count is server-derived, not the blind cashier's own count.
+		if ( 'store_switch' === ( $row['reason'] ?? null ) ) {
+			unset( $row['counted'] );
 		}
 		// Manager approval permits the recount write, not access to hidden report figures.
 		// The unsalted payload checksum would allow guessing the hidden variance.

@@ -18,7 +18,35 @@ class Test_Register_Session_Store extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
 	/** The session columns a read returned before closures folded into the session row. */
-	public const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+	public const SESSION_KEYS = array( 'id', 'register_id', 'store_id', 'status', 'opened_at_gmt', 'business_day', 'opened_by', 'expected_float', 'counted_float', 'opening_variance', 'counting_started_at_gmt', 'counting_by', 'float_source', 'carried_from_closure_id', 'closed_at_gmt', 'closed_by', 'approved_by', 'approved_counted', 'approved_expected', 'counted', 'closure_id', 'created_at_gmt' );
+
+	/** Carry provenance persists; ordinary openings have none. */
+	public function test_create_persists_float_source_and_carried_from_closure_id(): void {
+		$store = new Register_Session_Store();
+		$fields = array(
+			'id' => wp_generate_uuid4(),
+			'register_id' => wp_generate_uuid4(),
+			'opened_at_gmt' => '2026-09-11 10:00:00',
+			'opened_by' => get_current_user_id(),
+			'expected_float' => '100',
+			'counted_float' => '100',
+		);
+		$closure_id = wp_generate_uuid4();
+		$store->create(
+			$fields + array(
+				'float_source' => 'carried',
+				'carried_from_closure_id' => $closure_id,
+			)
+		);
+		$row = $store->get( $fields['id'] );
+		$this->assertSame( 'carried', $row['float_source'] );
+		$this->assertSame( $closure_id, $row['carried_from_closure_id'] );
+		$fields['id'] = wp_generate_uuid4();
+		$fields['register_id'] = wp_generate_uuid4();
+		$row = $store->create( $fields );
+		$this->assertNull( $row['float_source'] );
+		$this->assertNull( $row['carried_from_closure_id'] );
+	}
 
 	/** A closure on the session row never widens a session read. */
 	public function test_session_read_after_closure_returns_exactly_the_session_columns(): void {

@@ -44,6 +44,8 @@ final class Closure_Store {
 		'opened_by' => 'opened_by',
 		'closed_by' => null,
 		'approved_by' => null,
+		'reason' => null,
+		'carried_to_register_id' => null,
 		'expected' => null,
 		'till_expected' => null,
 		'counted' => null,
@@ -97,6 +99,7 @@ final class Closure_Store {
 		foreach ( self::ROW as $key => $column ) {
 			$row[ $key ] = null === $column ? ( $document[ $key ] ?? null ) : $session[ $column ];
 		}
+		$row['reason'] = $row['reason'] ?? 'end_of_day';
 		return self::normalize( $row );
 	}
 
@@ -687,7 +690,9 @@ final class Closure_Store {
 						'requested_closure_id' => $fields['id'],
 					)
 				);
-				$this->recount( $existing, $fields['id'], $fields['counted'], '' );
+				if ( null !== $fields['counted'] ) {
+					$this->recount( $existing, $fields['id'], $fields['counted'], '' );
+				}
 				return new \WP_Error(
 					'wcpos_closure_exists',
 					__( 'This session already has a closure; the count was recorded as a recount.', 'woocommerce-pos' ),
@@ -748,10 +753,14 @@ final class Closure_Store {
 			}
 			$figures = Session_Figures::for_session( $session );
 			$fields['expected'] = $figures->expected();
+			// A carry counts the drawer at the snapshot's own expected: no count is taken outside it.
+			$fields['counted'] = $fields['counted'] ?? $fields['expected'];
+			$fields['till_expected'] = $fields['till_expected'] ?? $fields['expected'];
 			$fields['variance'] = $this->variance( $fields['counted'], $fields['expected'] );
 			$totals = $figures->period_amounts();
 			$figures->stamp( $fields['id'] );
 			$carried = $this->carry_corrections( $session['register_id'], $fields['id'] );
+			$fields['reason'] = $fields['reason'] ?? 'end_of_day';
 			$findings = array();
 			foreach ( $totals as $kind => $amounts ) {
 				$period = self::sum( $amounts );
@@ -771,7 +780,7 @@ final class Closure_Store {
 						);
 						throw new \RuntimeException( 'Closure total exceeds storage precision.' );
 					}
-					if ( '0.0000' !== self::sum( array( $fields[ $key ], '-' . $derived ) ) ) {
+					if ( isset( $fields[ $key ] ) && '0.0000' !== self::sum( array( $fields[ $key ], '-' . $derived ) ) ) {
 						$findings['total_mismatch'][ $key ] = array(
 							'reported' => $fields[ $key ],
 							'derived' => $derived,

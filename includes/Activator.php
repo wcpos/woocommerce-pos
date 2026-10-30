@@ -272,6 +272,12 @@ class Activator {
 			$this->add_column_if_missing( ( new Register_Session_Store() )->table_name(), 'counting_by', 'BIGINT NULL', 'Counting cashier column' );
 		}
 
+		if ( null === $previous_schema || version_compare( (string) $previous_schema, '14', '<' ) ) {
+			$table = ( new Register_Session_Store() )->table_name();
+			$this->add_column_if_missing( $table, 'float_source', 'VARCHAR(16) NULL', 'Float source column' );
+			$this->add_column_if_missing( $table, 'carried_from_closure_id', 'CHAR(36) NULL', 'Carried closure column' );
+		}
+
 		if ( ! Sync_Health::is_healthy() ) {
 			if ( Sync_Api::SCHEMA_VERSION === $previous_schema ) {
 				delete_option( Sync_Api::SCHEMA_OPTION );

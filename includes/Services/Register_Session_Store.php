@@ -21,7 +21,7 @@ final class Register_Session_Store {
 	 * Closure_Store, and the movements array is read only through Cash_Movement_Store,
 	 * so a session route never selects them.
 	 */
-	private const COLUMNS = 'id, register_id, store_id, status, opened_at_gmt, business_day, opened_by, expected_float, counted_float, opening_variance, counting_started_at_gmt, counting_by, closed_at_gmt, closed_by, approved_by, approved_counted, approved_expected, counted, closure_id, created_at_gmt';
+	private const COLUMNS = 'id, register_id, store_id, status, opened_at_gmt, business_day, opened_by, expected_float, counted_float, opening_variance, counting_started_at_gmt, counting_by, float_source, carried_from_closure_id, closed_at_gmt, closed_by, approved_by, approved_counted, approved_expected, counted, closure_id, created_at_gmt';
 
 	/** Build the schema.
 	 *
@@ -42,6 +42,8 @@ final class Register_Session_Store {
 			opening_variance DECIMAL(19,4) NULL,
 			counting_started_at_gmt DATETIME NULL,
 			counting_by BIGINT NULL,
+			float_source VARCHAR(16) NULL,
+			carried_from_closure_id CHAR(36) NULL,
 			closed_at_gmt DATETIME NULL,
 			closed_by BIGINT NULL,
 			approved_by BIGINT NULL,
