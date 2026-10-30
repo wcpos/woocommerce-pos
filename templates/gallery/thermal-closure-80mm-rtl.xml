@@ -30,11 +30,11 @@ these star columns with hard-coded widths.
     <text>{{register.name}}</text>
     {{#fiscal.is_reprint}}<bold><text>{{i18n.copy}} {{fiscal.reprint_count}}</text></bold><text>{{order.printed.datetime}}</text>{{/fiscal.is_reprint}}
   </align>
-  {{#closure.opened_at.datetime}}<text align="right">{{i18n.opened}}: {{closure.opened_at.datetime}}</text><text align="right">{{closure.breakdowns.labels.opened_by_name}}</text>{{/closure.opened_at.datetime}}
-  {{#closure.closed_at.datetime}}<text align="right">{{i18n.closed}}: {{closure.closed_at.datetime}}</text><text align="right">{{closure.breakdowns.labels.closed_by_name}}</text>{{/closure.closed_at.datetime}}
-  {{#closure.approved_by}}<text align="right">{{i18n.approver}}: {{closure.breakdowns.labels.approved_by_name}}</text>{{/closure.approved_by}}
+  {{#closure.opened_at.datetime}}<align mode="right"><text>{{i18n.opened}}: {{closure.opened_at.datetime}}</text></align><align mode="right"><text>{{closure.breakdowns.labels.opened_by_name}}</text></align>{{/closure.opened_at.datetime}}
+  {{#closure.closed_at.datetime}}<align mode="right"><text>{{i18n.closed}}: {{closure.closed_at.datetime}}</text></align><align mode="right"><text>{{closure.breakdowns.labels.closed_by_name}}</text></align>{{/closure.closed_at.datetime}}
+  {{#closure.approved_by}}<align mode="right"><text>{{i18n.approver}}: {{closure.breakdowns.labels.approved_by_name}}</text></align>{{/closure.approved_by}}
   {{#closure.has_sales}}
-  <line /><bold><text align="right">{{i18n.sales}}</text></bold>
+  <line /><align mode="right"><bold><text>{{i18n.sales}}</text></bold></align>
   {{#closure.period_sales_total_display}}<row><col width="*" align="left">{{closure.period_sales_total_display}}</col><col width="*" align="right">{{i18n.period_sales}}</col></row>{{/closure.period_sales_total_display}}
   {{#closure.period_refunds_total_display}}<row><col width="*" align="left">{{closure.period_refunds_total_display}}</col><col width="*" align="right">{{i18n.period_refunds}}</col></row>{{/closure.period_refunds_total_display}}
   {{#closure.has_discounts}}<row><col width="*" align="left">{{closure.breakdowns.discounts.amount_display}}</col><col width="*" align="right">{{i18n.discounts}} · {{closure.breakdowns.discounts.count}}</col></row>{{/closure.has_discounts}}
@@ -45,43 +45,43 @@ these star columns with hard-coded widths.
   {{#closure.breakdowns.average_sale_display}}<row><col width="*" align="left">{{closure.breakdowns.average_sale_display}}</col><col width="*" align="right">{{i18n.average_sale}}</col></row>{{/closure.breakdowns.average_sale_display}}
   {{/closure.has_sales}}
   {{#closure.has_tax_rates}}
-  <line /><bold><text align="right">{{i18n.tax_rates}}</text></bold>
+  <line /><align mode="right"><bold><text>{{i18n.tax_rates}}</text></bold></align>
   <row><col width="*" align="left">{{i18n.gross}}</col><col width="*" align="left">{{i18n.tax}}</col><col width="*" align="left">{{i18n.net}}</col><col width="*" align="right">{{i18n.tax_rate}}</col></row>
   {{#closure.breakdowns.tax_rates}}<row><col width="*" align="left">{{gross_display}}</col><col width="*" align="left">{{tax_display}}</col><col width="*" align="left">{{net_display}}</col><col width="*" align="right">{{#name}}{{name}}{{/name}}{{^name}}{{rate}}{{/name}}</col></row>{{/closure.breakdowns.tax_rates}}
   {{/closure.has_tax_rates}}
-  <line /><bold><text align="right">{{i18n.tenders}}</text></bold>
+  <line /><align mode="right"><bold><text>{{i18n.tenders}}</text></bold></align>
   {{#closure.has_payment_methods}}
   <row><col width="*" align="left">{{i18n.refunds}}</col><col width="*" align="left">{{i18n.sales}}</col><col width="*" align="right">{{i18n.payment_method}}</col></row>
   {{#closure.breakdowns.payment_methods}}<row><col width="*" align="left">{{refunds_display}}</col><col width="*" align="left">{{sales_display}}</col><col width="*" align="right">{{#name}}{{name}}{{/name}}{{^name}}{{method}}{{/name}}</col></row>{{/closure.breakdowns.payment_methods}}
   {{/closure.has_payment_methods}}
   <row><col width="*" align="left">{{i18n.variance}}</col><col width="*" align="left">{{i18n.counted}}</col><col width="*" align="left">{{i18n.expected}}</col><col width="*" align="right">{{i18n.tender}}</col></row>
   {{#closure.tenders}}<row><col width="*" align="left">{{variance_display}}</col><col width="*" align="left">{{counted_display}}</col><col width="*" align="left">{{expected_display}}</col><col width="*" align="right">{{label}}</col></row>{{/closure.tenders}}
-  {{#closure.tenders}}{{#has_variance}}<text align="right">{{label}} {{variance_label}} {{variance_absolute_display}}</text>{{/has_variance}}{{/closure.tenders}}
+  {{#closure.tenders}}{{#has_variance}}<align mode="right"><text>{{label}} {{variance_label}} {{variance_absolute_display}}</text></align>{{/has_variance}}{{/closure.tenders}}
   {{#closure.breakdowns.opening_float}}
-  <line /><bold><text align="right">{{i18n.opening_float}}</text></bold>
+  <line /><align mode="right"><bold><text>{{i18n.opening_float}}</text></bold></align>
   <row><col width="*" align="left">{{expected_display}}</col><col width="*" align="right">{{i18n.expected}}</col></row>
   <row><col width="*" align="left">{{counted_display}}</col><col width="*" align="right">{{i18n.counted}}</col></row>
   <row><col width="*" align="left">{{variance_display}}</col><col width="*" align="right">{{i18n.variance}}</col></row>
   {{/closure.breakdowns.opening_float}}
   {{#closure.has_movements}}
-  <line /><bold><text align="right">{{i18n.cash_movements}}</text></bold>
+  <line /><align mode="right"><bold><text>{{i18n.cash_movements}}</text></bold></align>
   {{#closure.breakdowns.movements}}
-  <text align="right">{{created_at.time}}</text>
+  <align mode="right"><text>{{created_at.time}}</text></align>
   <row><col width="*" align="left">{{amount_display}}</col><col width="*" align="right">{{type_label}}{{#voided}} · {{i18n.voided}}{{/voided}}</col></row>
-  <text align="right">{{reason}}</text>
+  <align mode="right"><text>{{reason}}</text></align>
   {{/closure.breakdowns.movements}}
   {{/closure.has_movements}}
   {{#closure.breakdowns.drawer_openings}}<row><col width="*" align="left">{{closure.breakdowns.drawer_openings}}</col><col width="*" align="right">{{i18n.drawer_openings}}</col></row>{{/closure.breakdowns.drawer_openings}}
-  {{#closure.has_variance_note}}<text align="right">{{i18n.variance_note}}</text><text align="right">{{closure.breakdowns.variance_note}}</text>{{/closure.has_variance_note}}
+  {{#closure.has_variance_note}}<align mode="right"><text>{{i18n.variance_note}}</text></align><align mode="right"><text>{{closure.breakdowns.variance_note}}</text></align>{{/closure.has_variance_note}}
   {{#closure.has_perpetual}}
-  <line /><bold><text align="right">{{i18n.perpetual_totals}}</text></bold>
+  <line /><align mode="right"><bold><text>{{i18n.perpetual_totals}}</text></bold></align>
   <row><col width="*" align="left">{{closure.perpetual_sales_total_display}}</col><col width="*" align="right">{{i18n.perpetual_sales}}</col></row>
   <row><col width="*" align="left">{{closure.perpetual_refunds_total_display}}</col><col width="*" align="right">{{i18n.perpetual_refunds}}</col></row>
   {{/closure.has_perpetual}}
-  {{#closure.unsynced_count}}<text align="right">{{closure.unsynced_count}} {{i18n.unsynced_sales}} · {{closure.unsynced_total_display}}</text>{{/closure.unsynced_count}}
+  {{#closure.unsynced_count}}<align mode="right"><text>{{closure.unsynced_count}} {{i18n.unsynced_sales}} · {{closure.unsynced_total_display}}</text></align>{{/closure.unsynced_count}}
   <line />
-  {{#closure.has_sales}}<text align="right">{{i18n.cashiers}}</text>{{#closure.breakdowns.cashiers}}<text align="right">{{name}}</text>{{/closure.breakdowns.cashiers}}{{/closure.has_sales}}
-  {{#fiscal.hash}}<text align="right">{{i18n.record_hash}}: {{fiscal.hash}}</text>{{/fiscal.hash}}
+  {{#closure.has_sales}}<align mode="right"><text>{{i18n.cashiers}}</text></align>{{#closure.breakdowns.cashiers}}<align mode="right"><text>{{name}}</text></align>{{/closure.breakdowns.cashiers}}{{/closure.has_sales}}
+  {{#fiscal.hash}}<align mode="right"><text>{{i18n.record_hash}}: {{fiscal.hash}}</text></align>{{/fiscal.hash}}
   <align mode="center"><text>{{i18n.management_report}}</text><text>{{software.name}} {{software.plugin_version}}</text><text>{{order.printed.datetime}}</text></align>
   <feed lines="3" /><cut />
   {{/fiscal.is_closure_document}}

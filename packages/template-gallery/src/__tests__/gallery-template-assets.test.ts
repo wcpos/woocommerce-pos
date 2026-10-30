@@ -22,7 +22,12 @@ const PREVIEW_DEVICE_SCALE_FACTOR = 2;
 const A4_PREVIEW_CSS_WIDTH = 794;
 
 // Templates whose preview WebP dimensions must match the 58mm paper width.
-const THERMAL_58MM_KEYS = new Set(['thermal-simple-58mm', 'thermal-detailed-58mm']);
+const THERMAL_58MM_KEYS = new Set([
+	'thermal-simple-58mm',
+	'thermal-detailed-58mm',
+	'thermal-closure-58mm',
+	'thermal-report-58mm',
+]);
 
 // All thermal templates (need a preview WebP sized to 58mm or 80mm).
 const THERMAL_KEYS = new Set(getBundledGalleryKeys().filter((key) => key.startsWith('thermal-')));
