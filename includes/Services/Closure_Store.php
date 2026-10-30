@@ -803,6 +803,13 @@ final class Closure_Store {
 			$fields['breakdowns']['timezone'] = $resolver->resolve_store_timezone()->getName();
 			$fields['breakdowns']['store'] = array_intersect_key( $resolver->build_store_section(), array_flip( array( 'name', 'address_lines' ) ) );
 			$fields['breakdowns']['labels'] = array( 'register_name' => ( new Register_Store() )->display_name( $session['register_id'] ) );
+			if ( ! empty( $fields['carried_to_register_id'] ) ) {
+				// The closure pane badges a carry "Carried to Y": the destination's names travel in the document.
+				$to = ( new Register_Store() )->get( $fields['carried_to_register_id'] );
+				$to_store = $to && $to['store_id'] ? wcpos_get_store( (int) $to['store_id'] ) : null;
+				$fields['breakdowns']['labels']['carried_to_register_name'] = $to ? ( new Register_Store() )->display_name( $to['id'] ) : '';
+				$fields['breakdowns']['labels']['carried_to_store_name'] = is_object( $to_store ) ? (string) $to_store->get_name() : '';
+			}
 			foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 				$fields['breakdowns']['labels'][ $key . '_name' ] = get_userdata( (int) ( $fields[ $key ] ?? 0 ) )->display_name ?? '';
 			}
