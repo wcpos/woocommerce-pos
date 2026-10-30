@@ -1,6 +1,6 @@
-<article class="report-letterhead" style="font-family: sans-serif; color: #111827; padding: 24px; print-color-adjust: exact; -webkit-print-color-adjust: exact;">
+<article class="report-letterhead" style="font-family: sans-serif; color: #111827; padding: 24px;">
 {{#fiscal.is_report_document}}
-  <style>.report-letterhead tbody tr:nth-child(even) { background: #f9fafb } @media print { @page { margin: 18mm } thead { display: table-header-group } tr { page-break-inside: avoid } }</style>
+  <style>@media print { @page { margin: 18mm } thead { display: table-header-group } tr { page-break-inside: avoid } }</style>
   <header style="display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 1px solid #d1d5db; padding-bottom: 16px; margin-bottom: 20px;">
     <div><strong style="font-size: 22px;">{{store.name}}</strong>
       {{#store.address_lines}}<div style="font-size: 12px; color: #6b7280;">{{.}}</div>{{/store.address_lines}}
