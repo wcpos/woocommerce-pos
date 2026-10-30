@@ -96,6 +96,8 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( array( 'cash' => '0.0000' ), $closure['variance'] );
 			$this->assertSame( 'store_switch', $closure['reason'] );
 			$this->assertSame( $target['id'], $closure['carried_to_register_id'] );
+			$this->assertSame( ( new \WCPOS\WooCommercePOS\Services\Register_Store() )->display_name( $target['id'] ), $closure['breakdowns']['labels']['carried_to_register_name'] );
+			$this->assertArrayHasKey( 'carried_to_store_name', $closure['breakdowns']['labels'] );
 			$this->assertSame( 1, $closure['number'] );
 			$this->assertSame( '100.0000', $closure['period_sales_total'] );
 			$this->assertNull( $closure['findings'] );
