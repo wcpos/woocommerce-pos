@@ -340,7 +340,8 @@ class Receipt_Data_Builder {
 			),
 			'cashier' => array(
 				'id' => (int) $user->ID,
-				'name' => $user->display_name,
+				// No logged-in user (a CLI or cron build) still yields a string: the schema requires one.
+				'name' => (string) ( $user->display_name ?? '' ),
 			),
 			'software' => array(
 				'name' => 'WCPOS',
