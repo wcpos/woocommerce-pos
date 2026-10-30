@@ -27,7 +27,7 @@
 		  href="<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/img/apple-touch-icon.png">
 
 	<!-- IE 10 Metro tile icon -->
-	<meta name="msapplication-TileColor" content="#323A46">
+	<meta name="msapplication-TileColor" content="#262263">
 	<meta name="msapplication-TileImage"
 		  content="<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/img/icon-256x256.png">
 
