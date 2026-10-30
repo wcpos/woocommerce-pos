@@ -77,6 +77,7 @@ class Receipt_Payload_Assembler {
 			'is_cancellation_document' => 'cancellation' === $document_type,
 			'is_closure_document'      => in_array( $document_type, array( 'closure', 'xreport', 'x_report', 'handover' ), true ),
 			'is_x_report'              => in_array( $document_type, array( 'xreport', 'x_report', 'handover' ), true ),
+			'is_handover'              => 'handover' === $document_type,
 		);
 	}
 }
