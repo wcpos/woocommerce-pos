@@ -69,9 +69,14 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			$item->set_name( 'Test item' );
 			$item->set_quantity( 3 );
 			$item->set_total( '10' );
+			// A product line keeps its rate ids only when both halves are given (WC_Order_Item_Product::set_taxes).
 			$item->set_taxes(
 				array(
 					'total' => array(
+						1 => '2',
+						2 => '0.50',
+					),
+					'subtotal' => array(
 						1 => '2',
 						2 => '0.50',
 					),
