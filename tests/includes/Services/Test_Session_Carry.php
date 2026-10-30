@@ -290,6 +290,31 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), ( new Register_Session_Store() )->list( array( 'register_id' => $other['id'] ) ) );
 	}
 
+	/** A target moved to another store between validation and the opening takes no session. */
+	public function test_carry_refuses_a_target_reassigned_under_the_lock(): void {
+		$source = $this->closure_session( null, 'open' );
+		$target = $this->target();
+		$ids = $this->ids();
+		$moved = false;
+		$move = function ( $sql ) use ( $target, &$moved ) {
+			if ( ! $moved && false !== strpos( $sql, "GET_LOCK( 'wcpos_register_" . $target['id'] ) ) {
+				$moved = true;
+				( new \WCPOS\WooCommercePOS\Services\Register_Store() )->update( $target['id'], array( 'store_id' => 999 ) );
+			}
+			return $sql;
+		};
+		add_filter( 'query', $move );
+		try {
+			$result = ( new Session_Carry() )->carry( $source, $target, $ids, '2026-09-11 12:00:00' );
+		} finally {
+			remove_filter( 'query', $move );
+		}
+		$this->assertTrue( $moved );
+		$this->assertWPError( $result );
+		$this->assertSame( 'to_register_id', $result->get_error_data()['param'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $ids['session_id'] ) );
+	}
+
 	/** A target retired between validation and the opening takes no session. */
 	public function test_carry_refuses_a_target_retired_under_the_lock(): void {
 		$source = $this->closure_session( null, 'open' );

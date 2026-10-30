@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-/** Close before opening: a failed target opening never reopens the source. */
+/** Close before opening: a failed target opening never reopens the source; the target is re-read under its own lock, so a register retired or moved to another store meanwhile takes no session. */
 final class Session_Carry {
 	/** Carry at server figures using the stores' existing write guards.
 	 *
@@ -75,8 +75,8 @@ final class Session_Carry {
 				'carried_from_closure_id' => $ids['closure_id'],
 			),
 			function ( $fields ) use ( $target ) {
-				// Re-read under the target's lock: a register retired meanwhile takes no session.
-				return ( new Register_Store() )->get( $target['id'] )
+				$fresh = ( new Register_Store() )->get( $target['id'] );
+				return $fresh && $fresh['store_id'] === $target['store_id']
 					? $fields
 					: new \WP_Error(
 						'rest_invalid_param',
