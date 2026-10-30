@@ -1,0 +1,29 @@
+<article class="report-letterhead" style="font-family: sans-serif; color: #111827; padding: 24px; print-color-adjust: exact; -webkit-print-color-adjust: exact;">
+{{#fiscal.is_report_document}}
+  <style>.report-letterhead tbody tr:nth-child(even) { background: #f9fafb } @media print { @page { margin: 18mm } thead { display: table-header-group } tr { page-break-inside: avoid } }</style>
+  <header style="display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 1px solid #d1d5db; padding-bottom: 16px; margin-bottom: 20px;">
+    <div><strong style="font-size: 22px;">{{store.name}}</strong>
+      {{#store.address_lines}}<div style="font-size: 12px; color: #6b7280;">{{.}}</div>{{/store.address_lines}}
+      {{#store.tax_ids}}<div style="font-size: 12px; color: #6b7280;">{{#label}}{{label}}: {{/label}}{{value}}</div>{{/store.tax_ids}}
+      {{#store.phone}}<div style="font-size: 12px; color: #6b7280;">{{store.phone}}</div>{{/store.phone}}</div>
+    <div style="text-align: right;"><h1 style="font-size: 20px; margin: 0 0 8px;">{{report.title}}</h1>
+      {{#report.subtitle}}<p style="margin: 4px 0;">{{report.subtitle}}</p>{{/report.subtitle}}
+      <p style="font-size: 12px; margin: 4px 0;">{{report.scope.label}}</p><p style="font-size: 12px; margin: 4px 0;">{{i18n.generated}} {{report.generated_at.datetime}}</p>
+      {{#cashier.name}}<p style="font-size: 12px; margin: 4px 0;">{{cashier.name}}</p>{{/cashier.name}}</div>
+  </header>
+  {{#report.is_partial}}<p role="alert"><strong>{{report.partial_reason}}</strong></p>{{/report.is_partial}}
+  <table style="width: 100%; border-collapse: collapse;">
+    <thead><tr>{{#report.columns}}<th style="text-align: {{align}}; border-bottom: 1px solid #111827; padding: 8px;">{{label}}</th>{{/report.columns}}</tr></thead>
+    <tbody>
+      {{#report.has_groups}}{{#report.groups}}
+      <tr><th colspan="{{report.column_count}}" style="text-align: left; padding: 8px; border-top: 1px solid #d1d5db; font-weight: bold;">{{label}}</th></tr>
+      {{#rows}}<tr>{{#cells}}<td style="padding: 8px; text-align: {{align}};">{{formatted}}</td>{{/cells}}</tr>{{/rows}}
+      <tr>{{#subtotal.cells}}<td style="padding: 8px; border-top: 1px solid #d1d5db; text-align: {{align}};"><strong>{{formatted}}</strong></td>{{/subtotal.cells}}</tr>
+      {{/report.groups}}{{/report.has_groups}}
+      {{^report.has_groups}}{{#report.rows}}<tr>{{#cells}}<td style="padding: 8px; text-align: {{align}};">{{formatted}}</td>{{/cells}}</tr>{{/report.rows}}{{/report.has_groups}}
+    </tbody>
+    <tfoot><tr>{{#report.totals.cells}}<td style="padding: 8px; border-top: 2px solid #111827; text-align: {{align}};"><strong>{{formatted}}</strong></td>{{/report.totals.cells}}</tr></tfoot>
+  </table>
+  <footer style="font-size: 12px; color: #6b7280; margin-top: 20px;">{{software.name}} {{software.plugin_version}}</footer>
+{{/fiscal.is_report_document}}
+</article>

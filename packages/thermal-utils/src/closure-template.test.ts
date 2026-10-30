@@ -14,9 +14,50 @@ const fixture = JSON.parse(
 
 describe.each([
 	['closure-default.html', renderLogiclessPreview],
+	['closure-detailed.html', renderLogiclessPreview],
+	['thermal-closure-58mm.xml', renderThermalPreview],
+	['thermal-closure-80mm-rtl.xml', renderThermalPreview],
+	['thermal-count-slip-80mm.xml', renderThermalPreview],
 	['thermal-closure-80mm.xml', renderThermalPreview],
 ] as const)('%s', (file, render) => {
-	const template = fs.readFileSync(path.join(gallery, file), 'utf8');
+	const template = fs.existsSync(path.join(gallery, file))
+		? fs.readFileSync(path.join(gallery, file), 'utf8') : '';
+	const slip = file === 'thermal-count-slip-80mm.xml';
+
+
+	it('orders the management blocks and keeps count slips free of sales figures', () => {
+		const root = document.createElement('div');
+		root.innerHTML = render(template, fixture);
+		const headings = Array.from(root.querySelectorAll('h2, strong > div')).map(el => el.textContent);
+		if (slip) {
+			for (const label of ['Sales', 'Tax rates', 'Payment method', 'Items sold']) expect(root.textContent).not.toContain(label);
+		} else {
+			const positions = ['Sales', 'Tax rates', 'Tenders', 'Opening float'].map(label => headings.indexOf(label));
+			positions.forEach(position => expect(position).toBeGreaterThanOrEqual(0));
+			expect(positions).toEqual([...positions].sort((a, b) => a - b));
+			const usd = structuredClone(fixture);
+			usd.closure.breakdowns.discounts.amount_display = '$12.50';
+			expect(render(template, usd)).toContain('$12.50');
+		}
+	});
+
+	it('prints denomination amounts and signature lines only in the detailed formats', () => {
+		const html = render(template, fixture);
+		if (slip || file === 'closure-detailed.html') {
+			for (const label of ['£100.00', '£50.00', '£20.00', '£8.00', 'Cashier signature', 'Manager signature']) expect(html).toContain(label);
+		} else expect(html).not.toContain('Count by denomination');
+	});
+
+	it('omits optional additions on older closures and guards record hashes', () => {
+		const data = structuredClone(fixture);
+		for (const key of ['discounts', 'items_sold', 'average_sale_display', 'drawer_openings', 'variance_note', 'denominations']) delete data.closure.breakdowns[key];
+		for (const key of ['has_discounts', 'has_variance_note', 'has_denominations', 'net_sales_display']) delete data.closure[key];
+		const html = render(template, data);
+		for (const label of ['Discounts', 'Items sold', 'Average sale', 'Drawer openings', 'Difference note', 'Count by denomination', 'Net sales', 'WCPOS record hash']) expect(html).not.toContain(label);
+		expect(html).toContain('£178.00');
+		data.fiscal.hash = 'hash-123';
+		if (!slip) expect(render(template, data)).toContain('hash-123');
+	});
 
 	it('renders formatted document money, local dates and labels', () => {
 		const data = structuredClone(fixture);
@@ -24,15 +65,17 @@ describe.each([
 		for (const text of [
 			'Closure 42',
 			'Main register',
-			'$178.00',
-			'-$2.00',
+			'£178.00',
+			'-£2.00',
 			'Paid out',
-			'Sep 11, 2026, 10:00',
+			'Sep 11, 2026, 19:00',
 			'12:00',
 			'Petty cash',
 			'Voided',
-			'VAT 20%',
-			'$5,250.00',
+			...(slip ? [] : ['VAT 20%', '£5,250.00', '£12.50', '47']),
+			'Session closed · totals reset',
+			'Management report, not a fiscal document',
+			'Two £5 notes found under the drawer',
 		]) {
 			expect(html).toContain(text);
 		}
@@ -40,23 +83,23 @@ describe.each([
 		expect(html).not.toMatch(/\d+\.\d{4}|paid_out|2026-09-11 08:00:00|UTC/);
 		expect(data).toEqual(fixture);
 		if (file === 'closure-default.html') {
-			expect(html).toContain('-$2.00 Short');
-			expect(html).toContain('$0.00 Exact');
+			expect(html).toContain('-£2.00 Short');
+			expect(html).toContain('£0.00 Exact');
 		}
 	});
 
-	it('renders all fixture cells from raw offline money maps and breakdowns', () => {
+	it('renders legacy offline money maps while preserving server-formatted new fields', () => {
 		const data = structuredClone(fixture);
 		delete data.closure.tenders;
 		const stripDisplays = (value: Record<string, unknown>) => {
 			for (const key of Object.keys(value)) {
-				if (key.endsWith('_display')) delete value[key];
-				else if (value[key] && typeof value[key] === 'object')
+				if (key.endsWith('_display') && !['net_sales_display', 'average_sale_display'].includes(key)) delete value[key];
+				else if (!['discounts', 'denominations'].includes(key) && value[key] && typeof value[key] === 'object')
 					stripDisplays(value[key] as Record<string, unknown>);
 			}
 		};
 		stripDisplays(data.closure);
-		data.order = { currency: 'USD' };
+		data.order = { ...data.order, currency: 'USD' };
 		expect(render(template, data)).toBe(render(template, fixture));
 	});
 
@@ -90,7 +133,7 @@ describe.each([
 			delete data.closure[`${key}_display`];
 		}
 		const html = render(template, data);
-		expect(html).toContain('Transactions');
+		if (!slip) expect(html).toContain('Transactions');
 		expect(html).toContain('Alex');
 		expect(html).not.toContain('Period sales');
 		expect(html).not.toContain('Period refunds');
@@ -106,7 +149,7 @@ describe.each([
 			voided: 'Anulado',
 		};
 		const html = render(template, data);
-		for (const text of ['Cierre', 'Pagos', 'Impuestos', 'Anulado'])
+		for (const text of ['Cierre', 'Pagos', 'Anulado', ...(slip ? [] : ['Impuestos'])])
 			expect(html).toContain(text);
 		for (const text of ['Closure 42', 'Tenders', 'Tax rates', 'Voided'])
 			expect(html).not.toContain(text);
@@ -140,6 +183,7 @@ describe.each([
 	it('renders an X-report copy and omits corrections', () => {
 		const data = structuredClone(fixture);
 		data.fiscal.is_x_report = true;
+		data.fiscal.receipt_number = '';
 		data.fiscal.is_reprint = true;
 		data.fiscal.reprint_count = 2;
 		data.order = { printed: { datetime: '2026-09-11 18:00' } };
@@ -148,7 +192,8 @@ describe.each([
 		expect(html).toContain('X-report');
 		expect(html).toContain('COPY 2');
 		expect(html).toContain('2026-09-11 18:00');
-		expect(html).not.toContain('Closure 42');
+		expect(html).not.toContain('Closure ');
+		expect(html).toContain('Interim report · not a closure · totals continue');
 		expect(html).not.toContain('DO NOT PRINT THIS');
 	});
 });
@@ -175,13 +220,13 @@ it('keeps thermal variance cells separate from translated non-exact details at 4
 	const rows = Array.from(root.querySelectorAll('div')).filter(
 		(el) => el.style.display === 'flex'
 	);
-	const cash = rows.find((row) => row.firstElementChild?.textContent === 'Cash')!;
+	const cash = rows.find((row) => row.children.length === 4 && row.firstElementChild?.textContent === 'Cash')!;
 	expect(cash).toBeDefined();
-	expect(cash.lastElementChild?.textContent).toBe('-$2.00');
+	expect(cash.lastElementChild?.textContent).toBe('-£2.00');
 	for (const cell of Array.from(cash.children)) {
 		expect(cell.textContent!.length).toBeLessThanOrEqual(10);
 	}
-	expect(root.textContent).toContain('Cash Faltante $2.00');
+	expect(root.textContent).toContain('Cash Faltante £2.00');
 	expect(root.textContent).toContain('Voucher Over $1.00');
 	expect(root.textContent).not.toContain('Exact');
 });

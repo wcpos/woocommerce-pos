@@ -97,6 +97,8 @@ class Receipt_I18n_Labels {
 			'no_sale' => __( 'No sale', 'woocommerce-pos' ),
 			'void' => __( 'Void', 'woocommerce-pos' ),
 
+			'generated' => __( 'Generated', 'woocommerce-pos' ),
+
 			// Order meta.
 			'order'                  => /* translators: Receipt label for the order number or order reference. */ __( 'Order', 'woocommerce-pos' ),
 			'date'                   => /* translators: Receipt label for the sale/order date. */ __( 'Date', 'woocommerce-pos' ),

@@ -64,31 +64,36 @@
 				"key": "method",
 				"label": "Method",
 				"type": "text",
-				"align": "left"
+				"align": "left",
+				"is_first": true
 			},
 			{
 				"key": "payments",
 				"label": "Payments",
 				"type": "number",
-				"align": "right"
+				"align": "right",
+				"is_first": false
 			},
 			{
 				"key": "taken",
 				"label": "Taken",
 				"type": "money",
-				"align": "right"
+				"align": "right",
+				"is_first": false
 			},
 			{
 				"key": "refunded",
 				"label": "Refunded",
 				"type": "money",
-				"align": "right"
+				"align": "right",
+				"is_first": false
 			},
 			{
 				"key": "net",
 				"label": "Net",
 				"type": "money",
-				"align": "right"
+				"align": "right",
+				"is_first": false
 			}
 		],
 		"column_count": 5,
@@ -106,31 +111,41 @@
 								"key": "method",
 								"value": "Visa",
 								"formatted": "Visa",
-								"align": "left"
+								"align": "left",
+								"is_first": true,
+								"label": "Method"
 							},
 							{
 								"key": "payments",
 								"value": "3",
 								"formatted": "3",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Payments"
 							},
 							{
 								"key": "taken",
 								"value": "60",
 								"formatted": "£60.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Taken"
 							},
 							{
 								"key": "refunded",
 								"value": "10",
 								"formatted": "£10.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Refunded"
 							},
 							{
 								"key": "net",
 								"value": "50",
 								"formatted": "£50.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Net"
 							}
 						]
 					},
@@ -142,31 +157,41 @@
 								"key": "method",
 								"value": "Mastercard",
 								"formatted": "Mastercard",
-								"align": "left"
+								"align": "left",
+								"is_first": true,
+								"label": "Method"
 							},
 							{
 								"key": "payments",
 								"value": "2",
 								"formatted": "2",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Payments"
 							},
 							{
 								"key": "taken",
 								"value": "40",
 								"formatted": "£40.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Taken"
 							},
 							{
 								"key": "refunded",
 								"value": "0",
 								"formatted": "£0.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Refunded"
 							},
 							{
 								"key": "net",
 								"value": "40",
 								"formatted": "£40.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Net"
 							}
 						]
 					}
@@ -177,31 +202,41 @@
 							"key": "method",
 							"value": "Card subtotal",
 							"formatted": "Card subtotal",
-							"align": "left"
+							"align": "left",
+							"is_first": true,
+							"label": "Method"
 						},
 						{
 							"key": "payments",
 							"value": "5",
 							"formatted": "5",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Payments"
 						},
 						{
 							"key": "taken",
 							"value": "100",
 							"formatted": "£100.00",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Taken"
 						},
 						{
 							"key": "refunded",
 							"value": "10",
 							"formatted": "£10.00",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Refunded"
 						},
 						{
 							"key": "net",
 							"value": "90",
 							"formatted": "£90.00",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Net"
 						}
 					]
 				}
@@ -218,31 +253,41 @@
 								"key": "method",
 								"value": "Morning cash",
 								"formatted": "Morning cash",
-								"align": "left"
+								"align": "left",
+								"is_first": true,
+								"label": "Method"
 							},
 							{
 								"key": "payments",
 								"value": "4",
 								"formatted": "4",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Payments"
 							},
 							{
 								"key": "taken",
 								"value": "80",
 								"formatted": "£80.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Taken"
 							},
 							{
 								"key": "refunded",
 								"value": "0",
 								"formatted": "£0.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Refunded"
 							},
 							{
 								"key": "net",
 								"value": "80",
 								"formatted": "£80.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Net"
 							}
 						]
 					},
@@ -254,31 +299,41 @@
 								"key": "method",
 								"value": "Afternoon cash",
 								"formatted": "Afternoon cash",
-								"align": "left"
+								"align": "left",
+								"is_first": true,
+								"label": "Method"
 							},
 							{
 								"key": "payments",
 								"value": "1",
 								"formatted": "1",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Payments"
 							},
 							{
 								"key": "taken",
 								"value": "20",
 								"formatted": "£20.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Taken"
 							},
 							{
 								"key": "refunded",
 								"value": "5",
 								"formatted": "£5.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Refunded"
 							},
 							{
 								"key": "net",
 								"value": "15",
 								"formatted": "£15.00",
-								"align": "right"
+								"align": "right",
+								"is_first": false,
+								"label": "Net"
 							}
 						]
 					}
@@ -289,31 +344,41 @@
 							"key": "method",
 							"value": "Cash subtotal",
 							"formatted": "Cash subtotal",
-							"align": "left"
+							"align": "left",
+							"is_first": true,
+							"label": "Method"
 						},
 						{
 							"key": "payments",
 							"value": "5",
 							"formatted": "5",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Payments"
 						},
 						{
 							"key": "taken",
 							"value": "100",
 							"formatted": "£100.00",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Taken"
 						},
 						{
 							"key": "refunded",
 							"value": "5",
 							"formatted": "£5.00",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Refunded"
 						},
 						{
 							"key": "net",
 							"value": "95",
 							"formatted": "£95.00",
-							"align": "right"
+							"align": "right",
+							"is_first": false,
+							"label": "Net"
 						}
 					]
 				}
@@ -325,31 +390,41 @@
 					"key": "method",
 					"value": "Total",
 					"formatted": "Total",
-					"align": "left"
+					"align": "left",
+					"is_first": true,
+					"label": "Method"
 				},
 				{
 					"key": "payments",
 					"value": "10",
 					"formatted": "10",
-					"align": "right"
+					"align": "right",
+					"is_first": false,
+					"label": "Payments"
 				},
 				{
 					"key": "taken",
 					"value": "200",
 					"formatted": "£200.00",
-					"align": "right"
+					"align": "right",
+					"is_first": false,
+					"label": "Taken"
 				},
 				{
 					"key": "refunded",
 					"value": "15",
 					"formatted": "£15.00",
-					"align": "right"
+					"align": "right",
+					"is_first": false,
+					"label": "Refunded"
 				},
 				{
 					"key": "net",
 					"value": "185",
 					"formatted": "£185.00",
-					"align": "right"
+					"align": "right",
+					"is_first": false,
+					"label": "Net"
 				}
 			]
 		},
@@ -387,9 +462,15 @@
 			"123 Bean Street",
 			"London"
 		],
-		"phone": "",
+		"phone": "020 1234 5678",
 		"email": "",
-		"logo": ""
+		"logo": "",
+		"tax_ids": [
+			{
+				"label": "VAT",
+				"value": "GB123456789"
+			}
+		]
 	},
 	"register": {
 		"id": "front-till",
@@ -412,6 +493,7 @@
 	},
 	"i18n": {
 		"subtotal": "Subtotal",
-		"total": "Total"
+		"total": "Total",
+		"generated": "Generated"
 	}
 }
