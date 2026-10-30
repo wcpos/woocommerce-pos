@@ -4,8 +4,8 @@
     <strong style="font-size: 18px;">{{store.name}}</strong>
     {{#store.address_lines}}<div style="font-size: 12px;">{{.}}</div>{{/store.address_lines}}
     {{#store.tax_ids}}<div style="font-size: 12px; color: #6b7280;">{{#label}}{{label}}: {{/label}}{{value}}</div>{{/store.tax_ids}}
-    <h1 style="font-size: 24px; margin: 16px 0 8px;">{{#fiscal.is_x_report}}{{i18n.x_report}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure}} {{closure.number}}{{/fiscal.is_x_report}}</h1>
-    <p style="font-size: 12px; color: #6b7280;">{{#fiscal.is_x_report}}{{i18n.x_report_subtitle}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure_subtitle}}{{/fiscal.is_x_report}}</p>
+    <h1 style="font-size: 24px; margin: 16px 0 8px;">{{#fiscal.is_handover}}{{i18n.handover_slip}}{{/fiscal.is_handover}}{{^fiscal.is_handover}}{{#fiscal.is_x_report}}{{i18n.x_report}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure}} {{closure.number}}{{/fiscal.is_x_report}}{{/fiscal.is_handover}}</h1>
+    <p style="font-size: 12px; color: #6b7280;">{{#fiscal.is_handover}}{{i18n.handover_subtitle}}{{/fiscal.is_handover}}{{^fiscal.is_handover}}{{#fiscal.is_x_report}}{{i18n.x_report_subtitle}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure_subtitle}}{{/fiscal.is_x_report}}{{/fiscal.is_handover}}</p>
     <strong>{{register.name}}</strong>
     {{#fiscal.is_reprint}}<p><strong>{{i18n.copy}} {{fiscal.reprint_count}}</strong> · {{order.printed.datetime}}</p>{{/fiscal.is_reprint}}
     {{#closure.opened_at.datetime}}<p style="font-size: 12px; margin: 8px 0;">{{i18n.opened}}: {{closure.opened_at.datetime}} · {{closure.breakdowns.labels.opened_by_name}}</p>{{/closure.opened_at.datetime}}
@@ -59,6 +59,12 @@
   {{/closure.has_movements}}
   {{#closure.breakdowns.drawer_openings}}<p style="font-size: 12px;">{{i18n.drawer_openings}} · {{closure.breakdowns.drawer_openings}}</p>{{/closure.breakdowns.drawer_openings}}
   {{#closure.has_variance_note}}<p style="font-size: 12px; color: #6b7280; font-variant: small-caps;">{{i18n.variance_note}}</p><blockquote style="margin: 8px 0; font-size: 12px;">{{closure.breakdowns.variance_note}}</blockquote>{{/closure.has_variance_note}}
+  {{#fiscal.is_handover}}
+  <table style="width: 100%; margin: 32px 0 16px; font-size: 12px;"><tbody>
+    <tr><td><p>{{i18n.handed_over_by}}: {{closure.breakdowns.labels.cashier_name}}</p><div style="border-bottom: 1px solid #111827; width: 240px; height: 24px;"></div></td></tr>
+    <tr><td><p>{{i18n.taken_over_by}}</p><div style="border-bottom: 1px solid #111827; width: 240px; height: 24px;"></div></td></tr>
+  </tbody></table>
+  {{/fiscal.is_handover}}
   {{#closure.has_perpetual}}
   <h2 style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 8px;">{{i18n.perpetual_totals}}</h2>
   <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;"><tbody><tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.perpetual_sales}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.perpetual_sales_total_display}}</td></tr><tr><td style="text-align: left; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{i18n.perpetual_refunds}}</td><td style="text-align: right; padding: 6px 4px; border-bottom: 1px dashed #d1d5db;">{{closure.perpetual_refunds_total_display}}</td></tr></tbody></table>
@@ -67,7 +73,9 @@
   <footer style="border-top: 1px solid #d1d5db; padding-top: 12px; margin-top: 24px; font-size: 11px; color: #111827;">
   {{#closure.has_sales}}<p style="font-size: 12px;">{{i18n.cashiers}}: {{#closure.breakdowns.cashiers}}<span>{{name}} </span>{{/closure.breakdowns.cashiers}}</p>{{/closure.has_sales}}
   {{#fiscal.hash}}<p>{{i18n.record_hash}}: {{fiscal.hash}}</p>{{/fiscal.hash}}
+  {{^fiscal.is_handover}}
   <table style="width: 100%; margin: 32px 0 16px;"><tbody><tr><td><div style="border-bottom: 1px solid #111827; width: 240px; height: 24px;"></div><p>{{i18n.cashier_signature}}</p></td><td><div style="border-bottom: 1px solid #111827; width: 240px; height: 24px;"></div><p>{{i18n.manager_signature}}</p></td></tr></tbody></table>
+  {{/fiscal.is_handover}}
   <p style="color: #6b7280;">{{i18n.management_report}}</p>
   {{software.name}} {{software.plugin_version}} · {{order.printed.datetime}}</footer>
 {{/fiscal.is_closure_document}}

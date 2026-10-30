@@ -638,7 +638,7 @@ class Gallery_Registry {
 				'engine' => 'logicless',
 				'output_type' => 'html',
 				'paper_width' => null,
-				'version' => 2,
+				'version' => 3,
 				'preview_data' => 'closure',
 			),
 			'closure-detailed' => array(
@@ -649,7 +649,7 @@ class Gallery_Registry {
 				'engine' => 'logicless',
 				'output_type' => 'html',
 				'paper_width' => null,
-				'version' => 1,
+				'version' => 2,
 				'preview_data' => 'closure',
 			),
 			'thermal-closure-80mm' => array(
@@ -660,7 +660,7 @@ class Gallery_Registry {
 				'engine' => 'thermal',
 				'output_type' => 'escpos',
 				'paper_width' => '80mm',
-				'version' => 2,
+				'version' => 3,
 				'preview_data' => 'closure',
 			),
 			'thermal-closure-58mm' => array(
@@ -671,7 +671,7 @@ class Gallery_Registry {
 				'engine' => 'thermal',
 				'output_type' => 'escpos',
 				'paper_width' => '58mm',
-				'version' => 1,
+				'version' => 2,
 				'preview_data' => 'closure',
 			),
 			'thermal-closure-80mm-rtl' => array(
@@ -682,7 +682,7 @@ class Gallery_Registry {
 				'engine' => 'thermal',
 				'output_type' => 'escpos',
 				'paper_width' => '80mm',
-				'version' => 1,
+				'version' => 2,
 				'preview_data' => 'closure',
 				'direction' => 'rtl',
 			),
@@ -694,7 +694,7 @@ class Gallery_Registry {
 				'engine' => 'thermal',
 				'output_type' => 'escpos',
 				'paper_width' => '80mm',
-				'version' => 1,
+				'version' => 2,
 				'preview_data' => 'closure',
 			),
 		);

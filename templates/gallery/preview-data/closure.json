@@ -105,6 +105,7 @@
         }
       ],
       "labels": {
+        "cashier_name": "Alex",
         "opened_by_name": "Alex",
         "closed_by_name": "Alex",
         "approved_by_name": "Alex"
@@ -149,6 +150,10 @@
   "store": { "name": "Coffee Monster", "address_lines": ["123 Bean Street", "London"], "tax_ids": [{"label": "VAT", "value": "GB123456789"}] },
   "order": { "currency": "GBP", "printed": { "datetime": "Sep 11, 2026, 19:05" } },
   "i18n": {
+    "handover_slip": "Hand-over slip",
+    "handover_subtitle": "Drawer handed over · session continues",
+    "handed_over_by": "Handed over by",
+    "taken_over_by": "Taken over by",
     "discounts": "Discounts",
 "items_sold": "Items sold",
 "average_sale": "Average sale",
@@ -221,6 +226,7 @@
     "is_refund_document": false,
     "is_closure_document": true,
     "is_x_report": false,
+    "is_handover": false,
     "is_reprint": false,
     "reprint_count": 0
   }
