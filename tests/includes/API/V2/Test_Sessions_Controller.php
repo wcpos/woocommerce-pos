@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -28,20 +29,34 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private $register_ids = array();
 
+	/** The sale sequence option before the test; a carry's closure COMMITs the ledger's bump.
+	 *
+	 * @var string|null
+	 */
+	private $sale_sequence;
+
 	/** Remove this test's committed bookkeeping after the framework rollback. */
 	public function tearDown(): void {
 		parent::tearDown();
 		global $wpdb;
 		foreach ( $this->register_ids as $id ) {
-			// Movements live on the session rows, so they go with them.
-			$wpdb->delete( ( new Register_Session_Store() )->table_name(), array( 'register_id' => $id ) );
+			// Movements live on the session rows, so they go with them; a carry commits the sale's fiscal row.
+			foreach ( array( new Register_Session_Store(), new Fiscal_Record_Store() ) as $store ) {
+				$wpdb->delete( $store->table_name(), array( 'register_id' => $id ) );
+			}
 		}
 		$wpdb->query( 'COMMIT' );
+		if ( null === $this->sale_sequence ) {
+			delete_option( 'wcpos_fiscal_sequence_sale' );
+		} else {
+			update_option( 'wcpos_fiscal_sequence_sale', $this->sale_sequence, false );
+		}
 	}
 
 	/** Install owners and grant cash management. */
 	public function setUp(): void {
 		parent::setUp();
+		$this->sale_sequence = get_option( 'wcpos_fiscal_sequence_sale', null );
 		( new Register_Session_Store() )->install();
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos_cash' );
 	}
@@ -1634,6 +1649,8 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$id = $this->post( 'sessions', $fields )->get_data()['id'];
 		$order = new \WC_Order();
 		$order->set_total( '100' );
+		// The register keys the sale's fiscal row for tearDown; a carry's closure commits it.
+		$order->update_meta_data( '_wcpos_register', $fields['register_id'] );
 		$order->save();
 		$payment = Ledger::instance()->record(
 			$order,

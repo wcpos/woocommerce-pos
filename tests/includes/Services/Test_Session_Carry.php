@@ -15,7 +15,31 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Real stores pin the close-before-open sequence and replay. */
 class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
-	use Closure_Test_Fixture;
+	use Closure_Test_Fixture {
+		tearDown as fixture_teardown;
+	}
+
+	/** The sale sequence option before the test; the fixture's COMMIT makes the ledger's bump durable.
+	 *
+	 * @var string|null
+	 */
+	private $sale_sequence;
+
+	/** Remember the sale sequence the ledger will bump. */
+	public function setUp(): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- PHPUnit lifecycle method.
+		parent::setUp();
+		$this->sale_sequence = get_option( 'wcpos_fiscal_sequence_sale', null );
+	}
+
+	/** Remove the committed rows, then restore the sale sequence for the fiscal store's own tests. */
+	public function tearDown(): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- PHPUnit lifecycle method.
+		$this->fixture_teardown();
+		if ( null === $this->sale_sequence ) {
+			delete_option( 'wcpos_fiscal_sequence_sale' );
+		} else {
+			update_option( 'wcpos_fiscal_sequence_sale', $this->sale_sequence, false );
+		}
+	}
 
 	/** Client-owned identities for one act. */
 	private function ids(): array {
@@ -51,6 +75,8 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 		$ids = $this->ids();
 		$order = new \WC_Order();
 		$order->set_total( '100' );
+		// The register on the order keys its fiscal row for the fixture's committed-row cleanup.
+		$order->update_meta_data( '_wcpos_register', $source['register_id'] );
 		$order->save();
 		Ledger::instance()->record(
 			$order,
@@ -185,6 +211,7 @@ class Test_Session_Carry extends WCPOS_REST_Unit_Test_Case {
 				$landed = true;
 				$order = new \WC_Order();
 				$order->set_total( '20' );
+				$order->update_meta_data( '_wcpos_register', $source['register_id'] );
 				$order->save();
 				Ledger::instance()->record(
 					$order,
