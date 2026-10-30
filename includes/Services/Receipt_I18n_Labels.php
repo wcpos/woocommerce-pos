@@ -41,6 +41,22 @@ class Receipt_I18n_Labels {
 
 		return array(
 			// Closure headings and row labels.
+			'discounts' => __( 'Discounts', 'woocommerce-pos' ),
+			'items_sold' => __( 'Items sold', 'woocommerce-pos' ),
+			'average_sale' => __( 'Average sale', 'woocommerce-pos' ),
+			'drawer_openings' => __( 'Drawer openings', 'woocommerce-pos' ),
+			'variance_note' => __( 'Difference note', 'woocommerce-pos' ),
+			'denominations' => __( 'Count by denomination', 'woocommerce-pos' ),
+			'pieces' => __( 'Pieces', 'woocommerce-pos' ),
+			'closure_subtitle' => /* translators: Line printed below the numbered closure title. */ __( 'Session closed · totals reset', 'woocommerce-pos' ),
+			'x_report_subtitle' => /* translators: Tells the cashier this interim print does not close the session. */ __( 'Interim report · not a closure · totals continue', 'woocommerce-pos' ),
+			'management_report' => /* translators: Legal footer for non-fiscal management prints, including Poland and Italy. */ __( 'Management report, not a fiscal document', 'woocommerce-pos' ),
+			'record_hash' => __( 'WCPOS record hash', 'woocommerce-pos' ),
+			'cashier_signature' => __( 'Cashier signature', 'woocommerce-pos' ),
+			'manager_signature' => __( 'Manager signature', 'woocommerce-pos' ),
+			'count_slip' => __( 'Count slip', 'woocommerce-pos' ),
+			'counters' => __( 'Counters', 'woocommerce-pos' ),
+			'net_sales' => __( 'Net sales', 'woocommerce-pos' ),
 			'x_report' => __( 'X-report', 'woocommerce-pos' ),
 			'closure' => __( 'Closure', 'woocommerce-pos' ),
 			'opened' => __( 'Opened', 'woocommerce-pos' ),

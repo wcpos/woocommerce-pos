@@ -19,8 +19,190 @@ use WCPOS\WooCommercePOS\Tests\Helpers\Register_Sale;
 class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/** Tender rows reconcile with expected balances, including both refund sources. */
+	public function test_payment_methods_sales_and_refunds_reconcile_with_expected(): void {
+		$session = $this->closure_session();
+		$order = $this->closure_ledger( $session );
+		$rows = Ledger::instance()->read( $order );
+		$rows[] = array_merge(
+			$rows[0],
+			array(
+				'id' => wp_generate_uuid4(),
+				'amount' => '-5',
+			)
+		);
+		$rows[] = array_merge(
+			$rows[1],
+			array(
+				'id' => wp_generate_uuid4(),
+				'amount' => '-2',
+				'kind' => 'refund',
+			)
+		);
+		Ledger_Seed::rows( $order, $rows, false );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( '3' );
+		$refund->update_meta_data( '_wcpos_session', $session['id'] );
+		$refund->save();
+		$figures = Session_Figures::for_session( $session );
+
+		$methods = $figures->payment_methods();
+
+		$this->assertSame( '50.0000', $methods['cash']['sales'] );
+		$this->assertSame( '8.0000', $methods['cash']['refunds'] );
+		$this->assertSame( '30.0000', $methods['card']['sales'] );
+		$this->assertSame( '2.0000', $methods['card']['refunds'] );
+		foreach ( $methods as $key => $method ) {
+			$this->assertSame( $key, $method['method'] );
+			$this->assertSame( $figures->expected()[ $key ], \WCPOS\WooCommercePOS\Services\Closure_Store::sum( array( 'cash' === $key ? '100' : '0', $method['sales'], '-' . $method['refunds'] ) ) );
+		}
+		$this->assertSame( $methods, $figures->payment_methods() );
+	}
+
+	/** Tax lines, coupon lines and quantities are counted once per sale order. */
+	public function test_order_breakdowns_sum_two_orders_and_memoise_the_snapshot(): void {
+		$session = $this->closure_session();
+		$orders = array( $this->closure_ledger( $session ), $this->closure_ledger( $session ) );
+		foreach ( $orders as $order ) {
+			$item = new \WC_Order_Item_Product();
+			$item->set_name( 'Test item' );
+			$item->set_quantity( 3 );
+			$order->add_item( $item );
+			foreach ( array( 'first', 'second' ) as $code ) {
+				$coupon = new \WC_Order_Item_Coupon();
+				$coupon->set_code( $code );
+				$order->add_item( $coupon );
+			}
+			foreach ( array( array( 1, '20', '2', '1' ), array( 2, '5', '0.50', '0' ), array( 3, '0', '0', '0' ) ) as list( $id, $percent, $tax, $shipping ) ) {
+				$item = new \WC_Order_Item_Tax();
+				$item->set_rate_id( $id );
+				$item->set_label( 'VAT ' . $percent . '%' );
+				$item->set_rate_percent( $percent );
+				$item->set_tax_total( $tax );
+				$item->set_shipping_tax_total( $shipping );
+				$order->add_item( $item );
+			}
+			$order->set_discount_total( '5.25' );
+			$order->set_discount_tax( '1.05' );
+			$order->save();
+		}
+		$figures = Session_Figures::for_session( $session );
+
+		$this->assertSame( 2, $figures->sales_count() );
+		$this->assertSame(
+			array(
+				'count' => 4,
+				'amount' => '12.6000',
+			),
+			$figures->discounts()
+		);
+		$this->assertSame( 6, $figures->items_sold() );
+		$this->assertSame( '80.0000', $figures->average_sale() );
+		$rates = $figures->tax_rates();
+		$this->assertSame( '30.0000', $rates[1]['net'] );
+		$this->assertSame( '6.0000', $rates[1]['tax'] );
+		$this->assertSame( '36.0000', $rates[1]['gross'] );
+		$this->assertSame( '20.0000', $rates[2]['net'] );
+		$this->assertSame( '1.0000', $rates[2]['tax'] );
+		$this->assertSame( '0.0000', $rates[3]['net'] );
+		$orders[0]->set_discount_total( '99' );
+		$orders[0]->save();
+		$this->assertSame( '12.6000', $figures->discounts()['amount'] );
+		$this->assertSame( $rates, $figures->tax_rates() );
+
+		$document = ( new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder() )->build_closure_document( $session, true )['closure'];
+		$this->assertCount( 2, $document['breakdowns']['payment_methods'] );
+		$this->assertCount( 3, $document['breakdowns']['tax_rates'] );
+		$this->assertSame( '160.0000', $document['period_sales_total'] );
+		$this->assertSame( '80.0000', $document['breakdowns']['average_sale'] );
+		$this->assertSame( 6, $document['breakdowns']['items_sold'] );
+		$this->assertSame( 0, $document['breakdowns']['drawer_openings'] );
+		$this->assertNotEmpty( $document['breakdowns']['discounts']['amount_display'] );
+		$this->assertNotEmpty( $document['breakdowns']['average_sale_display'] );
+		$this->assertArrayNotHasKey( 'variance_note', $document['breakdowns'] );
+		$this->assertEmpty( $document['breakdowns']['denominations'] ?? array() );
+	}
+
+	/** Re-completed sales with no legs in this session still contribute their quantities. */
+	public function test_items_sold_includes_completion_history_only_orders(): void {
+		$first = $this->closure_session( null, 'open' );
+		$second = $this->closure_session( null, 'open' );
+		$order = $this->completed_in( $first );
+		$item = new \WC_Order_Item_Product();
+		$item->set_name( 'Re-completed item' );
+		$item->set_quantity( 2 );
+		$order->add_item( $item );
+		$order->save();
+		$this->recomplete_in( $order, $second );
+		$figures = Session_Figures::for_session( $second );
+		$this->assertSame( array(), $figures->legs() );
+		$this->assertSame( 1, $figures->sales_count() );
+		$this->assertSame( 2, $figures->items_sold() );
+	}
+
+	/** Empty sessions and repeating decimal averages keep four-place strings. */
+	public function test_average_sale_decimal_division_and_empty_breakdowns(): void {
+		$session = $this->closure_session();
+		$empty = Session_Figures::for_session( $session );
+		$this->assertSame( '0.0000', $empty->average_sale() );
+		$this->assertSame(
+			array(
+				'count' => 0,
+				'amount' => '0.0000',
+			),
+			$empty->discounts()
+		);
+		$this->assertSame( 0, $empty->items_sold() );
+		$this->assertSame( array(), $empty->tax_rates() );
+		foreach ( array( '1', '0', '0' ) as $amount ) {
+			$this->order_with_legs(
+				array(
+					array(
+						'session_id' => $session['id'],
+						'amount' => $amount,
+					),
+				)
+			);
+		}
+		$this->assertSame( '0.3333', Session_Figures::for_session( $session )->average_sale() );
+	}
+
+	/** A voided no-sale is not a drawer opening in the report. */
+	public function test_drawer_openings_ignores_voided_no_sales(): void {
+		$session = $this->closure_session( null, 'open' );
+		$store = new \WCPOS\WooCommercePOS\Services\Cash_Movement_Store();
+		$fields = array(
+			'session_id' => $session['id'],
+			'type' => 'no_sale',
+			'amount' => '0',
+			'reason' => 'Check',
+			'actor' => 1,
+			'created_at_gmt' => '2026-09-11 10:00:00',
+		);
+		$target = $store->create( $fields + array( 'id' => wp_generate_uuid4() ) );
+		$this->assertIsArray( $target );
+		$this->assertIsArray( $store->create( $fields + array( 'id' => wp_generate_uuid4() ) ) );
+		$this->assertIsArray(
+			$store->create(
+				array_merge(
+					$fields,
+					array(
+						'id' => wp_generate_uuid4(),
+						'type' => 'void',
+						'voids' => $target['id'],
+					)
+				)
+			)
+		);
+		$this->assertSame( 1, Session_Figures::for_session( $session )->drawer_openings() );
+	}
+
 	/**
 	 * A snapshot digest must not be enumerable without this site's secret.
+	 *
+	 * @param string $method Snapshot reader.
+	 * @param string $key Version key.
 	 *
 	 * @testWith ["ledger_rows", "version"]
 	 *           ["refund_versions", "allocation_version"]
@@ -53,6 +235,10 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Same-second financial edits must change the opaque snapshot version.
+	 *
+	 * @param int    $index Ledger row index.
+	 * @param string $field Changed field.
+	 * @param string $value New value.
 	 *
 	 * @testWith [0, "amount", "55.0000"]
 	 *           [1, "method", "voucher"]

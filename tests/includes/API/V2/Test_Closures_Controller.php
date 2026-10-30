@@ -426,9 +426,49 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 				'unsynced_count',
 				'unsynced_total',
 				'corrections_count',
+				'discount_count',
+				'discount_total',
+				'items_sold',
+				'average_sale',
+				'drawer_openings',
+				'variance_note',
 			),
 			$csv[0]
 		);
+	}
+
+	/** New scalar columns preserve posted values and stay empty for old closures. */
+	public function test_export_new_scalars_and_legacy_empty_cells(): void {
+		$store = new Closure_Store();
+		$old = $store->create( $this->closure_fields( $this->closure_session() ) );
+		$fields = $this->closure_fields( $this->closure_session() );
+		$fields['breakdowns'] += array(
+			'discounts' => array(
+				'count' => 3,
+				'amount' => '12.5000',
+			),
+			'items_sold' => 47,
+			'average_sale' => '20.8333',
+			'drawer_openings' => 2,
+			'variance_note' => 'Two notes found',
+		);
+		$this->assertIsArray( $store->create( $fields ) );
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+		$this->assertCount( 3, $csv );
+		$expected = array(
+			'discount_count' => '3',
+			'discount_total' => '12.5000',
+			'items_sold' => '47',
+			'average_sale' => '20.8333',
+			'drawer_openings' => '2',
+			'variance_note' => 'Two notes found',
+		);
+		foreach ( array_slice( $csv, 1 ) as $row ) {
+			$cells = array_combine( $csv[0], $row );
+			foreach ( $expected as $key => $value ) {
+				$this->assertSame( $old['register_id'] === $cells['register_id'] ? '' : $value, $cells[ $key ] );
+			}
+		}
 	}
 
 	/** Register ordering wins over global number or closing time ordering. */

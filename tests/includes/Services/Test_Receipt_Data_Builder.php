@@ -30,7 +30,204 @@ use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
  * @coversNothing
  */
 class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
-	use Register_Fixture;
+	use Closure_Test_Fixture {
+		tearDown as private tear_down_closure_fixtures;
+	}
+
+	/** Older snapshots omit the new content, even with malformed optional arrays. */
+	public function test_closure_legacy_breakdowns_have_false_optional_flags(): void {
+		foreach ( array(
+			array(),
+			array(
+				'denominations' => 'old',
+				'discounts' => null,
+			),
+		) as $breakdowns ) {
+			$row = $this->builder->build_closure_document(
+				array(
+					'number' => 1,
+					'breakdowns' => $breakdowns,
+				)
+			)['closure'];
+			$this->assertFalse( $row['has_discounts'] );
+			$this->assertFalse( $row['has_variance_note'] );
+			$this->assertFalse( $row['has_denominations'] );
+		}
+	}
+
+	/** Stored strings are formatted directly, and counts become integers. */
+	public function test_closure_new_breakdowns_format_money_and_cast_counts(): void {
+		$input = array(
+			'number' => 1,
+			'breakdowns' => array(
+				'currency' => 'GBP',
+				'discounts' => array(
+					'count' => '3',
+					'amount' => '12.5000',
+				),
+				'items_sold' => '47',
+				'average_sale' => '20.8333',
+				'drawer_openings' => '2',
+				'variance_note' => 'Two £5 notes found under the drawer',
+				'denominations' => array(
+					array(
+						'value' => '5.0000',
+						'pieces' => 2,
+						'amount' => '10.0000',
+					),
+				),
+			),
+		);
+		$row = $this->builder->build_closure_document( $input )['closure'];
+		$this->assertTrue( $row['has_discounts'] );
+		$this->assertTrue( $row['has_variance_note'] );
+		$this->assertTrue( $row['has_denominations'] );
+		$this->assertSame( 3, $row['breakdowns']['discounts']['count'] );
+		$this->assertSame( 47, $row['breakdowns']['items_sold'] );
+		$this->assertSame( 2, $row['breakdowns']['drawer_openings'] );
+		$this->assertSame( '£12.50', $row['breakdowns']['discounts']['amount_display'] );
+		$this->assertSame( '£20.83', $row['breakdowns']['average_sale_display'] );
+		$this->assertSame( '£5.00', $row['breakdowns']['denominations'][0]['value_display'] );
+		$this->assertSame( '£10.00', $row['breakdowns']['denominations'][0]['amount_display'] );
+		$this->assertSame( $input['breakdowns']['variance_note'], $row['breakdowns']['variance_note'] );
+		foreach ( array(
+			array(
+				'count' => 0,
+				'amount' => '0.0000',
+			),
+			array(
+				'count' => 0,
+				'amount' => '0.0001',
+			),
+			array(
+				'count' => 1,
+				'amount' => '0.0000',
+			),
+		) as $discounts ) {
+			$input['breakdowns']['discounts'] = $discounts;
+			$this->assertSame( 0 !== $discounts['count'] || '0.0000' !== $discounts['amount'], $this->builder->build_closure_document( $input )['closure']['has_discounts'] );
+		}
+	}
+
+	/** Names missing from the app's keyed maps resolve before building the tender table. */
+	public function test_closure_unnamed_tenders_and_tax_rates_resolve_store_labels(): void {
+		$id = TaxHelper::create_tax_rate(
+			array(
+				'name' => 'VAT',
+				'rate' => '20.0000',
+			)
+		);
+		try {
+			$row = $this->builder->build_closure_document(
+				array(
+					'number' => 1,
+					'expected' => array(
+						'cod' => '12',
+						'cash' => '1',
+					),
+					'breakdowns' => array(
+						'payment_methods' => array(
+							'cod' => array(
+								'sales' => '12',
+								'refunds' => '0',
+							),
+							'cash' => array(
+								'name' => '',
+								'sales' => '1',
+							),
+							'unknown' => array( 'sales' => '0' ),
+						),
+						'tax_rates' => array(
+							$id => array(
+								'net' => '10',
+								'tax' => '2',
+								'gross' => '12',
+							),
+						),
+					),
+				)
+			)['closure'];
+			$title = WC()->payment_gateways()->payment_gateways()['cod']->get_title();
+			$this->assertSame( $title, $row['breakdowns']['payment_methods'][0]['name'] );
+			$this->assertSame( 'cod', $row['breakdowns']['payment_methods'][0]['method'] );
+			$this->assertSame( $title, $row['tenders'][0]['label'] );
+			$this->assertSame( 'Cash', $row['tenders'][1]['label'] );
+			$this->assertSame( 'Unknown', $row['breakdowns']['payment_methods'][2]['name'] );
+			$this->assertSame( 'VAT 20%', $row['breakdowns']['tax_rates'][0]['name'] );
+		} finally {
+			\WC_Tax::_delete_tax_rate( $id );
+		}
+	}
+
+	/** Live reports supply breakdowns and totals, but never the cashier's count-pane content. */
+	public function test_xreport_supplies_breakdowns_without_count_pane_content(): void {
+		$session = $this->closure_session();
+		$this->closure_ledger( $session );
+		$session['breakdowns'] = array(
+			'variance_note' => 'Do not copy',
+			'denominations' => array(
+				array(
+					'value' => '1',
+					'pieces' => 1,
+					'amount' => '1',
+				),
+			),
+		);
+		$row = $this->builder->build_closure_document( $session, true )['closure'];
+		$this->assertCount( 2, $row['breakdowns']['payment_methods'] );
+		$this->assertSame( array(), $row['breakdowns']['tax_rates'] );
+		$this->assertSame( '80.0000', $row['period_sales_total'] );
+		$this->assertSame( '0.0000', $row['period_refunds_total'] );
+		$this->assertSame( '80.0000', $row['breakdowns']['average_sale'] );
+		$this->assertNotEmpty( $row['breakdowns']['average_sale_display'] );
+		$this->assertNotEmpty( $row['breakdowns']['discounts']['amount_display'] );
+		$this->assertSame( 0, $row['breakdowns']['items_sold'] );
+		$this->assertSame( 0, $row['breakdowns']['drawer_openings'] );
+		$this->assertFalse( $row['has_variance_note'] );
+		$this->assertFalse( $row['has_denominations'] );
+		$this->assertArrayNotHasKey( 'variance_note', $row['breakdowns'] );
+		$session['period_sales_total'] = '123.0000';
+		$this->assertSame( '123.0000', $this->builder->build_closure_document( $session, true )['closure']['period_sales_total'] );
+	}
+
+	/** Every report cell collection exposes its first entry to logic-less templates. */
+	public function test_report_document_marks_first_columns_and_cells(): void {
+		$core = ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->build( 'report', 'sales' );
+		$core['report']['rows'] = $core['report']['groups'][0]['rows'];
+		$scope = array(
+			'mode' => 'range',
+			'store_id' => 0,
+			'timezone' => 'UTC',
+			'register_id' => null,
+			'register_name' => '',
+			'from' => '2026-09-01',
+			'to' => '2026-09-02',
+			'business_day' => '2026-09-02',
+		);
+		$seen_key = null;
+		$observe = static function ( $document, $key ) use ( &$seen_key ) {
+			$seen_key = $key;
+			return $document;
+		};
+		add_filter( 'wcpos_report_data', $observe, 10, 2 );
+		try {
+			$document = $this->builder->build_report_document( 'sales', 'Sales', $scope, $core );
+		} finally {
+			remove_filter( 'wcpos_report_data', $observe, 10 );
+		}
+		$this->assertSame( 'sales', $seen_key );
+		$report = $document['report'];
+		$collections = array( $report['columns'], $report['totals']['cells'], $report['groups'][0]['subtotal']['cells'] );
+		foreach ( array_merge( $report['rows'], $report['groups'][0]['rows'] ) as $row ) {
+			$collections[] = $row['cells'];
+		}
+		foreach ( $collections as $entries ) {
+			foreach ( $entries as $index => $entry ) {
+				$this->assertSame( 0 === $index, $entry['is_first'] );
+			}
+		}
+		$this->assertTrue( \WCPOS\WooCommercePOS\Services\Report_Document_Validator::validate( $document ) );
+	}
 
 	/** Provenance uses the sale zone, not UTC or the current store zone. */
 	public function test_build_provenance_in_both_modes(): void {
@@ -411,7 +608,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		if ( null === WC()->payment_gateways ) {
 			WC()->payment_gateways = \WC_Payment_Gateways::instance();
 		}
-		parent::tearDown();
+		$this->tear_down_closure_fixtures();
 	}
 
 	/**
@@ -598,7 +795,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	 * Get a tax summary row by rate id.
 	 *
 	 * @param array<int,array<string,mixed>> $summary Tax summary rows.
-	 * @param int                           $rate_id Rate ID.
+	 * @param int                            $rate_id Rate ID.
 	 *
 	 * @return array<string,mixed>
 	 */
@@ -640,6 +837,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$order->save();
 
 		$pos_store = new class() {
+			/** Return the fixture timezone. */
 			public function get_timezone(): string {
 				return 'America/New_York';
 			}
@@ -1032,6 +1230,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_uses_store_locale_when_store_provides_one(): void {
 		$order = $this->create_taxed_order( 'itemized', 'yes' );
 		$pos_store = new class() {
+			/** Return the fixture locale. */
 			public function get_locale(): string {
 				return 'fr_FR';
 			}
@@ -1059,10 +1258,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$order->save();
 
 		$pos_store = new class() {
+			/** Return the fixture locale. */
 			public function get_locale(): string {
 				return 'es_ES';
 			}
 
+			/** Return the fixture timezone. */
 			public function get_timezone(): string {
 				return 'Europe/Madrid';
 			}
@@ -1189,42 +1390,52 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_uses_store_price_and_tax_presentation_settings(): void {
 		$order = $this->create_taxed_order( 'itemized', 'no' );
 		$pos_store = new class() {
+			/** Return the fixture locale. */
 			public function get_locale(): string {
 				return 'de_DE';
 			}
 
+			/** Return the fixture currency position. */
 			public function get_currency_position(): string {
 				return 'right_space';
 			}
 
+			/** Return the fixture price thousand separator. */
 			public function get_price_thousand_separator(): string {
 				return '.';
 			}
 
+			/** Return the fixture price decimal separator. */
 			public function get_price_decimal_separator(): string {
 				return ',';
 			}
 
+			/** Return the fixture price number of decimals. */
 			public function get_price_number_of_decimals(): int {
 				return 3;
 			}
 
+			/** Return the fixture price display suffix. */
 			public function get_price_display_suffix(): string {
 				return 'inkl. MwSt.';
 			}
 
+			/** Return the fixture tax display cart. */
 			public function get_tax_display_cart(): string {
 				return 'incl';
 			}
 
+			/** Return the fixture tax total display. */
 			public function get_tax_total_display(): string {
 				return 'single';
 			}
 
+			/** Return the fixture tax round at subtotal. */
 			public function get_tax_round_at_subtotal(): string {
 				return 'yes';
 			}
 
+			/** Return the fixture prices include tax. */
 			public function get_prices_include_tax(): string {
 				return 'yes';
 			}
@@ -1258,10 +1469,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$original_thousand_sep = get_option( 'woocommerce_price_thousand_sep' );
 		$original_price_suffix = get_option( 'woocommerce_price_display_suffix' );
 		$pos_store             = new class() {
+			/** Return the fixture price thousand separator. */
 			public function get_price_thousand_separator(): string {
 				return '';
 			}
 
+			/** Return the fixture price display suffix. */
 			public function get_price_display_suffix(): string {
 				return '';
 			}
@@ -1295,26 +1508,32 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$original_currency_pos      = get_option( 'woocommerce_currency_pos' );
 		$order                      = $this->create_taxed_order( 'single', 'yes' );
 		$pos_store                  = new class() {
+			/** Return the fixture calc taxes. */
 			public function get_calc_taxes(): string {
 				return '';
 			}
 
+			/** Return the fixture tax display cart. */
 			public function get_tax_display_cart(): string {
 				return '';
 			}
 
+			/** Return the fixture tax total display. */
 			public function get_tax_total_display(): string {
 				return '';
 			}
 
+			/** Return the fixture tax round at subtotal. */
 			public function get_tax_round_at_subtotal(): string {
 				return '';
 			}
 
+			/** Return the fixture prices include tax. */
 			public function get_prices_include_tax(): string {
 				return '';
 			}
 
+			/** Return the fixture currency position. */
 			public function get_currency_position(): string {
 				return '';
 			}
@@ -1355,6 +1574,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_uses_calculation_precision_for_unit_values(): void {
 		$original_num_decimals = get_option( 'woocommerce_price_num_decimals' );
 		$pos_store             = new class() {
+			/** Return the fixture price number of decimals. */
 			public function get_price_number_of_decimals(): int {
 				return 0;
 			}
@@ -1392,6 +1612,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_falls_back_to_site_locale_when_store_lacks_locale(): void {
 		$order = $this->create_taxed_order( 'itemized', 'yes' );
 		$pos_store = new class() {
+			/** Return the fixture locale. */
 			public function get_locale(): string {
 				return '';
 			}
@@ -1468,10 +1689,24 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_tax_summary_counts_full_line_base_for_each_rate(): void {
 		$this->set_tax_fixture_options( 'no' );
 		$rate_a = TaxHelper::create_tax_rate(
-			array( 'country' => 'US', 'rate' => '10.000', 'name' => 'State Tax', 'priority' => 1, 'compound' => false, 'shipping' => true )
+			array(
+				'country' => 'US',
+				'rate' => '10.000',
+				'name' => 'State Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
 		);
 		$rate_b = TaxHelper::create_tax_rate(
-			array( 'country' => 'US', 'rate' => '5.000', 'name' => 'Local Tax', 'priority' => 2, 'compound' => false, 'shipping' => true )
+			array(
+				'country' => 'US',
+				'rate' => '5.000',
+				'name' => 'Local Tax',
+				'priority' => 2,
+				'compound' => false,
+				'shipping' => true,
+			)
 		);
 		$product = $this->create_taxable_product_with_price( '100.00' );
 		$order   = wc_create_order();
@@ -1490,7 +1725,14 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_tax_summary_includes_taxable_fees_and_shipping(): void {
 		$this->set_tax_fixture_options( 'no' );
 		$rate_id = TaxHelper::create_tax_rate(
-			array( 'country' => 'US', 'rate' => '10.000', 'name' => 'US Tax', 'priority' => 1, 'compound' => false, 'shipping' => true )
+			array(
+				'country' => 'US',
+				'rate' => '10.000',
+				'name' => 'US Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
 		);
 		$product = $this->create_taxable_product_with_price( '100.00' );
 		$order   = wc_create_order();
@@ -1522,10 +1764,24 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_tax_summary_compound_rate_uses_pre_tax_net_base(): void {
 		$this->set_tax_fixture_options( 'no' );
 		TaxHelper::create_tax_rate(
-			array( 'country' => 'US', 'rate' => '10.000', 'name' => 'Base Tax', 'priority' => 1, 'compound' => false, 'shipping' => true )
+			array(
+				'country' => 'US',
+				'rate' => '10.000',
+				'name' => 'Base Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
 		);
 		$compound_rate = TaxHelper::create_tax_rate(
-			array( 'country' => 'US', 'rate' => '5.000', 'name' => 'Compound Tax', 'priority' => 2, 'compound' => true, 'shipping' => true )
+			array(
+				'country' => 'US',
+				'rate' => '5.000',
+				'name' => 'Compound Tax',
+				'priority' => 2,
+				'compound' => true,
+				'shipping' => true,
+			)
 		);
 		$product = $this->create_taxable_product_with_price( '100.00' );
 		$order   = wc_create_order();
@@ -1763,24 +2019,39 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$store_filter = static function () use ( $legacy_hours ) {
 			return new class( $legacy_hours ) {
+				/** Fixture value.
+				 *
+				 * @var string
+				 */
 				private string $legacy_hours;
 
+				/**
+				 * Initialize the store fixture.
+				 *
+				 * @param string $legacy_hours Fixture value.
+				 */
 				public function __construct( string $legacy_hours ) {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					$this->legacy_hours = $legacy_hours;
 				}
 
+				/** Return the fixture opening hours. */
 				public function get_opening_hours(): string {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					return $this->legacy_hours;
 				}
 
+				/** Return the fixture personal notes. */
 				public function get_personal_notes(): string {
 					return '';
 				}
 
+				/** Return the fixture policies and conditions. */
 				public function get_policies_and_conditions(): string {
 					return '';
 				}
 
+				/** Return the fixture footer imprint. */
 				public function get_footer_imprint(): string {
 					return '';
 				}
@@ -1821,32 +2092,53 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$store_filter = static function () use ( $store_id ) {
 			return new class( $store_id ) {
+				/** Fixture value.
+				 *
+				 * @var int
+				 */
 				private int $id;
 
+				/**
+				 * Initialize the store fixture.
+				 *
+				 * @param int $id Fixture value.
+				 */
 				public function __construct( int $id ) {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					$this->id = $id;
 				}
 
+				/** Return the fixture id. */
 				public function get_id(): int {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					return $this->id;
 				}
 
+				/**
+				 * Return the fixture logo image src.
+				 *
+				 * @param string $size Requested image size.
+				 */
 				public function get_logo_image_src( $size = 'full' ) {
 					return false;
 				}
 
+				/** Return the fixture opening hours. */
 				public function get_opening_hours(): array {
 					return array();
 				}
 
+				/** Return the fixture personal notes. */
 				public function get_personal_notes(): string {
 					return '';
 				}
 
+				/** Return the fixture policies and conditions. */
 				public function get_policies_and_conditions(): string {
 					return '';
 				}
 
+				/** Return the fixture footer imprint. */
 				public function get_footer_imprint(): string {
 					return '';
 				}
@@ -1888,32 +2180,53 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$store_filter = static function () use ( $store_id ) {
 			return new class( $store_id ) {
+				/** Fixture value.
+				 *
+				 * @var int
+				 */
 				private int $id;
 
+				/**
+				 * Initialize the store fixture.
+				 *
+				 * @param int $id Fixture value.
+				 */
 				public function __construct( int $id ) {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					$this->id = $id;
 				}
 
+				/** Return the fixture id. */
 				public function get_id(): int {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					return $this->id;
 				}
 
+				/**
+				 * Return the fixture logo image src.
+				 *
+				 * @param string $size Requested image size.
+				 */
 				public function get_logo_image_src( $size = 'full' ) {
 					return false;
 				}
 
+				/** Return the fixture opening hours. */
 				public function get_opening_hours(): array {
 					return array();
 				}
 
+				/** Return the fixture personal notes. */
 				public function get_personal_notes(): string {
 					return '';
 				}
 
+				/** Return the fixture policies and conditions. */
 				public function get_policies_and_conditions(): string {
 					return '';
 				}
 
+				/** Return the fixture footer imprint. */
 				public function get_footer_imprint(): string {
 					return '';
 				}
@@ -2011,32 +2324,53 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$store_filter = static function () use ( $store_id ) {
 			return new class( $store_id ) {
+				/** Fixture value.
+				 *
+				 * @var int
+				 */
 				private int $id;
 
+				/**
+				 * Initialize the store fixture.
+				 *
+				 * @param int $id Fixture value.
+				 */
 				public function __construct( int $id ) {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					$this->id = $id;
 				}
 
+				/** Return the fixture id. */
 				public function get_id(): int {
+					// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic -- $this belongs to the anonymous class, not its enclosing static factory.
 					return $this->id;
 				}
 
+				/**
+				 * Return the fixture logo image src.
+				 *
+				 * @param string $size Requested image size.
+				 */
 				public function get_logo_image_src( $size = 'full' ) {
 					return false;
 				}
 
+				/** Return the fixture opening hours. */
 				public function get_opening_hours(): array {
 					return array();
 				}
 
+				/** Return the fixture personal notes. */
 				public function get_personal_notes(): string {
 					return '';
 				}
 
+				/** Return the fixture policies and conditions. */
 				public function get_policies_and_conditions(): string {
 					return '';
 				}
 
+				/** Return the fixture footer imprint. */
 				public function get_footer_imprint(): string {
 					return '';
 				}
@@ -2765,6 +3099,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'net_total_display', $formatted['totals'] );
 		$this->assertNotSame( '', $formatted['totals']['net_total_display'] );
 	}
+	/** Refund documents retain their own amounts and identity. */
 	public function test_refund_document_uses_refund_amounts_cashier_and_fiscal_identity(): void {
 		$order = OrderHelper::create_order();
 		$cashier = $this->factory->user->create( array( 'display_name' => 'Refund operator' ) );
@@ -2776,7 +3111,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		foreach ( array( new \WC_Order_Item_Product(), new \WC_Order_Item_Fee(), new \WC_Order_Item_Shipping() ) as $item ) {
 			$item->set_name( 'Refunded item' );
 			$item->set_total( -10 );
-			$item->set_taxes( array( 'total' => array( 1 => -2 ), 'subtotal' => array( 1 => -2 ) ) );
+			$item->set_taxes(
+				array(
+					'total' => array( 1 => -2 ),
+					'subtotal' => array( 1 => -2 ),
+				)
+			);
 			if ( $item instanceof \WC_Order_Item_Product ) {
 				$item->set_quantity( -2 );
 				$item->set_subtotal( -10 );
@@ -2833,5 +3173,4 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 30, $data['totals']['total_excl'] );
 		$this->assertEquals( 36, $data['totals']['total_incl'] );
 	}
-
 }

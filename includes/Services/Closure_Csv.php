@@ -110,6 +110,15 @@ final class Closure_Csv {
 			$columns[ $field ] = array( $field );
 		}
 
+		$columns += array(
+			'discount_count' => array( 'breakdowns', 'discounts', 'count' ),
+			'discount_total' => array( 'breakdowns', 'discounts', 'amount' ),
+			'items_sold' => array( 'breakdowns', 'items_sold' ),
+			'average_sale' => array( 'breakdowns', 'average_sale' ),
+			'drawer_openings' => array( 'breakdowns', 'drawer_openings' ),
+			'variance_note' => array( 'breakdowns', 'variance_note' ),
+		);
+
 		// php://temp, not php://memory: this buffers a whole-store export, which the
 		// page cap allows to be very large. php://temp spills past ~2 MB to disk, so
 		// the buffer is not resident while stream_get_contents() below materializes
@@ -134,7 +143,7 @@ final class Closure_Csv {
 						$value = is_array( $value ) ? ( $value[ $part ] ?? null ) : null;
 					}
 					$value = is_scalar( $value ) ? (string) $value : '';
-					$text = in_array( $column, array( 'register_id', 'register_name', 'store_name', 'business_day', 'opened_at_gmt', 'closed_at_gmt', 'closed_by_name', 'currency', 'timezone' ), true );
+					$text = in_array( $column, array( 'register_id', 'register_name', 'store_name', 'business_day', 'opened_at_gmt', 'closed_at_gmt', 'closed_by_name', 'currency', 'timezone', 'variance_note' ), true );
 					// Text is never a spreadsheet formula; signed decimal amounts stay raw.
 					if ( preg_match( '/^[\x00-\x20]*[=+@-]/', $value ) && ( $text || ! preg_match( '/^-?\d+(?:\.\d+)?$/D', $value ) ) ) {
 						$value = "'" . $value;

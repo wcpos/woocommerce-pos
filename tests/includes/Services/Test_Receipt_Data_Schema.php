@@ -20,6 +20,34 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Receipt_Data_Schema extends WP_UnitTestCase {
+	/** Closure fields and report first-entry flags are available in the editor. */
+	public function test_closure_fields_and_report_is_first_have_contract_types(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'closure' );
+		foreach ( array(
+			'breakdowns.discounts.count' => 'number',
+			'breakdowns.discounts.amount' => 'money',
+			'breakdowns.items_sold' => 'number',
+			'breakdowns.average_sale' => 'money',
+			'breakdowns.drawer_openings' => 'number',
+			'breakdowns.variance_note' => 'string',
+			'has_discounts' => 'boolean',
+			'has_variance_note' => 'boolean',
+			'has_denominations' => 'boolean',
+		) as $field => $type ) {
+			$this->assertSame( $type, $tree['closure']['fields'][ $field ]['type'] );
+		}
+		$denominations = $tree['closure.breakdowns.denominations'];
+		$this->assertTrue( $denominations['is_array'] );
+		$this->assertSame( 'money', $denominations['fields']['value']['type'] );
+		$this->assertSame( 'number', $denominations['fields']['pieces']['type'] );
+		$this->assertSame( 'money', $denominations['fields']['amount']['type'] );
+		$this->assertSame( 'string', $denominations['fields']['value_display']['type'] );
+		$fields = Receipt_Data_Schema::get_field_tree( 'report' )['report']['fields'];
+		foreach ( array( $fields['columns'], $fields['rows']['fields']['cells'], $fields['groups']['fields']['rows']['fields']['cells'], $fields['groups']['fields']['subtotal']['fields']['cells'], $fields['totals']['fields']['cells'] ) as $list ) {
+			$this->assertSame( 'boolean', $list['fields']['is_first']['type'] );
+		}
+	}
+
 	/** Corrections expose item fields inside a repeatable Mustache section. */
 	public function test_closure_field_tree_corrections_are_repeatable(): void {
 		$tree = Receipt_Data_Schema::get_field_tree( 'closure' );

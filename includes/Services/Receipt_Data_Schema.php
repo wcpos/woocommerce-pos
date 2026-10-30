@@ -1293,6 +1293,9 @@ class Receipt_Data_Schema {
 				'tax_rates' => 'tax_rates',
 				'perpetual' => 'perpetual_totals',
 				'movements' => 'cash_movements',
+				'discounts' => 'discounts',
+				'variance_note' => 'variance_note',
+				'denominations' => 'denominations',
 			) as $section => $label_key ) {
 				$tree['closure']['fields'][ 'has_' . $section ] = array(
 					'type' => 'boolean',
@@ -1301,6 +1304,8 @@ class Receipt_Data_Schema {
 			}
 			$field_types = array_fill_keys( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ), 'money' );
 			$field_types += array_fill_keys( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ), 'number' );
+			$field_types += array_fill_keys( array( 'breakdowns.discounts.amount', 'breakdowns.average_sale', 'net_sales' ), 'money' );
+			$field_types += array_fill_keys( array( 'breakdowns.discounts.count', 'breakdowns.items_sold', 'breakdowns.drawer_openings' ), 'number' );
 			foreach ( array(
 				'id' => __( 'Closure ID', 'woocommerce-pos' ),
 				'number' => __( 'Closure Number', 'woocommerce-pos' ),
@@ -1325,12 +1330,19 @@ class Receipt_Data_Schema {
 				'breakdowns.opening_float.expected' => __( 'Expected Opening Float', 'woocommerce-pos' ),
 				'breakdowns.opening_float.counted' => __( 'Counted Opening Float', 'woocommerce-pos' ),
 				'breakdowns.opening_float.variance' => __( 'Opening Variance', 'woocommerce-pos' ),
+				'breakdowns.discounts.count' => __( 'Discount count', 'woocommerce-pos' ),
+				'breakdowns.discounts.amount' => __( 'Discounts', 'woocommerce-pos' ),
+				'breakdowns.items_sold' => __( 'Items sold', 'woocommerce-pos' ),
+				'breakdowns.average_sale' => __( 'Average sale', 'woocommerce-pos' ),
+				'breakdowns.drawer_openings' => __( 'Drawer openings', 'woocommerce-pos' ),
+				'breakdowns.variance_note' => __( 'Difference note', 'woocommerce-pos' ),
 				'breakdowns.transaction_count' => __( 'Transactions', 'woocommerce-pos' ),
 				'breakdowns.refund_count' => __( 'Refunds', 'woocommerce-pos' ),
 				'unsynced_count' => __( 'Unsynced Sales', 'woocommerce-pos' ),
 				'unsynced_total' => __( 'Unsynced Total', 'woocommerce-pos' ),
 				'period_sales_total' => __( 'Period Sales', 'woocommerce-pos' ),
 				'period_refunds_total' => __( 'Period Refunds', 'woocommerce-pos' ),
+				'net_sales' => __( 'Net Sales', 'woocommerce-pos' ),
 				'perpetual_sales_total' => __( 'Perpetual Sales', 'woocommerce-pos' ),
 				'perpetual_refunds_total' => __( 'Perpetual Refunds', 'woocommerce-pos' ),
 				'software_version' => __( 'Software Version', 'woocommerce-pos' ),
@@ -1389,6 +1401,7 @@ class Receipt_Data_Schema {
 				'breakdowns.payment_methods' => __( 'Payment Methods', 'woocommerce-pos' ),
 				'breakdowns.tax_rates' => __( 'Tax Rates', 'woocommerce-pos' ),
 				'breakdowns.movements' => __( 'Cash Movements', 'woocommerce-pos' ),
+				'breakdowns.denominations' => __( 'Denominations', 'woocommerce-pos' ),
 				'breakdowns.cashiers' => __( 'Cashiers', 'woocommerce-pos' ),
 			) as $field => $label ) {
 				$tree['closure']['fields'][ $field ] = array(
@@ -1506,6 +1519,11 @@ class Receipt_Data_Schema {
 					'gross' => __( 'Gross', 'woocommerce-pos' ),
 				),
 				'movements' => array( 'amount' => __( 'Amount', 'woocommerce-pos' ) ),
+				'denominations' => array(
+					'value' => __( 'Value', 'woocommerce-pos' ),
+					'pieces' => __( 'Pieces', 'woocommerce-pos' ),
+					'amount' => __( 'Amount', 'woocommerce-pos' ),
+				),
 			) as $section => $fields ) {
 				$key = 'closure.breakdowns.' . $section;
 				$tree[ $key ] = array(
@@ -1515,7 +1533,7 @@ class Receipt_Data_Schema {
 				);
 				foreach ( $fields as $field => $label ) {
 					$tree[ $key ]['fields'][ $field ] = array(
-						'type' => in_array( $field, array( 'name', 'method' ), true ) ? 'string' : 'money',
+						'type' => 'pieces' === $field ? 'number' : ( in_array( $field, array( 'name', 'method' ), true ) ? 'string' : 'money' ),
 						'label' => $label,
 					);
 				}
@@ -1557,7 +1575,7 @@ class Receipt_Data_Schema {
 				'fields' => self::get_date_field_tree_fields(),
 			);
 			unset( $movement_fields );
-			foreach ( array( 'closure', 'closure.tenders', 'closure.breakdowns.payment_methods', 'closure.breakdowns.tax_rates', 'closure.breakdowns.movements' ) as $section ) {
+			foreach ( array( 'closure', 'closure.tenders', 'closure.breakdowns.payment_methods', 'closure.breakdowns.tax_rates', 'closure.breakdowns.movements', 'closure.breakdowns.denominations' ) as $section ) {
 				foreach ( $tree[ $section ]['fields'] as $field => $definition ) {
 					if ( 'money' === $definition['type'] && ( 'closure' !== $section || ! preg_match( '/^(counted|expected|variance)\./', $field ) ) ) {
 						$tree[ $section ]['fields'][ $field . '_display' ] = array(
@@ -1805,12 +1823,21 @@ class Receipt_Data_Schema {
 				'label' => __( 'Label', 'woocommerce-pos' ),
 			),
 		);
+		$first = array(
+			'type' => 'boolean',
+			'label' => __( 'First entry', 'woocommerce-pos' ),
+		);
 		$cells = array(
 			'type' => 'array',
 			'is_array' => true,
 			'label' => __( 'Cells', 'woocommerce-pos' ),
 			'fields' => array(
 				'key' => $identity['key'],
+				'is_first' => $first,
+				'label' => array(
+					'type' => 'string',
+					'label' => __( 'Column label', 'woocommerce-pos' ),
+				),
 				'value' => array(
 					'type' => 'string',
 					'label' => __( 'Value', 'woocommerce-pos' ),
@@ -1900,6 +1927,7 @@ class Receipt_Data_Schema {
 					'is_array' => true,
 					'label' => __( 'Columns', 'woocommerce-pos' ),
 					'fields' => $identity + array(
+						'is_first' => $first,
 						'type' => array(
 							'type' => 'string',
 							'label' => __( 'Type', 'woocommerce-pos' ),
@@ -1996,7 +2024,9 @@ class Receipt_Data_Schema {
 	 */
 	private static function require_report_fields( array $schema ): array {
 		if ( isset( $schema['properties'] ) ) {
-			$schema['required'] = array_keys( $schema['properties'] );
+			// is_first and a cell's column label are builder decoration, not required in older producer/preview documents.
+			$optional = isset( $schema['properties']['formatted'] ) ? array( 'is_first', 'label' ) : array( 'is_first' );
+			$schema['required'] = array_values( array_diff( array_keys( $schema['properties'] ), $optional ) );
 			$schema['properties'] = array_map( array( self::class, 'require_report_fields' ), $schema['properties'] );
 		}
 		if ( isset( $schema['items'] ) ) {

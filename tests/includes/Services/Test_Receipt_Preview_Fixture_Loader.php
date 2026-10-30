@@ -95,7 +95,7 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 		$this->assertSame( 'closure', $data['fiscal']['document_type'] );
 		$this->assertFalse( $data['fiscal']['is_sale_document'] );
 		$this->assertTrue( $data['fiscal']['is_closure_document'] );
-		foreach ( array( 'payment_methods', 'tax_rates', 'opening_float', 'movements', 'transaction_count', 'refund_count', 'cashiers' ) as $section ) {
+		foreach ( array( 'payment_methods', 'tax_rates', 'opening_float', 'movements', 'transaction_count', 'refund_count', 'cashiers', 'discounts', 'items_sold', 'average_sale', 'drawer_openings', 'variance_note', 'denominations' ) as $section ) {
 			$this->assertNotEmpty( $data['closure']['breakdowns'][ $section ] );
 		}
 		$this->assertSame( '-2.0000', $data['closure']['variance']['cash'] );

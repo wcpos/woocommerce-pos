@@ -50,12 +50,21 @@ class Receipt_Data_Builder {
 					}
 				}
 			}
+			foreach ( $figures->period_amounts() as $kind => $amounts ) {
+				$row[ 'period_' . $kind . '_total' ] = $row[ 'period_' . $kind . '_total' ] ?? Closure_Store::sum( $amounts );
+			}
 			$row['breakdowns'] = array(
 				'opening_float' => array(
 					'expected' => $row['expected_float'],
 					'counted' => $row['counted_float'],
 					'variance' => $row['opening_variance'],
 				),
+				'payment_methods' => $figures->payment_methods(),
+				'tax_rates' => $figures->tax_rates(),
+				'discounts' => $figures->discounts(),
+				'items_sold' => $figures->items_sold(),
+				'average_sale' => $figures->average_sale(),
+				'drawer_openings' => $figures->drawer_openings(),
 				'movements' => $figures->movements(),
 				'transaction_count' => $figures->sales_count(),
 				'refund_count' => $figures->refund_count(),
@@ -85,6 +94,22 @@ class Receipt_Data_Builder {
 			$row['breakdowns'][ $section ] = array_filter( is_array( $values ) ? $values : array(), 'is_array' );
 			$row[ 'has_' . $section ] = ! empty( $row['breakdowns'][ $section ] );
 		}
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		foreach ( $row['breakdowns']['payment_methods'] as $key => &$method ) {
+			$method['method'] = $method['method'] ?? (string) $key;
+			if ( empty( $method['name'] ) ) {
+				$id = $method['method'];
+				$method['name'] = 'cash' === $id ? ( $i18n['cash'] ?? 'Cash' ) : ( isset( $gateways[ $id ] ) ? $gateways[ $id ]->get_title() : ucwords( str_replace( array( '_', '-' ), ' ', $id ) ) );
+			}
+		}
+		unset( $method );
+		foreach ( $row['breakdowns']['tax_rates'] as $key => &$rate ) {
+			if ( empty( $rate['name'] ) ) {
+				$stored = \WC_Tax::_get_tax_rate( $rate['rate'] ?? $key );
+				$rate['name'] = ! empty( $stored['tax_rate_name'] ) ? $stored['tax_rate_name'] . ' ' . wc_format_decimal( $stored['tax_rate'], wc_get_price_decimals(), true ) . '%' : (string) $key;
+			}
+		}
+		unset( $rate );
 		$tender_labels = array();
 		foreach ( $row['breakdowns']['payment_methods'] ?? array() as $key => $payment_method ) {
 			$tender_labels[ $payment_method['method'] ?? $key ] = $payment_method['name'] ?? '';
@@ -114,12 +139,38 @@ class Receipt_Data_Builder {
 			}
 			return $values;
 		};
+		$discounts = $row['breakdowns']['discounts'] ?? array();
+		$discounts = is_array( $discounts ) ? $discounts : array();
+		$row['has_discounts'] = (int) ( $discounts['count'] ?? 0 ) > 0 || '' !== trim( (string) ( $discounts['amount'] ?? '0' ), '-+0.' );
+		if ( $discounts ) {
+			$discounts['count'] = (int) ( $discounts['count'] ?? 0 );
+			$row['breakdowns']['discounts'] = $with_money( $discounts, array( 'amount' ) );
+		}
+		foreach ( array( 'items_sold', 'drawer_openings' ) as $field ) {
+			if ( isset( $row['breakdowns'][ $field ] ) ) {
+				$row['breakdowns'][ $field ] = (int) $row['breakdowns'][ $field ];
+			}
+		}
+		if ( isset( $row['breakdowns']['average_sale'] ) ) {
+			$row['breakdowns'] = $with_money( $row['breakdowns'], array( 'average_sale' ) );
+		}
+		$row['has_variance_note'] = '' !== trim( (string) ( $row['breakdowns']['variance_note'] ?? '' ) );
+		$denominations = $row['breakdowns']['denominations'] ?? array();
+		$denominations = array_filter( is_array( $denominations ) ? $denominations : array(), 'is_array' );
+		$row['has_denominations'] = ! empty( $denominations );
+		if ( isset( $row['breakdowns']['denominations'] ) ) {
+			$row['breakdowns']['denominations'] = array_values( array_map( static fn( $denomination ) => $with_money( $denomination, array( 'value', 'amount' ) ), $denominations ) );
+		}
 		$timezone = isset( $row['breakdowns']['timezone'] ) ? new DateTimeZone( $row['breakdowns']['timezone'] ) : $resolver->resolve_store_timezone();
 		$date = static function ( $gmt ) use ( $resolver, $timezone ): array {
 			$timestamp = $gmt ? strtotime( $gmt . ' UTC' ) : false;
 			return false === $timestamp ? Receipt_Date_Formatter::empty() : Receipt_Date_Formatter::from_timestamp( $timestamp, $timezone, $resolver->resolve_locale() );
 		};
-		$row = $with_money( $row, array( 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'unsynced_total' ) );
+		// Sales minus refunds: the "net" line every ECR Z report prints between gross and tax.
+		if ( isset( $row['period_sales_total'] ) ) {
+			$row['net_sales'] = Closure_Store::sum( array( $row['period_sales_total'], '-' . ltrim( (string) ( $row['period_refunds_total'] ?? '0' ), '-' ) ) );
+		}
+		$row = $with_money( $row, array( 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'unsynced_total', 'net_sales' ) );
 		foreach ( array( 'opened_at', 'closed_at' ) as $field ) {
 			$row[ $field ] = $date( $row[ $field . '_gmt' ] ?? null );
 		}
@@ -288,6 +339,44 @@ class Receipt_Data_Builder {
 			'fiscal' => $fiscal,
 			'i18n' => Receipt_I18n_Labels::get_labels( $locale ),
 		) + $core;
+
+		// A cell carries its column's label so a narrow template can print "Label  value" lines.
+		$column_labels = array_column( $data['report']['columns'] ?? array(), 'label' );
+		$mark_first = static function ( array $entries ) use ( $column_labels ): array {
+			$first = true;
+			foreach ( $entries as $index => &$entry ) {
+				$entry['is_first'] = $first;
+				if ( isset( $entry['formatted'], $column_labels[ $index ] ) ) {
+					$entry['label'] = $entry['label'] ?? $column_labels[ $index ];
+				}
+				$first = false;
+			}
+			return $entries;
+		};
+		$mark_rows = static function ( array $rows ) use ( $mark_first ): array {
+			foreach ( $rows as &$row ) {
+				if ( isset( $row['cells'] ) ) {
+					$row['cells'] = $mark_first( $row['cells'] );
+				}
+			}
+			return $rows;
+		};
+		if ( isset( $data['report']['columns'] ) ) {
+			$data['report']['columns'] = $mark_first( $data['report']['columns'] );
+		}
+		if ( isset( $data['report']['rows'] ) ) {
+			$data['report']['rows'] = $mark_rows( $data['report']['rows'] );
+		}
+		foreach ( $data['report']['groups'] ?? array() as $group_key => $group ) {
+			$group['rows'] = $mark_rows( $group['rows'] ?? array() );
+			if ( isset( $group['subtotal']['cells'] ) ) {
+				$group['subtotal']['cells'] = $mark_first( $group['subtotal']['cells'] );
+			}
+			$data['report']['groups'][ $group_key ] = $group;
+		}
+		if ( isset( $data['report']['totals']['cells'] ) ) {
+			$data['report']['totals']['cells'] = $mark_first( $data['report']['totals']['cells'] );
+		}
 
 		/**
 		 * Filters a server-built report document before it is validated.
