@@ -63,7 +63,19 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 	/** Tax lines, coupon lines and quantities are counted once per sale order. */
 	public function test_order_breakdowns_sum_two_orders_and_memoise_the_snapshot(): void {
 		$session = $this->closure_session();
-		$orders = array( $this->closure_ledger( $session ), $this->closure_ledger( $session ) );
+		$rows = array(
+			array(
+				'session_id' => $session['id'],
+				'amount' => '50',
+			),
+			array(
+				'session_id' => $session['id'],
+				'amount' => '30',
+				'method_id' => 'pos_card',
+				'kind' => 'card',
+			),
+		);
+		$orders = array( $this->order_with_legs( $rows ), $this->order_with_legs( $rows ) );
 		foreach ( $orders as $order ) {
 			$item = new \WC_Order_Item_Product();
 			$item->set_name( 'Test item' );
@@ -161,7 +173,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		remove_filter( 'woocommerce_stock_amount', 'intval', $priority );
 		try {
 			$session = $this->closure_session();
-			$order = $this->closure_ledger( $session );
+			$order = $this->order_with_legs( array( array( 'session_id' => $session['id'] ) ) );
 			foreach ( $quantities as $quantity ) {
 				$item = new \WC_Order_Item_Product();
 				$item->set_quantity( $quantity );
@@ -196,7 +208,7 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		);
 		try {
 			$session = $this->closure_session();
-			$order = $this->closure_ledger( $session );
+			$order = $this->order_with_legs( array( array( 'session_id' => $session['id'] ) ) );
 			foreach ( array( array( $zero, '10', '' ), array( $standard, '20', '4' ) ) as list( $id, $net, $tax ) ) {
 				$item = new \WC_Order_Item_Product();
 				$item->set_total( $net );
@@ -863,6 +875,140 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		foreach ( array( $first, $second ) as $session ) {
 			$legs = Session_Figures::for_session( $session )->legs();
 			$this->assertSame( array( $session['id'] ), array_column( $legs[ $order->get_id() ] ?? array(), 'session_id' ) );
+		}
+	}
+
+	/**
+	 * Split payments move money in both sessions, but sale facts belong only to the completing session.
+	 *
+	 * @param string $attribution Completion history, latest timestamp, or legacy ledger order.
+	 * @testWith ["completion"]
+	 *           ["timestamp"]
+	 *           ["ledger_order"]
+	 */
+	public function test_order_breakdowns_split_sessions_attribute_sale_only_to_second( string $attribution ): void {
+		// Arrange: £60 in each session, with £100 net and £20 tax on the sale.
+		$first = $this->closure_session( null, 'open' );
+		$second = $this->closure_session( null, 'open' );
+		$rows = array(
+			array(
+				'session_id' => $first['id'],
+				'amount' => '60',
+				'created_at_gmt' => '2026-09-11T09:00:00Z',
+			),
+			array(
+				'session_id' => $second['id'],
+				'amount' => '60',
+				'created_at_gmt' => '2026-09-11T10:00:00Z',
+			),
+		);
+		if ( 'completion' === $attribution ) {
+			// Completion wins even when the other session has the newest captured leg.
+			$rows[0]['created_at_gmt'] = '2026-09-11T11:00:00Z';
+		} elseif ( 'timestamp' === $attribution ) {
+			// Timestamp wins over ledger order.
+			$rows = array_reverse( $rows );
+		}
+		$order = $this->order_with_legs( $rows );
+		$item = new \WC_Order_Item_Product();
+		$item->set_name( 'Split-session item' );
+		$item->set_quantity( 3 );
+		$item->set_subtotal( '110' );
+		$item->set_total( '100' );
+		$item->set_taxes(
+			array(
+				'subtotal' => array( 1 => '22' ),
+				'total' => array( 1 => '20' ),
+			)
+		);
+		$order->add_item( $item );
+		$tax = new \WC_Order_Item_Tax();
+		$tax->set_rate_id( 1 );
+		$tax->set_label( 'VAT 20%' );
+		$tax->set_rate_percent( '20' );
+		$tax->set_tax_total( '20' );
+		$order->add_item( $tax );
+		$coupon = new \WC_Order_Item_Coupon();
+		$coupon->set_code( 'split-sale' );
+		$order->add_item( $coupon );
+		$order->set_discount_total( '10' );
+		$order->set_discount_tax( '2' );
+		$order->set_total( '120' );
+		$order->save();
+		if ( 'completion' === $attribution ) {
+			Register_Sale::complete(
+				$order,
+				array(
+					'register_id' => $second['register_id'],
+					'session_id' => $second['id'],
+				)
+			);
+			$this->assertSame( $second['id'], Completion_History::of( wc_get_order( $order->get_id() ) )->latest()['session'] );
+		} else {
+			$this->assertTrue( Completion_History::of( $order )->is_empty() );
+			if ( 'ledger_order' === $attribution ) {
+				// Old stored rows predate timestamps; current writes always supply them.
+				$legacy = Ledger::instance()->read( $order );
+				foreach ( $legacy as &$row ) {
+					unset( $row['created_at_gmt'] );
+				}
+				unset( $row );
+				$order->update_meta_data(
+					Ledger::META_KEY,
+					wp_json_encode(
+						array(
+							'schema' => Ledger::SCHEMA,
+							'payments' => $legacy,
+						)
+					)
+				);
+				$order->save_meta_data();
+			}
+		}
+
+		// Act.
+		$a = Session_Figures::for_session( $first );
+		$b = Session_Figures::for_session( $second );
+
+		// Assert: the three sale aggregates are not duplicated; money stays per leg.
+		$this->assertSame( array(), $a->tax_rates() );
+		$this->assertSame( '0', $a->items_sold() );
+		$this->assertSame(
+			array(
+				'count' => 0,
+				'amount' => '0.0000',
+			),
+			$a->discounts()
+		);
+		$this->assertSame( '3', $b->items_sold() );
+		$this->assertSame(
+			array(
+				'count' => 1,
+				'amount' => '12.0000',
+			),
+			$b->discounts()
+		);
+		$this->assertSame(
+			array(
+				1 => array(
+					'rate' => 1,
+					'name' => 'VAT 20%',
+					'net' => '100.0000',
+					'tax' => '20.0000',
+					'gross' => '120.0000',
+				),
+			),
+			$b->tax_rates()
+		);
+		foreach ( array( $a, $b ) as $figures ) {
+			$this->assertSame(
+				array(
+					'sales' => array( '60.00' ),
+					'refunds' => array(),
+				),
+				$figures->period_amounts()
+			);
+			$this->assertSame( '60.0000', $figures->payment_methods()['cash']['sales'] );
 		}
 	}
 

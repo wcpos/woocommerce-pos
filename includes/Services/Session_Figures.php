@@ -204,7 +204,7 @@ final class Session_Figures {
 			return $this->memo['tax_rates'];
 		}
 		$rates = array();
-		foreach ( $this->orders() as $order ) {
+		foreach ( $this->sale_orders() as $order ) {
 			if ( $order ) {
 				$this->add_order_tax_rates( $order, $rates );
 			}
@@ -250,7 +250,7 @@ final class Session_Figures {
 		if ( ! isset( $this->memo['discounts'] ) ) {
 			$count = 0;
 			$amounts = array();
-			foreach ( $this->orders() as $order ) {
+			foreach ( $this->sale_orders() as $order ) {
 				if ( $order ) {
 					$count += count( $order->get_items( 'coupon' ) );
 					$amounts[] = $order->get_discount_total();
@@ -269,7 +269,7 @@ final class Session_Figures {
 	public function items_sold(): string {
 		if ( ! isset( $this->memo['items_sold'] ) ) {
 			$quantities = array();
-			foreach ( $this->orders() as $order ) {
+			foreach ( $this->sale_orders() as $order ) {
 				foreach ( $order ? $order->get_items() : array() as $item ) {
 					$quantities[] = (string) $item->get_quantity();
 				}
@@ -317,6 +317,39 @@ final class Session_Figures {
 			}
 		}
 		return array_intersect_key( $this->memo['orders'] ?? array(), array_flip( $ids ) );
+	}
+
+	/** Sale facts belong to the latest completion, or the last captured leg for legacy orders. */
+	private function sale_orders(): array {
+		if ( isset( $this->memo['sale_orders'] ) ) {
+			return $this->memo['sale_orders'];
+		}
+		$orders = array();
+		foreach ( $this->orders() as $id => $order ) {
+			if ( ! $order instanceof \WC_Order ) {
+				continue;
+			}
+			$completion = Completion_History::of( $order )->latest();
+			$session_id = $completion['session'] ?? null;
+			if ( null === $completion ) {
+				$last = null;
+				foreach ( Ledger::instance()->read( $order ) as $row ) {
+					if ( 'captured' !== ( $row['status'] ?? null ) ) {
+						continue;
+					}
+					// Equal or absent timestamps retain the last row in ledger order.
+					if ( null === $last || strtotime( $row['created_at_gmt'] ?? '' ) >= strtotime( $last['created_at_gmt'] ?? '' ) ) {
+						$last = $row;
+					}
+				}
+				$session_id = $last['session_id'] ?? null;
+			}
+			if ( (string) $this->session['id'] === $session_id ) {
+				$orders[ $id ] = $order;
+			}
+		}
+		$this->memo['sale_orders'] = $orders;
+		return $orders;
 	}
 
 	/** Flip a decimal string's sign without float arithmetic.
