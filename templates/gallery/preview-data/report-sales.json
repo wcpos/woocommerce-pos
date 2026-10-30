@@ -499,13 +499,7 @@
     ],
     "phone": "020 1234 5678",
     "email": "",
-    "logo": "",
-    "tax_ids": [
-      {
-        "label": "VAT",
-        "value": "GB123456789"
-      }
-    ]
+    "logo": ""
   },
   "register": {
     "id": "front-till",

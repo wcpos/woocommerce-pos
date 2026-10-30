@@ -87,7 +87,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertSame( 'logicless', $template['engine'] );
 		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/report-default.html' ), $template['content'] );
 		$gallery = Templates::get_gallery_templates( 'report' );
-		$this->assertSame( array( 'report-default', 'thermal-report-80mm' ), array_column( $gallery, 'key' ) );
+		$this->assertSame( array( 'report-default', 'report-letterhead', 'thermal-report-58mm', 'thermal-report-80mm' ), array_column( $gallery, 'key' ) );
 		foreach ( $gallery as $entry ) {
 			$id = Templates::install_gallery_template( $entry['key'] );
 			$this->assertIsInt( $id );
@@ -105,7 +105,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertSame( 'logicless', $template['engine'] );
 		$this->assertSame( 'html', $template['language'] );
 		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/closure-default.html' ), $template['content'] );
-		$this->assertSame( array( 'closure-default', 'thermal-closure-80mm' ), array_column( Templates::get_gallery_templates( 'closure' ), 'key' ) );
+		$this->assertSame( array( 'closure-default', 'closure-detailed', 'thermal-closure-58mm', 'thermal-closure-80mm', 'thermal-closure-80mm-rtl', 'thermal-count-slip-80mm' ), array_column( Templates::get_gallery_templates( 'closure' ), 'key' ) );
 		$this->assertStringEndsWith( '/templates/gallery/closure-default.html', $template['file_path'] );
 		$this->assertContains( 'plugin-core', array_column( Templates::detect_filesystem_templates( 'closure' ), 'id' ) );
 		$this->assertFalse( is_numeric( $template['id'] ) );

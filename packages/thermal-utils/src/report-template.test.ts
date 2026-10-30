@@ -29,7 +29,7 @@ describe.each([
 			expect(root.textContent!.match(/Visa/g)).toHaveLength(1);
 			expect(root.textContent!.match(/Subtotal/g)).toHaveLength(2);
 		} else {
-			for (const text of ['123 Bean Street', 'GB123456789', '020 1234 5678', 'Generated', 'Alex']) expect(html).toContain(text);
+			for (const text of ['123 Bean Street', '020 1234 5678', 'Generated', 'Alex']) expect(html).toContain(text);
 		}
 	});
 

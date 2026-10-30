@@ -594,7 +594,7 @@ class Gallery_Registry {
 				'engine' => 'logicless',
 				'output_type' => 'html',
 				'paper_width' => null,
-				'version' => 1,
+				'version' => 2,
 				'preview_data' => 'report-sales',
 			),
 			'report-letterhead' => array(
