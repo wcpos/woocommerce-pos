@@ -169,6 +169,189 @@ final class Session_Figures {
 		return $this->memo['terms'];
 	}
 
+	/** Captured sales and unsigned refunds grouped by the same tender keys as expected(). */
+	public function payment_methods(): array {
+		if ( isset( $this->memo['payment_methods'] ) ) {
+			return $this->memo['payment_methods'];
+		}
+		$rows = array_merge( array(), ...array_values( $this->legs() ) );
+		foreach ( $this->refunds() as $refund ) {
+			$rows = array_merge( $rows, $refund['rows'] );
+		}
+		$methods = array();
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		foreach ( $rows as $row ) {
+			$key = self::tender_key( $row );
+			$methods[ $key ] = $methods[ $key ] ?? array(
+				'method' => $key,
+				'name' => isset( $gateways[ $key ] ) ? $gateways[ $key ]->get_title() : '',
+				'sales' => array(),
+				'refunds' => array(),
+			);
+			$methods[ $key ][ self::is_refund_tender( $row ) ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
+		}
+		foreach ( $methods as &$method ) {
+			$method['sales'] = Closure_Store::sum( $method['sales'] );
+			$method['refunds'] = Closure_Store::sum( $method['refunds'] );
+		}
+		$this->memo['payment_methods'] = $methods;
+		return $methods;
+	}
+
+	/** Tax-line amounts include shipping; each applied rate gets the line's full net base. */
+	public function tax_rates(): array {
+		if ( isset( $this->memo['tax_rates'] ) ) {
+			return $this->memo['tax_rates'];
+		}
+		$rates = array();
+		foreach ( $this->sale_orders() as $order ) {
+			if ( $order ) {
+				$this->add_order_tax_rates( $order, $rates );
+			}
+		}
+		foreach ( $this->refunds() as $refund ) {
+			$this->add_order_tax_rates( $refund['refund'], $rates );
+		}
+		$this->memo['tax_rates'] = $rates;
+		return $rates;
+	}
+
+	/** Add a sale's or refund's signed tax amounts to the session rates.
+	 *
+	 * @param \WC_Abstract_Order $order Sale or refund.
+	 * @param array              $rates Accumulated rates.
+	 */
+	private function add_order_tax_rates( \WC_Abstract_Order $order, array &$rates ): void {
+		$net_by_rate = array();
+		foreach ( $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) as $item ) {
+			foreach ( array_keys( $item->get_taxes()['total'] ) as $id ) {
+				$net_by_rate[ $id ][] = (string) $item->get_total();
+			}
+		}
+		foreach ( $order->get_items( 'tax' ) as $line ) {
+			$id = $line->get_rate_id();
+			$amount = Closure_Store::sum( array( $line->get_tax_total(), $line->get_shipping_tax_total() ) );
+			$net = Closure_Store::sum( $net_by_rate[ $id ] ?? array() );
+			$rates[ $id ] = $rates[ $id ] ?? array(
+				'rate' => $id,
+				'name' => $line->get_label(),
+				'net' => '0.0000',
+				'tax' => '0.0000',
+				'gross' => '0.0000',
+			);
+			$rates[ $id ]['net'] = Closure_Store::sum( array( $rates[ $id ]['net'], $net ) );
+			$rates[ $id ]['tax'] = Closure_Store::sum( array( $rates[ $id ]['tax'], $amount ) );
+			$rates[ $id ]['gross'] = Closure_Store::sum( array( $rates[ $id ]['net'], $rates[ $id ]['tax'] ) );
+		}
+	}
+
+	/** Coupon-line count and gross order discounts, without subtracting refunds. */
+	public function discounts(): array {
+		if ( ! isset( $this->memo['discounts'] ) ) {
+			$count = 0;
+			$amounts = array();
+			foreach ( $this->sale_orders() as $order ) {
+				if ( $order ) {
+					$count += count( $order->get_items( 'coupon' ) );
+					$amounts[] = $order->get_discount_total();
+					$amounts[] = $order->get_discount_tax();
+				}
+			}
+			$this->memo['discounts'] = array(
+				'count' => $count,
+				'amount' => Closure_Store::sum( $amounts ),
+			);
+		}
+		return $this->memo['discounts'];
+	}
+
+	/** Sale quantities, without subtracting refund quantities. */
+	public function items_sold(): string {
+		if ( ! isset( $this->memo['items_sold'] ) ) {
+			$quantities = array();
+			foreach ( $this->sale_orders() as $order ) {
+				foreach ( $order ? $order->get_items() : array() as $item ) {
+					$quantities[] = (string) $item->get_quantity();
+				}
+			}
+			$sum = Closure_Store::sum( $quantities );
+			$quantity = rtrim( rtrim( $sum, '0' ), '.' );
+			$this->memo['items_sold'] = '' === $quantity ? '0' : $quantity;
+		}
+		return $this->memo['items_sold'];
+	}
+
+	/** Period sales per completion, rounded to four decimal places. */
+	public function average_sale(): string {
+		$this->memo['average_sale'] = $this->memo['average_sale'] ?? self::divide( Closure_Store::sum( $this->period_amounts()['sales'] ), (string) $this->sales_count() );
+		return $this->memo['average_sale'];
+	}
+
+	/** Non-voided no-sale movements. */
+	public function drawer_openings(): int {
+		return $this->terms()['no_sales'];
+	}
+
+	/** Decimal division uses the same SQL precision as Closure_Store::sum, never floats.
+	 *
+	 * @param string $amount Decimal numerator.
+	 * @param string $divisor Decimal divisor; zero produces zero.
+	 * @throws \RuntimeException On calculation failure.
+	 */
+	private static function divide( string $amount, string $divisor ): string {
+		global $wpdb;
+		$result = $wpdb->get_var( $wpdb->prepare( 'SELECT CAST(COALESCE(CAST(%s AS DECIMAL(65,4)) / NULLIF(CAST(%s AS DECIMAL(65,4)), 0), 0) AS DECIMAL(65,4))', $amount, $divisor ) );
+		if ( null === $result ) {
+			throw new \RuntimeException( 'Session division failed.' );
+		}
+		return $result;
+	}
+
+	/** Share loaded orders between completion counting and the order-level breakdowns. */
+	private function orders(): array {
+		$this->memo['completion_ids'] = $this->memo['completion_ids'] ?? Completion_History::orders_in_session( (string) $this->session['id'] );
+		$ids = array_unique( array_merge( array_map( 'intval', array_keys( $this->legs() ) ), $this->memo['completion_ids'] ) );
+		foreach ( $ids as $id ) {
+			if ( ! array_key_exists( $id, $this->memo['orders'] ?? array() ) ) {
+				$this->memo['orders'][ $id ] = wc_get_order( $id );
+			}
+		}
+		return array_intersect_key( $this->memo['orders'] ?? array(), array_flip( $ids ) );
+	}
+
+	/** Sale facts belong to the latest completion, or the last captured leg for legacy orders. */
+	private function sale_orders(): array {
+		if ( isset( $this->memo['sale_orders'] ) ) {
+			return $this->memo['sale_orders'];
+		}
+		$orders = array();
+		foreach ( $this->orders() as $id => $order ) {
+			if ( ! $order instanceof \WC_Order ) {
+				continue;
+			}
+			$completion = Completion_History::of( $order )->latest();
+			$session_id = $completion['session'] ?? null;
+			if ( null === $completion ) {
+				$last = null;
+				foreach ( Ledger::instance()->read( $order ) as $row ) {
+					if ( 'captured' !== ( $row['status'] ?? null ) ) {
+						continue;
+					}
+					// Equal or absent timestamps retain the last row in ledger order.
+					if ( null === $last || strtotime( $row['created_at_gmt'] ?? '' ) >= strtotime( $last['created_at_gmt'] ?? '' ) ) {
+						$last = $row;
+					}
+				}
+				$session_id = $last['session_id'] ?? null;
+			}
+			if ( (string) $this->session['id'] === $session_id ) {
+				$orders[ $id ] = $order;
+			}
+		}
+		$this->memo['sale_orders'] = $orders;
+		return $orders;
+	}
+
 	/** Flip a decimal string's sign without float arithmetic.
 	 *
 	 * @param string $amount Decimal string.
@@ -189,10 +372,8 @@ final class Session_Figures {
 		if ( isset( $this->memo['sales_count'] ) ) {
 			return $this->memo['sales_count'];
 		}
-		$ids   = Completion_History::orders_in_session( (string) $this->session['id'] );
 		$count = 0;
-		foreach ( array_unique( array_merge( array_map( 'intval', array_keys( $this->legs() ) ), $ids ) ) as $id ) {
-			$order   = wc_get_order( $id );
+		foreach ( $this->orders() as $id => $order ) {
 			$history = $order instanceof \WC_Order ? Completion_History::of( $order ) : null;
 			if ( null === $history || $history->is_empty() ) {
 				$count += isset( $this->legs()[ $id ] ) ? 1 : 0;
@@ -273,6 +454,9 @@ final class Session_Figures {
 
 	/** Split unsigned amounts for closure period and perpetual totals. */
 	public function period_amounts(): array {
+		if ( isset( $this->memo['period_amounts'] ) ) {
+			return $this->memo['period_amounts'];
+		}
 		$totals = array(
 			'sales' => array(),
 			'refunds' => array(),
@@ -287,6 +471,7 @@ final class Session_Figures {
 				$totals['refunds'][] = ltrim( $row['amount'], '-' );
 			}
 		}
+		$this->memo['period_amounts'] = $totals;
 		return $totals;
 	}
 
@@ -594,6 +779,7 @@ final class Session_Figures {
 			if ( ! $order ) {
 				throw new \RuntimeException( 'Session order could not be read.' );
 			}
+			$this->memo['orders'][ $id ] = $order;
 			foreach ( Ledger::instance()->read( $order ) as $row ) {
 				if ( ( $row['session_id'] ?? null ) === $session['id'] && 'captured' === ( $row['status'] ?? null ) ) {
 					$result[ $id ][] = $row;
