@@ -104,4 +104,50 @@ class Test_Settings_Extensions_Badge extends WP_UnitTestCase {
 		// Only the detected installed plugin has a "newer" version.
 		$this->assertSame( 1, $this->invoke_get_update_available_count() );
 	}
+
+	/**
+	 * Test a release that needs a newer WCPOS than this site runs is not counted.
+	 *
+	 * The Extensions screen does not offer such a release, so the badge must not count it.
+	 */
+	public function test_skips_release_requiring_newer_wcpos(): void {
+		if ( ! \function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$slug = null;
+		foreach ( array_keys( get_plugins() ) as $plugin_file ) {
+			if ( str_contains( (string) $plugin_file, '/' ) ) {
+				$slug = dirname( (string) $plugin_file );
+				break;
+			}
+		}
+		$this->assertNotNull( $slug, 'No directory-based plugin found in test environment' );
+
+		// Each catalog entry is counted on its own, so one installed slug covers all three cases.
+		set_transient(
+			ExtensionsService::TRANSIENT_KEY,
+			array(
+				array(
+					'slug'           => $slug,
+					'latest_version' => '999.0.0',
+					'requires_wcpos' => '999.0.0',
+				),
+				array(
+					'slug'           => $slug,
+					'latest_version' => '999.0.0',
+					'requires_wcpos' => '',
+				),
+				array(
+					'slug'           => $slug,
+					'latest_version' => '999.0.0',
+					'requires_wcpos' => '0.0.1',
+				),
+			),
+			3600
+		);
+
+		// The empty and met requirements are counted; the unmet one is not.
+		$this->assertSame( 2, $this->invoke_get_update_available_count() );
+	}
 }

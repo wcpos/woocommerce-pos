@@ -214,6 +214,7 @@ class Settings {
 		$installed_plugins = get_plugins();
 		$installed_by_slug = array();
 		$count             = 0;
+		$extensions        = ExtensionsService::instance();
 
 		foreach ( $installed_plugins as $plugin_file => $plugin_data ) {
 			$parts = explode( '/', $plugin_file, 2 );
@@ -223,7 +224,7 @@ class Settings {
 		}
 
 		foreach ( $cached as $entry ) {
-			if ( ! \is_array( $entry ) ) {
+			if ( ! \is_array( $entry ) || ! $extensions->site_meets_wcpos_requirement( $entry ) ) {
 				continue;
 			}
 			$slug       = $entry['slug'] ?? '';
