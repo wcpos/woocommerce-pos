@@ -148,6 +148,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'price_decimal_sep',
 			'price_num_decimals',
 			'prevent_overselling',
+			'decimal_qty',
 			'prices_include_tax',
 			'tax_based_on',
 			'shipping_tax_class',
@@ -242,6 +243,19 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 				update_option( 'woocommerce_pos_settings_checkout', $original );
 			}
 		}
+	}
+
+	/**
+	 * Store payloads expose whether General settings allow decimal quantities.
+	 */
+	public function test_store_payload_includes_decimal_qty_setting(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'decimal_qty' => true ) );
+		$store = new Store();
+		$this->assertTrue( $store->get_data()['decimal_qty'] );
+
+		update_option( 'woocommerce_pos_settings_general', array( 'decimal_qty' => false ) );
+		$store = new Store();
+		$this->assertFalse( $store->get_data()['decimal_qty'] );
 	}
 
 	public function test_get_store_id(): void {
