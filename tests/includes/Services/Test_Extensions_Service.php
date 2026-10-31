@@ -215,6 +215,44 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A catalog release that needs a newer WCPOS than this site runs is not an update.
+	 *
+	 * The badge would send the merchant to an Update button Pro refuses; the entry stays
+	 * active with no has_update, as if the catalog held nothing newer.
+	 */
+	public function test_status_active_when_catalog_release_needs_a_newer_wcpos(): void {
+		update_option( 'active_plugins', array( 'woocommerce/woocommerce.php' ) );
+
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'latest_version' => '999.0.0',
+				'requires_wcpos' => '99.0.0',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertEquals( 'active', $extensions[0]['status'] );
+		$this->assertArrayNotHasKey( 'has_update', $extensions[0] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * A requires_wcpos floor this site meets, or an empty one, leaves the update offered.
+	 */
+	public function test_requires_wcpos_floor_met_or_empty_keeps_the_update(): void {
+		$this->assertTrue( $this->service->site_meets_wcpos_requirement( array( 'requires_wcpos' => '1.0.0' ) ) );
+		$this->assertTrue( $this->service->site_meets_wcpos_requirement( array( 'requires_wcpos' => '' ) ) );
+		$this->assertTrue( $this->service->site_meets_wcpos_requirement( array() ) );
+		$this->assertFalse( $this->service->site_meets_wcpos_requirement( array( 'requires_wcpos' => '99.0.0' ) ) );
+	}
+
+	/**
 	 * Test inactive status for installed but deactivated plugin.
 	 */
 	public function test_status_inactive_for_deactivated_plugin(): void {
