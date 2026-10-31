@@ -71,6 +71,7 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'price_decimal_sep',
 			'price_num_decimals',
 			'prevent_overselling',
+			'decimal_qty',
 			'prices_include_tax',
 			'tax_based_on',
 			'shipping_tax_class',

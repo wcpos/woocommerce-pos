@@ -56,6 +56,7 @@ class Store extends \WC_Data {
 		'price_decimal_sep'           => '',
 		'price_num_decimals'          => '',
 		'prevent_overselling'         => false,
+		'decimal_qty'                 => false,
 		'prices_include_tax'          => '',
 		'tax_based_on'                => '',
 		'tax_address'                 => array(
@@ -179,6 +180,7 @@ class Store extends \WC_Data {
 		$this->set_prop( 'variance_threshold', $general['variance_threshold'] ?? '' );
 		$this->set_prop( 'expected_close_time', $general['expected_close_time'] ?? '' );
 		$this->set_prop( 'prevent_overselling', Settings::instance()->prevent_overselling_enabled() );
+		$this->set_prop( 'decimal_qty', Settings::instance()->decimal_qty_enabled() );
 		// The POS client gates its OWN error reporting on this value, so it is a
 		// send gate one hop away: read the persisted answer, not the filtered view.
 		$this->set_prop( 'tracking_consent', Settings::instance()->raw_tracking_consent() );
