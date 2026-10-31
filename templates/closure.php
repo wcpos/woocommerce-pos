@@ -18,6 +18,8 @@ table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
 th, td { text-align: right; padding: 4px; border-bottom: 1px solid #ddd; }
 th:first-child, td:first-child { text-align: left; } h1 { font-size: 18px; } h2 { font-size: 14px; }
 </style></head><body>
+<?php // Store before register, the order every gallery closure prints (Paul, 2026-10-31). ?>
+<p><strong><?php echo esc_html( $receipt_data['store']['name'] ?? '' ); ?></strong></p>
 <h1><?php echo esc_html( ! empty( $fiscal['is_x_report'] ) ? __( 'X-report', 'woocommerce-pos' ) : sprintf( /* translators: %s: closure number. */ __( 'Closure %s', 'woocommerce-pos' ), $closure['number'] ?? '' ) ); ?> · <?php echo esc_html( $receipt_data['register']['name'] ?? '' ); ?></h1>
 <?php
 foreach ( array(
