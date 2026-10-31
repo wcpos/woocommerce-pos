@@ -9,6 +9,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
+
 /**
  * Extensions service class.
  */
@@ -145,7 +147,9 @@ class Extensions {
 				$is_active      = \in_array( $plugin_file, $active_plugins, true )
 					|| \in_array( $plugin_file, $network_plugins, true );
 
-				$has_update = $remote_version && version_compare( $local_version, $remote_version, '<' );
+				$has_update = $remote_version
+					&& version_compare( $local_version, $remote_version, '<' )
+					&& $this->site_meets_wcpos_requirement( $entry );
 
 				if ( $has_update && $is_active ) {
 					$status = 'update_available';
@@ -173,6 +177,27 @@ class Extensions {
 		}
 
 		return $extensions;
+	}
+
+	/**
+	 * Whether this site's WCPOS satisfies a catalog entry's `requires_wcpos` floor.
+	 *
+	 * `requires_wcpos` is the lowest WCPOS version the catalogued release runs on; empty
+	 * means any. A release above the site's WCPOS is not an update the screen can offer:
+	 * Pro's updater and install/update actions refuse it, so the screen does not announce it.
+	 *
+	 * @param array $entry Catalog entry.
+	 *
+	 * @return bool
+	 */
+	public function site_meets_wcpos_requirement( array $entry ): bool {
+		$required = trim( (string) ( $entry['requires_wcpos'] ?? '' ) );
+
+		if ( '' === $required ) {
+			return true;
+		}
+
+		return version_compare( PLUGIN_VERSION, $required, '>=' );
 	}
 
 	/**
