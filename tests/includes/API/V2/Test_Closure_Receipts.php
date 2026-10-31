@@ -90,6 +90,14 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			foreach ( array( 'Closure 7 · Closure fixture', '101.0000', '100.0000', '1.0000', '2 sales not yet on the server · 12.0000', 'Petty cash', 'Voided' ) as $text ) {
 				$this->assertStringContainsString( $text, $html );
 			}
+			// Store before register, the order every gallery closure prints (Paul, 2026-10-31).
+			$store_name = esc_html( (string) $data['store']['name'] );
+			$this->assertNotSame( '', $store_name );
+			$store_at   = strpos( $html, $store_name );
+			$heading_at = strpos( $html, 'Closure 7 · Closure fixture' );
+			$this->assertNotFalse( $store_at, 'the fallback prints the store name' );
+			$this->assertNotFalse( $heading_at );
+			$this->assertLessThan( $heading_at, $store_at );
 			$this->assertSame( array( 0, 1, 1, 2 )[ $index ], $store->get( $row['id'] )['print_count'] );
 			$this->assertSame( 3 === $index, $data['fiscal']['is_reprint'] );
 		}
