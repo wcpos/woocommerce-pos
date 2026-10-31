@@ -4,8 +4,8 @@
     <bold><text>{{store.name}}</text></bold>
     {{#store.address_lines}}<text>{{.}}</text>{{/store.address_lines}}
     {{#store.tax_ids}}<text>{{#label}}{{label}}: {{/label}}{{value}}</text>{{/store.tax_ids}}
-    <bold><text>{{#fiscal.is_x_report}}{{i18n.x_report}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure}} {{closure.number}}{{/fiscal.is_x_report}}</text></bold>
-    <text>{{#fiscal.is_x_report}}{{i18n.x_report_subtitle}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure_subtitle}}{{/fiscal.is_x_report}}</text>
+    <bold><text>{{#fiscal.is_handover}}{{i18n.handover_slip}}{{/fiscal.is_handover}}{{^fiscal.is_handover}}{{#fiscal.is_x_report}}{{i18n.x_report}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure}} {{closure.number}}{{/fiscal.is_x_report}}{{/fiscal.is_handover}}</text></bold>
+    <text>{{#fiscal.is_handover}}{{i18n.handover_subtitle}}{{/fiscal.is_handover}}{{^fiscal.is_handover}}{{#fiscal.is_x_report}}{{i18n.x_report_subtitle}}{{/fiscal.is_x_report}}{{^fiscal.is_x_report}}{{i18n.closure_subtitle}}{{/fiscal.is_x_report}}{{/fiscal.is_handover}}</text>
     <text>{{register.name}}</text>
     {{#fiscal.is_reprint}}<bold><text>{{i18n.copy}} {{fiscal.reprint_count}}</text></bold><text>{{order.printed.datetime}}</text>{{/fiscal.is_reprint}}
   </align>
@@ -61,6 +61,12 @@
   {{/closure.has_movements}}
   {{#closure.breakdowns.drawer_openings}}<row><col width="*">{{i18n.drawer_openings}}</col><col width="*" align="right">{{closure.breakdowns.drawer_openings}}</col></row>{{/closure.breakdowns.drawer_openings}}
   {{#closure.has_variance_note}}<text>{{i18n.variance_note}}</text><text>{{closure.breakdowns.variance_note}}</text>{{/closure.has_variance_note}}
+  {{#fiscal.is_handover}}
+  <text>{{i18n.handed_over_by}}: {{closure.breakdowns.labels.cashier_name}}</text>
+  <feed lines="1" /><text>________________________</text>
+  <text>{{i18n.taken_over_by}}</text>
+  <feed lines="1" /><text>________________________</text>
+  {{/fiscal.is_handover}}
   {{#closure.has_perpetual}}
   <line /><bold><text>{{i18n.perpetual_totals}}</text></bold>
   <row><col width="*">{{i18n.perpetual_sales}}</col><col width="*" align="right">{{closure.perpetual_sales_total_display}}</col></row>

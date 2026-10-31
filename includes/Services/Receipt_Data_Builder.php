@@ -23,8 +23,10 @@ class Receipt_Data_Builder {
 	 *
 	 * @param array $row Closure or session row.
 	 * @param bool  $xreport Whether to read the live session ledger.
+	 * @param bool  $handover Whether to print a hand-over slip.
 	 */
-	public function build_closure_document( array $row, bool $xreport = false ): array {
+	public function build_closure_document( array $row, bool $xreport = false, bool $handover = false ): array {
+		$xreport = $xreport || $handover;
 		if ( $xreport ) {
 			$figures = Session_Figures::for_session( $row );
 			$row['expected'] = $figures->expected();
@@ -83,6 +85,7 @@ class Receipt_Data_Builder {
 		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
 			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
 		}
+		$labels['cashier_name'] = $labels['cashier_name'] ?? ( is_user_logged_in() ? wp_get_current_user()->display_name : '' );
 		$row['breakdowns']['labels'] = $labels;
 		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
 		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
@@ -214,6 +217,10 @@ class Receipt_Data_Builder {
 			$store_section[ $field ] = $row['breakdowns']['store'][ $field ] ?? $store_section[ $field ];
 		}
 		$fiscal = self::document_fiscal( $xreport ? 'xreport' : 'closure', $xreport ? '' : (string) $row['number'] );
+		if ( $handover ) {
+			$fiscal['is_handover'] = true;
+			$fiscal['document_type'] = 'handover';
+		}
 		$data = array(
 			'closure' => $row,
 			'store' => $store_section,
@@ -252,6 +259,7 @@ class Receipt_Data_Builder {
 		// of which survive this.
 		$data['closure'] = array_merge( (array) ( $data['closure'] ?? array() ), $row, $printed );
 		$data['fiscal']['is_x_report'] = $xreport;
+		$data['fiscal']['is_handover'] = $handover;
 		$data['fiscal']['is_closure_document'] = true;
 		return $data;
 	}
@@ -454,7 +462,7 @@ class Receipt_Data_Builder {
 				'reprint_count' => 0,
 				'extra_fields' => array(),
 			)
-		);
+		) + array( 'is_handover' => false );
 	}
 
 	/**

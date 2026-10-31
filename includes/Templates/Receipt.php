@@ -94,7 +94,7 @@ class Receipt {
 			// Closure selectors are orderless; authorise them before the order-key gate.
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Document access is capability checked.
 			$document = sanitize_text_field( wp_unslash( $_GET['document'] ?? '' ) );
-			$orderless = (bool) preg_match( '/\A(closure|xreport):/', $document );
+			$orderless = (bool) preg_match( '/\A(closure|xreport|handover):/', $document );
 			if ( $orderless && ! current_user_can( 'access_woocommerce_pos' ) ) {
 				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ), '', array( 'response' => 403 ) );
 			}
@@ -532,7 +532,7 @@ class Receipt {
 		$query_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : '';
 		// Preview remains sample/live data, never a frozen refund document.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( isset( $_GET['document'] ) && ( preg_match( '/\A(closure|xreport):/', sanitize_text_field( wp_unslash( $_GET['document'] ) ) ) || ( 'preview' !== $mode && 'preview' !== $query_mode ) ) ) {
+		if ( isset( $_GET['document'] ) && ( preg_match( '/\A(closure|xreport|handover):/', sanitize_text_field( wp_unslash( $_GET['document'] ) ) ) || ( 'preview' !== $mode && 'preview' !== $query_mode ) ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$document = sanitize_text_field( wp_unslash( $_GET['document'] ) );
 			$payload = ( new Fiscal_Record_Store() )->resolve_document( $order->get_id(), $document );

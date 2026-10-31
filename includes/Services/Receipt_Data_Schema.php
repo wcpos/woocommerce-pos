@@ -1201,6 +1201,11 @@ class Receipt_Data_Schema {
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Closure Document', 'woocommerce-pos' ),
 						'default' => false,
 					),
+					'is_handover' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Hand-over slip', 'woocommerce-pos' ),
+						'default' => false,
+					),
 					'is_x_report' => array(
 						'type' => 'boolean',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is X Report', 'woocommerce-pos' ),
@@ -1317,6 +1322,7 @@ class Receipt_Data_Schema {
 				'closed_at_gmt' => __( 'Closed (UTC)', 'woocommerce-pos' ),
 				'breakdowns.currency' => __( 'Currency recorded at closure (older documents use current store currency)', 'woocommerce-pos' ),
 				'breakdowns.timezone' => __( 'Timezone recorded at closure (older documents use current store timezone)', 'woocommerce-pos' ),
+				'breakdowns.labels.cashier_name' => __( 'Printed By', 'woocommerce-pos' ),
 				'breakdowns.labels.register_name' => __( 'Register Name', 'woocommerce-pos' ),
 				'breakdowns.labels.opened_by_name' => __( 'Opened By', 'woocommerce-pos' ),
 				'breakdowns.labels.closed_by_name' => __( 'Closed By', 'woocommerce-pos' ),

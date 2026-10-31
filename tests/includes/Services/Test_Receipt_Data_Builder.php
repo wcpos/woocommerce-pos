@@ -12,6 +12,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Register_Store;
@@ -32,6 +33,55 @@ use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	use Closure_Test_Fixture {
 		tearDown as private tear_down_closure_fixtures;
+	}
+
+	/** A hand-over is the live interim document, attributed to the requesting cashier. */
+	public function test_handover_document_uses_current_cashier_and_interim_flags(): void {
+		$session = $this->closure_session();
+		$user = self::factory()->user->create_and_get(
+			array(
+				'role' => 'administrator',
+				'display_name' => 'Alex',
+			)
+		);
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'view_woocommerce_pos_reports' );
+		wp_set_current_user( $user->ID );
+
+		$data = ( new Fiscal_Record_Store() )->resolve_document( 0, 'handover:' . $session['id'] );
+
+		$this->assertIsArray( $data );
+		$this->assertTrue( $data['fiscal']['is_handover'] );
+		$this->assertTrue( $data['fiscal']['is_x_report'] );
+		$this->assertTrue( $data['fiscal']['is_closure_document'] );
+		$this->assertSame( 'handover', $data['fiscal']['document_type'] );
+		$this->assertSame( 'Alex', $data['closure']['breakdowns']['labels']['cashier_name'] );
+	}
+
+	/** Stored labels survive reprints; older closures and live reports use the current user. */
+	public function test_closure_cashier_label_preserves_stored_value_and_defaults_to_current_user(): void {
+		$user = self::factory()->user->create( array( 'display_name' => 'Alex' ) );
+		wp_set_current_user( $user );
+		$session = $this->closure_session();
+		$row = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		foreach ( array( false, true ) as $xreport ) {
+			$data = $this->builder->build_closure_document( $xreport ? $session : $row, $xreport );
+			$this->assertFalse( $data['fiscal']['is_handover'] );
+			$this->assertSame( 'Alex', $data['closure']['breakdowns']['labels']['cashier_name'] );
+		}
+		foreach ( array( 'Original cashier', '' ) as $name ) {
+			$row['breakdowns']['labels']['cashier_name'] = $name;
+			$data = $this->builder->build_closure_document( $row );
+			$this->assertFalse( $data['fiscal']['is_handover'] );
+			$this->assertSame( $name, $data['closure']['breakdowns']['labels']['cashier_name'] );
+		}
+	}
+
+	/** An unsigned preview does not invent a printed-by name. */
+	public function test_closure_cashier_label_without_logged_in_user_is_empty(): void {
+		wp_set_current_user( 0 );
+		$data = $this->builder->build_closure_document( $this->closure_fields( $this->closure_session() ) );
+		$this->assertSame( '', $data['closure']['breakdowns']['labels']['cashier_name'] );
 	}
 
 	/** Older snapshots omit the new content, even with malformed optional arrays. */

@@ -25,6 +25,28 @@ describe.each([
 	const slip = file === 'thermal-count-slip-80mm.xml';
 
 
+	it('prints the hand-over header and the requesting cashier with two signature rules', () => {
+		const data = structuredClone(fixture);
+		data.fiscal.is_handover = true;
+		data.fiscal.is_x_report = true;
+		const root = document.createElement('div');
+		root.innerHTML = render(template, data);
+		for (const text of ['Hand-over slip', 'Drawer handed over · session continues', 'Handed over by: Alex', 'Taken over by']) expect(root.textContent).toContain(text);
+		for (const text of ['Closure 42', 'X-report', 'Session closed · totals reset', 'Interim report', 'Cashier signature', 'Manager signature']) expect(root.textContent).not.toContain(text);
+		if (slip) expect(root.textContent).toContain('Count slip');
+		if (file.endsWith('.xml')) expect(root.textContent?.match(/_{24}/g)).toHaveLength(2);
+		else expect(Array.from(root.querySelectorAll('div')).filter(el => el.style.width === '240px' && el.style.borderBottom)).toHaveLength(2);
+	});
+
+	it.each([false, true])('omits hand-over additions on ordinary documents (X-report: %s)', (xreport) => {
+		const data = structuredClone(fixture);
+		data.fiscal.is_handover = false;
+		data.fiscal.is_x_report = xreport;
+		const html = render(template, data);
+		expect(html).toContain(xreport ? 'X-report' : 'Closure 42');
+		for (const text of ['Hand-over slip', 'Drawer handed over', 'Handed over by', 'Taken over by']) expect(html).not.toContain(text);
+	});
+
 	it('orders the management blocks and keeps count slips free of sales figures', () => {
 		const root = document.createElement('div');
 		root.innerHTML = render(template, fixture);

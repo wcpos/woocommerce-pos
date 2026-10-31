@@ -441,6 +441,25 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** Hand-overs resolve the same live figures as X-reports without closing the session. */
+	public function test_handover_open_and_counting_sessions_resolve_but_closed_sessions_are_refused(): void {
+		foreach ( array( 'open', 'counting' ) as $status ) {
+			$session = $this->closure_session( null, $status );
+			$this->closure_ledger( $session );
+			$response = $this->document( 'handover:' . $session['id'], 'print' );
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data()['data'];
+			$this->assertSame( 'handover', $data['fiscal']['document_type'] );
+			$this->assertTrue( $data['fiscal']['is_handover'] );
+			$this->assertTrue( $data['fiscal']['is_x_report'] );
+			$this->assertSame( $this->document( 'xreport:' . $session['id'] )->get_data()['data']['closure'], $data['closure'] );
+			$this->assertSame( $status, ( new Register_Session_Store() )->get( $session['id'] )['status'] );
+			$this->assertNull( ( new Closure_Store() )->for_session( $session['id'] ) );
+		}
+		$closed = $this->closure_session( null, 'closed' );
+		$this->assertSame( 404, $this->document( 'handover:' . $closed['id'] )->get_status() );
+	}
+
 	/** A live X-report needs no closure, number or count, and carries the session tenders. */
 	public function test_xreport_live_session_and_missing_or_scoped_documents(): void {
 		$session = $this->closure_session();
@@ -468,7 +487,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$row = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
 		$this->assertSame( 404, $this->document( 'xreport:' . $session['id'] )->get_status() );
 		$this->assertStringNotContainsString( 'sales not yet on the server', $this->html( $this->document( 'closure:' . $row['id'] )->get_data()['data'] ) );
-		foreach ( array( 'closure:', 'xreport:' ) as $prefix ) {
+		foreach ( array( 'closure:', 'xreport:', 'handover:' ) as $prefix ) {
 			$this->assertSame( 404, $this->document( $prefix . wp_generate_uuid4() )->get_status() );
 		}
 		$scope = static function ( $args ) {
@@ -480,6 +499,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 404, $this->document( 'closure:' . $row['id'], 'print' )->get_status() );
 			$open = $this->closure_session();
 			$this->assertSame( 404, $this->document( 'xreport:' . $open['id'] )->get_status() );
+			$this->assertSame( 404, $this->document( 'handover:' . $open['id'] )->get_status() );
 			$this->assertSame( 0, ( new Closure_Store() )->get( $row['id'] )['print_count'] );
 		} finally {
 			remove_filter( 'wcpos_closures_list_args', $scope );
@@ -493,7 +513,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$blind = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
 		$blind->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $blind->ID );
-		foreach ( array( 'closure:' . $row['id'], 'xreport:' . $open['id'] ) as $document ) {
+		foreach ( array( 'closure:' . $row['id'], 'xreport:' . $open['id'], 'handover:' . $open['id'] ) as $document ) {
 			$response = $this->document( $document );
 			$this->assertSame( 403, $response->get_status(), $document );
 			$this->assertSame( 'rest_forbidden', $response->get_data()['code'], $document );
@@ -839,6 +859,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		foreach ( array(
 			'closure:' . $row['id'] => 'Closure 1',
 			'xreport:' . $session['id'] => 'X-report',
+			'handover:' . $session['id'] => 'Hand-over slip',
 		) as $document => $heading ) {
 			$page = $this->render_receipt_page( 0, array( 'document' => $document ) );
 			$this->assertNull( $page['error'] );
