@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
@@ -26,6 +27,67 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  */
 class Test_Integrity_Stale_Digest_Rebuild extends Sync_REST_Store_Test_Case {
 	use Seeds_Stored_Digests;
+	use HPOSToggleTrait;
+
+	/** Storage backends for the order window regression. */
+	public static function order_storage_backends(): array {
+		return array( 'CPT' => array( false ), 'HPOS' => array( true ) );
+	}
+
+	/**
+	 * Removing the window predicate must reinsert the old order or fail to prune it.
+	 *
+	 * @dataProvider order_storage_backends
+	 * @param bool $hpos Whether to use HPOS storage.
+	 */
+	public function test_order_digest_window_rebuild_and_scan_exclude_old_orders( bool $hpos ): void {
+		global $wpdb;
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->toggle_cot_feature_and_usage( true );
+			$this->disable_cot_sync();
+		}
+
+		try {
+			$recent = new \WC_Order();
+			$recent->set_date_created( time() - 10 * DAY_IN_SECONDS );
+			$recent->save();
+			// Create the old order last so an unwindowed MAX(id) also fails.
+			$old = new \WC_Order();
+			$old->set_date_created( time() - 100 * DAY_IN_SECONDS );
+			$old->save();
+			$ids    = array( $recent->get_id(), $old->get_id() );
+			$digest = new Integrity_Digest();
+			$index  = new Digest_Index();
+			Integrity_Digest::flush_pending_digests();
+			$wpdb->query( 'DELETE FROM ' . $digest->table_name() . " WHERE object_type = 'order'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Internal table name.
+
+			$digest->rebuild();
+			$this->assertSame( array( $recent->get_id() ), array_keys( $index->read_digests( 'orders', $ids ) ) );
+
+			// An old-order save still stamps a row, like a pre-window stored digest.
+			$this->seed_digests( 'orders', $old->get_id() );
+			$range = array( 'bucket_size' => 1000000, 'start' => 0, 'end' => 1000000 );
+			$scan  = $index->bucket_aggregates( $range, 'orders' );
+			$this->assertCount( 1, $scan['buckets'] );
+			$this->assertSame( 1, $scan['buckets'][0]['stored_count'] );
+			$this->assertSame( 1, $scan['buckets'][0]['current_count'] );
+			$this->assertTrue( $scan['buckets'][0]['match'] );
+			$this->assertSame( $recent->get_id(), $scan['max_id'] );
+			$this->assertSame( array( $recent->get_id() ), array_column( $index->bucket_listing( 'orders', $range ), 'id' ) );
+
+			$digest->rebuild();
+			$this->assertSame( array( $recent->get_id() ), array_keys( $index->read_digests( 'orders', $ids ) ) );
+		} finally {
+			if ( $hpos ) {
+				$this->toggle_cot_feature_and_usage( false );
+				$this->clean_up_cot_setup();
+				remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			}
+		}
+	}
+
 	/**
 	 * Isolate cron, lock and streak state.
 	 */

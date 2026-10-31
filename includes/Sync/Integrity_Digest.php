@@ -67,6 +67,12 @@ final class Integrity_Digest {
 	/** @see Digest_Index::ORDER_DIGESTED_META_KEYS The digest formula's home. */
 	public const ORDER_DIGESTED_META_KEYS = Digest_Index::ORDER_DIGESTED_META_KEYS;
 
+	/**
+	 * The client's windowed order replica holds open and recent orders;
+	 * 90 days covers that with margin (ADR 0036).
+	 */
+	public const ORDER_DIGEST_WINDOW_DAYS = 90;
+
 	/** @see Digest_Index::OBJECT_TYPES_SQL The product-space object types. */
 	public const OBJECT_TYPES_SQL = Digest_Index::OBJECT_TYPES_SQL;
 
@@ -456,6 +462,7 @@ final class Integrity_Digest {
 	 */
 	/** Owe the order's digest; it is written once, on flush (see $pending). */
 	public function record_order_saved( int $order_id ): void {
+		// Saving an old order still stamps a digest; the next rebuild prunes it.
 		$this->defer( self::pending_type( 'orders' ), $order_id );
 	}
 
@@ -689,12 +696,14 @@ final class Integrity_Digest {
 		}
 
 		// Leg-3 phase 7 (ADR 0015): orders share the digest table via their own 'order' rows (HPOS or CPT).
-		// Same prune-orphans + INSERT…SELECT pass; Digest_Index::order_digest_select_sql() emits the storage-correct SQL
+		// Prune gone/out-of-window orders, then digest only the window (ADR 0036).
+		// Digest_Index::order_digest_select_sql() emits the storage-correct SQL
 		// (the CPT path GROUP BYs, the HPOS path does not — both valid as an INSERT…SELECT source).
 		$order_orphans = $this->query_retrying_contention(
 			'DELETE FROM ' . $this->table_name()
 			. " WHERE object_type = 'order'"
-			. ' AND NOT ' . $this->index->order_live_row_exists_sql( 'object_id' )
+			. ' AND NOT (' . $this->index->order_live_row_exists_sql( 'object_id' )
+			. ' AND COALESCE(' . $this->index->order_window_predicate_sql( 'object_id' ) . ', 0))'
 		);
 		if ( false === $order_orphans ) {
 			throw new RuntimeException( 'prune orphan order digests failed: ' . $wpdb->last_error );
@@ -702,7 +711,7 @@ final class Integrity_Digest {
 		$order_writes = $this->query_retrying_contention(
 			'INSERT INTO ' . $this->table_name() . ' (object_type, object_id, digest, updated_gmt)'
 			. ' SELECT t.object_type, t.id, t.crc, UTC_TIMESTAMP()'
-			. ' FROM (' . $this->index->order_digest_select_sql() . ') t'
+			. ' FROM (' . $this->index->order_digest_select_sql( $this->index->order_window_predicate_sql( '{id}' ) ) . ') t'
 			. ' ON DUPLICATE KEY UPDATE'
 			. ' updated_gmt = IF(digest <=> VALUES(digest), updated_gmt, VALUES(updated_gmt)),'
 			. ' digest = VALUES(digest)'
