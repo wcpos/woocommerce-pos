@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-30T20:56:03+00:00\n"
+"POT-Creation-Date: 2026-10-31T00:08:31+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -62,7 +62,7 @@ msgstr ""
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Activator.php:1345
 #: includes/Services/Receipt_Data_Schema.php:327
-#: includes/Services/Receipt_I18n_Labels.php:109
+#: includes/Services/Receipt_I18n_Labels.php:113
 #: includes/Services/Reports_Registry.php:188
 #: includes/Templates/Payment.php:346
 #: templates/receipt.php:203
@@ -1289,9 +1289,9 @@ msgstr ""
 #: includes/Gateways/Cash.php:92
 #: includes/Services/Receipt_Data_Schema.php:813
 #: includes/Services/Receipt_Data_Schema.php:928
-#: includes/Services/Receipt_Data_Schema.php:1623
-#: includes/Services/Receipt_Data_Schema.php:1669
-#: includes/Services/Receipt_I18n_Labels.php:233
+#: includes/Services/Receipt_Data_Schema.php:1629
+#: includes/Services/Receipt_Data_Schema.php:1675
+#: includes/Services/Receipt_I18n_Labels.php:237
 #: templates/receipt.php:367
 msgid "Change"
 msgstr ""
@@ -1865,8 +1865,8 @@ msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Services/Opening_Hours_Formatter.php:200
-#: includes/Services/Receipt_Data_Schema.php:1485
-#: includes/Services/Receipt_I18n_Labels.php:64
+#: includes/Services/Receipt_Data_Schema.php:1491
+#: includes/Services/Receipt_I18n_Labels.php:68
 #: templates/closure.php:25
 msgid "Closed"
 msgstr ""
@@ -1880,7 +1880,7 @@ msgstr ""
 #. translators: Customer name shown in an order note for a guest checkout.
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Services/Order_Notes.php:42
-#: includes/Services/Receipt_Data_Builder.php:621
+#: includes/Services/Receipt_Data_Builder.php:629
 #: includes/Templates/Payment.php:364
 #: tests/includes/Templates/Test_Receipt_Renderers.php:267
 msgid "Guest"
@@ -1890,9 +1890,9 @@ msgstr ""
 #. translators: %d: Historical POS store ID that no longer exists.
 #. translators: %d: store ID.
 #: includes/Services/Order_Notes.php:61
-#: includes/Services/Receipt_Data_Builder.php:601
-#: includes/Services/Receipt_Data_Builder.php:1029
-#: tests/includes/Services/Test_Receipt_Data_Builder.php:1954
+#: includes/Services/Receipt_Data_Builder.php:609
+#: includes/Services/Receipt_Data_Builder.php:1037
+#: tests/includes/Services/Test_Receipt_Data_Builder.php:2004
 #, php-format
 msgid "Store #%d"
 msgstr ""
@@ -1972,9 +1972,9 @@ msgstr ""
 #. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
 #. translators: Tax identification type label.
 #: includes/Services/Preview_Receipt_Builder.php:849
-#: includes/Services/Receipt_I18n_Labels.php:126
-#: includes/Services/Receipt_I18n_Labels.php:154
-#: includes/Services/Receipt_I18n_Labels.php:183
+#: includes/Services/Receipt_I18n_Labels.php:130
+#: includes/Services/Receipt_I18n_Labels.php:158
+#: includes/Services/Receipt_I18n_Labels.php:187
 #: includes/Services/Tax_Id_Types.php:300
 msgid "Tax ID"
 msgstr ""
@@ -1997,7 +1997,7 @@ msgstr ""
 #. translators: Sample receipt label or value used in receipt template previews.
 #. translators: Receipt footer message thanking the customer for a completed purchase.
 #: includes/Services/Preview_Receipt_Builder.php:913
-#: includes/Services/Receipt_I18n_Labels.php:275
+#: includes/Services/Receipt_I18n_Labels.php:279
 #: templates/receipt.php:379
 msgid "Thank you for your purchase!"
 msgstr ""
@@ -2008,8 +2008,8 @@ msgstr ""
 #: includes/Services/Preview_Receipt_Builder.php:1230
 #: includes/Services/Preview_Receipt_Builder.php:1255
 #: includes/Services/Receipt_Data_Schema.php:835
-#: includes/Services/Receipt_Data_Schema.php:1518
-#: includes/Services/Receipt_I18n_Labels.php:229
+#: includes/Services/Receipt_Data_Schema.php:1524
+#: includes/Services/Receipt_I18n_Labels.php:233
 #: includes/Services/Reports_Registry.php:243
 #: templates/closure.php:45
 msgid "Tax"
@@ -2104,19 +2104,19 @@ msgid "Quick discount code \"%s\" belongs to a store coupon. Use another code."
 msgstr ""
 
 #. translators: %s: closed session number.
-#: includes/Services/Receipt_Data_Builder.php:295
+#: includes/Services/Receipt_Data_Builder.php:303
 #, php-format
 msgid "Session %s"
 msgstr ""
 
 #. translators: Receipt label for discount amount or discount line.
-#: includes/Services/Receipt_Data_Builder.php:762
-#: includes/Services/Receipt_I18n_Labels.php:205
+#: includes/Services/Receipt_Data_Builder.php:770
+#: includes/Services/Receipt_I18n_Labels.php:209
 msgid "Discount"
 msgstr ""
 
 #. translators: %s: Discount percentage.
-#: includes/Services/Receipt_Data_Builder.php:764
+#: includes/Services/Receipt_Data_Builder.php:772
 #, php-format
 msgid "Discount (%s%%)"
 msgstr ""
@@ -2125,7 +2125,7 @@ msgstr ""
 #. translators: Receipt label for the order number or order reference.
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Services/Receipt_Data_Schema.php:206
-#: includes/Services/Receipt_I18n_Labels.php:103
+#: includes/Services/Receipt_I18n_Labels.php:107
 #: includes/Templates/Adapters/Html_Output_Adapter.php:36
 msgid "Order"
 msgstr ""
@@ -2148,7 +2148,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt section heading for a note/message supplied by or about the customer.
 #: includes/Services/Receipt_Data_Schema.php:222
-#: includes/Services/Receipt_I18n_Labels.php:258
+#: includes/Services/Receipt_I18n_Labels.php:262
 msgid "Customer Note"
 msgstr ""
 
@@ -2204,7 +2204,7 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:267
-#: includes/Services/Receipt_Data_Schema.php:1283
+#: includes/Services/Receipt_Data_Schema.php:1288
 msgid "Store ID"
 msgstr ""
 
@@ -2236,7 +2236,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the store business opening hours.
 #: includes/Services/Receipt_Data_Schema.php:292
-#: includes/Services/Receipt_I18n_Labels.php:305
+#: includes/Services/Receipt_I18n_Labels.php:309
 msgid "Opening Hours"
 msgstr ""
 
@@ -2272,20 +2272,20 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:331
-#: includes/Services/Receipt_Data_Schema.php:1547
+#: includes/Services/Receipt_Data_Schema.php:1553
 msgid "Cashier ID"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:335
-#: includes/Services/Receipt_Data_Schema.php:1551
+#: includes/Services/Receipt_Data_Schema.php:1557
 msgid "Cashier Name"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the customer name or customer details.
 #: includes/Services/Receipt_Data_Schema.php:340
-#: includes/Services/Receipt_I18n_Labels.php:110
+#: includes/Services/Receipt_I18n_Labels.php:114
 #: templates/receipt.php:207
 msgid "Customer"
 msgstr ""
@@ -2308,7 +2308,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt/invoice address heading for the billing address.
 #: includes/Services/Receipt_Data_Schema.php:359
-#: includes/Services/Receipt_I18n_Labels.php:192
+#: includes/Services/Receipt_I18n_Labels.php:196
 msgid "Billing Address"
 msgstr ""
 
@@ -2320,16 +2320,16 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt section label for multiple customer tax/VAT/GST identification numbers.
 #: includes/Services/Receipt_Data_Schema.php:368
-#: includes/Services/Receipt_I18n_Labels.php:112
+#: includes/Services/Receipt_I18n_Labels.php:116
 msgid "Customer Tax IDs"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:373
 #: includes/Services/Receipt_Data_Schema.php:395
-#: includes/Services/Receipt_Data_Schema.php:1558
-#: includes/Services/Receipt_Data_Schema.php:1937
-#: includes/Services/Receipt_I18n_Labels.php:74
+#: includes/Services/Receipt_Data_Schema.php:1564
+#: includes/Services/Receipt_Data_Schema.php:1943
+#: includes/Services/Receipt_I18n_Labels.php:78
 #: includes/Services/Reports_Registry.php:257
 #: templates/closure.php:91
 msgid "Type"
@@ -2338,9 +2338,9 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:377
 #: includes/Services/Receipt_Data_Schema.php:399
-#: includes/Services/Receipt_Data_Schema.php:1264
-#: includes/Services/Receipt_Data_Schema.php:1523
-#: includes/Services/Receipt_Data_Schema.php:1847
+#: includes/Services/Receipt_Data_Schema.php:1269
+#: includes/Services/Receipt_Data_Schema.php:1529
+#: includes/Services/Receipt_Data_Schema.php:1853
 msgid "Value"
 msgstr ""
 
@@ -2354,8 +2354,8 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:385
 #: includes/Services/Receipt_Data_Schema.php:407
-#: includes/Services/Receipt_Data_Schema.php:1260
-#: includes/Services/Receipt_Data_Schema.php:1823
+#: includes/Services/Receipt_Data_Schema.php:1265
+#: includes/Services/Receipt_Data_Schema.php:1829
 msgid "Label"
 msgstr ""
 
@@ -2408,7 +2408,7 @@ msgstr ""
 #. translators: Receipt table column heading for product SKU/reference code.
 #: includes/Services/Receipt_Data_Schema.php:450
 #: includes/Services/Receipt_Data_Schema.php:1012
-#: includes/Services/Receipt_I18n_Labels.php:196
+#: includes/Services/Receipt_I18n_Labels.php:200
 msgid "SKU"
 msgstr ""
 
@@ -2542,7 +2542,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt table column heading for unit price.
 #: includes/Services/Receipt_Data_Schema.php:572
-#: includes/Services/Receipt_I18n_Labels.php:198
+#: includes/Services/Receipt_I18n_Labels.php:202
 msgid "Unit Price"
 msgstr ""
 
@@ -2560,8 +2560,8 @@ msgstr ""
 #. translators: Receipt total-row label for the order subtotal before final total adjustments.
 #: includes/Services/Receipt_Data_Schema.php:584
 #: includes/Services/Receipt_Data_Schema.php:735
-#: includes/Services/Receipt_Data_Schema.php:1956
-#: includes/Services/Receipt_I18n_Labels.php:222
+#: includes/Services/Receipt_Data_Schema.php:1962
+#: includes/Services/Receipt_I18n_Labels.php:226
 msgid "Subtotal"
 msgstr ""
 
@@ -2580,7 +2580,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:596
 #: includes/Services/Receipt_Data_Schema.php:701
-#: includes/Services/Receipt_Data_Schema.php:1334
+#: includes/Services/Receipt_Data_Schema.php:1340
 #: includes/Services/Receipt_I18n_Labels.php:44
 msgid "Discounts"
 msgstr ""
@@ -2613,7 +2613,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt total-row label for the total amount refunded to the customer.
 #: includes/Services/Receipt_Data_Schema.php:620
-#: includes/Services/Receipt_I18n_Labels.php:253
+#: includes/Services/Receipt_I18n_Labels.php:257
 msgid "Total Refunded"
 msgstr ""
 
@@ -2649,8 +2649,8 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:680
 #: includes/Services/Receipt_Data_Schema.php:718
 #: includes/Services/Receipt_Data_Schema.php:797
-#: includes/Services/Receipt_Data_Schema.php:1599
-#: includes/Services/Receipt_I18n_Labels.php:224
+#: includes/Services/Receipt_Data_Schema.php:1605
+#: includes/Services/Receipt_I18n_Labels.php:228
 #: templates/receipt.php:229
 msgid "Total"
 msgstr ""
@@ -2723,7 +2723,7 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:731
-#: includes/Services/Receipt_Data_Schema.php:1869
+#: includes/Services/Receipt_Data_Schema.php:1875
 msgid "Totals"
 msgstr ""
 
@@ -2785,7 +2785,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt total-row label for the order total including tax/VAT/GST.
 #: includes/Services/Receipt_Data_Schema.php:801
-#: includes/Services/Receipt_I18n_Labels.php:227
+#: includes/Services/Receipt_I18n_Labels.php:231
 msgid "Total (incl. tax)"
 msgstr ""
 
@@ -2807,7 +2807,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt total-row label for total after subtracting refunds.
 #: includes/Services/Receipt_Data_Schema.php:821
-#: includes/Services/Receipt_I18n_Labels.php:255
+#: includes/Services/Receipt_I18n_Labels.php:259
 #: templates/receipt.php:316
 msgid "Net Total"
 msgstr ""
@@ -2865,7 +2865,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt section heading for the tax/VAT/GST breakdown.
 #: includes/Services/Receipt_Data_Schema.php:873
-#: includes/Services/Receipt_I18n_Labels.php:236
+#: includes/Services/Receipt_I18n_Labels.php:240
 msgid "Tax Summary"
 msgstr ""
 
@@ -2897,7 +2897,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt tax summary label for tax/VAT/GST amount, not a tax rate percentage.
 #: includes/Services/Receipt_Data_Schema.php:898
-#: includes/Services/Receipt_I18n_Labels.php:238
+#: includes/Services/Receipt_I18n_Labels.php:242
 msgid "Tax Amount"
 msgstr ""
 
@@ -2919,17 +2919,17 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:916
-#: includes/Services/Receipt_Data_Schema.php:1511
+#: includes/Services/Receipt_Data_Schema.php:1517
 msgid "Payment Method"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Generic receipt column/field label for a monetary amount.
 #: includes/Services/Receipt_Data_Schema.php:920
-#: includes/Services/Receipt_Data_Schema.php:1521
-#: includes/Services/Receipt_Data_Schema.php:1525
-#: includes/Services/Receipt_Data_Schema.php:1653
-#: includes/Services/Receipt_I18n_Labels.php:252
+#: includes/Services/Receipt_Data_Schema.php:1527
+#: includes/Services/Receipt_Data_Schema.php:1531
+#: includes/Services/Receipt_Data_Schema.php:1659
+#: includes/Services/Receipt_I18n_Labels.php:256
 #: includes/Services/Reports_Registry.php:260
 #: templates/closure.php:91
 msgid "Amount"
@@ -2938,8 +2938,8 @@ msgstr ""
 #. translators: Template-editor field label for the money received from the customer at checkout; use the target-language equivalent of "Received", not procurement tender/bid language.
 #. translators: Standalone receipt/payment label meaning money received from the customer at checkout. Use the target-language equivalent of "Received" as a concise label; do not use wording that means "Amount paid/deposited", and do not use procurement tender/bid language.
 #: includes/Services/Receipt_Data_Schema.php:924
-#: includes/Services/Receipt_Data_Schema.php:1661
-#: includes/Services/Receipt_I18n_Labels.php:232
+#: includes/Services/Receipt_Data_Schema.php:1667
+#: includes/Services/Receipt_I18n_Labels.php:236
 #: templates/receipt.php:363
 msgid "Tendered"
 msgstr ""
@@ -2951,9 +2951,9 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:937
-#: includes/Services/Receipt_Data_Schema.php:1340
-#: includes/Services/Receipt_Data_Schema.php:1513
-#: includes/Services/Receipt_I18n_Labels.php:80
+#: includes/Services/Receipt_Data_Schema.php:1346
+#: includes/Services/Receipt_Data_Schema.php:1519
+#: includes/Services/Receipt_I18n_Labels.php:84
 #: includes/Services/Reports_Registry.php:241
 #: templates/closure.php:40
 #: templates/closure.php:105
@@ -3109,7 +3109,7 @@ msgstr ""
 #. translators: Receipt section in the template editor.
 #. translators: Fiscal receipt label preceding the software name and version that produced the receipt.
 #: includes/Services/Receipt_Data_Schema.php:1097
-#: includes/Services/Receipt_I18n_Labels.php:299
+#: includes/Services/Receipt_I18n_Labels.php:303
 msgid "Software"
 msgstr ""
 
@@ -3141,7 +3141,7 @@ msgstr ""
 #. translators: Receipt section in the template editor.
 #. translators: Fiscal receipt label for the till (register) that rang the sale.
 #: includes/Services/Receipt_Data_Schema.php:1127
-#: includes/Services/Receipt_I18n_Labels.php:292
+#: includes/Services/Receipt_I18n_Labels.php:296
 #: includes/Services/Register_Store.php:150
 #: includes/Services/Register_Store.php:305
 #: includes/Services/Reports_Registry.php:189
@@ -3151,13 +3151,13 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:1131
-#: includes/Services/Receipt_Data_Schema.php:1313
+#: includes/Services/Receipt_Data_Schema.php:1318
 msgid "Register ID"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:1136
-#: includes/Services/Receipt_Data_Schema.php:1320
+#: includes/Services/Receipt_Data_Schema.php:1326
 msgid "Register Name"
 msgstr ""
 
@@ -3169,7 +3169,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Fiscal receipt label for document type/category.
 #: includes/Services/Receipt_Data_Schema.php:1146
-#: includes/Services/Receipt_I18n_Labels.php:288
+#: includes/Services/Receipt_I18n_Labels.php:292
 msgid "Document Type"
 msgstr ""
 
@@ -3196,7 +3196,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label preceding the identity of the sale corrected by a refund.
 #: includes/Services/Receipt_Data_Schema.php:1176
-#: includes/Services/Receipt_I18n_Labels.php:295
+#: includes/Services/Receipt_I18n_Labels.php:299
 #: templates/receipt.php:190
 msgid "Corrects"
 msgstr ""
@@ -3228,775 +3228,785 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:1206
-msgid "Is X Report"
+#: includes/Services/Receipt_I18n_Labels.php:61
+msgid "Hand-over slip"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:1211
+msgid "Is X Report"
+msgstr ""
+
+#. translators: Label for a receipt data field in the template editor.
+#: includes/Services/Receipt_Data_Schema.php:1216
 msgid "Immutable ID"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1215
+#: includes/Services/Receipt_Data_Schema.php:1220
 msgid "Receipt Number"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1219
+#: includes/Services/Receipt_Data_Schema.php:1224
 msgid "Sequence"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1223
+#: includes/Services/Receipt_Data_Schema.php:1228
 msgid "Hash"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1227
+#: includes/Services/Receipt_Data_Schema.php:1232
 msgid "QR Payload"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1231
+#: includes/Services/Receipt_Data_Schema.php:1236
 msgid "Tax Agency Code"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1235
+#: includes/Services/Receipt_Data_Schema.php:1240
 msgid "Signed At"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1239
+#: includes/Services/Receipt_Data_Schema.php:1244
 msgid "Signature Excerpt"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1243
+#: includes/Services/Receipt_Data_Schema.php:1248
 msgid "Document Label"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1247
+#: includes/Services/Receipt_Data_Schema.php:1252
 msgid "Is Reprint"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1251
+#: includes/Services/Receipt_Data_Schema.php:1256
 msgid "Reprint Count"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1255
+#: includes/Services/Receipt_Data_Schema.php:1260
 msgid "Extra Fields"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1271
+#: includes/Services/Receipt_Data_Schema.php:1276
 msgid "Labels (i18n)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1287
-#: includes/Services/Receipt_I18n_Labels.php:62
+#: includes/Services/Receipt_Data_Schema.php:1292
+#: includes/Services/Receipt_I18n_Labels.php:66
 #: includes/Templates.php:598
 #: includes/Templates/Gallery_Registry.php:634
 msgid "Closure"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1310
+#: includes/Services/Receipt_Data_Schema.php:1315
 msgid "Closure ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1311
+#: includes/Services/Receipt_Data_Schema.php:1316
 msgid "Closure Number"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1312
+#: includes/Services/Receipt_Data_Schema.php:1317
 msgid "Printed Number"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1314
-#: includes/Services/Receipt_Data_Schema.php:1887
+#: includes/Services/Receipt_Data_Schema.php:1319
+#: includes/Services/Receipt_Data_Schema.php:1893
 msgid "Session ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1315
-#: includes/Services/Receipt_Data_Schema.php:1883
+#: includes/Services/Receipt_Data_Schema.php:1320
+#: includes/Services/Receipt_Data_Schema.php:1889
 msgid "Business Day"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1316
+#: includes/Services/Receipt_Data_Schema.php:1321
 msgid "Opened (UTC)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1317
+#: includes/Services/Receipt_Data_Schema.php:1322
 msgid "Closed (UTC)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1318
+#: includes/Services/Receipt_Data_Schema.php:1323
 msgid "Currency recorded at closure (older documents use current store currency)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1319
+#: includes/Services/Receipt_Data_Schema.php:1324
 msgid "Timezone recorded at closure (older documents use current store timezone)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1321
-msgid "Opened By"
-msgstr ""
-
-#: includes/Services/Receipt_Data_Schema.php:1322
-msgid "Closed By"
-msgstr ""
-
-#: includes/Services/Receipt_Data_Schema.php:1323
-msgid "Approved By"
-msgstr ""
-
-#: includes/Services/Receipt_Data_Schema.php:1324
-msgid "Counted Cash"
-msgstr ""
-
 #: includes/Services/Receipt_Data_Schema.php:1325
-msgid "Counted Card"
-msgstr ""
-
-#: includes/Services/Receipt_Data_Schema.php:1326
-msgid "Expected Cash"
+msgid "Printed By"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1327
-msgid "Expected Card"
+msgid "Opened By"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1328
-msgid "Cash Variance"
+msgid "Closed By"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1329
-msgid "Card Variance"
+msgid "Approved By"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1330
-msgid "Expected Opening Float"
+msgid "Counted Cash"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1331
-msgid "Counted Opening Float"
+msgid "Counted Card"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1332
-msgid "Opening Variance"
+msgid "Expected Cash"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1333
-msgid "Discount count"
+msgid "Expected Card"
+msgstr ""
+
+#: includes/Services/Receipt_Data_Schema.php:1334
+msgid "Cash Variance"
 msgstr ""
 
 #: includes/Services/Receipt_Data_Schema.php:1335
+msgid "Card Variance"
+msgstr ""
+
+#: includes/Services/Receipt_Data_Schema.php:1336
+msgid "Expected Opening Float"
+msgstr ""
+
+#: includes/Services/Receipt_Data_Schema.php:1337
+msgid "Counted Opening Float"
+msgstr ""
+
+#: includes/Services/Receipt_Data_Schema.php:1338
+msgid "Opening Variance"
+msgstr ""
+
+#: includes/Services/Receipt_Data_Schema.php:1339
+msgid "Discount count"
+msgstr ""
+
+#: includes/Services/Receipt_Data_Schema.php:1341
 #: includes/Services/Receipt_I18n_Labels.php:45
 msgid "Items sold"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1336
+#: includes/Services/Receipt_Data_Schema.php:1342
 #: includes/Services/Receipt_I18n_Labels.php:46
 msgid "Average sale"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1337
+#: includes/Services/Receipt_Data_Schema.php:1343
 #: includes/Services/Receipt_I18n_Labels.php:47
 msgid "Drawer openings"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1338
+#: includes/Services/Receipt_Data_Schema.php:1344
 #: includes/Services/Receipt_I18n_Labels.php:48
 msgid "Difference note"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1339
-#: includes/Services/Receipt_I18n_Labels.php:79
+#: includes/Services/Receipt_Data_Schema.php:1345
+#: includes/Services/Receipt_I18n_Labels.php:83
 #: templates/closure.php:104
 msgid "Transactions"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1341
+#: includes/Services/Receipt_Data_Schema.php:1347
 msgid "Unsynced Sales"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1342
+#: includes/Services/Receipt_Data_Schema.php:1348
 msgid "Unsynced Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1343
+#: includes/Services/Receipt_Data_Schema.php:1349
 msgid "Period Sales"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1344
+#: includes/Services/Receipt_Data_Schema.php:1350
 msgid "Period Refunds"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1345
+#: includes/Services/Receipt_Data_Schema.php:1351
 msgid "Net Sales"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1346
+#: includes/Services/Receipt_Data_Schema.php:1352
 msgid "Perpetual Sales"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1347
+#: includes/Services/Receipt_Data_Schema.php:1353
 msgid "Perpetual Refunds"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1348
+#: includes/Services/Receipt_Data_Schema.php:1354
 msgid "Software Version"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1349
+#: includes/Services/Receipt_Data_Schema.php:1355
 msgid "Printed At (UTC)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1350
+#: includes/Services/Receipt_Data_Schema.php:1356
 msgid "Print Count"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1351
+#: includes/Services/Receipt_Data_Schema.php:1357
 msgid "Last Printed At (UTC)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1360
+#: includes/Services/Receipt_Data_Schema.php:1366
 msgid "Money format recorded at closure"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1364
+#: includes/Services/Receipt_Data_Schema.php:1370
 msgid "Currency Position"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1365
+#: includes/Services/Receipt_Data_Schema.php:1371
 msgid "Currency Symbol"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1366
+#: includes/Services/Receipt_Data_Schema.php:1372
 msgid "Decimal Separator"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1367
+#: includes/Services/Receipt_Data_Schema.php:1373
 msgid "Thousand Separator"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1368
+#: includes/Services/Receipt_Data_Schema.php:1374
 msgid "Number of Decimals"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1376
-#: includes/Services/Receipt_I18n_Labels.php:70
+#: includes/Services/Receipt_Data_Schema.php:1382
+#: includes/Services/Receipt_I18n_Labels.php:74
 msgid "Tenders"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1381
-#: includes/Services/Receipt_I18n_Labels.php:71
+#: includes/Services/Receipt_Data_Schema.php:1387
+#: includes/Services/Receipt_I18n_Labels.php:75
 #: templates/closure.php:68
 msgid "Tender"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1385
-#: includes/Services/Receipt_I18n_Labels.php:67
+#: includes/Services/Receipt_Data_Schema.php:1391
+#: includes/Services/Receipt_I18n_Labels.php:71
 #: templates/closure.php:68
 #: templates/closure.php:79
 msgid "Expected"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1389
-#: includes/Services/Receipt_I18n_Labels.php:68
+#: includes/Services/Receipt_Data_Schema.php:1395
+#: includes/Services/Receipt_I18n_Labels.php:72
 #: templates/closure.php:68
 #: templates/closure.php:78
 msgid "Counted"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1393
-#: includes/Services/Receipt_I18n_Labels.php:69
+#: includes/Services/Receipt_Data_Schema.php:1399
+#: includes/Services/Receipt_I18n_Labels.php:73
 #: templates/closure.php:68
 #: templates/closure.php:80
 msgid "Variance"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1398
+#: includes/Services/Receipt_Data_Schema.php:1404
 msgid "Counted by Tender"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1399
+#: includes/Services/Receipt_Data_Schema.php:1405
 msgid "Expected by Tender"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1400
+#: includes/Services/Receipt_Data_Schema.php:1406
 msgid "Variance by Tender"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1401
+#: includes/Services/Receipt_Data_Schema.php:1407
 msgid "Payment Methods"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1402
+#: includes/Services/Receipt_Data_Schema.php:1408
 msgid "Tax Rates"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1403
+#: includes/Services/Receipt_Data_Schema.php:1409
 msgid "Cash Movements"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1404
+#: includes/Services/Receipt_Data_Schema.php:1410
 msgid "Denominations"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1405
-#: includes/Services/Receipt_Data_Schema.php:1542
-#: includes/Services/Receipt_I18n_Labels.php:82
+#: includes/Services/Receipt_Data_Schema.php:1411
+#: includes/Services/Receipt_Data_Schema.php:1548
+#: includes/Services/Receipt_I18n_Labels.php:86
 #: templates/closure.php:114
 msgid "Cashiers"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1416
+#: includes/Services/Receipt_Data_Schema.php:1422
 msgid "Corrections"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1420
+#: includes/Services/Receipt_Data_Schema.php:1426
 msgid "Record ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1424
+#: includes/Services/Receipt_Data_Schema.php:1430
 msgid "Correction Type"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1428
+#: includes/Services/Receipt_Data_Schema.php:1434
 msgid "Actor ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1432
+#: includes/Services/Receipt_Data_Schema.php:1438
 msgid "Actor Name"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1436
+#: includes/Services/Receipt_Data_Schema.php:1442
 msgid "Approver ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1440
+#: includes/Services/Receipt_Data_Schema.php:1446
 msgid "Approver Name"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1444
-#: includes/Services/Receipt_Data_Schema.php:1560
-#: includes/Services/Receipt_I18n_Labels.php:75
+#: includes/Services/Receipt_Data_Schema.php:1450
+#: includes/Services/Receipt_Data_Schema.php:1566
+#: includes/Services/Receipt_I18n_Labels.php:79
 #: includes/Services/Reports_Registry.php:258
 #: templates/closure.php:91
 msgid "Reason"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1448
-#: includes/Services/Receipt_Data_Schema.php:1561
+#: includes/Services/Receipt_Data_Schema.php:1454
+#: includes/Services/Receipt_Data_Schema.php:1567
 msgid "Created (UTC)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1452
+#: includes/Services/Receipt_Data_Schema.php:1458
 msgid "Correction Figures"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1456
+#: includes/Services/Receipt_Data_Schema.php:1462
 msgid "Expected Delta by Tender"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1460
+#: includes/Services/Receipt_Data_Schema.php:1466
 msgid "Late Sale Sales Delta"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1464
+#: includes/Services/Receipt_Data_Schema.php:1470
 msgid "Refunds Delta"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1468
+#: includes/Services/Receipt_Data_Schema.php:1474
 msgid "Late Movement Cash Delta"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1472
+#: includes/Services/Receipt_Data_Schema.php:1478
 msgid "Recount Counted by Tender"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1476
+#: includes/Services/Receipt_Data_Schema.php:1482
 msgid "Recount Variance by Tender"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1484
-#: includes/Services/Receipt_I18n_Labels.php:63
+#: includes/Services/Receipt_Data_Schema.php:1490
+#: includes/Services/Receipt_I18n_Labels.php:67
 #: templates/closure.php:24
 msgid "Opened"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1494
+#: includes/Services/Receipt_Data_Schema.php:1500
 msgid "Variance Label (Over / Short / Exact)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1498
+#: includes/Services/Receipt_Data_Schema.php:1504
 msgid "Tender Title"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1502
+#: includes/Services/Receipt_Data_Schema.php:1508
 msgid "Non-zero Variance"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1506
+#: includes/Services/Receipt_Data_Schema.php:1512
 msgid "Absolute Variance (Formatted)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1510
+#: includes/Services/Receipt_Data_Schema.php:1516
 msgid "Tender Key"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1512
-#: includes/Services/Receipt_I18n_Labels.php:76
+#: includes/Services/Receipt_Data_Schema.php:1518
+#: includes/Services/Receipt_I18n_Labels.php:80
 #: includes/Services/Reports_Registry.php:203
 #: includes/Services/Reports_Registry.php:239
 #: templates/closure.php:39
 msgid "Sales"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1516
+#: includes/Services/Receipt_Data_Schema.php:1522
 msgid "Tax Rate"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1517
-#: includes/Services/Receipt_I18n_Labels.php:85
+#: includes/Services/Receipt_Data_Schema.php:1523
+#: includes/Services/Receipt_I18n_Labels.php:89
 #: includes/Services/Reports_Registry.php:242
 #: templates/closure.php:44
 msgid "Net"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1519
-#: includes/Services/Receipt_I18n_Labels.php:86
+#: includes/Services/Receipt_Data_Schema.php:1525
+#: includes/Services/Receipt_I18n_Labels.php:90
 #: includes/Services/Reports_Registry.php:240
 #: templates/closure.php:46
 msgid "Gross"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1524
+#: includes/Services/Receipt_Data_Schema.php:1530
 #: includes/Services/Receipt_I18n_Labels.php:50
 msgid "Pieces"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1559
+#: includes/Services/Receipt_Data_Schema.php:1565
 msgid "Movement Label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1570
-#: includes/Services/Receipt_I18n_Labels.php:94
+#: includes/Services/Receipt_Data_Schema.php:1576
+#: includes/Services/Receipt_I18n_Labels.php:98
 #: templates/closure.php:96
 msgid "Voided"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1574
+#: includes/Services/Receipt_Data_Schema.php:1580
 msgid "Created"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1583
-#: includes/Services/Receipt_Data_Schema.php:1851
+#: includes/Services/Receipt_Data_Schema.php:1589
+#: includes/Services/Receipt_Data_Schema.php:1857
 msgid "Formatted"
 msgstr ""
 
 #. translators: Gallery template name shown in the admin Template Gallery.
-#: includes/Services/Receipt_Data_Schema.php:1591
+#: includes/Services/Receipt_Data_Schema.php:1597
 #: includes/Templates/Gallery_Registry.php:92
 msgid "Ledger"
 msgstr ""
 
 #. translators: Receipt label for order/document status.
-#: includes/Services/Receipt_Data_Schema.php:1595
-#: includes/Services/Receipt_Data_Schema.php:1649
-#: includes/Services/Receipt_I18n_Labels.php:302
+#: includes/Services/Receipt_Data_Schema.php:1601
+#: includes/Services/Receipt_Data_Schema.php:1655
+#: includes/Services/Receipt_I18n_Labels.php:306
 msgid "Status"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1603
+#: includes/Services/Receipt_Data_Schema.php:1609
 msgid "Total (raw)"
 msgstr ""
 
 #. translators: Receipt payment-section heading for amounts already paid by the customer.
-#: includes/Services/Receipt_Data_Schema.php:1607
-#: includes/Services/Receipt_I18n_Labels.php:230
+#: includes/Services/Receipt_Data_Schema.php:1613
+#: includes/Services/Receipt_I18n_Labels.php:234
 #: templates/receipt.php:355
 msgid "Paid"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1611
+#: includes/Services/Receipt_Data_Schema.php:1617
 msgid "Paid (raw)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1615
+#: includes/Services/Receipt_Data_Schema.php:1621
 msgid "Due"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1619
+#: includes/Services/Receipt_Data_Schema.php:1625
 msgid "Due (raw)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1627
-#: includes/Services/Receipt_Data_Schema.php:1673
+#: includes/Services/Receipt_Data_Schema.php:1633
+#: includes/Services/Receipt_Data_Schema.php:1679
 msgid "Change (raw)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1632
+#: includes/Services/Receipt_Data_Schema.php:1638
 msgid "Ledger payments"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1637
+#: includes/Services/Receipt_Data_Schema.php:1643
 msgid "ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1641
+#: includes/Services/Receipt_Data_Schema.php:1647
 #: includes/Services/Reports_Registry.php:244
 msgid "Method"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1645
+#: includes/Services/Receipt_Data_Schema.php:1651
 msgid "Kind"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1657
+#: includes/Services/Receipt_Data_Schema.php:1663
 msgid "Amount (raw)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1665
+#: includes/Services/Receipt_Data_Schema.php:1671
 msgid "Tendered (raw)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1678
+#: includes/Services/Receipt_Data_Schema.php:1684
 msgid "Assets"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1682
+#: includes/Services/Receipt_Data_Schema.php:1688
 msgid "Plugin image folder URL (example pictures)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1687
+#: includes/Services/Receipt_Data_Schema.php:1693
 msgid "Payment"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1691
+#: includes/Services/Receipt_Data_Schema.php:1697
 msgid "State"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1695
+#: includes/Services/Receipt_Data_Schema.php:1701
 msgid "Message"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1731
+#: includes/Services/Receipt_Data_Schema.php:1737
 msgid "Date & Time"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the sale/order date.
-#: includes/Services/Receipt_Data_Schema.php:1735
-#: includes/Services/Receipt_I18n_Labels.php:104
+#: includes/Services/Receipt_Data_Schema.php:1741
+#: includes/Services/Receipt_I18n_Labels.php:108
 msgid "Date"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1739
-#: includes/Services/Receipt_I18n_Labels.php:73
+#: includes/Services/Receipt_Data_Schema.php:1745
+#: includes/Services/Receipt_I18n_Labels.php:77
 #: includes/Services/Reports_Registry.php:256
 #: templates/closure.php:91
 msgid "Time"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1743
+#: includes/Services/Receipt_Data_Schema.php:1749
 msgid "Short Date & Time"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1747
+#: includes/Services/Receipt_Data_Schema.php:1753
 msgid "Long Date & Time"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1751
+#: includes/Services/Receipt_Data_Schema.php:1757
 msgid "Full Date & Time"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1755
+#: includes/Services/Receipt_Data_Schema.php:1761
 msgid "Short Date"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1759
+#: includes/Services/Receipt_Data_Schema.php:1765
 msgid "Long Date"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1763
+#: includes/Services/Receipt_Data_Schema.php:1769
 msgid "Full Date"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1767
+#: includes/Services/Receipt_Data_Schema.php:1773
 msgid "YYYY-MM-DD"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1771
+#: includes/Services/Receipt_Data_Schema.php:1777
 msgid "DD/MM/YYYY"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1775
+#: includes/Services/Receipt_Data_Schema.php:1781
 msgid "MM/DD/YYYY"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1779
+#: includes/Services/Receipt_Data_Schema.php:1785
 msgid "Weekday Short"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1783
+#: includes/Services/Receipt_Data_Schema.php:1789
 msgid "Weekday Long"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1787
+#: includes/Services/Receipt_Data_Schema.php:1793
 msgid "Day"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1791
+#: includes/Services/Receipt_Data_Schema.php:1797
 msgid "Month Number"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1795
+#: includes/Services/Receipt_Data_Schema.php:1801
 msgid "Month Short"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1799
+#: includes/Services/Receipt_Data_Schema.php:1805
 msgid "Month Long"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
-#: includes/Services/Receipt_Data_Schema.php:1803
+#: includes/Services/Receipt_Data_Schema.php:1809
 msgid "Year"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1819
+#: includes/Services/Receipt_Data_Schema.php:1825
 msgid "Key"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1828
+#: includes/Services/Receipt_Data_Schema.php:1834
 msgid "First entry"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1833
+#: includes/Services/Receipt_Data_Schema.php:1839
 msgid "Cells"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1839
+#: includes/Services/Receipt_Data_Schema.php:1845
 msgid "Column label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1843
+#: includes/Services/Receipt_Data_Schema.php:1849
 msgid "Repeats the row heading"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1857
-#: includes/Services/Receipt_Data_Schema.php:1941
+#: includes/Services/Receipt_Data_Schema.php:1863
+#: includes/Services/Receipt_Data_Schema.php:1947
 msgid "Alignment"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1864
+#: includes/Services/Receipt_Data_Schema.php:1870
 msgid "Rows"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1875
+#: includes/Services/Receipt_Data_Schema.php:1881
 msgid "Mode"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1891
+#: includes/Services/Receipt_Data_Schema.php:1897
 msgid "Session Number"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1895
+#: includes/Services/Receipt_Data_Schema.php:1901
 msgid "Opened At"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1896
+#: includes/Services/Receipt_Data_Schema.php:1902
 msgid "Closed At"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1897
+#: includes/Services/Receipt_Data_Schema.php:1903
 msgid "From"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1898
+#: includes/Services/Receipt_Data_Schema.php:1904
 msgid "To"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1907
+#: includes/Services/Receipt_Data_Schema.php:1913
 #: includes/Templates.php:598
 #: includes/Templates/Gallery_Registry.php:590
 msgid "Report"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1912
+#: includes/Services/Receipt_Data_Schema.php:1918
 msgid "Title"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1916
+#: includes/Services/Receipt_Data_Schema.php:1922
 msgid "Subtitle"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1920
+#: includes/Services/Receipt_Data_Schema.php:1926
 msgid "Scope"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1926
+#: includes/Services/Receipt_Data_Schema.php:1932
 msgid "Group By"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1932
+#: includes/Services/Receipt_Data_Schema.php:1938
 msgid "Columns"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1947
+#: includes/Services/Receipt_Data_Schema.php:1953
 msgid "Column Count"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1953
+#: includes/Services/Receipt_Data_Schema.php:1959
 msgid "Groups"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1962
+#: includes/Services/Receipt_Data_Schema.php:1968
 msgid "Count"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1966
+#: includes/Services/Receipt_Data_Schema.php:1972
 msgid "Has Groups"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1970
+#: includes/Services/Receipt_Data_Schema.php:1976
 msgid "Has Rows"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1974
+#: includes/Services/Receipt_Data_Schema.php:1980
 msgid "Generated At"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1979
+#: includes/Services/Receipt_Data_Schema.php:1985
 msgid "Is Partial"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1983
+#: includes/Services/Receipt_Data_Schema.php:1989
 msgid "Partial Reason"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1989
+#: includes/Services/Receipt_Data_Schema.php:1995
 msgid "Is Report Document"
 msgstr ""
 
@@ -4045,171 +4055,139 @@ msgstr ""
 msgid "Net sales"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:61
+#: includes/Services/Receipt_I18n_Labels.php:62
+msgid "Drawer handed over · session continues"
+msgstr ""
+
+#: includes/Services/Receipt_I18n_Labels.php:63
+msgid "Handed over by"
+msgstr ""
+
+#: includes/Services/Receipt_I18n_Labels.php:64
+msgid "Taken over by"
+msgstr ""
+
+#: includes/Services/Receipt_I18n_Labels.php:65
 #: templates/closure.php:21
 msgid "X-report"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:65
+#: includes/Services/Receipt_I18n_Labels.php:69
 #: templates/closure.php:33
 msgid "Approver"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:66
+#: includes/Services/Receipt_I18n_Labels.php:70
 #: templates/closure.php:75
 msgid "Opening float"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:72
+#: includes/Services/Receipt_I18n_Labels.php:76
 #: includes/Services/Reports_Registry.php:221
 #: templates/closure.php:90
 msgid "Cash movements"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:77
+#: includes/Services/Receipt_I18n_Labels.php:81
 #: templates/closure.php:122
 msgid "Period sales"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:78
+#: includes/Services/Receipt_I18n_Labels.php:82
 #: templates/closure.php:123
 msgid "Period refunds"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:81
+#: includes/Services/Receipt_I18n_Labels.php:85
 #: includes/Services/Reports_Registry.php:187
 #: templates/closure.php:38
 msgid "Payment method"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:83
+#: includes/Services/Receipt_I18n_Labels.php:87
 msgid "Tax rates"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:84
+#: includes/Services/Receipt_I18n_Labels.php:88
 #: includes/Services/Reports_Registry.php:190
 #: templates/closure.php:43
 msgid "Tax rate"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:87
+#: includes/Services/Receipt_I18n_Labels.php:91
 msgid "Perpetual totals"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:88
+#: includes/Services/Receipt_I18n_Labels.php:92
 #: templates/closure.php:124
 msgid "Perpetual sales"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:89
+#: includes/Services/Receipt_I18n_Labels.php:93
 #: templates/closure.php:125
 msgid "Perpetual refunds"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:90
+#: includes/Services/Receipt_I18n_Labels.php:94
 msgid "sales not yet on the server"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:91
+#: includes/Services/Receipt_I18n_Labels.php:95
 msgid "Short"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:92
+#: includes/Services/Receipt_I18n_Labels.php:96
 msgid "Over"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:93
+#: includes/Services/Receipt_I18n_Labels.php:97
 msgid "Exact"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:95
+#: includes/Services/Receipt_I18n_Labels.php:99
 msgid "Paid in"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:96
+#: includes/Services/Receipt_I18n_Labels.php:100
 msgid "Paid out"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:97
+#: includes/Services/Receipt_I18n_Labels.php:101
 msgid "No sale"
 msgstr ""
 
 #. translators: Fiscal receipt heading for a void document (a sale cancelled before completion).
-#: includes/Services/Receipt_I18n_Labels.php:98
-#: includes/Services/Receipt_I18n_Labels.php:297
+#: includes/Services/Receipt_I18n_Labels.php:102
+#: includes/Services/Receipt_I18n_Labels.php:301
 msgid "Void"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:100
+#: includes/Services/Receipt_I18n_Labels.php:104
 msgid "Generated"
 msgstr ""
 
 #. translators: Receipt label for an invoice number.
-#: includes/Services/Receipt_I18n_Labels.php:105
+#: includes/Services/Receipt_I18n_Labels.php:109
 msgid "Invoice No."
 msgstr ""
 
 #. translators: Receipt label for a reference code, transaction reference, or document reference.
-#: includes/Services/Receipt_I18n_Labels.php:106
+#: includes/Services/Receipt_I18n_Labels.php:110
 msgid "Reference"
 msgstr ""
 
 #. translators: Receipt label for one customer tax/VAT/GST identification number.
-#: includes/Services/Receipt_I18n_Labels.php:111
+#: includes/Services/Receipt_I18n_Labels.php:115
 msgid "Customer Tax ID"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number.
 #. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:113
-#: includes/Services/Receipt_I18n_Labels.php:114
-#: includes/Services/Receipt_I18n_Labels.php:115
+#: includes/Services/Receipt_I18n_Labels.php:117
+#: includes/Services/Receipt_I18n_Labels.php:118
+#: includes/Services/Receipt_I18n_Labels.php:119
 #: includes/Services/Tax_Id_Types.php:242
 msgid "VAT Number"
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number.
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:116
-#: includes/Services/Receipt_I18n_Labels.php:136
-#: includes/Services/Receipt_I18n_Labels.php:165
-#: includes/Services/Tax_Id_Types.php:245
-msgid "ABN"
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number.
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:117
-#: includes/Services/Receipt_I18n_Labels.php:137
-#: includes/Services/Receipt_I18n_Labels.php:166
-#: includes/Services/Tax_Id_Types.php:248
-msgid "CPF"
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number.
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:118
-#: includes/Services/Receipt_I18n_Labels.php:138
-#: includes/Services/Receipt_I18n_Labels.php:167
-#: includes/Services/Tax_Id_Types.php:251
-msgid "CNPJ"
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number.
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:119
-#: includes/Services/Receipt_I18n_Labels.php:139
-#: includes/Services/Receipt_I18n_Labels.php:168
-#: includes/Services/Tax_Id_Types.php:254
-msgid "GSTIN"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number.
@@ -4219,15 +4197,19 @@ msgstr ""
 #: includes/Services/Receipt_I18n_Labels.php:120
 #: includes/Services/Receipt_I18n_Labels.php:140
 #: includes/Services/Receipt_I18n_Labels.php:169
-#: includes/Services/Tax_Id_Types.php:257
-msgid "Codice Fiscale"
+#: includes/Services/Tax_Id_Types.php:245
+msgid "ABN"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
 #. translators: Tax identification type label.
 #: includes/Services/Receipt_I18n_Labels.php:121
-#: includes/Services/Tax_Id_Types.php:260
-msgid "Partita IVA"
+#: includes/Services/Receipt_I18n_Labels.php:141
+#: includes/Services/Receipt_I18n_Labels.php:170
+#: includes/Services/Tax_Id_Types.php:248
+msgid "CPF"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number.
@@ -4237,8 +4219,8 @@ msgstr ""
 #: includes/Services/Receipt_I18n_Labels.php:122
 #: includes/Services/Receipt_I18n_Labels.php:142
 #: includes/Services/Receipt_I18n_Labels.php:171
-#: includes/Services/Tax_Id_Types.php:263
-msgid "NIF"
+#: includes/Services/Tax_Id_Types.php:251
+msgid "CNPJ"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number.
@@ -4248,13 +4230,53 @@ msgstr ""
 #: includes/Services/Receipt_I18n_Labels.php:123
 #: includes/Services/Receipt_I18n_Labels.php:143
 #: includes/Services/Receipt_I18n_Labels.php:172
+#: includes/Services/Tax_Id_Types.php:254
+msgid "GSTIN"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:124
+#: includes/Services/Receipt_I18n_Labels.php:144
+#: includes/Services/Receipt_I18n_Labels.php:173
+#: includes/Services/Tax_Id_Types.php:257
+msgid "Codice Fiscale"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:125
+#: includes/Services/Tax_Id_Types.php:260
+msgid "Partita IVA"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:126
+#: includes/Services/Receipt_I18n_Labels.php:146
+#: includes/Services/Receipt_I18n_Labels.php:175
+#: includes/Services/Tax_Id_Types.php:263
+msgid "NIF"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number.
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:127
+#: includes/Services/Receipt_I18n_Labels.php:147
+#: includes/Services/Receipt_I18n_Labels.php:176
 #: includes/Services/Tax_Id_Types.php:266
 msgid "CUIT"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number.
 #. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:124
+#: includes/Services/Receipt_I18n_Labels.php:128
 #: includes/Services/Tax_Id_Types.php:269
 msgid "GST/HST"
 msgstr ""
@@ -4263,82 +4285,46 @@ msgstr ""
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
 #. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
 #. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:125
-#: includes/Services/Receipt_I18n_Labels.php:145
-#: includes/Services/Receipt_I18n_Labels.php:174
+#: includes/Services/Receipt_I18n_Labels.php:129
+#: includes/Services/Receipt_I18n_Labels.php:149
+#: includes/Services/Receipt_I18n_Labels.php:178
 #: includes/Services/Tax_Id_Types.php:272
 msgid "EIN"
 msgstr ""
 
 #. translators: Receipt section label for store tax/VAT/GST/business identification numbers.
-#: includes/Services/Receipt_I18n_Labels.php:129
+#: includes/Services/Receipt_I18n_Labels.php:133
 msgid "Tax IDs"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
 #. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#: includes/Services/Receipt_I18n_Labels.php:133
-#: includes/Services/Receipt_I18n_Labels.php:162
+#: includes/Services/Receipt_I18n_Labels.php:137
+#: includes/Services/Receipt_I18n_Labels.php:166
 msgid "VAT ID"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
 #. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#: includes/Services/Receipt_I18n_Labels.php:134
-#: includes/Services/Receipt_I18n_Labels.php:135
-#: includes/Services/Receipt_I18n_Labels.php:163
-#: includes/Services/Receipt_I18n_Labels.php:164
+#: includes/Services/Receipt_I18n_Labels.php:138
+#: includes/Services/Receipt_I18n_Labels.php:139
+#: includes/Services/Receipt_I18n_Labels.php:167
+#: includes/Services/Receipt_I18n_Labels.php:168
 msgid "VAT No."
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
 #. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#: includes/Services/Receipt_I18n_Labels.php:141
-#: includes/Services/Receipt_I18n_Labels.php:170
+#: includes/Services/Receipt_I18n_Labels.php:145
+#: includes/Services/Receipt_I18n_Labels.php:174
 msgid "P.IVA"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
 #. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#: includes/Services/Receipt_I18n_Labels.php:144
-#: includes/Services/Receipt_I18n_Labels.php:173
-msgid "GST/HST No."
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:146
-#: includes/Services/Receipt_I18n_Labels.php:175
-#: includes/Services/Tax_Id_Types.php:275
-msgid "USt-IdNr."
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:147
-#: includes/Services/Receipt_I18n_Labels.php:176
-#: includes/Services/Tax_Id_Types.php:278
-msgid "Steuernummer"
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
 #: includes/Services/Receipt_I18n_Labels.php:148
 #: includes/Services/Receipt_I18n_Labels.php:177
-#: includes/Services/Tax_Id_Types.php:281
-msgid "HRB"
-msgstr ""
-
-#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
-#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
-#. translators: Tax identification type label.
-#: includes/Services/Receipt_I18n_Labels.php:149
-#: includes/Services/Receipt_I18n_Labels.php:178
-#: includes/Services/Tax_Id_Types.php:284
-msgid "KVK"
+msgid "GST/HST No."
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
@@ -4346,8 +4332,8 @@ msgstr ""
 #. translators: Tax identification type label.
 #: includes/Services/Receipt_I18n_Labels.php:150
 #: includes/Services/Receipt_I18n_Labels.php:179
-#: includes/Services/Tax_Id_Types.php:287
-msgid "SIRET"
+#: includes/Services/Tax_Id_Types.php:275
+msgid "USt-IdNr."
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
@@ -4355,8 +4341,8 @@ msgstr ""
 #. translators: Tax identification type label.
 #: includes/Services/Receipt_I18n_Labels.php:151
 #: includes/Services/Receipt_I18n_Labels.php:180
-#: includes/Services/Tax_Id_Types.php:290
-msgid "SIREN"
+#: includes/Services/Tax_Id_Types.php:278
+msgid "Steuernummer"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
@@ -4364,8 +4350,8 @@ msgstr ""
 #. translators: Tax identification type label.
 #: includes/Services/Receipt_I18n_Labels.php:152
 #: includes/Services/Receipt_I18n_Labels.php:181
-#: includes/Services/Tax_Id_Types.php:293
-msgid "Company No."
+#: includes/Services/Tax_Id_Types.php:281
+msgid "HRB"
 msgstr ""
 
 #. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
@@ -4373,37 +4359,73 @@ msgstr ""
 #. translators: Tax identification type label.
 #: includes/Services/Receipt_I18n_Labels.php:153
 #: includes/Services/Receipt_I18n_Labels.php:182
+#: includes/Services/Tax_Id_Types.php:284
+msgid "KVK"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:154
+#: includes/Services/Receipt_I18n_Labels.php:183
+#: includes/Services/Tax_Id_Types.php:287
+msgid "SIRET"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:155
+#: includes/Services/Receipt_I18n_Labels.php:184
+#: includes/Services/Tax_Id_Types.php:290
+msgid "SIREN"
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:156
+#: includes/Services/Receipt_I18n_Labels.php:185
+#: includes/Services/Tax_Id_Types.php:293
+msgid "Company No."
+msgstr ""
+
+#. translators: Receipt label for a store tax/VAT/GST/business identification number of this type.
+#. translators: Receipt label for a customer tax/VAT/GST/business identification number of this type.
+#. translators: Tax identification type label.
+#: includes/Services/Receipt_I18n_Labels.php:157
+#: includes/Services/Receipt_I18n_Labels.php:186
 #: includes/Services/Tax_Id_Types.php:296
 msgid "UID"
 msgstr ""
 
 #. translators: Receipt/quote label for the customer or recipient the document was prepared for.
-#: includes/Services/Receipt_I18n_Labels.php:185
+#: includes/Services/Receipt_I18n_Labels.php:189
 msgid "Prepared For"
 msgstr ""
 
 #. translators: Receipt label for the staff member/cashier who processed the order.
-#: includes/Services/Receipt_I18n_Labels.php:186
+#: includes/Services/Receipt_I18n_Labels.php:190
 msgid "Processed by"
 msgstr ""
 
 #. translators: Receipt/invoice address heading for the billing customer.
-#: includes/Services/Receipt_I18n_Labels.php:189
+#: includes/Services/Receipt_I18n_Labels.php:193
 msgid "Bill To"
 msgstr ""
 
 #. translators: Receipt/invoice address heading for the shipping recipient.
-#: includes/Services/Receipt_I18n_Labels.php:190
+#: includes/Services/Receipt_I18n_Labels.php:194
 msgid "Ship To"
 msgstr ""
 
 #. translators: Receipt/invoice address heading for the customer being billed.
-#: includes/Services/Receipt_I18n_Labels.php:191
+#: includes/Services/Receipt_I18n_Labels.php:195
 msgid "Billed To"
 msgstr ""
 
 #. translators: Receipt table column heading for product/item name.
-#: includes/Services/Receipt_I18n_Labels.php:195
+#: includes/Services/Receipt_I18n_Labels.php:199
 #: includes/Services/Reports_Registry.php:191
 #: includes/Services/Reports_Registry.php:251
 #: templates/receipt.php:227
@@ -4411,169 +4433,169 @@ msgid "Item"
 msgstr ""
 
 #. translators: Receipt table column heading for quantity.
-#: includes/Services/Receipt_I18n_Labels.php:197
+#: includes/Services/Receipt_I18n_Labels.php:201
 #: includes/Services/Reports_Registry.php:255
 #: templates/receipt.php:228
 msgid "Qty"
 msgstr ""
 
 #. translators: Receipt label for the original or regular product price.
-#: includes/Services/Receipt_I18n_Labels.php:199
+#: includes/Services/Receipt_I18n_Labels.php:203
 msgid "Regular price"
 msgstr ""
 
 #. translators: Receipt label for the product selling price before coupons.
-#: includes/Services/Receipt_I18n_Labels.php:200
+#: includes/Services/Receipt_I18n_Labels.php:204
 msgid "Selling price"
 msgstr ""
 
 #. translators: Receipt label for money saved from the regular price.
-#: includes/Services/Receipt_I18n_Labels.php:201
+#: includes/Services/Receipt_I18n_Labels.php:205
 msgid "Savings"
 msgstr ""
 
 #. translators: Receipt total-row label for coupon discounts plus savings from regular prices.
-#: includes/Services/Receipt_I18n_Labels.php:202
+#: includes/Services/Receipt_I18n_Labels.php:206
 msgid "Total saved"
 msgstr ""
 
 #. translators: Receipt table column heading for unit price excluding tax/VAT/GST.
-#: includes/Services/Receipt_I18n_Labels.php:203
+#: includes/Services/Receipt_I18n_Labels.php:207
 msgid "Unit (excl.)"
 msgstr ""
 
 #. translators: Receipt table column heading for line total excluding tax/VAT/GST.
-#: includes/Services/Receipt_I18n_Labels.php:204
+#: includes/Services/Receipt_I18n_Labels.php:208
 msgid "Total (excl.)"
 msgstr ""
 
 #. translators: Packing slip label indicating an item/order has been packed.
-#: includes/Services/Receipt_I18n_Labels.php:206
+#: includes/Services/Receipt_I18n_Labels.php:210
 msgid "Packed"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — heading above a signature block where the warehouse picker signs/dates the slip.
-#: includes/Services/Receipt_I18n_Labels.php:207
+#: includes/Services/Receipt_I18n_Labels.php:211
 msgid "Packed By"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — sublabel under a blank signature line indicating the printed name field.
-#: includes/Services/Receipt_I18n_Labels.php:208
+#: includes/Services/Receipt_I18n_Labels.php:212
 #: includes/Services/Reports_Registry.php:248
 msgid "Name"
 msgstr ""
 
 #. translators: Short receipt table header for product/item name. Keep very short, ideally 3–8 characters.
-#: includes/Services/Receipt_I18n_Labels.php:211
+#: includes/Services/Receipt_I18n_Labels.php:215
 msgctxt "short receipt table header"
 msgid "Item"
 msgstr ""
 
 #. translators: Short receipt table header for SKU/reference/product code. Keep very short.
-#: includes/Services/Receipt_I18n_Labels.php:212
+#: includes/Services/Receipt_I18n_Labels.php:216
 msgctxt "short receipt table header"
 msgid "SKU"
 msgstr ""
 
 #. translators: Short receipt table header for quantity. Keep very short.
-#: includes/Services/Receipt_I18n_Labels.php:213
+#: includes/Services/Receipt_I18n_Labels.php:217
 msgctxt "short receipt table header"
 msgid "Qty"
 msgstr ""
 
 #. translators: Short receipt table header for unit price excluding tax/VAT/GST. Keep compact for narrow receipt columns.
-#: includes/Services/Receipt_I18n_Labels.php:214
+#: includes/Services/Receipt_I18n_Labels.php:218
 msgctxt "short receipt table header"
 msgid "Unit excl."
 msgstr ""
 
 #. translators: Short receipt table header for tax/VAT/GST rate percentage, not tax amount. Keep compact for narrow receipt columns.
-#: includes/Services/Receipt_I18n_Labels.php:215
+#: includes/Services/Receipt_I18n_Labels.php:219
 msgctxt "short receipt table header: tax rate percentage"
 msgid "Tax %"
 msgstr ""
 
 #. translators: Short receipt table header for tax/VAT/GST amount, not tax rate. Keep compact for narrow receipt columns.
-#: includes/Services/Receipt_I18n_Labels.php:216
+#: includes/Services/Receipt_I18n_Labels.php:220
 msgctxt "short receipt table header: tax amount"
 msgid "Tax"
 msgstr ""
 
 #. translators: Short receipt table header for line total including tax/VAT/GST. Keep compact for narrow receipt columns.
-#: includes/Services/Receipt_I18n_Labels.php:217
+#: includes/Services/Receipt_I18n_Labels.php:221
 msgctxt "short receipt table header"
 msgid "Total incl."
 msgstr ""
 
 #. translators: Short receipt table header for taxable amount excluding tax/VAT/GST. Keep compact for narrow receipt columns.
-#: includes/Services/Receipt_I18n_Labels.php:218
+#: includes/Services/Receipt_I18n_Labels.php:222
 msgctxt "short receipt table header"
 msgid "Taxable excl."
 msgstr ""
 
 #. translators: Short receipt table header for taxable amount including tax/VAT/GST. Keep compact for narrow receipt columns.
-#: includes/Services/Receipt_I18n_Labels.php:219
+#: includes/Services/Receipt_I18n_Labels.php:223
 msgctxt "short receipt table header"
 msgid "Taxable incl."
 msgstr ""
 
 #. translators: Receipt total-row label for the subtotal excluding tax/VAT/GST.
-#: includes/Services/Receipt_I18n_Labels.php:223
+#: includes/Services/Receipt_I18n_Labels.php:227
 msgid "Subtotal (excl. tax)"
 msgstr ""
 
 #. translators: Receipt total-row label for the total tax/VAT/GST amount.
-#: includes/Services/Receipt_I18n_Labels.php:225
+#: includes/Services/Receipt_I18n_Labels.php:229
 msgid "Total Tax"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates for tax amounts already included in displayed prices.
-#: includes/Services/Receipt_I18n_Labels.php:226
+#: includes/Services/Receipt_I18n_Labels.php:230
 msgid "Tax included"
 msgstr ""
 
 #. translators: Receipt total-row label for the grand total including tax/VAT/GST.
-#: includes/Services/Receipt_I18n_Labels.php:228
+#: includes/Services/Receipt_I18n_Labels.php:232
 msgid "Grand Total (incl. tax)"
 msgstr ""
 
 #. translators: Receipt label prefix shown before a payment method, for example "Paid via Cash".
-#: includes/Services/Receipt_I18n_Labels.php:231
+#: includes/Services/Receipt_I18n_Labels.php:235
 msgid "Paid via"
 msgstr ""
 
 #. translators: Receipt tax summary label for taxable amount excluding tax/VAT/GST.
-#: includes/Services/Receipt_I18n_Labels.php:237
+#: includes/Services/Receipt_I18n_Labels.php:241
 msgid "Taxable (excl.)"
 msgstr ""
 
 #. translators: Receipt tax summary label for taxable amount including tax/VAT/GST.
-#: includes/Services/Receipt_I18n_Labels.php:239
+#: includes/Services/Receipt_I18n_Labels.php:243
 msgid "Taxable (incl.)"
 msgstr ""
 
 #. translators: Document title printed at the top of an invoice template.
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
-#: includes/Services/Receipt_I18n_Labels.php:242
+#: includes/Services/Receipt_I18n_Labels.php:246
 #: includes/Templates.php:1429
 #: includes/Templates/Gallery_Registry.php:421
 msgid "Invoice"
 msgstr ""
 
 #. translators: Document title printed at the top of a tax invoice/VAT invoice template.
-#: includes/Services/Receipt_I18n_Labels.php:243
+#: includes/Services/Receipt_I18n_Labels.php:247
 msgid "Tax Invoice"
 msgstr ""
 
 #. translators: Document title for a quotation/estimate, not a receipt or completed purchase.
-#: includes/Services/Receipt_I18n_Labels.php:244
+#: includes/Services/Receipt_I18n_Labels.php:248
 msgid "Quote"
 msgstr ""
 
 #. translators: Document title printed at the top of a completed sale receipt.
 #. translators: Receipt template post type or template option label.
-#: includes/Services/Receipt_I18n_Labels.php:245
+#: includes/Services/Receipt_I18n_Labels.php:249
 #: includes/Storefront_Receipts.php:140
 #: includes/Templates.php:1428
 #: templates/receipt.php:184
@@ -4589,7 +4611,7 @@ msgstr ""
 #. translators: Document title for a gift receipt that usually hides prices.
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
-#: includes/Services/Receipt_I18n_Labels.php:246
+#: includes/Services/Receipt_I18n_Labels.php:250
 #: includes/Templates.php:1430
 #: includes/Templates/Gallery_Registry.php:408
 msgid "Gift Receipt"
@@ -4597,308 +4619,308 @@ msgstr ""
 
 #. translators: Document title for a credit note/refund document.
 #. translators: Receipt template post type or template option label.
-#: includes/Services/Receipt_I18n_Labels.php:247
+#: includes/Services/Receipt_I18n_Labels.php:251
 #: includes/Templates.php:1431
 msgid "Credit Note"
 msgstr ""
 
 #. translators: Document title for a packing slip used to pick/pack shipped items.
 #. translators: Gallery template name shown in the admin Template Gallery.
-#: includes/Services/Receipt_I18n_Labels.php:248
+#: includes/Services/Receipt_I18n_Labels.php:252
 #: includes/Templates/Gallery_Registry.php:459
 msgid "Packing Slip"
 msgstr ""
 
 #. translators: Receipt section heading for products returned/refunded from the order.
-#: includes/Services/Receipt_I18n_Labels.php:251
+#: includes/Services/Receipt_I18n_Labels.php:255
 #: templates/receipt.php:325
 msgid "Returned Items"
 msgstr ""
 
 #. translators: Receipt label for an amount refunded to the customer.
-#: includes/Services/Receipt_I18n_Labels.php:254
+#: includes/Services/Receipt_I18n_Labels.php:258
 #: includes/Services/Reports_Registry.php:247
 msgid "Refunded"
 msgstr ""
 
 #. translators: Receipt section heading for sale terms and conditions text.
-#: includes/Services/Receipt_I18n_Labels.php:259
+#: includes/Services/Receipt_I18n_Labels.php:263
 msgid "Terms & Conditions"
 msgstr ""
 
 #. translators: Receipt section heading for a short merchant message to the customer.
-#: includes/Services/Receipt_I18n_Labels.php:260
+#: includes/Services/Receipt_I18n_Labels.php:264
 msgid "A message for you"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — column heading for invoice meta (issued date, cashier, currency).
-#: includes/Services/Receipt_I18n_Labels.php:261
+#: includes/Services/Receipt_I18n_Labels.php:265
 msgid "Details"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — date the invoice was issued.
-#: includes/Services/Receipt_I18n_Labels.php:262
+#: includes/Services/Receipt_I18n_Labels.php:266
 msgid "Issued"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — large amount-due heading on unpaid invoices.
-#: includes/Services/Receipt_I18n_Labels.php:266
+#: includes/Services/Receipt_I18n_Labels.php:270
 msgid "Amount due"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — section heading for payment instructions on unpaid invoices.
-#: includes/Services/Receipt_I18n_Labels.php:267
+#: includes/Services/Receipt_I18n_Labels.php:271
 msgid "How to pay"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — subheading for the bank-transfer column under "How to pay".
-#: includes/Services/Receipt_I18n_Labels.php:268
+#: includes/Services/Receipt_I18n_Labels.php:272
 msgid "Bank transfer"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — subheading for the online-payment column under "How to pay".
-#: includes/Services/Receipt_I18n_Labels.php:269
+#: includes/Services/Receipt_I18n_Labels.php:273
 msgid "Pay online"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — instruction shown next to a pay-now QR code, followed by the payment URL.
-#: includes/Services/Receipt_I18n_Labels.php:270
+#: includes/Services/Receipt_I18n_Labels.php:274
 msgid "Scan the QR code, or visit:"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates — bank-transfer field label for the account name.
-#: includes/Services/Receipt_I18n_Labels.php:271
+#: includes/Services/Receipt_I18n_Labels.php:275
 msgid "Account"
 msgstr ""
 
 #. translators: Short receipt footer message thanking the customer.
-#: includes/Services/Receipt_I18n_Labels.php:274
+#: includes/Services/Receipt_I18n_Labels.php:278
 msgid "Thank you!"
 msgstr ""
 
 #. translators: Receipt footer message thanking the customer for shopping at the store.
-#: includes/Services/Receipt_I18n_Labels.php:276
+#: includes/Services/Receipt_I18n_Labels.php:280
 msgid "Thank you for shopping with us!"
 msgstr ""
 
 #. translators: Receipt footer message thanking the customer for their business.
-#: includes/Services/Receipt_I18n_Labels.php:277
+#: includes/Services/Receipt_I18n_Labels.php:281
 msgid "Thank you for your business."
 msgstr ""
 
 #. translators: Gift receipt footer explaining the return/exchange period.
-#: includes/Services/Receipt_I18n_Labels.php:278
+#: includes/Services/Receipt_I18n_Labels.php:282
 msgid "Items may be returned or exchanged within 30 days with this receipt."
 msgstr ""
 
 #. translators: Quote document footer explaining validity period and that the quote is not a receipt.
-#: includes/Services/Receipt_I18n_Labels.php:279
+#: includes/Services/Receipt_I18n_Labels.php:283
 msgid "This quote is valid for 30 days from the date of issue. Prices are subject to change after the validity period. This is not a receipt or confirmation of purchase."
 msgstr ""
 
 #. translators: Quote document notice clarifying it is not a completed-sale receipt.
-#: includes/Services/Receipt_I18n_Labels.php:280
+#: includes/Services/Receipt_I18n_Labels.php:284
 msgid "This is a quote, not a receipt"
 msgstr ""
 
 #. translators: Receipt footer asking the customer to keep the receipt for returns/records.
-#: includes/Services/Receipt_I18n_Labels.php:281
+#: includes/Services/Receipt_I18n_Labels.php:285
 msgid "Please retain this receipt for your records."
 msgstr ""
 
 #. translators: Kitchen ticket document label for food/drink preparation; keep concise and uppercase if natural in the target language.
-#: includes/Services/Receipt_I18n_Labels.php:284
+#: includes/Services/Receipt_I18n_Labels.php:288
 msgid "KITCHEN"
 msgstr ""
 
 #. translators: Receipt label for a customer or staff signature line.
-#: includes/Services/Receipt_I18n_Labels.php:287
+#: includes/Services/Receipt_I18n_Labels.php:291
 msgid "Signature"
 msgstr ""
 
 #. translators: Fiscal receipt label for a printed copy of a document.
-#: includes/Services/Receipt_I18n_Labels.php:289
+#: includes/Services/Receipt_I18n_Labels.php:293
 msgid "COPY"
 msgstr ""
 
 #. translators: Fiscal receipt label for copy number/sequence.
-#: includes/Services/Receipt_I18n_Labels.php:290
+#: includes/Services/Receipt_I18n_Labels.php:294
 msgid "Copy No."
 msgstr ""
 
 #. translators: Fiscal receipt label marking a document printed again after the original.
-#: includes/Services/Receipt_I18n_Labels.php:291
+#: includes/Services/Receipt_I18n_Labels.php:295
 msgid "Reprint"
 msgstr ""
 
 #. translators: Fiscal receipt label for the time the sale was rung at the till, in the till's own zone.
-#: includes/Services/Receipt_I18n_Labels.php:293
+#: includes/Services/Receipt_I18n_Labels.php:297
 msgid "Sale time"
 msgstr ""
 
 #. translators: Fiscal receipt heading for a refund document (credit note).
-#: includes/Services/Receipt_I18n_Labels.php:294
+#: includes/Services/Receipt_I18n_Labels.php:298
 msgid "Refund"
 msgstr ""
 
 #. translators: Refund receipt payment-section heading identifying where money was returned.
-#: includes/Services/Receipt_I18n_Labels.php:296
+#: includes/Services/Receipt_I18n_Labels.php:300
 #: templates/receipt.php:355
 msgid "Refunded to"
 msgstr ""
 
 #. translators: Fiscal receipt heading for a cancellation document (a completed sale later cancelled).
-#: includes/Services/Receipt_I18n_Labels.php:298
+#: includes/Services/Receipt_I18n_Labels.php:302
 msgid "Cancelled"
 msgstr ""
 
 #. translators: Receipt status value meaning the order/document is completed.
-#: includes/Services/Receipt_I18n_Labels.php:303
+#: includes/Services/Receipt_I18n_Labels.php:307
 msgid "Completed"
 msgstr ""
 
 #. translators: Receipt status value meaning the document has been printed.
-#: includes/Services/Receipt_I18n_Labels.php:304
+#: includes/Services/Receipt_I18n_Labels.php:308
 msgid "Printed"
 msgstr ""
 
 #. translators: Customer-facing display label welcoming the customer.
-#: includes/Services/Receipt_I18n_Labels.php:308
+#: includes/Services/Receipt_I18n_Labels.php:312
 msgid "Welcome"
 msgstr ""
 
 #. translators: Customer-facing display label used before the first name, as in "Hi {first name}!".
-#: includes/Services/Receipt_I18n_Labels.php:312
+#: includes/Services/Receipt_I18n_Labels.php:316
 msgid "Hi"
 msgstr ""
 
 #. translators: Customer-facing display label heading the item list.
-#: includes/Services/Receipt_I18n_Labels.php:316
+#: includes/Services/Receipt_I18n_Labels.php:320
 msgid "Your items"
 msgstr ""
 
 #. translators: Customer-facing display label for an empty item list.
-#: includes/Services/Receipt_I18n_Labels.php:320
+#: includes/Services/Receipt_I18n_Labels.php:324
 msgid "Your items will appear here"
 msgstr ""
 
 #. translators: Customer-facing display label before the savings amount, as in "You saved $15.00".
-#: includes/Services/Receipt_I18n_Labels.php:324
+#: includes/Services/Receipt_I18n_Labels.php:328
 msgid "You saved"
 msgstr ""
 
 #. translators: Customer-facing display label for the amount already paid.
-#: includes/Services/Receipt_I18n_Labels.php:328
+#: includes/Services/Receipt_I18n_Labels.php:332
 msgid "Paid so far"
 msgstr ""
 
 #. translators: Customer-facing display label prompting card presentation.
-#: includes/Services/Receipt_I18n_Labels.php:332
+#: includes/Services/Receipt_I18n_Labels.php:336
 msgid "Please present your card"
 msgstr ""
 
 #. translators: Customer-facing display label for an approved payment.
-#: includes/Services/Receipt_I18n_Labels.php:336
+#: includes/Services/Receipt_I18n_Labels.php:340
 msgid "Approved"
 msgstr ""
 
 #. translators: Customer-facing display label for a declined payment.
-#: includes/Services/Receipt_I18n_Labels.php:340
+#: includes/Services/Receipt_I18n_Labels.php:344
 msgid "Declined"
 msgstr ""
 
 #. translators: Customer-facing display label after a declined payment.
-#: includes/Services/Receipt_I18n_Labels.php:344
+#: includes/Services/Receipt_I18n_Labels.php:348
 msgid "Please try another card or ask staff"
 msgstr ""
 
 #. translators: Customer-facing display label confirming full payment.
-#: includes/Services/Receipt_I18n_Labels.php:348
+#: includes/Services/Receipt_I18n_Labels.php:352
 msgid "Paid in full"
 msgstr ""
 
 #. translators: %s: store tax identification number
-#: includes/Services/Receipt_I18n_Labels.php:374
+#: includes/Services/Receipt_I18n_Labels.php:378
 #, php-format
 msgid "Tax ID: %s"
 msgstr ""
 
 #. translators: %s: store phone number
-#: includes/Services/Receipt_I18n_Labels.php:379
+#: includes/Services/Receipt_I18n_Labels.php:383
 #, php-format
 msgid "Phone: %s"
 msgstr ""
 
 #. translators: %s: store email address
-#: includes/Services/Receipt_I18n_Labels.php:384
+#: includes/Services/Receipt_I18n_Labels.php:388
 #, php-format
 msgid "Email: %s"
 msgstr ""
 
 #. translators: %s: payment method name
-#: includes/Services/Receipt_I18n_Labels.php:389
+#: includes/Services/Receipt_I18n_Labels.php:393
 #, php-format
 msgid "Paid via %s"
 msgstr ""
 
 #. translators: %s: payment method name
-#: includes/Services/Receipt_I18n_Labels.php:394
+#: includes/Services/Receipt_I18n_Labels.php:398
 #, php-format
 msgid "Refunded via %s"
 msgstr ""
 
 #. translators: %s: cashier name
-#: includes/Services/Receipt_I18n_Labels.php:399
+#: includes/Services/Receipt_I18n_Labels.php:403
 #, php-format
 msgid "Served by %s"
 msgstr ""
 
 #. translators: %s: customer name
-#: includes/Services/Receipt_I18n_Labels.php:404
+#: includes/Services/Receipt_I18n_Labels.php:408
 #, php-format
 msgid "Customer: %s"
 msgstr ""
 
 #. translators: %s: customer name
-#: includes/Services/Receipt_I18n_Labels.php:409
+#: includes/Services/Receipt_I18n_Labels.php:413
 #, php-format
 msgid "Thank you, %s!"
 msgstr ""
 
 #. translators: %s: payment transaction ID
 #. translators: %s: order number with # prefix
-#: includes/Services/Receipt_I18n_Labels.php:414
-#: includes/Services/Receipt_I18n_Labels.php:419
+#: includes/Services/Receipt_I18n_Labels.php:418
+#: includes/Services/Receipt_I18n_Labels.php:423
 #, php-format
 msgid "Ref: %s"
 msgstr ""
 
 #. translators: %s: order number with # prefix
-#: includes/Services/Receipt_I18n_Labels.php:424
+#: includes/Services/Receipt_I18n_Labels.php:428
 #, php-format
 msgid "Order %s"
 msgstr ""
 
 #. translators: %s: product SKU
-#: includes/Services/Receipt_I18n_Labels.php:429
+#: includes/Services/Receipt_I18n_Labels.php:433
 #, php-format
 msgid "SKU: %s"
 msgstr ""
 
 #. translators: %s: line subtotal amount
-#: includes/Services/Receipt_I18n_Labels.php:434
+#: includes/Services/Receipt_I18n_Labels.php:438
 #, php-format
 msgid "Subtotal: %s"
 msgstr ""
 
 #. translators: %s: discount amount with minus sign
-#: includes/Services/Receipt_I18n_Labels.php:439
+#: includes/Services/Receipt_I18n_Labels.php:443
 #, php-format
 msgid "Discount: %s"
 msgstr ""
 
 #. translators: %s: taxable amount
-#: includes/Services/Receipt_I18n_Labels.php:444
+#: includes/Services/Receipt_I18n_Labels.php:448
 #, php-format
 msgid "Taxable: %s"
 msgstr ""
