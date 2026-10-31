@@ -337,6 +337,20 @@ final class Digest_Index {
 	}
 
 	/**
+	 * Whether an order was created within the integrity window (ADR 0036).
+	 * NULL means the order is gone, so stored-side scans can still detect deletes.
+	 *
+	 * @internal Engine-internal SQL predicate; $id_expr is never request data.
+	 */
+	public function order_window_predicate_sql( string $id_expr ): string {
+		$schema = Order_Meta_Store::schema();
+
+		return "(SELECT window_order.{$schema['created']} IS NOT NULL AND window_order.{$schema['created']} >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL "
+			. Integrity_Digest::ORDER_DIGEST_WINDOW_DAYS . ' DAY)'
+			. " FROM {$schema['orders']} window_order WHERE window_order.{$schema['id']} = {$id_expr})";
+	}
+
+	/**
 	 * Bulk-read the STORED 64-bit digests for ONE collection's id-space -> `[id => digest string]`.
 	 *
 	 * ONE reader for every id-space. The registry row names the object types the
@@ -549,7 +563,8 @@ final class Digest_Index {
 		}
 		$publish      = isset( Collections::row( $collection )['digest']['published_ids'] ) && 'publish' === ( $filters['status'] ?? '' );
 		$object_types = "('" . implode( "','", $digest['object_types'] ) . "')";
-		$current_sql  = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' );
+		$order_window = 'orders' === $collection ? ' AND ' . $this->order_window_predicate_sql( $digest['id_column'] ) : '';
+		$current_sql  = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' . $order_window );
 		$current_scope = $publish ? $this->product_servable_predicate_sql( 't.id', true ) : array(
 			'sql' => '',
 			'args' => array(),
@@ -560,6 +575,8 @@ final class Digest_Index {
 		);
 		$current_join  = $publish ? $this->servable_product_join_sql( 't.id' ) : '';
 		$stored_join   = $publish ? $this->servable_product_join_sql( 'd.object_id' ) : '';
+		// A gone order has no creation date; retain its stored digest as the deletion signal until rebuild.
+		$stored_order_window = 'orders' === $collection ? ' AND COALESCE(' . $this->order_window_predicate_sql( 'd.object_id' ) . ', 1)' : '';
 
 		// Current side: one SQL pass — per-row canonical digests aggregated
 		// per bucket inside the DB engine. Raw rows are digested for
@@ -586,6 +603,7 @@ final class Digest_Index {
 				'SELECT FLOOR(d.object_id / %d) AS bucket, COUNT(*) AS record_count, BIT_XOR(d.digest) AS digest'
 				. ' FROM ' . $this->table_name() . ' d' . $stored_join
 				. ' WHERE d.object_type IN ' . $object_types
+				. $stored_order_window
 				. ' AND d.object_id >= %d AND d.object_id < %d' . ( '' === $stored_scope['sql'] ? '' : ' AND ' . $stored_scope['sql'] )
 				. ' GROUP BY bucket ORDER BY bucket',
 				$bucket_size,
@@ -634,7 +652,7 @@ final class Digest_Index {
 		$live_max  = $this->live_max_id_sql( $collection, $publish );
 		$max_query = 'SELECT GREATEST(COALESCE((' . $live_max['sql'] . '), 0),'
 			. ' COALESCE((SELECT MAX(d.object_id) FROM ' . $this->table_name() . ' d'
-			. ' WHERE d.object_type IN ' . $object_types . '), 0))';
+			. ' WHERE d.object_type IN ' . $object_types . $stored_order_window . '), 0))';
 		$max_id    = (int) $wpdb->get_var( empty( $live_max['args'] ) ? $max_query : $wpdb->prepare( $max_query, ...$live_max['args'] ) );
 
 		return array(
@@ -735,7 +753,8 @@ final class Digest_Index {
 		if ( null === $digest ) {
 			return array();
 		}
-		$inner_sql = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' );
+		$order_window = 'orders' === $collection ? ' AND ' . $this->order_window_predicate_sql( $digest['id_column'] ) : '';
+		$inner_sql = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' . $order_window );
 		if ( isset( $digest['servable'] ) ) {
 			$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id";
 			if ( 'publish' === ( $filters['status'] ?? '' ) ) {
@@ -933,12 +952,14 @@ final class Digest_Index {
 		if ( Order_Meta_Store::hpos() ) {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return array(
-				'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' ),
+				'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' )
+					. ' AND ' . $this->order_window_predicate_sql( 'o.id' ),
 				'args' => array(),
 			);
 		}
 		return array(
-			'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' ),
+			'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' )
+				. ' AND ' . $this->order_window_predicate_sql( 'p.ID' ),
 			'args' => array(),
 		);
 	}
