@@ -580,6 +580,44 @@ class Test_WooCommerce_Tax extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * The billing basis with no billing address is taxed at the store
+	 * (Orders::get_tax_location); a shipping address inside the store's own
+	 * location must not lend its street to that store-based request.
+	 */
+	public function test_street_follows_the_fallback_basis_when_the_declared_address_is_empty(): void {
+		// Arrange.
+		update_option( 'woocommerce_store_address', '100 Main St' );
+		update_option( 'woocommerce_store_postcode', '94103' );
+		update_option( 'woocommerce_store_city', 'San Francisco' );
+		$address = array(
+			'country'  => 'US',
+			'state'    => 'CA',
+			'postcode' => '94103',
+			'city'     => 'San Francisco',
+		);
+		$payload = array(
+			'status'     => 'pos-open',
+			'line_items' => array( $this->line( $this->product( 10 ) ) ),
+			'shipping'   => $address + array( 'address_1' => '2 Rodeo Dr' ),
+			'meta_data'  => array(
+				array(
+					'key'   => '_woocommerce_pos_tax_based_on',
+					'value' => 'billing',
+				),
+			),
+		);
+
+		// Act.
+		$created = $this->push_order( 'create', wp_generate_uuid4(), $payload );
+
+		// Assert.
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertCount( 1, $this->taxjar->calculate_tax_calls );
+		$this->assertSame( '94103', $this->taxjar->calculate_tax_calls[0]['to_zip'] );
+		$this->assertSame( '100 Main St', $this->taxjar->calculate_tax_calls[0]['to_street'] );
+	}
+
+	/**
 	 * A filter can move the taxed location to the customer address that is NOT
 	 * the declared basis; if that address shares the store's location, the
 	 * customer's street must still win over the store's.

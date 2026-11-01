@@ -335,6 +335,14 @@ class WooCommerce_Tax {
 			if ( '' === $basis ) {
 				$basis = (string) get_option( 'woocommerce_tax_based_on', 'shipping' );
 			}
+			// The same fallback Orders::get_tax_location() takes: an address with no
+			// country was not the one taxed, so its street is not the one to send.
+			if ( 'shipping' === $basis && ! $order->get_shipping_country() ) {
+				$basis = 'billing';
+			}
+			if ( 'billing' === $basis && ! $order->get_billing_country() ) {
+				$basis = 'base';
+			}
 			// The store address is a candidate too, but LAST unless it is the
 			// declared basis: when a filter moves the taxed location to the other
 			// customer address, that address must win over a store that happens
