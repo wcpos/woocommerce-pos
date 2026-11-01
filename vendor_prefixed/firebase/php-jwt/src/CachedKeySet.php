@@ -73,7 +73,7 @@ class CachedKeySet implements ArrayAccess
      * @var string|null
      */
     private $defaultAlg;
-    public function __construct(string $jwksUri, ClientInterface $httpClient, RequestFactoryInterface $httpFactory, CacheItemPoolInterface $cache, int $expiresAfter = null, bool $rateLimit = \false, string $defaultAlg = null)
+    public function __construct(string $jwksUri, ClientInterface $httpClient, RequestFactoryInterface $httpFactory, CacheItemPoolInterface $cache, ?int $expiresAfter = null, bool $rateLimit = \false, ?string $defaultAlg = null)
     {
         $this->jwksUri = $jwksUri;
         $this->httpClient = $httpClient;
