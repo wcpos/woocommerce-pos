@@ -5,6 +5,7 @@ namespace WCPOS\Vendor\Sentry;
 
 use WCPOS\Vendor\Psr\Log\LoggerInterface;
 use WCPOS\Vendor\Psr\Log\NullLogger;
+use WCPOS\Vendor\Sentry\DataCollection\DataCollectionOptions;
 use WCPOS\Vendor\Sentry\HttpClient\HttpClientInterface;
 use WCPOS\Vendor\Sentry\Integration\ErrorListenerIntegration;
 use WCPOS\Vendor\Sentry\Integration\IntegrationInterface;
@@ -55,6 +56,8 @@ final class Options
         if (isset($options['strict_trace_propagation']) && !isset($options['strict_trace_continuation'])) {
             $options['strict_trace_continuation'] = $options['strict_trace_propagation'];
         }
+        // Make the logger available to normalizers of nested options such as `data_collection` while resolving
+        $this->options = ['logger' => $this->getLoggerOrNullLogger($options)];
         $this->options = $this->resolver->resolve($options, $this->getLoggerOrNullLogger($options));
         if ($this->options['enable_tracing'] === \true && $this->options['traces_sample_rate'] === null) {
             $this->options = \array_merge($this->options, ['traces_sample_rate' => 1]);
@@ -325,6 +328,26 @@ final class Options
     public function setContextLines(?int $contextLines) : self
     {
         return $this->updateOptions(['context_lines' => $contextLines]);
+    }
+    /**
+     * Gets the data collection options. `null` means the legacy options such as
+     * `send_default_pii` are used instead.
+     */
+    public function getDataCollection() : ?DataCollectionOptions
+    {
+        /** @var DataCollectionOptions|null $dataCollection */
+        $dataCollection = $this->options['data_collection'];
+        return $dataCollection;
+    }
+    /**
+     * Sets the data collection options. Any value other than `null` opts into the
+     * data collection options and ignores the legacy options such as `send_default_pii`.
+     *
+     * @param DataCollectionOptions|array<string, mixed>|null $dataCollection
+     */
+    public function setDataCollection($dataCollection) : self
+    {
+        return $this->updateOptions(['data_collection' => $dataCollection]);
     }
     /**
      * Gets the environment.
@@ -1051,7 +1074,8 @@ final class Options
     /**
      * Sets a list of callables that will be called to customize how objects are
      * serialized in the event's payload. The list must be a map of FQCN/callable
-     * pairs.
+     * pairs. Use `object` as the key to register a serializer that matches any
+     * object; return `null` from it to fall back to the default serialization.
      *
      * @param array<string, callable> $serializers The list of serializer callbacks
      */
@@ -1141,6 +1165,7 @@ final class Options
         $resolver->setAllowedTypes('capture_silenced_errors', 'bool');
         $resolver->setAllowedTypes('max_request_body_size', 'string');
         $resolver->setAllowedTypes('class_serializers', 'array');
+        $resolver->setAllowedTypes('data_collection', ['null', 'array', DataCollectionOptions::class]);
         $resolver->setAllowedValues('max_request_body_size', ['none', 'never', 'small', 'medium', 'always']);
         $resolver->setAllowedValues('dsn', \Closure::fromCallable([$this, 'validateDsnOption']));
         $resolver->setAllowedValues('max_breadcrumbs', \Closure::fromCallable([$this, 'validateMaxBreadcrumbsOptions']));
@@ -1149,6 +1174,7 @@ final class Options
         $resolver->setAllowedValues('log_flush_threshold', \Closure::fromCallable([$this, 'validateLogFlushThresholdOption']));
         $resolver->setAllowedValues('metric_flush_threshold', \Closure::fromCallable([$this, 'validateMetricFlushThresholdOption']));
         $resolver->setNormalizer('dsn', \Closure::fromCallable([$this, 'normalizeDsnOption']));
+        $resolver->setNormalizer('data_collection', \Closure::fromCallable([$this, 'normalizeDataCollectionOption']));
         $resolver->setNormalizer('prefixes', function (array $value) {
             return \array_map([$this, 'normalizeAbsolutePath'], $value);
         });
@@ -1241,6 +1267,7 @@ final class Options
             'capture_silenced_errors' => \false,
             'max_request_body_size' => 'medium',
             'class_serializers' => [],
+            'data_collection' => null,
         ]);
     }
     /**
@@ -1280,6 +1307,16 @@ final class Options
             return \substr($url, 0, -7);
         }
         return $url;
+    }
+    /**
+     * @param array<string, mixed>|DataCollectionOptions|null $value
+     */
+    private function normalizeDataCollectionOption($value) : ?DataCollectionOptions
+    {
+        if ($value === null || $value instanceof DataCollectionOptions) {
+            return $value;
+        }
+        return new DataCollectionOptions($value, $this->getLoggerOrNullLogger());
     }
     /**
      * Normalizes the DSN option by parsing the host, public and secret keys and

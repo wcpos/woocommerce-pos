@@ -3,9 +3,11 @@
 declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\State;
 
+use WCPOS\Vendor\Sentry\Attachment\Attachment;
 use WCPOS\Vendor\Sentry\Breadcrumb;
 use WCPOS\Vendor\Sentry\Event;
 use WCPOS\Vendor\Sentry\EventHint;
+use WCPOS\Vendor\Sentry\EventType;
 use WCPOS\Vendor\Sentry\Options;
 use WCPOS\Vendor\Sentry\Severity;
 use WCPOS\Vendor\Sentry\Tracing\DynamicSamplingContext;
@@ -73,6 +75,10 @@ class Scope
      * @var Span|null Set a Span on the Scope
      */
     private $span;
+    /**
+     * @var Attachment[]
+     */
+    private $attachments = [];
     /**
      * @var callable[] List of event processors
      *
@@ -370,6 +376,7 @@ class Scope
         $this->flags = [];
         $this->extra = [];
         $this->contexts = [];
+        $this->attachments = [];
         return $this;
     }
     /**
@@ -441,8 +448,20 @@ class Scope
         if ($hint === null) {
             $hint = new EventHint();
         }
+        if ($event->getType() === EventType::event() || $event->getType() === EventType::transaction()) {
+            if (empty($event->getAttachments())) {
+                $event->setAttachments($this->attachments);
+            }
+        }
         foreach (\array_merge(self::$globalEventProcessors, $this->eventProcessors) as $processor) {
-            $event = $processor($event, $hint);
+            try {
+                $event = $processor($event, $hint);
+            } catch (\Throwable $exception) {
+                if ($options !== null) {
+                    $options->getLoggerOrNullLogger()->error(\sprintf('The event processor failed with exception: "%s".', $exception->getMessage()));
+                }
+                return null;
+            }
             if ($event === null) {
                 return null;
             }
@@ -522,5 +541,15 @@ class Scope
         if ($this->propagationContext !== null) {
             $this->propagationContext = clone $this->propagationContext;
         }
+    }
+    public function addAttachment(Attachment $attachment) : self
+    {
+        $this->attachments[] = $attachment;
+        return $this;
+    }
+    public function clearAttachments() : self
+    {
+        $this->attachments = [];
+        return $this;
     }
 }

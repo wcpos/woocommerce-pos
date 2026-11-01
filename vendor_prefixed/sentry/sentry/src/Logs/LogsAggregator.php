@@ -92,7 +92,12 @@ final class LogsAggregator
             }
             $log->setAttribute($key, $attribute);
         }
-        $log = $options->getBeforeSendLogCallback()($log);
+        try {
+            $log = $options->getBeforeSendLogCallback()($log);
+        } catch (\Throwable $exception) {
+            $options->getLoggerOrNullLogger()->error(\sprintf('The "before_send_log" callback failed with exception: "%s".', $exception->getMessage()));
+            return;
+        }
         if ($log === null) {
             if ($sdkLogger !== null) {
                 $sdkLogger->info('Log will be discarded because the "before_send_log" callback returned "null".', ['log' => $log]);
