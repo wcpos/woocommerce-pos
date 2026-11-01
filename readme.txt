@@ -130,6 +130,13 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.11.8 - 2026/11/01 =
+
+- **New sales start from WooCommerce's own "Calculate tax based on" setting** (shop base address, customer billing address or customer shipping address) instead of always the shop base address. A sale with no customer address is still taxed at the shop base address, as in WooCommerce.
+- **The Extensions screen and its menu badge no longer announce an extension update that needs a newer WCPOS than this site runs.**
+- **The refund window is titled with the order number, not the order's database id.**
+- Developers: translations updated to 2026.11.0.
+
 = 1.11.7 - 2026/10/28 =
 
 - **Reading an order from the POS no longer saves it on stores using WooCommerce's High-Performance Order Storage.** The first read of a web or admin order could attribute it to the cashier who opened it and make the till's next change to that order fail as out of date.
