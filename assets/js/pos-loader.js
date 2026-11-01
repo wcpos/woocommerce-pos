@@ -1,5 +1,7 @@
 (function () {
     'use strict';
+    // A cold edge fills within a second or two; one retry covers it without doubling a real outage's wait.
+    var RETRY_DELAY_MS = 1500;
     function getScript(source, callback, onError, integrity) {
         var script = document.createElement('script');
         script.async = true;
@@ -107,18 +109,25 @@
             });
         }
         function loadAssets(d, base) {
+            function loadWithRetry(load, path, resolve, reject) {
+                load(base + '/' + path, resolve, function () {
+                    deps.setTimeout(function () {
+                        load(base + '/' + path, resolve, reject, d.sri[path]);
+                    }, RETRY_DELAY_MS);
+                }, d.sri[path]);
+            }
             function scripts(index) {
                 if (index >= d.files.bundles.length) return Promise.resolve();
                 return new Promise(function (resolve, reject) {
                     var path = d.files.bundles[index];
-                    deps.getScript(base + '/' + path, resolve, function () {
+                    loadWithRetry(deps.getScript, path, resolve, function () {
                         reject(index === 0 ? 'asset_js' : 'asset_js_partial');
-                    }, d.sri[path]);
+                    });
                 }).then(function () { return scripts(index + 1); });
             }
             return new Promise(function (resolve, reject) {
                 if (!d.files.css) return resolve();
-                deps.loadCSS(base + '/' + d.files.css, resolve, function () { reject('asset_css'); }, d.sri[d.files.css]);
+                loadWithRetry(deps.loadCSS, d.files.css, resolve, function () { reject('asset_css'); });
             }).then(function () { return scripts(0); }).then(function () { beacon('ok', null, d.build_id); });
         }
         function legacy() {
@@ -195,6 +204,8 @@
         var storage = null;
         try { storage = window.localStorage; } catch (_) {}
         defaultDeps = { fetch: window.fetch.bind(window), subtle: window.crypto && window.crypto.subtle,
+            // Bound: a bare global called as deps.setTimeout(...) has deps as its receiver and throws in browsers.
+            setTimeout: function (fn, ms) { return window.setTimeout(fn, ms); },
             getScript: getScript, loadCSS: loadCSS, storage: storage,
             sendBeacon: function (url, body) { return window.navigator.sendBeacon(url, body); },
             now: function () { return new Date(); }, setGlobalBase: function (url) { window.cdnBaseUrl = url; } };
