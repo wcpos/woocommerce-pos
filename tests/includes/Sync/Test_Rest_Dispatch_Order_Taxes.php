@@ -247,6 +247,79 @@ class Test_Rest_Dispatch_Order_Taxes extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Shipping tax-based-on with no shipping address at all: the store base rates apply, as
+	 * WooCommerce itself falls back, not no rate. Found 2026-11-01 after #1953 made the shipping
+	 * basis reachable: a till sale on a default-settings store was saved with 0.00 tax.
+	 */
+	public function test_v2_push_shipping_basis_without_shipping_address_falls_back_to_base(): void {
+		$product = $this->create_taxable_product();
+
+		$response = $this->push_order_create(
+			261,
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'meta_data'  => array(
+					array(
+						'key'   => '_woocommerce_pos_tax_based_on',
+						'value' => 'shipping',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_tax_based_on_meta( $response->get_data()['document'], 'shipping' );
+		$order     = wc_get_order( (int) $response->get_data()['document']['id'] );
+		$tax_lines = array_values( $order->get_items( 'tax' ) );
+		$this->assertCount( 1, $tax_lines );
+		$this->assertSame( 'US', $tax_lines[0]->get_label() );
+		$this->assertSame( 1.0, (float) $order->get_total_tax() );
+		$this->assertSame( 11.0, (float) $order->get_total() );
+	}
+
+	/**
+	 * Shipping tax-based-on with no shipping address but a billing address: the billing address
+	 * is used, the step WooCommerce core takes before it reaches the store.
+	 */
+	public function test_v2_push_shipping_basis_without_shipping_address_uses_billing_first(): void {
+		$product = $this->create_taxable_product();
+
+		$response = $this->push_order_create(
+			271,
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+				'billing'    => array(
+					'country' => 'GB',
+				),
+				'meta_data'  => array(
+					array(
+						'key'   => '_woocommerce_pos_tax_based_on',
+						'value' => 'shipping',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$order     = wc_get_order( (int) $response->get_data()['document']['id'] );
+		$tax_lines = array_values( $order->get_items( 'tax' ) );
+		$this->assertCount( 1, $tax_lines );
+		$this->assertSame( 'VAT', $tax_lines[0]->get_label() );
+		$this->assertSame( 2.0, (float) $order->get_total_tax() );
+		$this->assertSame( 12.0, (float) $order->get_total() );
+	}
+
+	/**
 	 * The per-line _woocommerce_pos_data tax_status override zeroes the
 	 * line's taxes (Orders::order_item_after_calculate_taxes).
 	 */

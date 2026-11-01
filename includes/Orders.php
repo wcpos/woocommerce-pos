@@ -1107,6 +1107,15 @@ class Orders {
 		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
 
 		if ( $order instanceof WC_Order ) {
+			// WooCommerce's own fallback: a till sale rarely carries a shipping address and often no
+			// billing one, so an empty chosen address falls through to the next, ending at the store.
+			if ( 'shipping' == $tax_based_on && ! $order->get_shipping_country() ) {
+				$tax_based_on = 'billing';
+			}
+			if ( 'billing' == $tax_based_on && ! $order->get_billing_country() ) {
+				$tax_based_on = 'base';
+			}
+
 			if ( 'billing' == $tax_based_on ) {
 				$args['country']  = $order->get_billing_country();
 				$args['state']    = $order->get_billing_state();
