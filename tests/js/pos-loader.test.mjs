@@ -34,12 +34,13 @@ function harness() {
     ['https://mirror.test/build/bundle.sig', response(primary.signature)],
     ['metadata?v=hash', response({ fileMetadata: { web: { css: 'old.css', bundles: ['old.js'] } } })],
   ]);
-  const calls = [], assets = [], bases = [], beacons = [], values = new Map();
+  const calls = [], assets = [], bases = [], beacons = [], values = new Map(), delays = [];
   const config = { manifest_url: 'manifest', fallback_manifest: 'metadata?v=hash',
     fallback_base: 'https://mirror.test/build', beacon_url: 'beacon', timeout_ms: 10,
     lane: 'next', worker_version: '17.6.0', plugin_version: '2.0.0', pro_version: null,
     signing_keys: [jwk] };
   const deps = {
+    setTimeout: (callback, delay) => { delays.push(delay); callback(); },
     fetch: async (url, options) => {
       calls.push([url, options]);
       if (!routes.has(url)) throw new Error('Unexpected fetch: ' + url);
@@ -55,7 +56,7 @@ function harness() {
     storage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value),
       removeItem: key => values.delete(key) },
   };
-  return { config, deps, routes, calls, assets, bases, beacons, values,
+  return { config, deps, routes, calls, assets, bases, beacons, values, delays,
     run: () => loader.boot(config, deps) };
 }
 
@@ -178,17 +179,51 @@ for (const reason of ['bad_signature', 'wrong_lane', 'worker_mismatch']) {
   });
 }
 
+for (const fallback of [false, true]) {
+  for (const method of ['getScript', 'loadCSS']) {
+    test(`${method} retries each failed asset once on ${fallback ? 'mirror' : 'primary'} and boots`, async () => {
+      const h = harness(), attempts = new Map();
+      if (fallback) h.routes.set('manifest', response({}, 503));
+      const original = h.deps[method];
+      h.deps[method] = (url, ok, fail, sri) => {
+        const requests = attempts.get(url) || [];
+        requests.push(sri);
+        attempts.set(url, requests);
+        if (requests.length === 1) fail(new Error('cold edge'));
+        else original(url, ok, fail, sri);
+      };
+      await h.run();
+      const base = fallback ? 'https://mirror.test/build' : 'https://cdn.test/build';
+      assert.deepEqual([...attempts], method === 'getScript' ? [
+        [base + '/runtime.js', ['sha384-runtime', 'sha384-runtime']],
+        [base + '/entry.js', ['sha384-entry', 'sha384-entry']],
+      ] : [[base + '/style.css', ['sha384-css', 'sha384-css']]]);
+      assert.deepEqual(h.delays, method === 'getScript' ? [1500, 1500] : [1500]);
+      assert.deepEqual(h.assets.map(a => a[1]), [base + '/style.css', base + '/runtime.js', base + '/entry.js']);
+      assert.deepEqual(h.beacons.map(b => b.outcome), fallback ? ['fallback', 'ok'] : ['ok']);
+      assert.equal(h.beacons.at(-1).build_id, descriptor.build_id);
+    });
+  }
+}
+
 for (const failure of ['css', 'first', 'partial']) {
   test(`asset error ${failure} falls back only before any script executes`, async t => {
     t.mock.method(console, 'error', () => {});
     const h = harness();
     const method = failure === 'css' ? 'loadCSS' : 'getScript';
     const original = h.deps[method];
+    const failed = [];
     h.deps[method] = (url, ok, fail, sri) => {
-      if (url.startsWith('https://cdn.test') && (failure !== 'partial' || url.endsWith('entry.js'))) fail(new Error('asset'));
+      if (url.startsWith('https://cdn.test') && (failure !== 'partial' || url.endsWith('entry.js'))) {
+        failed.push([url, sri]);
+        fail(new Error('asset'));
+      }
       else original(url, ok, fail, sri);
     };
     await h.run();
+    assert.equal(failed.length, 2);
+    assert.deepEqual(failed[0], failed[1]);
+    assert.deepEqual(h.delays, [1500]);
     assert.equal(h.beacons[0].reason, failure === 'css' ? 'asset_css' : failure === 'first' ? 'asset_js' : 'asset_js_partial');
     assert.equal(h.beacons[0].outcome, failure === 'partial' ? 'fail' : 'fallback');
     assert.equal(h.bases.length, failure === 'partial' ? 1 : 2);
