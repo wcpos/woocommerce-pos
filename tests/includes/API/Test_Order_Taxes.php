@@ -286,6 +286,84 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Post a tax_based_on order with no address of that kind and return the response.
+	 *
+	 * @param string $basis   'shipping' or 'billing'.
+	 * @param array  $address Address block to send under that key (empty = none).
+	 */
+	private function create_tax_order_without_address( string $basis, array $address = array() ): array {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$data    = array(
+			'payment_method' => 'pos_cash',
+			'line_items'     => array(
+				array(
+					'product_id' => 1,
+					'quantity'   => 1,
+					'price'      => 10,
+					'total'      => '10.00',
+				),
+			),
+			'meta_data' => array(
+				array(
+					'key'   => '_woocommerce_pos_tax_based_on',
+					'value' => $basis,
+				),
+			),
+		);
+		if ( $address ) {
+			$data['billing'] = $address;
+		}
+
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( $data ) );
+
+		$response = $this->server->dispatch( $request );
+
+		return array(
+			'status' => $response->get_status(),
+			'data'   => $response->get_data(),
+		);
+	}
+
+	/**
+	 * A till sale with "Calculate tax based on: shipping address" and no shipping address is taxed at
+	 * the store's base rates, as WooCommerce itself would, not at no rate at all. Found 2026-11-01
+	 * after #1953 made the shipping basis reachable: every parity E2E on a default-settings store
+	 * came back with 0.00 tax server-side.
+	 */
+	public function test_shipping_basis_without_shipping_address_falls_back_to_base(): void {
+		$result = $this->create_tax_order_without_address( 'shipping' );
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
+
+		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
+		$this->assertSame( 1.0, (float) $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( 'US', $data['tax_lines'][0]['label'] );
+		$this->assertEquals( '10', $data['tax_lines'][0]['rate_percent'] );
+	}
+
+	/**
+	 * The shipping basis with no shipping address but a billing address uses the billing address,
+	 * the same step WooCommerce core takes before it reaches the store.
+	 */
+	public function test_shipping_basis_without_shipping_address_uses_billing_first(): void {
+		$result = $this->create_tax_order_without_address(
+			'shipping',
+			array(
+				'country'  => 'US',
+				'state'    => 'AL',
+				'postcode' => '12345',
+			)
+		);
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
+
+		$this->assertEquals( 2, \count( $data['tax_lines'] ) );
+		$this->assertSame( 1.0, (float) $data['tax_lines'][0]['tax_total'] );
+		$this->assertSame( 0.22, (float) $data['tax_lines'][1]['tax_total'] );
+	}
+
+	/**
 	 * Helper to assert common shipping tax order metadata.
 	 */
 	private function assert_shipping_tax_meta( array $data ): void {
