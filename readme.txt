@@ -130,6 +130,12 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 1.11.9 - 2026/11/01 =
+
+- **Fixed POS sales saving with no tax on stores that calculate tax by the customer shipping address** -- a regression in 1.11.8. A sale with no shipping address is taxed at the customer billing address, else at the shop base address, as WooCommerce does; the till showed the right tax all along. Orders saved by 1.11.8 with no tax are corrected with Recalculate on the order's edit screen.
+- **PHP 8.5 no longer logs a deprecation notice on every POS request** from the bundled login-token library.
+- Developers: the bundled Sentry error-reporting library is updated to 4.34.0.
+
 = 1.11.8 - 2026/11/01 =
 
 - **New sales start from WooCommerce's own "Calculate tax based on" setting** (shop base address, customer billing address or customer shipping address) instead of always the shop base address. A sale with no customer address is still taxed at the shop base address, as in WooCommerce.
