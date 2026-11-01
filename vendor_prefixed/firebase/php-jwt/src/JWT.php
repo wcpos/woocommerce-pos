@@ -77,7 +77,7 @@ class JWT
      * @uses jsonDecode
      * @uses urlsafeB64Decode
      */
-    public static function decode(string $jwt, $keyOrKeyArray, stdClass &$headers = null) : stdClass
+    public static function decode(string $jwt, $keyOrKeyArray, ?stdClass &$headers = null) : stdClass
     {
         // Validate JWT
         $timestamp = \is_null(static::$timestamp) ? \time() : static::$timestamp;
@@ -165,7 +165,7 @@ class JWT
      * @uses jsonEncode
      * @uses urlsafeB64Encode
      */
-    public static function encode(array $payload, $key, string $alg, string $keyId = null, array $head = null) : string
+    public static function encode(array $payload, $key, string $alg, ?string $keyId = null, ?array $head = null) : string
     {
         $header = ['typ' => 'JWT'];
         if (isset($head) && \is_array($head)) {
