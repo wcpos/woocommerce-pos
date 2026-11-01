@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.8
+Stable tag: 1.11.9
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,12 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.11.9 - 2026/11/01 =
+
+- **Fixed POS sales saving with no tax on stores that calculate tax by the customer shipping address** -- a regression in 1.11.8. A sale with no shipping address is taxed at the customer billing address, else at the shop base address, as WooCommerce does; the till showed the right tax all along. Orders saved by 1.11.8 with no tax are corrected with Recalculate on the order's edit screen.
+- **PHP 8.5 no longer logs a deprecation notice on every POS request** from the bundled login-token library.
+- Developers: the bundled Sentry error-reporting library is updated to 4.34.0.
 
 = 1.11.8 - 2026/11/01 =
 
