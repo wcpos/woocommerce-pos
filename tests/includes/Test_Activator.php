@@ -2706,4 +2706,23 @@ class Test_Activator extends WP_UnitTestCase {
 
 		return $method->invoke( $reflection->newInstanceWithoutConstructor() );
 	}
+
+	/**
+	 * A prerelease stamp runs its release's updater: 1.11.x → 2.0.0-beta.1 must include
+	 * update-2.0.0.php (PHP orders `2.0.0-beta.1` before `2.0.0`), and the later release stamp
+	 * runs it again, which the idempotent updaters allow.
+	 */
+	public function test_pending_db_updates_treats_a_prerelease_as_its_release(): void {
+		$table = array(
+			'1.10.0' => 'updates/update-1.10.0.php',
+			'2.0.0'  => 'updates/update-2.0.0.php',
+		);
+
+		$this->assertSame( array( 'updates/update-2.0.0.php' ), Activator::pending_db_updates( $table, '1.11.9', '2.0.0-beta.1' ) );
+		$this->assertSame( array( 'updates/update-2.0.0.php' ), Activator::pending_db_updates( $table, '2.0.0-beta.1', '2.0.0-beta.2' ) );
+		$this->assertSame( array( 'updates/update-2.0.0.php' ), Activator::pending_db_updates( $table, '2.0.0-beta.2', '2.0.0' ) );
+		$this->assertSame( array(), Activator::pending_db_updates( $table, '2.0.0', '2.0.0' ) );
+		$this->assertSame( array(), Activator::pending_db_updates( $table, '2.0.0', '2.0.1-beta.1' ) );
+		$this->assertSame( array_values( $table ), Activator::pending_db_updates( $table, '1.9.5', '2.0.0-beta.1' ) );
+	}
 }
