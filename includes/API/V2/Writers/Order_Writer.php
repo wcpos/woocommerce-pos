@@ -359,15 +359,18 @@ class Order_Writer extends Null_Writer {
 				// Provenance only when there is provenance to write: a restart alone
 				// must not restamp the receipt time, or Provenance_Health would read
 				// a clock skew off an unchanged sale time.
-				if ( array() === ( $context['fill_provenance'] ?? array() ) ) {
-					return $order;
-				}
 				if ( $order->needs_payment() ) {
+					if ( ! empty( $context['clear_register'] ) && $order->meta_exists( '_wcpos_register' ) ) {
+						$order->delete_meta_data( '_wcpos_register' );
+					}
+					if ( array() === ( $context['fill_provenance'] ?? array() ) ) {
+						return $order;
+					}
 					foreach ( $context['fill_provenance'] as $key => $value ) {
 						$order->update_meta_data( $key, $value );
 					}
 					$order->update_meta_data( '_wcpos_sale_received_gmt', gmdate( 'Y-m-d\TH:i:s\Z' ) );
-				} else {
+				} elseif ( ! empty( $context['fill_provenance'] ) ) {
 					// Paid since the pre-read: refused here, noted after the forward.
 					$this->late_provenance_refusals = array_keys( $context['fill_provenance'] );
 				}
@@ -400,7 +403,7 @@ class Order_Writer extends Null_Writer {
 				self::adjust_line_stock( $order, $context['bindings'] ?? array() );
 			}
 		};
-		$use_filter = array() !== ( $context['fill_provenance'] ?? array() ) || isset( $context['restart_gmt'] );
+		$use_filter = array() !== ( $context['fill_provenance'] ?? array() ) || isset( $context['restart_gmt'] ) || ! empty( $context['clear_register'] );
 		if ( $use_filter ) {
 			add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $pre_insert, 10, 3 );
 		}
@@ -624,8 +627,12 @@ class Order_Writer extends Null_Writer {
 			return $forward;
 		}
 		$reassignment = array();
+		$clear_register = false;
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
 			$key = Meta_Entry::key( $entry );
+			if ( '_wcpos_register' === $key ) {
+				$clear_register = '' === Meta_Entry::value( $entry );
+			}
 			if ( is_scalar( $key ) && in_array( (string) $key, array( '_pos_user', '_pos_store' ), true ) ) {
 				$reassignment[ (string) $key ] = Meta_Entry::value( $entry ) ?? '';
 			}
@@ -686,6 +693,7 @@ class Order_Writer extends Null_Writer {
 			'operation' => 'update',
 			'id' => $id,
 			'clear_email' => $clear_email,
+			'clear_register' => $clear_register,
 			'reassignment' => $reassignment,
 			'store_authorized' => $authorized,
 			'pre_store' => $pre_store,
