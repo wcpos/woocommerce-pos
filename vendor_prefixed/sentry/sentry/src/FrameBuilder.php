@@ -3,6 +3,7 @@
 declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry;
 
+use WCPOS\Vendor\Sentry\DataCollection\KeyValueDataFilter;
 use WCPOS\Vendor\Sentry\Serializer\RepresentationSerializerInterface;
 use WCPOS\Vendor\Sentry\Util\PrefixStripper;
 /**
@@ -139,6 +140,11 @@ final class FrameBuilder
         if (!isset($backtraceFrame['function'], $backtraceFrame['args'])) {
             return [];
         }
+        $dataCollection = $this->options->getDataCollection();
+        $filter = $dataCollection === null ? null : new KeyValueDataFilter($dataCollection->getStackFrameVariables());
+        if ($filter !== null && !$filter->isEnabled()) {
+            return [];
+        }
         $reflectionFunction = null;
         try {
             if (isset($backtraceFrame['class'])) {
@@ -162,6 +168,9 @@ final class FrameBuilder
             foreach ($backtraceFrame['args'] as $parameterPosition => $parameterValue) {
                 $argumentValues['param' . $parameterPosition] = $parameterValue;
             }
+        }
+        if ($filter !== null) {
+            return $filter->filterKeyValueData($argumentValues, [$this->representationSerializer, 'representationSerialize']) ?? [];
         }
         foreach ($argumentValues as $argumentName => $argumentValue) {
             $argumentValues[$argumentName] = $this->representationSerializer->representationSerialize($argumentValue);
