@@ -466,6 +466,50 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed' ) ) ) );
 	}
 
+	public function test_update_open_order_empty_register_clears_meta(): void {
+		// Arrange.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->update_meta_data( '_wcpos_register', wp_generate_uuid4() );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment() );
+		$notes = $this->noteContents( $order->get_id() );
+
+		// Act.
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => '' ) ) );
+
+		// Assert: removing the clear branch must leave the stored register and fail here.
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertFalse( $order->meta_exists( '_wcpos_register' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+	}
+
+	public function test_update_paid_order_empty_register_keeps_meta(): void {
+		// Arrange.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$register = wp_generate_uuid4();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_wcpos_register', $register );
+		$order->save();
+		$this->assertFalse( wc_get_order( $order->get_id() )->needs_payment() );
+		$notes = $this->noteContents( $order->get_id() );
+
+		// Act.
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => '' ) ) );
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $register, $order->get_meta( '_wcpos_register' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+	}
+
 	public function test_create_loose_sale_time_shapes_are_dropped(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		foreach ( array( '2026-6-1 12:00+02:00', 'tomorrow +00:00', '2026-06-01T12:00:00', '2026-02-30T12:00:00+02:00' ) as $shape ) {
