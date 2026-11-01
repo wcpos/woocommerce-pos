@@ -3,16 +3,19 @@
 declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Integration;
 
-use WCPOS\Vendor\Psr\Http\Message\ServerRequestInterface;
-use WCPOS\Vendor\Psr\Http\Message\UploadedFileInterface;
+use WCPOS\Vendor\Sentry\DataCollection\DataCollectionPolicy;
+use WCPOS\Vendor\Sentry\DataCollection\HttpBodyCollector;
+use WCPOS\Vendor\Sentry\DataCollection\HttpCookieCollector;
+use WCPOS\Vendor\Sentry\DataCollection\HttpHeaderCollector;
+use WCPOS\Vendor\Sentry\DataCollection\HttpMessageType;
+use WCPOS\Vendor\Sentry\DataCollection\HttpUrlCollector;
 use WCPOS\Vendor\Sentry\Event;
-use WCPOS\Vendor\Sentry\Exception\JsonException;
+use WCPOS\Vendor\Sentry\EventType;
 use WCPOS\Vendor\Sentry\Options;
 use WCPOS\Vendor\Sentry\OptionsResolver;
 use WCPOS\Vendor\Sentry\SentrySdk;
 use WCPOS\Vendor\Sentry\State\Scope;
 use WCPOS\Vendor\Sentry\UserDataBag;
-use WCPOS\Vendor\Sentry\Util\JSON;
 /**
  * This integration collects information from the request and attaches them to
  * the event.
@@ -22,36 +25,14 @@ use WCPOS\Vendor\Sentry\Util\JSON;
 final class RequestIntegration implements IntegrationInterface
 {
     /**
-     * This constant represents the size limit in bytes beyond which the body
-     * of the request is not captured when the `max_request_body_size` option
-     * is set to `small`.
-     */
-    private const REQUEST_BODY_SMALL_MAX_CONTENT_LENGTH = 10 ** 3;
-    /**
-     * This constant represents the size limit in bytes beyond which the body
-     * of the request is not captured when the `max_request_body_size` option
-     * is set to `medium`.
-     */
-    private const REQUEST_BODY_MEDIUM_MAX_CONTENT_LENGTH = 10 ** 4;
-    /**
-     * This constant is a map of maximum allowed sizes for each value of the
-     * `max_request_body_size` option.
-     */
-    private const MAX_REQUEST_BODY_SIZE_OPTION_TO_MAX_LENGTH_MAP = ['never' => 0, 'small' => self::REQUEST_BODY_SMALL_MAX_CONTENT_LENGTH, 'medium' => self::REQUEST_BODY_MEDIUM_MAX_CONTENT_LENGTH, 'always' => \PHP_INT_MAX];
-    /**
-     * This constant defines the default list of headers that may contain
-     * sensitive data and that will be sanitized if sending PII is disabled.
-     */
-    private const DEFAULT_SENSITIVE_HEADERS = ['Authorization', 'Proxy-Authorization', 'Cookie', 'Set-Cookie', 'X-Forwarded-For', 'X-Real-IP'];
-    /**
      * @var RequestFetcherInterface PSR-7 request fetcher
      */
     private $requestFetcher;
     /**
-     * @var array<string, mixed> The options
+     * @var array<string, mixed> The explicitly configured options
      *
      * @phpstan-var array{
-     *     pii_sanitize_headers: string[]
+     *     pii_sanitize_headers?: string[]
      * }
      */
     private $options;
@@ -70,8 +51,8 @@ final class RequestIntegration implements IntegrationInterface
         $resolver = new OptionsResolver();
         $this->configureOptions($resolver);
         $this->requestFetcher = $requestFetcher ?? new RequestFetcher();
-        /** @var array{pii_sanitize_headers: string[]} $resolvedOptions */
-        $resolvedOptions = $resolver->resolve($options);
+        /** @var array{pii_sanitize_headers?: string[]} $resolvedOptions */
+        $resolvedOptions = $resolver->resolveOnly($options);
         $this->options = $resolvedOptions;
     }
     /**
@@ -98,135 +79,50 @@ final class RequestIntegration implements IntegrationInterface
         if ($request === null) {
             return;
         }
-        $requestData = ['url' => (string) $request->getUri(), 'method' => $request->getMethod()];
-        if ($request->getUri()->getQuery()) {
-            $requestData['query_string'] = $request->getUri()->getQuery();
+        $policy = DataCollectionPolicy::fromOptions($options);
+        $uri = $request->getUri();
+        $requestData = ['url' => HttpUrlCollector::collect($policy, HttpMessageType::incomingRequest(), $uri), 'method' => $request->getMethod()];
+        $queryString = HttpUrlCollector::collectQueryString($policy, $uri->getQuery());
+        if ($queryString !== null) {
+            $requestData['query_string'] = $queryString;
         }
-        if ($options->shouldSendDefaultPii()) {
-            $serverParams = $request->getServerParams();
-            if (!empty($serverParams['REMOTE_ADDR'])) {
-                $user = $event->getUser();
-                $requestData['env']['REMOTE_ADDR'] = $serverParams['REMOTE_ADDR'];
-                if ($user === null) {
-                    $user = UserDataBag::createFromUserIpAddress($serverParams['REMOTE_ADDR']);
-                } elseif ($user->getIpAddress() === null) {
-                    $user->setIpAddress($serverParams['REMOTE_ADDR']);
-                }
-                $event->setUser($user);
+        $serverParams = $request->getServerParams();
+        if (!empty($serverParams['REMOTE_ADDR']) && $policy->shouldCollectUserInfo()) {
+            /** @var string $ipAddress */
+            $ipAddress = $serverParams['REMOTE_ADDR'];
+            $this->addRequestUserInfo($event, $ipAddress, $requestData);
+        }
+        $cookies = HttpCookieCollector::collect($policy, HttpMessageType::incomingRequest(), $request->getCookieParams());
+        if ($cookies !== null) {
+            $requestData['cookies'] = $cookies;
+        }
+        $headers = HttpHeaderCollector::collect($policy, HttpMessageType::incomingRequest(), $request->getHeaders(), $this->options['pii_sanitize_headers'] ?? null);
+        if ($headers !== null) {
+            $requestData['headers'] = $headers;
+        }
+        // Request bodies attached here are only relevant for error events, other events would
+        // needlessly read the body only to be discarded later on
+        if ($event->getType() === EventType::event() && !\array_key_exists('data', $event->getRequest())) {
+            $requestBody = HttpBodyCollector::collectServerRequest($policy, $request);
+            if ($requestBody !== null) {
+                $requestData['data'] = $requestBody;
             }
-            $requestData['cookies'] = $request->getCookieParams();
-            $requestData['headers'] = $request->getHeaders();
-        } else {
-            $requestData['headers'] = $this->sanitizeHeaders($request->getHeaders());
         }
-        $requestBody = $this->captureRequestBody($options, $request);
-        if (!empty($requestBody)) {
-            $requestData['data'] = $requestBody;
-        }
-        $event->setRequest($requestData);
+        $event->setRequest($event->getRequest() + $requestData);
     }
     /**
-     * Removes headers containing potential PII.
-     *
-     * @param array<array-key, string[]> $headers Array containing request headers
-     *
-     * @return array<string, string[]>
+     * @param array<string, mixed> $requestData
      */
-    private function sanitizeHeaders(array $headers) : array
+    private function addRequestUserInfo(Event $event, string $ipAddress, array &$requestData) : void
     {
-        foreach ($headers as $name => $values) {
-            // Cast the header name into a string, to avoid errors on numeric headers
-            $name = (string) $name;
-            if (!\in_array(\strtolower($name), $this->options['pii_sanitize_headers'], \true)) {
-                continue;
-            }
-            foreach ($values as $headerLine => $headerValue) {
-                $headers[$name][$headerLine] = '[Filtered]';
-            }
+        $user = $event->getUser();
+        $requestData['env'] = ['REMOTE_ADDR' => $ipAddress];
+        if ($user === null) {
+            $user = UserDataBag::createFromUserIpAddress($ipAddress);
+        } elseif ($user->getIpAddress() === null) {
+            $user->setIpAddress($ipAddress);
         }
-        return $headers;
-    }
-    /**
-     * Gets the decoded body of the request, if available. If the Content-Type
-     * header contains "application/json" then the content is decoded and if
-     * the parsing fails then the raw data is returned. If there are submitted
-     * fields or files, all of their information are parsed and returned.
-     *
-     * @param Options                $options The options of the client
-     * @param ServerRequestInterface $request The server request
-     *
-     * @return mixed
-     */
-    private function captureRequestBody(Options $options, ServerRequestInterface $request)
-    {
-        $maxRequestBodySize = $options->getMaxRequestBodySize();
-        $requestBodySize = (int) $request->getHeaderLine('Content-Length');
-        if (!$this->isRequestBodySizeWithinReadBounds($requestBodySize, $maxRequestBodySize)) {
-            return null;
-        }
-        $requestData = $request->getParsedBody();
-        $requestData = \array_replace($this->parseUploadedFiles($request->getUploadedFiles()), \is_array($requestData) ? $requestData : []);
-        if (!empty($requestData)) {
-            return $requestData;
-        }
-        $requestBody = '';
-        $maxLength = self::MAX_REQUEST_BODY_SIZE_OPTION_TO_MAX_LENGTH_MAP[$maxRequestBodySize];
-        if ($maxLength > 0) {
-            $stream = $request->getBody();
-            while ($maxLength > 0 && !$stream->eof()) {
-                if ('' === ($buffer = $stream->read(\min($maxLength, self::REQUEST_BODY_MEDIUM_MAX_CONTENT_LENGTH)))) {
-                    break;
-                }
-                $requestBody .= $buffer;
-                $maxLength -= \strlen($buffer);
-            }
-        }
-        if ($request->getHeaderLine('Content-Type') === 'application/json') {
-            try {
-                return JSON::decode($requestBody);
-            } catch (JsonException $exception) {
-                // Fallback to returning the raw data from the request body
-            }
-        }
-        return $requestBody;
-    }
-    /**
-     * Create an array with the same structure as $uploadedFiles, but replacing
-     * each UploadedFileInterface with an array of info.
-     *
-     * @param array<string, mixed> $uploadedFiles The uploaded files info from a PSR-7 server request
-     *
-     * @return array<string, mixed>
-     */
-    private function parseUploadedFiles(array $uploadedFiles) : array
-    {
-        $result = [];
-        foreach ($uploadedFiles as $key => $item) {
-            if ($item instanceof UploadedFileInterface) {
-                $result[$key] = ['client_filename' => $item->getClientFilename(), 'client_media_type' => $item->getClientMediaType(), 'size' => $item->getSize()];
-            } elseif (\is_array($item)) {
-                $result[$key] = $this->parseUploadedFiles($item);
-            } else {
-                throw new \UnexpectedValueException(\sprintf('Expected either an object implementing the "%s" interface or an array. Got: "%s".', UploadedFileInterface::class, \is_object($item) ? \get_class($item) : \gettype($item)));
-            }
-        }
-        return $result;
-    }
-    private function isRequestBodySizeWithinReadBounds(int $requestBodySize, string $maxRequestBodySize) : bool
-    {
-        if ($requestBodySize <= 0) {
-            return \false;
-        }
-        if ($maxRequestBodySize === 'none' || $maxRequestBodySize === 'never') {
-            return \false;
-        }
-        if ($maxRequestBodySize === 'small' && $requestBodySize > self::REQUEST_BODY_SMALL_MAX_CONTENT_LENGTH) {
-            return \false;
-        }
-        if ($maxRequestBodySize === 'medium' && $requestBodySize > self::REQUEST_BODY_MEDIUM_MAX_CONTENT_LENGTH) {
-            return \false;
-        }
-        return \true;
+        $event->setUser($user);
     }
     /**
      * Configures the options of the client.
@@ -239,6 +135,6 @@ final class RequestIntegration implements IntegrationInterface
         $resolver->setNormalizer('pii_sanitize_headers', static function (array $value) : array {
             return \array_map('strtolower', $value);
         });
-        $resolver->setDefault('pii_sanitize_headers', self::DEFAULT_SENSITIVE_HEADERS);
+        $resolver->setDefault('pii_sanitize_headers', HttpHeaderCollector::DEFAULT_PII_SANITIZE_HEADERS);
     }
 }

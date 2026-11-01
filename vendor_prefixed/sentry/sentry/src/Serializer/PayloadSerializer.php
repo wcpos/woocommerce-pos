@@ -6,6 +6,7 @@ namespace WCPOS\Vendor\Sentry\Serializer;
 use WCPOS\Vendor\Sentry\Event;
 use WCPOS\Vendor\Sentry\EventType;
 use WCPOS\Vendor\Sentry\Options;
+use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\AttachmentItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\CheckInItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\ClientReportItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\EventItem;
@@ -55,11 +56,17 @@ final class PayloadSerializer implements PayloadSerializerInterface
         switch ($event->getType()) {
             case EventType::event():
                 $items[] = EventItem::toEnvelopeItem($event);
+                foreach ($event->getAttachments() as $attachment) {
+                    $items[] = AttachmentItem::toAttachmentItem($attachment);
+                }
                 break;
             case EventType::transaction():
                 $items[] = TransactionItem::toEnvelopeItem($event);
                 if ($event->getSdkMetadata('profile') !== null) {
                     $items[] = ProfileItem::toEnvelopeItem($event);
+                }
+                foreach ($event->getAttachments() as $attachment) {
+                    $items[] = AttachmentItem::toAttachmentItem($attachment);
                 }
                 break;
             case EventType::checkIn():

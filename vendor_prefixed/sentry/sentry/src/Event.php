@@ -3,6 +3,7 @@
 declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry;
 
+use WCPOS\Vendor\Sentry\Attachment\Attachment;
 use WCPOS\Vendor\Sentry\ClientReport\DiscardedEvent;
 use WCPOS\Vendor\Sentry\Context\OsContext;
 use WCPOS\Vendor\Sentry\Context\RuntimeContext;
@@ -169,6 +170,10 @@ final class Event
      * @var Profile|null The profile data
      */
     private $profile;
+    /**
+     * @var Attachment[]
+     */
+    private $attachments = [];
     /**
      * @var DiscardedEvent[]
      */
@@ -830,6 +835,20 @@ final class Event
             return $traceId;
         }
         return null;
+    }
+    /**
+     * @return Attachment[]
+     */
+    public function getAttachments() : array
+    {
+        return $this->attachments;
+    }
+    /**
+     * @param Attachment[] $attachments
+     */
+    public function setAttachments(array $attachments) : void
+    {
+        $this->attachments = $attachments;
     }
     /**
      * @param DiscardedEvent[] $clientReports
