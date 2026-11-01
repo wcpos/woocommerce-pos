@@ -2723,6 +2723,8 @@ class Test_Activator extends WP_UnitTestCase {
 		$this->assertSame( array( 'updates/update-2.0.0.php' ), Activator::pending_db_updates( $table, '2.0.0-beta.2', '2.0.0' ) );
 		$this->assertSame( array(), Activator::pending_db_updates( $table, '2.0.0', '2.0.0' ) );
 		$this->assertSame( array(), Activator::pending_db_updates( $table, '2.0.0', '2.0.1-beta.1' ) );
+		// A stamped prerelease reached again by a sync-schema or role-caps repair: nothing to run.
+		$this->assertSame( array(), Activator::pending_db_updates( $table, '2.0.0-beta.1', '2.0.0-beta.1' ) );
 		$this->assertSame( array_values( $table ), Activator::pending_db_updates( $table, '1.9.5', '2.0.0-beta.1' ) );
 	}
 }

@@ -1398,6 +1398,13 @@ class Activator {
 	 * @return string[] Update files to include.
 	 */
 	public static function pending_db_updates( array $db_updates, string $old, string $current ): array {
+		// version_check() also reaches db_upgrade() for a sync-schema or role-caps repair with
+		// the version already stamped; a stamp that has not moved has no updater to run, and
+		// without this line a stamped prerelease would re-run its release's updater on every
+		// such request.
+		if ( version_compare( $old, $current, '>=' ) ) {
+			return array();
+		}
 		$current_release = (string) preg_replace( '/[-+].*$/', '', $current );
 		$pending         = array();
 		foreach ( $db_updates as $version => $updater ) {
