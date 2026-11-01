@@ -9,6 +9,7 @@ use WCPOS\Vendor\Sentry\State\Hub;
 use WCPOS\Vendor\Sentry\State\HubInterface;
 use WCPOS\Vendor\Sentry\State\RuntimeContext;
 use WCPOS\Vendor\Sentry\State\RuntimeContextManager;
+use WCPOS\Vendor\Sentry\State\RuntimeContextStorageInterface;
 /**
  * This class is the main entry point for all the most common SDK features.
  *
@@ -25,6 +26,10 @@ final class SentrySdk
      */
     private static $runtimeContextManager;
     /**
+     * @var RuntimeContextStorageInterface|null
+     */
+    private static $runtimeContextStorage;
+    /**
      * Constructor.
      */
     private function __construct()
@@ -36,9 +41,28 @@ final class SentrySdk
      */
     public static function init() : HubInterface
     {
+        if (self::$runtimeContextManager !== null) {
+            self::$runtimeContextManager->discardActiveContext();
+        }
         self::$currentHub = new Hub();
-        self::$runtimeContextManager = new RuntimeContextManager(self::$currentHub);
+        self::$runtimeContextManager = null;
         return self::getCurrentHub();
+    }
+    /**
+     * Registers storage for isolating runtime contexts across overlapping logical executions.
+     *
+     * The registration persists across SDK initialization. Changing it discards the active
+     * context for the current logical execution without flushing it. Concurrent runtimes
+     * should register storage before logical executions begin and must not replace it while
+     * other logical executions are active.
+     */
+    public static function setRuntimeContextStorage(?RuntimeContextStorageInterface $runtimeContextStorage) : void
+    {
+        if (self::$runtimeContextManager !== null) {
+            self::$runtimeContextManager->discardActiveContext();
+        }
+        self::$runtimeContextStorage = $runtimeContextStorage;
+        self::$runtimeContextManager = null;
     }
     /**
      * Gets the current hub. If it's not initialized then creates a new instance
@@ -65,10 +89,29 @@ final class SentrySdk
         }
         return $hub;
     }
-    public static function startContext() : void
+    /**
+     * Starts an isolated context for the current logical execution.
+     *
+     * A provided hub is used as-is, allowing runtimes with their own HubInterface
+     * implementation to manage hub isolation. When no hub is provided, the SDK
+     * creates an isolated hub from the baseline.
+     *
+     * If a context is already active, this method is a no-op and the provided hub
+     * is ignored. Use setCurrentHub() to replace the active context's hub.
+     *
+     * @param HubInterface|null $hub The hub to use for the new context
+     */
+    public static function startContext(?HubInterface $hub = null) : void
     {
-        self::getRuntimeContextManager()->startContext();
+        self::getRuntimeContextManager()->startContext($hub);
     }
+    /**
+     * Ends and flushes the active context for the current logical execution.
+     *
+     * When no context is active this is a no-op.
+     *
+     * @param int|null $timeout The maximum number of seconds to wait while flushing the client transport
+     */
     public static function endContext(?int $timeout = null) : void
     {
         self::getRuntimeContextManager()->endContext($timeout);
@@ -76,7 +119,7 @@ final class SentrySdk
     /**
      * Executes the given callback within an isolated context.
      *
-     * If a context is already active for the current execution key, this method
+     * If a context is already active for the current logical execution, this method
      * reuses it and only executes the callback.
      *
      * @param callable $callback The callback to execute
@@ -92,10 +135,7 @@ final class SentrySdk
     public static function withContext(callable $callback, ?int $timeout = null)
     {
         $runtimeContextManager = self::getRuntimeContextManager();
-        $startedNewContext = !$runtimeContextManager->hasActiveContext();
-        if ($startedNewContext) {
-            $runtimeContextManager->startContext();
-        }
+        $startedNewContext = $runtimeContextManager->startContext();
         try {
             return $callback();
         } finally {
@@ -138,7 +178,7 @@ final class SentrySdk
             self::$currentHub = new Hub();
         }
         if (self::$runtimeContextManager === null) {
-            self::$runtimeContextManager = new RuntimeContextManager(self::$currentHub);
+            self::$runtimeContextManager = new RuntimeContextManager(self::$currentHub, self::$runtimeContextStorage);
         }
         return self::$runtimeContextManager;
     }

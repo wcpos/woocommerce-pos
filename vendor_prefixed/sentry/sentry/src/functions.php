@@ -4,12 +4,14 @@ declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry;
 
 use WCPOS\Vendor\Psr\Log\LoggerInterface;
+use WCPOS\Vendor\Sentry\Attachment\Attachment;
 use WCPOS\Vendor\Sentry\HttpClient\HttpClientInterface;
 use WCPOS\Vendor\Sentry\Integration\IntegrationInterface;
 use WCPOS\Vendor\Sentry\Integration\OTLPIntegration;
 use WCPOS\Vendor\Sentry\Logs\Logs;
 use WCPOS\Vendor\Sentry\Metrics\Metrics;
 use WCPOS\Vendor\Sentry\Metrics\TraceMetrics;
+use WCPOS\Vendor\Sentry\State\HubInterface;
 use WCPOS\Vendor\Sentry\State\Scope;
 use WCPOS\Vendor\Sentry\Tracing\PropagationContext;
 use WCPOS\Vendor\Sentry\Tracing\SpanContext;
@@ -29,6 +31,21 @@ use WCPOS\Vendor\Sentry\Transport\TransportInterface;
  *     before_send_transaction?: callable,
  *     capture_silenced_errors?: bool,
  *     context_lines?: int|null,
+ *     data_collection?: DataCollection\DataCollectionOptions|array{
+ *         user_info?: bool,
+ *         cookies?: array{mode?: "off"|"denyList"|"allowList", terms?: array<string>},
+ *         http_headers?: array{mode?: "off"|"denyList"|"allowList", terms?: array<string>}|array{
+ *             request?: array{mode?: "off"|"denyList"|"allowList", terms?: array<string>},
+ *             response?: array{mode?: "off"|"denyList"|"allowList", terms?: array<string>},
+ *         },
+ *         http_bodies?: array<"incomingRequest"|"outgoingRequest"|"incomingResponse"|"outgoingResponse">|DataCollection\HttpMessageType[],
+ *         url_query_params?: array{mode?: "off"|"denyList"|"allowList", terms?: array<string>},
+ *         gen_ai?: array{inputs?: bool, outputs?: bool},
+ *         database_query_data?: bool,
+ *         queues?: bool,
+ *         stack_frame_variables?: bool|array{mode?: "off"|"denyList"|"allowList", terms?: array<string>},
+ *         frame_context_lines?: int,
+ *     }|null,
  *     default_integrations?: bool,
  *     dsn?: string|bool|Dsn|null,
  *     enable_logs?: bool,
@@ -201,10 +218,29 @@ function withScope(callable $callback)
 {
     return SentrySdk::getCurrentHub()->withScope($callback);
 }
-function startContext() : void
+/**
+ * Starts an isolated context for the current logical execution.
+ *
+ * A provided hub is used as-is, allowing runtimes with their own HubInterface
+ * implementation to manage hub isolation. When no hub is provided, the SDK
+ * creates an isolated hub from the baseline.
+ *
+ * If a context is already active, this function is a no-op and the provided hub
+ * is ignored. Use SentrySdk::setCurrentHub() to replace the active context's hub.
+ *
+ * @param HubInterface|null $hub The hub to use for the new context
+ */
+function startContext(?HubInterface $hub = null) : void
 {
-    SentrySdk::startContext();
+    SentrySdk::startContext($hub);
 }
+/**
+ * Ends and flushes the active context for the current logical execution.
+ *
+ * When no context is active this is a no-op.
+ *
+ * @param int|null $timeout The maximum number of seconds to wait while flushing the client transport
+ */
 function endContext(?int $timeout = null) : void
 {
     SentrySdk::endContext($timeout);
@@ -212,7 +248,7 @@ function endContext(?int $timeout = null) : void
 /**
  * Executes the given callback within an isolated context.
  *
- * If a context is already active for the current execution key, it is reused.
+ * If a context is already active for the current logical execution, it is reused.
  *
  * @param callable $callback The callback to execute
  * @param int|null $timeout  The maximum number of seconds to wait while flushing the client transport
@@ -435,6 +471,16 @@ function addFeatureFlag(string $name, bool $result) : void
 {
     SentrySdk::getCurrentHub()->configureScope(static function (Scope $scope) use($name, $result) {
         $scope->addFeatureFlag($name, $result);
+    });
+}
+/**
+ * Adds an attachment to the current scope. For large attachments, it might be helpful
+ * to use the SDK Sidecar Transport: https://docs.sentry.io/platforms/php/agent/.
+ */
+function addAttachment(Attachment $attachment) : void
+{
+    SentrySdk::getCurrentHub()->configureScope(static function (Scope $scope) use($attachment) {
+        $scope->addAttachment($attachment);
     });
 }
 /**

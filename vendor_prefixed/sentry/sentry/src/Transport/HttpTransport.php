@@ -79,6 +79,12 @@ class HttpTransport implements TransportInterface
                     $this->logger->warning('Rate limit exceeded for sending requests of type "profile". The profile has been dropped.', ['event' => $event]);
                 }
             }
+            // Attachments are rate limited independently of the event they belong to,
+            // so only the attachments are dropped and the event is still sent.
+            if ($event->getAttachments() !== [] && $this->rateLimiter->isRateLimited(RateLimiter::DATA_CATEGORY_ATTACHMENT)) {
+                $event->setAttachments([]);
+                $this->logger->warning('Rate limit exceeded for sending requests of type "attachment". The attachments have been dropped.', ['event' => $event]);
+            }
         }
         $request = new Request();
         $request->setStringBody($this->payloadSerializer->serialize($event));
@@ -88,11 +94,13 @@ class HttpTransport implements TransportInterface
             $this->logger->error(\sprintf('Failed to send %s to %s. Reason: "%s".', $eventDescription, $targetDescription, $exception->getMessage()), ['exception' => $exception, 'event' => $event]);
             return new Result(ResultStatus::failed());
         }
+        // Sentry replies to rate limited requests with an error body, so the rate limits
+        // must be recorded before bailing out on error responses.
+        $this->rateLimiter->handleResponse($response);
         if ($response->hasError()) {
             $this->logger->error(\sprintf('Failed to send %s to %s. Reason: "%s".', $eventDescription, $targetDescription, $response->getError()), ['event' => $event]);
             return new Result(ResultStatus::unknown());
         }
-        $this->rateLimiter->handleResponse($response);
         $resultStatus = ResultStatus::createFromHttpStatusCode($response->getStatusCode());
         $this->logger->info(\sprintf('Sent %s to %s. Result: "%s" (status: %s).', $eventDescription, $targetDescription, \strtolower((string) $resultStatus), $response->getStatusCode()), ['response' => $response, 'event' => $event]);
         return new Result($resultStatus, $event);

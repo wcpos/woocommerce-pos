@@ -4,6 +4,7 @@ declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\State;
 
 use WCPOS\Vendor\Psr\Log\NullLogger;
+use WCPOS\Vendor\Sentry\Attachment\Attachment;
 use WCPOS\Vendor\Sentry\Breadcrumb;
 use WCPOS\Vendor\Sentry\CheckIn;
 use WCPOS\Vendor\Sentry\CheckInStatus;
@@ -178,11 +179,25 @@ class Hub implements HubInterface
         if ($maxBreadcrumbs <= 0) {
             return \false;
         }
-        $breadcrumb = $beforeBreadcrumbCallback($breadcrumb);
+        try {
+            $breadcrumb = $beforeBreadcrumbCallback($breadcrumb);
+        } catch (\Throwable $exception) {
+            $options->getLoggerOrNullLogger()->error(\sprintf('The "before_breadcrumb" callback failed with exception: "%s".', $exception->getMessage()));
+            return \false;
+        }
         if ($breadcrumb !== null) {
             $this->getScope()->addBreadcrumb($breadcrumb, $maxBreadcrumbs);
         }
         return $breadcrumb !== null;
+    }
+    public function addAttachment(Attachment $attachment) : bool
+    {
+        $client = $this->getClient();
+        if ($client === null) {
+            return \false;
+        }
+        $this->getScope()->addAttachment($attachment);
+        return \true;
     }
     /**
      * {@inheritdoc}
@@ -218,8 +233,14 @@ class Hub implements HubInterface
         if ($transaction->getSampled() === null) {
             $tracesSampler = $options->getTracesSampler();
             if ($tracesSampler !== null) {
-                $sampleRate = $tracesSampler($samplingContext);
-                $sampleSource = 'config:traces_sampler';
+                try {
+                    $sampleRate = $tracesSampler($samplingContext);
+                    $sampleSource = 'config:traces_sampler';
+                } catch (\Throwable $exception) {
+                    $options->getLoggerOrNullLogger()->error(\sprintf('The "traces_sampler" callback failed with exception: "%s".', $exception->getMessage()));
+                    $sampleRate = $options->getTracesSampleRate() ?? 0;
+                    $sampleSource = 'config:traces_sampler_error_fallback';
+                }
             } else {
                 $parentSampleRate = $context->getMetadata()->getParentSamplingRate();
                 if ($parentSampleRate !== null) {
@@ -257,8 +278,14 @@ class Hub implements HubInterface
         $profilesSampleSource = 'config:profiles_sample_rate';
         $profilesSampler = $options->getProfilesSampler();
         if ($profilesSampler !== null) {
-            $profilesSampleRate = $profilesSampler($samplingContext);
-            $profilesSampleSource = 'config:profiles_sampler';
+            try {
+                $profilesSampleRate = $profilesSampler($samplingContext);
+                $profilesSampleSource = 'config:profiles_sampler';
+            } catch (\Throwable $exception) {
+                $options->getLoggerOrNullLogger()->error(\sprintf('The "profiles_sampler" callback failed with exception: "%s".', $exception->getMessage()));
+                $profilesSampleRate = $options->getProfilesSampleRate() ?? 0;
+                $profilesSampleSource = 'config:profiles_sampler_error_fallback';
+            }
         } else {
             $profilesSampleRate = $options->getProfilesSampleRate();
         }
