@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.7
+Stable tag: 1.11.8
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,13 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.11.8 - 2026/11/01 =
+
+- **New sales start from WooCommerce's own "Calculate tax based on" setting** (shop base address, customer billing address or customer shipping address) instead of always the shop base address. A sale with no customer address is still taxed at the shop base address, as in WooCommerce.
+- **The Extensions screen and its menu badge no longer announce an extension update that needs a newer WCPOS than this site runs.**
+- **The refund window is titled with the order number, not the order's database id.**
+- Developers: translations updated to 2026.11.0.
 
 = 1.11.7 - 2026/10/28 =
 
