@@ -121,6 +121,18 @@ return array(
 				);
 			}
 
+			// firebase/php-jwt 6.10.0 (pinned: 6.10.1+ needs PHP 8.0 while the plugin minimum is 7.4;
+			// kept by the numbers on 2026-11-01: 1.6% of active sites on 7.4, WooCommerce drops it in
+			// 11.6) declares `Type $x = null` parameters. PHP 8.4 deprecates the implicit nullable and
+			// 8.5 logs it on every request that builds a token; `?Type` is explicit and legal since 7.1.
+			if ( false !== strpos( $filePath, 'firebase/php-jwt/src/' ) ) {
+				$content = preg_replace(
+					'/(\(|,\s*)(\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*)(\s+&?\$[A-Za-z_]\w*\s*=\s*null\b)/',
+					'$1?$2$3',
+					$content
+				);
+			}
+
 			return $content;
 		},
 	),
