@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.11.6\n"
+"Project-Id-Version: WCPOS 1.11.8\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-25T10:28:24+00:00\n"
+"POT-Creation-Date: 2026-11-01T20:51:23+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1117,14 +1117,14 @@ msgstr ""
 
 #. translators: POS order status label.
 #: includes/Orders.php:103
-#: includes/Orders.php:1136
+#: includes/Orders.php:1145
 msgctxt "Order status"
 msgid "POS - Open"
 msgstr ""
 
 #. translators: POS order status label.
 #: includes/Orders.php:104
-#: includes/Orders.php:1154
+#: includes/Orders.php:1163
 msgctxt "Order status"
 msgid "POS - Partial Payment"
 msgstr ""
@@ -1136,7 +1136,7 @@ msgid "Order status set by %s; no payment was taken at the till."
 msgstr ""
 
 #. translators: %s is the number of orders with POS - Open status.
-#: includes/Orders.php:1142
+#: includes/Orders.php:1151
 #, php-format
 msgid "POS - Open <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
@@ -1144,7 +1144,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s is the number of orders with POS - Partial Payment status.
-#: includes/Orders.php:1160
+#: includes/Orders.php:1169
 #, php-format
 msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
