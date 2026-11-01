@@ -204,7 +204,8 @@
         var storage = null;
         try { storage = window.localStorage; } catch (_) {}
         defaultDeps = { fetch: window.fetch.bind(window), subtle: window.crypto && window.crypto.subtle,
-            setTimeout: setTimeout,
+            // Bound: a bare global called as deps.setTimeout(...) has deps as its receiver and throws in browsers.
+            setTimeout: function (fn, ms) { return window.setTimeout(fn, ms); },
             getScript: getScript, loadCSS: loadCSS, storage: storage,
             sendBeacon: function (url, body) { return window.navigator.sendBeacon(url, body); },
             now: function () { return new Date(); }, setGlobalBase: function (url) { window.cdnBaseUrl = url; } };
