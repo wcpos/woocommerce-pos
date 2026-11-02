@@ -46,6 +46,7 @@ namespace WCPOS\WooCommercePOS;
 
 use Automattic\WooCommerce\Admin\PageController;
 use WCPOS\WooCommercePOS\Admin\Analytics;
+use WCPOS\WooCommercePOS\Admin\Font_Pack_Notice;
 use WCPOS\WooCommercePOS\Admin\Notices;
 use WCPOS\WooCommercePOS\Admin\Orders\HPOS_List_Orders;
 use WCPOS\WooCommercePOS\Admin\Orders\HPOS_Single_Order;
@@ -98,6 +99,10 @@ class Admin {
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ), 5 );
 		add_action( 'admin_init', array( $this, 'init' ) );
+		// Self-heals a version bump whose upgrade never reached woocommerce_init, which
+		// Activator::version_check() documents as permanent. Gated on an option, so this is a
+		// version comparison on every admin load and nothing more.
+		add_action( 'admin_init', array( '\WCPOS\WooCommercePOS\Templates\Gallery_Update_Status', 'maintain' ) );
 		add_action( 'admin_init', array( $this, 'register_scripts' ) );
 		add_action( 'current_screen', array( $this, 'current_screen' ) );
 
@@ -120,6 +125,7 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
+		new Font_Pack_Notice();
 	}
 
 	/**
@@ -161,18 +167,10 @@ class Admin {
 	 * @param WP_Screen $current_screen Current screen object.
 	 */
 	public function current_screen( $current_screen ): void {
-		/*
-		 * Backwards compatibility for WCPOS Pro 1.4.2 and below.
-		 * DO NOT USE THIS!
-		 *
-		 * @TODO: Remove in WCPOS 2.0.0.
-		 */
-		$this->screen_handlers['product'] = apply_filters( 'woocommerce_pos_single_product_admin_class', Single_Product::class );
-
 		/**
 		 * Filters the screen handlers for WCPOS admin screens.
 		 *
-		 * @hook woocommerce_pos_admin_screen_handlers
+		 * @hook wcpos_admin_screen_handlers
 		 *
 		 * @since 1.4.10
 		 *
@@ -180,7 +178,8 @@ class Admin {
 		 *                                  Handler can be a class name or a callback array.
 		 * @param WP_Screen $current_screen The current WP_Screen object being loaded in the admin.
 		 */
-		$handlers = apply_filters( 'woocommerce_pos_admin_screen_handlers', $this->screen_handlers, $current_screen );
+		$handlers = apply_filters( 'wcpos_admin_screen_handlers', $this->screen_handlers, $current_screen );
+		$handlers = apply_filters_deprecated( 'woocommerce_pos_admin_screen_handlers', array( $handlers, $current_screen ), '2.0.0', 'wcpos_admin_screen_handlers' );
 
 		// Check if the current screen has a handler.
 		if ( isset( $handlers[ $current_screen->id ] ) ) {
@@ -241,7 +240,7 @@ class Admin {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_content_security_policy.html">woocommerce_pos_content_security_policy</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_license_settings.html">woocommerce_pos_license_settings</a></li><li><a href="woocommerce_pos_payment_gateways_settings.html">woocommerce_pos_payment_gateways_settings</a></li><li><a href="woocommerce_pos_pre_save_%257B$id%257D_settings.html">woocommerce_pos_pre_save_{$id}_settings</a></li><li><a href="woocommerce_pos_receipt_data.html">woocommerce_pos_receipt_data</a></li><li><a href="woocommerce_pos_register_settings_sections.html">woocommerce_pos_register_settings_sections</a></li><li><a href="woocommerce_pos_saved_%257B$id%257D_settings.html">woocommerce_pos_saved_{$id}_settings</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li><li><a href="woocommerce_pos_template_gallery_preview_base_url.html">woocommerce_pos_template_gallery_preview_base_url</a></li><li><a href="woocommerce_pos_web_bundle_ref.html">woocommerce_pos_web_bundle_ref</a></li><li><a href="woocommerce_pos_%257B$id%257D_settings.html">woocommerce_pos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li><li><a href="woocommerce_pos_wp_overnight_pdf_templates_enabled.html">woocommerce_pos_wp_overnight_pdf_templates_enabled</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="wcpos_admin_screen_handlers.html">wcpos_admin_screen_handlers</a></li><li><a href="wcpos_content_security_policy.html">wcpos_content_security_policy</a></li><li><a href="wcpos_development_mode.html">wcpos_development_mode</a></li><li><a href="wcpos_font_pack_sources.html">wcpos_font_pack_sources</a></li><li><a href="wcpos_font_packs.html">wcpos_font_packs</a></li><li><a href="wcpos_license_settings.html">wcpos_license_settings</a></li><li><a href="wcpos_payment_gateway_readers.html">wcpos_payment_gateway_readers</a></li><li><a href="wcpos_payment_gateways_settings.html">wcpos_payment_gateways_settings</a></li><li><a href="wcpos_payment_method_capture_mode.html">wcpos_payment_method_capture_mode</a></li><li><a href="wcpos_payment_method_fields.html">wcpos_payment_method_fields</a></li><li><a href="wcpos_payment_method_kind.html">wcpos_payment_method_kind</a></li><li><a href="wcpos_payment_recorded.html">wcpos_payment_recorded</a></li><li><a href="wcpos_payment_refused.html">wcpos_payment_refused</a></li><li><a href="wcpos_pre_save_%257B$id%257D_settings.html">wcpos_pre_save_{$id}_settings</a></li><li><a href="wcpos_receipt_data.html">wcpos_receipt_data</a></li><li><a href="wcpos_refund_allocated.html">wcpos_refund_allocated</a></li><li><a href="wcpos_register_settings_sections.html">wcpos_register_settings_sections</a></li><li><a href="wcpos_report_data.html">wcpos_report_data</a></li><li><a href="wcpos_reports.html">wcpos_reports</a></li><li><a href="wcpos_saved_%257B$id%257D_settings.html">wcpos_saved_{$id}_settings</a></li><li><a href="wcpos_template_gallery_preview_base_url.html">wcpos_template_gallery_preview_base_url</a></li><li><a href="wcpos_web_bundle_ref.html">wcpos_web_bundle_ref</a></li><li><a href="wcpos_%257B$id%257D_settings.html">wcpos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="wcpos_active_receipt_template.html">wcpos_active_receipt_template</a></li><li><a href="wcpos_admin_notices.html">wcpos_admin_notices</a></li><li><a href="wcpos_inline_vars.html">wcpos_inline_vars</a></li><li><a href="wcpos_jwt_access_token_expire.html">wcpos_jwt_access_token_expire</a></li><li><a href="wcpos_jwt_refresh_token_before_sign.html">wcpos_jwt_refresh_token_before_sign</a></li><li><a href="wcpos_jwt_refresh_token_expire.html">wcpos_jwt_refresh_token_expire</a></li><li><a href="wcpos_locate_template.html">wcpos_locate_template</a></li><li><a href="wcpos_wp_overnight_pdf_templates_enabled.html">wcpos_wp_overnight_pdf_templates_enabled</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li></ul>
 </nav>
 
 <br class="clear">

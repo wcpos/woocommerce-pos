@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Source: Payments/Contract/Descriptor_Builder.php - 10up Distributor Hook Docs</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+
+	<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Mono|IBM+Plex+Sans:300,400|Playfair+Display:900&display=swap" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="styles-10up.css">
+</head>
+
+<body>
+
+<div id="main">
+
+	
+    <h1 class="page-title">Source: Payments/Contract/Descriptor_Builder.php</h1>
+	
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>&lt;?php
+/**
+ * Payment method descriptor builder.
+ *
+ * @package WCPOS\WooCommercePOS\Payments\Contract
+ */
+
+namespace WCPOS\WooCommercePOS\Payments\Contract;
+
+\defined( 'ABSPATH' ) || die;
+
+use WC_Payment_Gateway;
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
+
+/** Builds the v1 payment method contract from registered gateways. */
+class Descriptor_Builder {
+	/**
+	 * Shared instance.
+	 *
+	 * @var self|null
+	 */
+	private static $instance = null;
+
+	/**
+	 * Modes already logged as missing.
+	 *
+	 * @var array&lt;string, bool>
+	 */
+	private static $logged_missing_modes = array();
+
+	/** Get the shared builder. */
+	public static function instance(): self {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+		}
+
+		return self::$instance;
+	}
+
+	/** Build the descriptor envelope for every real gateway. */
+	public function all(): array {
+		WC()->payment_gateways();
+		$settings = (array) wcpos_get_settings( 'payment_gateways' );
+		$methods  = array();
+		foreach ( WC()->payment_gateways->payment_gateways() as $id => $gateway ) {
+			if ( ! $gateway instanceof WC_Payment_Gateway || 'pre_install_woocommerce_payments_promotion' === $id ) {
+				continue;
+			}
+			$methods[] = $this->build( $gateway, $settings );
+		}
+		usort(
+			$methods,
+			static function ( array $left, array $right ): int {
+				return $left['order'] === $right['order'] ? strcmp( $left['id'], $right['id'] ) : $left['order'] &lt;=> $right['order'];
+			}
+		);
+
+		return array(
+			'schema' => 1,
+			'contract' => '1.3',
+			'methods' => $methods,
+		);
+	}
+
+	/**
+	 * Build one gateway descriptor.
+	 *
+	 * @param string $gateway_id Gateway ID.
+	 */
+	public function get( string $gateway_id ): ?array {
+		$gateway = $this->gateway( $gateway_id );
+		return $gateway ? $this->build( $gateway, (array) wcpos_get_settings( 'payment_gateways' ) ) : null;
+	}
+
+	/**
+	 * Look up a registered gateway.
+	 *
+	 * @param string $id Gateway ID.
+	 */
+	public function gateway( string $id ): ?WC_Payment_Gateway {
+		WC()->payment_gateways();
+		$gateways = WC()->payment_gateways->payment_gateways();
+		return isset( $gateways[ $id ] ) &amp;&amp; $gateways[ $id ] instanceof WC_Payment_Gateway ? $gateways[ $id ] : null;
+	}
+
+	/**
+	 * Resolve and validate a gateway kind.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway instance.
+	 */
+	public static function resolve_kind( WC_Payment_Gateway $gateway ): string {
+		$map  = array(
+			'pos_cash' => 'cash',
+			'pos_card' => 'card',
+			'cod' => 'cash',
+			'bacs' => 'bank_transfer',
+			'cheque' => 'other',
+		);
+		$kind = $map[ $gateway->id ] ?? 'other';
+
+		/**
+		 * Filters the POS payment method kind.
+		 *
+		 * @since 2.0.0
+		 * @hook wcpos_payment_method_kind
+		 *
+		 * @param string             $kind    Payment method kind.
+		 * @param WC_Payment_Gateway $gateway Gateway instance.
+		 */
+		$kind = apply_filters( 'wcpos_payment_method_kind', $kind, $gateway );
+		if ( ! is_string( $kind ) || ! in_array( $kind, Ledger::KINDS, true ) ) {
+			Logger::log( sprintf( 'Unknown WCPOS payment method kind returned for gateway "%s"; using "other".', $gateway->id ) );
+			return 'other';
+		}
+
+		return $kind;
+	}
+
+	/**
+	 * Resolve a gateway capture mode.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway instance.
+	 */
+	public static function resolve_mode( WC_Payment_Gateway $gateway ): string {
+		$manual = array( 'pos_cash', 'pos_card', 'cod', 'bacs', 'cheque' );
+		$mode   = in_array( $gateway->id, $manual, true ) ? 'manual' : 'webview';
+
+		/**
+		 * Filters the POS payment method capture mode.
+		 *
+		 * @since 2.0.0
+		 * @hook wcpos_payment_method_capture_mode
+		 *
+		 * @param string             $mode    Capture mode.
+		 * @param WC_Payment_Gateway $gateway Gateway instance.
+		 */
+		return (string) apply_filters( 'wcpos_payment_method_capture_mode', $mode, $gateway );
+	}
+
+	/**
+	 * Assemble one descriptor in wire-key order.
+	 *
+	 * @param WC_Payment_Gateway $gateway  Gateway instance.
+	 * @param array              $settings Payment gateway settings.
+	 */
+	private function build( WC_Payment_Gateway $gateway, array $settings ): array {
+		$gateway_settings = (array) ( $settings['gateways'][ $gateway->id ] ?? array() );
+		$kind             = self::resolve_kind( $gateway );
+		$increment        = $gateway_settings['rounding_increment'] ?? '';
+		$rounding         = 'cash' === $kind &amp;&amp; '' !== $increment &amp;&amp; in_array( $increment, Payment_Gateways_Section::ROUNDING_INCREMENTS, true )
+			? array(
+				'increment' => $increment,
+				'mode'      => 'nearest',
+			) : null;
+		// The filter may answer with a provider-scoped key (`device:stripe`); the
+		// wire mode stays bare and the provider only steers the handler lookup.
+		$mode_key         = self::resolve_mode( $gateway );
+		$mode_parts       = explode( ':', $mode_key, 2 );
+		$mode             = $mode_parts[0];
+		$registry         = Capture_Mode_Registry::instance();
+		$handler          = $registry->resolve( $mode, $mode_parts[1] ?? null );
+		if ( ! $handler ) {
+			if ( empty( self::$logged_missing_modes[ $mode ] ) ) {
+				Logger::log( sprintf( 'No WCPOS capture-mode handler registered for "%s"; using webview.', $mode ) );
+				self::$logged_missing_modes[ $mode ] = true;
+			}
+			$mode    = 'webview';
+			$handler = $registry->get( $mode );
+		}
+		$described    = $handler ? $handler->describe( $gateway ) : array();
+		$capture      = (array) ( $described['capture'] ?? array() );
+		$capabilities = (array) ( $described['capabilities'] ?? array() );
+		$provider     = $capture['provider'] ?? null;
+		$title        = isset( $gateway_settings['title'] ) &amp;&amp; is_string( $gateway_settings['title'] ) &amp;&amp; '' !== $gateway_settings['title']
+			? $gateway_settings['title'] : $gateway->get_title();
+		$order_status = isset( $gateway_settings['order_status'] ) &amp;&amp; is_string( $gateway_settings['order_status'] )
+			? $gateway_settings['order_status'] : 'completed';
+		$order_status = 0 === strpos( $order_status, 'wc-' ) ? substr( $order_status, 3 ) : $order_status;
+		$provider_data = (array) ( $described['provider_data'] ?? array() );
+		$amount        = array( 'partial' => (bool) ( $capabilities['amount']['partial'] ?? false ) );
+		foreach ( array( 'min', 'max' ) as $bound ) {
+			if ( isset( $capabilities['amount'][ $bound ] ) &amp;&amp; is_numeric( $capabilities['amount'][ $bound ] ) ) {
+				$amount[ $bound ] = Money::normalize( $capabilities['amount'][ $bound ] );
+			}
+		}
+
+		$descriptor = array(
+			'schema'        => 1,
+			'id'            => $gateway->id,
+			'title'         => $title,
+			'kind'          => $kind,
+			'pos_enabled'   => (bool) ( $gateway_settings['enabled'] ?? false ),
+			'order'         => (int) ( $gateway_settings['order'] ?? 999 ),
+			'capture'       => array(
+				'mode'              => isset( $capture['mode'] ) ? (string) $capture['mode'] : $mode,
+				'provider'          => is_string( $provider ) ? $provider : null,
+				'hardware'          => isset( $capture['hardware'] ) &amp;&amp; is_array( $capture['hardware'] ) ? $capture['hardware'] : null,
+				'webview_available' => (bool) ( $capture['webview_available'] ?? false ),
+			),
+			'capabilities'  => array(
+				'amount'  => $amount,
+				'change'  => (bool) ( $capabilities['change'] ?? false ),
+				'refunds' => array(
+					'via'     => (string) ( $capabilities['refunds']['via'] ?? 'none' ),
+					'partial' => (bool) ( $capabilities['refunds']['partial'] ?? false ),
+				),
+				'tips'    => (string) ( $capabilities['tips'] ?? 'none' ),
+				'offline' => (string) ( $capabilities['offline'] ?? 'none' ),
+				'void'    => (bool) ( $capabilities['void'] ?? false ),
+			),
+			'defaults'      => array(
+				'order_status' => $order_status ? $order_status : 'completed',
+				'rounding' => $rounding,
+				'open_drawer' => 'cash' === $kind,
+			),
+			'provider_data' => empty( $provider_data ) ? new \stdClass() : $provider_data,
+		);
+		$fields = Declared_Fields::for_gateway( $gateway );
+		if ( null !== $fields ) {
+			$descriptor['fields'] = $fields;
+		}
+		return $descriptor;
+	}
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+
+    <footer>
+		<a href="https://wcpos.com/">WCPOS</a> &bull;
+		<a href="https://github.com/wcpos/woocommerce-pos/">GitHub</a> &bull;
+		<a href="https://github.com/wcpos/discord">Discord Chat</a>
+	</footer>
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="wcpos_admin_screen_handlers.html">wcpos_admin_screen_handlers</a></li><li><a href="wcpos_content_security_policy.html">wcpos_content_security_policy</a></li><li><a href="wcpos_development_mode.html">wcpos_development_mode</a></li><li><a href="wcpos_font_pack_sources.html">wcpos_font_pack_sources</a></li><li><a href="wcpos_font_packs.html">wcpos_font_packs</a></li><li><a href="wcpos_license_settings.html">wcpos_license_settings</a></li><li><a href="wcpos_payment_gateway_readers.html">wcpos_payment_gateway_readers</a></li><li><a href="wcpos_payment_gateways_settings.html">wcpos_payment_gateways_settings</a></li><li><a href="wcpos_payment_method_capture_mode.html">wcpos_payment_method_capture_mode</a></li><li><a href="wcpos_payment_method_fields.html">wcpos_payment_method_fields</a></li><li><a href="wcpos_payment_method_kind.html">wcpos_payment_method_kind</a></li><li><a href="wcpos_payment_recorded.html">wcpos_payment_recorded</a></li><li><a href="wcpos_payment_refused.html">wcpos_payment_refused</a></li><li><a href="wcpos_pre_save_%257B$id%257D_settings.html">wcpos_pre_save_{$id}_settings</a></li><li><a href="wcpos_receipt_data.html">wcpos_receipt_data</a></li><li><a href="wcpos_refund_allocated.html">wcpos_refund_allocated</a></li><li><a href="wcpos_register_settings_sections.html">wcpos_register_settings_sections</a></li><li><a href="wcpos_report_data.html">wcpos_report_data</a></li><li><a href="wcpos_reports.html">wcpos_reports</a></li><li><a href="wcpos_saved_%257B$id%257D_settings.html">wcpos_saved_{$id}_settings</a></li><li><a href="wcpos_template_gallery_preview_base_url.html">wcpos_template_gallery_preview_base_url</a></li><li><a href="wcpos_web_bundle_ref.html">wcpos_web_bundle_ref</a></li><li><a href="wcpos_%257B$id%257D_settings.html">wcpos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="wcpos_active_receipt_template.html">wcpos_active_receipt_template</a></li><li><a href="wcpos_admin_notices.html">wcpos_admin_notices</a></li><li><a href="wcpos_inline_vars.html">wcpos_inline_vars</a></li><li><a href="wcpos_jwt_access_token_expire.html">wcpos_jwt_access_token_expire</a></li><li><a href="wcpos_jwt_refresh_token_before_sign.html">wcpos_jwt_refresh_token_before_sign</a></li><li><a href="wcpos_jwt_refresh_token_expire.html">wcpos_jwt_refresh_token_expire</a></li><li><a href="wcpos_locate_template.html">wcpos_locate_template</a></li><li><a href="wcpos_wp_overnight_pdf_templates_enabled.html">wcpos_wp_overnight_pdf_templates_enabled</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
