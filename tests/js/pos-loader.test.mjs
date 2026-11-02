@@ -214,7 +214,7 @@ for (const failure of ['css', 'first', 'partial']) {
     const original = h.deps[method];
     const failed = [];
     h.deps[method] = (url, ok, fail, sri) => {
-      if (url.startsWith('https://cdn.test') && (failure !== 'partial' || url.endsWith('entry.js'))) {
+      if (url.startsWith('https://cdn.test/') && (failure !== 'partial' || url.endsWith('entry.js'))) {
         failed.push([url, sri]);
         fail(new Error('asset'));
       }
