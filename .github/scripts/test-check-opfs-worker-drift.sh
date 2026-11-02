@@ -72,7 +72,7 @@ mk_version_file() {
 # tag and report "no drift" for a version we never actually parsed — the exact
 # "could not check reads as no drift" failure this script exists to avoid.
 # A bare two-part `1.10` is rejected too: VERSION is always three-part.
-for bad in '1.10.' '1.10.4.0' '1.10' '1..4' '1' '1.10.x' '.1.10'; do
+for bad in '1.10.' '1.10.4.0' '1.10' '1..4' '1' '1.10.x' '.1.10' '2.0.0-' '2.0.0-beta.' '2.0-beta.1'; do
   mk_version_file "$bad" "$TMP_DIR/bad.php"
   if got=$(plugin_major_minor "$TMP_DIR/bad.php" 2>/dev/null); then
     fail "expected VERSION='$bad' to be rejected, got '$got'"
@@ -80,7 +80,7 @@ for bad in '1.10.' '1.10.4.0' '1.10' '1..4' '1' '1.10.x' '.1.10'; do
 done
 
 # Well-formed values still parse after the tightening, including multi-digit parts.
-for good in '1.10.4:1.10' '1.9.17:1.9' '2.0.0:2.0' '10.20.30:10.20'; do
+for good in '1.10.4:1.10' '1.9.17:1.9' '2.0.0:2.0' '10.20.30:10.20' '2.0.0-beta.1:2.0' '2.0.0-rc.2:2.0'; do
   mk_version_file "${good%%:*}" "$TMP_DIR/good.php"
   got=$(plugin_major_minor "$TMP_DIR/good.php") \
     || fail "expected VERSION='${good%%:*}' to parse"

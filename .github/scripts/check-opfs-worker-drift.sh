@@ -42,7 +42,9 @@ sha256_of() {
 }
 
 # Pure: read the runtime VERSION constant and reduce it to major.minor.
-# Returns non-zero unless the constant is a complete `major.minor.patch`.
+# Returns non-zero unless the constant is a complete `major.minor.patch`, with
+# an optional prerelease suffix (`2.0.0-beta.1` is on the `2.0` lane: the beta
+# plugins load the released lane's bundle, there is no prerelease lane).
 # Strictness is the point: `1.10.` and `1.10.4.0` both `cut` down to a
 # plausible-looking `1.10`, which would resolve a real tag and report "no drift"
 # for a version we could not actually parse. A bare two-part `1.10` is rejected
@@ -50,8 +52,8 @@ sha256_of() {
 # value means something upstream is wrong and guessing would defeat the check.
 plugin_major_minor() {
   local file="$1" version
-  version=$(sed -n "s/.*\\\\VERSION', '\([0-9][0-9.]*\)'.*/\1/p" "$file" | head -1)
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  version=$(sed -n "s/.*\\\\VERSION', '\([0-9][0-9.]*\(-[A-Za-z0-9.]*\)\{0,1\}\)'.*/\1/p" "$file" | head -1)
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$ ]] || return 1
   printf '%s' "$version" | cut -d. -f1,2
 }
 

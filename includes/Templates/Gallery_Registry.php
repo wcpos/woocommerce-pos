@@ -400,7 +400,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'base-receipt',
 			),
 			'gift-receipt' => array(
