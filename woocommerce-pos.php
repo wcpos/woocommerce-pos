@@ -45,7 +45,7 @@ API\V2\Ping::maybe_serve();
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
 	// On next, this is wcpos/translations' moving jsDelivr branch ref, refreshed by the CDN within about 12 hours.
 	// On main, the release workflow replaces it with a CalVer tag; resolve this one-line conflict in main's favour when merging next.
-	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.11.2' );
+	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.11.3' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
 	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
