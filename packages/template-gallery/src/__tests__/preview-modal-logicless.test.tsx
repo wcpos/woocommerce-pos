@@ -92,42 +92,58 @@ describe('PreviewModal logicless previews', () => {
 		expect(buildPreviewModalSrcDoc(preview)).toBe(fullHtml);
 	});
 
-	it('wraps legacy partial preview_html in the modal iframe fallback', async () => {
-		usePreviewMock.mockReturnValue({
-			data: {
-				engine: 'legacy-php',
-				preview_html: '<main>Legacy fallback</main>',
-				order_id: 0,
-				template_id: 'legacy',
-			},
-			isLoading: false,
-			isFetching: false,
-			isError: false,
-		} as ReturnType<typeof usePreview>);
+	it.each(['receipt', 'closure', 'report'] as const)(
+		'wraps legacy %s preview_html in the modal iframe fallback',
+		async (type) => {
+			(window as any).wcpos = { templateGallery: { hasPosOrders: true } };
+			usePreviewMock.mockReturnValue({
+				data: {
+					engine: 'legacy-php',
+					preview_html: '<main>Legacy fallback</main>',
+					order_id: 0,
+					template_id: 'legacy',
+				},
+				isLoading: false,
+				isFetching: false,
+				isError: false,
+			} as unknown as ReturnType<typeof usePreview>);
 
-		const container = document.createElement('div');
-		const root = createRoot(container);
-		mountedRoots.push(root);
-		document.body.appendChild(container);
+			const container = document.createElement('div');
+			const root = createRoot(container);
+			mountedRoots.push(root);
+			document.body.appendChild(container);
 
-		await act(async () => {
-			root.render(
-				<PreviewModal templateId="legacy" templateName="Legacy" isGallery onClose={() => {}} />
+			await act(async () => {
+				root.render(
+					<PreviewModal
+						templateType={type}
+						templateId="legacy"
+						templateName="Legacy"
+						isGallery
+						onClose={() => {}}
+					/>
+				);
+			});
+
+			expect(usePreviewMock).toHaveBeenCalledWith(
+				'legacy',
+				type === 'receipt' ? 'latest' : undefined,
+				type
 			);
-		});
+			expect(container.querySelector('[role="radiogroup"]') === null).toBe(type !== 'receipt');
+			const iframe = container.querySelector('iframe');
+			expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
+			expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
 
-		const iframe = container.querySelector('iframe');
-		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
-		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
-
-		const canvas = container.querySelector(
-			'[data-testid="preview-viewport-canvas"]'
-		) as HTMLElement | null;
-		expect(canvas).toBeTruthy();
-		expect(canvas?.style.width).toBe('794px');
-		expect(canvas?.style.height).toBe('1123px');
-		expect(iframe?.getAttribute('srcdoc')).toContain('width:210mm');
-	});
+			const canvas = container.querySelector(
+				'[data-testid="preview-viewport-canvas"]'
+			) as HTMLElement | null;
+			expect(canvas).toBeTruthy();
+			expect(canvas?.style.width).toBe('794px');
+			expect(canvas?.style.height).toBe('1123px');
+			expect(iframe?.getAttribute('srcdoc')).toContain('width:210mm');
+		}
+	);
 
 	it('renders an empty logicless template when receipt data is present', async () => {
 		usePreviewMock.mockReturnValue({
@@ -141,7 +157,7 @@ describe('PreviewModal logicless previews', () => {
 			isLoading: false,
 			isFetching: false,
 			isError: false,
-		} as ReturnType<typeof usePreview>);
+		} as unknown as ReturnType<typeof usePreview>);
 
 		const container = document.createElement('div');
 		const root = createRoot(container);
@@ -150,7 +166,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="empty" templateName="Empty" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="empty"
+					templateName="Empty"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 
@@ -169,7 +191,7 @@ describe('PreviewModal logicless previews', () => {
 			isLoading: false,
 			isFetching: false,
 			isError: false,
-		} as ReturnType<typeof usePreview>);
+		} as unknown as ReturnType<typeof usePreview>);
 
 		const container = document.createElement('div');
 		const root = createRoot(container);
@@ -178,7 +200,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="legacy" templateName="Legacy" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="legacy"
+					templateName="Legacy"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 
@@ -208,7 +236,7 @@ describe('PreviewModal logicless previews', () => {
 						data: samplePreview,
 						isFetching: false,
 						isError: false,
-					} as ReturnType<typeof usePreview>);
+					} as unknown as ReturnType<typeof usePreview>);
 		});
 
 		const container = document.createElement('div');
@@ -218,7 +246,13 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="invoice" templateName="Invoice" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="invoice"
+					templateName="Invoice"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 		await act(async () => {
@@ -226,8 +260,8 @@ describe('PreviewModal logicless previews', () => {
 		});
 
 		expect(orderObserverMounted).toBe(true);
-		expect(usePreviewMock).toHaveBeenCalledWith('invoice', 'latest');
-		expect(usePreviewMock).toHaveBeenCalledWith('invoice', undefined);
+		expect(usePreviewMock).toHaveBeenCalledWith('invoice', 'latest', 'receipt');
+		expect(usePreviewMock).toHaveBeenCalledWith('invoice', undefined, 'receipt');
 		expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain('Sample preview');
 	});
 
@@ -249,13 +283,19 @@ describe('PreviewModal logicless previews', () => {
 
 		await act(async () => {
 			root.render(
-				<PreviewModal templateId="invoice" templateName="Invoice" isGallery onClose={() => {}} />
+				<PreviewModal
+					templateType="receipt"
+					templateId="invoice"
+					templateName="Invoice"
+					isGallery
+					onClose={() => {}}
+				/>
 			);
 		});
 		await act(async () => {
 			await new Promise((resolve) => window.setTimeout(resolve, 0));
 		});
 
-		expect(usePreviewMock).not.toHaveBeenCalledWith('invoice', undefined);
+		expect(usePreviewMock).not.toHaveBeenCalledWith('invoice', undefined, 'receipt');
 	});
 });

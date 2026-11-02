@@ -72,7 +72,7 @@ export interface CloudPrintSettingsResponse extends CloudPrintSettings {
 	generated?: Record<string, string>;
 }
 
-const ENDPOINT = 'wcpos/v1/settings/cloud-print?wcpos=1';
+const ENDPOINT = 'wcpos/v2/settings/cloud-print?wcpos=1';
 
 /**
  * Read/write the cloud-print settings. The REST endpoint replaces the whole
@@ -111,13 +111,13 @@ export function useCloudPrintSettings() {
 	return { settings: data, save: mutation.mutateAsync };
 }
 
-const RELAY_REGISTER_ENDPOINT = 'wcpos/v1/print-jobs/relay/register?wcpos=1';
+const RELAY_REGISTER_ENDPOINT = 'wcpos/v2/print-jobs/relay/register?wcpos=1';
 
 /**
  * Self-register with the WCPOS Cloud Print relay. The endpoint returns the
  * new relay state, which is folded into the cached cloud-print settings.
  * There is no disable counterpart — the relay is on by default and sites
- * opt out server-side via the `woocommerce_pos_cloud_print_relay_enabled`
+ * opt out server-side via the `wcpos_cloud_print_relay_enabled`
  * filter.
  */
 export function useCloudPrintRelay() {

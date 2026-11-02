@@ -116,7 +116,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array( $this->misc_line() ),
 				'meta_data'  => $this->order_meta(),
 			)
@@ -144,7 +144,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array( $this->misc_line( array( 'sku' => 'COLLIDE-PIN-1' ) ) ),
 				'meta_data'  => $this->order_meta(),
 			)
@@ -181,7 +181,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					array(
 						'product_id' => $a->get_id(),
@@ -223,7 +223,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 			$response = $this->push_envelope(
 				'create',
 				array(
-					'status'     => 'processing',
+					'status'     => 'pending',
 					'line_items' => array( $this->misc_line(), $second_line ),
 					'meta_data'  => $this->order_meta(),
 				)
@@ -247,7 +247,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					$this->misc_line( array( 'sku' => 'wcpos-misc-item-no-sku-lookup' ) ),
 				),
@@ -264,7 +264,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					$this->misc_line( array( 'sku' => array( 'not-a-string' ) ) ),
 				),
@@ -280,7 +280,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					$this->misc_line(
 						array(
@@ -315,7 +315,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$created = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					array(
 						'product_id' => $a->get_id(),
@@ -362,7 +362,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$created = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array( $this->misc_line( array( 'sku' => 'MISC-OLD-SKU' ) ) ),
 				'meta_data'  => $this->order_meta(),
 			)
@@ -395,7 +395,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$created = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array( $this->misc_line( array( 'sku' => 'MISC-CLEAR-1' ) ) ),
 				'meta_data'  => $this->order_meta(),
 			)
@@ -439,7 +439,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					$this->misc_line(
 						array(
@@ -476,7 +476,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$created = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					array(
 						'product_id'   => $variable->get_id(),
@@ -519,7 +519,7 @@ class Test_Rest_Dispatch_Line_Item_Identity extends Sync_REST_Store_Test_Case {
 		$created = $this->push_envelope(
 			'create',
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array( $this->misc_line( array( 'sku' => 'MISC-KEEP-1' ) ) ),
 				'meta_data'  => $this->order_meta(),
 			)

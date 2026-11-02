@@ -90,12 +90,12 @@ class Test_Order_Write_Contract_HPOS extends Sync_REST_Store_Test_Case {
 				'collection'   => 'orders',
 				'recordId'     => $record_uuid,
 				'baseRevision' => $created->get_data()['currentRevision'],
-				'payload'      => array( 'status' => 'completed' ),
+				'payload'      => array( 'status' => 'on-hold' ),
 			)
 		);
 
 		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
-		$this->assertSame( 'completed', wc_get_order( $order_id )->get_status() );
+		$this->assertSame( 'on-hold', wc_get_order( $order_id )->get_status() );
 
 		$deleted = $this->dispatch_order_mutation(
 			array(

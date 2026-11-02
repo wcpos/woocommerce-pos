@@ -7,6 +7,13 @@
 	convertNoticesToExceptions="true"
 	convertWarningsToExceptions="true"
 	>
+	<!-- Benchmarks print timings and assert nothing: excluded by default, run on
+	     demand by passing the "benchmark" group to PHPUnit. -->
+	<groups>
+		<exclude>
+			<group>benchmark</group>
+		</exclude>
+	</groups>
 	<extensions>
 		<extension class="WCPOS\WooCommercePOS\Tests\Helpers\Save_Reentry_Guard_Reset" file="tests/Helpers/Save_Reentry_Guard_Reset.php" />
 	</extensions>
@@ -17,6 +24,9 @@
 			<directory suffix="_Test.php">./tests/</directory>
 		</testsuite>
 	</testsuites>
+	<listeners>
+		<listener class="WCPOS\WooCommercePOS\Tests\Helpers\Order_Lock_Guard" file="tests/Helpers/Order_Lock_Guard.php" />
+	</listeners>
     <filter>
         <whitelist processUncoveredFilesFromWhitelist="false">
             <directory suffix=".php">includes</directory>

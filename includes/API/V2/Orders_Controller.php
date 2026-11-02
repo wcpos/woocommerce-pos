@@ -121,7 +121,7 @@ final class Orders_Controller extends WP_REST_Controller {
 		 *
 		 * The interim hook-parity seam for order-scoping plugins on a lane that
 		 * bypasses `woocommerce_rest_orders_prepare_object_query`. It retires with
-		 * the lane at the 1.11.0 protocol boundary (ADR 0035, #1748).
+		 * the lane at the 2.0.0 protocol boundary (ADR 0035, #1748).
 		 *
 		 * The contract, precisely:
 		 *  - NARROW ONLY. Return the subset of `$ids` to serve; ids added by the
@@ -141,7 +141,9 @@ final class Orders_Controller extends WP_REST_Controller {
 		 * @param int[]           $ids     Candidate order IDs in this pull page.
 		 * @param WP_REST_Request $request Pull request.
 		 */
-		$allowed = array_map( 'intval', (array) apply_filters( 'woocommerce_pos_order_pull_ids', $ids, $request ) );
+		$filtered = apply_filters( 'wcpos_order_pull_ids', $ids, $request );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_order_pull_ids', array( $filtered, $request ), '2.0.0', 'wcpos_order_pull_ids' );
+		$allowed = array_map( 'intval', (array) $filtered );
 		$allowed = array_flip( $allowed ); // O(1) membership for 250-row pages.
 
 		$planner = new Order_Pull_Planner(
@@ -178,6 +180,9 @@ final class Orders_Controller extends WP_REST_Controller {
 				}
 				return $payload;
 			},
+			// The SERVED payload is the hash input on purpose — see
+			// Order_Serializer::serialize_order() for why, and canonical_form()
+			// for why a third-party key in it cannot move the revision.
 			static function ( array $full_payload ): string {
 				return Order_Serializer::canonical_revision( $full_payload );
 			}
@@ -185,6 +190,7 @@ final class Orders_Controller extends WP_REST_Controller {
 
 		$documents           = array();
 		$deletes             = array(); // wooOrderIds of deleted orders (F6) — a SEPARATE channel from documents
+		$complete            = ! $has_more;
 		$response_checkpoint = array(
 			'updatedAtGmt' => $updated_at_gmt,
 			'orderId' => $order_id,
@@ -199,7 +205,7 @@ final class Orders_Controller extends WP_REST_Controller {
 			}
 			if ( 'complete' === $decision['type'] ) {
 				$response_checkpoint = $decision['checkpoint'];
-				$has_more            = $decision['hasMore'];
+				$complete            = $decision['complete'];
 				continue;
 			}
 			$full_payload  = $decision['payload'];
@@ -214,7 +220,8 @@ final class Orders_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$payloads = (array) apply_filters( 'woocommerce_pos_sync_order_pull_payloads', array_column( $documents, 'payload' ), 'orders', $request );
+		$payloads = apply_filters( 'wcpos_sync_order_pull_payloads', array_column( $documents, 'payload' ), 'orders', $request );
+		$payloads = (array) apply_filters_deprecated( 'woocommerce_pos_sync_order_pull_payloads', array( $payloads, 'orders', $request ), '2.0.0', 'wcpos_sync_order_pull_payloads' );
 		foreach ( $payloads as $index => $payload ) {
 			$documents[ $index ]['payload'] = $payload;
 		}
@@ -224,15 +231,22 @@ final class Orders_Controller extends WP_REST_Controller {
 		// AUTO_INCREMENT space reset beneath it). Cheap: an autoloaded option + a MAX(sequence).
 		$journal = new Sync_Journal();
 
+		// ONE checkpoint shape across the v2 read lanes (free#1870): the cursor
+		// interior plus the shared epoch/head/horizon as /changes/* serves them,
+		// and `complete` for the inverted `hasMore`. Present on an empty page too.
 		return rest_ensure_response(
 			array(
 				'documents'  => $documents,
 				'deletes'    => $deletes, // wooOrderIds the client resolves + removes (F6); empty unless include_deletes
-				'checkpoint' => $response_checkpoint,
-				'hasMore'    => $has_more,
-				'epoch'      => $journal->ensure_epoch(), // F8 journal epoch — client resyncs on mismatch
-				'head'       => $journal->head_sequence( array( 'order' ) ), // F8 order-lane head — client resyncs if its cursor exceeds it; stream-scoped so catalogue writes don't move it
-				'horizon'    => $journal->prune_watermark( array( 'order' ) ),
+				'checkpoint' => array_merge(
+					$response_checkpoint,
+					array(
+						'epoch'   => $journal->ensure_epoch(), // F8 journal epoch — client resyncs on mismatch
+						'head'    => $journal->head_sequence( array( 'order' ) ), // F8 order-lane head — client resyncs if its cursor exceeds it; stream-scoped so catalogue writes don't move it
+						'horizon' => $journal->prune_watermark( array( 'order' ) ),
+					)
+				),
+				'complete'   => $complete,
 			)
 		);
 	}

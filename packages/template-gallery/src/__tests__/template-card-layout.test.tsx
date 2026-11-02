@@ -11,8 +11,10 @@ import { GalleryGrid } from '../screens/gallery-grid';
 
 import type { GalleryTemplate } from '../types';
 
+vi.mock('@tanstack/react-router', () => ({ useSearch: () => ({ type: 'receipt' }) }));
+
 vi.mock('../components/filter-sidebar', () => ({
-	DEFAULT_FILTERS: { search: '', categories: [], output: 'all', direction: 'all' },
+	DEFAULT_FILTERS: { search: '', categories: [], output: 'all', direction: 'all', screen: 'all' },
 	FilterSidebar: () => <div data-testid="filter-sidebar" />,
 }));
 
@@ -36,6 +38,7 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 }));
 
 vi.mock('../hooks/use-templates', () => ({
+	useSetActiveTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 	useTemplates: () => ({
 		data: [],
 	}),

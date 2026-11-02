@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
+use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WP_Error;
 use WP_User;
@@ -38,6 +39,12 @@ class Access_Section implements Settings_Section_Interface {
 	}
 
 	/**
+	 * Capabilities the app's gates read that the Access screen never offers as toggles: they are
+	 * WordPress's and WooCommerce's own. Reported in effective_capabilities() when held.
+	 */
+	public const REPORTED_ONLY_CAPABILITIES = array( 'manage_woocommerce', 'delete_users' );
+
+	/**
 	 * Get the flat list of capability names.
 	 *
 	 * @return array
@@ -49,7 +56,8 @@ class Access_Section implements Settings_Section_Interface {
 	}
 
 	/**
-	 * Capabilities the user can actually exercise, in the Access-settings vocabulary.
+	 * Capabilities the user can actually exercise: the Access-settings vocabulary, then the
+	 * reported-only names in REPORTED_ONLY_CAPABILITIES.
 	 *
 	 * The user_can() check is what every REST permission callback asks, so it is the
 	 * answer the client must be given; it also runs the `user_has_cap` filter that
@@ -60,7 +68,8 @@ class Access_Section implements Settings_Section_Interface {
 	 *
 	 * @param WP_User $user User to report on.
 	 *
-	 * @return string[] Capability names, in capability_names() order.
+	 * @return string[] Capability names, in capability_names() order, then each reported-only
+	 *                  capability the user holds (read by the app's gates, never a toggle).
 	 */
 	public static function effective_capabilities( WP_User $user ): array {
 		$names = self::capability_names();
@@ -68,7 +77,7 @@ class Access_Section implements Settings_Section_Interface {
 		// (WP_User::has_cap), so mirror that bypass for the two filtered names.
 		$super_admin = is_multisite() && is_super_admin( $user->ID );
 
-		return array_values(
+		$effective = array_values(
 			array_filter(
 				$names,
 				function ( $cap ) use ( $user, $super_admin ) {
@@ -87,6 +96,16 @@ class Access_Section implements Settings_Section_Interface {
 				}
 			)
 		);
+		// Reported, never toggles: capabilities the app's gates read that are not the Access
+		// screen's to grant. `manage_woocommerce` gates a card provider's terms (Tap to Pay);
+		// `delete_users` gates deleting a customer. Each is sent whenever the user holds it.
+		foreach ( self::REPORTED_ONLY_CAPABILITIES as $cap ) {
+			if ( user_can( $user, $cap ) ) {
+				$effective[] = $cap;
+			}
+		}
+
+		return $effective;
 	}
 
 	/**
@@ -117,6 +136,10 @@ class Access_Section implements Settings_Section_Interface {
 			'wcpos' => array(
 				'access_woocommerce_pos',
 				'manage_woocommerce_pos',
+				'manage_woocommerce_pos_cash',
+				'view_woocommerce_pos_reports',
+				'manage_woocommerce_pos_closures',
+				'reassign_woocommerce_pos_sales',
 			),
 			'wc' => array(
 				$customer_create_cap,
@@ -163,14 +186,33 @@ class Access_Section implements Settings_Section_Interface {
 	 */
 	public function read(): array {
 		global $wp_roles;
-		$role_caps = array();
-		$caps      = self::get_caps();
+		$role_caps   = array();
+		$caps        = self::get_caps();
+		$definitions = Activator::role_capability_definition();
 
 		$roles = $wp_roles->roles;
 		if ( $roles ) {
 			foreach ( $roles as $slug => $role ) {
+				$grants = $definitions[ $slug ] ?? array();
+				if ( 'cashier' === $slug ) {
+					// Activation grants the access gate beside the definition
+					// (Activator::create_pos_roles()), so the default carries it too.
+					$grants['access_woocommerce_pos'] = true;
+				} else {
+					$grants = array_fill_keys( $grants, true );
+				}
+				$defaults = array();
+				foreach ( $caps as $group => $names ) {
+					if ( 'wcpos' !== $group && 'cashier' !== $slug ) {
+						continue;
+					}
+					foreach ( $names as $name ) {
+						$defaults[ $group ][ $name ] = ! empty( $grants[ $name ] );
+					}
+				}
 				$role_caps[ $slug ] = array(
 					'name'         => $role['name'],
+					'defaults'     => $defaults,
 					'capabilities' => array(
 						'wcpos' => array_intersect_key(
 							array_merge( array_fill_keys( $caps['wcpos'], false ), $role['capabilities'] ),
@@ -195,9 +237,10 @@ class Access_Section implements Settings_Section_Interface {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_access_settings
+		 * @hook wcpos_access_settings
 		 */
-		return apply_filters( 'woocommerce_pos_access_settings', $role_caps );
+		$filtered = apply_filters( 'wcpos_access_settings', $role_caps );
+		return apply_filters_deprecated( 'woocommerce_pos_access_settings', array( $filtered ), '2.0.0', 'wcpos_access_settings' );
 	}
 
 	/**
@@ -218,7 +261,7 @@ class Access_Section implements Settings_Section_Interface {
 	public function write( array $settings ) {
 		// Defense-in-depth: capability mutation is a privileged service-layer
 		// operation; do not rely solely on the REST route's permission
-		// callback (matches the Settings::delete_settings() precedent).
+		// callback.
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) || ! current_user_can( 'edit_users' ) || ! current_user_can( 'promote_users' ) ) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',
@@ -241,7 +284,7 @@ class Access_Section implements Settings_Section_Interface {
 
 			if ( $role ) {
 				// Build the allow-list of capabilities exposed for this role, including
-				// extension groups added via the woocommerce_pos_access_settings filter.
+				// extension groups added via the wcpos_access_settings filter.
 				$access_settings = $this->read();
 				$allowed_caps    = array();
 				if ( isset( $access_settings[ $slug ]['capabilities'] ) ) {

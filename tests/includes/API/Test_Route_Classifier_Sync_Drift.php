@@ -10,8 +10,18 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Closure;
 use ReflectionFunction;
 use ReflectionMethod;
+use WCPOS\WooCommercePOS\API;
+use WCPOS\WooCommercePOS\API\Route_Classifier;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
+
+/** API subclass exposing the live route classifier to drift tests. */
+class Route_Classifier_Sync_Drift_Test_API extends API {
+	/** Get the classifier populated during route registration. */
+	public function get_route_classifier(): Route_Classifier {
+		return $this->route_classifier;
+	}
+}
 
 /**
  * Sync admin operation classification drift guard.
@@ -24,6 +34,14 @@ use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
  * directions, turning that silent drift into a red test.
  */
 class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
+	/** @var Route_Classifier_Sync_Drift_Test_API */
+	private $api;
+
+	/** Register a testable API instance. */
+	public function rest_api_init(): void {
+		$this->api = new Route_Classifier_Sync_Drift_Test_API();
+	}
+
 	/**
 	 * Initialize REST routes before classification checks.
 	 */
@@ -108,7 +126,7 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 	 *
 	 * NOTE: the promoted wcpos/v2 service pass-through controllers (the
 	 * `API\V2\*` subclasses of the v1 controllers, registered through
-	 * `woocommerce_pos_rest_api_v2_controllers`) share the namespace but are
+	 * `wcpos_rest_api_v2_controllers`) share the namespace but are
 	 * deliberately NOT sync routes, so ownership is derived from the sync
 	 * controller map rather than from the namespace.
 	 */
@@ -138,6 +156,102 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Every declared v2 protocol carve-out resolves to a live route.
+	 * DRIFT CAUGHT: stale protocol-gate and telemetry ownership metadata.
+	 * WHEN IT FIRES: update or remove the controller's `protocol_exempt` entry.
+	 */
+	public function test_protocol_exempt_routes_are_registered(): void {
+		// Arrange.
+		$routes = rest_get_server()->get_routes( 'wcpos/v2' );
+		// Act / Assert.
+		foreach ( $this->api->get_route_classifier()->routes( 'protocol_exempt' ) as $exempt_route ) {
+			if ( 0 !== strpos( $exempt_route, '/wcpos/v2/' ) ) {
+				continue;
+			}
+			if ( '/' !== substr( $exempt_route, -1 ) ) {
+				$this->assertArrayHasKey( $exempt_route, $routes, $exempt_route );
+				continue;
+			}
+
+			$matches = preg_grep( '#^' . preg_quote( $exempt_route, '#' ) . '#i', array_keys( $routes ) );
+			$this->assertNotEmpty( $matches, $exempt_route );
+		}
+	}
+
+	/**
+	 * Every wcpos/v2 route the wp-admin settings screen calls is exempt from
+	 * the protocol gate.
+	 *
+	 * The screen authenticates with a cookie and makes no client protocol
+	 * claim, so a gated route it calls answers 426 "update required" — which
+	 * is how the PrintNode and Star discovery lookups broke while the
+	 * declared-entries guard above stayed green (they sit at the namespace
+	 * root, outside the `/print-jobs` prefix). This walks the source the
+	 * other way: every `wcpos/v2/...` literal in `packages/settings/src`
+	 * (template segments cut at the first `${`) must be exempt.
+	 * DRIFT CAUGHT: a settings-facing route added without its exemption.
+	 * WHEN IT FIRES: add the route to its controller's `protocol_exempt`.
+	 */
+	public function test_every_v2_route_the_settings_screen_calls_is_protocol_exempt(): void {
+		// Arrange.
+		$source = \dirname( __DIR__, 3 ) . '/packages/settings/src';
+		$this->assertDirectoryExists( $source );
+		$paths = array();
+		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $source ) );
+		foreach ( $files as $file ) {
+			if ( ! preg_match( '/\.(ts|tsx)$/', $file->getFilename() ) || false !== strpos( $file->getFilename(), '.test.' ) ) {
+				continue;
+			}
+			$contents = file_get_contents( $file->getPathname() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Test reads repo source.
+			if ( preg_match_all( '#wcpos/v2/([A-Za-z0-9_/-]+)#', (string) $contents, $matches ) ) {
+				foreach ( $matches[1] as $path ) {
+					$paths[ '/wcpos/v2/' . rtrim( $path, '/' ) ] = true;
+				}
+			}
+		}
+		$this->assertNotEmpty( $paths, 'the settings screen calls no wcpos/v2 route at all — the scan is broken' );
+
+		// Act / Assert.
+		$classifier = $this->api->get_route_classifier();
+		foreach ( array_keys( $paths ) as $route ) {
+			$this->assertTrue( $classifier->is_protocol_exempt( $route ), $route . ' is called by the settings screen with cookie auth but is protocol-gated' );
+		}
+	}
+
+	/**
+	 * Every public and printer-token v2 route is exempt from the protocol gate.
+	 *
+	 * Pins the derivation in `Route_Classifier::is_protocol_exempt()`: pre-login
+	 * connect probes and printer/relay callers never carry a client protocol
+	 * signal, so their exemption must follow from their existing classification
+	 * rather than from a second hand-maintained list.
+	 *
+	 * DRIFT CAUGHT: a refactor of `is_protocol_exempt()` that stops deriving
+	 * from `public` / `printer_token`, leaving a connect probe or a printer poll
+	 * refused with "update required".
+	 *
+	 * WHEN IT FIRES: restore the derivation — do not add the route to
+	 * `protocol_exempt` by hand.
+	 */
+	public function test_public_and_printer_token_v2_routes_are_protocol_exempt(): void {
+		// Arrange.
+		$classifier = $this->api->get_route_classifier();
+		$checked    = 0;
+		// Act / Assert.
+		foreach ( array( 'public', 'printer_token' ) as $group ) {
+			foreach ( $classifier->routes( $group ) as $route ) {
+				if ( 0 !== strpos( $route, '/wcpos/v2/' ) ) {
+					continue;
+				}
+				++$checked;
+				$this->assertTrue( $classifier->is_protocol_exempt( $route ), $group . ': ' . $route );
+			}
+		}
+
+		$this->assertGreaterThan( 0, $checked, 'No public or printer-token wcpos/v2 routes were classified — the guard would pass vacuously.' );
 	}
 
 	/**

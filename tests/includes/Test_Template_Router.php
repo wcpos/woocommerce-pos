@@ -172,7 +172,7 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		// Arrange.
 		$this->set_permalink_structure( '/%postname%/' );
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['force_ssl'] = false;
 
@@ -196,7 +196,7 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		// Arrange.
 		global $wp;
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['force_ssl'] = false;
 
@@ -266,7 +266,7 @@ class Test_Template_Router extends WC_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'wcpos-login', $GLOBALS['wp']->query_vars );
 		$this->assertTrue( is_404() );
 		// This is the frame-exemption predicate; headers_list() is always empty under the CLI SAPI.
-		$this->assertFalse( woocommerce_pos_request() );
+		$this->assertFalse( wcpos_request() );
 	}
 
 	/**

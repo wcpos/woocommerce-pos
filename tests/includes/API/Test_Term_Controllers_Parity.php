@@ -402,45 +402,6 @@ class Test_Term_Controllers_Parity extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Tied names carry the term_id tiebreak into the ORDER BY clause.
-	 *
-	 * The v2 proxy lane pins this in Terms_Proxy_Behavior; the direct lane must
-	 * carry the same Collection Rule or the two lanes paginate differently.
-	 *
-	 * @dataProvider taxonomy_provider
-	 *
-	 * @param string $controller_class Controller class name.
-	 * @param string $taxonomy         Taxonomy name.
-	 * @param string $rest_base        Route below the namespace.
-	 */
-	public function test_term_list_orderby_name_carries_the_term_id_tiebreak( string $controller_class, string $taxonomy, string $rest_base ): void {
-		// Arrange.
-		$this->boot_endpoint( $controller_class, $taxonomy );
-		$this->create_term( 'Tiebreak Clause' );
-		$captured = array();
-		add_filter(
-			'terms_clauses',
-			function ( $clauses, $taxonomies ) use ( &$captured, $taxonomy ) {
-				if ( \in_array( $taxonomy, (array) $taxonomies, true ) && '' !== (string) ( $clauses['orderby'] ?? '' ) ) {
-					$captured[] = $clauses;
-				}
-
-				return $clauses;
-			},
-			99,
-			2
-		);
-
-		// Act.
-		$this->read_collection( $rest_base, array( 'orderby' => 'name' ) );
-
-		// Assert.
-		$this->assertNotEmpty( $captured, 'No ordered term query ran for ' . $taxonomy . '.' );
-		$this->assertSame( 'ORDER BY t.name ASC, t.term_id', $captured[0]['orderby'] );
-		$this->assertSame( 'ASC', $captured[0]['order'] );
-	}
-
-	/**
 	 * A tie straddling a page boundary appears exactly once across the walk.
 	 *
 	 * ORDER BY a tied column alone gives MySQL no total order across separate

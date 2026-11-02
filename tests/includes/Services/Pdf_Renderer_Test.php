@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Pdf_Renderer;
 
 /**
@@ -25,18 +26,24 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		add_filter( 'pre_http_request', array( $this, 'block_http' ) );
 		$this->renderer = new Pdf_Renderer();
 	}
 
+	/** Restore the HTTP boundary. */
+	public function tearDown(): void {
+		remove_filter( 'pre_http_request', array( $this, 'block_http' ) );
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
+		parent::tearDown();
+	}
+
 	/**
-	 * The prefixed Dompdf class is available under the WCPOS\Vendor namespace.
+	 * Keep renderer tests offline even if the local pack is missing.
+	 *
+	 * @return \WP_Error Blocked request.
 	 */
-	public function test_prefixed_dompdf_class_is_loadable(): void {
-		// Assert.
-		$this->assertTrue(
-			class_exists( '\\WCPOS\\Vendor\\Dompdf\\Dompdf' ),
-			'Prefixed Dompdf class should be autoloadable from vendor_prefixed.'
-		);
+	public function block_http(): \WP_Error {
+		return new \WP_Error( 'network_disabled' );
 	}
 
 	/**
@@ -447,6 +454,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function test_render_html_keeps_non_latin_text_at_core_font_weights(): void {
 		// Arrange.
+		$this->assertTrue( ( new Font_Pack_Loader() )->ensure_all() );
 		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
 			. '<body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif;">'
 			. '<p><br></p>'
@@ -485,6 +493,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function test_render_html_empty_inline_before_text_keeps_unicode_font(): void {
 		// Arrange.
+		$this->assertTrue( ( new Font_Pack_Loader() )->ensure_all() );
 		$style = 'font-family: fixed; font-weight: 700; font-style: italic;';
 		$html  = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
 			. '<div><span style="' . $style . '"></span></div>'
@@ -508,6 +517,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function test_render_html_receipt_layout_thermal_uses_unicode_monospace(): void {
 		// Arrange.
+		$this->assertTrue( ( new Font_Pack_Loader() )->ensure_all() );
 		$html = '<div style="font-family: \'Courier New\', Courier, monospace; '
 			. 'font-size: 13px; line-height: 1.4; background: #fff; color: #000; '
 			. 'padding: 16px 12px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere;">Σύνολο</div>';
@@ -598,37 +608,13 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The build retains only receipt font faces.
+	 * The build ships no DejaVu faces; receipts use downloaded packs.
 	 */
-	public function test_build_ships_only_used_dejavu_faces(): void {
+	public function test_build_ships_no_dejavu_faces(): void {
 		// Arrange.
-		$dir  = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/lib/fonts/';
-		$kept = array( 'DejaVuSans', 'DejaVuSans-Bold', 'DejaVuSans-Oblique', 'DejaVuSansMono', 'DejaVuSansMono-Bold' );
-		// Act.
-		$shipped = array_map(
-			static function ( string $file ): string {
-				return basename( $file, '.ttf' );
-			},
-			glob( $dir . 'DejaVu*.ttf' )
-		);
-		sort( $shipped );
+		$dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'vendor_prefixed/dompdf/dompdf/lib/fonts/';
 		// Assert.
-		$this->assertSame( $kept, $shipped );
-		foreach ( $kept as $face ) {
-			$this->assertFileExists( $dir . $face . '.ttf' );
-		}
-		$removed = array(
-			'DejaVuSerif',
-			'DejaVuSerif-Bold',
-			'DejaVuSerif-Italic',
-			'DejaVuSerif-BoldItalic',
-			'DejaVuSans-BoldOblique',
-			'DejaVuSansMono-Oblique',
-			'DejaVuSansMono-BoldOblique',
-		);
-		foreach ( $removed as $face ) {
-			$this->assertFileDoesNotExist( $dir . $face . '.ttf' );
-		}
+		$this->assertSame( array(), glob( $dir . 'DejaVu*.ttf' ) );
 	}
 
 	/**
@@ -636,7 +622,10 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function test_font_map_aliases_removed_variants(): void {
 		// Arrange.
+		$loader = new Font_Pack_Loader();
+		$this->assertTrue( $loader->ensure_all() );
 		$options = new \WCPOS\Vendor\Dompdf\Options();
+		$options->set( 'fontDir', $loader->dir() );
 		$options->set( 'defaultFont', 'dejavu sans' );
 		$dompdf = new \WCPOS\Vendor\Dompdf\Dompdf( $options );
 		// Act.
@@ -649,6 +638,53 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Receipt PDFs embed the pack's DejaVu face, not Dompdf's core Times fallback.
+	 *
+	 * Without the pack installed and fontDir pointed at it, Dompdf still returns
+	 * a PDF — in Times, Latin-1 only — so a bytes-start check cannot catch a
+	 * silent fallback. The embedded font name can.
+	 */
+	public function test_render_html_embeds_pack_font(): void {
+		// Arrange.
+		$this->assertTrue( ( new Font_Pack_Loader() )->ensure_all() );
+		// Act.
+		$pdf = $this->renderer->render_html( '<html><body><p>Ünïcödé receipt ✓</p></body></html>' );
+		// Assert.
+		$this->assertStringContainsString( 'DejaVuSans', $pdf );
+		$this->assertStringNotContainsString( 'Times-Roman', $pdf );
+	}
+
+	/** A missing pack schedules background work without blocking the PDF. */
+	public function test_build_pack_missing_schedules_install_and_still_renders(): void {
+		// Arrange.
+		$dir    = get_temp_dir() . 'wcpos-pdf-fonts-' . wp_generate_uuid4();
+		$filter = static function ( array $uploads ) use ( $dir ): array {
+			$uploads['basedir'] = $dir;
+			return $uploads;
+		};
+		add_filter( 'upload_dir', $filter );
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
+		try {
+			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
+			// Act.
+			$pdf = $this->renderer->render_html( '<html><body>Receipt</body></html>' );
+			// Assert.
+			$this->assertStringStartsWith( '%PDF', $pdf );
+			$this->assertNotFalse( as_next_scheduled_action( Font_Pack_Loader::ACTION ) );
+			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
+		} finally {
+			remove_filter( 'upload_dir', $filter );
+			if ( is_dir( $dir ) ) {
+				$items = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
+				foreach ( $items as $item ) {
+					$item->isDir() ? rmdir( $item->getPathname() ) : unlink( $item->getPathname() );
+				}
+				rmdir( $dir );
+			}
+		}
+	}
+
+	/**
 	 * Italic and bold italic sans text embeds the kept oblique and bold faces.
 	 *
 	 * The family is named explicitly: Dompdf memoises default-font lookups in a
@@ -657,6 +693,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	 */
 	public function test_render_html_renders_italic_and_bold_italic_text(): void {
 		// Arrange.
+		$this->assertTrue( ( new Font_Pack_Loader() )->ensure_all() );
 		$html = '<html><body style="font-family: \'dejavu sans\'"><span style="font-style: italic">Note</span>'
 			. '<span style="font-weight: bold; font-style: italic">Total</span></body></html>';
 		// Act.

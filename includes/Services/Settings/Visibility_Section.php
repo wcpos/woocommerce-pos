@@ -205,9 +205,10 @@ class Visibility_Section extends Abstract_Section {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_product_visibility_settings
+		 * @hook wcpos_product_visibility_settings
 		 */
-		return apply_filters( 'woocommerce_pos_product_visibility_settings', $settings['products'][ $scope ], $scope );
+		$filtered = apply_filters( 'wcpos_product_visibility_settings', $settings['products'][ $scope ], $scope );
+		return apply_filters_deprecated( 'woocommerce_pos_product_visibility_settings', array( $filtered, $scope ), '2.0.0', 'wcpos_product_visibility_settings' );
 	}
 
 	/**
@@ -226,9 +227,10 @@ class Visibility_Section extends Abstract_Section {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_product_visibility_settings
+		 * @hook wcpos_pos_only_product_visibility_settings
 		 */
-		return apply_filters( 'woocommerce_pos_pos_only_product_visibility_settings', $settings['pos_only'], $scope );
+		$filtered = apply_filters( 'wcpos_pos_only_product_visibility_settings', $settings['pos_only'], $scope );
+		return apply_filters_deprecated( 'woocommerce_pos_pos_only_product_visibility_settings', array( $filtered, $scope ), '2.0.0', 'wcpos_pos_only_product_visibility_settings' );
 	}
 
 	/**
@@ -247,9 +249,10 @@ class Visibility_Section extends Abstract_Section {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_product_visibility_settings
+		 * @hook wcpos_online_only_product_visibility_settings
 		 */
-		return apply_filters( 'woocommerce_pos_online_only_product_visibility_settings', $settings['online_only'], $scope );
+		$filtered = apply_filters( 'wcpos_online_only_product_visibility_settings', $settings['online_only'], $scope );
+		return apply_filters_deprecated( 'woocommerce_pos_online_only_product_visibility_settings', array( $filtered, $scope ), '2.0.0', 'wcpos_online_only_product_visibility_settings' );
 	}
 
 	/**
@@ -268,9 +271,10 @@ class Visibility_Section extends Abstract_Section {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_product_visibility_settings
+		 * @hook wcpos_variations_visibility_settings
 		 */
-		return apply_filters( 'woocommerce_pos_variations_visibility_settings', $settings['variations'][ $scope ], $scope );
+		$filtered = apply_filters( 'wcpos_variations_visibility_settings', $settings['variations'][ $scope ], $scope );
+		return apply_filters_deprecated( 'woocommerce_pos_variations_visibility_settings', array( $filtered, $scope ), '2.0.0', 'wcpos_variations_visibility_settings' );
 	}
 
 	/**
@@ -289,9 +293,10 @@ class Visibility_Section extends Abstract_Section {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_product_visibility_settings
+		 * @hook wcpos_pos_only_variations_visibility_settings
 		 */
-		return apply_filters( 'woocommerce_pos_pos_only_variations_visibility_settings', $settings['pos_only'], $scope );
+		$filtered = apply_filters( 'wcpos_pos_only_variations_visibility_settings', $settings['pos_only'], $scope );
+		return apply_filters_deprecated( 'woocommerce_pos_pos_only_variations_visibility_settings', array( $filtered, $scope ), '2.0.0', 'wcpos_pos_only_variations_visibility_settings' );
 	}
 
 	/**
@@ -310,9 +315,10 @@ class Visibility_Section extends Abstract_Section {
 		 * @param {array} $settings
 		 * @returns {array} $settings
 		 * @since 1.0.0
-		 * @hook woocommerce_pos_product_visibility_settings
+		 * @hook wcpos_online_only_variations_visibility_settings
 		 */
-		return apply_filters( 'woocommerce_pos_online_only_variations_visibility_settings', $settings['online_only'], $scope );
+		$filtered = apply_filters( 'wcpos_online_only_variations_visibility_settings', $settings['online_only'], $scope );
+		return apply_filters_deprecated( 'woocommerce_pos_online_only_variations_visibility_settings', array( $filtered, $scope ), '2.0.0', 'wcpos_online_only_variations_visibility_settings' );
 	}
 
 	/**

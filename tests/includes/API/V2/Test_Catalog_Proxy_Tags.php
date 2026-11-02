@@ -7,8 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Sync\Collections;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
@@ -30,6 +32,8 @@ class Test_Catalog_Proxy_Tags extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		parent::tearDown();
 		$this->uninstall_sync_read_lane();
+		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( Pos_Visibility::OPTION );
 	}
 
 	/**
@@ -96,6 +100,40 @@ class Test_Catalog_Proxy_Tags extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Every tag has a POS count, excluding hidden products and including zero.
+	 */
+	public function test_tag_pos_count_excludes_hidden_products_on_every_row(): void {
+		$tag   = wp_insert_term( 'V2 Count Tag', 'product_tag' );
+		$empty = wp_insert_term( 'V2 Empty Tag', 'product_tag' );
+		foreach ( array( 'visible', 'hidden' ) as $name ) {
+			$product = ProductHelper::create_simple_product( array( 'name' => $name ) );
+			$product->set_status( 'publish' );
+			$product->set_tag_ids( array( (int) $tag['term_id'] ) );
+			$product->save();
+		}
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $product->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$rows = array_column( $this->read( array( 'include' => array( (int) $tag['term_id'], (int) $empty['term_id'] ) ) ), null, 'id' );
+
+		$this->assertCount( 2, $rows );
+		foreach ( $rows as $row ) {
+			$this->assertArrayHasKey( 'pos_count', $row );
+		}
+		$this->assertSame( 1, $rows[ $tag['term_id'] ]['pos_count'] );
+		$this->assertSame( 0, $rows[ $empty['term_id'] ]['pos_count'] );
+	}
+
+	/**
 	 * Tag rows expose the complete v2 field set.
 	 */
 	public function test_tag_row_has_full_v2_field_set(): void {
@@ -118,12 +156,14 @@ class Test_Catalog_Proxy_Tags extends WCPOS_REST_Unit_Test_Case {
 				'slug',
 				'description',
 				'count',
+				'pos_count',
 				'meta_data',
 				'_rxdb_revision',
 				'_links',
 			),
 			array_keys( $rows[0] )
 		);
+
 		/*
 		 * Named rather than left to the set difference above: `_rxdb_digest` is
 		 * absent from this lane STRUCTURALLY. The tags registry row declares no

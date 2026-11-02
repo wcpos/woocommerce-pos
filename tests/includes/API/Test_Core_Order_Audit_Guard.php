@@ -39,6 +39,7 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		unset( $_GET['authorization'], $_GET['rest_route'] );
 		unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
 		parent::tearDown();
 	}
@@ -52,6 +53,48 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		global $current_user;
 		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- force authentication.
+	}
+
+	/** JWT-authenticated updates cannot change the sale counter. */
+	public function test_audit_guard_jwt_sale_counter_update_returns_403(): void {
+		$order = OrderHelper::create_order();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_sale_counter',
+						'value' => '123',
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_counter' ) );
+	}
+
+	/** JWT-authenticated updates cannot change the till. */
+	public function test_audit_guard_jwt_till_update_returns_403(): void {
+		$order = OrderHelper::create_order();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_till',
+						'value' => wp_generate_uuid4(),
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_till' ) );
 	}
 
 	/**
@@ -121,6 +164,42 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'original', wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
+	}
+
+	/**
+	 * Query-token-authenticated updates cannot supply POS audit meta.
+	 */
+	public function test_audit_guard_jwt_query_param_order_update_with_audit_key_returns_forbidden(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_store', 'original' );
+		$order->save();
+		$token = Auth::instance()->generate_access_token( get_user_by( 'id', $this->user ) );
+		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+		// A query token signs in REST requests only, so shape this one as the front controller would.
+		$this->arrange_rest_front_controller_request( '/wc/v3/orders/' . $order->get_id() );
+		$_GET['authorization'] = 'Bearer ' . $token;
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- force authentication.
+		$request      = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_pos_store',
+						'value' => 'forged',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
 		$this->assertSame( 'original', wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
 	}
 
@@ -405,5 +484,55 @@ class Test_Core_Order_Audit_Guard extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'product-meta', wc_get_product( $product->get_id() )->get_meta( '_pos_store' ) );
+	}
+
+	/** Core wc/v3 writes cannot forge the server-derived receipt count. */
+	public function test_audit_guard_jwt_receipt_print_count_update_returns_403(): void {
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_wcpos_receipt_print_count', 2 );
+		$order->save();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_wcpos_receipt_print_count',
+						'value' => '999',
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_audit_meta_forbidden', $response->get_data()['code'] );
+		$this->assertSame( 2, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
+	}
+
+	/**
+	 * A case variant of a server-owned key is the same row to the meta tables, so it is refused too.
+	 */
+	public function test_audit_guard_jwt_order_update_with_a_case_variant_server_key_returns_forbidden(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$this->authenticate_via_wcpos_jwt();
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'meta_data' => array(
+					array(
+						'key'   => '_WCPOS_PAYMENTS',
+						'value' => '{"schema":1,"payments":[]}',
+					),
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_WCPOS_PAYMENTS' ) );
 	}
 }

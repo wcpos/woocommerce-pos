@@ -18,6 +18,7 @@ use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Templates\Frontend;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
@@ -67,8 +68,6 @@ class Menu {
 			add_action( 'admin_footer', array( $this, 'print_upgrade_click_tracking_script' ) );
 			add_action( 'admin_init', array( $this, 'redirect_template_list_page' ) );
 		}
-
-		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
 	}
 
 	/**
@@ -107,37 +106,6 @@ class Menu {
 	 */
 	public function display_upgrade_page(): void {
 		include_once 'views/upgrade.php';
-	}
-
-	/**
-	 * Add POS submenu to WooCommerce Analytics menu.
-	 *
-	 * @param array $report_pages The analytics report pages.
-	 */
-	public function analytics_menu_items( array $report_pages ): array {
-		// Find the position of the 'Orders' item.
-		$position = array_search( 'Orders', array_column( $report_pages, 'title' ), true );
-
-		// Use array_splice to add the new item.
-		array_splice(
-			$report_pages,
-			$position + 1,
-			0,
-			array(
-				array(
-					'id'       => 'woocommerce-analytics-pos',
-					'title'    => /* translators: WordPress admin menu label for WCPOS. */ __( 'POS', 'woocommerce-pos' ),
-					'parent'   => 'woocommerce-analytics',
-					'path'     => '/analytics/pos',
-					'nav_args' => array(
-						'order'  => 45,
-						'parent' => 'woocommerce-analytics',
-					),
-				),
-			)
-		);
-
-		return $report_pages;
 	}
 
 	/**
@@ -197,7 +165,7 @@ class Menu {
 			'menu_submenu',
 			admin_url( 'admin.php?page=' . PLUGIN_NAME )
 		);
-		$pos_submenu[1][2] = woocommerce_pos_url();
+		$pos_submenu[1][2] = wcpos_url();
 
 		// The "Upgrade to Pro" submenu link is persistent navigation rendered
 		// on every wp-admin page, so we deliberately do NOT emit an
@@ -222,11 +190,22 @@ class Menu {
 		 * }
 		 */
 		do_action(
-			'woocommerce_pos_register_pos_admin',
+			'wcpos_register_pos_admin',
 			array(
 				'toplevel' => $this->toplevel_screen_id,
 				'settings' => $this->settings_screen_id,
 			)
+		);
+		do_action_deprecated(
+			'woocommerce_pos_register_pos_admin',
+			array(
+				array(
+					'toplevel' => $this->toplevel_screen_id,
+					'settings' => $this->settings_screen_id,
+				),
+			),
+			'2.0.0',
+			'wcpos_register_pos_admin'
 		);
 	}
 
@@ -566,18 +545,31 @@ JS;
 			'wcpos-template-gallery-styles',
 			PLUGIN_URL . $dir . '/css/template-gallery.css',
 			array(),
-			PLUGIN_VERSION
+			self::asset_version( $dir . '/css/template-gallery.css' )
 		);
 
 		wp_enqueue_script(
 			'wcpos-template-gallery',
 			PLUGIN_URL . $dir . '/js/template-gallery.js',
 			array( 'react', 'react-dom', 'wp-api-fetch', \WCPOS\WooCommercePOS\Admin::API_FETCH_METHOD_PARAM_HANDLE, 'wp-url' ),
-			PLUGIN_VERSION,
+			self::asset_version( $dir . '/js/template-gallery.js' ),
 			true
 		);
 
 		wp_add_inline_script( 'wcpos-template-gallery', $this->gallery_inline_script(), 'before' );
+	}
+
+	/**
+	 * Cache-busting version for a built asset: the plugin version plus the file's mtime, so a
+	 * redeploy of the same plugin version (dev sites deploy every merge) is never served stale
+	 * from a long-lived browser cache.
+	 *
+	 * @param string      $relative Path under the plugin directory.
+	 * @param string|null $base     Directory the path is relative to; the plugin directory by default.
+	 */
+	public static function asset_version( string $relative, ?string $base = null ): string {
+		$path = trailingslashit( $base ?? PLUGIN_PATH ) . $relative;
+		return file_exists( $path ) ? PLUGIN_VERSION . '.' . (string) filemtime( $path ) : PLUGIN_VERSION;
 	}
 
 	/**
@@ -597,9 +589,10 @@ JS;
 		 * @since 1.11.2
 		 *
 		 * @param string $url Preview base URL without a trailing slash.
-		 * @hook woocommerce_pos_template_gallery_preview_base_url
+		 * @hook wcpos_template_gallery_preview_base_url
 		 */
-		return apply_filters( 'woocommerce_pos_template_gallery_preview_base_url', $url );
+		$filtered = apply_filters( 'wcpos_template_gallery_preview_base_url', $url );
+		return apply_filters_deprecated( 'woocommerce_pos_template_gallery_preview_base_url', array( $filtered ), '2.0.0', 'wcpos_template_gallery_preview_base_url' );
 	}
 
 	/**
@@ -609,7 +602,7 @@ JS;
 		$json_encode_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
 		return \sprintf(
-			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s, previewBaseUrl: %s }; wcpos.translationVersion = %s;',
+			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s, previewBaseUrl: %s, displayPreviewUrl: %s }; wcpos.translationVersion = %s;',
 			wp_json_encode( wcpos_is_pro_active(), $json_encode_flags ),
 			wp_json_encode( untrailingslashit( admin_url() ), $json_encode_flags ),
 			wp_json_encode(
@@ -624,6 +617,7 @@ JS;
 				$json_encode_flags
 			),
 			wp_json_encode( $this->gallery_preview_base_url(), $json_encode_flags ),
+			wp_json_encode( wcpos_display_url(), $json_encode_flags ),
 			wp_json_encode( TRANSLATION_VERSION, $json_encode_flags )
 		);
 	}

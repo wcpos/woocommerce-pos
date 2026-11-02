@@ -12,10 +12,12 @@ use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
+use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -43,8 +45,6 @@ final class Changes_Controller extends WP_REST_Controller {
 	 */
 	private const CATALOG_POST_OBJECT_TYPES = array( 'product', 'variation' );
 
-	private const PRODUCT_POST_TYPES_SQL     = "('product','product_variation')";
-	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
 	private const TAX_RATES_NOTE             = 'tax rates table has no timestamps; rows carry ids only.';
 
 	private Sync_Journal $journal;
@@ -166,10 +166,13 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * Hook-maintained journal queried by global sequence cursor.
 	 */
 	public function sequence_log( WP_REST_Request $request ) {
-		// `all` (the unified catalogue stream) is recognised ONLY here, from the raw param;
-		// collection_for_request() never returns it, so the other endpoints can't.
-		$is_all     = ( 'all' === (string) $request->get_param( 'collection' ) );
-		$collection = $is_all ? 'all' : $this->collection_for_request( $request );
+		// `all` (the unified catalogue stream) is served ONLY here; the hash lanes
+		// validate against a list without it. Anything else is a 400 (free#1740).
+		$collection = $this->collection_for_request( $request, self::STREAM_LANE_COLLECTIONS );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+		$is_all     = ( 'all' === $collection );
 		$limit      = $this->int_param( $request, 'limit', 100, 1, 1000 );
 		$since      = max( 0, (int) ( $request->get_param( 'since' ) ?? 0 ) );
 
@@ -325,7 +328,10 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * the hashed value is hydrated through the filtered REST path.
 	 */
 	public function revision_hash( WP_REST_Request $request ) {
-		$collection = $this->collection_for_request( $request );
+		$collection = $this->collection_for_request( $request, self::HASH_LANE_COLLECTIONS );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
 		$limit      = $this->int_param( $request, 'limit', 50, 1, 200 );
 		$since_id   = max( 0, (int) ( $request->get_param( 'since_id' ) ?? 0 ) );
 		$note       = 'full filtered REST serialization per record on every poll; the serialization cost is the point of this repair tier.';
@@ -369,8 +375,8 @@ final class Changes_Controller extends WP_REST_Controller {
 		$rows   = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT ID FROM {$wpdb->posts}"
-				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. ' WHERE post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
+				. ' AND post_status NOT IN ' . Digest_Index::EXCLUDED_POST_STATUSES_SQL
 				. self::hidden_ids_sql( $hidden )
 				. ' AND ID > %d ORDER BY ID ASC LIMIT %d',
 				array_merge( $hidden, array( $since_id, $limit ) )
@@ -417,7 +423,10 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * Bucketed integrity checksums with per-bucket audit-list drill-down.
 	 */
 	public function range_checksum( WP_REST_Request $request ) {
-		$collection  = $this->collection_for_request( $request );
+		$collection = $this->collection_for_request( $request, self::HASH_LANE_COLLECTIONS );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
 		$bucket_size = $this->int_param( $request, 'bucket_size', 1000, 1, 10000 );
 		$bucket_raw  = $request->get_param( 'bucket' );
 		global $wpdb;
@@ -465,8 +474,8 @@ final class Changes_Controller extends WP_REST_Controller {
 			$rows   = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT ID, post_modified_gmt FROM {$wpdb->posts}"
-					. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-					. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+					. ' WHERE post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
+					. ' AND post_status NOT IN ' . Digest_Index::EXCLUDED_POST_STATUSES_SQL
 					. self::hidden_ids_sql( $hidden )
 					. ' AND ID >= %d AND ID < %d ORDER BY ID ASC',
 					array_merge( $hidden, array( $range_start, $range_end ) )
@@ -505,8 +514,8 @@ final class Changes_Controller extends WP_REST_Controller {
 			$sql    = 'SELECT FLOOR(ID/%d) AS bucket, COUNT(*) AS record_count,'
 				. " MD5(GROUP_CONCAT(CONCAT(ID,'|',post_modified_gmt) ORDER BY ID SEPARATOR ',')) AS checksum"
 				. " FROM {$wpdb->posts}"
-				. ' WHERE post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-				. ' AND post_status NOT IN ' . self::EXCLUDED_POST_STATUSES_SQL
+				. ' WHERE post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
+				. ' AND post_status NOT IN ' . Digest_Index::EXCLUDED_POST_STATUSES_SQL
 				. self::hidden_ids_sql( $hidden )
 				. ' GROUP BY bucket ORDER BY bucket';
 			$sql_args = array_merge( $sql_args, $hidden );
@@ -675,7 +684,8 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * phantom changes (measured live: 43/52 false positives per no-op sweep).
 	 */
 	private function canonicalize_for_revision( array $payload ): array {
-		$excluded = apply_filters( 'woocommerce_pos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
+		$excluded = apply_filters( 'wcpos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
+		$excluded = apply_filters_deprecated( 'woocommerce_pos_sync_revision_excluded_fields', array( $excluded ), '2.0.0', 'wcpos_sync_revision_excluded_fields' );
 		foreach ( (array) $excluded as $field ) {
 			unset( $payload[ $field ] );
 		}
@@ -731,13 +741,54 @@ final class Changes_Controller extends WP_REST_Controller {
 		return ' AND ID NOT IN (' . implode( ',', array_fill( 0, \count( $hidden ), '%d' ) ) . ')';
 	}
 
-	private function collection_for_request( WP_REST_Request $request ): string {
-		// NB this intentionally collapses everything except tax_rates to products.
-		// The unified `all` mode is recognised ONLY inside sequence_log() (read
-		// from the raw param there); the other /changes/* handlers have no `all`
-		// branch, so they must never see it or they would label product rows as
-		// collection:"all".
-		return 'tax_rates' === (string) $request->get_param( 'collection' ) ? 'tax_rates' : 'products';
+	/**
+	 * The `collection` values each /changes/* lane serves. Anything else is a 400,
+	 * never a silent substitution (free#1740, survey D2/D2b): the hash lanes have
+	 * an id-space for products (variations folded in) and tax_rates only, and the
+	 * sequence-log stream is `all` (the unified catalogue stream) or one of those
+	 * two narrowed streams. The shipped client sends `all`.
+	 */
+	private const HASH_LANE_COLLECTIONS   = array( 'products', 'tax_rates' );
+	private const STREAM_LANE_COLLECTIONS = array( 'all', 'products', 'tax_rates' );
+
+	/**
+	 * Resolve the request's `collection`, or refuse it.
+	 *
+	 * Fail closed: an unsupported collection used to collapse to `products` here,
+	 * so `/changes/revision-hash?collection=coupons` served PRODUCT rows labelled
+	 * `coupons` — the "default → products" bug class the collection registry exists
+	 * to kill ({@see \WCPOS\WooCommercePOS\Sync\Collections}). The lane family now
+	 * answers 400 `woocommerce_pos_sync_unsupported_collection` before any query
+	 * runs, the same shape the integrity lanes use.
+	 *
+	 * @param WP_REST_Request $request   The request.
+	 * @param string[]        $supported The values this lane serves.
+	 * @return string|WP_Error The collection, or the 400.
+	 */
+	private function collection_for_request( WP_REST_Request $request, array $supported ) {
+		// Only an ABSENT parameter takes the documented `products` default (the
+		// route args supply it); an explicit empty value (`?collection=`) is a
+		// malformed request and fails closed like any other unsupported value.
+		$raw        = $request->get_param( 'collection' );
+		$collection = null === $raw ? 'products' : (string) $raw;
+		if ( \in_array( $collection, $supported, true ) ) {
+			return $collection;
+		}
+
+		return new WP_Error(
+			'woocommerce_pos_sync_unsupported_collection',
+			\sprintf(
+				/* translators: 1: the requested collection, 2: the supported collections. */
+				__( 'Collection "%1$s" is not served by this route. Supported: %2$s.', 'woocommerce-pos' ),
+				$collection,
+				implode( ', ', $supported )
+			),
+			array(
+				'status'     => 400,
+				'collection' => $collection,
+				'supported'  => $supported,
+			)
+		);
 	}
 
 	/**
@@ -745,7 +796,8 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * `tax_rates` is a single type, and `products`
 	 * spans product AND variation because a variation change is a products-stream
 	 * event. This is the only place the endpoint names object types; the journal
-	 * itself owns the query.
+	 * itself owns the query. Total over STREAM_LANE_COLLECTIONS and nothing else:
+	 * the handlers validate first, so an unknown value here is a programming error.
 	 *
 	 * @return string[]
 	 */
@@ -758,8 +810,11 @@ final class Changes_Controller extends WP_REST_Controller {
 		if ( 'tax_rates' === $collection ) {
 			return array( 'tax_rate' );
 		}
+		if ( 'products' === $collection ) {
+			return array( 'product', 'variation' );
+		}
 
-		return array( 'product', 'variation' );
+		throw new \LogicException( esc_html( \sprintf( 'Unsupported changes collection "%s" reached the stream helper; validate with collection_for_request() first.', $collection ) ) );
 	}
 
 	private function tax_rates_table(): string {

@@ -11,7 +11,7 @@ describe('logsRequestPath', () => {
 		const path = logsRequestPath(1, 'all', 'all');
 		const params = queryOf(path);
 
-		expect(path.startsWith('wcpos/v1/logs?')).toBe(true);
+		expect(path.startsWith('wcpos/v2/logs?')).toBe(true);
 		expect(params.get('wcpos')).toBe('1');
 		expect(params.get('_wcpos_envelope')).toBe('1');
 		expect(params.get('per_page')).toBe('50');

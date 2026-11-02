@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 use WCPOS\WooCommercePOS\Admin\Consent;
 use WCPOS\WooCommercePOS\Admin\Menu;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Service_Groups;
 
 /**
@@ -81,7 +82,7 @@ class Init {
 				'phase'    => 'pre-latch',
 			),
 			array(
-				'hook'     => 'woocommerce_pos_rest_api_controllers',
+				'hook'     => 'wcpos_rest_api_controllers',
 				'callback' => array( Sync\Api::class, 'register_controllers' ),
 				'priority' => 10,
 				'args'     => 1,
@@ -97,6 +98,14 @@ class Init {
 				'phase'    => 'pre-latch',
 			),
 			array(
+				'hook'     => Font_Pack_Loader::ACTION,
+				'callback' => array( Font_Pack_Loader::class, 'run_scheduled' ),
+				'priority' => 10,
+				'args'     => 1,
+				'reason'   => 'Default; sole callback, always registered including WP-Cron and Action Scheduler requests.',
+				'phase'    => 'pre-latch',
+			),
+			array(
 				'hook'     => null,
 				'callback' => array( Sync\Meta_Normalizer::class, 'register_hooks' ),
 				'priority' => 10,
@@ -105,7 +114,7 @@ class Init {
 				'phase'    => 'sync-latched',
 			),
 			array(
-				'hook'     => 'woocommerce_pos_sync_serialized_order',
+				'hook'     => 'wcpos_sync_serialized_order',
 				'callback' => array( Sync\Pos_Uuid::class, 'stamp_serialized_record' ),
 				'priority' => 10,
 				'args'     => 3,
@@ -126,6 +135,16 @@ class Init {
 				'priority' => 10,
 				'args'     => 0,
 				'reason'   => 'Default 10; identity is unconditional: before-save UUIDs land in the same write and native restores re-prove ownership (ADR 0038).',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Catalog_Visibility() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default; POS Only forces hidden catalog visibility on membership transitions and saves, an unconditional storefront invariant (#1862).',
 				'phase'    => 'post-latch',
 			),
 			array(
@@ -170,6 +189,16 @@ class Init {
 				'phase'    => 'sync-latched',
 			),
 			array(
+				'hook'     => null,
+				'callback' => static function (): void {
+					( new Payments\Contract\Payments_Sweeper() )->register_hooks();
+				},
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Default; schedule the ten-minute sweep outside the schema latch so live payment legs reconcile even while sync is down.',
+				'phase'    => 'post-latch',
+			),
+			array(
 				'hook'     => 'init',
 				'callback' => array( $this, 'init' ),
 				'priority' => 10,
@@ -191,14 +220,6 @@ class Init {
 				'priority' => 10,
 				'args'     => 1,
 				'reason'   => 'Default; appends one variable.',
-				'phase'    => 'post-latch',
-			),
-			array(
-				'hook'     => 'pre_update_option_woocommerce_pos_pro_settings_license',
-				'callback' => array( self::class, 'remove_license_transient' ),
-				'priority' => 10,
-				'args'     => 2,
-				'reason'   => 'Default; the reentrancy guard, not priority, makes legacy Pro license cache invalidation safe (f33b8d655).',
 				'phase'    => 'post-latch',
 			),
 			array(
@@ -311,43 +332,6 @@ class Init {
 		);
 	}
 
-	/**
-	 * Clear cached data that depends on the Pro license.
-	 *
-	 * @param mixed $value     The new option value.
-	 * @param mixed $old_value The previous option value (false when unset).
-	 *
-	 * @return mixed
-	 */
-	public static function remove_license_transient( $value, $old_value = false ) {
-		// Pro's updater can react to the update_plugins deletion by reading —
-		// and, when the stored instance id is blank, re-saving — the license
-		// option, which re-enters this filter. Without the guard that cycle is
-		// unbounded and OOMs the first license activation on a fresh install.
-		static $clearing = false;
-		if ( $clearing ) {
-			return $value;
-		}
-		$clearing = true;
-		delete_transient( 'woocommerce_pos_pro_license_status' );
-
-		// The update caches bind to the license key and activation state. A
-		// write that changes neither — e.g. Pro's read-side instance mint —
-		// must not wipe update_plugins: Pro reacts to that deletion by
-		// clearing its own update-data cache, which empties the payload of an
-		// update check that is in flight when the mint occurs.
-		$old = \is_array( $old_value ) ? $old_value : array();
-		$new = \is_array( $value ) ? $value : array();
-		if (
-			(string) ( $old['key'] ?? '' ) !== (string) ( $new['key'] ?? '' )
-			|| ! empty( $old['activated'] ) !== ! empty( $new['activated'] )
-		) {
-			delete_site_transient( 'update_plugins' );
-		}
-		$clearing = false;
-
-		return $value;
-	}
 
 	/**
 	 * Early authentication check for JWT tokens.
@@ -394,7 +378,7 @@ class Init {
 	 * Loads the POS API and duck punches the WC REST API.
 	 */
 	public function init_rest_api(): void {
-		$is_wcpos_request = woocommerce_pos_request();
+		$is_wcpos_request = wcpos_request();
 
 		if ( $is_wcpos_request ) {
 			if ( ! wcpos_request( 'header' ) && ! wcpos_request( 'query_var' ) ) {
@@ -453,9 +437,10 @@ class Init {
 			return;
 		}
 
-		// The relay's consent callback is expected unmarked traffic (see
-		// register_public_relay_routes()), not a misconfigured client.
-		if ( '/wcpos/v1/print-jobs/relay-verification' === $route ) {
+		// The relay's consent callback and the payment providers' webhooks are expected
+		// unmarked traffic (the relay and SumUp/Stripe/Mollie send no WCPOS header), not a
+		// misconfigured client; every card payment was logging this warning.
+		if ( in_array( $route, array( '/wcpos/v1/print-jobs/relay-verification', '/wcpos/v2/payments/webhook' ), true ) ) {
 			return;
 		}
 
@@ -528,7 +513,7 @@ class Init {
 	 * @return void
 	 */
 	public function remove_x_frame_options( $wp ): void {
-		if ( woocommerce_pos_request() ) {
+		if ( wcpos_request() ) {
 			if ( ! headers_sent() && \function_exists( 'header_remove' ) ) {
 				header_remove( 'X-Frame-Options' );
 			}
@@ -565,7 +550,7 @@ class Init {
 	 * Construct the order-event services exactly once per request.
 	 *
 	 * Idempotent and safe to call after `init`; each service handles its own
-	 * late registration. Fires `woocommerce_pos_order_services_ready` once so
+	 * late registration. Fires `wcpos_order_services_ready` once so
 	 * Pro and extensions can construct their own order-event services at the
 	 * same moment on every lane. Implementation now lives in Service_Groups.
 	 */

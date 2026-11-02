@@ -30,12 +30,19 @@ class Template_Pdf_Service {
 	 *
 	 * @param array             $template Template metadata/content (must include 'engine').
 	 * @param WC_Abstract_Order $order    The order to render.
+	 * @param array|null        $receipt_data Optional prepared receipt or frozen refund payload.
 	 *
 	 * @return string The PDF document bytes (begins with '%PDF-').
+	 * @throws \RuntimeException When a native integration cannot consume a frozen document.
 	 */
-	public function render( array $template, WC_Abstract_Order $order ): string {
+	public function render( array $template, WC_Abstract_Order $order, ?array $receipt_data = null ): string {
 		$engine = isset( $template['engine'] ) ? (string) $template['engine'] : '';
 
+		// Prepared sale data is also passed by the PDF route; only frozen documents (refund, closure,
+		// X-report) must not fall back to a native integration that would render the sale.
+		if ( in_array( $receipt_data['fiscal']['document_type'] ?? '', array( 'refund', 'closure', 'xreport', 'handover' ), true ) && $this->is_native( $template ) ) {
+			throw new \RuntimeException( 'WP Overnight templates cannot render frozen receipt documents.' );
+		}
 		$wp_overnight_pdf = $this->maybe_render_wp_overnight_pdf( $template, $order );
 		if ( null !== $wp_overnight_pdf ) {
 			return $wp_overnight_pdf;
@@ -44,7 +51,7 @@ class Template_Pdf_Service {
 		if ( 'thermal' === $engine ) {
 			$paper_width_pt = $this->thermal_paper_width_pt( $template );
 
-			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order );
+			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order, $receipt_data );
 			$html = ( new Html_Thermal_Emitter() )->emit(
 				$ast,
 				array(
@@ -70,7 +77,7 @@ class Template_Pdf_Service {
 			);
 		}
 
-		$html = $this->render_html_engine( $engine, $template, $order );
+		$html = $this->render_html_engine( $engine, $template, $order, $receipt_data );
 
 		// Non-thermal templates render to a standard A4 portrait page (Pdf_Renderer default).
 		return ( new Pdf_Renderer() )->render_html( $html, array( 'receipt_layout' => true ) );
@@ -113,7 +120,8 @@ class Template_Pdf_Service {
 			return null;
 		}
 
-		$document = apply_filters( 'woocommerce_pos_wp_overnight_pdf_document', null, $document_type, $order );
+		$document = apply_filters( 'wcpos_wp_overnight_pdf_document', null, $document_type, $order );
+		$document = apply_filters_deprecated( 'woocommerce_pos_wp_overnight_pdf_document', array( $document, $document_type, $order ), '2.0.0', 'wcpos_wp_overnight_pdf_document' );
 		if ( null === $document && \function_exists( 'wcpdf_get_document' ) ) {
 			$document = wcpdf_get_document( $document_type, $order, true );
 		}
@@ -147,6 +155,16 @@ class Template_Pdf_Service {
 	}
 
 	/**
+	 * Whether the template renders through a native integration whose bytes this
+	 * service cannot mark (WP Overnight documents).
+	 *
+	 * @param array $template Template metadata.
+	 */
+	public function is_native( array $template ): bool {
+		return null !== $this->wp_overnight_document_type( $template );
+	}
+
+	/**
 	 * Map WCPOS virtual template IDs to WP Overnight document types.
 	 *
 	 * @param array $template Template metadata/content.
@@ -173,11 +191,12 @@ class Template_Pdf_Service {
 	 * @param string            $engine   The template engine.
 	 * @param array             $template Template metadata/content.
 	 * @param WC_Abstract_Order $order    The order to render.
+	 * @param array|null        $receipt_data Optional prepared receipt or frozen refund payload.
 	 *
 	 * @return string The captured receipt HTML.
 	 */
-	private function render_html_engine( string $engine, array $template, WC_Abstract_Order $order ): string {
-		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+	private function render_html_engine( string $engine, array $template, WC_Abstract_Order $order, ?array $receipt_data = null ): string {
+		$receipt_data = $receipt_data ?? ( new Receipt_Data_Builder() )->build( $order, 'live' );
 		$renderer     = ( new Receipt_Renderer_Factory() )->create( $engine );
 
 		ob_start();

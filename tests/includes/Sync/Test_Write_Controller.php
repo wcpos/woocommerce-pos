@@ -121,9 +121,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		return $envelope;
 	}
 
+	/** A real, editable order and its document (a paid order would refuse the line edits these forward-shape pins send). */
 	private function real_order_payload(): array {
 		$order = OrderHelper::create_order();
-		$order->set_status( 'processing' );
+		$order->set_status( 'pending' );
 		$order->save();
 		$payload = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
 		return array( $order->get_id(), $payload );
@@ -180,6 +181,422 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'payload'      => $payload,
 			)
 		);
+	}
+
+	private function provenance_tuple(): array {
+		return array(
+			'_wcpos_register' => wp_generate_uuid4(),
+			'_wcpos_till' => wp_generate_uuid4(),
+			'_wcpos_sale_time' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ),
+			'_wcpos_sale_tz' => 'Europe/Madrid',
+			'_wcpos_sale_counter' => '123',
+			'_wcpos_session' => wp_generate_uuid4(),
+			'_wcpos_app_version' => 'test',
+			'_wcpos_app_build' => '456',
+		);
+	}
+
+	private function provenance_payload( array $tuple ): array {
+		$meta = array();
+		foreach ( $tuple as $key => $value ) {
+			$meta[] = array( 'key' => $key, 'value' => $value );
+		}
+		return array( 'meta_data' => $meta );
+	}
+
+	private function update_provenance_order( $order, array $payload ) {
+		// Keep identity resolution fake, but exercise the real missing-only audit store.
+		$fake = new Fake_Mutation_Store();
+		$fake->resolve = $order->get_id();
+		$store = new class( $fake ) {
+			private $fake;
+			public function __construct( Fake_Mutation_Store $fake ) {
+				$this->fake = $fake;
+			}
+			public function __call( $method, $arguments ) {
+				return $this->fake->{$method}( ...$arguments );
+			}
+			public function persist_order_audit_meta( int $id, array $meta, string $created_via = '' ): void {
+				( new \WCPOS\WooCommercePOS\Sync\Mutation_Store() )->persist_order_audit_meta( $id, $meta, $created_via );
+			}
+		};
+		$current = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+		$envelope = $this->envelope( array(
+			'collection' => 'orders',
+			'operation' => 'update',
+			'baseRevision' => Order_Serializer::canonical_revision( $current ),
+			'payload' => $payload,
+		) );
+		return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+	}
+
+	/**
+	 * A line edit holds the order lock from the revision read through the write (ADR 0040 rule 6b):
+	 * a lock held by a money command answers a retryable 409 with nothing written.
+	 */
+	public function test_line_edit_push_is_refused_409_while_another_writer_holds_the_order_lock(): void {
+		// Arrange: a POS order with a line, and another owner holding its order lock.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$item_id        = array_key_first( $order->get_items() );
+		$quantity       = $order->get_item( $item_id )->get_quantity();
+		$payload        = array(
+			'customer_note' => 'Must wait',
+			'line_items'    => array( array( 'id' => $item_id, 'quantity' => $quantity + 2 ) ),
+		);
+		$store          = new Fake_Mutation_Store();
+		$store->resolve = $order->get_id();
+		$push           = function () use ( $store, $order, $payload ) {
+			$current  = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+			$envelope = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => Order_Serializer::canonical_revision( $current ), 'payload' => $payload ) );
+			return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+		};
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+
+		// Act.
+		try {
+			$refused = $push();
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+
+		// Assert: refused before anything was written, the reservation released for a retry.
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_error_code() );
+		$this->assertSame( 409, $refused->get_error_data()['status'] );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_customer_note() );
+		$this->assertSame( $quantity, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
+		$this->assertNull( $store->lookup( 'orders', self::MID ) );
+
+		// Act: the same push once the lock is free.
+		$retried = $push();
+
+		// Assert.
+		$this->assertNotInstanceOf( WP_Error::class, $retried );
+		$this->assertLessThan( 300, $retried->get_status() );
+		$this->assertSame( 'Must wait', wc_get_order( $order->get_id() )->get_customer_note() );
+		$this->assertSame( $quantity + 2, wc_get_order( $order->get_id() )->get_item( $item_id )->get_quantity() );
+	}
+
+	/** A push that moves no money (a note) is not held up by a money command on the order. */
+	public function test_note_only_push_proceeds_while_the_order_lock_is_held(): void {
+		// Arrange.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$store          = new Fake_Mutation_Store();
+		$store->resolve = $order->get_id();
+		$current        = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+		$envelope       = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => Order_Serializer::canonical_revision( $current ), 'payload' => array( 'customer_note' => 'Goes through' ) ) );
+		$lock           = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+
+		// Act.
+		try {
+			$result = ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+
+		// Assert.
+		$this->assertNotInstanceOf( WP_Error::class, $result );
+		$this->assertLessThan( 300, $result->get_status() );
+		$this->assertSame( 'Goes through', wc_get_order( $order->get_id() )->get_customer_note() );
+	}
+
+	/**
+	 * An address push waits for the order lock too: wc/v3 recalculates the totals whenever
+	 * billing or shipping is sent, so an address change can move tax and total (ADR 0040 rule 6b).
+	 */
+	public function test_address_only_push_waits_for_the_order_lock(): void {
+		// Arrange: a POS order, and another owner holding its order lock.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$city           = $order->get_billing_city();
+		$store          = new Fake_Mutation_Store();
+		$store->resolve = $order->get_id();
+		$push           = function () use ( $store, $order ) {
+			$current  = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+			$envelope = $this->envelope(
+				array(
+					'collection'   => 'orders',
+					'operation'    => 'update',
+					'baseRevision' => Order_Serializer::canonical_revision( $current ),
+					'payload'      => array( 'billing' => array( 'city' => 'Elsewhere' ) ),
+				)
+			);
+			return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
+		};
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+
+		// Act.
+		try {
+			$refused = $push();
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+
+		// Assert: refused before anything was written.
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $refused->get_error_code() );
+		$this->assertSame( 409, $refused->get_error_data()['status'] );
+		$this->assertSame( $city, wc_get_order( $order->get_id() )->get_billing_city() );
+
+		// Act: the same push once the lock is free.
+		$retried = $push();
+
+		// Assert.
+		$this->assertNotInstanceOf( WP_Error::class, $retried );
+		$this->assertLessThan( 300, $retried->get_status() );
+		$this->assertSame( 'Elsewhere', wc_get_order( $order->get_id() )->get_billing_city() );
+	}
+
+	public function test_create_full_provenance_tuple_is_stored_with_received_time(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$tuple = $this->provenance_tuple();
+		$before = time();
+		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$this->assertSame( 201, $result->get_status() );
+		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+		foreach ( $tuple as $key => $value ) {
+			$this->assertSame( $value, $order->get_meta( $key ), $key );
+		}
+		$this->assertGreaterThanOrEqual( $before, strtotime( $order->get_meta( '_wcpos_sale_received_gmt' ) ) );
+		$this->assertLessThanOrEqual( time(), strtotime( $order->get_meta( '_wcpos_sale_received_gmt' ) ) );
+	}
+
+	/**
+	 * An unpaid sale with no provenance yet takes the till's tuple and a receipt time from the push.
+	 * Under ADR 0040 the push carries no money, so the sale completes later through a money command
+	 * against an order whose provenance is already stored; a `set_paid` in the push completes nothing.
+	 */
+	public function test_update_unpaid_sale_fills_missing_provenance_and_completes_nothing(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+		$order->calculate_totals( false );
+		$order->save();
+		$tuple     = $this->provenance_tuple();
+		$completed = 0;
+		$recorder  = static function () use ( &$completed ) {
+			++$completed;
+		};
+		add_action( 'woocommerce_payment_complete', $recorder, 5 );
+		try {
+			$result = $this->update_provenance_order( $order, array_merge( $this->provenance_payload( $tuple ), array( 'set_paid' => true, 'payment_method' => 'pos_cash' ) ) );
+		} finally {
+			remove_action( 'woocommerce_payment_complete', $recorder, 5 );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		foreach ( $tuple as $key => $value ) {
+			$this->assertSame( $value, $order->get_meta( $key ), $key );
+		}
+		$this->assertNotEmpty( $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$this->assertSame( 0, $completed );
+		$this->assertSame( 'pending', $order->get_status() );
+	}
+
+	public function test_update_changed_provenance_is_refused_with_one_note(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$tuple = $this->provenance_tuple();
+		foreach ( $tuple as $key => $value ) {
+			$order->update_meta_data( $key, $value );
+		}
+		$order->update_meta_data( '_wcpos_sale_received_gmt', '2026-01-01T00:00:00Z' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertFalse( $order->needs_payment(), 'fixture must be a paid order' );
+		$result = $this->update_provenance_order(
+			$order,
+			$this->provenance_payload(
+				array(
+					'_wcpos_register' => wp_generate_uuid4(),
+					'_wcpos_till' => wp_generate_uuid4(),
+					'_wcpos_sale_counter' => '124',
+				)
+			)
+		);
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $tuple['_wcpos_register'], $order->get_meta( '_wcpos_register' ) );
+		$this->assertSame( $tuple['_wcpos_till'], $order->get_meta( '_wcpos_till' ) );
+		$this->assertSame( '123', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '2026-01-01T00:00:00Z', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$notes = array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed after the sale:' ) ) );
+		$this->assertCount( 1, $notes );
+		$this->assertStringContainsString( '_wcpos_register', $notes[0] );
+		$this->assertStringContainsString( '_wcpos_till', $notes[0] );
+		$this->assertStringContainsString( '_wcpos_sale_counter', $notes[0] );
+	}
+
+	public function test_update_unpaid_order_restamps_provenance_and_received_time(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$tuple = $this->provenance_tuple();
+		foreach ( $tuple as $key => $value ) {
+			$order->update_meta_data( $key, $value );
+		}
+		$order->update_meta_data( '_wcpos_sale_received_gmt', '2026-01-01T00:00:00Z' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment(), 'fixture must still need payment' );
+		$register = wp_generate_uuid4();
+		$result   = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => $register, '_wcpos_sale_counter' => '124' ) ) );
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $register, $order->get_meta( '_wcpos_register' ) );
+		$this->assertSame( '124', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertNotSame( '2026-01-01T00:00:00Z', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed' ) ) ) );
+	}
+
+	public function test_update_open_order_empty_register_clears_meta(): void {
+		// Arrange.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->update_meta_data( '_wcpos_register', wp_generate_uuid4() );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment() );
+		$notes = $this->noteContents( $order->get_id() );
+
+		// Act.
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => '' ) ) );
+
+		// Assert: removing the clear branch must leave the stored register and fail here.
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertFalse( $order->meta_exists( '_wcpos_register' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+	}
+
+	public function test_update_paid_order_empty_register_keeps_meta(): void {
+		// Arrange.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$register = wp_generate_uuid4();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_wcpos_register', $register );
+		$order->save();
+		$this->assertFalse( wc_get_order( $order->get_id() )->needs_payment() );
+		$notes = $this->noteContents( $order->get_id() );
+
+		// Act.
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => '' ) ) );
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $register, $order->get_meta( '_wcpos_register' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+	}
+
+	public function test_create_loose_sale_time_shapes_are_dropped(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		foreach ( array( '2026-6-1 12:00+02:00', 'tomorrow +00:00', '2026-06-01T12:00:00', '2026-02-30T12:00:00+02:00' ) as $shape ) {
+			$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( array( '_wcpos_sale_time' => $shape ) ) ) );
+			$this->assertSame( 201, $result->get_status() );
+			$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+			$this->assertSame( '', $order->get_meta( '_wcpos_sale_time' ), $shape );
+		}
+	}
+
+	public function test_update_paid_order_never_gains_a_missing_provenance_key(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertFalse( $order->needs_payment() );
+		$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_sale_counter' => '9' ) ) );
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+	}
+
+	public function test_payment_completing_between_pre_read_and_write_refuses_provenance_with_a_note(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+		$order->calculate_totals( false );
+		$order->save();
+		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment() );
+		// Simulate a gateway completing the order after the writer's pre-read.
+		$race = static function ( $incoming ) use ( $order ) {
+			if ( $incoming instanceof \WC_Order && $incoming->get_id() === $order->get_id() ) {
+				$incoming->set_status( 'completed' );
+			}
+			return $incoming;
+		};
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
+		try {
+			$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_sale_counter' => '77', '_wcpos_register' => wp_generate_uuid4() ) ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_counter' ) );
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$notes = array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS provenance keys cannot be changed after the sale:' ) ) );
+		$this->assertCount( 1, $notes );
+		$this->assertStringContainsString( '_wcpos_sale_counter', $notes[0] );
+	}
+
+	public function test_create_far_future_sale_time_is_kept(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$tuple  = array( '_wcpos_sale_time' => '2031-06-01T12:00:00+02:00' );
+		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$this->assertSame( 201, $result->get_status() );
+		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+		$this->assertSame( '2031-06-01T12:00:00+02:00', $order->get_meta( '_wcpos_sale_time' ) );
+		$this->assertNotSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
+	}
+
+	public function test_create_invalid_provenance_is_silently_dropped(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$tuple = array(
+			'_wcpos_register' => 'bad',
+			'_wcpos_till' => 'bad',
+			'_wcpos_session' => 'bad',
+			'_wcpos_sale_time' => '2026-01-01T12:00:00',
+			'_wcpos_sale_tz' => 'Not/AZone',
+			'_wcpos_sale_counter' => '0',
+		);
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload' => $this->provenance_payload( $tuple ),
+			)
+		);
+		$this->assertSame( 201, $result->get_status() );
+		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
+		foreach ( $tuple as $key => $value ) {
+			$this->assertSame( '', $order->get_meta( $key ), $key );
+		}
+		$this->assertSame( '', $order->get_meta( '_wcpos_sale_received_gmt' ) );
 	}
 
 	public function test_unknown_collection_is_rejected_400_without_reserving(): void {
@@ -571,52 +988,6 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		return $product ? (string) $product->get_description() : '';
 	}
 
-	public function test_order_edit_permission_respects_order_ownership(): void {
-		$cashier_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$other_id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$cashier    = get_user_by( 'id', $cashier_id );
-		$cashier->add_cap( 'access_woocommerce_pos' );
-		$cashier->add_cap( 'edit_shop_orders' );
-		$cashier->remove_cap( 'edit_others_shop_orders' );
-		$own_order_id   = $this->orderAssignedTo( $cashier_id );
-		$other_order_id = $this->orderAssignedTo( $other_id );
-		$web_order_id   = $this->orderAssignedTo( 0 );
-		wp_set_current_user( $cashier_id );
-		$controller = new Write_Controller( new Fake_Mutation_Store() );
-
-		$this->assertTrue( $controller->wcpos_check_permissions( false, 'edit', $own_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $other_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'edit', $web_order_id, 'shop_order' ) );
-	}
-
-	public function test_order_delete_permission_respects_order_ownership(): void {
-		$cashier_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$other_id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$cashier    = get_user_by( 'id', $cashier_id );
-		$cashier->add_cap( 'access_woocommerce_pos' );
-		$cashier->add_cap( 'delete_shop_orders' );
-		$cashier->remove_cap( 'delete_others_shop_orders' );
-		$own_order_id   = $this->orderAssignedTo( $cashier_id );
-		$other_order_id = $this->orderAssignedTo( $other_id );
-		$web_order_id   = $this->orderAssignedTo( 0 );
-		wp_set_current_user( $cashier_id );
-		$controller = new Write_Controller( new Fake_Mutation_Store() );
-
-		$this->assertTrue( $controller->wcpos_check_permissions( false, 'delete', $own_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'delete', $other_order_id, 'shop_order' ) );
-		$this->assertFalse( $controller->wcpos_check_permissions( false, 'delete', $web_order_id, 'shop_order' ) );
-	}
-
-	/** An order assigned to $cashier_id via `_pos_user`, or a web order (no cashier) for 0. */
-	private function orderAssignedTo( int $cashier_id ): int {
-		$order = wc_create_order();
-		if ( $cashier_id > 0 ) {
-			$order->update_meta_data( '_pos_user', (string) $cashier_id );
-			$order->save_meta_data();
-		}
-		return $order->get_id();
-	}
-
 	/**
 	 * The shop_order re-map grants nothing beyond the user's own role caps: a user
 	 * without any shop_orders capabilities keeps every order context denied.
@@ -834,7 +1205,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			array(
 				'collection' => 'orders',
 				'payload'    => array(
-					'status'     => 'processing',
+					'status'     => 'pending',
 					'line_items' => array(
 						array(
 							'product_id' => $product->get_id(),
@@ -962,136 +1333,6 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertNotSame( '999', $order->get_meta( '_pos_user' ) );
 	}
 
-	public function test_offline_completed_create_snapshots_cashier_and_tender_at_payment_complete(): void {
-		// An offline-completed sale arrives as ONE create carrying set_paid — so
-		// woocommerce_payment_complete fires INSIDE the forwarded create. Cashier
-		// and tender stamps must already be available to those payment observers.
-		// JWT-armed like the tax test.
-		$cashier_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $cashier_id );
-		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $cashier_id ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-
-		$seen = null;
-		$recorder = static function ( $order_id ) use ( &$seen ) {
-			$order = wc_get_order( $order_id );
-			if ( $order && null === $seen ) {
-				$unrelated = apply_filters( 'woocommerce_rest_pre_insert_shop_order_object', new \WC_Order(), new WP_REST_Request( 'POST', '/wc/v3/orders' ), true );
-				$seen = array(
-					'user'               => (string) $order->get_meta( '_pos_user' ),
-					'creator'            => (string) $order->get_meta( '_pos_user_created' ),
-					'tendered'           => (string) $order->get_meta( '_pos_cash_amount_tendered' ),
-					'unrelated_user'      => (string) $unrelated->get_meta( '_pos_user' ),
-					'unrelated_tendered'  => (string) $unrelated->get_meta( '_pos_cash_amount_tendered' ),
-				);
-			}
-		};
-		add_action( 'woocommerce_payment_complete', $recorder, 5 );
-
-		try {
-			$created = $this->push(
-				new Fake_Mutation_Store(),
-				array(
-					'collection' => 'orders',
-					'payload'    => array(
-						'set_paid'  => true,
-						'fee_lines' => array(
-							array(
-								'name'  => 'Offline sale',
-								'total' => '10.00',
-							),
-						),
-						'meta_data' => array(
-							array(
-								'key'   => '_pos_cash_amount_tendered',
-								'value' => '20.00',
-							),
-						),
-					),
-				)
-			);
-		} finally {
-			remove_action( 'woocommerce_payment_complete', $recorder, 5 );
-			unset( $_SERVER['HTTP_AUTHORIZATION'] );
-		}
-
-		$this->assertSame( 201, $created->get_status(), 'push response: ' . wp_json_encode( $created->get_data() ) );
-		$this->assertNotNull( $seen, 'payment_complete must fire for a set_paid create' );
-		$this->assertSame( (string) $cashier_id, $seen['user'], 'cashier must be attributed AT payment_complete time' );
-		$this->assertSame( (string) $cashier_id, $seen['creator'] );
-		$this->assertSame( '20.00', $seen['tendered'], 'cash tender must be visible AT payment_complete time' );
-		$this->assertSame( '', $seen['unrelated_user'], 'temporary create filter must not attribute an unrelated order' );
-		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary create filter must not stamp tender on an unrelated order' );
-	}
-
-	public function test_update_completing_payment_fills_missing_audit_meta_before_payment_complete(): void {
-		// A pos-open order completed by an update that carries set_paid + the cash
-		// tender: the fill-if-absent stamps must be on the order DURING the inner
-		// wc/v3 update, not only in the post-forward stamps — payment_complete
-		// observers fire inside the forward.
-		$cashier_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $cashier_id );
-		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . Auth::instance()->generate_access_token( get_user_by( 'id', $cashier_id ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'woocommerce-pos' );
-		// Simulate a legacy POS order with no cashier attribution and no tender.
-		$order->delete_meta_data( '_pos_user' );
-		$order->delete_meta_data( '_pos_user_created' );
-		$order->delete_meta_data( '_pos_cash_amount_tendered' );
-		$order->set_status( 'pending' );
-		// needs_payment() requires total > 0 or wc/v3 skips payment_complete on set_paid.
-		$order->calculate_totals( false );
-		$order->save();
-		$this->assertTrue( $order->needs_payment(), 'fixture must be payable for set_paid to fire payment_complete' );
-
-		$seen = null;
-		$recorder = static function ( $order_id ) use ( &$seen ) {
-			$updated = wc_get_order( $order_id );
-			if ( $updated && null === $seen ) {
-				$unrelated = apply_filters( 'woocommerce_rest_pre_insert_shop_order_object', new \WC_Order(), new WP_REST_Request( 'PUT', '/wc/v3/orders/999999' ), false );
-				$seen = array(
-					'user'               => (string) $updated->get_meta( '_pos_user' ),
-					'creator'            => (string) $updated->get_meta( '_pos_user_created' ),
-					'tendered'           => (string) $updated->get_meta( '_pos_cash_amount_tendered' ),
-					'unrelated_user'      => (string) $unrelated->get_meta( '_pos_user' ),
-					'unrelated_tendered'  => (string) $unrelated->get_meta( '_pos_cash_amount_tendered' ),
-				);
-			}
-		};
-		add_action( 'woocommerce_payment_complete', $recorder, 5 );
-
-		try {
-			$updated = $this->updateOrder(
-				$order,
-				array(
-					'set_paid'  => true,
-					'meta_data' => array(
-						array(
-							'key'   => '_pos_cash_amount_tendered',
-							'value' => '55.00',
-						),
-					),
-				)
-			);
-		} finally {
-			remove_action( 'woocommerce_payment_complete', $recorder, 5 );
-			unset( $_SERVER['HTTP_AUTHORIZATION'] );
-		}
-
-		$this->assertSame( 200, $updated->get_status(), 'push response: ' . wp_json_encode( $updated->get_data() ) );
-		$this->assertNotNull(
-			$seen,
-			'payment_complete must fire for a set_paid update; post-update status: '
-			. wc_get_order( $order->get_id() )->get_status()
-			. ' needs_payment-was: ' . wp_json_encode( $order->needs_payment() )
-		);
-		$this->assertSame( (string) $cashier_id, $seen['user'], 'missing cashier must be filled AT payment_complete time' );
-		$this->assertSame( (string) $cashier_id, $seen['creator'], 'missing creator must be filled AT payment_complete time' );
-		$this->assertSame( '55.00', $seen['tendered'], 'cash tender must be visible AT payment_complete time' );
-		$this->assertSame( '', $seen['unrelated_user'], 'temporary update filter must not attribute an unrelated order' );
-		$this->assertSame( '', $seen['unrelated_tendered'], 'temporary update filter must not stamp tender on an unrelated order' );
-	}
-
 	public function test_store_reassignment_respects_the_authorization_filter(): void {
 		// #1550: v1 applied a store change only after Pro authorization; the v2
 		// default stays permissive (free single-store) but the filter must be
@@ -1103,7 +1344,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$order->update_meta_data( '_pos_store', '5' );
 		$order->save();
 
-		add_filter( 'woocommerce_pos_order_store_reassignment_allowed', '__return_false' );
+		add_filter( 'wcpos_order_store_reassignment_allowed', '__return_false' );
 		try {
 			$updated = $this->updateOrder(
 				$order,
@@ -1117,7 +1358,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				)
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_order_store_reassignment_allowed', '__return_false' );
+			remove_filter( 'wcpos_order_store_reassignment_allowed', '__return_false' );
 		}
 
 		$this->assertSame( 200, $updated->get_status(), 'push response: ' . wp_json_encode( $updated->get_data() ) );
@@ -1254,7 +1495,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			new Fake_Mutation_Store(),
 			array(
 				'collection' => 'orders',
-				'payload'    => array( 'status' => 'processing' ),
+				'payload'    => array( 'status' => 'pending' ),
 			)
 		);
 
@@ -1386,7 +1627,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'operation'    => 'update',
 				'mutationId'   => '00000000-0000-4000-8000-00000000f002',
 				'baseRevision' => $updated->get_data()['currentRevision'],
-				'payload'      => array( 'status' => 'completed' ),
+				'payload'      => array( 'status' => 'on-hold' ),
 			)
 		);
 
@@ -1982,12 +2223,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$order = OrderHelper::create_order();
 		$order->update_meta_data( '_woocommerce_pos_version', 'trusted-version' );
+		$order->update_meta_data( '_wcpos_receipt_print_count', 2 );
 		$order->save();
 
 		$result = $this->updateOrder(
 			$order,
 			array(
-				'status'      => 'completed',
+				'status'      => 'on-hold',
 				'created_via' => 'online',
 				'meta_data'   => array(
 					array(
@@ -2001,6 +2243,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 					array(
 						'key'   => '_woocommerce_pos_version',
 						'value' => 'forged-version',
+					),
+					array(
+						'key'   => '_wcpos_receipt_print_count',
+						'value' => '999',
 					),
 					array(
 						'key'   => 'custom',
@@ -2023,6 +2269,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertNotContains( '_pos_user', $keys );
 		$this->assertNotContains( '_pos_store', $keys );
 		$this->assertNotContains( '_woocommerce_pos_version', $keys );
+		$this->assertNotContains( '_wcpos_receipt_print_count', $keys );
+		$this->assertSame( 2, (int) wc_get_order( $order->get_id() )->get_meta( '_wcpos_receipt_print_count' ) );
 		$this->assertContains( 'custom', $keys );
 		$this->assertArrayNotHasKey( 'created_via', $body );
 		$this->assertSame( 'trusted-version', wc_get_order( $order->get_id() )->get_meta( '_woocommerce_pos_version' ) );
@@ -2382,7 +2630,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'collection'   => 'orders',
 				'operation'    => 'update',
 				'baseRevision' => $previous_revision,
-				'payload'      => array( 'status' => 'completed' ),
+				'payload'      => array( 'status' => 'on-hold' ),
 			)
 		);
 
@@ -2407,7 +2655,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'collection' => 'orders',
 				'operation' => 'update',
 				'baseRevision' => '2026-07-01T10:00:00',
-				'payload' => array( 'status' => 'completed' ),
+				'payload' => array( 'status' => 'on-hold' ),
 			)
 		);
 		$this->assertSame( 409, $result->get_status() );
@@ -2432,7 +2680,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'collection' => 'orders',
 				'operation' => 'update',
 				'baseRevision' => $revision,
-				'payload' => array( 'status' => 'completed' ),
+				'payload' => array( 'status' => 'on-hold' ),
 			)
 		);
 
@@ -2736,6 +2984,39 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array( self::MID ), $store->released ); // reservation released (failure)
 	}
 
+	public function test_order_update_with_a_failed_current_read_carries_no_order_key(): void {
+		// Arrange: a real order (so the POS links could be built) whose current read is refused.
+		list( $order_id ) = $this->real_order_payload();
+		$order_key = wc_get_order( $order_id )->get_order_key();
+		$store = new Fake_Mutation_Store();
+		$store->resolve = $order_id;
+		$this->setRestResponse(
+			array(
+				'code' => 'woocommerce_rest_cannot_view',
+				'message' => 'Sorry, you cannot view this resource.',
+			),
+			403
+		);
+
+		// Act.
+		$result = $this->push(
+			$store,
+			array(
+				'collection'   => 'orders',
+				'operation'    => 'update',
+				'baseRevision' => 'sha256:whatever',
+				'payload'      => array( 'status' => 'on-hold' ),
+			)
+		);
+
+		// Assert: the refusal is propagated, and the error body carries no pay or receipt link.
+		$this->assertInstanceOf( WP_REST_Response::class, $result );
+		$this->assertSame( 403, $result->get_status() );
+		$this->assertSame( 'woocommerce_rest_cannot_view', $result->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'links', $result->get_data() );
+		$this->assertStringNotContainsString( $order_key, (string) wp_json_encode( $result->get_data() ) );
+	}
+
 	public function test_delete_already_gone_is_idempotent_success(): void {
 		$store = new Fake_Mutation_Store(); // resolve=0 ⇒ already gone
 		$result = $this->push(
@@ -2911,7 +3192,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		}
 		$last = $wpdb->get_row(
 			$wpdb->prepare(
-				'SELECT deleted FROM ' . $journal->table_name() . " WHERE object_type = 'product' AND object_id = %d AND sequence > %d ORDER BY sequence DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+				'SELECT deleted FROM ' . $journal->table_name() . " WHERE object_type = 'product' AND object_id = %d AND sequence > %d ORDER BY sequence DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
 				$parent_id,
 				$cursor
 			)

@@ -19,6 +19,24 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Receipt_Date_Formatter extends WP_UnitTestCase {
+	/** The offline hint preserves both the server clock and its padding. */
+	public function test_hour_token_preserves_wordpress_padding(): void {
+		$original = get_option( 'time_format' );
+		try {
+			foreach ( array(
+				'g:i A' => 'h',
+				'h:i A' => 'hh',
+				'G:i' => 'H',
+				'H:i' => 'HH',
+			) as $format => $token ) {
+				update_option( 'time_format', $format );
+				$this->assertSame( $token, Receipt_Date_Formatter::hour_token() );
+			}
+		} finally {
+			update_option( 'time_format', $original );
+		}
+	}
+
 	/**
 	 * Test formatter returns rich display fields for a timestamp.
 	 */

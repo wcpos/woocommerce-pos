@@ -53,14 +53,14 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 				'role'       => 'cashier',
 			)
 		);
-		add_filter( 'woocommerce_pos_authenticate_user', array( $this, 'authentication_sentinel' ), 10 );
+		add_filter( 'wcpos_authenticate_user', array( $this, 'authentication_sentinel' ), 10 );
 	}
 
 	/**
 	 * Restore request state and remove the test authentication filter.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_authenticate_user', array( $this, 'authentication_sentinel' ), 10 );
+		remove_filter( 'wcpos_authenticate_user', array( $this, 'authentication_sentinel' ), 10 );
 		delete_transient( 'wcpos_auth_session_' . md5( $this->state . 'wcpos://' ) );
 		unset( $_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['HTTP_CF_CONNECTING_IP'] );
 		list( $_REQUEST, $_SERVER, $_POST ) = $this->request;

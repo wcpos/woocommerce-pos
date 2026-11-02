@@ -34,7 +34,7 @@ class Test_Consent extends WP_UnitTestCase {
 	 * Set up each test.
 	 */
 	public function setUp(): void {
-		// The consent REST routes are now gated behind woocommerce_pos_request()
+		// The consent REST routes are now gated behind wcpos_request()
 		// (see Consent::register_routes). The real call path carries the WCPOS
 		// flag, so set it before any rest_api_init for the routes to register.
 		// wcpos_request() reads the request headers via getallheaders().
@@ -232,7 +232,7 @@ class Test_Consent extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
 			'allowed',
-			woocommerce_pos_get_settings( 'general', 'tracking_consent' )
+			wcpos_get_settings( 'general', 'tracking_consent' )
 		);
 		$this->assertFalse(
 			get_transient( Consent::MODAL_TRANSIENT ),
@@ -253,7 +253,7 @@ class Test_Consent extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
 			'denied',
-			woocommerce_pos_get_settings( 'general', 'tracking_consent' )
+			wcpos_get_settings( 'general', 'tracking_consent' )
 		);
 	}
 
@@ -268,17 +268,6 @@ class Test_Consent extends WP_UnitTestCase {
 
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'wcpos_consent_invalid', $result->get_error_code() );
-	}
-
-	/**
-	 * The REST route is registered under the WCPOS namespace at rest_api_init.
-	 */
-	public function test_rest_route_is_registered(): void {
-		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
-		do_action( 'rest_api_init' );
-
-		$routes = rest_get_server()->get_routes();
-		$this->assertArrayHasKey( '/wcpos/v1/consent', $routes );
 	}
 
 	/**
@@ -298,7 +287,7 @@ class Test_Consent extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
 			'allowed',
-			woocommerce_pos_get_settings( 'general', 'tracking_consent' )
+			wcpos_get_settings( 'general', 'tracking_consent' )
 		);
 	}
 
@@ -321,7 +310,7 @@ class Test_Consent extends WP_UnitTestCase {
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame(
 			'undecided',
-			woocommerce_pos_get_settings( 'general', 'tracking_consent' ),
+			wcpos_get_settings( 'general', 'tracking_consent' ),
 			'Denied request must not persist a choice.'
 		);
 	}
@@ -444,7 +433,7 @@ class Test_Consent extends WP_UnitTestCase {
 
 		$this->assertSame(
 			'undecided',
-			woocommerce_pos_get_settings( 'general', 'tracking_consent' ),
+			wcpos_get_settings( 'general', 'tracking_consent' ),
 			'Dismiss must not record a consent decision.'
 		);
 	}
@@ -542,7 +531,7 @@ class Test_Consent extends WP_UnitTestCase {
 	 * matching the rest of /wcpos/v1/. register_routes returns early.
 	 */
 	public function test_routes_not_registered_without_wcpos_flag(): void {
-		// Arrange: clear the flag so woocommerce_pos_request() is false when
+		// Arrange: clear the flag so wcpos_request() is false when
 		// rest_api_init fires, on a fresh REST server.
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- resetting the REST server for an isolated registration run.

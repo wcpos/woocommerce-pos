@@ -10,6 +10,7 @@ column and a fixed amount column on the right; do not replace the star
 columns with hard-coded numeric widths.
 -->
 <receipt paper-width="32">
+  {{#fiscal.is_reprint}}<align mode="center"><bold><text align="center" bold="true">{{i18n.copy}} {{fiscal.reprint_count}} · {{order.printed.datetime}}</text></bold></align>{{/fiscal.is_reprint}}
 
   <!-- ── Logo + store identity ─────────────── -->
   {{#store.logo}}
@@ -34,9 +35,15 @@ columns with hard-coded numeric widths.
   </align>
   <line />
 
+  {{#fiscal.is_refund_document}}
+  <align mode="center">
+    <bold><text>{{fiscal.document_label}}</text></bold>
+    {{#fiscal.corrects}}<text>{{i18n.corrects}} {{fiscal.corrects}}</text>{{/fiscal.corrects}}
+  </align>
+  {{/fiscal.is_refund_document}}
   <!-- ── Order info ─────────────── -->
-  <text>{{i18n.order}}: #{{order.number}}</text>
-  <text>{{i18n.date}}: {{order.created.datetime}}</text>
+  {{#order.number}}<text>{{i18n.order}}: #{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</text>{{/order.number}}
+  <text>{{i18n.date}}: {{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</text>
   {{#cashier.name}}<text>{{i18n.cashier}}: {{cashier.name}}</text>{{/cashier.name}}
   {{#customer.name}}<text>{{i18n.customer}}: {{customer.name}}</text>{{/customer.name}}
 
@@ -121,7 +128,7 @@ columns with hard-coded numeric widths.
   <!-- ── Payments ─────────────── -->
   {{#payments.0}}
   <line style="dashed" />
-  <bold><text>{{i18n.paid}}</text></bold>
+  <bold><text>{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</text></bold>
   {{/payments.0}}
   {{#payments}}
   <row>
@@ -145,8 +152,14 @@ columns with hard-coded numeric widths.
   <!-- ── Order barcode ─────────────── -->
   <feed lines="1" />
   <align mode="center">
-    <barcode type="code128" height="40">{{order.number}}</barcode>
+    {{#order.number}}<barcode type="code128" height="40">{{order.number}}</barcode>{{/order.number}}
   </align>
+
+  {{#fiscal.qr_payload}}<align mode="center"><qrcode size="4">{{fiscal.qr_payload}}</qrcode></align>{{/fiscal.qr_payload}}
+  {{#register.name}}<align mode="center"><text>{{i18n.register}}: {{register.name}}</text></align>{{/register.name}}
+  {{#fiscal.receipt_number}}<align mode="center"><text>#{{fiscal.receipt_number}}</text></align>{{/fiscal.receipt_number}}
+  {{#fiscal.sale_time.datetime}}<align mode="center"><text>{{i18n.sale_time}}: {{fiscal.sale_time.datetime}}</text></align>{{/fiscal.sale_time.datetime}}
+  {{#software.name}}<align mode="center"><text>{{software.name}} {{software.plugin_version}}{{#software.app_version}} · {{software.app_version}}{{/software.app_version}}</text></align>{{/software.name}}
 
   <!-- ── Personal note ─────────────── -->
   <feed lines="1" />

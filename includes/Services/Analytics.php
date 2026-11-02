@@ -130,7 +130,7 @@ class Analytics {
 		}
 
 		// The PERSISTED consent, not the filtered read view — otherwise any
-		// plugin filtering woocommerce_pos_general_settings could switch
+		// plugin filtering wcpos_general_settings could switch
 		// telemetry on for a merchant who declined it. Same gate as
 		// Services\Error_Reporter.
 		$consent             = Settings::instance()->raw_tracking_consent();
@@ -327,7 +327,7 @@ class Analytics {
 	 * Get the PostHog project token.
 	 *
 	 * Allows override via constant (`WCPOS_POSTHOG_TOKEN`) or filter
-	 * (`woocommerce_pos_posthog_token`) for self-hosted deployments.
+	 * (`wcpos_posthog_token`) for self-hosted deployments.
 	 */
 	public function get_token(): string {
 		$token = \defined( 'WCPOS_POSTHOG_TOKEN' ) ? (string) \WCPOS_POSTHOG_TOKEN : self::DEFAULT_TOKEN;
@@ -339,14 +339,15 @@ class Analytics {
 		 *
 		 * @param string $token The default project token.
 		 */
-		return (string) apply_filters( 'woocommerce_pos_posthog_token', $token );
+		$filtered = apply_filters( 'wcpos_posthog_token', $token );
+		return (string) apply_filters_deprecated( 'woocommerce_pos_posthog_token', array( $filtered ), '2.0.0', 'wcpos_posthog_token' );
 	}
 
 	/**
 	 * Get the PostHog host URL.
 	 *
 	 * Allows override via constant (`WCPOS_POSTHOG_HOST`) or filter
-	 * (`woocommerce_pos_posthog_host`).
+	 * (`wcpos_posthog_host`).
 	 */
 	public function get_host(): string {
 		$host = \defined( 'WCPOS_POSTHOG_HOST' ) ? (string) \WCPOS_POSTHOG_HOST : self::DEFAULT_HOST;
@@ -358,7 +359,9 @@ class Analytics {
 		 *
 		 * @param string $host The default host URL.
 		 */
-		return untrailingslashit( (string) apply_filters( 'woocommerce_pos_posthog_host', $host ) );
+		$filtered = apply_filters( 'wcpos_posthog_host', $host );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_posthog_host', array( $filtered ), '2.0.0', 'wcpos_posthog_host' );
+		return untrailingslashit( (string) $filtered );
 	}
 
 	/**

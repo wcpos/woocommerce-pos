@@ -1,0 +1,31 @@
+{
+  "name": "dejavu",
+  "version": 1,
+  "license": "LICENSE",
+  "families": {
+    "dejavu sans": {
+      "normal": "DejaVuSans",
+      "bold": "DejaVuSans-Bold",
+      "italic": "DejaVuSans-Oblique",
+      "bold_italic": "DejaVuSans-Bold"
+    },
+    "dejavu sans mono": {
+      "normal": "DejaVuSansMono",
+      "bold": "DejaVuSansMono-Bold",
+      "italic": "DejaVuSansMono",
+      "bold_italic": "DejaVuSansMono-Bold"
+    }
+  },
+  "files": {
+    "DejaVuSans-Bold.ttf": "e6476c1b80502924294eed40894c5b18e06c181444ca953e5334262df9c27724",
+    "DejaVuSans-Bold.ufm": "7db5542a1d3767dbada39b7bdb69be104c27674a9455aeecb43636373d197f6f",
+    "DejaVuSans-Oblique.ttf": "4af75fa16ee6d3ad43e1ecec41862c24954af26a55c6bb1ebb27bd486a50f5f4",
+    "DejaVuSans-Oblique.ufm": "32ae0d1e8bfe5503d2b1d0e9804a05db0caf52c8f72d76930d136668bf62d6c7",
+    "DejaVuSans.ttf": "7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954",
+    "DejaVuSans.ufm": "2bac7acfea072267e034c64c564d701fbd368bd67eb16c10ddd856fd0b5a7845",
+    "DejaVuSansMono-Bold.ttf": "bce60f1b4421acd9ea51ba6623d7024ecbe6817a953e3654df62a5e6bdf8f769",
+    "DejaVuSansMono-Bold.ufm": "ee94bee18a8656bf7e0ed1bbf648bb0841c14862a9729f18b0e0301f079b9c02",
+    "DejaVuSansMono.ttf": "b4a6c3e4faab8773f4ff761d56451646409f29abedd68f05d38c2df667d3c582",
+    "DejaVuSansMono.ufm": "5ff9e15e4789ab096ce90cce7163c5a2f1e0fc660a5c71d9e936f7c6f94aaa80"
+  }
+}

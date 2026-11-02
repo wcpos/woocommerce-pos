@@ -235,7 +235,7 @@ class Test_Auth_Redirect_Uri extends WP_UnitTestCase {
 			$origins[] = $origin;
 			return 'https://wcpos--pr-42.expo.app' === $origin || $allowed;
 		};
-		add_filter( 'woocommerce_pos_auth_redirect_origin_allowed', $allow, 10, 2 );
+		add_filter( 'wcpos_auth_redirect_origin_allowed', $allow, 10, 2 );
 		try {
 			// Act.
 			$preview = $this->validate( 'https://WCPOS--PR-42.expo.app:443/cb' );
@@ -245,7 +245,7 @@ class Test_Auth_Redirect_Uri extends WP_UnitTestCase {
 			$this->assertSame( '', $other );
 			$this->assertSame( array( 'https://wcpos--pr-42.expo.app', 'https://wcpos--pr-43.expo.app' ), $origins );
 		} finally {
-			remove_filter( 'woocommerce_pos_auth_redirect_origin_allowed', $allow );
+			remove_filter( 'wcpos_auth_redirect_origin_allowed', $allow );
 		}
 	}
 }

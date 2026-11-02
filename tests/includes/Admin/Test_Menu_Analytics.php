@@ -50,7 +50,7 @@ class Test_Menu_Analytics extends WP_UnitTestCase {
 		$user = wp_get_current_user();
 		$user->add_cap( 'manage_woocommerce_pos' );
 
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 

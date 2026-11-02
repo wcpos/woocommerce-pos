@@ -9,11 +9,11 @@ namespace WCPOS\WooCommercePOS\API\V1;
 
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Logger;
-use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
-use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
+use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
 use WP_Error;
 use WP_Query;
 use WP_REST_Controller;
@@ -42,6 +42,22 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @var string
 	 */
 	protected $rest_base = 'templates';
+
+	/**
+	 * Declare the protocol-gate classification.
+	 *
+	 * The wp-admin settings screen calls this surface with cookie auth and no
+	 * client protocol claim, and its wire shape did not change at the 2.0.0
+	 * boundary, so the whole prefix is exempt from the gate on both namespaces.
+	 * The sync surface stays gated (#1868).
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array(
+			'protocol_exempt' => array( "/{$this->namespace}/{$this->rest_base}" ),
+		);
+	}
 
 	/**
 	 * Register routes.
@@ -77,7 +93,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description' => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'default'     => 'receipt',
-						'enum'        => array( 'receipt', 'report' ),
+						'enum'        => TemplatesManager::SUPPORTED_TYPES,
 					),
 				),
 			)
@@ -121,8 +137,14 @@ class Templates_Controller extends WP_REST_Controller {
 						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type for ordering.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
-						'enum'              => array( 'receipt', 'report' ),
+						'enum'              => TemplatesManager::SUPPORTED_TYPES,
 						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+					'active'          => array(
+						'description' => __( 'Enabled template ID to activate: a post ID or a virtual template key.', 'woocommerce-pos' ),
+						'type'              => array( 'integer', 'string' ),
+						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
 					'update'          => array(
@@ -207,7 +229,7 @@ class Templates_Controller extends WP_REST_Controller {
 						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
-						'enum'              => array( 'receipt', 'report' ),
+						'enum'              => TemplatesManager::SUPPORTED_TYPES,
 						'sanitize_callback' => 'sanitize_key',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
@@ -272,6 +294,19 @@ class Templates_Controller extends WP_REST_Controller {
 						'description' => /* translators: REST API schema field label or error message. */ __( 'Template ID to preview.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'required'    => true,
+					),
+					'type'     => array(
+						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
+						'type'              => 'string',
+						'default'           => 'receipt',
+						'enum'              => TemplatesManager::SUPPORTED_TYPES,
+						'sanitize_callback' => 'sanitize_key',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+					'report' => array(
+						'type' => 'string',
+						'default' => 'sales',
+						'sanitize_callback' => 'sanitize_key',
 					),
 					'order_id'  => array(
 						'description' => __( 'Order ID or "latest" for most recent POS order. Omit for sample data.', 'woocommerce-pos' ),
@@ -343,9 +378,28 @@ class Templates_Controller extends WP_REST_Controller {
 		// access_woocommerce_pos do not receive disabled or draft templates.
 		$is_manager = current_user_can( 'manage_woocommerce_pos' );
 		$enabled    = $store_id ? TemplatesManager::resolve_templates( (int) $store_id, $type ) : array();
-		$active_template_id = $store_id
-			? ( ! empty( $enabled ) ? $enabled[0]['id'] : null )
-			: TemplatesManager::get_active_template_id( $type );
+		// A store-scoped receipt list is active at its first enabled entry: the cashier picks
+		// among them. A display shows exactly one template, chosen the way the customer display
+		// resolves it at runtime: the store's first enabled choice when the store's own override
+		// names it, otherwise the global Live. The list must say what the screen shows.
+		if ( ! $store_id ) {
+			$active_template_id = TemplatesManager::get_active_template_id( $type );
+		} elseif ( 'display' === $type ) {
+			$first              = $enabled[0]['id'] ?? null;
+			$chosen             = null !== $first && in_array( (string) $first, TemplatesManager::get_store_template_ids( (int) $store_id, $type ), true );
+			$active_template_id = $chosen ? $first : TemplatesManager::get_active_template_id( $type );
+		} else {
+			$active_template_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		}
+
+		// A display shows exactly one template and the gallery presents it as a "Live" radio, so the
+		// first-enabled fallback is pinned the first time the admin list resolves it; otherwise a
+		// reorder or Pro activation would move Live without anyone choosing it. Receipts keep the
+		// fallback (the cashier picks among enabled receipts, there is no single live one).
+		if ( ! $store_id && 'display' === $type && $is_manager && null !== $active_template_id
+			&& null === get_option( 'wcpos_active_template_' . $type, null ) ) {
+			TemplatesManager::set_active_template_id( $active_template_id, $type );
+		}
 
 		// Step 2: Build full template list.
 		// When store_id is set, use the resolved enabled list directly.
@@ -453,13 +507,7 @@ class Templates_Controller extends WP_REST_Controller {
 		$id   = $request['id'];
 		$type = $request->get_param( 'type' ) ?? 'receipt';
 
-		// Check if it's a numeric ID (database template).
-		if ( is_numeric( $id ) ) {
-			$template = TemplatesManager::get_template( (int) $id );
-		} else {
-			// It's a virtual template ID.
-			$template = TemplatesManager::get_virtual_template( $id, $type );
-		}
+		$template = TemplatesManager::find_template( $id, $type );
 
 		if ( ! $template ) {
 			return new WP_Error(
@@ -470,8 +518,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$enabled = TemplatesManager::get_enabled_templates( $template['type'] ?? 'receipt' );
-		$active_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		$active_id             = TemplatesManager::get_active_template_id( $template['type'] ?? 'receipt' );
 		$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
@@ -561,8 +608,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$enabled = TemplatesManager::get_enabled_templates( $template['type'] ?? 'receipt' );
-		$active_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		$active_id             = TemplatesManager::get_active_template_id( $template['type'] ?? 'receipt' );
 		$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
@@ -577,6 +623,22 @@ class Templates_Controller extends WP_REST_Controller {
 	 */
 	public function batch_items( $request ) {
 		$type = $request->get_param( 'type' ) ?? 'receipt';
+
+		// `active` is validated against the enabled set this batch will leave behind — current
+		// enabled ids, plus virtual templates it enables and database templates it publishes,
+		// minus the ones it disables or drafts — before anything is written, so an invalid id
+		// rejects the whole request without a partial write.
+		$has_active = $request->has_param( 'active' );
+		if ( $has_active ) {
+			$active = $request->get_param( 'active' );
+			if ( ! \in_array( (string) $active, $this->projected_enabled_ids( $request, $type ), true ) ) {
+				return new WP_Error(
+					'wcpos_template_invalid_active',
+					__( 'The active template must be enabled for this template type.', 'woocommerce-pos' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
 
 		// Handle order.
 		$order = $request->get_param( 'order' );
@@ -644,6 +706,10 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		if ( $has_active ) {
+			TemplatesManager::set_active_template_id( is_numeric( $active ) ? (int) $active : $active, $type );
+		}
+
 		// Build response.
 		$response_data = array();
 		if ( ! empty( $results ) ) {
@@ -656,10 +722,14 @@ class Templates_Controller extends WP_REST_Controller {
 			$response_data['disabled_virtual'] = TemplatesManager::get_disabled_virtual_templates( $type );
 		}
 
+		$has_non_update_ops = $has_active || \is_array( $order ) || \is_array( $disable_virtual ) || \is_array( $enable_virtual );
+		if ( $has_non_update_ops ) {
+			$response_data['active'] = TemplatesManager::get_active_template_id( $type );
+		}
+
 		$response = rest_ensure_response( $response_data );
 
 		// Return 400 only when the request contained nothing but update items and every one failed.
-		$has_non_update_ops = \is_array( $order ) || \is_array( $disable_virtual ) || \is_array( $enable_virtual );
 		if ( ! empty( $results ) && ! $has_non_update_ops ) {
 			$has_success = false;
 			foreach ( $results as $result_item ) {
@@ -675,6 +745,49 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		return $response;
+	}
+
+	/**
+	 * Enabled template ids of a type as they will stand once a batch request is applied.
+	 *
+	 * @param WP_REST_Request $request Batch request.
+	 * @param string          $type    Template type.
+	 *
+	 * @return string[] Template ids as strings.
+	 */
+	private function projected_enabled_ids( $request, string $type ): array {
+		$ids = array_map( 'strval', array_column( TemplatesManager::get_enabled_templates( $type ), 'id' ) );
+
+		$removed = array_map( 'strval', (array) $request->get_param( 'disable_virtual' ) );
+		foreach ( (array) $request->get_param( 'enable_virtual' ) as $vid ) {
+			if ( \is_string( $vid ) && TemplatesManager::get_virtual_template( $vid, $type ) ) {
+				$ids[] = $vid;
+			}
+		}
+
+		// Database updates: the last status for an id wins, and only templates of this type
+		// count — a display batch must not be able to make a receipt id "enabled" for display.
+		$statuses = array();
+		foreach ( (array) $request->get_param( 'update' ) as $item ) {
+			if ( \is_array( $item ) && ! empty( $item['id'] ) && is_numeric( $item['id'] ) && isset( $item['status'] ) ) {
+				$statuses[ (string) (int) $item['id'] ] = $item['status'];
+			}
+		}
+		foreach ( $statuses as $id => $status ) {
+			$id       = (string) $id; // PHP stores numeric-string keys as ints; the ids list is strings.
+			$template = TemplatesManager::get_template( (int) $id );
+			if ( ! $template || ( $template['type'] ?? 'receipt' ) !== $type ) {
+				$removed[] = $id;
+				continue;
+			}
+			if ( 'publish' === $status ) {
+				$ids[] = $id;
+			} elseif ( 'draft' === $status ) {
+				$removed[] = $id;
+			}
+		}
+
+		return array_values( array_unique( array_diff( $ids, $removed ) ) );
 	}
 
 	/**
@@ -869,14 +982,7 @@ class Templates_Controller extends WP_REST_Controller {
 		$type = $request->get_param( 'type' ) ?? 'receipt';
 
 		// Validate the template exists (database, virtual, or gallery).
-		if ( is_numeric( $id ) ) {
-			$template = TemplatesManager::get_template( (int) $id );
-		} else {
-			$template = TemplatesManager::get_virtual_template( $id, $type );
-			if ( ! $template ) {
-				$template = TemplatesManager::get_gallery_template_by_key( $id );
-			}
-		}
+		$template = TemplatesManager::find_template_or_gallery( $id, $type );
 
 		if ( ! $template ) {
 			return new WP_Error(
@@ -888,7 +994,7 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		// Build receipt data: real order if order_id provided, otherwise sample data.
-		$raw_order_id = $request->get_param( 'order_id' );
+		$raw_order_id = \in_array( $template['type'] ?? '', array( 'closure', 'report' ), true ) ? null : $request->get_param( 'order_id' );
 		$order        = null;
 		$order_id     = 0;
 
@@ -935,17 +1041,15 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( $order ) {
 			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {
-			$pos_store = null === $request_pos_store ? wcpos_get_store() : $request_pos_store;
-			$preview_data_profile = isset( $template['preview_data'] ) && is_string( $template['preview_data'] )
-				? $template['preview_data']
-				: null;
-			$receipt_data = null !== $preview_data_profile
-				? ( new Receipt_Preview_Fixture_Loader() )->build( $preview_data_profile, $pos_store )
-				: ( new Preview_Receipt_Builder() )->build( $pos_store );
+			$receipt_data = ( new Receipt_Preview_Fixture_Loader() )->for_template(
+				$template,
+				null === $request_pos_store ? wcpos_get_store() : $request_pos_store,
+				$request->get_param( 'report' ) ?? 'sales'
+			);
 		}
 
 		$currency       = $receipt_data['order']['currency'] ?? 'USD';
-		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
+		$formatted_data = Receipt_Money_Formatter::format( $receipt_data, $currency );
 
 		// Determine engine.
 		$engine = $template['engine'] ?? 'legacy-php';
@@ -1021,6 +1125,22 @@ class Templates_Controller extends WP_REST_Controller {
 			return rest_ensure_response( $response );
 		}
 
+		if ( 'closure' === ( $template['type'] ?? '' ) ) {
+			ob_start();
+			try {
+				( new \WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer() )->render( $template, null, $formatted_data );
+				return rest_ensure_response(
+					array(
+						'engine' => 'legacy-php',
+						'preview_html' => ob_get_contents(),
+						'receipt_data' => $formatted_data,
+					)
+				);
+			} finally {
+				ob_end_clean();
+			}
+		}
+
 		// Legacy-php templates execute arbitrary PHP that expects a real WC_Order
 		// in scope. Sample receipt data cannot stand in for one, so signal the
 		// editor to prompt for a POS order instead of rendering with a null order.
@@ -1060,10 +1180,10 @@ class Templates_Controller extends WP_REST_Controller {
 
 
 	/**
-	 * Render a logicless template with preview data and return the HTML string.
+	 * Render a logicless template for the `preview_html` diagnostic.
 	 *
-	 * Uses output buffering to capture the Logicless_Renderer output
-	 * without requiring a real WC_Abstract_Order.
+	 * Delegates to Logicless_Renderer so the diagnostic is a real render: barcodes rasterised,
+	 * print-colour styles kept. Money formatting is idempotent, so pre-formatted data is safe.
 	 *
 	 * @param array $template       Template metadata including content.
 	 * @param array $formatted_data Receipt data with money fields pre-formatted.
@@ -1071,35 +1191,14 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return string Rendered HTML.
 	 */
 	private function render_logicless_preview( array $template, array $formatted_data ): string {
-		$content = isset( $template['content'] ) && \is_string( $template['content'] ) ? $template['content'] : '';
+		ob_start();
+		try {
+			( new Logicless_Renderer() )->render( $template, null, $formatted_data );
 
-		if ( '' === $content ) {
-			return '<!-- Empty logicless receipt template -->';
+			return (string) ob_get_contents();
+		} finally {
+			ob_end_clean();
 		}
-
-		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
-		$content = preg_replace( '/<!--.*?-->/s', '', $content );
-
-		// Safety net for unresolved {{#t}}...{{/t}} markers in gallery templates.
-		$formatted_data['t'] = true;
-
-		$flags    = ENT_QUOTES | ENT_SUBSTITUTE;
-		$mustache = new \Mustache\Engine(
-			array(
-				'entity_flags' => $flags,
-				'escape'       => function ( $value ) use ( $flags ) {
-					if ( \is_array( $value ) ) {
-						return '';
-					}
-
-					return htmlspecialchars( (string) $value, $flags, 'UTF-8' );
-				},
-			)
-		);
-
-		$output = $mustache->render( $content, $formatted_data );
-
-		return wp_kses_post( $output );
 	}
 
 	/**
@@ -1198,10 +1297,10 @@ class Templates_Controller extends WP_REST_Controller {
 	 * Uses the URL namespace with a wcpos-specific prefix so the same
 	 * template ID + type always produces the same UUID across installations.
 	 * Type is included because the same ID (e.g. 'plugin-core') can exist
-	 * for both 'receipt' and 'report' template types.
+	 * across receipt, report, and display template types.
 	 *
 	 * @param string $template_id Virtual template ID (e.g. 'plugin-core').
-	 * @param string $type        Template type (e.g. 'receipt', 'report').
+	 * @param string $type        Template type (e.g. 'receipt', 'report', 'display').
 	 *
 	 * @return string UUID v5 string.
 	 */
@@ -1278,7 +1377,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'description'       => __( 'Filter by template type.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'default'           => 'receipt',
-				'enum'              => array( 'receipt', 'report' ),
+				'enum'              => TemplatesManager::SUPPORTED_TYPES,
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),

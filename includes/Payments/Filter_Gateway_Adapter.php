@@ -54,7 +54,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	public function get_pos_provider( ?WP_REST_Request $request = null ): string {
 		$default = $this->direct_adapter ? $this->direct_adapter->get_pos_provider( $request ) : $this->gateway->id;
 
-		return (string) apply_filters( 'wcpos_payment_gateway_provider', $default, $this->gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return (string) apply_filters( 'wcpos_payment_gateway_provider', $default, $this->gateway, $request );
 	}
 
 	/**
@@ -65,7 +65,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	public function get_pos_type( ?WP_REST_Request $request = null ): string {
 		$default = $this->direct_adapter ? $this->direct_adapter->get_pos_type( $request ) : 'manual';
 
-		return (string) apply_filters( 'wcpos_payment_gateway_pos_type', $default, $this->gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return (string) apply_filters( 'wcpos_payment_gateway_pos_type', $default, $this->gateway, $request );
 	}
 
 	/**
@@ -76,7 +76,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	public function get_pos_provider_data( ?WP_REST_Request $request = null ): array {
 		$default = $this->direct_adapter ? $this->direct_adapter->get_pos_provider_data( $request ) : array();
 
-		return (array) apply_filters( 'wcpos_payment_gateway_provider_data', $default, $this->gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return (array) apply_filters( 'wcpos_payment_gateway_provider_data', $default, $this->gateway, $request );
 	}
 
 	/**
@@ -88,7 +88,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 		$has_handler = false !== has_action( 'wcpos_process_checkout_action_' . $this->gateway->id );
 		$default     = $this->direct_adapter ? $this->direct_adapter->supports_pos_checkout( $request ) : $has_handler;
 
-		return (bool) apply_filters( 'wcpos_payment_gateway_supports_checkout', $default, $this->gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return (bool) apply_filters( 'wcpos_payment_gateway_supports_checkout', $default, $this->gateway, $request );
 	}
 
 	/**
@@ -101,7 +101,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 			? $this->direct_adapter->supports_pos_automatic_refunds( $request )
 			: $this->get_default_refund_support();
 
-		return (bool) apply_filters( 'wcpos_payment_gateway_supports_automatic_refunds', $default, $this->gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return (bool) apply_filters( 'wcpos_payment_gateway_supports_automatic_refunds', $default, $this->gateway, $request );
 	}
 
 	/**
@@ -112,9 +112,9 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	public function supports_pos_provider_refunds( ?WP_REST_Request $request = null ): bool {
 		$default = $this->direct_adapter
 			? $this->direct_adapter->supports_pos_provider_refunds( $request )
-			: $this->get_default_refund_support();
+			: ( $this->get_default_refund_support() || $this->descriptor_refunds_via_provider() );
 
-		return (bool) apply_filters( 'wcpos_payment_gateway_supports_provider_refunds', $default, $this->gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return (bool) apply_filters( 'wcpos_payment_gateway_supports_provider_refunds', $default, $this->gateway, $request );
 	}
 
 	/**
@@ -136,7 +136,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 				'provider_data' => array(),
 			);
 
-		return (array) apply_filters( 'wcpos_payment_gateway_bootstrap', $default, $this->gateway->id, $context, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return (array) apply_filters( 'wcpos_payment_gateway_bootstrap', $default, $this->gateway->id, $context, $request );
 	}
 
 	/**
@@ -161,9 +161,7 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 			}
 		}
 
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS checkout contract filter.
 		return apply_filters( $hook, $state, $action, $payment_data, $order, $request );
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 	}
 
 	/**
@@ -195,9 +193,29 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	}
 
 	/**
-	 * Default refund support for the gateway.
+	 * Default refund support for the gateway: WooCommerce's `refunds` feature flag,
+	 * which is what `process_refund()` (an automatic refund) needs.
 	 */
 	private function get_default_refund_support(): bool {
 		return ! in_array( $this->gateway->id, self::MANUAL_GATEWAYS, true ) && $this->gateway->supports( 'refunds' );
+	}
+
+	/**
+	 * Whether the gateway's POS capture mode refunds through its provider.
+	 *
+	 * A gateway whose v2 descriptor says `refunds.via` is `provider` refunds from the
+	 * till through that provider, not through `process_refund()`, so it supports
+	 * provider refunds even when the gateway class declares no `refunds` feature — the
+	 * terminal extensions' legacy gateways do not, and the refund form offered only
+	 * cash for a SumUp sale (first physical Solo run, 2026-10-05). Automatic refunds
+	 * stay on the feature flag.
+	 */
+	private function descriptor_refunds_via_provider(): bool {
+		if ( in_array( $this->gateway->id, self::MANUAL_GATEWAYS, true ) ) {
+			return false;
+		}
+		$descriptor = Contract\Descriptor_Builder::instance()->get( $this->gateway->id );
+
+		return 'provider' === ( $descriptor['capabilities']['refunds']['via'] ?? 'none' );
 	}
 }

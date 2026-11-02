@@ -11,6 +11,10 @@ use WCPOS\WooCommercePOS\Emails;
 use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\i18n;
 use WCPOS\WooCommercePOS\Orders;
+use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Products;
 use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Templates;
@@ -175,6 +179,13 @@ final class Service_Groups {
 		new Gateways();
 		new Products();
 		new Orders();
+		// Hooks only (payment_complete, before_pay_action, status_changed): the
+		// order-pay page is a storefront request, so this cannot wait for the
+		// deferred order services.
+		Webview_Passthrough::register_hooks();
+		Ledger::register_hooks();
+		Attempts::register_hooks();
+		Completion_Stamp::register_hooks();
 		Stock_Validator::instance();
 		Order_Write_Intent::register();
 		Role_Meta_Guard::register();
@@ -184,6 +195,7 @@ final class Service_Groups {
 	 * The order-event observers, plus the action that lets others join them.
 	 */
 	private static function construct_order(): void {
+		Fiscal_Record_Writers::instance();
 		new Emails();
 		new Templates();
 		new Print_Job_Service();
@@ -204,7 +216,8 @@ final class Service_Groups {
 		 *
 		 * @since 1.10.8
 		 */
-		do_action( 'woocommerce_pos_order_services_ready' );
+		do_action( 'wcpos_order_services_ready' );
+		do_action_deprecated( 'woocommerce_pos_order_services_ready', array(), '2.0.0', 'wcpos_order_services_ready' );
 	}
 
 	/**

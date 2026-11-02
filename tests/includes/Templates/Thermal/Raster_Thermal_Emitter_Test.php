@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
+use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Templates\Thermal\Raster_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
 use WP_UnitTestCase;
@@ -30,6 +31,9 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 */
 	private $emitter;
 
+	/** @var int HTTP attempts during the test. */
+	private $requests = 0;
+
 	/**
 	 * Set up the parser and emitter instances.
 	 *
@@ -37,6 +41,11 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		add_filter( 'pre_http_request', array( $this, 'block_http' ) );
+		delete_transient( 'wcpos_font_pack_failed_dejavu' );
+		delete_transient( 'wcpos_font_pack_lock_dejavu' );
+		( new Font_Pack_Loader() )->ensure_all();
+		$this->requests = 0;
 		if ( ! Raster_Thermal_Emitter::is_supported() ) {
 			$this->markTestSkipped( 'GD with FreeType is required to rasterize receipts.' );
 		}
@@ -50,8 +59,82 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 * @return void
 	 */
 	public function tearDown(): void {
-		remove_all_filters( 'woocommerce_pos_receipt_raster_font' );
+		remove_filter( 'pre_http_request', array( $this, 'block_http' ) );
+		remove_all_filters( 'wcpos_receipt_raster_font' );
+		as_unschedule_all_actions( Font_Pack_Loader::ACTION );
 		parent::tearDown();
+	}
+
+	/**
+	 * Keep renderer tests offline even if the local pack is missing.
+	 *
+	 * @return \WP_Error Blocked request.
+	 */
+	public function block_http(): \WP_Error {
+		++$this->requests;
+		return new \WP_Error( 'network_disabled' );
+	}
+
+	/** A cached pack failure must leave the support probe unavailable, not fatal. */
+	public function test_font_path_failed_pack_reports_no_font(): void {
+		// Arrange.
+		$dir    = get_temp_dir() . 'wcpos-raster-fonts-' . wp_generate_uuid4();
+		$filter = static function ( array $uploads ) use ( $dir ): array {
+			$uploads['basedir'] = $dir;
+			return $uploads;
+		};
+		wp_mkdir_p( $dir );
+		add_filter( 'upload_dir', $filter );
+		set_transient( 'wcpos_font_pack_failed_dejavu', 1, HOUR_IN_SECONDS );
+		$method = new \ReflectionMethod( Raster_Thermal_Emitter::class, 'font_path' );
+		$method->setAccessible( true );
+		try {
+			// Act.
+			$font      = $method->invoke( null, false );
+			$supported = Raster_Thermal_Emitter::is_supported();
+			// Assert.
+			$this->assertSame( '', $font );
+			$this->assertFalse( $supported );
+			$this->assertSame( 0, $this->requests );
+		} finally {
+			remove_filter( 'upload_dir', $filter );
+			delete_transient( 'wcpos_font_pack_failed_dejavu' );
+			delete_transient( 'wcpos_font_pack_lock_dejavu' );
+			rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
+		}
+	}
+
+	/** Without the pack face, a readable configured face still satisfies the probe. */
+	public function test_font_path_probe_uses_filtered_font_when_pack_missing(): void {
+		// Arrange.
+		$dir    = get_temp_dir() . 'wcpos-raster-fonts-' . wp_generate_uuid4();
+		$filter = static function ( array $uploads ) use ( $dir ): array {
+			$uploads['basedir'] = $dir;
+			return $uploads;
+		};
+		$face   = static function (): string {
+			return \WCPOS\WooCommercePOS\PLUGIN_PATH . 'fonts/packs/dejavu/DejaVuSansMono.ttf';
+		};
+		wp_mkdir_p( $dir );
+		add_filter( 'upload_dir', $filter );
+		add_filter( 'wcpos_receipt_raster_font', $face );
+		$method = new \ReflectionMethod( Raster_Thermal_Emitter::class, 'font_path' );
+		$method->setAccessible( true );
+		try {
+			// Act.
+			$font = $method->invoke( null, false );
+			// Assert.
+			$this->assertSame( $face(), $font );
+			$this->assertTrue( Raster_Thermal_Emitter::is_supported() );
+			$this->assertSame( 0, $this->requests );
+			$this->assertFalse( ( new Font_Pack_Loader() )->installed() );
+		} finally {
+			remove_filter( 'upload_dir', $filter );
+			remove_filter( 'wcpos_receipt_raster_font', $face );
+			delete_transient( 'wcpos_font_pack_failed_dejavu' );
+			delete_transient( 'wcpos_font_pack_lock_dejavu' );
+			rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
+		}
 	}
 
 	/**
@@ -553,7 +636,7 @@ class Raster_Thermal_Emitter_Test extends WP_UnitTestCase {
 	 */
 	public function test_emit_falls_back_when_the_font_filter_is_broken(): void {
 		add_filter(
-			'woocommerce_pos_receipt_raster_font',
+			'wcpos_receipt_raster_font',
 			static function (): string {
 				return '/nonexistent/font.ttf';
 			}

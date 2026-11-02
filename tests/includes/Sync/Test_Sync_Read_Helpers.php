@@ -56,33 +56,8 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame( array( 4, 8 ), ( new Pos_Visibility() )->online_only_product_ids() );
-		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_variation_ids() );
-	}
-
-	/**
-	 * Stored visibility ids do not apply while the production feature toggle is disabled.
-	 */
-	public function test_pos_visibility_with_toggle_disabled_returns_no_exclusions(): void {
-		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => false ) );
-		update_option(
-			Pos_Visibility::OPTION,
-			array(
-				'products' => array(
-					'default' => array(
-						'online_only' => array( 'ids' => array( 4 ) ),
-					),
-				),
-				'variations' => array(
-					'default' => array(
-						'online_only' => array( 'ids' => array( 8 ) ),
-					),
-				),
-			)
-		);
-
-		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_product_ids() );
-		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_variation_ids() );
+		$this->assertSame( array( 4, 8 ), ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::PRODUCTS ) );
+		$this->assertSame( array(), ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::VARIATIONS ) );
 	}
 
 	/**
@@ -113,7 +88,7 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 		// Act: the production drive point is the public catalog-proxy filter the
 		// registry-built stamper closures are hooked to.
 		$data = apply_filters(
-			'woocommerce_pos_sync_proxy_response',
+			'wcpos_sync_proxy_response',
 			array(
 				array(
 					'id' => $product->get_id(),

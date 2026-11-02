@@ -166,17 +166,6 @@ class Test_Tax_Id_Types extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `customer_applicable_types()` excludes every store-only business-register type.
-	 */
-	public function test_customer_applicable_types_excludes_business_registers(): void {
-		$customer = Tax_Id_Types::customer_applicable_types();
-		$business = Tax_Id_Types::business_register_types();
-		foreach ( $business as $type ) {
-			$this->assertNotContains( $type, $customer, "Business-register type {$type} must not appear in customer_applicable_types()" );
-		}
-	}
-
-	/**
 	 * `customer_applicable_types()` and `business_register_types()` are a strict partition of `all_types()`.
 	 */
 	public function test_customer_applicable_plus_business_register_equals_all(): void {

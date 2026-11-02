@@ -1,0 +1,215 @@
+<?php
+/**
+ * Bounded reconciliation of stale provider payment legs.
+ *
+ * @package WCPOS\WooCommercePOS\Payments\Contract
+ */
+
+namespace WCPOS\WooCommercePOS\Payments\Contract;
+
+\defined( 'ABSPATH' ) || die;
+
+use WC_Order;
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
+
+/** Free owns scheduling; registered handlers own provider status, expiry and capture operations. */
+final class Payments_Sweeper {
+	const HOOK = 'wcpos_payments_sweep';
+
+	/** Register the callback and schedule one recurring reconciliation event. */
+	public function register_hooks(): void {
+		add_action( self::HOOK, array( $this, 'run' ) );
+		add_filter( 'cron_schedules', array( $this, 'schedules' ) );
+		if ( ! wp_next_scheduled( self::HOOK ) ) {
+			wp_schedule_event( time() + 10 * MINUTE_IN_SECONDS, 'wcpos_ten_minutes', self::HOOK );
+		}
+	}
+
+	/**
+	 * Add the shared ten-minute interval.
+	 *
+	 * @param array $schedules Existing cron schedules.
+	 */
+	public function schedules( array $schedules ): array {
+		$schedules['wcpos_ten_minutes'] = array(
+			'interval' => 10 * MINUTE_IN_SECONDS,
+			'display' => __( 'Every ten minutes', 'woocommerce-pos' ),
+		);
+		return $schedules;
+	}
+
+	/** Poll oldest-modified in-progress orders within this run's batch budget. */
+	public function run(): void {
+		$threshold = max( 0, (int) apply_filters( 'wcpos_payments_sweep_threshold', 5 * MINUTE_IN_SECONDS ) );
+		// Selected by the live-leg index, not by order status: a live leg can stand on an order
+		// whose status moved on (completed by captured tenders, or by an older rule under which
+		// an authorization counted), and it still has to be captured or voided.
+		$batch     = max( 1, (int) apply_filters( 'wcpos_payments_sweep_batch_size', 50 ) );
+		$order_ids = Payment_Index::order_ids_with_live_legs( $batch );
+		foreach ( $order_ids as $order_id ) {
+			// A busy order is left for the next run; the existing lock owns contention policy.
+			Order_Lock::instance()->with_lock(
+				$order_id,
+				function () use ( $order_id, $threshold ) {
+					$order = wc_get_order( $order_id );
+					if ( ! $order instanceof WC_Order ) {
+						return;
+					}
+					$ledger = Ledger::instance();
+					foreach ( $ledger->read( $order ) as $row ) {
+						$updated = strtotime( $row['updated_at_gmt'] ?? $row['created_at_gmt'] ?? '' );
+						if ( ! in_array( $row['status'], array( 'pending', 'authorized' ), true ) || false === $updated || $updated >= time() - $threshold ) {
+							continue;
+						}
+						$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
+						if ( ! $handler ) {
+							continue;
+						}
+						// Re-dispatch only a row the provider has never answered: any provider ref other than the
+						// reader (server `action`, device `payment_intent`) means a live provider object to poll.
+						$dispatch = Ledger::is_unanswered( $row );
+						// Manual records are never pending; legacy webview legs are not provider intents.
+						if ( $dispatch && in_array( $row['capture_mode'], array( 'manual', 'webview' ), true ) ) {
+							continue;
+						}
+						// An order cancelled or completed since the create was lost takes no new charge. The
+						// provider MAY have accepted that create, so the row is not voided blind: the handler's
+						// void recovers any live action through the idempotent create and cancels it (Pro), or
+						// voids locally when nothing exists at the provider.
+						if ( $dispatch && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) ) {
+							$closed = $handler->void( $row, 'order_closed' );
+							if ( is_wp_error( $closed ) ) {
+								Logger::log( sprintf( 'WCPOS payment sweep %s: void on closed order failed: %s', $row['id'], $closed->get_error_message() ) );
+							} else {
+								$ledger->apply_result( $order, $row['id'], $closed, false );
+							}
+							continue;
+						}
+						$result = $dispatch
+							? $handler->intent(
+								$row,
+								array(
+									'source' => 'sweep',
+									'reader' => $row['provider_refs']['reader'] ?? null,
+								)
+							)
+							: $handler->status( $row );
+						if ( is_wp_error( $result ) ) {
+							if ( $dispatch && true !== ( $result->get_error_data()['indeterminate'] ?? false ) ) {
+								$ledger->apply_result(
+									$order,
+									$row['id'],
+									array(
+										'status' => 'failed',
+										'failure_reason' => $result->get_error_code(),
+									),
+									false
+								);
+							}
+							Logger::log( sprintf( 'WCPOS payment sweep %s: %s', $row['id'], $result->get_error_message() ) );
+							continue;
+						}
+						// Decide expiry before an authorization can complete the order.
+						$result = $ledger->apply_result( $order, $row['id'], $result, false );
+						$expires = ! is_wp_error( $result ) && ! empty( $result['expires_at'] ) ? strtotime( $result['expires_at'] ) : false;
+						// A cancel already in flight (void_requested_at) is not requested again; the
+						// status() call above is what confirms it.
+						if ( ! is_wp_error( $result ) && in_array( $result['status'], array( 'pending', 'authorized' ), true ) && empty( $result['void_requested_at'] ) && false !== $expires && $expires < time() ) {
+							$result = $handler->void( $result, 'expired' );
+							if ( ! is_wp_error( $result ) ) {
+								$result = $ledger->apply_result( $order, $row['id'], $result, false );
+							}
+							// The projection never unwinds a paid order (§3.3), so an authorization
+							// that completed it and then lapsed leaves the order paid with no money
+							// captured. That is a needs-attention fact, recorded where staff look.
+							if ( ! is_wp_error( $result ) && ! in_array( $order->get_status(), Ledger::IN_PROGRESS_STATUSES, true ) ) {
+								/* translators: 1: payment row uuid, 2: leg amount with currency. */
+								$order->add_order_note( sprintf( __( 'WCPOS payment %1$s: the authorization for %2$s expired after the order was marked paid and was never captured — needs attention.', 'woocommerce-pos' ), $row['id'], $row['amount'] . ' ' . $row['currency'] ) );
+							}
+						} elseif ( ! is_wp_error( $result ) && 'authorized' === $result['status'] && empty( $result['void_requested_at'] ) && $order->is_paid() && $ledger->signed_balance( $order, $ledger->read( $order ) ) >= Money::minor( $result['amount'] ) ) {
+							// Only captured money pays a sale (ADR 0040 rule 1), so an authorization on a
+							// paid order is captured only while the order still owes at least its amount:
+							// captured tenders that already cover the total leave it to lapse at expires_at.
+							// The app resumes live legs only on orders still open, so no till is coming
+							// back to capture this one. Capture it here, through the same amount and
+							// currency verification the capture route uses. Only a PAID order qualifies
+							// (wc_get_is_paid_statuses()): one still in progress is left to its till,
+							// which may yet cancel the leg, and a cancelled or refunded order is never
+							// charged — its authorization lapses at expires_at (wcpos/roadmap#169).
+							// status() ran first, so a capture whose answer was lost last run is seen
+							// as captured before it could be asked again.
+							$captured = $handler->capture( $result, array( 'source' => 'sweep' ) );
+							if ( is_wp_error( $captured ) ) {
+								$ledger->record_failure_events( $order, $row['id'], $captured );
+								// An authorize-only provider answers unsupported: authorized is its
+								// settled state (ledger.md, captured_at_gmt) and there is nothing to do.
+								// Any other refusal leaves the authorization standing for the next run.
+								if ( 'wcpos_capture_mode_unsupported' !== $captured->get_error_code() ) {
+									Logger::log( sprintf( 'WCPOS payment sweep %s: capture refused: %s', $row['id'], $captured->get_error_message() ) );
+								}
+							} else {
+								$result = $ledger->apply_result( $order, $row['id'], $captured, false );
+							}
+						}
+						if ( is_wp_error( $result ) ) {
+							Logger::log( sprintf( 'WCPOS payment sweep %s: %s', $row['id'], $result->get_error_message() ) );
+						}
+					}
+					// Project the reconciled legs and complete what completion_due() says is due, once every confirmation
+					// parked for the rows is drained (a mismatch is the answer, not a completion).
+					try {
+						// An attempt whose outcome is unknown is asked about once it is older than the threshold (rule 7).
+						$sent = Attempts::of( $order )->eligible( 'sweep' );
+						$at   = strtotime( (string) ( $sent['sent_at_gmt'] ?? '' ) );
+						if ( false !== $at && $at <= time() - $threshold ) {
+							Attempts::reconcile( $order, 'sweep' );
+						}
+						foreach ( $ledger->read( wc_get_order( $order_id ) ) as $row ) {
+							if ( null !== Settlement::instance()->parked( (string) $row['id'] ) && is_wp_error( $ledger->drain_parked( wc_get_order( $order_id ), (string) $row['id'] ) ) ) {
+								return; // The parking lock is busy: the next sweep drains it.
+							}
+						}
+						$ledger->write( $order_id );
+					} catch ( Ledger_Persistence_Exception $error ) {
+						Logger::log( sprintf( 'WCPOS payment sweep on order #%d: %s', $order_id, $error->getMessage() ) );
+					}
+				}
+			);
+		}
+		$this->retry_fiscal_records( $batch, $threshold );
+	}
+
+	/**
+	 * Write the sale records standing completions are still owed (#2378): a parked document, or one a crash
+	 * between the completion entry's save and `wcpos_sale_completed` never wrote. Same batch cap; a
+	 * completion younger than the threshold is left to its own request.
+	 *
+	 * @param int $batch     Batch cap.
+	 * @param int $threshold Seconds a completion is left alone.
+	 */
+	private function retry_fiscal_records( int $batch, int $threshold ): void {
+		try {
+			$order_ids = Fiscal_Record_Writers::orders_owed_a_sale( $batch, $threshold );
+		} catch ( \Throwable $error ) {
+			Logger::log( 'WCPOS fiscal record sweep could not read its candidates: ' . $error->getMessage() );
+			return;
+		}
+		foreach ( $order_ids as $order_id ) {
+			// A busy order is left for the next run, as above.
+			Order_Lock::instance()->with_lock(
+				$order_id,
+				static function () use ( $order_id ): void {
+					try {
+						$order = wc_get_order( $order_id );
+						if ( $order instanceof WC_Order ) {
+							Fiscal_Record_Writers::instance()->retry( $order );
+						}
+					} catch ( \Throwable $error ) {
+						Logger::log( sprintf( 'WCPOS fiscal record sweep on order #%d: %s', $order_id, $error->getMessage() ) );
+					}
+				}
+			);
+		}
+	}
+}

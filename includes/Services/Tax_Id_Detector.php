@@ -276,9 +276,8 @@ class Tax_Id_Detector {
 	/**
 	 * How many of the given orders carry a non-empty value for each meta key.
 	 *
-	 * Reads the order meta table of the active datastore directly: under HPOS
-	 * the rows live in `wc_orders_meta`, otherwise in `wp_postmeta`, the same
-	 * split {@see Pos_Uuid::get_order_ids_by_uuid()} makes.
+	 * Reads the order meta table of the active datastore directly, as
+	 * {@see Order_Meta_Store::schema()} names it.
 	 *
 	 * @param int[]    $ids  Order ids to inspect.
 	 * @param string[] $keys Candidate meta keys.
@@ -293,12 +292,9 @@ class Tax_Id_Detector {
 			return $counts;
 		}
 
-		$order_util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
-		$hpos       = class_exists( $order_util )
-			&& method_exists( $order_util, 'custom_orders_table_usage_is_enabled' )
-			&& call_user_func( array( $order_util, 'custom_orders_table_usage_is_enabled' ) );
-		$table      = $hpos ? $wpdb->prefix . 'wc_orders_meta' : $wpdb->postmeta;
-		$id_column  = $hpos ? 'order_id' : 'post_id';
+		$schema    = Order_Meta_Store::schema();
+		$table     = $schema['meta'];
+		$id_column = $schema['owner'];
 
 		$id_placeholders  = implode( ',', array_fill( 0, \count( $ids ), '%d' ) );
 		$key_placeholders = implode( ',', array_fill( 0, \count( $keys ), '%s' ) );

@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for the woocommerce_pos_rest_api_v2_controllers filter.
+ * Tests for the wcpos_rest_api_v2_controllers filter.
  *
  * @package WCPOS\WooCommercePOS\Tests\API
  */
@@ -44,7 +44,7 @@ class Test_V2_Controllers_Filter extends WCPOS_REST_Unit_Test_Case {
 	 * Replace the v2 settings entry before REST registration.
 	 */
 	public function setUp(): void {
-		add_filter( 'woocommerce_pos_rest_api_v2_controllers', array( $this, 'replace_v2_settings' ) );
+		add_filter( 'wcpos_rest_api_v2_controllers', array( $this, 'replace_v2_settings' ) );
 		parent::setUp();
 	}
 
@@ -52,7 +52,7 @@ class Test_V2_Controllers_Filter extends WCPOS_REST_Unit_Test_Case {
 	 * Remove the filter.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_rest_api_v2_controllers', array( $this, 'replace_v2_settings' ) );
+		remove_filter( 'wcpos_rest_api_v2_controllers', array( $this, 'replace_v2_settings' ) );
 		parent::tearDown();
 	}
 

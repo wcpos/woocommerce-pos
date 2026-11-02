@@ -5,6 +5,8 @@
  * @package WCPOS\WooCommercePOS\Tests\API
  */
 
+// phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- Route classifier fixture controllers share this test file.
+
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use ReflectionClass;
@@ -87,9 +89,9 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$controllers['auth'] = Route_Classifier_Legacy_Auth_Controller::class;
 			return $controllers;
 		};
-		add_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		add_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		$api = new Route_Classifier_Test_API();
-		remove_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		remove_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		wp_set_current_user( 0 );
 
 		$result = $api->rest_pre_dispatch( null, $this->server, $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
@@ -105,9 +107,9 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$controllers['auth'] = Route_Classifier_Metadata_Auth_Controller::class;
 			return $controllers;
 		};
-		add_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		add_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		$api = new Route_Classifier_Test_API();
-		remove_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		remove_filter( 'wcpos_rest_api_controllers', $replace_auth );
 		wp_set_current_user( 0 );
 
 		$result = $api->rest_pre_dispatch( null, $this->server, $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
@@ -171,8 +173,39 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			array( '/wcpos/v2/' ),
 			$built_classifications['rewrite_exempt']
 		);
+		// The auth family, the health probe, and the five service surfaces the
+		// wp-admin settings screen drives with cookie auth (no protocol claim),
+		// each declared by its V1 controller and carried onto wcpos/v2 by the
+		// Controller Registry. The order is registration order and pins nothing:
+		// the v2-native controllers register before the promoted services.
 		$this->assertSame(
-			array( 'public', 'printer_token', 'admin_op', 'permission_error_passthrough', 'rewrite_exempt' ),
+			array(
+				'/wcpos/v1/auth/',
+				'/wcpos/v1/settings',
+				'/wcpos/v1/templates',
+				'/wcpos/v1/print-jobs',
+				'/wcpos/v1/printnode/printers',
+				'/wcpos/v1/star-online/devices',
+				'/wcpos/v1/extensions',
+				'/wcpos/v1/logs',
+				'/wcpos/v2/status',
+				'/wcpos/v2/registers',
+				'/wcpos/v2/sessions',
+				'/wcpos/v2/movements',
+				'/wcpos/v2/closures',
+				'/wcpos/v2/auth/',
+				'/wcpos/v2/settings',
+				'/wcpos/v2/templates',
+				'/wcpos/v2/print-jobs',
+				'/wcpos/v2/printnode/printers',
+				'/wcpos/v2/star-online/devices',
+				'/wcpos/v2/extensions',
+				'/wcpos/v2/logs',
+			),
+			$built_classifications['protocol_exempt']
+		);
+		$this->assertSame(
+			array( 'public', 'printer_token', 'admin_op', 'permission_error_passthrough', 'rewrite_exempt', 'protocol_exempt' ),
 			array_keys( $built_classifications )
 		);
 	}
@@ -193,6 +226,13 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $classifier->is_admin_op( '/WCPOS/V2/uuid/BACKFILL' ) );
 		$this->assertTrue( $classifier->is_permission_error_passthrough( '/WCPOS/v1/RECEIPTS/123' ) );
 		$this->assertTrue( $classifier->is_rewrite_exempt( '/WCPOS/V2/anything' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/AUTH/refresh' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/ECHO' ), 'public routes derive their exemption' );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/print-jobs/RELAY-VERIFICATION' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/print-jobs/cloudprnt/printer-1/token' ) );
+		$this->assertTrue( $classifier->is_protocol_exempt( '/WCPOS/V2/STATUS/detail' ), 'an entry covers the routes below it' );
+		$this->assertFalse( $classifier->is_protocol_exempt( '/WCPOS/V2/status-report' ), 'but not a sibling sharing its name prefix' );
+		$this->assertFalse( $classifier->is_protocol_exempt( '/WCPOS/V2/products' ) );
 		$this->assertFalse( $classifier->in_wcpos_namespace( '/wc/v3/products' ) );
 	}
 

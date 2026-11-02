@@ -33,7 +33,8 @@ if ( ! \function_exists( 'wcpos_get_stores' ) ) {
 	function wcpos_get_stores( $args = array() ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 		$store = new Store();
 
-		return apply_filters( 'woocommerce_pos_get_stores', array( $store ), $args );
+		$filtered = apply_filters( 'wcpos_get_stores', array( $store ), $args );
+		return apply_filters_deprecated( 'woocommerce_pos_get_stores', array( $filtered, $args ), '2.0.0', 'wcpos_get_stores' );
 	}
 }
 
@@ -60,7 +61,8 @@ if ( ! \function_exists( 'wcpos_get_store' ) ) {
 	function wcpos_get_store( $the_store = false, array $args = array() ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 		$store = new Store();
 
-		return apply_filters( 'woocommerce_pos_get_store', $store, $the_store, $args );
+		$filtered = apply_filters( 'wcpos_get_store', $store, $the_store, $args );
+		return apply_filters_deprecated( 'woocommerce_pos_get_store', array( $filtered, $the_store, $args ), '2.0.0', 'wcpos_get_store' );
 	}
 }
 

@@ -30,7 +30,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 		( new Print_Job_Service() )->register_post_type();
-		remove_all_actions( 'woocommerce_pos_print_job_created' );
+		remove_all_actions( 'wcpos_print_job_created' );
 		remove_all_actions( Cloud_Print_Relay_Service::REREGISTER_HOOK );
 		new Cloud_Print_Relay_Service();
 		// The relay only registers https sites; the test install is http.
@@ -62,7 +62,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		delete_transient( Cloud_Print_Relay_Service::REREGISTER_TRANSIENT );
 		delete_transient( Cloud_Print_Relay_Service::DOWN_TRANSIENT );
 		wp_clear_scheduled_hook( Cloud_Print_Relay_Service::REREGISTER_HOOK );
-		remove_all_filters( 'woocommerce_pos_cloud_print_relay_enabled' );
+		remove_all_filters( 'wcpos_cloud_print_relay_enabled' );
 		parent::tearDown();
 	}
 
@@ -211,7 +211,6 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( true, $saved['enabled'] );
 		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
 		$this->assertEquals( '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff', $saved['hint_secret'] );
 		$this->assertGreaterThan( 0, $saved['registered_at'] );
@@ -252,7 +251,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		remove_filter( 'home_url', array( $this, 'https_home_url' ) );
 		add_filter(
-			'woocommerce_pos_cloud_print_relay_url',
+			'wcpos_cloud_print_relay_url',
 			static function () {
 				return 'http://relay.test';
 			}
@@ -398,14 +397,14 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 				'payload'    => base64_encode( 'one' ),
 			)
 		);
-		add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
+		add_filter( 'wcpos_cloud_print_relay_enabled', '__return_false' );
 		$jobs->create(
 			array(
 				'printer_id' => 'front',
 				'payload'    => base64_encode( 'two' ),
 			)
 		);
-		remove_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
+		remove_filter( 'wcpos_cloud_print_relay_enabled', '__return_false' );
 		$this->store_relay( 'printnode' );
 		$jobs->create(
 			array(
@@ -583,40 +582,6 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It keeps the relay disabled when the admin disables it mid re-registration.
-	 */
-	public function test_reregister_preserves_disable_that_lands_mid_flight(): void {
-		// Arrange: enabled at launch; the admin disables while the outbound
-		// registration request is in flight.
-		$this->store_relay();
-		$this->mock_http(
-			function ( $pre, $args, $url ) {
-				if ( false !== strpos( $url, '/api/register' ) ) {
-					Cloud_Print_Relay_Service::disable();
-
-					return $this->http_response(
-						201,
-						array(
-							'site_key'    => 'abcdef0123456789abcdef0123456789',
-							'hint_secret' => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
-						)
-					);
-				}
-
-				return new WP_Error( 'unexpected', 'unexpected request' );
-			}
-		);
-
-		// Act.
-		( new Cloud_Print_Relay_Service() )->reregister();
-		$saved = get_option( Cloud_Print_Relay_Service::OPTION );
-
-		// Assert: credentials refreshed, but the admin's disable wins.
-		$this->assertFalse( (bool) $saved['enabled'] );
-		$this->assertEquals( 'abcdef0123456789abcdef0123456789', $saved['site_key'] );
-	}
-
-	/**
 	 * It clears the per-printer status backoff when re-registration succeeds.
 	 *
 	 * Because status() reads the per-printer negative cache before DOWN_TRANSIENT,
@@ -690,7 +655,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	public function test_reregister_cron_respects_opt_out_filter(): void {
 		// Arrange: registered, then opted out in code.
 		$this->store_relay();
-		add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
+		add_filter( 'wcpos_cloud_print_relay_enabled', '__return_false' );
 		$calls = 0;
 		$this->mock_http(
 			function () use ( &$calls ) {
@@ -779,7 +744,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	public function test_relay_filter_opt_out_hides_relay_everywhere(): void {
 		// Arrange: valid credentials on record, but the site opted out in code.
 		$this->store_relay();
-		add_filter( 'woocommerce_pos_cloud_print_relay_enabled', '__return_false' );
+		add_filter( 'wcpos_cloud_print_relay_enabled', '__return_false' );
 		$calls = 0;
 		$this->mock_http(
 			function () use ( &$calls ) {

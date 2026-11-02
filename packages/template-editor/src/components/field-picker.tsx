@@ -22,6 +22,23 @@ export interface FieldTreeEntry {
 	children: FieldTreeEntry[];
 }
 
+function expandNestedFields(entry: FieldTreeEntry): FieldTreeEntry {
+	const fields = { ...entry.section.fields };
+	const children = entry.children.map(expandNestedFields);
+	for (const [key, field] of Object.entries(fields)) {
+		if (!field.fields) continue;
+		children.push(
+			expandNestedFields({
+				sectionKey: entry.section.is_array ? key : `${entry.sectionKey}.${key}`,
+				section: { ...field, fields: field.fields },
+				children: [],
+			})
+		);
+		delete fields[key];
+	}
+	return { ...entry, section: { ...entry.section, fields }, children };
+}
+
 export function getFieldTreeEntries(schema: FieldSchema): FieldTreeEntry[] {
 	const entries = new Map<string, FieldTreeEntry>();
 	const childEntries: FieldTreeEntry[] = [];
@@ -48,7 +65,9 @@ export function getFieldTreeEntries(schema: FieldSchema): FieldTreeEntry[] {
 
 	const childKeys = new Set(childEntries.map((entry) => entry.sectionKey));
 
-	return Array.from(entries.values()).filter((entry) => !childKeys.has(entry.sectionKey));
+	return Array.from(entries.values())
+		.filter((entry) => !childKeys.has(entry.sectionKey))
+		.map(expandNestedFields);
 }
 
 function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {

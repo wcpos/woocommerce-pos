@@ -97,7 +97,7 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'create',
 			array(
-				'status'       => 'processing',
+				'status'       => 'pending',
 				'line_items'   => array(
 					array(
 						'product_id' => $product->get_id(),
@@ -284,7 +284,7 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 		$response = $this->push_envelope(
 			'update',
 			array(
-				'status'       => 'completed',
+				'status'       => 'on-hold',
 				'coupon_lines' => array(
 					array(
 						'id'   => $coupon_line_id,
@@ -300,7 +300,7 @@ class Test_Rest_Dispatch_Coupon_Lines extends Sync_REST_Store_Test_Case {
 		$order = wc_get_order( $order_id );
 		$this->assertSame( array(), array_values( $order->get_items( 'coupon' ) ) );
 		$this->assertSame( '10.00', $order->get_total() );
-		$this->assertSame( 'completed', $order->get_status() );
+		$this->assertSame( 'on-hold', $order->get_status() );
 		$this->assertSame( array(), $response->get_data()['document']['coupon_lines'] );
 	}
 

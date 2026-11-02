@@ -78,7 +78,7 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 			'recordId'     => self::REC,
 			'baseRevision' => null,
 			'payload'      => array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					array(
 						'product_id' => $product->get_id(),
@@ -179,7 +179,7 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 		$request = new WP_REST_Request( 'POST', '/wc/v3/orders' );
 		$request->set_body_params(
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					array(
 						'product_id' => $product->get_id(),
@@ -216,7 +216,7 @@ class Test_Rest_Dispatch_Fee_Tax extends Sync_REST_Store_Test_Case {
 		$request = new WP_REST_Request( 'POST', '/wc/v3/orders' );
 		$request->set_body_params(
 			array(
-				'status'     => 'processing',
+				'status'     => 'pending',
 				'line_items' => array(
 					array(
 						'product_id' => $product->get_id(),

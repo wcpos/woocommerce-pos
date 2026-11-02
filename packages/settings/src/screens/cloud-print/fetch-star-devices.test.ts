@@ -10,7 +10,7 @@ it('POSTs cloudprnt_url + api_key and returns the device list', async () => {
 		fetch as never
 	);
 	expect(fetch).toHaveBeenCalledWith({
-		path: 'wcpos/v1/star-online/devices?wcpos=1',
+		path: 'wcpos/v2/star-online/devices?wcpos=1',
 		method: 'POST',
 		data: { cloudprnt_url: 'https://eu-device.stario.online/cloudprnt/kilbot', api_key: 'KEY' },
 	});

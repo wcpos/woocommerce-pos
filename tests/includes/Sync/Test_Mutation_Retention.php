@@ -48,9 +48,9 @@ class Test_Mutation_Retention extends Sync_Store_Test_Case {
 	 * Remove retention filters and cron state added by individual tests.
 	 */
 	public function tearDown(): void {
-		remove_all_filters( 'woocommerce_pos_sync_mutation_settled_retention_days' );
-		remove_all_filters( 'woocommerce_pos_sync_mutation_create_retention_days' );
-		remove_all_filters( 'woocommerce_pos_sync_mutation_failure_retention_days' );
+		remove_all_filters( 'wcpos_sync_mutation_settled_retention_days' );
+		remove_all_filters( 'wcpos_sync_mutation_create_retention_days' );
+		remove_all_filters( 'wcpos_sync_mutation_failure_retention_days' );
 		wp_clear_scheduled_hook( Sync_Journal_Purge::PURGE_HOOK );
 		parent::tearDown();
 	}
@@ -278,7 +278,7 @@ class Test_Mutation_Retention extends Sync_Store_Test_Case {
 	 */
 	public function test_purge_expired_mutation_retention_zero_disables_pruning(): void {
 		// Arrange.
-		add_filter( 'woocommerce_pos_sync_mutation_settled_retention_days', '__return_zero' );
+		add_filter( 'wcpos_sync_mutation_settled_retention_days', '__return_zero' );
 		$this->seed_mutation( 'old-done', 'done', 400 );
 
 		// Act.
@@ -294,7 +294,7 @@ class Test_Mutation_Retention extends Sync_Store_Test_Case {
 	public function test_purge_expired_failure_retention_optin_prunes_old_failures(): void {
 		// Arrange.
 		add_filter(
-			'woocommerce_pos_sync_mutation_failure_retention_days',
+			'wcpos_sync_mutation_failure_retention_days',
 			static function (): int {
 				return 30;
 			}

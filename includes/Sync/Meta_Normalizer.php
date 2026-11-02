@@ -56,18 +56,18 @@ final class Meta_Normalizer {
 	 * Register the shared pre-stamping normalization seams.
 	 */
 	public static function register_hooks(): void {
-		add_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'normalize' ), 5 );
-		add_filter( 'woocommerce_pos_sync_serialized_product', array( __CLASS__, 'normalize' ), 5 );
-		add_filter( 'woocommerce_pos_sync_serialized_order', array( __CLASS__, 'normalize' ), 5 );
+		add_filter( 'wcpos_sync_proxy_response', array( __CLASS__, 'normalize' ), 5 );
+		add_filter( 'wcpos_sync_serialized_product', array( __CLASS__, 'normalize' ), 5 );
+		add_filter( 'wcpos_sync_serialized_order', array( __CLASS__, 'normalize' ), 5 );
 	}
 
 	/**
 	 * Unregister the shared pre-stamping normalization seams.
 	 */
 	public static function unregister_hooks(): void {
-		remove_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'normalize' ), 5 );
-		remove_filter( 'woocommerce_pos_sync_serialized_product', array( __CLASS__, 'normalize' ), 5 );
-		remove_filter( 'woocommerce_pos_sync_serialized_order', array( __CLASS__, 'normalize' ), 5 );
+		remove_filter( 'wcpos_sync_proxy_response', array( __CLASS__, 'normalize' ), 5 );
+		remove_filter( 'wcpos_sync_serialized_product', array( __CLASS__, 'normalize' ), 5 );
+		remove_filter( 'wcpos_sync_serialized_order', array( __CLASS__, 'normalize' ), 5 );
 	}
 
 	/**

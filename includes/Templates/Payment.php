@@ -105,8 +105,8 @@ class Payment {
 	 * Remove enqueued scripts and styles.
 	 *
 	 * This function dequeues all scripts and styles that are not specified in the WCPOS settings,
-	 * unless they are specifically included by the 'woocommerce_pos_payment_template_dequeue_script_handles'
-	 * and 'woocommerce_pos_payment_template_dequeue_style_handles' filters.
+	 * unless they are specifically included by the 'wcpos_payment_template_dequeue_script_handles'
+	 * and 'wcpos_payment_template_dequeue_style_handles' filters.
 	 *
 	 * It runs twice, at wp_enqueue_scripts and again just before the footer scripts print, so the
 	 * list binds the whole page: some gateways enqueue from wp_footer (WooCommerce Stripe's
@@ -123,9 +123,10 @@ class Payment {
 		 * @since 1.3.0
 		 */
 		$script_exclude_list = apply_filters(
-			'woocommerce_pos_payment_template_dequeue_script_handles',
+			'wcpos_payment_template_dequeue_script_handles',
 			Settings::instance()->dequeue_script_handles()
 		);
+		$script_exclude_list = apply_filters_deprecated( 'woocommerce_pos_payment_template_dequeue_script_handles', array( $script_exclude_list ), '2.0.0', 'wcpos_payment_template_dequeue_script_handles' );
 
 		/**
 		 * List of style handles to exclude from the payment template.
@@ -133,9 +134,10 @@ class Payment {
 		 * @since 1.3.0
 		 */
 		$style_exclude_list = apply_filters(
-			'woocommerce_pos_payment_template_dequeue_style_handles',
+			'wcpos_payment_template_dequeue_style_handles',
 			Settings::instance()->dequeue_style_handles()
 		);
+		$style_exclude_list = apply_filters_deprecated( 'woocommerce_pos_payment_template_dequeue_style_handles', array( $style_exclude_list ), '2.0.0', 'wcpos_payment_template_dequeue_style_handles' );
 
 		// Loop through all enqueued styles and dequeue those that are in the exclusion list.
 		if ( \is_array( $style_exclude_list ) ) {
@@ -183,7 +185,8 @@ class Payment {
 			\define( 'WOOCOMMERCE_CHECKOUT', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WooCommerce constant.
 		}
 
-		do_action( 'woocommerce_pos_before_pay' );
+		do_action( 'wcpos_before_pay' );
+		do_action_deprecated( 'woocommerce_pos_before_pay', array(), '2.0.0', 'wcpos_before_pay' );
 
 		try {
 			// initialize order and nonces before the user is switched to customer.
@@ -223,7 +226,7 @@ class Payment {
 
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', /* translators: Short WCPOS UI label; keep concise. */ __( 'Pay for order', 'woocommerce-pos' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 
-			include woocommerce_pos_locate_template( 'payment.php' );
+			include wcpos_locate_template( 'payment.php' );
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
@@ -241,14 +244,16 @@ class Payment {
 		$defaults       = Settings::instance()->sections()->get( 'checkout' )->defaults();
 
 		$style_exclude_list = apply_filters(
-			'woocommerce_pos_payment_template_dequeue_style_handles',
+			'wcpos_payment_template_dequeue_style_handles',
 			Settings::instance()->dequeue_style_handles()
 		);
+		$style_exclude_list = apply_filters_deprecated( 'woocommerce_pos_payment_template_dequeue_style_handles', array( $style_exclude_list ), '2.0.0', 'wcpos_payment_template_dequeue_style_handles' );
 
 		$script_exclude_list = apply_filters(
-			'woocommerce_pos_payment_template_dequeue_script_handles',
+			'wcpos_payment_template_dequeue_script_handles',
 			Settings::instance()->dequeue_script_handles()
 		);
+		$script_exclude_list = apply_filters_deprecated( 'woocommerce_pos_payment_template_dequeue_script_handles', array( $script_exclude_list ), '2.0.0', 'wcpos_payment_template_dequeue_script_handles' );
 
 		$merged_style_handles  = array_unique( array_merge( $style_handles, $style_exclude_list ) );
 		$merged_script_handles = array_unique( array_merge( $script_handles, $script_exclude_list ) );
@@ -527,7 +532,7 @@ class Payment {
 			$disable_wp_footer = isset( $_POST['disable_wp_footer'] ) ? (bool) $_POST['disable_wp_footer'] : false;
 
 			// @TODO - the save settings function should allow saving by key
-			$checkout_settings = woocommerce_pos_get_settings( 'checkout' );
+			$checkout_settings = wcpos_get_settings( 'checkout' );
 			$new_settings      = array_merge(
 				$checkout_settings,
 				array(

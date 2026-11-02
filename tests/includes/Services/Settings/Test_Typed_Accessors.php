@@ -137,9 +137,9 @@ class Test_Typed_Accessors extends WP_UnitTestCase {
 
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_general_settings', $filter );
+		add_filter( 'wcpos_general_settings', $filter );
 
 		$this->assertEquals( '_filtered', Settings::instance()->barcode_field() );
-		remove_filter( 'woocommerce_pos_general_settings', $filter );
+		remove_filter( 'wcpos_general_settings', $filter );
 	}
 }

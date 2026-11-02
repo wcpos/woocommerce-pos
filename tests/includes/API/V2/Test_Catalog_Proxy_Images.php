@@ -114,7 +114,7 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 		$request->set_param( 'include', array( $variation_id ) );
 
 		$response  = $this->server->dispatch( $request );
-		$documents = $response->get_data()['documents'];
+		$documents = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $documents );
@@ -169,7 +169,7 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 
 		$document = $this->read_variation( $variation->get_id() );
 
-		$this->assertSame( $medium_url, $document['payload']['image']['src'] );
+		$this->assertSame( $medium_url, $document['image']['src'] );
 	}
 
 	/**
@@ -188,7 +188,7 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 
 		$document = $this->read_variation( $variation->get_id() );
 
-		$this->assertSame( $original_url, $document['payload']['image']['src'] );
+		$this->assertSame( $original_url, $document['image']['src'] );
 	}
 
 	/**
@@ -204,7 +204,7 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 	public function test_variation_read_uses_the_variation_shape(): void {
 		$variation = $this->create_variation();
 
-		$payload = $this->read_variation( $variation->get_id() )['payload'];
+		$payload = $this->read_variation( $variation->get_id() );
 
 		$this->assertArrayHasKey( 'image', $payload, 'a variation carries the singular image key' );
 		$this->assertArrayNotHasKey( 'images', $payload, 'a variation is not a product' );
@@ -221,9 +221,8 @@ class Test_Catalog_Proxy_Images extends Sync_REST_Store_Test_Case {
 			$this->assertArrayHasKey( $required, $payload, "the client reads {$required} off a variation" );
 		}
 
-		// The revision the client stores for a variation IS `date_modified_gmt` (Write_Controller
-		// carves variations out of the payload hash), so this key is load-bearing for change
-		// detection, not decoration.
+		// Content revisions, not second-granularity dates, feed variation CAS.
+		$this->assertStringStartsWith( 'sha256:', $payload['_rxdb_revision'] );
 		$this->assertSame( 'variation', $payload['type'] );
 
 		// Attributes keep the singular-`option` shape on both controllers; the client's promoted

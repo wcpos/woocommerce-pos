@@ -7,30 +7,519 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WC_Abstract_Order;
 
 /**
  * Receipt_Data_Builder class.
  */
 class Receipt_Data_Builder {
-	/**
-	 * Build a canonical receipt payload.
+	/** Build a stored closure or the explicitly live, unnumbered X-report.
 	 *
-	 * @param WC_Abstract_Order $order     Receipt order.
-	 * @param string            $mode      Receipt mode ('live', 'fiscal', 'preview'), passed unchanged to the receipt data filter.
-	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
-	 *
-	 * @return array
+	 * @param array $row Closure or session row.
+	 * @param bool  $xreport Whether to read the live session ledger.
+	 * @param bool  $handover Whether to print a hand-over slip.
 	 */
-	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
-		$status_label = '';
-		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
-			$status_label = (string) wc_get_order_status_name( $wc_status );
+	public function build_closure_document( array $row, bool $xreport = false, bool $handover = false ): array {
+		$xreport = $xreport || $handover;
+		if ( $xreport ) {
+			$figures = Session_Figures::for_session( $row );
+			$row['expected'] = $figures->expected();
+			$row['variance'] = ( new Closure_Store() )->variance( $row['counted'] ?? array(), $row['expected'] );
+			$cashiers = array();
+			foreach ( $figures->refunds() as $refund ) {
+				$id = (int) $refund['refund']->get_refunded_by();
+				if ( $id ) {
+					$cashiers[ $id ] = array(
+						'id' => $id,
+						'name' => get_userdata( $id )->display_name ?? (string) $id,
+					);
+				}
+			}
+			foreach ( $figures->legs() as $payments ) {
+				foreach ( $payments as $payment ) {
+					$id = (int) ( $payment['cashier_id'] ?? 0 );
+					if ( $id ) {
+						$cashiers[ $id ] = array(
+							'id' => $id,
+							'name' => get_userdata( $id )->display_name ?? (string) $id,
+						);
+					}
+				}
+			}
+			foreach ( $figures->period_amounts() as $kind => $amounts ) {
+				$row[ 'period_' . $kind . '_total' ] = $row[ 'period_' . $kind . '_total' ] ?? Closure_Store::sum( $amounts );
+			}
+			$row['breakdowns'] = array(
+				'opening_float' => array(
+					'expected' => $row['expected_float'],
+					'counted' => $row['counted_float'],
+					'variance' => $row['opening_variance'],
+				),
+				'payment_methods' => $figures->payment_methods(),
+				'tax_rates' => $figures->tax_rates(),
+				'discounts' => $figures->discounts(),
+				'items_sold' => $figures->items_sold(),
+				'average_sale' => $figures->average_sale(),
+				'drawer_openings' => $figures->drawer_openings(),
+				'movements' => $figures->movements(),
+				'transaction_count' => $figures->sales_count(),
+				'refund_count' => $figures->refund_count(),
+				'cashiers' => array_values( $cashiers ),
+			);
+		}
+		// A live X-report and a preview fixture have no stored closure to carry corrections.
+		$row['corrections'] = $xreport || empty( $row['id'] ) || ! is_string( $row['id'] ) ? array() : ( new Closure_Store() )->corrections_for( $row['id'] );
+		// Old closures and live X-reports have no label snapshot.
+		$labels = $row['breakdowns']['labels'] ?? array();
+		$register_id = $row['register_id'] ?? null;
+		$registers = new Register_Store();
+		// A register its repository no longer holds (Pro deactivated) still prints its last known name.
+		$register = is_string( $register_id ) && '' !== $register_id ? ( $registers->get( $register_id ) ?? array( 'name' => $registers->display_name( $register_id ) ) ) : array();
+		$register['name'] = $labels['register_name'] ?? $register['name'] ?? '';
+		foreach ( array( 'opened_by', 'closed_by', 'approved_by' ) as $key ) {
+			$labels[ $key . '_name' ] = $labels[ $key . '_name' ] ?? get_userdata( (int) ( $row[ $key ] ?? 0 ) )->display_name ?? '';
+		}
+		$labels['cashier_name'] = $labels['cashier_name'] ?? ( is_user_logged_in() ? wp_get_current_user()->display_name : '' );
+		$row['breakdowns']['labels'] = $labels;
+		$store = wcpos_get_store( (int) ( $row['store_id'] ?? 0 ) );
+		$resolver = new Receipt_Store_Resolver( is_object( $store ) ? $store : new Store() );
+		$i18n = Receipt_I18n_Labels::get_labels( $resolver->resolve_locale() );
+		$row['has_sales'] = isset( $row['period_sales_total'] ) || isset( $row['period_refunds_total'] ) || isset( $row['breakdowns']['transaction_count'] ) || isset( $row['breakdowns']['refund_count'] );
+		$row['has_perpetual'] = isset( $row['perpetual_sales_total'] ) || isset( $row['perpetual_refunds_total'] );
+		foreach ( array( 'payment_methods', 'tax_rates', 'movements' ) as $section ) {
+			$values = $row['breakdowns'][ $section ] ?? array();
+			$row['breakdowns'][ $section ] = array_filter( is_array( $values ) ? $values : array(), 'is_array' );
+			$row[ 'has_' . $section ] = ! empty( $row['breakdowns'][ $section ] );
+		}
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		foreach ( $row['breakdowns']['payment_methods'] as $key => &$method ) {
+			$method['method'] = $method['method'] ?? (string) $key;
+			if ( empty( $method['name'] ) ) {
+				$id = $method['method'];
+				$method['name'] = 'cash' === $id ? ( $i18n['cash'] ?? 'Cash' ) : ( isset( $gateways[ $id ] ) ? $gateways[ $id ]->get_title() : ucwords( str_replace( array( '_', '-' ), ' ', $id ) ) );
+			}
+		}
+		unset( $method );
+		foreach ( $row['breakdowns']['tax_rates'] as $key => &$rate ) {
+			if ( empty( $rate['name'] ) ) {
+				$stored = \WC_Tax::_get_tax_rate( $rate['rate'] ?? $key );
+				$rate['name'] = ! empty( $stored['tax_rate_name'] ) ? $stored['tax_rate_name'] . ' ' . self::trim_decimal( (string) $stored['tax_rate'] ) . '%' : (string) $key;
+			}
+		}
+		unset( $rate );
+		$tender_labels = array();
+		foreach ( $row['breakdowns']['payment_methods'] ?? array() as $key => $payment_method ) {
+			$tender_labels[ $payment_method['method'] ?? $key ] = $payment_method['name'] ?? '';
+		}
+		// Mustache iterates rows, not tender-keyed maps. Keep the stored figures unchanged.
+		$row['tenders'] = array();
+		foreach ( ( $row['counted'] ?? array() ) + ( $row['expected'] ?? array() ) as $method => $amount ) {
+			$row['tenders'][] = array(
+				'name' => (string) $method,
+				'label' => ! empty( $tender_labels[ $method ] ) ? $tender_labels[ $method ] : ucwords( str_replace( array( '_', '-' ), ' ', (string) $method ) ),
+				'expected' => $row['expected'][ $method ] ?? '',
+				'counted' => $row['counted'][ $method ] ?? '',
+				'variance' => $row['variance'][ $method ] ?? '',
+				'has_variance' => 0.0 !== (float) ( $row['variance'][ $method ] ?? 0 ),
+				'variance_label' => ! isset( $row['variance'][ $method ] ) ? '' : ( (float) $row['variance'][ $method ] > 0 ? $i18n['over'] : ( (float) $row['variance'][ $method ] < 0 ? $i18n['short'] : $i18n['exact'] ) ),
+			);
+		}
+		$currency = $row['breakdowns']['currency'] ?? $resolver->resolve_store_option_string( 'get_currency', get_woocommerce_currency() );
+		$hints = $resolver->build_presentation_hints( $currency );
+		if ( ! $xreport && ! empty( $row['id'] ) ) {
+			$hints = array_replace( $hints, $row['breakdowns']['money_format'] ?? array() );
+		}
+		// Format recorded decimal strings without a float round-trip.
+		$with_money = static function ( array $values, array $fields ) use ( $hints ): array {
+			foreach ( $fields as $field ) {
+				$values[ $field . '_display' ] = self::format_closure_money( (string) ( $values[ $field ] ?? '' ), $hints );
+			}
+			return $values;
+		};
+		$discounts = $row['breakdowns']['discounts'] ?? array();
+		$discounts = is_array( $discounts ) ? $discounts : array();
+		$row['has_discounts'] = (int) ( $discounts['count'] ?? 0 ) > 0 || '' !== trim( (string) ( $discounts['amount'] ?? '0' ), '-+0.' );
+		if ( $discounts ) {
+			$discounts['count'] = (int) ( $discounts['count'] ?? 0 );
+			$row['breakdowns']['discounts'] = $with_money( $discounts, array( 'amount' ) );
+		}
+		if ( isset( $row['breakdowns']['items_sold'] ) ) {
+			$row['breakdowns']['items_sold'] = self::trim_decimal( (string) $row['breakdowns']['items_sold'] );
+		}
+		if ( isset( $row['breakdowns']['drawer_openings'] ) ) {
+			$row['breakdowns']['drawer_openings'] = (int) $row['breakdowns']['drawer_openings'];
+		}
+		if ( isset( $row['breakdowns']['average_sale'] ) ) {
+			$row['breakdowns'] = $with_money( $row['breakdowns'], array( 'average_sale' ) );
+		}
+		$row['has_variance_note'] = '' !== trim( (string) ( $row['breakdowns']['variance_note'] ?? '' ) );
+		$denominations = $row['breakdowns']['denominations'] ?? array();
+		$denominations = array_filter( is_array( $denominations ) ? $denominations : array(), 'is_array' );
+		$row['has_denominations'] = ! empty( $denominations );
+		if ( isset( $row['breakdowns']['denominations'] ) ) {
+			$row['breakdowns']['denominations'] = array_values( array_map( static fn( $denomination ) => $with_money( $denomination, array( 'value', 'amount' ) ), $denominations ) );
+		}
+		$timezone = isset( $row['breakdowns']['timezone'] ) ? new DateTimeZone( $row['breakdowns']['timezone'] ) : $resolver->resolve_store_timezone();
+		$date = static function ( $gmt ) use ( $resolver, $timezone ): array {
+			$timestamp = $gmt ? strtotime( $gmt . ' UTC' ) : false;
+			return false === $timestamp ? Receipt_Date_Formatter::empty() : Receipt_Date_Formatter::from_timestamp( $timestamp, $timezone, $resolver->resolve_locale() );
+		};
+		// Sales minus refunds: the "net" line every ECR Z report prints between gross and tax.
+		if ( isset( $row['period_sales_total'] ) ) {
+			$row['net_sales'] = Closure_Store::sum( array( $row['period_sales_total'], '-' . ltrim( (string) ( $row['period_refunds_total'] ?? '0' ), '-' ) ) );
+		}
+		$row = $with_money( $row, array( 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'unsynced_total', 'net_sales' ) );
+		foreach ( array( 'opened_at', 'closed_at' ) as $field ) {
+			$row[ $field ] = $date( $row[ $field . '_gmt' ] ?? null );
+		}
+		foreach ( $row['tenders'] as &$tender ) {
+			$tender = $with_money( $tender, array( 'expected', 'counted', 'variance' ) );
+			$absolute = $with_money( array( 'amount' => ltrim( $tender['variance'], '-' ) ), array( 'amount' ) );
+			$tender['variance_absolute_display'] = $absolute['amount_display'];
+		}
+		unset( $tender );
+		if ( isset( $row['breakdowns']['opening_float'] ) && ! is_array( $row['breakdowns']['opening_float'] ) ) {
+			$row['breakdowns']['opening_float'] = array();
+		}
+		if ( ! empty( $row['breakdowns']['opening_float'] ) ) {
+			$row['breakdowns']['opening_float'] = $with_money( $row['breakdowns']['opening_float'], array( 'expected', 'counted', 'variance' ) );
+		}
+		foreach ( array(
+			'payment_methods' => array( 'sales', 'refunds' ),
+			'tax_rates' => array( 'net', 'tax', 'gross' ),
+		) as $section => $fields ) {
+			$rows = array();
+			foreach ( $row['breakdowns'][ $section ] ?? array() as $key => $values ) {
+				if ( 'payment_methods' === $section ) {
+					$values['method'] = $values['method'] ?? (string) $key;
+				}
+				$values['name'] = $values['name'] ?? $values['method'] ?? $values['rate'] ?? (string) $key;
+				$rows[] = $with_money( $values, $fields );
+			}
+			$row['breakdowns'][ $section ] = $rows;
+		}
+		foreach ( $row['breakdowns']['movements'] ?? array() as $key => $movement ) {
+			$movement = $with_money( $movement, array( 'amount' ) );
+			$movement['created_at'] = $date( $movement['created_at_gmt'] ?? null );
+			$movement['type_label'] = $i18n[ $movement['type'] ] ?? $movement['type'];
+			$movement['voided'] = ! empty( $movement['voided_by'] );
+			$row['breakdowns']['movements'][ $key ] = $movement;
+		}
+		$row['breakdowns']['movements'] = array_values( $row['breakdowns']['movements'] );
+		$store_section = $resolver->build_store_section();
+		foreach ( array( 'name', 'address_lines' ) as $field ) {
+			$store_section[ $field ] = $row['breakdowns']['store'][ $field ] ?? $store_section[ $field ];
+		}
+		$fiscal = self::document_fiscal( $xreport ? 'xreport' : 'closure', $xreport ? '' : (string) $row['number'] );
+		if ( $handover ) {
+			$fiscal['is_handover'] = true;
+			$fiscal['document_type'] = 'handover';
+		}
+		$data = array(
+			'closure' => $row,
+			'store' => $store_section,
+			'presentation_hints' => $hints,
+			'register' => $register,
+			'software' => array(
+				'name' => 'WCPOS',
+				'plugin_version' => $row['software_version'] ?? \WCPOS\WooCommercePOS\VERSION,
+			),
+			'order' => array(
+				'currency' => $currency,
+				'printed' => Receipt_Date_Formatter::from_timestamp( time(), $resolver->resolve_store_timezone(), $resolver->resolve_locale() ),
+			),
+			'fiscal' => $fiscal,
+			'i18n' => $i18n,
+		);
+		$identity = array_intersect_key( $fiscal, array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id' ) ) );
+		$printed = array_intersect_key( $row, array_flip( array( 'id', 'number', 'printed_number' ) ) );
+		$order = new \WC_Order();
+		$data = apply_filters( 'wcpos_receipt_data', $data, $order, $xreport ? 'xreport' : 'closure' );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $data, $order, $xreport ? 'xreport' : 'closure' ), '2.0.0', 'wcpos_receipt_data' );
+		// The identity is core-owned, as on the refund path: an extension cannot restate the
+		// document type or the closure's number. Its other fiscal additions are kept.
+		$data['fiscal'] = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
+		// Restore what a template actually prints, not merely what fiscal records. Both the PHP
+		// and the shipped gallery closure templates head the document with `closure.number` and
+		// branch on `fiscal.is_x_report`, so protecting `fiscal.receipt_number` and
+		// `fiscal.document_type` alone would still let an extension print a closure under another
+		// number, or print an X-report as a numbered closure. The two flags are derived, so they
+		// are re-derived here rather than trusted back from the filter.
+		// The whole `closure` section is restored, not just the printed identity. It is the frozen
+		// fiscal record — expected, counted, variance, the tender rows and their `_display`
+		// companions — and the shipped templates print those figures under the authentic closure
+		// number. An extension that could rewrite `variance_display` could make a short drawer
+		// print as balanced. Enrichment belongs in a top-level key or `fiscal.extra_fields`, both
+		// of which survive this.
+		$data['closure'] = array_merge( (array) ( $data['closure'] ?? array() ), $row, $printed );
+		$data['fiscal']['is_x_report'] = $xreport;
+		$data['fiscal']['is_handover'] = $handover;
+		$data['fiscal']['is_closure_document'] = true;
+		return $data;
+	}
+
+	/** Trim fractional zeros without rounding quantities or tax percentages.
+	 *
+	 * @param string $value Decimal value.
+	 */
+	private static function trim_decimal( string $value ): string {
+		$value = false !== strpos( $value, '.' ) ? rtrim( rtrim( $value, '0' ), '.' ) : $value;
+		return '' === $value ? '0' : $value;
+	}
+
+	/**
+	 * Merge a report core with the plugin-owned envelope, without running receipt filters.
+	 *
+	 * @param string $key Registered report key.
+	 * @param string $title Registered title.
+	 * @param array  $scope Resolved query scope.
+	 * @param array  $core Producer's report and top-level extras.
+	 */
+	public function build_report_document( string $key, string $title, array $scope, array $core ): array {
+		$resolver = new Receipt_Store_Resolver( wcpos_get_store( $scope['store_id'] ) );
+		$timezone = new DateTimeZone( $scope['timezone'] );
+		$locale = $resolver->resolve_locale();
+		$document_scope = array_intersect_key( $scope, array_flip( array( 'mode', 'store_id', 'register_id', 'register_name', 'business_day', 'session_id', 'session_number' ) ) );
+		// The document schema uses an empty string for all registers; the query scope uses null.
+		$document_scope['register_id'] = $scope['register_id'] ?? '';
+		if ( 'range' === $scope['mode'] ) {
+			foreach ( array( 'from', 'to' ) as $field ) {
+				$day = new \DateTimeImmutable( $scope[ $field ] . ' 00:00:00', $timezone );
+				$document_scope[ $field ] = Receipt_Date_Formatter::from_timestamp( $day->getTimestamp(), $timezone, $locale );
+			}
+			$document_scope['label'] = $document_scope['from']['date'] . ' – ' . $document_scope['to']['date'];
+		} else {
+			foreach ( array( 'opened_at', 'closed_at' ) as $field ) {
+				$instant = new \DateTimeImmutable( $scope[ $field ], new DateTimeZone( 'UTC' ) );
+				$document_scope[ $field ] = Receipt_Date_Formatter::from_timestamp( $instant->getTimestamp(), $timezone, $locale );
+			}
+			/* translators: %s: closed session number. */
+			$document_scope['label'] = sprintf( __( 'Session %s', 'woocommerce-pos' ), $scope['session_number'] );
+		}
+		$report = array_intersect_key( $core['report'] ?? array(), array_flip( array( 'subtitle', 'group_by', 'columns', 'column_count', 'rows', 'groups', 'totals', 'count', 'has_groups', 'has_rows', 'generated_at', 'is_partial', 'partial_reason' ) ) );
+		$user = wp_get_current_user();
+		$fiscal = self::document_fiscal( 'report' );
+		// The report schema's shared fields are typed: no sequence or signature is issued.
+		$fiscal['sequence'] = 0;
+		$fiscal['signed_at'] = '';
+		$fiscal['is_report_document'] = true;
+		$store = $resolver->build_store_section();
+		// The report schema's logo is a string, even when no store/site logo is configured.
+		$store['logo'] = $store['logo'] ?? '';
+		$identity = array(
+			'report' => array(
+				'key' => $key,
+				'title' => $title,
+				'scope' => $document_scope,
+			),
+			'sections' => array(
+				'store' => array_intersect_key( $store, array_flip( array( 'id', 'name' ) ) ),
+				'register' => array(
+					'id' => $document_scope['register_id'],
+					'name' => $scope['register_name'],
+				),
+				'cashier' => array( 'id' => (int) $user->ID ),
+				'software' => array(
+					'name' => 'WCPOS',
+					'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+				),
+				'fiscal' => array(
+					'document_type' => 'report',
+					'is_report_document' => true,
+				),
+			),
+		);
+		$data = array(
+			'report' => array(
+				'key' => $key,
+				'title' => $title,
+				'scope' => $document_scope,
+			) + $report,
+			'store' => $store,
+			'register' => array(
+				'id' => $document_scope['register_id'],
+				'name' => $scope['register_name'],
+			),
+			'cashier' => array(
+				'id' => (int) $user->ID,
+				// No logged-in user (a CLI or cron build) still yields a string: the schema requires one.
+				'name' => (string) ( $user->display_name ?? '' ),
+			),
+			'software' => array(
+				'name' => 'WCPOS',
+				'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+			),
+			'fiscal' => $fiscal,
+			'i18n' => Receipt_I18n_Labels::get_labels( $locale ),
+		) + $core;
+
+		// A cell carries its column's label so a narrow template can print "Label  value" lines.
+		$column_labels = array_column( $data['report']['columns'] ?? array(), 'label' );
+		$column_types  = array_column( $data['report']['columns'] ?? array(), 'type' );
+		// `is_label`: the first cell merely repeats the heading a narrow template prints above the
+		// row (a row whose label IS its first cell; a subtotal or total whose first column is text),
+		// so that template may leave it out. A first cell that carries its own value (the time on a
+		// cash-movements row, the count on an ungrouped sales row) keeps `is_label` false.
+		$mark_first = static function ( array $entries, ?string $row_label = null, bool $summary = false ) use ( $column_labels, $column_types ): array {
+			$first = true;
+			foreach ( $entries as $index => &$entry ) {
+				$entry['is_first'] = $first;
+				if ( isset( $entry['formatted'], $column_labels[ $index ] ) ) {
+					$entry['label']    = $entry['label'] ?? $column_labels[ $index ];
+					$entry['is_label'] = $first && ( $summary ? 'text' === ( $column_types[ $index ] ?? '' ) : (string) $entry['formatted'] === (string) $row_label );
+				}
+				$first = false;
+			}
+			return $entries;
+		};
+		$mark_rows = static function ( array $rows ) use ( $mark_first ): array {
+			foreach ( $rows as &$row ) {
+				if ( isset( $row['cells'] ) ) {
+					$row['cells'] = $mark_first( $row['cells'], (string) ( $row['label'] ?? '' ) );
+				}
+			}
+			return $rows;
+		};
+		if ( isset( $data['report']['columns'] ) ) {
+			$data['report']['columns'] = $mark_first( $data['report']['columns'] );
+		}
+		if ( isset( $data['report']['rows'] ) ) {
+			$data['report']['rows'] = $mark_rows( $data['report']['rows'] );
+		}
+		foreach ( $data['report']['groups'] ?? array() as $group_key => $group ) {
+			$group['rows'] = $mark_rows( $group['rows'] ?? array() );
+			if ( isset( $group['subtotal']['cells'] ) ) {
+				$group['subtotal']['cells'] = $mark_first( $group['subtotal']['cells'], null, true );
+			}
+			$data['report']['groups'][ $group_key ] = $group;
+		}
+		if ( isset( $data['report']['totals']['cells'] ) ) {
+			$data['report']['totals']['cells'] = $mark_first( $data['report']['totals']['cells'], null, true );
 		}
 
+		/**
+		 * Filters a server-built report document before it is validated.
+		 *
+		 * Runs on every document a registered report produces, after the plugin has merged its
+		 * envelope and the report's key, title and resolved scope over the producer's tabular
+		 * core. Extensions may add optional top-level extras or adjust presentation; the document
+		 * is validated against the `report` JSON schema afterwards, so a filtered document that
+		 * breaks the schema fails as the report's own failure. Device-built reports never reach
+		 * PHP and so never run this filter.
+		 *
+		 * The plugin's own statement of the document — its key, its title, the scope that was
+		 * authorised, and the identity a reader relies on — is restored after this filter and
+		 * cannot be rewritten here.
+		 *
+		 * @param array  $data  The report document.
+		 * @param string $key   The report key.
+		 * @param array  $scope The resolved scope (see Report_Scope_Resolver).
+		 *
+		 * @since 2.0.0
+		 *
+		 * @hook wcpos_report_data
+		 */
+		$data = apply_filters( 'wcpos_report_data', $data, $key, $scope );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_report_data', array( $data, $key, $scope ), '2.0.0', 'wcpos_report_data' );
+
+		// Restored for the same reason the closure path restores its identity, and covering what a
+		// template prints rather than only what `fiscal` records: the key and title name the
+		// report, the scope states what was asked for and authorised, and the store, register and
+		// cashier lines head the rendered document. An extension may enrich any of these sections
+		// — only the identity-bearing fields come back.
+		foreach ( array( 'key', 'title', 'scope' ) as $field ) {
+			$data['report'][ $field ] = $identity['report'][ $field ];
+		}
+		foreach ( $identity['sections'] as $section => $fields ) {
+			foreach ( $fields as $field => $value ) {
+				$data[ $section ][ $field ] = $value;
+			}
+		}
+		return $data;
+	}
+
+	/**
+	 * Shared unsigned fiscal envelope for closure and report documents.
+	 *
+	 * @param string $type Document type.
+	 * @param string $number Captured closure number, or empty for an unnumbered document.
+	 */
+	private static function document_fiscal( string $type, string $number = '' ): array {
+		$values = array_fill_keys( array( 'immutable_id', 'hash', 'qr_payload', 'tax_agency_code', 'signature_excerpt', 'document_label' ), '' );
+		return Receipt_Payload_Assembler::fiscal(
+			$values + array(
+				'document_type' => $type,
+				'receipt_number' => $number,
+				'sequence' => null,
+				'signed_at' => null,
+				'is_reprint' => false,
+				'reprint_count' => 0,
+				'extra_fields' => array(),
+			)
+		) + array( 'is_handover' => false );
+	}
+
+	/**
+	 * Format closure decimals directly, rounding half up on their magnitude.
+	 *
+	 * @param string $value Recorded decimal amount.
+	 * @param array  $hints Store presentation hints.
+	 * @return string
+	 */
+	private static function format_closure_money( string $value, array $hints ): string {
+		if ( '' === $value ) {
+			return '';
+		}
+		$negative = '-' === $value[0];
+		$parts = explode( '.', ltrim( $value, '+-' ), 2 );
+		$decimals = (int) $hints['price_num_decimals'];
+		$fraction = str_pad( $parts[1] ?? '', $decimals + 1, '0' );
+		$digits = $parts[0] . substr( $fraction, 0, $decimals );
+		if ( $fraction[ $decimals ] >= '5' ) {
+			for ( $index = strlen( $digits ) - 1; $index >= 0 && '9' === $digits[ $index ]; --$index ) {
+				$digits[ $index ] = '0';
+			}
+			if ( $index < 0 ) {
+				$digits = '1' . $digits;
+			} else {
+				$digits[ $index ] = (string) ( (int) $digits[ $index ] + 1 );
+			}
+		}
+		$integer = ltrim( $decimals ? substr( $digits, 0, -$decimals ) : $digits, '0' );
+		$integer = '' === $integer ? '0' : $integer;
+		$amount = preg_replace_callback(
+			'/\B(?=(\d{3})+(?!\d))/',
+			static function () use ( $hints ) {
+				return $hints['price_thousand_separator'];
+			},
+			$integer
+		);
+		if ( $decimals ) {
+			$amount .= $hints['price_decimal_separator'] . substr( $digits, -$decimals );
+		}
+		$symbol = html_entity_decode( wp_strip_all_tags( $hints['currency_symbol'] ), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
+		$position = $hints['currency_position'];
+		$space = false !== strpos( $position, '_space' ) ? ' ' : '';
+		return ( $negative ? '-' : '' ) . ( 0 === strpos( $position, 'right' ) ? $amount . $space . $symbol : $symbol . $space . $amount );
+	}
+
+	/**
+	 * The POS store a receipt for this order is rendered under: the order's own
+	 * `_pos_store` when it still exists, else the current store, else an empty
+	 * store object (a stub when the order's store is gone, so nothing is invented).
+	 *
+	 * @param WC_Abstract_Order $order     Order.
+	 * @param object|null       $pos_store Explicit store override.
+	 *
+	 * @return object
+	 */
+	public static function resolve_pos_store( WC_Abstract_Order $order, $pos_store = null ) {
 		$order_store_id         = (int) $order->get_meta( '_pos_store' );
 		$missing_order_store_id = 0;
 		if ( null === $pos_store ) {
@@ -51,6 +540,29 @@ class Receipt_Data_Builder {
 		if ( ! \is_object( $pos_store ) ) {
 			$pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
 		}
+
+		return $pos_store;
+	}
+
+	/**
+	 * Build a canonical receipt payload.
+	 *
+	 * @param WC_Abstract_Order $order     Receipt order.
+	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
+	 * @param array|null        $till      A completion's till tuple (Completion_History::till()); null reads the order's till meta.
+	 *
+	 * @return array
+	 */
+	private function build_data( WC_Abstract_Order $order, $pos_store = null, ?array $till = null ): array {
+		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
+		$status_label = '';
+		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
+			$status_label = (string) wc_get_order_status_name( $wc_status );
+		}
+
+		$pos_store = self::resolve_pos_store( $order, $pos_store );
+		// A stub store means the order's own store is gone (see resolve_pos_store()).
+		$missing_order_store_id = $pos_store instanceof \stdClass ? (int) $order->get_meta( '_pos_store' ) : 0;
 
 		$store_resolver = new Receipt_Store_Resolver( $pos_store );
 		$date_timezone  = $store_resolver->resolve_store_timezone();
@@ -123,6 +635,7 @@ class Receipt_Data_Builder {
 		$customer = array(
 			'id'               => $customer_id ? $customer_id : null,
 			'name'             => $customer_name,
+			'first_name'       => (string) $order->get_billing_first_name(),
 			'billing_address'  => $order->get_address( 'billing' ),
 			'shipping_address' => $order->get_address( 'shipping' ),
 			// Structured TaxId[] — read fallback across the legacy meta-key inventory.
@@ -251,14 +764,26 @@ class Receipt_Data_Builder {
 			if ( ! $coupon_item instanceof \WC_Order_Item_Coupon ) {
 				continue;
 			}
-			$coupon      = $this->get_order_coupon( $coupon_item );
+			$intent = Quick_Discount::intent_from_item( $coupon_item );
+			if ( $intent ) {
+				$discount_type = $intent['discount_type'];
+				$label = 'fixed_cart' === $discount_type ? __( 'Discount', 'woocommerce-pos' ) : sprintf(
+					/* translators: %s: Discount percentage. */
+					__( 'Discount (%s%%)', 'woocommerce-pos' ),
+					wc_format_decimal( $intent['amount'], '', true )
+				);
+			} else {
+				$coupon = $this->get_order_coupon( $coupon_item );
+				$discount_type = $coupon ? (string) $coupon->get_discount_type() : '';
+				$label = $this->get_coupon_label( $coupon_item, $coupon );
+			}
 			$coupon_excl = (float) $coupon_item->get_discount();
 			$coupon_tax  = (float) $coupon_item->get_discount_tax();
 			$coupon_incl = $coupon_excl + $coupon_tax;
 			$discounts[] = Receipt_Sections::discount(
-				$this->get_coupon_label( $coupon_item, $coupon ),
+				$label,
 				$coupon_item->get_code(),
-				$coupon ? (string) $coupon->get_discount_type() : '',
+				$discount_type,
 				array(
 					'incl' => $coupon_incl,
 					'excl' => $coupon_excl,
@@ -293,7 +818,8 @@ class Receipt_Data_Builder {
 		);
 
 		// A payable order has taken no payment yet: an empty list, so templates skip their PAID block
-		// ({{#payments.0}}) instead of printing the total as if it had been received.
+		// ({{#payments.0}}) instead of printing the total as if it had been received. Ledger rows,
+		// when the order has them, still replace this below.
 		$payments = $needs_payment
 			? array()
 			: array(
@@ -306,11 +832,69 @@ class Receipt_Data_Builder {
 					(float) $order->get_meta( '_pos_cash_change' )
 				),
 			);
+		$ledger_rows = $order instanceof \WC_Order ? Ledger::instance()->read( $order ) : array();
+		$counting     = array_values(
+			array_filter(
+				$ledger_rows,
+				static function ( array $row ): bool {
+					return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
+				}
+			)
+		);
+		if ( $ledger_rows ) {
+			$payments   = array();
+			$change_sum = 0.0;
+			foreach ( $counting as $row ) {
+				$method_id = (string) ( $row['method_id'] ?? '' );
+				$descriptor = Descriptor_Builder::instance()->get( $method_id );
+				$refs       = is_array( $row['provider_refs'] ?? null ) ? $row['provider_refs'] : array();
+				$change     = (float) ( $row['change'] ?? 0 );
+				$payments[] = array(
+					'method_id'      => $method_id,
+					'method_title'   => $descriptor ? $descriptor['title'] : $method_id,
+					'amount'         => (float) ( $row['amount'] ?? 0 ),
+					'transaction_id' => (string) ( $refs['payment_intent'] ?? $refs['transaction_id'] ?? '' ),
+					'tendered'       => (float) ( $row['tendered'] ?? 0 ),
+					'change'         => $change,
+				);
+				$change_sum += $change;
+			}
+			$totals['paid_total']   = (float) Ledger::instance()->paid( $ledger_rows );
+			$totals['change_total'] = $change_sum;
+		}
 
 		$tax_summary = $this->get_tax_summary( $order );
 
+		$register_id = (string) ( null === $till ? $order->get_meta( '_wcpos_register' ) : $till['register'] );
+		$registers = new Register_Store();
+		$register_row = '' !== $register_id ? $registers->get( $register_id ) : null;
+		$register = array(
+			'id' => $register_row['id'] ?? '',
+			'name' => $register_row['name'] ?? ( '' !== $register_id ? $registers->display_name( $register_id ) : '' ),
+		);
+		$software = array(
+			'name'           => 'WCPOS',
+			'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+			'app_version'    => (string) $order->get_meta( '_wcpos_app_version' ),
+			'app_build'      => (string) $order->get_meta( '_wcpos_app_build' ),
+			'platform'       => '',
+		);
+		$sale_tz = (string) ( null === $till ? $order->get_meta( '_wcpos_sale_tz' ) : $till['sale_tz'] );
+		try {
+			$sale_timezone = '' !== $sale_tz ? new DateTimeZone( $sale_tz ) : $date_timezone;
+		} catch ( \Exception $e ) {
+			$sale_timezone = $date_timezone;
+		}
+		$sale_time = strtotime( (string) ( null === $till ? $order->get_meta( '_wcpos_sale_time' ) : $till['sale_time'] ) );
+		$received_at = strtotime( (string) $order->get_meta( '_wcpos_sale_received_gmt' ) );
+		$sale_counter = null === $till ? $order->get_meta( '_wcpos_sale_counter' ) : (string) $till['counter'];
+
 		$fiscal = Receipt_Payload_Assembler::fiscal(
 			array(
+				'sale_time'         => false === $sale_time ? null : Receipt_Date_Formatter::from_timestamp( $sale_time, $sale_timezone, $date_locale ),
+				'sale_tz'           => $sale_tz,
+				'sale_counter'      => '' === $sale_counter ? null : (int) $sale_counter,
+				'received_at'       => false === $received_at ? null : Receipt_Date_Formatter::from_timestamp( $received_at, $date_timezone, $date_locale ),
 				'immutable_id'      => '',
 				'receipt_number'    => '',
 				'sequence'          => null,
@@ -330,6 +914,8 @@ class Receipt_Data_Builder {
 			array(
 				'order'              => $order_data,
 				'store'              => $store,
+				'software'           => $software,
+				'register'           => $register,
 				'cashier'            => $cashier,
 				'customer'           => $customer,
 				'lines'              => $lines,
@@ -346,6 +932,33 @@ class Receipt_Data_Builder {
 			)
 		);
 
+		return $data;
+	}
+
+	/**
+	 * Build a canonical receipt, retaining frozen identity in live mode.
+	 *
+	 * @param WC_Abstract_Order $order Receipt order.
+	 * @param string            $mode Receipt mode ('live', 'fiscal', 'refund', 'preview'), passed unchanged to the receipt data filter.
+	 * @param object|null       $pos_store POS store override.
+	 */
+	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
+		// A fiscal document is built for the completion that stands (Fiscal_Record_Writers::record_sale())
+		// and carries its till tuple. A re-completed sale's live receipt names that completion too (its
+		// register, counter, sale time and record), not the tuple completion 1 was taken under; a first
+		// completion's live receipt reads the order's till meta (ADR 0040 rule 1c).
+		$standing = null;
+		$till     = null;
+		if ( ( 'live' === $mode || 'fiscal' === $mode ) && $order instanceof \WC_Order ) {
+			$history = Completion_History::of( $order );
+			$latest  = $history->standing();
+			if ( 'fiscal' === $mode || (int) ( $latest['n'] ?? 0 ) >= 2 ) {
+				$standing = $latest;
+				$till     = $history->till();
+			}
+		}
+		$data = $this->build_data( $order, $pos_store, $till );
+
 		/**
 		 * Filters the canonical receipt data before it is rendered or snapshotted.
 		 *
@@ -356,18 +969,296 @@ class Receipt_Data_Builder {
 		 * by Receipt_Data_Schema should keep their documented types.
 		 *
 		 * Sample previews for the template editor and gallery also run through this filter,
-		 * with mode `preview` and an unsaved order whose id is 0; a plugin that needs a
-		 * persisted order should return `$data` unchanged when `$order->get_id()` is 0.
+		 * with mode `preview` and an unsaved order whose id is 0. Closure and X-report
+		 * documents also run through this filter, with modes `closure` and `xreport`
+		 * and an unsaved id-0 order, never null. A plugin that needs a persisted order
+		 * should return `$data` unchanged when `$order->get_id()` is 0.
 		 *
 		 * @param array             $data  Receipt data (see Receipt_Data_Schema).
 		 * @param WC_Abstract_Order $order Order the receipt is for.
-		 * @param string            $mode  Receipt mode: 'live', 'fiscal' or 'preview', passed unchanged.
+		 * @param string            $mode  Receipt mode: 'live', 'fiscal', 'refund', 'preview', 'closure' or 'xreport', passed unchanged.
 		 *
 		 * @since 1.10.8
 		 *
-		 * @hook woocommerce_pos_receipt_data
+		 * @hook wcpos_receipt_data
 		 */
-		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, $order, $mode );
+		$data = apply_filters( 'wcpos_receipt_data', $data, $order, $mode );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $data, $order, $mode ), '2.0.0', 'wcpos_receipt_data' );
+
+		// Frozen identity on live builds (roadmap#243): when a snapshot exists, the
+		// fiscal identity is copied from it, never rebuilt. Applied AFTER the filter
+		// so an extension that recomputes a QR or a label live cannot overwrite what
+		// was captured at the sale; enrichment belongs in the snapshot
+		// (`wcpos_fiscal_snapshot_enrich`). Order details and provenance
+		// stay live. A 1.3 snapshot without a key keeps the live value.
+		if ( 'live' === $mode ) {
+			$records  = new Fiscal_Record_Store();
+			$snapshot = ( null === $standing ? $records->find_sale( $order->get_id() ) : $records->find_sale( $order->get_id(), (string) $standing['id'] ) )['payload'] ?? null;
+			if ( null !== $snapshot ) {
+				foreach ( array( 'immutable_id', 'receipt_number', 'sequence', 'hash', 'qr_payload', 'tax_agency_code', 'signed_at', 'signature_excerpt', 'document_label', 'extra_fields' ) as $key ) {
+					if ( array_key_exists( $key, $snapshot['fiscal'] ?? array() ) ) {
+						$data['fiscal'][ $key ] = $snapshot['fiscal'][ $key ];
+					}
+				}
+				foreach ( array( 'register', 'software' ) as $key ) {
+					if ( array_key_exists( $key, $snapshot ) ) {
+						$data[ $key ] = $snapshot[ $key ];
+					}
+				}
+			}
+		}
+
+		return $data;
+	}
+
+
+	/**
+	 * Build the write-once refund receipt without changing the sale or its money.
+	 *
+	 * @param \WC_Order        $order Parent sale.
+	 * @param \WC_Order_Refund $refund Refund document source.
+	 * @param int              $number Minted refund sequence.
+	 * @param string|null      $corrects Original sale identity.
+	 * @param array|null       $provenance Resolved refund provenance (store_id, register_id).
+	 * @throws \RuntimeException When the refund's register cannot be read.
+	 * @throws \RuntimeException When the refund document cannot be encoded.
+	 */
+	public function build_refund_document( \WC_Order $order, \WC_Order_Refund $refund, int $number, ?string $corrects, ?array $provenance = null ): array {
+		// The document identifies where the refund was made: the provenance the record writer
+		// resolved (its session's store, its register), or the sale's when the refund carries none.
+		$store_id = (int) ( $provenance['store_id'] ?? 0 );
+		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id, array( 'status' => array( 'publish', 'trash' ) ) ) : null;
+		$store_missing = $store_id > 0 && ! \is_object( $pos_store );
+		// A deleted refund store keeps its id on the document, the way a deleted order store does.
+		$data = $this->build_data( $order, $store_missing ? new \stdClass() : ( \is_object( $pos_store ) ? $pos_store : null ) );
+		if ( $store_missing ) {
+			$data['store']['id'] = $store_id;
+			/* translators: %d: store ID. */
+			$data['store']['name'] = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $store_id );
+		}
+		$register_id = (string) ( $provenance['register_id'] ?? $refund->get_meta( '_wcpos_register', true ) );
+		if ( Pos_Uuid::is_uuid( $register_id ) ) {
+			global $wpdb;
+			$registers = new Register_Store();
+			$register_row = $registers->get( strtolower( $register_id ) );
+			if ( '' !== $wpdb->last_error ) {
+				throw new \RuntimeException( 'Refund register read failed.' );
+			}
+			// The stamped id stays truthful even when the register row is gone.
+			$data['register'] = array(
+				'id' => $register_row['id'] ?? strtolower( $register_id ),
+				'name' => $register_row['name'] ?? $registers->display_name( strtolower( $register_id ) ),
+			);
+		}
+		$display_incl = ! empty( $data['tax']['display_incl'] );
+		$items = $this->get_refund_items( $refund, $display_incl );
+		$data['lines'] = $items['lines'];
+		foreach ( $data['lines'] as &$line ) {
+			foreach ( array( '', '_incl', '_excl' ) as $basis ) {
+				$line[ 'line_total' . $basis ] = $line[ 'total' . $basis ];
+				$line[ 'line_subtotal' . $basis ] = $line[ 'total' . $basis ];
+				$line[ 'unit_price' . $basis ] = $line['qty'] > 0 ? round( $line[ 'total' . $basis ] / $line['qty'], wc_get_price_decimals() ) : 0.0;
+				$line[ 'unit_subtotal' . $basis ] = $line[ 'unit_price' . $basis ];
+				$line[ 'discounts' . $basis ] = 0.0;
+			}
+			$line['qty_refunded'] = 0.0;
+			$line['total_refunded'] = 0.0;
+		}
+		unset( $line );
+		$data['fees'] = $items['fees'];
+		$data['shipping'] = $items['shipping'];
+		$data['discounts'] = array();
+		$data['refunds'] = array();
+		foreach ( $data['totals'] as $key => $value ) {
+			$data['totals'][ $key ] = is_bool( $value ) ? true : 0.0;
+		}
+		$data['totals']['total_incl'] = abs( (float) $refund->get_amount() );
+		$data['totals']['tax_total'] = abs( (float) $refund->get_total_tax() );
+		$data['totals']['total_excl'] = $data['totals']['total_incl'] - $data['totals']['tax_total'];
+		$data['totals']['total'] = $data['totals'][ $display_incl ? 'total_incl' : 'total_excl' ];
+		foreach ( array( '', '_incl', '_excl' ) as $basis ) {
+			$data['totals'][ 'subtotal' . $basis ] = array_sum( array_column( $data['lines'], 'line_subtotal' . $basis ) );
+		}
+		$data['totals']['total_qty'] = array_sum( array_column( $data['lines'], 'qty' ) );
+		$data['totals']['line_count'] = count( $data['lines'] );
+		$data['tax_summary'] = $this->get_tax_summary( $refund );
+		foreach ( $data['tax_summary'] as &$tax ) {
+			foreach ( array( 'taxable_amount_excl', 'tax_amount', 'taxable_amount_incl' ) as $key ) {
+				$tax[ $key ] = null === $tax[ $key ] ? null : abs( $tax[ $key ] );
+			}
+		}
+		unset( $tax );
+		$data['has_tax_summary'] = ! empty( $data['tax_summary'] );
+		$allocations = $refund->get_meta( '_wcpos_refund_allocations', true );
+		if ( ! $refund->meta_exists( '_wcpos_refund_allocations' ) ) {
+			$counting = array_values(
+				array_filter(
+					Ledger::instance()->read( $order ),
+					static function ( array $row ): bool {
+						return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
+					}
+				)
+			);
+			$allocations = 1 === count( $counting ) ? array(
+				array(
+					'payment_id' => $counting[0]['id'],
+					'method_id' => $counting[0]['method_id'],
+					'amount' => wc_format_decimal( $refund->get_amount(), wc_get_price_decimals() ),
+				),
+			) : array();
+		}
+		$data['payments'] = array();
+		foreach ( $allocations as $allocation ) {
+			$method = (string) ( $allocation['method_id'] ?? '' );
+			$descriptor = Descriptor_Builder::instance()->get( $method );
+			$data['payments'][] = array(
+				'payment_id' => $allocation['payment_id'],
+				'method_id' => $method,
+				'method_title' => $descriptor['title'] ?? $method,
+				'amount' => (float) $allocation['amount'],
+				'transaction_id' => '',
+				'tendered' => 0.0,
+				'change' => 0.0,
+			);
+		}
+		$data['totals']['paid_total'] = array_sum( array_column( $data['payments'], 'amount' ) );
+		$cashier_id = (int) $refund->get_refunded_by();
+		$user = $cashier_id ? get_user_by( 'id', $cashier_id ) : false;
+		$data['cashier'] = array(
+			'id' => $cashier_id,
+			'name' => $user ? $user->display_name : '',
+		);
+		$date = $this->format_wc_datetime_in_timezone( $refund->get_date_created(), wp_timezone(), $data['presentation_hints']['locale'] ?? '' );
+		$data['fiscal'] = Receipt_Payload_Assembler::fiscal(
+			array_merge(
+				$data['fiscal'],
+				array(
+					'document_type' => 'refund',
+					'document_label' => $data['i18n']['document_refund'],
+					'receipt_number' => (string) $number,
+					'sequence' => $number,
+					'corrects' => $corrects,
+					'immutable_id' => $refund->get_id() . ':' . $number,
+					'hash' => '',
+					'sale_time' => $date,
+					'sale_tz' => wp_timezone_string(),
+					'received_at' => $date,
+					'sale_counter' => null,
+					'is_reprint' => false,
+					'reprint_count' => 0,
+					// Store health listing of unallocated refunds belongs to a later ticket.
+					'extra_fields' => array(
+						'refund_id' => $refund->get_id(),
+						'allocations' => $allocations,
+						'allocation' => $allocations ? 'allocated' : 'unallocated',
+					),
+				)
+			)
+		);
+		$data['fiscal']['corrects'] = $corrects;
+		$identity = array_intersect_key( $data['fiscal'], array_flip( array( 'document_type', 'document_label', 'receipt_number', 'sequence', 'immutable_id', 'corrects' ) ) );
+		$data = apply_filters( 'wcpos_receipt_data', $data, $order, 'refund' );
+		$data = (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $data, $order, 'refund' ), '2.0.0', 'wcpos_receipt_data' );
+		// The minted identity is core-owned: an extension unaware of the refund mode
+		// cannot rewrite it after the number and the row are fixed.
+		$data['fiscal']         = array_merge( (array) ( $data['fiscal'] ?? array() ), $identity );
+		// The hash covers the stored bytes: the document without rendering labels
+		// (Fiscal_Record_Store::record() strips i18n on write) and with its own hash blank.
+		// The returned document keeps its labels so it can also be rendered directly.
+		$data['fiscal']['hash'] = '';
+		$hashed = $data;
+		unset( $hashed['i18n'] );
+		$json = wp_json_encode( $hashed );
+		if ( ! is_string( $json ) ) {
+			throw new \RuntimeException( 'Unable to encode refund document.' );
+		}
+		$data['fiscal']['hash'] = Fiscal_Record_Store::checksum( $json );
+		return $data;
+	}
+
+	/**
+	 * Shape positive refund items for embedded refunds and standalone documents.
+	 *
+	 * @param \WC_Order_Refund $refund Refund source.
+	 * @param bool             $display_incl Tax display basis.
+	 */
+	private function get_refund_items( \WC_Order_Refund $refund, bool $display_incl ): array {
+		$refund_lines = array();
+		foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
+			if ( ! $refund_item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+			$line_total_excl = abs( (float) $refund_item->get_total() );
+			$line_total_tax  = abs( (float) $refund_item->get_total_tax() );
+			$line_total_incl = $line_total_excl + $line_total_tax;
+			$refund_lines[]  = array(
+				'name'       => (string) $refund_item->get_name(),
+				'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
+				'qty'        => abs( (float) $refund_item->get_quantity() ),
+				'total'      => $display_incl ? $line_total_incl : $line_total_excl,
+				'total_incl' => $line_total_incl,
+				'total_excl' => $line_total_excl,
+				'taxes'      => array_map(
+					static function ( array $tax ): array {
+						$tax['amount'] = abs( (float) $tax['amount'] );
+						return $tax;
+					},
+					$this->get_item_taxes( $refund_item )
+				),
+			);
+		}
+
+		$refund_fees = array();
+		foreach ( $refund->get_items( 'fee' ) as $refund_fee ) {
+			if ( ! $refund_fee instanceof \WC_Order_Item_Fee ) {
+				continue;
+			}
+			$fee_total_excl = abs( (float) $refund_fee->get_total() );
+			$fee_total_tax  = abs( (float) $refund_fee->get_total_tax() );
+			$fee_total_incl = $fee_total_excl + $fee_total_tax;
+			$refund_fees[]  = array(
+				'label'      => (string) $refund_fee->get_name(),
+				'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
+				'total_incl' => $fee_total_incl,
+				'total_excl' => $fee_total_excl,
+				'taxes'      => array_map(
+					static function ( array $tax ): array {
+						$tax['amount'] = abs( (float) $tax['amount'] );
+						return $tax;
+					},
+					$this->get_item_taxes( $refund_fee )
+				),
+			);
+		}
+
+		$refund_shipping = array();
+		foreach ( $refund->get_items( 'shipping' ) as $refund_ship ) {
+			if ( ! $refund_ship instanceof \WC_Order_Item_Shipping ) {
+				continue;
+			}
+			$ship_total_excl   = abs( (float) $refund_ship->get_total() );
+			$ship_total_tax    = abs( (float) $refund_ship->get_total_tax() );
+			$ship_total_incl   = $ship_total_excl + $ship_total_tax;
+			$refund_shipping[] = array(
+				'label'      => (string) $refund_ship->get_name(),
+				'method_id'  => method_exists( $refund_ship, 'get_method_id' ) ? (string) $refund_ship->get_method_id() : '',
+				'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
+				'total_incl' => $ship_total_incl,
+				'total_excl' => $ship_total_excl,
+				'taxes'      => array_map(
+					static function ( array $tax ): array {
+						$tax['amount'] = abs( (float) $tax['amount'] );
+						return $tax;
+					},
+					$this->get_item_taxes( $refund_ship )
+				),
+			);
+		}
+		return array(
+			'lines' => $refund_lines,
+			'fees' => $refund_fees,
+			'shipping' => $refund_shipping,
+		);
 	}
 
 
@@ -877,77 +1768,7 @@ class Receipt_Data_Builder {
 				}
 			}
 
-			$refund_lines = array();
-			foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
-				if ( ! $refund_item instanceof \WC_Order_Item_Product ) {
-					continue;
-				}
-				$line_total_excl = abs( (float) $refund_item->get_total() );
-				$line_total_tax  = abs( (float) $refund_item->get_total_tax() );
-				$line_total_incl = $line_total_excl + $line_total_tax;
-				$refund_lines[]  = array(
-					'name'       => (string) $refund_item->get_name(),
-					'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
-					'qty'        => abs( (float) $refund_item->get_quantity() ),
-					'total'      => $display_incl ? $line_total_incl : $line_total_excl,
-					'total_incl' => $line_total_incl,
-					'total_excl' => $line_total_excl,
-					'taxes'      => array_map(
-						static function ( array $tax ): array {
-							$tax['amount'] = abs( (float) $tax['amount'] );
-							return $tax;
-						},
-						$this->get_item_taxes( $refund_item )
-					),
-				);
-			}
-
-			$refund_fees = array();
-			foreach ( $refund->get_items( 'fee' ) as $refund_fee ) {
-				if ( ! $refund_fee instanceof \WC_Order_Item_Fee ) {
-					continue;
-				}
-				$fee_total_excl = abs( (float) $refund_fee->get_total() );
-				$fee_total_tax  = abs( (float) $refund_fee->get_total_tax() );
-				$fee_total_incl = $fee_total_excl + $fee_total_tax;
-				$refund_fees[]  = array(
-					'label'      => (string) $refund_fee->get_name(),
-					'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
-					'total_incl' => $fee_total_incl,
-					'total_excl' => $fee_total_excl,
-					'taxes'      => array_map(
-						static function ( array $tax ): array {
-							$tax['amount'] = abs( (float) $tax['amount'] );
-							return $tax;
-						},
-						$this->get_item_taxes( $refund_fee )
-					),
-				);
-			}
-
-			$refund_shipping = array();
-			foreach ( $refund->get_items( 'shipping' ) as $refund_ship ) {
-				if ( ! $refund_ship instanceof \WC_Order_Item_Shipping ) {
-					continue;
-				}
-				$ship_total_excl   = abs( (float) $refund_ship->get_total() );
-				$ship_total_tax    = abs( (float) $refund_ship->get_total_tax() );
-				$ship_total_incl   = $ship_total_excl + $ship_total_tax;
-				$refund_shipping[] = array(
-					'label'      => (string) $refund_ship->get_name(),
-					'method_id'  => method_exists( $refund_ship, 'get_method_id' ) ? (string) $refund_ship->get_method_id() : '',
-					'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
-					'total_incl' => $ship_total_incl,
-					'total_excl' => $ship_total_excl,
-					'taxes'      => array_map(
-						static function ( array $tax ): array {
-							$tax['amount'] = abs( (float) $tax['amount'] );
-							return $tax;
-						},
-						$this->get_item_taxes( $refund_ship )
-					),
-				);
-			}
+			$items = $this->get_refund_items( $refund, $display_incl );
 
 			$pos_destination = (string) $refund->get_meta( '_pos_refund_destination' );
 			$pos_mode        = (string) $refund->get_meta( '_pos_refund_mode' );
@@ -980,9 +1801,9 @@ class Receipt_Data_Builder {
 				'gateway_id'       => $pos_gateway_id,
 				'gateway_title'    => $pos_gateway_title,
 				'processing_mode'  => $pos_mode,
-				'lines'            => $refund_lines,
-				'fees'             => $refund_fees,
-				'shipping'         => $refund_shipping,
+				'lines'            => $items['lines'],
+				'fees'             => $items['fees'],
+				'shipping'         => $items['shipping'],
 			);
 		}
 

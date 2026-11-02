@@ -22,8 +22,10 @@ composer.lock
 assets/js/*
 !assets/js/README.md
 !assets/js/indexeddb.worker.js
-!assets/js/opfs.worker.js
+!assets/js/sqlite.worker.js
+!assets/js/sqlite3.wasm
 !assets/js/api-fetch-method-param.js
+!assets/js/pos-loader.js
 assets/css/*
 !assets/css/README.md
 assets/asset-manifest.json

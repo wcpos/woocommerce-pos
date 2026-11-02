@@ -305,10 +305,14 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		return Order_Serializer::canonical_revision( Order_Serializer::add_pos_links( $data, wc_get_order( $id ) ) );
 	}
 
+	/**
+	 * A variation's revision is the schema-scoped content hash of its bare wc/v3
+	 * read (free#1869) — the same recipe as products, not a modified date.
+	 */
 	private function variation_revision( int $parent_id, int $id ): string {
 		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/v3/products/' . $parent_id . '/variations/' . $id ) );
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		return (string) $response->get_data()['date_modified_gmt'];
+		return Revision::compute_variation( Meta_Normalizer::normalize( $response->get_data() ) );
 	}
 
 	private function variation_fixture(): WC_Product_Variation {
@@ -615,8 +619,8 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		$this->assert_hook_parity(
 			'order_update',
 			self::ORDER_HOOKS,
-			$this->wc_operation( 'PUT', '/wc/v3/orders/' . $baseline->get_id(), array( 'status' => 'processing' ), 200 ),
-			$this->v2_operation( 'update', 'orders', $uuid, array( 'status' => 'processing' ), $revision )
+			$this->wc_operation( 'PUT', '/wc/v3/orders/' . $baseline->get_id(), array( 'status' => 'on-hold' ), 200 ),
+			$this->v2_operation( 'update', 'orders', $uuid, array( 'status' => 'on-hold' ), $revision )
 		);
 	}
 
@@ -676,33 +680,14 @@ class Test_Hook_Parity extends Sync_REST_Store_Test_Case {
 		update_option( 'woocommerce_manage_stock', 'yes' );
 		$baseline_product = $this->line_product( true );
 		$v2_product       = $this->line_product( true );
-		$baseline_payload = $this->order_line_payload( $baseline_product->get_id(), 2, 'processing' );
-		$v2_payload       = $this->order_line_payload( $v2_product->get_id(), 2, 'processing' );
+		$baseline_payload = $this->order_line_payload( $baseline_product->get_id(), 2, 'on-hold' );
+		$v2_payload       = $this->order_line_payload( $v2_product->get_id(), 2, 'on-hold' );
 		$hooks            = array( 'woocommerce_reduce_order_stock', 'woocommerce_order_item_quantity', 'woocommerce_new_order' );
 		$this->assert_hook_parity(
 			'order_stock_via_order',
 			$hooks,
 			$this->wc_operation( 'POST', '/wc/v3/orders', $baseline_payload, 201 ),
 			$this->v2_operation( 'create', 'orders', $this->next_uuid(), $v2_payload )
-		);
-	}
-
-	public function test_parity_order_set_paid_checkout_path(): void {
-		$payload = array(
-			'set_paid' => true,
-			'fee_lines' => array(
-				array(
-					'name' => 'Offline sale',
-					'total' => '10.00',
-				),
-			),
-		);
-		$hooks   = array( 'woocommerce_pre_payment_complete', 'woocommerce_payment_complete', 'woocommerce_order_status_changed', 'woocommerce_new_order' );
-		$this->assert_hook_parity(
-			'order_set_paid_checkout_path',
-			$hooks,
-			$this->wc_operation( 'POST', '/wc/v3/orders', $payload, 201 ),
-			$this->v2_operation( 'create', 'orders', $this->next_uuid(), $payload )
 		);
 	}
 

@@ -524,7 +524,9 @@ class Preview_Receipt_Builder {
 	 * @return array Filtered payload.
 	 */
 	public static function apply_receipt_data_filter( array $data ): array {
-		return (array) apply_filters( 'woocommerce_pos_receipt_data', $data, new \WC_Order(), 'preview' );
+		$order = new \WC_Order();
+		$filtered = apply_filters( 'wcpos_receipt_data', $data, $order, 'preview' );
+		return (array) apply_filters_deprecated( 'woocommerce_pos_receipt_data', array( $filtered, $order, 'preview' ), '2.0.0', 'wcpos_receipt_data' );
 	}
 
 	/**
@@ -827,6 +829,10 @@ class Preview_Receipt_Builder {
 
 		$fiscal = Receipt_Payload_Assembler::fiscal(
 			array(
+				'sale_time' => Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15T10:30:00Z' ), new \DateTimeZone( 'Europe/Madrid' ), $date_locale ),
+				'sale_tz' => 'Europe/Madrid',
+				'sale_counter' => 42,
+				'received_at' => Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15T10:35:00Z' ), $date_timezone, $date_locale ),
 				'immutable_id'      => '12345:42',
 				'receipt_number'    => '00042',
 				'sequence'          => 42,
@@ -855,6 +861,17 @@ class Preview_Receipt_Builder {
 			array(
 				'order'              => $order,
 				'store'              => $store,
+				'software'           => array(
+					'name' => 'WCPOS',
+					'plugin_version' => \WCPOS\WooCommercePOS\VERSION,
+					'app_version' => '1.8.7',
+					'app_build' => '42',
+					'platform' => 'ios',
+				),
+				'register'           => array(
+					'id' => 'e705c930-233f-4c8a-b8af-5794ab979d81',
+					'name' => 'Front till',
+				),
 				'cashier'            => $cashier,
 				'customer'           => $customer,
 				'lines'              => $lines,
@@ -987,6 +1004,7 @@ class Preview_Receipt_Builder {
 		return array(
 			'id'               => 42,
 			'name'             => $sample['first_name'] . ' ' . $sample['last_name'],
+			'first_name'       => $sample['first_name'],
 			'billing_address'  => $billing,
 			'shipping_address' => $shipping,
 			'tax_ids'          => $tax_ids,

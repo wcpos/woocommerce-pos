@@ -105,14 +105,19 @@ final class Sync_Journal_Purge {
 	 * Purge eligible rows, capped per run; a capped run reschedules itself.
 	 */
 	public function purge_expired(): void {
-		$batch = max( 1, min( self::MAX_DELETES_PER_RUN, (int) apply_filters( 'woocommerce_pos_change_log_purge_batch_size', 500 ) ) );
+		$filtered = apply_filters( 'wcpos_change_log_purge_batch_size', 500 );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_change_log_purge_batch_size', array( $filtered ), '2.0.0', 'wcpos_change_log_purge_batch_size' );
+		$batch = max( 1, min( self::MAX_DELETES_PER_RUN, (int) $filtered ) );
 		$now   = time();
 
-		$compaction_hours  = max( 0, (int) apply_filters( 'woocommerce_pos_change_log_compaction_window_hours', 24 ) );
+		$filtered = apply_filters( 'wcpos_change_log_compaction_window_hours', 24 );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_change_log_compaction_window_hours', array( $filtered ), '2.0.0', 'wcpos_change_log_compaction_window_hours' );
+		$compaction_hours  = max( 0, (int) $filtered );
 		$compaction_gmt    = gmdate( 'Y-m-d H:i:s', $now - $compaction_hours * HOUR_IN_SECONDS );
 		$compaction_cutoff = $this->sync_journal->sequence_at_or_before( $compaction_gmt );
 
-		$tombstone_days = (int) apply_filters( 'woocommerce_pos_change_log_tombstone_retention_days', 90 );
+		$tombstone_days = apply_filters( 'wcpos_change_log_tombstone_retention_days', 90 );
+		$tombstone_days = (int) apply_filters_deprecated( 'woocommerce_pos_change_log_tombstone_retention_days', array( $tombstone_days ), '2.0.0', 'wcpos_change_log_tombstone_retention_days' );
 		$tombstone_gmt  = gmdate( 'Y-m-d H:i:s', $now - $tombstone_days * DAY_IN_SECONDS );
 		// Never let a served stream's head regress: clamp each object type's
 		// cutoff below ITS OWN newest row. An expired tombstone can be the newest
@@ -162,9 +167,15 @@ final class Sync_Journal_Purge {
 
 		// Mutation retention windows. The create window never drops below the
 		// general settled window — creates are the riskier class to prune.
-		$settled_days = max( 0, (int) apply_filters( 'woocommerce_pos_sync_mutation_settled_retention_days', self::DEFAULT_SETTLED_RETENTION_DAYS ) );
-		$create_days  = max( $settled_days, (int) apply_filters( 'woocommerce_pos_sync_mutation_create_retention_days', self::DEFAULT_CREATE_RETENTION_DAYS ) );
-		$failure_days = max( 0, (int) apply_filters( 'woocommerce_pos_sync_mutation_failure_retention_days', self::DEFAULT_FAILURE_RETENTION_DAYS ) );
+		$filtered = apply_filters( 'wcpos_sync_mutation_settled_retention_days', self::DEFAULT_SETTLED_RETENTION_DAYS );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sync_mutation_settled_retention_days', array( $filtered ), '2.0.0', 'wcpos_sync_mutation_settled_retention_days' );
+		$settled_days = max( 0, (int) $filtered );
+		$filtered = apply_filters( 'wcpos_sync_mutation_create_retention_days', self::DEFAULT_CREATE_RETENTION_DAYS );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sync_mutation_create_retention_days', array( $filtered ), '2.0.0', 'wcpos_sync_mutation_create_retention_days' );
+		$create_days  = max( $settled_days, (int) $filtered );
+		$filtered = apply_filters( 'wcpos_sync_mutation_failure_retention_days', self::DEFAULT_FAILURE_RETENTION_DAYS );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sync_mutation_failure_retention_days', array( $filtered ), '2.0.0', 'wcpos_sync_mutation_failure_retention_days' );
+		$failure_days = max( 0, (int) $filtered );
 
 		// Journal work runs first, so each active mutation-expiry phase needs a
 		// reserved floor or an earlier saturated phase would starve it every run.

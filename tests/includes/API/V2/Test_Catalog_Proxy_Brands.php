@@ -108,6 +108,7 @@ class Test_Catalog_Proxy_Brands extends WCPOS_REST_Unit_Test_Case {
 		$rows = $this->read( array( 'include' => array( (int) $brand['term_id'] ) ) );
 
 		$this->assertCount( 1, $rows );
+
 		/*
 		 * `meta_data` is the one BUSINESS key WCPOS adds, and it is load-bearing
 		 * rather than cosmetic: wc/v3 serves no meta on a term at all, so
@@ -122,10 +123,11 @@ class Test_Catalog_Proxy_Brands extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing(
 			array_merge(
 				$this->view_context_fields( ( new WC_REST_Product_Brands_Controller() )->get_public_item_schema()['properties'] ),
-				array( 'meta_data', '_rxdb_revision', '_links' )
+				array( 'meta_data', 'pos_count', '_rxdb_revision', '_links' )
 			),
 			array_keys( $rows[0] )
 		);
+
 		/*
 		 * Named rather than left to the set difference above: `_rxdb_digest` is
 		 * absent from this lane STRUCTURALLY, not because the fixture happens to

@@ -28,22 +28,6 @@ trait Product_Helpers {
 	}
 
 	/**
-	 * Get barcode field from settings.
-	 *
-	 * @deprecated No caller remains in this repository. Kept because
-	 *             this trait is aliased as public API in
-	 *             includes/API/class-aliases.php, so callers outside this
-	 *             repository may still use it. Use
-	 *             {@see \WCPOS\WooCommercePOS\Services\Barcode_Field::meta_key()}
-	 *             instead.
-	 *
-	 * @return string
-	 */
-	public function wcpos_get_barcode_field() {
-		return Barcode_Field::meta_key();
-	}
-
-	/**
 	 * Whether the POS-only products feature is enabled.
 	 *
 	 * @return bool

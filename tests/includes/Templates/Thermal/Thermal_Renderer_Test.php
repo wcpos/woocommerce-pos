@@ -16,6 +16,31 @@ use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer;
  */
 class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 
+	/** Live rendering must carry the persisted fiscal identity through the real builder. */
+	public function test_live_render_uses_frozen_identity(): void {
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		$enrich = static function ( array $snapshot ) {
+			$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
+			return $snapshot;
+		};
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		try {
+			\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
+		} finally {
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		}
+		$number = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload']['fiscal']['receipt_number'];
+		$template = array(
+			'engine' => 'thermal',
+			'content' => '<receipt><text>ID:{{fiscal.receipt_number}} {{fiscal.qr_payload}}</text></receipt>',
+		);
+		$output = ( new Thermal_Renderer() )->render( $template, $order, 'escpos' );
+		$this->assertStringContainsString( 'FROZEN-QR-243', $output );
+		$this->assertStringContainsString( 'ID:' . $number, $output );
+	}
+
 	/**
 	 * Build a minimal thermal template array.
 	 *

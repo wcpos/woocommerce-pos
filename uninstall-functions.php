@@ -28,6 +28,29 @@ function woocommerce_pos_uninstall_table_suffixes(): array {
 }
 
 /**
+ * Owned tables holding user-authored bookkeeping: registers, register sessions,
+ * cash movements, closures and fiscal records. Dropped only on a full wipe.
+ *
+ * @return string[] Table name suffixes.
+ */
+function woocommerce_pos_uninstall_configuration_table_suffixes(): array {
+	return array(
+		'wcpos_fiscal_records',
+		'wcpos_register_sessions',
+		// Legacy: closures live on session rows since sync schema 10, movements since schema 11,
+		// and the register in the wcpos_register option since schema 12. A dev build that never
+		// reached the upgrade still holds these tables, or a renamed copy when a fold stopped
+		// between the rename and the drop.
+		'wcpos_closures',
+		'wcpos_closures_folded',
+		'wcpos_cash_movements',
+		'wcpos_cash_movements_folded',
+		'wcpos_registers',
+		'wcpos_registers_folded',
+	);
+}
+
+/**
  * Cron hooks whose scheduled events are cleared on uninstall.
  *
  * @return string[] Hook names.
@@ -40,7 +63,14 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		'wcpos_cloud_print_submit',
 		'wcpos_relay_reregister',
 		'wcpos_analytics_group_refresh',
+		'wcpos_payments_sweep',
+		// WP-Cron fallback for the receipt font install (Action Scheduler is the
+		// primary queue; its pending actions are cancelled in the sweep below).
+		'wcpos_install_font_packs',
 		'wcpos_file_integrity_check',
+		// Receipt_Snapshot_Cleanup's WP-Cron fallback (its Action Scheduler action is
+		// cancelled in the sweep below).
+		'wcpos_receipt_snapshot_cleanup',
 		// Legacy (pre-unified-journal) purge hook.
 		'wcpos_change_log_purge',
 	);
@@ -80,7 +110,8 @@ function woocommerce_pos_uninstall_pro_installed(): bool {
 		$installed       = isset( $network_plugins[ $pro_plugin ] );
 	}
 
-	return (bool) apply_filters( 'woocommerce_pos_uninstall_pro_installed', $installed );
+	$filtered = apply_filters( 'wcpos_uninstall_pro_installed', $installed );
+	return (bool) apply_filters_deprecated( 'woocommerce_pos_uninstall_pro_installed', array( $filtered ), '2.0.0', 'wcpos_uninstall_pro_installed' );
 }
 
 /**
@@ -318,7 +349,8 @@ function woocommerce_pos_uninstall_report(): void {
 	// still point a self-hosted deployment at its own project, and sending its
 	// uninstall events to the default project instead would be wrong twice over.
 	$token = \defined( 'WCPOS_POSTHOG_TOKEN' ) ? (string) WCPOS_POSTHOG_TOKEN : 'phc_BhTJzZ7fXMqcD4MiaUJQsQqPkEpu94yoSAthXFBWemvd';
-	$token = (string) apply_filters( 'woocommerce_pos_posthog_token', $token );
+	$token = apply_filters( 'wcpos_posthog_token', $token );
+	$token = (string) apply_filters_deprecated( 'woocommerce_pos_posthog_token', array( $token ), '2.0.0', 'wcpos_posthog_token' );
 
 	$body = wp_json_encode(
 		array(
@@ -335,7 +367,8 @@ function woocommerce_pos_uninstall_report(): void {
 	}
 
 	$host = \defined( 'WCPOS_POSTHOG_HOST' ) ? (string) WCPOS_POSTHOG_HOST : 'https://ph.wcpos.com';
-	$host = (string) apply_filters( 'woocommerce_pos_posthog_host', $host );
+	$host = apply_filters( 'wcpos_posthog_host', $host );
+	$host = (string) apply_filters_deprecated( 'woocommerce_pos_posthog_host', array( $host ), '2.0.0', 'wcpos_posthog_host' );
 
 	wp_remote_post(
 		untrailingslashit( $host ) . '/capture/',
@@ -370,15 +403,28 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 	foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
 		wp_unschedule_hook( $hook );
 	}
-	if ( function_exists( 'as_unschedule_all_actions' ) ) {
+	// The background font install is queued on Action Scheduler (WooCommerce is
+	// normally still active during an uninstall). Cancel it like the cron events
+	// above, whether or not Pro is present: an installed-but-inactive Pro would
+	// leave the action with no callback, and an active Pro re-queues on demand.
+	if ( \function_exists( 'as_unschedule_all_actions' ) ) {
+		as_unschedule_all_actions( 'wcpos_install_font_packs' );
 		as_unschedule_all_actions( 'wcpos_receipt_snapshot_cleanup', array(), 'wcpos' );
 	}
-	wp_clear_scheduled_hook( 'wcpos_receipt_snapshot_cleanup' );
 
 	// 2. Drop plugin tables. All are derived from WooCommerce data and are
 	// rebuilt on reinstall.
 	foreach ( woocommerce_pos_uninstall_table_suffixes() as $suffix ) {
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$suffix}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table names; uninstall context.
+	}
+
+	// Registers are user-authored configuration (names, store bindings, default
+	// floats, retired state) and the anchor of every sale's provenance, so the
+	// table goes only with a full wipe, like templates and the receipt sequence.
+	if ( $remove_all ) {
+		foreach ( woocommerce_pos_uninstall_configuration_table_suffixes() as $suffix ) {
+			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$suffix}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- Known plugin table names; uninstall context.
+		}
 	}
 
 	// 3. Delete plugin post types: the print-job queue always; receipt
@@ -450,6 +496,9 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 				$wpdb->esc_like( 'wcpos_active_template_' ) . '%',
 				$wpdb->esc_like( 'wcpos_template_order_' ) . '%',
 				$wpdb->esc_like( 'wcpos_disabled_virtual_templates_' ) . '%',
+				$wpdb->esc_like( 'wcpos_fiscal_sequence_' ) . '%',
+				// The register (name, default float, retired names) anchors every sale's provenance.
+				$wpdb->esc_like( 'wcpos_register' ),
 			)
 		);
 	}
@@ -492,6 +541,12 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-languages' );
 		}
 		woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-templates' );
+
+		// Receipt fonts are re-downloadable derived state, but Pro's bundled core
+		// installs into the same directory, so they stay while Pro is installed.
+		if ( ! $pro_installed ) {
+			woocommerce_pos_uninstall_rmdir( trailingslashit( $uploads['basedir'] ) . 'wcpos-fonts' );
+		}
 
 		if ( ! $pro_installed ) {
 			$log_files = glob( trailingslashit( $uploads['basedir'] ) . 'wc-logs/woocommerce-pos-*.log' );

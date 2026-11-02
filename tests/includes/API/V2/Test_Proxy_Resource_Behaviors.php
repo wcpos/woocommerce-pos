@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\API\V2\Proxy\Null_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Orders_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Products_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Proxy_Behavior;
+use WCPOS\WooCommercePOS\API\V2\Proxy\Refunds_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Taxes_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Terms_Proxy_Behavior;
 use WCPOS\WooCommercePOS\Sync\Collections;
@@ -50,6 +51,7 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 			'tags'       => Terms_Proxy_Behavior::class,
 			'coupons'    => Coupons_Proxy_Behavior::class,
 			'tax_rates'  => Taxes_Proxy_Behavior::class,
+			'refunds'    => Refunds_Proxy_Behavior::class,
 		);
 
 		foreach ( Collections::with( 'proxy' ) as $collection => $row ) {
@@ -133,7 +135,10 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$order     = OrderHelper::create_order();
 		$behavior  = new Orders_Proxy_Behavior();
 		$request   = new WP_REST_Request();
-		$input     = array( 'pos_cashier' => 11, 'dp' => '2' );
+		$input     = array(
+			'pos_cashier' => 11,
+			'dp' => '2',
+		);
 		$request->set_query_params( $input );
 		$forwarded = $behavior->forwarded_params( $input, $request );
 		$data      = $behavior->post_process( array( array( 'id' => $order->get_id() ) ) );
@@ -270,5 +275,77 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 
 		$this->assertTrue( $inside );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'read', 0, 'shop_coupon' ) );
+	}
+
+	/**
+	 * Register filtering is claimed by the proxy and preserves the UUID in its meta query.
+	 */
+	public function test_order_behavior_pos_register_claims_param_and_adds_meta_query(): void {
+		$uuid     = '550e8400-e29b-41d4-a716-446655440000';
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request();
+		$input    = array(
+			'pos_register' => $uuid,
+			'dp' => '2',
+		);
+		$request->set_query_params( $input );
+
+		$forwarded = $behavior->forwarded_params( $input, $request );
+		$filtered  = $behavior->around(
+			static function () use ( $request ): array {
+				return apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request );
+			}
+		);
+
+		$this->assertArrayNotHasKey( 'pos_register', $forwarded );
+		$this->assertSame(
+			array(
+				array(
+					'key' => '_wcpos_register',
+					'value' => $uuid,
+				),
+			),
+			$filtered['meta_query']
+		);
+	}
+
+	/** The proxy claims the gateway and installs the legacy OR group only during the read. */
+	public function test_order_behavior_payment_method_claims_param_and_adds_or_meta_query(): void {
+		// Arrange.
+		update_option( 'woocommerce_custom_orders_table_enabled', 'no' );
+		$behavior = new Orders_Proxy_Behavior();
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
+		$input    = array( 'payment_method' => 'stripe' );
+		$request->set_query_params( $input );
+
+		// Act.
+		$forwarded = $behavior->forwarded_params( $input, $request );
+		$filtered  = $behavior->around(
+			static function () use ( $request ): array {
+				return apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request );
+			}
+		);
+
+		// Assert.
+		$this->assertArrayNotHasKey( 'payment_method', $forwarded );
+		$this->assertSame(
+			array(
+				'meta_query' => array(
+					array(
+						'relation' => 'OR',
+						array(
+							'key'   => '_payment_method',
+							'value' => 'stripe',
+						),
+						array(
+							'key'   => '_wcpos_payment_method',
+							'value' => 'stripe',
+						),
+					),
+				),
+			),
+			$filtered
+		);
+		$this->assertSame( array(), apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request ) );
 	}
 }

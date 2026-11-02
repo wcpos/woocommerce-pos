@@ -66,7 +66,7 @@ final class Proxy_Uuid_Stamper {
 				return self::stamp_proxy_generic( $data, $resource, $config );
 			};
 			add_filter(
-				'woocommerce_pos_sync_proxy_response',
+				'wcpos_sync_proxy_response',
 				$callback,
 				10,
 				3
@@ -83,7 +83,7 @@ final class Proxy_Uuid_Stamper {
 	 */
 	public static function unregister_proxy_stampers(): void {
 		foreach ( self::$proxy_stampers as $callback ) {
-			remove_filter( 'woocommerce_pos_sync_proxy_response', $callback, 10 );
+			remove_filter( 'wcpos_sync_proxy_response', $callback, 10 );
 		}
 		self::$proxy_stampers = array();
 	}
@@ -179,7 +179,7 @@ final class Proxy_Uuid_Stamper {
 	}
 	/**
 	 * The ONE stamping loop behind every stamp_proxy_* collection hook on the
-	 * `woocommerce_pos_sync_proxy_response` filter. The catalog proxy forwards wc/v3 LISTS,
+	 * `wcpos_sync_proxy_response` filter. The catalog proxy forwards wc/v3 LISTS,
 	 * but wc/v3 STRIPS the protected `_woocommerce_pos_uuid` from most read payloads —
 	 * so without these stampers the served records carry no identity and the
 	 * uuid-native client (identifyRecord, mintOnMissing:false) throws. A collection

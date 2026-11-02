@@ -44,7 +44,7 @@ cat > "$TMP_DIR/woocommerce-pos.php" <<'EOF'
  * Tested up to:      7.0
  * Requires PHP:      7.4
  * WC tested up to:   10.8.0
- * WC requires at least: 5.3
+ * WC requires at least: 9.0
  */
 EOF
 
@@ -68,7 +68,7 @@ grep -Fqx 'Requires at least: 5.6' "$TMP_DIR/readme.txt" \
   || fail "readme.txt Requires at least was modified"
 grep -Fqx ' * Requires at least: 5.6' "$TMP_DIR/woocommerce-pos.php" \
   || fail "plugin Requires at least was modified"
-grep -Fqx ' * WC requires at least: 5.3' "$TMP_DIR/woocommerce-pos.php" \
+grep -Fqx ' * WC requires at least: 9.0' "$TMP_DIR/woocommerce-pos.php" \
   || fail "plugin WC requires at least was modified"
 grep -Fqx 'Stable tag: 1.9.17' "$TMP_DIR/readme.txt" \
   || fail "readme.txt Stable tag was modified"

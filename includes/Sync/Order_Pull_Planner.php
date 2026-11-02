@@ -34,9 +34,9 @@ use Generator;
  *    violation (Order_Document's single fail-closed reaction). The planner
  *    stops the page WITHOUT advancing — merely skipping would let a LATER
  *    order's emit advance the checkpoint past the unemitted one, losing it —
- *    and raises hasMore so the client retries from the last emitted position.
+ *    and clears `complete` so the client retries from the last emitted position.
  *
- * Pure: no REST, no WordPress state. Serialization and the fallback revision
+ * Pure: no REST, no WordPress state. Serialization and the revision recipe
  * are injected callables so the invariants unit-test against plain arrays.
  */
 final class Order_Pull_Planner {
@@ -59,16 +59,18 @@ final class Order_Pull_Planner {
 	 *
 	 *  - array{type:'document', orderId:int, payload:array, revision:string, checkpoint:array, sequence:int}
 	 *  - array{type:'tombstone', wooOrderId:int, checkpoint:array} (only when the client opted into deletes)
-	 *  - array{type:'complete', checkpoint:array, hasMore:bool} (EXACTLY ONE, always LAST)
+	 *  - array{type:'complete', checkpoint:array, complete:bool} (EXACTLY ONE, always LAST;
+	 *    `complete` is false when more rows remain — the /changes/* vocabulary)
 	 *
 	 * @param array    $change_rows       The sync-index page including its optional limit+1 probe row.
 	 * @param bool     $page_full         The limit+1 probe overflowed (more rows exist beyond this page).
 	 * @param callable $serialize         fn(int $order_id): array — the FULL payload, or array() when the
 	 *                                    order no longer serializes (absent/inaccessible).
-	 * @param callable $fallback_revision fn(array $full_payload, int $order_id, int $sequence): string —
-	 *                                    the canonical revision for fresh index rows, which normally carry none.
+	 * @param callable $revision_for      fn(array $full_payload, int $order_id, int $sequence): string —
+	 *                                    the canonical revision of the served payload. Index rows carry
+	 *                                    no revision value (ADR 0033, #1757): this is the ONLY source.
 	 */
-	public function plan( array $change_rows, bool $page_full, callable $serialize, callable $fallback_revision ): Generator {
+	public function plan( array $change_rows, bool $page_full, callable $serialize, callable $revision_for ): Generator {
 		$has_more = $page_full;
 		$response_checkpoint = $this->request_checkpoint;
 		$latest_sequence_by_order = self::latest_sequence_by_order( $change_rows );
@@ -79,12 +81,13 @@ final class Order_Pull_Planner {
 		foreach ( $change_rows as $change_row ) {
 			$id = (int) $change_row['order_id'];
 			$row_sequence = (int) $change_row['sequence'];
-			$row_revision = ! empty( $change_row['revision'] ) ? (string) $change_row['revision'] : '';
 			$row_modified = ! empty( $change_row['modified_gmt'] ) ? (string) $change_row['modified_gmt'] : gmdate( 'c' );
+			// A non-document checkpoint (superseded, tombstone, no-longer-serializes)
+			// has no revision: the row is a pointer and nothing was served (#1757).
 			$checkpoint = array(
 				'updatedAtGmt' => $row_modified,
 				'orderId' => $id,
-				'revision' => $row_revision,
+				'revision' => '',
 				'sequence' => $row_sequence,
 			);
 
@@ -115,7 +118,7 @@ final class Order_Pull_Planner {
 				continue;
 			}
 
-			$revision = '' !== $row_revision ? $row_revision : (string) $fallback_revision( $payload, $id, $row_sequence );
+			$revision = (string) $revision_for( $payload, $id, $row_sequence );
 			$modified = isset( $payload['date_modified_gmt'] ) ? (string) $payload['date_modified_gmt'] : $row_modified;
 			$checkpoint = array(
 				'updatedAtGmt' => $modified,
@@ -127,8 +130,8 @@ final class Order_Pull_Planner {
 			try {
 				Order_Document::require_uuid( $payload, $id );
 			} catch ( Order_Uuid_Exception $exception ) {
-				// UUID STOP: end the page WITHOUT advancing; hasMore retries from
-				// the last emitted checkpoint.
+				// UUID STOP: end the page WITHOUT advancing; a cleared `complete`
+				// retries from the last emitted checkpoint.
 				$has_more = true;
 				break;
 			}
@@ -147,7 +150,7 @@ final class Order_Pull_Planner {
 		yield array(
 			'type' => 'complete',
 			'checkpoint' => $response_checkpoint,
-			'hasMore' => $has_more,
+			'complete' => ! $has_more,
 		);
 	}
 

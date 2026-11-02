@@ -7,6 +7,7 @@ import { type TaxId } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { CloudflareCallout } from './cloudflare-callout';
+import { RegisterSection, type RegisterSectionProps } from './register-section';
 import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
 import { StorefrontReceiptSection } from './storefront-receipt-section';
 import { TaxIdsSection } from './tax-ids-section';
@@ -27,6 +28,9 @@ export interface StoreDefaults {
 }
 
 export interface GeneralSettingsProps {
+	register_sessions: boolean;
+	variance_threshold: string | null;
+	expected_close_time: string | null;
 	pos_only_products: boolean;
 	decimal_qty: boolean;
 	force_ssl: boolean;
@@ -100,10 +104,18 @@ function General() {
 		[]
 	);
 
+	const ResolvedRegisterSection = React.useMemo(
+		() =>
+			(window.wcpos?.settings?.getComponent?.('general.register_section') ??
+				RegisterSection) as React.ComponentType<RegisterSectionProps>,
+		[]
+	);
+
 	return (
 		<>
 			{/* eslint-disable-next-line react-hooks/static-components -- resolved from the pro registry; identity is stable (memoized above) */}
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
+			<ResolvedRegisterSection data={data} mutate={mutate} />
 			<FormSection title={t('settings.products_section_title')} divider>
 				<FormRow>
 					<Label tip={t('settings.pos_only_products_tip')}>

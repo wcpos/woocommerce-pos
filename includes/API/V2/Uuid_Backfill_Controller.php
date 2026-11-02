@@ -7,10 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use Exception;
 use WC_Coupon;
 use WC_Customer;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
@@ -269,64 +269,27 @@ final class Uuid_Backfill_Controller extends WP_REST_Controller {
 		return array_map( 'intval', (array) $wpdb->get_col( $sql ) );
 	}
 
-	/** Select orders from the active HPOS or CPT datastore. */
+	/** Select orders from the active order store. */
 	private function select_ids_order( string $mode, int $since_id, int $limit ): array {
 		global $wpdb;
-		$hpos   = class_exists( OrderUtil::class )
-			&& method_exists( OrderUtil::class, 'custom_orders_table_usage_is_enabled' )
-			&& OrderUtil::custom_orders_table_usage_is_enabled();
+		$s      = Order_Meta_Store::schema();
 		$regexp = self::UUID_SQL_REGEXP;
 
-		if ( $hpos ) {
-			$orders = $wpdb->prefix . 'wc_orders';
-			$meta   = $wpdb->prefix . 'wc_orders_meta';
-			if ( 'collisions' === $mode ) {
-				$sql = $wpdb->prepare(
-					"SELECT m.order_id FROM {$meta} m
-					 JOIN {$orders} o ON o.id = m.order_id AND o.type = 'shop_order'
-					 JOIN (
-					     SELECT m2.meta_value, MIN(m2.order_id) AS keep_id
-					     FROM {$meta} m2
-					     JOIN {$orders} o2 ON o2.id = m2.order_id AND o2.type = 'shop_order'
-					     WHERE m2.meta_key = %s AND m2.meta_value REGEXP '$regexp'
-					       AND o2.status NOT IN ('trash','auto-draft')
-					     GROUP BY m2.meta_value HAVING COUNT(*) > 1
-					 ) dups ON dups.meta_value = m.meta_value
-					 WHERE m.meta_key = %s AND m.order_id <> dups.keep_id
-					   AND o.status NOT IN ('trash','auto-draft')
-					   AND m.order_id > %d ORDER BY m.order_id ASC LIMIT %d",
-					Api::UUID_META_KEY,
-					Api::UUID_META_KEY,
-					$since_id,
-					$limit
-				);
-			} else {
-				$sql = $wpdb->prepare(
-					"SELECT o.id FROM {$orders} o
-					 LEFT JOIN {$meta} m
-					   ON m.order_id = o.id AND m.meta_key = %s AND m.meta_value REGEXP '$regexp'
-					 WHERE o.type = 'shop_order' AND o.status NOT IN ('trash','auto-draft')
-					   AND o.id > %d AND m.id IS NULL ORDER BY o.id ASC LIMIT %d",
-					Api::UUID_META_KEY,
-					$since_id,
-					$limit
-				);
-			}
-		} elseif ( 'collisions' === $mode ) {
+		if ( 'collisions' === $mode ) {
 			$sql = $wpdb->prepare(
-				"SELECT m.post_id FROM {$wpdb->postmeta} m
-				 JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type = 'shop_order'
+				"SELECT m.{$s['owner']} FROM {$s['meta']} m
+				 JOIN {$s['orders']} o ON o.{$s['id']} = m.{$s['owner']} AND o.{$s['type']} = 'shop_order'
 				 JOIN (
-				     SELECT m2.meta_value, MIN(m2.post_id) AS keep_id
-				     FROM {$wpdb->postmeta} m2
-				     JOIN {$wpdb->posts} p2 ON p2.ID = m2.post_id AND p2.post_type = 'shop_order'
+				     SELECT m2.meta_value, MIN(m2.{$s['owner']}) AS keep_id
+				     FROM {$s['meta']} m2
+				     JOIN {$s['orders']} o2 ON o2.{$s['id']} = m2.{$s['owner']} AND o2.{$s['type']} = 'shop_order'
 				     WHERE m2.meta_key = %s AND m2.meta_value REGEXP '$regexp'
-				       AND p2.post_status NOT IN ('trash','auto-draft')
+				       AND o2.{$s['status']} NOT IN ('trash','auto-draft')
 				     GROUP BY m2.meta_value HAVING COUNT(*) > 1
 				 ) dups ON dups.meta_value = m.meta_value
-				 WHERE m.meta_key = %s AND m.post_id <> dups.keep_id
-				   AND p.post_status NOT IN ('trash','auto-draft')
-				   AND m.post_id > %d ORDER BY m.post_id ASC LIMIT %d",
+				 WHERE m.meta_key = %s AND m.{$s['owner']} <> dups.keep_id
+				   AND o.{$s['status']} NOT IN ('trash','auto-draft')
+				   AND m.{$s['owner']} > %d ORDER BY m.{$s['owner']} ASC LIMIT %d",
 				Api::UUID_META_KEY,
 				Api::UUID_META_KEY,
 				$since_id,
@@ -334,11 +297,11 @@ final class Uuid_Backfill_Controller extends WP_REST_Controller {
 			);
 		} else {
 			$sql = $wpdb->prepare(
-				"SELECT p.ID FROM {$wpdb->posts} p
-				 LEFT JOIN {$wpdb->postmeta} m
-				   ON m.post_id = p.ID AND m.meta_key = %s AND m.meta_value REGEXP '$regexp'
-				 WHERE p.post_type = 'shop_order' AND p.post_status NOT IN ('trash','auto-draft')
-				   AND p.ID > %d AND m.meta_id IS NULL ORDER BY p.ID ASC LIMIT %d",
+				"SELECT o.{$s['id']} FROM {$s['orders']} o
+				 LEFT JOIN {$s['meta']} m
+				   ON m.{$s['owner']} = o.{$s['id']} AND m.meta_key = %s AND m.meta_value REGEXP '$regexp'
+				 WHERE o.{$s['type']} = 'shop_order' AND o.{$s['status']} NOT IN ('trash','auto-draft')
+				   AND o.{$s['id']} > %d AND m.{$s['meta_id']} IS NULL ORDER BY o.{$s['id']} ASC LIMIT %d",
 				Api::UUID_META_KEY,
 				$since_id,
 				$limit

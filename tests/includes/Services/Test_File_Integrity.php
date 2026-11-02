@@ -218,7 +218,7 @@ class Test_File_Integrity extends WP_UnitTestCase {
 			}
 		);
 		Error_Reporter::set_dev_override_for_testing( false );
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 		$this->stub_http( 200, array( 'files' => $this->manifest() ) );

@@ -40,6 +40,69 @@ class Receipt_I18n_Labels {
 		}
 
 		return array(
+			// Closure headings and row labels.
+			'discounts' => __( 'Discounts', 'woocommerce-pos' ),
+			'items_sold' => __( 'Items sold', 'woocommerce-pos' ),
+			'average_sale' => __( 'Average sale', 'woocommerce-pos' ),
+			'drawer_openings' => __( 'Drawer openings', 'woocommerce-pos' ),
+			'variance_note' => __( 'Difference note', 'woocommerce-pos' ),
+			'denominations' => __( 'Count by denomination', 'woocommerce-pos' ),
+			'pieces' => __( 'Pieces', 'woocommerce-pos' ),
+			'closure_subtitle' => /* translators: Line printed below the numbered closure title. */ __( 'Session closed · totals reset', 'woocommerce-pos' ),
+			'x_report_subtitle' => /* translators: Tells the cashier this interim print does not close the session. */ __( 'Interim report · not a closure · totals continue', 'woocommerce-pos' ),
+			'management_report' => /* translators: Legal footer for non-fiscal management prints, including Poland and Italy. */ __( 'Management report, not a fiscal document', 'woocommerce-pos' ),
+			'record_hash' => __( 'WCPOS record hash', 'woocommerce-pos' ),
+			'cashier_signature' => __( 'Cashier signature', 'woocommerce-pos' ),
+			'manager_signature' => __( 'Manager signature', 'woocommerce-pos' ),
+			'count_slip' => __( 'Count slip', 'woocommerce-pos' ),
+			'counters' => __( 'Counters', 'woocommerce-pos' ),
+			'net_sales' => __( 'Net sales', 'woocommerce-pos' ),
+			'cash' => __( 'Cash', 'woocommerce-pos' ),
+			'handover_slip' => __( 'Hand-over slip', 'woocommerce-pos' ),
+			'handover_subtitle' => __( 'Drawer handed over · session continues', 'woocommerce-pos' ),
+			'handed_over_by' => __( 'Handed over by', 'woocommerce-pos' ),
+			'taken_over_by' => __( 'Taken over by', 'woocommerce-pos' ),
+			'x_report' => __( 'X-report', 'woocommerce-pos' ),
+			'closure' => __( 'Closure', 'woocommerce-pos' ),
+			'opened' => __( 'Opened', 'woocommerce-pos' ),
+			'closed' => __( 'Closed', 'woocommerce-pos' ),
+			'approver' => __( 'Approver', 'woocommerce-pos' ),
+			'opening_float' => __( 'Opening float', 'woocommerce-pos' ),
+			'expected' => __( 'Expected', 'woocommerce-pos' ),
+			'counted' => __( 'Counted', 'woocommerce-pos' ),
+			'variance' => __( 'Variance', 'woocommerce-pos' ),
+			'tenders' => __( 'Tenders', 'woocommerce-pos' ),
+			'tender' => __( 'Tender', 'woocommerce-pos' ),
+			'cash_movements' => __( 'Cash movements', 'woocommerce-pos' ),
+			'time' => __( 'Time', 'woocommerce-pos' ),
+			'type' => __( 'Type', 'woocommerce-pos' ),
+			'reason' => __( 'Reason', 'woocommerce-pos' ),
+			'sales' => __( 'Sales', 'woocommerce-pos' ),
+			'period_sales' => __( 'Period sales', 'woocommerce-pos' ),
+			'period_refunds' => __( 'Period refunds', 'woocommerce-pos' ),
+			'transactions' => __( 'Transactions', 'woocommerce-pos' ),
+			'refunds' => __( 'Refunds', 'woocommerce-pos' ),
+			'payment_method' => __( 'Payment method', 'woocommerce-pos' ),
+			'cashiers' => __( 'Cashiers', 'woocommerce-pos' ),
+			'tax_rates' => __( 'Tax rates', 'woocommerce-pos' ),
+			'tax_rate' => __( 'Tax rate', 'woocommerce-pos' ),
+			'net' => __( 'Net', 'woocommerce-pos' ),
+			'gross' => __( 'Gross', 'woocommerce-pos' ),
+			'perpetual_totals' => __( 'Perpetual totals', 'woocommerce-pos' ),
+			'perpetual_sales' => __( 'Perpetual sales', 'woocommerce-pos' ),
+			'perpetual_refunds' => __( 'Perpetual refunds', 'woocommerce-pos' ),
+			'unsynced_sales' => __( 'sales not yet on the server', 'woocommerce-pos' ),
+			'short' => __( 'Short', 'woocommerce-pos' ),
+			'over' => __( 'Over', 'woocommerce-pos' ),
+			'exact' => __( 'Exact', 'woocommerce-pos' ),
+			'voided' => __( 'Voided', 'woocommerce-pos' ),
+			'paid_in' => __( 'Paid in', 'woocommerce-pos' ),
+			'paid_out' => __( 'Paid out', 'woocommerce-pos' ),
+			'no_sale' => __( 'No sale', 'woocommerce-pos' ),
+			'void' => __( 'Void', 'woocommerce-pos' ),
+
+			'generated' => __( 'Generated', 'woocommerce-pos' ),
+
 			// Order meta.
 			'order'                  => /* translators: Receipt label for the order number or order reference. */ __( 'Order', 'woocommerce-pos' ),
 			'date'                   => /* translators: Receipt label for the sale/order date. */ __( 'Date', 'woocommerce-pos' ),
@@ -227,14 +290,69 @@ class Receipt_I18n_Labels {
 			// Fiscal.
 			'signature'              => /* translators: Receipt label for a customer or staff signature line. */ __( 'Signature', 'woocommerce-pos' ),
 			'document_type'          => /* translators: Fiscal receipt label for document type/category. */ __( 'Document Type', 'woocommerce-pos' ),
-			'copy'                   => /* translators: Fiscal receipt label for a printed copy of a document. */ __( 'Copy', 'woocommerce-pos' ),
+			'copy'                   => /* translators: Fiscal receipt label for a printed copy of a document. */ __( 'COPY', 'woocommerce-pos' ),
 			'copy_number'            => /* translators: Fiscal receipt label for copy number/sequence. */ __( 'Copy No.', 'woocommerce-pos' ),
+			'reprint'                => /* translators: Fiscal receipt label marking a document printed again after the original. */ __( 'Reprint', 'woocommerce-pos' ),
+			'register'               => /* translators: Fiscal receipt label for the till (register) that rang the sale. */ __( 'Register', 'woocommerce-pos' ),
+			'sale_time'              => /* translators: Fiscal receipt label for the time the sale was rung at the till, in the till's own zone. */ __( 'Sale time', 'woocommerce-pos' ),
+			'document_refund'        => /* translators: Fiscal receipt heading for a refund document (credit note). */ __( 'Refund', 'woocommerce-pos' ),
+			'corrects'               => /* translators: Receipt label preceding the identity of the sale corrected by a refund. */ __( 'Corrects', 'woocommerce-pos' ),
+			'refunded_to'            => /* translators: Refund receipt payment-section heading identifying where money was returned. */ __( 'Refunded to', 'woocommerce-pos' ),
+			'document_void'          => /* translators: Fiscal receipt heading for a void document (a sale cancelled before completion). */ __( 'Void', 'woocommerce-pos' ),
+			'document_cancellation'  => /* translators: Fiscal receipt heading for a cancellation document (a completed sale later cancelled). */ __( 'Cancelled', 'woocommerce-pos' ),
+			'software'               => /* translators: Fiscal receipt label preceding the software name and version that produced the receipt. */ __( 'Software', 'woocommerce-pos' ),
 
 			// Order meta + footer (used by detailed-receipt header / order column / footer).
 			'status'                 => /* translators: Receipt label for order/document status. */ __( 'Status', 'woocommerce-pos' ),
 			'completed'              => /* translators: Receipt status value meaning the order/document is completed. */ __( 'Completed', 'woocommerce-pos' ),
 			'printed'                => /* translators: Receipt status value meaning the document has been printed. */ __( 'Printed', 'woocommerce-pos' ),
 			'opening_hours'          => /* translators: Receipt label for the store business opening hours. */ __( 'Opening Hours', 'woocommerce-pos' ),
+
+			// Customer display.
+			'welcome'            => /* translators: Customer-facing display label welcoming the customer. */ __(
+				'Welcome',
+				'woocommerce-pos'
+			),
+			'greeting'           => /* translators: Customer-facing display label used before the first name, as in "Hi {first name}!". */ __(
+				'Hi',
+				'woocommerce-pos'
+			),
+			'your_items'         => /* translators: Customer-facing display label heading the item list. */ __(
+				'Your items',
+				'woocommerce-pos'
+			),
+			'items_appear_here'  => /* translators: Customer-facing display label for an empty item list. */ __(
+				'Your items will appear here',
+				'woocommerce-pos'
+			),
+			'you_saved'          => /* translators: Customer-facing display label before the savings amount, as in "You saved $15.00". */ __(
+				'You saved',
+				'woocommerce-pos'
+			),
+			'paid_so_far'        => /* translators: Customer-facing display label for the amount already paid. */ __(
+				'Paid so far',
+				'woocommerce-pos'
+			),
+			'present_card'       => /* translators: Customer-facing display label prompting card presentation. */ __(
+				'Please present your card',
+				'woocommerce-pos'
+			),
+			'approved'           => /* translators: Customer-facing display label for an approved payment. */ __(
+				'Approved',
+				'woocommerce-pos'
+			),
+			'declined'           => /* translators: Customer-facing display label for a declined payment. */ __(
+				'Declined',
+				'woocommerce-pos'
+			),
+			'try_another_card'   => /* translators: Customer-facing display label after a declined payment. */ __(
+				'Please try another card or ask staff',
+				'woocommerce-pos'
+			),
+			'paid_in_full'       => /* translators: Customer-facing display label confirming full payment. */ __(
+				'Paid in full',
+				'woocommerce-pos'
+			),
 		);
 	}
 

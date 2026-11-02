@@ -333,11 +333,12 @@ class Cloud_Print_Section extends Abstract_Section {
 		// the stored option as the old default. Only 'star-line' survives as
 		// an explicit choice, for Line Mode-only models (TSP650II et al.).
 		// There is no admin toggle; sites that need a different fallback set
-		// it in code via the woocommerce_pos_cloud_printer_default_language filter.
+		// it in code via the wcpos_cloud_printer_default_language filter.
 		$accepted = array( 'star-prnt', 'star-line' );
 		$language = $printer['language'] ?? '';
 		if ( ! \in_array( $language, $accepted, true ) ) {
-			$language = (string) apply_filters( 'woocommerce_pos_cloud_printer_default_language', 'star-prnt', $printer );
+			$language = apply_filters( 'wcpos_cloud_printer_default_language', 'star-prnt', $printer );
+			$language = (string) apply_filters_deprecated( 'woocommerce_pos_cloud_printer_default_language', array( $language, $printer ), '2.0.0', 'wcpos_cloud_printer_default_language' );
 			if ( ! \in_array( $language, $accepted, true ) ) {
 				$language = 'star-prnt';
 			}

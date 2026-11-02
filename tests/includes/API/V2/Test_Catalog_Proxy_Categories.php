@@ -7,9 +7,11 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_REST_Product_Categories_Controller;
 use WCPOS\WooCommercePOS\Sync\Collections;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
@@ -32,6 +34,8 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		parent::tearDown();
 		$this->uninstall_sync_read_lane();
+		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( Pos_Visibility::OPTION );
 	}
 
 	/**
@@ -127,7 +131,60 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A category row carries WooCommerce's CATEGORY shape plus the POS identity meta.
+	 * Descendant products count once, while POS-hidden products do not count.
+	 */
+	public function test_category_pos_count_includes_descendants_and_excludes_hidden_products(): void {
+		$parent    = wp_insert_term( 'V2 Count Parent', 'product_cat' );
+		$parent_id = (int) $parent['term_id'];
+		$child     = wp_insert_term( 'V2 Count Child', 'product_cat', array( 'parent' => $parent_id ) );
+		$child_id  = (int) $child['term_id'];
+		foreach ( array( array( $child_id ), array( $child_id, $parent_id ), array( $parent_id ) ) as $category_ids ) {
+			$product = ProductHelper::create_simple_product();
+			$product->set_status( 'publish' );
+			$product->set_category_ids( $category_ids );
+			$product->save();
+		}
+		$hidden = ProductHelper::create_simple_product();
+		$hidden->set_status( 'publish' );
+		$hidden->set_category_ids( array( $parent_id ) );
+		$hidden->save();
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$rows = array_column( $this->read( array( 'include' => array( $parent_id, $child_id ) ) ), null, 'id' );
+
+		$this->assertSame( 3, $rows[ $parent_id ]['pos_count'] );
+		$this->assertSame( 2, $rows[ $child_id ]['pos_count'] );
+		$this->assertArrayHasKey( 'count', $rows[ $parent_id ] );
+	}
+
+	/**
+	 * A category containing only a draft has no published POS products.
+	 */
+	public function test_category_pos_count_excludes_draft_products(): void {
+		$category = wp_insert_term( 'V2 Draft Category', 'product_cat' );
+		$product  = ProductHelper::create_simple_product();
+		$product->set_status( 'draft' );
+		$product->set_category_ids( array( (int) $category['term_id'] ) );
+		$product->save();
+
+		$rows = $this->read( array( 'include' => array( (int) $category['term_id'] ) ) );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 0, $rows[0]['pos_count'] );
+	}
+
+	/**
+	 * A category row carries WooCommerce's shape plus POS identity meta and count.
 	 *
 	 * The expectation is DERIVED from WooCommerce's own product-categories schema
 	 * rather than copied out of a response; see
@@ -142,8 +199,9 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 		$rows = $this->read( array( 'include' => array( (int) $category['term_id'] ) ) );
 
 		$this->assertCount( 1, $rows );
+
 		/*
-		 * `meta_data` is the one BUSINESS key WCPOS adds, and it is load-bearing
+		 * `meta_data` is a BUSINESS key WCPOS adds, and it is load-bearing
 		 * rather than cosmetic: wc/v3 serves no meta on a term at all, so
 		 * `Sync\Proxy_Uuid_Stamper` injects the record's `_woocommerce_pos_uuid`
 		 * here. Without it the uuid-native client has no primary key for the row and
@@ -151,16 +209,18 @@ class Test_Catalog_Proxy_Categories extends WCPOS_REST_Unit_Test_Case {
 		 * makes. `_rxdb_revision` is transport metadata, stamped on every proxied
 		 * record by `Sync\Revision` at priority 9 (wired by
 		 * `Sync\Augmentation_Pipeline::install()`, as `Init::__construct()` does in
-		 * production). `_links` is appended by
+		 * production). `pos_count` counts POS-visible products including descendants.
+		 * `_links` is appended by
 		 * `rest_get_server()->response_to_data()`, not by the schema.
 		 */
 		$this->assertEqualsCanonicalizing(
 			array_merge(
 				$this->view_context_fields( ( new WC_REST_Product_Categories_Controller() )->get_public_item_schema()['properties'] ),
-				array( 'meta_data', '_rxdb_revision', '_links' )
+				array( 'meta_data', 'pos_count', '_rxdb_revision', '_links' )
 			),
 			array_keys( $rows[0] )
 		);
+
 		/*
 		 * Named rather than left to the set difference above: `_rxdb_digest` is
 		 * absent from this lane STRUCTURALLY, not because the fixture happens to

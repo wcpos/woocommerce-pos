@@ -21,7 +21,7 @@ class Test_Route_Classifier_Namespace_Parameterization extends WCPOS_REST_Unit_T
 	 * Add a duplicate core namespace before REST route registration.
 	 */
 	public function setUp(): void {
-		add_filter( 'woocommerce_pos_rest_namespaces', array( $this, 'add_v2_namespace' ) );
+		add_filter( 'wcpos_rest_namespaces', array( $this, 'add_v2_namespace' ) );
 		parent::setUp();
 	}
 
@@ -29,7 +29,7 @@ class Test_Route_Classifier_Namespace_Parameterization extends WCPOS_REST_Unit_T
 	 * Remove the future namespace filter.
 	 */
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_rest_namespaces', array( $this, 'add_v2_namespace' ) );
+		remove_filter( 'wcpos_rest_namespaces', array( $this, 'add_v2_namespace' ) );
 		parent::tearDown();
 	}
 

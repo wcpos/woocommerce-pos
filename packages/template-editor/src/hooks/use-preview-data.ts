@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 
 import apiFetch from '@wordpress/api-fetch';
 
+import type { EditorConfig } from '../types';
+
 interface PreviewDataState {
 	source: 'sample' | 'order';
 	data: Record<string, unknown>;
@@ -11,13 +13,17 @@ interface PreviewDataState {
 export function usePreviewData(
 	sampleData: Record<string, unknown>,
 	templateId: number,
-	hasPosOrders: boolean
+	hasPosOrders: boolean,
+	type: EditorConfig['type'] = 'receipt'
 ) {
-	const defaultSource = hasPosOrders ? 'order' : 'sample';
+	// A report document is never an order's; the route serves the fixture whatever order is
+	// named, so the order source is not offered for it.
+	const supportsOrderSource = type !== 'report' && hasPosOrders;
+	const defaultSource = supportsOrderSource ? 'order' : 'sample';
 	const [state, setState] = useState<PreviewDataState>({
 		source: defaultSource,
 		data: sampleData,
-		loading: hasPosOrders,
+		loading: supportsOrderSource,
 	});
 
 	const abortRef = useRef<AbortController | null>(null);
@@ -29,7 +35,7 @@ export function usePreviewData(
 				abortRef.current = null;
 			}
 
-			if (source === 'sample') {
+			if (source === 'sample' || !supportsOrderSource) {
 				setState({ source: 'sample', data: sampleData, loading: false });
 				return;
 			}
@@ -40,7 +46,7 @@ export function usePreviewData(
 			setState((prev) => ({ ...prev, source: 'order', loading: true }));
 
 			apiFetch<{ receipt_data?: Record<string, unknown> }>({
-				path: `wcpos/v1/templates/${templateId}/preview?order_id=latest&wcpos=1`,
+				path: `wcpos/v1/templates/${templateId}/preview?order_id=latest&wcpos=1&type=${type}`,
 				signal: controller.signal,
 			})
 				.then((response) => {
@@ -54,17 +60,17 @@ export function usePreviewData(
 					setState({ source: 'sample', data: sampleData, loading: false });
 				});
 		},
-		[sampleData, templateId]
+		[sampleData, templateId, type, supportsOrderSource]
 	);
 
 	// Auto-fetch order data on mount when POS orders exist.
 	const mountedRef = useRef(false);
 	useEffect(() => {
-		if (!mountedRef.current && hasPosOrders) {
+		if (!mountedRef.current && supportsOrderSource) {
 			mountedRef.current = true;
 			selectSource('order');
 		}
-	}, [hasPosOrders, selectSource]);
+	}, [supportsOrderSource, selectSource]);
 
 	return {
 		source: state.source,

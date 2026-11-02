@@ -143,7 +143,8 @@ class Stores extends WP_REST_Controller {
 		 * @param Store              $store      Store object.
 		 * @param WP_REST_Request    $request    Request object.
 		 */
-		return apply_filters( 'woocommerce_pos_rest_prepare_store', $response, $store, $request );
+		$filtered = apply_filters( 'wcpos_rest_prepare_store', $response, $store, $request );
+		return apply_filters_deprecated( 'woocommerce_pos_rest_prepare_store', array( $filtered, $store, $request ), '2.0.0', 'wcpos_rest_prepare_store' );
 	}
 
 	/**

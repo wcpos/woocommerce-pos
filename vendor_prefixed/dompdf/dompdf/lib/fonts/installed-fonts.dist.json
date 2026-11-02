@@ -58,17 +58,5 @@
         "bold": "Courier-Bold",
         "italic": "Courier-Oblique",
         "bold_italic": "Courier-BoldOblique"
-    },
-    "dejavu sans": {
-        "bold": "DejaVuSans-Bold",
-        "bold_italic": "DejaVuSans-Bold",
-        "italic": "DejaVuSans-Oblique",
-        "normal": "DejaVuSans"
-    },
-    "dejavu sans mono": {
-        "bold": "DejaVuSansMono-Bold",
-        "bold_italic": "DejaVuSansMono-Bold",
-        "italic": "DejaVuSansMono",
-        "normal": "DejaVuSansMono"
     }
 }

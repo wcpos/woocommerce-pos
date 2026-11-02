@@ -28,20 +28,13 @@ class Cash extends Abstract_POS_Gateway {
 		$this->id          = 'pos_cash';
 		$this->title       = /* translators: POS payment gateway label shown during checkout. */ __( 'Cash', 'woocommerce-pos' );
 		$this->description = '';
-		$this->icon        = apply_filters( 'woocommerce_pos_cash_icon', '' );
+		$this->icon = apply_filters( 'wcpos_cash_icon', '' );
+		$this->icon = apply_filters_deprecated( 'woocommerce_pos_cash_icon', array( $this->icon ), '2.0.0', 'wcpos_cash_icon' );
 		$this->has_fields  = true;
 		$this->enabled     = 'no';
 		$this->supports    = array( 'products', 'refunds' );
 
 		// Actions.
-		// @phpstan-ignore-next-line.
-		add_action(
-			'woocommerce_pos_update_options_payment_gateways_' . $this->id,
-			array(
-				$this,
-				'process_admin_options',
-			)
-		);
 		add_action( 'woocommerce_thankyou_pos_cash', array( $this, 'calculate_change' ) );
 		$this->register_pos_gateway_contract_hooks();
 	}

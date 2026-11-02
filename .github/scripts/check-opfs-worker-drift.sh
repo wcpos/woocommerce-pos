@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# check-opfs-worker-drift.sh — fail when the vendored OPFS worker no longer matches
+# check-opfs-worker-drift.sh — fail when the vendored SQLite assets no longer match
 # the web bundle the plugin actually loads.
 #
-# Why this exists: the POS web app loads its OPFS worker from the PLUGIN
-# (`Frontend.php` builds `opfsWorker` from `PLUGIN_URL . 'assets/js/opfs.worker.js'`),
-# not from the CDN bundle. The file is vendored by hand-copying `build/opfs.worker.js`
+# Why this exists: the POS web app loads its SQLite worker and WASM from the PLUGIN
+# (`Frontend.php` builds `opfsWorker` from `PLUGIN_URL . 'assets/js/sqlite.worker.js'`),
+# not from the CDN bundle. The files are vendored by hand-copying
+# `build/sqlite.worker.js` and `build/sqlite3.wasm`
 # out of wcpos/web-bundle. Nothing enforced that copy, so it silently fell three
 # bundle tags behind and shipped a storage fix that never reached web merchants.
 #
@@ -17,9 +18,11 @@
 set -euo pipefail
 
 PLUGIN_FILE="${PLUGIN_FILE:-woocommerce-pos.php}"
-WORKER_FILE="${WORKER_FILE:-assets/js/opfs.worker.js}"
+WORKER_FILE="${WORKER_FILE:-assets/js/sqlite.worker.js}"
+WASM_FILE="${WASM_FILE:-assets/js/sqlite3.wasm}"
 BUNDLE_REPO="${BUNDLE_REPO:-wcpos/web-bundle}"
-BUNDLE_WORKER_PATH="${BUNDLE_WORKER_PATH:-build/opfs.worker.js}"
+BUNDLE_WORKER_PATH="${BUNDLE_WORKER_PATH:-build/sqlite.worker.js}"
+BUNDLE_WASM_PATH="${BUNDLE_WASM_PATH:-build/sqlite3.wasm}"
 
 # Emit a workflow annotation and stop. Every failure path routes through here so
 # that "could not check" is always a red job, never a silent pass.
@@ -39,7 +42,9 @@ sha256_of() {
 }
 
 # Pure: read the runtime VERSION constant and reduce it to major.minor.
-# Returns non-zero unless the constant is a complete `major.minor.patch`.
+# Returns non-zero unless the constant is a complete `major.minor.patch`, with
+# an optional prerelease suffix (`2.0.0-beta.1` is on the `2.0` lane: the beta
+# plugins load the released lane's bundle, there is no prerelease lane).
 # Strictness is the point: `1.10.` and `1.10.4.0` both `cut` down to a
 # plausible-looking `1.10`, which would resolve a real tag and report "no drift"
 # for a version we could not actually parse. A bare two-part `1.10` is rejected
@@ -47,8 +52,8 @@ sha256_of() {
 # value means something upstream is wrong and guessing would defeat the check.
 plugin_major_minor() {
   local file="$1" version
-  version=$(sed -n "s/.*\\\\VERSION', '\([0-9][0-9.]*\)'.*/\1/p" "$file" | head -1)
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  version=$(sed -n "s/.*\\\\VERSION', '\([0-9][0-9.]*\(-[A-Za-z0-9.]*\)\{0,1\}\)'.*/\1/p" "$file" | head -1)
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$ ]] || return 1
   printf '%s' "$version" | cut -d. -f1,2
 }
 
@@ -77,50 +82,76 @@ fi
 : "${GH_TOKEN:?GH_TOKEN is required}"
 
 [[ -f "$PLUGIN_FILE" ]] || fail "plugin file not found: $PLUGIN_FILE"
-[[ -f "$WORKER_FILE" ]] || fail "vendored worker not found: $WORKER_FILE"
+for file in "$WORKER_FILE" "$WASM_FILE"; do
+  [[ -f "$file" ]] || fail "vendored asset not found: $file"
+done
 
-major_minor=$(plugin_major_minor "$PLUGIN_FILE") \
-  || fail "could not parse the VERSION constant out of $PLUGIN_FILE"
+# The `next` lane has no tag: its jsDelivr ref IS the web-bundle `next` branch (owner
+# ruling, 2026-09-04), so dev-next loads whatever that branch's head holds. The lane's
+# workflow passes it as BUNDLE_REF and the version-to-tag resolution is skipped. Left
+# unchecked, the vendored worker fell one rxdb minor behind the bundle for five days
+# and dev-next failed every boot with RxDB RM1 the moment the bundle was published
+# (2026-10-05).
+if [[ -n "${BUNDLE_REF:-}" ]]; then
+  tag="$BUNDLE_REF"
+  major_minor="(lane ref)"
+else
+  major_minor=$(plugin_major_minor "$PLUGIN_FILE") \
+    || fail "could not parse the VERSION constant out of $PLUGIN_FILE"
 
-tags=$(gh api --paginate "repos/${BUNDLE_REPO}/git/matching-refs/tags/v${major_minor}." \
-  --jq '.[].ref | sub("^refs/tags/"; "")' 2>/dev/null) \
-  || fail "could not list ${BUNDLE_REPO} tags for v${major_minor}.x"
+  tags=$(gh api --paginate "repos/${BUNDLE_REPO}/git/matching-refs/tags/v${major_minor}." \
+    --jq '.[].ref | sub("^refs/tags/"; "")' 2>/dev/null) \
+    || fail "could not list ${BUNDLE_REPO} tags for v${major_minor}.x"
 
-tag=$(printf '%s\n' "$tags" | newest_bundle_tag "$major_minor")
-[[ -n "$tag" ]] || fail "no v${major_minor}.x tag found in ${BUNDLE_REPO} — cannot verify the worker"
+  tag=$(printf '%s\n' "$tags" | newest_bundle_tag "$major_minor")
+  [[ -n "$tag" ]] || fail "no v${major_minor}.x tag found in ${BUNDLE_REPO} — cannot verify the worker"
+fi
 
 expected="$(mktemp)"
 trap 'rm -f "$expected"' EXIT
 
-# Pinned to the tag and requested raw: `raw.githubusercontent.com/.../main/...` serves
-# stale content for a freshly pushed commit and will happily report no drift.
-gh api "repos/${BUNDLE_REPO}/contents/${BUNDLE_WORKER_PATH}?ref=${tag}" \
-  -H "Accept: application/vnd.github.raw" > "$expected" \
-  || fail "could not fetch ${BUNDLE_WORKER_PATH} at ${tag} from ${BUNDLE_REPO}"
+files=("$WORKER_FILE" "$WASM_FILE")
+bundle_paths=("$BUNDLE_WORKER_PATH" "$BUNDLE_WASM_PATH")
+for i in 0 1; do
+  file="${files[$i]}"
+  bundle_path="${bundle_paths[$i]}"
+  # Pinned to the tag and requested raw: `raw.githubusercontent.com/.../main/...` serves
+  # stale content for a freshly pushed commit and will happily report no drift.
+  gh api "repos/${BUNDLE_REPO}/contents/${bundle_path}?ref=${tag}" \
+    -H "Accept: application/vnd.github.raw" > "$expected" \
+    || fail "could not fetch ${bundle_path} at ${tag} from ${BUNDLE_REPO}"
 
-[[ -s "$expected" ]] || fail "${BUNDLE_WORKER_PATH} at ${tag} came back empty"
+  [[ -s "$expected" ]] || fail "${bundle_path} at ${tag} came back empty"
 
-have=$(sha256_of "$WORKER_FILE")
-want=$(sha256_of "$expected")
+  have=$(sha256_of "$file")
+  want=$(sha256_of "$expected")
 
-if [[ "$have" == "$want" ]]; then
-  echo "✅ $WORKER_FILE matches ${BUNDLE_REPO}@${tag}:${BUNDLE_WORKER_PATH} ($have)"
-  exit 0
-fi
+  if [[ "$have" == "$want" ]]; then
+    echo "✅ $file matches ${BUNDLE_REPO}@${tag}:${bundle_path} ($have)"
+    continue
+  fi
 
-cat >&2 <<MSG
-::error::$WORKER_FILE has drifted from the bundle the plugin loads.
+  if [[ -n "${BUNDLE_REF:-}" ]]; then
+    resolved="lane ref @${tag}  ->  branch head of ${BUNDLE_REPO}"
+    reach="On a Pro dev site the page loads Pro's VENDORED copy of this plugin, so after merging also run: gh workflow run deploy-dev.yml --repo wcpos/woocommerce-pos-pro --ref ${tag}"
+  else
+    resolved="plugin version   $major_minor.x  ->  bundle ref @${major_minor}  ->  resolves to ${tag}"
+    reach="Desktop is unaffected — electron packages its own assets."
+  fi
+  cat >&2 <<MSG
+::error::$file has drifted from the bundle the plugin loads.
 
-  plugin version   $major_minor.x  ->  bundle ref @${major_minor}  ->  resolves to ${tag}
+  ${resolved}
   vendored copy    $have
   bundle copy      $want
 
-The web app loads the worker from the plugin, so merchants are running the vendored
+The web app loads these assets from the plugin, so merchants are running the vendored
 copy above, not the bundle's. Re-vendor it:
 
-  gh api "repos/${BUNDLE_REPO}/contents/${BUNDLE_WORKER_PATH}?ref=${tag}" \\
-    -H "Accept: application/vnd.github.raw" > ${WORKER_FILE}
+  gh api "repos/${BUNDLE_REPO}/contents/${bundle_path}?ref=${tag}" \\
+    -H "Accept: application/vnd.github.raw" > ${file}
 
-Then commit the result. Desktop is unaffected — electron packages its own worker.
+Then commit the result. ${reach}
 MSG
-exit 1
+  exit 1
+done

@@ -40,6 +40,7 @@ use WP_REST_Request;
  * @covers \WCPOS\WooCommercePOS\API\V2\Variations_Controller
  */
 class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * Remove read settings after each test.
 	 */
@@ -90,9 +91,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$first   = ProductHelper::create_simple_product();
 		$second  = ProductHelper::create_simple_product();
 		$deleted = ProductHelper::create_simple_product();
-		$digest  = new Integrity_Digest();
-		$digest->upsert_digest( $first->get_id() );
-		$digest->upsert_digest( $second->get_id() );
+		$this->seed_digests( 'products', $first->get_id(), $second->get_id() );
 		wp_delete_post( $deleted->get_id(), true );
 
 		$response = ( new Digests_Controller() )->get_digests(
@@ -992,7 +991,11 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$fingerprint = new Config_Fingerprint();
 
-		foreach ( array( 'products' => 1, 'tax_rates' => 1, 'variations' => 2 ) as $collection => $contract ) {
+		foreach ( array(
+			'products' => 1,
+			'tax_rates' => 1,
+			'variations' => 2,
+		) as $collection => $contract ) {
 			$this->assertSame(
 				$contract,
 				Config_Fingerprint::payload_contract_version( $collection ),
@@ -1026,7 +1029,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$fingerprint          = new Config_Fingerprint();
 		$tax_rate_fingerprint = $fingerprint->fingerprint( 'tax_rates' );
 
-		foreach ( array( 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons' ) as $collection ) {
+		foreach ( array( 'orders', 'customers', 'categories', 'brands', 'tags', 'coupons', 'refunds' ) as $collection ) {
 			$this->assertArrayHasKey( $collection, Collections::with( 'fingerprint' ) );
 			$this->assertSame( 1, Config_Fingerprint::payload_contract_version( $collection ) );
 			$this->assertSame( array(), $fingerprint->representation_settings( $collection ) );
@@ -1118,8 +1121,8 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		);
 		$data = $response->get_data();
 
-		$this->assertSame( array( $variation_ids[0] ), array_column( $data['documents'], 'id' ) );
-		$this->assertSame( $product->get_id(), $data['documents'][0]['parent_id'] );
+		$this->assertSame( array( $variation_ids[0] ), array_column( $data, 'id' ) );
+		$this->assertSame( $product->get_id(), $data[0]['parent_id'] );
 	}
 
 	/**
@@ -1137,7 +1140,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$this->assertTrue( $data['found'] );
 		$this->assertSame( $product->get_id(), $data['match']['id'] );
-		$this->assertSame( 'product', $data['match']['type'] );
+		$this->assertSame( 'simple', $data['match']['type'] );
 	}
 
 	/**
@@ -1252,15 +1255,12 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	public function test_variations_attach_stored_digests(): void {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = array_map( 'intval', $product->get_children() );
-		$digest        = new Integrity_Digest();
-		foreach ( $variation_ids as $variation_id ) {
-			$digest->upsert_digest( $variation_id );
-		}
+		$this->seed_digests( 'variations', ...$variation_ids );
 
 		$response = ( new Variations_Controller() )->get_variations(
 			$this->request( array( 'include' => $variation_ids ) )
 		);
-		$documents = $response->get_data()['documents'];
+		$documents = $response->get_data();
 
 		$this->assertNotEmpty( $documents );
 		foreach ( $documents as $document ) {
@@ -1418,7 +1418,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	 * Barcode resolution honours an extension filter that hides a product.
 	 *
 	 * The v2 lanes read visibility through Sync\Pos_Visibility, which reads through
-	 * Services\Settings — so the public `woocommerce_pos_online_only_product_visibility_settings`
+	 * Services\Settings — so the public `wcpos_online_only_product_visibility_settings`
 	 * filter applies here exactly as it always has on the v1 lanes.
 	 */
 	public function test_resolve_barcode_excludes_product_hidden_by_extension_filter(): void {
@@ -1431,14 +1431,14 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_online_only_product_visibility_settings', $filter );
+		add_filter( 'wcpos_online_only_product_visibility_settings', $filter );
 
 		try {
 			$response = ( new Resolve_Controller() )->resolve_barcode(
 				$this->request( array( 'code' => 'SYNC-FILTER-HIDDEN-PRODUCT' ) )
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_online_only_product_visibility_settings', $filter );
+			remove_filter( 'wcpos_online_only_product_visibility_settings', $filter );
 		}
 		$data = $response->get_data();
 
@@ -1513,7 +1513,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$product     = ProductHelper::create_simple_product();
 		$bucket_size = 1000;
 		$bucket      = (int) floor( $product->get_id() / $bucket_size );
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 
 		$response = ( new Integrity_Controller() )->scan(
 			$this->request(
@@ -1536,7 +1536,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 			$this->request( array( 'include' => array( $product->get_id() ) ) )
 		);
 
-		$this->assertSame( array(), $response->get_data()['documents'] );
+		$this->assertSame( array(), $response->get_data() );
 		$this->assertNotInstanceOf( WC_Product_Variation::class, wc_get_product( $product->get_id() ) );
 	}
 

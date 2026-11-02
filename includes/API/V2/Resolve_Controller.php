@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
@@ -29,14 +30,13 @@ use WP_REST_Server;
  * that own barcode storage can override resolution entirely; the returned
  * payload is hydrated through the filtered REST serialization path.
  *
- * Not final: the woocommerce_pos_sync_resolve_barcode_matches filter is applied
+ * Not final: the wcpos_sync_resolve_barcode_matches filter is applied
  * through a protected seam that the unit harness subclasses (its
  * apply_filters stub is identity).
  */
 class Resolve_Controller extends WP_REST_Controller {
 	use Endpoint_Permissions;
 
-	private const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
 	private const BARCODE_META_KEYS_SQL  = "('_sku','_global_unique_id','_barcode')";
 
 
@@ -108,14 +108,11 @@ class Resolve_Controller extends WP_REST_Controller {
 				// assembly line (Product_Serializer) — raw projections are never
 				// trusted (ADR 0003).
 				$serialization_request = new WP_REST_Request( 'GET', '/' );
-				$payload               = ( new Product_Serializer() )->serialize( $product, $serialization_request );
-				$type                  = (string) ( $first['type'] ?? 'product' );
-				$match                 = array(
-					'id'        => (int) ( $first['id'] ?? 0 ),
-					'type'      => $type,
-					'parent_id' => 'variation' === $type ? (int) $product->get_parent_id() : 0,
-					'payload'   => $payload,
-				);
+				// The RESPONSE body is the serializer's record (links included, like the
+				// collection lanes); stamp_record() takes the revision from the canonical
+				// read on its own, so the two never share bytes by accident.
+				$bare                  = ( new Product_Serializer() )->serialize( $product, $serialization_request, false );
+				$match                 = Product_Serializer::stamp_record( $bare, $product, $serialization_request );
 			}
 		}
 
@@ -150,7 +147,7 @@ class Resolve_Controller extends WP_REST_Controller {
 				"SELECT p.ID, p.post_type FROM {$wpdb->posts} p"
 				. ' INNER JOIN ' . $wpdb->postmeta . ' pm ON pm.post_id = p.ID'
 				. ' WHERE pm.meta_key = %s AND pm.meta_value = %s'
-				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
+				. ' AND p.post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
 				. " AND p.post_status = 'publish'"
 				. ' GROUP BY p.ID ORDER BY p.ID ASC',
 				$meta_key,
@@ -176,7 +173,7 @@ class Resolve_Controller extends WP_REST_Controller {
 				. ' WHERE pm.meta_key IN ' . self::BARCODE_META_KEYS_SQL
 				. ' AND pm.meta_key <> %s'
 				. ' AND pm.meta_value = %s'
-				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
+				. ' AND p.post_type IN ' . Digest_Index::PRODUCT_POST_TYPES_SQL
 				. " AND p.post_status = 'publish'"
 				. ' GROUP BY p.ID ORDER BY p.ID ASC',
 				$active_field,
@@ -207,13 +204,14 @@ class Resolve_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Seam for woocommerce_pos_sync_resolve_barcode_matches: plugins that own
+	 * Seam for wcpos_sync_resolve_barcode_matches: plugins that own
 	 * barcode storage (ADR 0003: value-based lookups must be hookable) can
 	 * replace discovery output entirely. Protected so the unit harness —
 	 * whose apply_filters stub is identity — can subclass the override path.
 	 */
 	protected function apply_matches_filter( array $matches, string $code ): array {
-		$filtered = apply_filters( 'woocommerce_pos_sync_resolve_barcode_matches', $matches, $code );
+		$filtered = apply_filters( 'wcpos_sync_resolve_barcode_matches', $matches, $code );
+		$filtered = apply_filters_deprecated( 'woocommerce_pos_sync_resolve_barcode_matches', array( $filtered, $code ), '2.0.0', 'wcpos_sync_resolve_barcode_matches' );
 
 		return \is_array( $filtered ) ? array_values( $filtered ) : array();
 	}

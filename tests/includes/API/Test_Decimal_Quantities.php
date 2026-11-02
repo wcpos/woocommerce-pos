@@ -44,7 +44,7 @@ class Test_Decimal_Quantities extends WCPOS_REST_Decimal_Quantity_Unit_Test_Case
 	 * Test that decimal_qty setting is enabled.
 	 */
 	public function test_decimal_qty_setting_enabled(): void {
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 	}
 
 	/**

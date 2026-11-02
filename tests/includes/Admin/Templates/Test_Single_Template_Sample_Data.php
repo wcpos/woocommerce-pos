@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Admin\Templates\Single_Template;
+use WCPOS\WooCommercePOS\Templates;
 use WC_REST_Unit_Test_Case;
 
 /**
@@ -23,6 +24,29 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Single_Template_Sample_Data extends WC_REST_Unit_Test_Case {
+
+	/**
+	 * Installed templates seed the editor with their formatted gallery profile.
+	 */
+	public function test_editor_bootstrap_uses_installed_template_preview_profile(): void {
+		// Arrange.
+		$post_id = Templates::install_gallery_template( 'invoice' );
+		try {
+			$this->assertIsInt( $post_id );
+			$method = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
+			$method->setAccessible( true );
+
+			// Act.
+			$script = $method->invoke( new Single_Template(), get_post( $post_id ) );
+			$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+
+			// Assert.
+			$this->assertSame( 'INV-2048', $config['sampleData']['order']['number'] );
+			$this->assertIsString( $config['sampleData']['totals']['total_incl_display'] );
+		} finally {
+			wp_delete_post( $post_id, true );
+		}
+	}
 
 	/**
 	 * The editor's sample data must carry formatted `*_display` money companions
@@ -48,5 +72,53 @@ class Test_Single_Template_Sample_Data extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'line_total_display', $first_line );
 		$this->assertIsString( $first_line['line_total_display'] );
 		$this->assertIsNumeric( $first_line['line_total'] );
+	}
+	/** Report bootstrap supplies its own fields, data and generic starters. */
+	public function test_report_editor_bootstrap_uses_report_assets(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_content' => '',
+			)
+		);
+		wp_set_object_terms( $post_id, 'report', 'wcpos_template_type' );
+		$method = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
+		$method->setAccessible( true );
+		$script = $method->invoke( new Single_Template(), get_post( $post_id ) );
+		$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+		$this->assertSame( 'report', $config['type'] );
+		$this->assertSame( 'Sales report', $config['sampleData']['report']['title'] );
+		$this->assertArrayHasKey( 'report', $config['fieldSchema'] );
+		$this->assertArrayNotHasKey( 'closure', $config['fieldSchema'] );
+		foreach ( array(
+			'logicless' => 'report-default.html',
+			'thermal' => 'thermal-report-80mm.xml',
+		) as $engine => $file ) {
+			$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ), $config['reportStarters'][ $engine ] );
+		}
+	}
+	/** Closure bootstrap supplies its own fields, data and generic starters. */
+	public function test_closure_editor_bootstrap_uses_closure_assets(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type' => 'wcpos_template',
+				'post_content' => '',
+			)
+		);
+		wp_set_object_terms( $post_id, 'closure', 'wcpos_template_type' );
+		$method = new \ReflectionMethod( Single_Template::class, 'get_editor_inline_script' );
+		$method->setAccessible( true );
+		$script = $method->invoke( new Single_Template(), get_post( $post_id ) );
+		$config = json_decode( rtrim( explode( 'var wcposTemplateEditor = ', $script )[1], ';' ), true );
+		$this->assertSame( 'closure', $config['type'] );
+		$this->assertSame( 42, $config['sampleData']['closure']['number'] );
+		$this->assertArrayHasKey( 'closure', $config['fieldSchema'] );
+		$this->assertArrayNotHasKey( 'report', $config['fieldSchema'] );
+		foreach ( array(
+			'logicless' => 'closure-default.html',
+			'thermal' => 'thermal-closure-80mm.xml',
+		) as $engine => $file ) {
+			$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ), $config['closureStarters'][ $engine ] );
+		}
 	}
 }

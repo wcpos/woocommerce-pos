@@ -35,6 +35,16 @@ class Null_Writer implements Collection_Writer_Interface {
 		);
 	}
 
+	/** Ordinary collections need no lock beyond the record lock. */
+	public function with_write_lock( int $id, array $payload, callable $work ) {
+		return $work();
+	}
+
+	/** Ordinary collections need no lock beyond the record lock to delete either. */
+	public function with_delete_lock( int $id, callable $work ) {
+		return $work();
+	}
+
 	/** Accept an existing target unchanged. */
 	public function validate_existing_create( int $id, array $payload, array $prepared ) {
 		return null;

@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\API\V1;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -30,7 +29,7 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
  * /settings/{slug} whose args come from the section's endpoint_args(), whose
  * reads call read(), and whose writes call write( merge( read(), $patch ) ).
  * Registering a section through the
- * `woocommerce_pos_register_settings_sections` action is therefore all an
+ * `wcpos_register_settings_sections` action is therefore all an
  * extension needs to do to gain an HTTP surface.
  */
 class Settings extends WP_REST_Controller {
@@ -95,6 +94,22 @@ class Settings extends WP_REST_Controller {
 	protected $rest_base = 'settings';
 
 	/**
+	 * Declare the protocol-gate classification.
+	 *
+	 * The wp-admin settings screen calls this surface with cookie auth and no
+	 * client protocol claim, and its wire shape did not change at the 2.0.0
+	 * boundary, so the whole prefix is exempt from the gate on both namespaces.
+	 * The sync surface stays gated (#1868).
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array(
+			'protocol_exempt' => array( "/{$this->namespace}/{$this->rest_base}" ),
+		);
+	}
+
+	/**
 	 * Register routes.
 	 *
 	 * @return void
@@ -138,6 +153,44 @@ class Settings extends WP_REST_Controller {
 
 		// Section-adjacent read-only lookups. These are not section CRUD, so they
 		// stay hand-registered.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/payment-gateways/readers',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'permission_callback' => function () {
+					return $this->section_update_permission_check( 'payment_gateways' );
+				},
+				'args'                => array(
+					'gateway_id' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'refresh'    => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
+				),
+				'callback'            => function ( WP_REST_Request $request ) {
+					$gateway_id = $request['gateway_id'];
+					$refresh    = $request['refresh'];
+					/**
+					 * Filters the terminals available for a payment gateway.
+					 *
+					 * @param array|null|WP_Error $readers     Readers, unavailable, or provider error.
+					 * @param string              $gateway_id Gateway id.
+					 * @param bool                $refresh    Request fresh discovery.
+					 * @hook wcpos_payment_gateway_readers
+					 */
+					$readers = apply_filters( 'wcpos_payment_gateway_readers', null, $gateway_id, $refresh );
+					if ( null === $readers ) {
+						return new WP_Error( 'wcpos_readers_unavailable', __( 'This payment method does not list terminals.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+					}
+					return is_wp_error( $readers ) ? $readers : new WP_REST_Response( array( 'readers' => $readers ), 200 );
+				},
+			)
+		);
+
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/tax_ids/detection',
@@ -251,32 +304,6 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
-	 * Sanitize a cloud assignment entry.
-	 *
-	 * Kept for backward compatibility — the Settings_CloudPrint_Test conformance
-	 * gate exercises this method directly via ReflectionMethod. Delegates to
-	 * Cloud_Print_Section::sanitize_assignment() when the section is registered.
-	 *
-	 * @param mixed $assignment Assignment.
-	 *
-	 * @return array
-	 *
-	 * @phpstan-ignore-next-line
-	 */
-	private function sanitize_cloud_assignment( $assignment ): array {
-		$section = SettingsService::instance()->sections()->get( 'cloud_print' );
-
-		if ( $section instanceof \WCPOS\WooCommercePOS\Services\Settings\Cloud_Print_Section ) {
-			return $section->sanitize_assignment( $assignment );
-		}
-
-		$assignment           = \is_array( $assignment ) ? $assignment : array();
-		$assignment['copies'] = min( 5, max( 1, (int) ( $assignment['copies'] ?? 1 ) ) );
-
-		return $assignment;
-	}
-
-	/**
 	 * Check read permissions for a section.
 	 *
 	 * @param string $id Section id.
@@ -342,17 +369,6 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function update_access_permission_check(): bool {
 		return current_user_can( 'manage_woocommerce_pos' ) && current_user_can( 'edit_users' ) && current_user_can( 'promote_users' );
-	}
-
-	/**
-	 * Filter payment gateways settings.
-	 *
-	 * @deprecated 2.0.0 Use Payment_Gateways_Section::free_tier_rule().
-	 *
-	 * @param mixed $options The gateway options.
-	 */
-	public function payment_gateways_settings( $options ) {
-		return Payment_Gateways_Section::free_tier_rule( $options );
 	}
 
 

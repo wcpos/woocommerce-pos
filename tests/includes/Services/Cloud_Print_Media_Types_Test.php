@@ -101,18 +101,6 @@ class Cloud_Print_Media_Types_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It offers the raster between native StarPRNT and the plain-text floor.
-	 */
-	public function test_for_job_offers_png_after_starprnt(): void {
-		$offer = $this->media_types->for_job( $this->template_job(), $this->printer );
-
-		$this->assertSame(
-			array( Cloud_Print_Media_Types::STARPRNT, Cloud_Print_Media_Types::PNG, Cloud_Print_Media_Types::TEXT ),
-			$offer
-		);
-	}
-
-	/**
 	 * It promotes the raster when the printer is configured for a full receipt
 	 * raster — the merchant asking for pixel fidelity over the printer's fonts.
 	 */

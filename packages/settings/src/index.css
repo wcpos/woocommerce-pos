@@ -51,6 +51,25 @@
 	display: none !important;
 } */
 
+/* Keep the native mixed state visible despite wp-admin forms.css. */
+#woocommerce-pos-settings input[type="checkbox"]:indeterminate {
+	position: relative;
+	border-color: #3582c4 !important;
+}
+
+#woocommerce-pos-settings input[type="checkbox"]:indeterminate::before {
+	content: "";
+	display: block;
+	position: absolute;
+	width: 8px;
+	height: 2px;
+	top: 50%;
+	left: 50%;
+	margin: 0;
+	transform: translate(-50%, -50%);
+	background: #3582c4;
+}
+
 /* Override WordPress admin focus styles inside POS settings */
 #woocommerce-pos-settings a:focus,
 #woocommerce-pos-settings a:active {

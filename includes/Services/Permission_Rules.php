@@ -22,6 +22,7 @@ class Permission_Rules {
 		'tax_rates'        => array( 'Taxes', 'settings', true ),
 		'tax_classes'      => array( 'Tax_Classes', 'settings', true ),
 		'shipping_methods' => array( 'Shipping_Methods', 'shipping_methods', true ),
+		'refunds'          => array( 'Refunds', 'shop_order_refund', true ),
 	);
 
 	/**
@@ -183,7 +184,7 @@ class Permission_Rules {
 	}
 
 	/**
-	 * Single WC callback; optional scope arguments serve deprecated public forwarders.
+	 * Single WC callback; optional scope arguments support internal permission checks.
 	 *
 	 * @param bool        $permission Incoming WC permission.
 	 * @param string      $context    Permission context.
@@ -322,9 +323,10 @@ class Permission_Rules {
 		 * @param {array} $capabilities
 		 * @returns {array} $capabilities
 		 * @since 1.10.10
-		 * @hook woocommerce_pos_protected_account_capabilities
+		 * @hook wcpos_protected_account_capabilities
 		 */
-		$caps = apply_filters( 'woocommerce_pos_protected_account_capabilities', array( 'manage_options', 'manage_woocommerce', 'edit_users', 'edit_posts' ) );
+		$caps = apply_filters( 'wcpos_protected_account_capabilities', array( 'manage_options', 'manage_woocommerce', 'edit_users', 'edit_posts' ) );
+		$caps = apply_filters_deprecated( 'woocommerce_pos_protected_account_capabilities', array( $caps ), '2.0.0', 'wcpos_protected_account_capabilities' );
 
 		return array_values( array_unique( array_filter( array_map( 'strval', (array) $caps ) ) ) );
 	}

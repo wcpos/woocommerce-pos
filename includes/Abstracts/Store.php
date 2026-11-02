@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Abstracts;
 
-use WCPOS\WooCommercePOS\Interfaces\StoreInterface;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Store_Defaults;
@@ -21,10 +20,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Abstract Store class.
  *
- * Handles the store data, and provides CRUD methods.
- * Implements StoreInterface to ensure API consistency with Pro version.
+ * Handles the store data, and provides CRUD methods. Pro's Store extends this
+ * class; the getters here are the one definition of the store contract.
  */
-class Store extends \WC_Data implements StoreInterface {
+class Store extends \WC_Data {
 	/**
 	 * This is the name of this object type.
 	 *
@@ -57,6 +56,7 @@ class Store extends \WC_Data implements StoreInterface {
 		'price_decimal_sep'           => '',
 		'price_num_decimals'          => '',
 		'prevent_overselling'         => false,
+		'decimal_qty'                 => false,
 		'prices_include_tax'          => '',
 		'tax_based_on'                => '',
 		'tax_address'                 => array(
@@ -73,6 +73,9 @@ class Store extends \WC_Data implements StoreInterface {
 		'tax_total_display'           => '',
 		'default_customer'            => 0,
 		'default_customer_is_cashier' => false,
+		'register_sessions'           => false,
+		'variance_threshold'          => '',
+		'expected_close_time'         => '',
 		// The merchant's consent to anonymous usage data + error reports. The POS
 		// client reads it from here so its own error reporting follows the same
 		// switch as the plugin's analytics (POS > Settings > General).
@@ -172,7 +175,12 @@ class Store extends \WC_Data implements StoreInterface {
 	public function set_woocommerce_pos_settings() {
 		$this->set_prop( 'default_customer', Settings::instance()->default_customer_id() );
 		$this->set_prop( 'default_customer_is_cashier', Settings::instance()->default_customer_is_cashier() );
+		$general = Settings::instance()->get_general_settings();
+		$this->set_prop( 'register_sessions', (bool) ( $general['register_sessions'] ?? false ) );
+		$this->set_prop( 'variance_threshold', $general['variance_threshold'] ?? '' );
+		$this->set_prop( 'expected_close_time', $general['expected_close_time'] ?? '' );
 		$this->set_prop( 'prevent_overselling', Settings::instance()->prevent_overselling_enabled() );
+		$this->set_prop( 'decimal_qty', Settings::instance()->decimal_qty_enabled() );
 		// The POS client gates its OWN error reporting on this value, so it is a
 		// send gate one hop away: read the persisted answer, not the filtered view.
 		$this->set_prop( 'tracking_consent', Settings::instance()->raw_tracking_consent() );

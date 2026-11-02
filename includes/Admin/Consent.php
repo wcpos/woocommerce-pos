@@ -276,7 +276,7 @@ class Consent {
 	public function register_routes(): void {
 		// Only expose the consent REST routes on WCPOS-flagged requests, matching the
 		// rest of /wcpos/v1/ (see Init::init_rest_api). Limits the always-on surface.
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			return;
 		}
 
@@ -334,7 +334,7 @@ class Consent {
 			return new WP_Error( 'wcpos_consent_invalid', /* translators: Short WCPOS UI label; keep concise. */ __( 'Invalid consent value.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 
-		$settings = woocommerce_pos_get_settings( 'general' );
+		$settings = wcpos_get_settings( 'general' );
 		if ( ! \is_array( $settings ) ) {
 			return new WP_Error( 'wcpos_consent_load_failed', __( 'Unable to load general settings.', 'woocommerce-pos' ), array( 'status' => 500 ) );
 		}
@@ -444,6 +444,22 @@ class Consent {
 		// PostHog only if this user goes on to allow tracking.
 		( new Lifecycle_Events() )->record_consent_prompt_viewed( $show_modal ? 'modal' : 'callout' );
 
+		/**
+		 * Filters the consent-prompt copy overrides.
+		 *
+		 * Keys (all optional; the consent UI keeps its built-in string for
+		 * any missing key): 'title', 'body', 'fields_intro', 'allow_label',
+		 * 'deny_label', 'privacy_note'. Used by the landing-experiments
+		 * consent-ask test (exp-202607) to vary the prompt without a
+		 * plugin release. Every claim in override copy must be literally
+		 * true about what is read and where it goes.
+		 *
+		 * @since x.x.x  (replace with the next release version at release time)
+		 *
+		 * @param array $copy Copy overrides, default empty.
+		 */
+		$copy = apply_filters( 'wcpos_consent_copy', array() );
+		$copy = apply_filters_deprecated( 'woocommerce_pos_consent_copy', array( $copy ), '2.0.0', 'wcpos_consent_copy' );
 		// Append the WCPOS request flag so the bundle's REST calls register the
 		// now-gated consent routes (see register_routes / Init::init_rest_api).
 		$config = array(
@@ -452,21 +468,7 @@ class Consent {
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'showModal'   => $show_modal,
 			'showCallout' => true,
-			/**
-			 * Filters the consent-prompt copy overrides.
-			 *
-			 * Keys (all optional; the consent UI keeps its built-in string for
-			 * any missing key): 'title', 'body', 'fields_intro', 'allow_label',
-			 * 'deny_label', 'privacy_note'. Used by the landing-experiments
-			 * consent-ask test (exp-202607) to vary the prompt without a
-			 * plugin release. Every claim in override copy must be literally
-			 * true about what is read and where it goes.
-			 *
-			 * @since x.x.x  (replace with the next release version at release time)
-			 *
-			 * @param array $copy Copy overrides, default empty.
-			 */
-			'copy'        => (object) apply_filters( 'woocommerce_pos_consent_copy', array() ),
+			'copy'        => (object) $copy,
 		);
 
 		return sprintf(

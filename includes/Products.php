@@ -96,6 +96,11 @@ class Products {
 	/**
 	 * Get POS Only product and variation ids for the query post types.
 	 *
+	 * This is the hard backstop (`post__not_in`). Since #1862 a POS Only product
+	 * also carries WooCommerce catalog visibility `hidden`, kept in step by
+	 * {@see Catalog_Visibility}, so surfaces that never run this query filter
+	 * (blocks, Store API, related products, wc/v3) hide it too.
+	 *
 	 * @param \WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return int[]
@@ -201,7 +206,7 @@ class Products {
 	 * Whether the request is a storefront rather than an operator context.
 	 */
 	private function is_storefront_request(): bool {
-		return ! ( is_admin() || woocommerce_pos_request() || $this->is_cli_request() || $this->is_operator_rest_request() );
+		return ! ( is_admin() || wcpos_request() || $this->is_cli_request() || $this->is_operator_rest_request() );
 	}
 
 	/**
@@ -233,7 +238,8 @@ class Products {
 		 * @param bool      $hide  Whether to exclude POS Only products from this query.
 		 * @param \WP_Query $query The query being decided.
 		 */
-		return (bool) apply_filters( 'woocommerce_pos_hide_pos_only_products', $hide, $query );
+		$filtered = apply_filters( 'wcpos_hide_pos_only_products', $hide, $query );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_hide_pos_only_products', array( $filtered, $query ), '2.0.0', 'wcpos_hide_pos_only_products' );
 	}
 
 	/**

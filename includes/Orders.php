@@ -70,8 +70,12 @@ class Orders {
 		$this->register_order_status();
 		add_filter( 'wc_order_statuses', array( $this, 'wc_order_statuses' ), 10, 1 );
 		add_filter( 'woocommerce_order_needs_payment', array( $this, 'order_needs_payment' ), 10, 3 );
+		add_filter( 'wc_order_is_editable', array( $this, 'order_is_editable' ), 10, 2 );
 		add_filter( 'woocommerce_valid_order_statuses_for_payment', array( $this, 'valid_order_statuses_for_payment' ), 10, 2 );
 		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2 );
+		add_filter( 'woocommerce_order_is_pending_statuses', array( $this, 'order_is_pending_statuses' ), 10, 1 );
+		add_filter( 'wc_stripe_allowed_payment_processing_statuses', array( $this, 'stripe_allowed_payment_processing_statuses' ), 10, 1 );
+		add_filter( 'woocommerce_analytics_excluded_order_statuses', array( $this, 'analytics_excluded_order_statuses' ), 10, 1 );
 		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3 );
 		add_filter( 'woocommerce_bacs_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_cheque_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
@@ -87,6 +91,7 @@ class Orders {
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( __CLASS__, 'fee_after_calculate_taxes' ), 10, 2 );
+		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( Services\Quick_Discount::class, 'recalculate_coupon_object' ), 10, 4 );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid_for_product', array( $this, 'coupon_is_valid_for_product' ), 10, 4 );
 		add_action( 'woocommerce_order_after_calculate_totals', array( __CLASS__, 'cleanup_temp_caches' ), 999 );
@@ -127,6 +132,20 @@ class Orders {
 	}
 
 	/**
+	 * Both POS open statuses are editable on every request, not only in wp-admin: the push
+	 * lane's `reopen_required` gate reads is_editable() (ADR 0040 rule 4), and a layaway
+	 * (`pos-partial`, derived from the ledger) takes a line edit without a status flip.
+	 *
+	 * @param bool              $is_editable Whether the order is editable.
+	 * @param WC_Abstract_Order $order       The order object.
+	 *
+	 * @return bool
+	 */
+	public function order_is_editable( $is_editable, WC_Abstract_Order $order ) {
+		return \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true ) ? true : $is_editable;
+	}
+
+	/**
 	 * Note: the wc- prefix is not used here because it is added by WooCommerce.
 	 *
 	 * @param array             $order_statuses Valid order statuses.
@@ -157,6 +176,68 @@ class Orders {
 	}
 
 	/**
+	 * Treat the WCPOS statuses as "pending" wherever core asks.
+	 *
+	 * The wc_get_is_pending_statuses() function is what the order-pay page, the Store API and
+	 * WooPayments' duplicate-prevention use to decide that stock is already held;
+	 * a pos-open order failing that test is re-validated as if it were a failed order.
+	 *
+	 * @param array $statuses Pending statuses (without the wc- prefix).
+	 *
+	 * @return array
+	 */
+	public function order_is_pending_statuses( array $statuses ): array {
+		return $this->add_pos_statuses( $statuses );
+	}
+
+	/**
+	 * Let Stripe finish asynchronous payments on WCPOS orders.
+	 *
+	 * Stripe refuses 3DS returns, redirect methods and webhook completions for any
+	 * order outside this list (default: pending, failed) — the money is taken and
+	 * the order stays pos-open. Same extension point Stripe's own voucher methods use.
+	 *
+	 * @param array $statuses Statuses Stripe will process a payment for.
+	 *
+	 * @return array
+	 */
+	public function stripe_allowed_payment_processing_statuses( array $statuses ): array {
+		return $this->add_pos_statuses( $statuses );
+	}
+
+	/**
+	 * Keep open carts and half-paid orders out of WooCommerce Analytics.
+	 *
+	 * Analytics counts every status that is not excluded, and core excludes only
+	 * pending/failed/cancelled, so without this an order still sitting in the till
+	 * is reported as a full sale.
+	 *
+	 * @param array $statuses Statuses excluded from Analytics (without the wc- prefix).
+	 *
+	 * @return array
+	 */
+	public function analytics_excluded_order_statuses( array $statuses ): array {
+		return $this->add_pos_statuses( $statuses );
+	}
+
+	/**
+	 * Append the WCPOS statuses to a status list without duplicating them.
+	 *
+	 * @param array $statuses Statuses without the wc- prefix.
+	 *
+	 * @return array
+	 */
+	private function add_pos_statuses( array $statuses ): array {
+		foreach ( array( 'pos-open', 'pos-partial' ) as $status ) {
+			if ( ! \in_array( $status, $statuses, true ) ) {
+				$statuses[] = $status;
+			}
+		}
+
+		return $statuses;
+	}
+
+	/**
 	 * Payment complete order status.
 	 * POS orders are also matched by order origin because gateway webhooks and
 	 * reconciliation crons complete payment outside POS requests.
@@ -170,7 +251,7 @@ class Orders {
 	 * @return string
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
-		if ( woocommerce_pos_request() || woocommerce_pos_is_pos_order( $order ) ) {
+		if ( wcpos_request() || wcpos_is_pos_order( $order ) ) {
 			$configured = $this->normalize_status( $this->get_gateway_order_status( $order->get_payment_method() ), $status );
 
 			if (
@@ -195,7 +276,7 @@ class Orders {
 	 * @return string
 	 */
 	public function offline_process_payment_order_status( string $status, WC_Abstract_Order $order ): string {
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			return $status;
 		}
 
@@ -203,7 +284,7 @@ class Orders {
 			return $status;
 		}
 
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return $status;
 		}
 
@@ -399,13 +480,13 @@ class Orders {
 	 * @return array
 	 */
 	public function apply_unpaid_gateway_order_status( $result, $order_id ) {
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			return $result;
 		}
 
 		$order = wc_get_order( $order_id );
 
-		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! $order instanceof WC_Order || ! wcpos_is_pos_order( $order ) ) {
 			return $result;
 		}
 
@@ -666,7 +747,7 @@ class Orders {
 	 * @return string The configured order status (may include wc- prefix).
 	 */
 	private function get_gateway_order_status( string $gateway_id ): string {
-		$gateway_settings = woocommerce_pos_get_settings( 'payment_gateways' );
+		$gateway_settings = wcpos_get_settings( 'payment_gateways' );
 
 		if (
 			is_array( $gateway_settings )
@@ -785,7 +866,7 @@ class Orders {
 	 */
 	public function coupon_get_items_to_validate( array $items, WC_Discounts $discounts ): array {
 		$object = $discounts->get_object();
-		if ( ! $object instanceof WC_Order || ! woocommerce_pos_is_pos_order( $object ) ) {
+		if ( ! $object instanceof WC_Order || ! wcpos_is_pos_order( $object ) ) {
 			return $items;
 		}
 
@@ -984,13 +1065,14 @@ class Orders {
 		$is_on_sale = (float) $pos_data['price'] < (float) $pos_data['regular_price'];
 		$product    = $product ? $product : $item->get_product();
 
-		return (bool) apply_filters(
-			'woocommerce_pos_item_is_on_sale',
+		$filtered = apply_filters(
+			'wcpos_item_is_on_sale',
 			$is_on_sale,
 			$product,
 			$item,
 			$pos_data
 		);
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_item_is_on_sale', array( $filtered, $product, $item, $pos_data ), '2.0.0', 'wcpos_item_is_on_sale' );
 	}
 
 	/**
@@ -1018,7 +1100,7 @@ class Orders {
 	 * @return array
 	 */
 	public function get_tax_location( $args, WC_Abstract_Order $order ) {
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return $args;
 		}
 

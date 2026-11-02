@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
 use WC_Payment_Gateways;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 
 /**
@@ -20,6 +21,9 @@ use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
  * time.
  */
 class Payment_Gateways_Section extends Abstract_Section {
+	/** Supported decimal strings; an empty string disables cash rounding. */
+	const ROUNDING_INCREMENTS = array( '', '0.05', '0.10', '0.25', '0.50', '1', '5', '10' );
+
 	/**
 	 * Section id.
 	 */
@@ -35,9 +39,10 @@ class Payment_Gateways_Section extends Abstract_Section {
 			'default_gateway' => 'pos_cash',
 			'gateways'        => array(
 				'pos_cash' => array(
-					'order'        => 0,
-					'enabled'      => true,
-					'order_status' => 'wc-completed',
+					'order'              => 0,
+					'enabled'            => true,
+					'order_status'       => 'wc-completed',
+					'rounding_increment' => '',
 				),
 				'pos_card' => array(
 					'order'        => 1,
@@ -115,10 +120,75 @@ class Payment_Gateways_Section extends Abstract_Section {
 			),
 			'gateways' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_array( $param );
+					if ( ! \is_array( $param ) ) {
+						return false;
+					}
+					foreach ( $param as $gateway ) {
+						if ( ! \is_array( $gateway ) ) {
+							return false;
+						}
+						if ( \array_key_exists( 'rounding_increment', $gateway ) && ! \in_array( $gateway['rounding_increment'], self::ROUNDING_INCREMENTS, true ) ) {
+							return false;
+						}
+						if ( ( \array_key_exists( 'default_reader', $gateway ) && ! \is_string( $gateway['default_reader'] ) )
+							|| ( \array_key_exists( 'lock_to_default', $gateway ) && ! \is_bool( $gateway['lock_to_default'] ) ) ) {
+							return false;
+						}
+						if ( \array_key_exists( 'allowed_readers', $gateway ) ) {
+							$readers = $gateway['allowed_readers'];
+							if ( ! \is_array( $readers ) || array_values( array_filter( $readers, 'is_string' ) ) !== $readers || \in_array( '', $readers, true ) ) {
+								return false;
+							}
+						}
+					}
+					return true;
 				},
 			),
 		);
+	}
+
+	/**
+	 * Replace reader lists wholesale while retaining PATCH semantics elsewhere.
+	 *
+	 * @param array $existing Existing settings.
+	 * @param array $patch    Incoming settings.
+	 * @return array
+	 */
+	public function merge( array $existing, array $patch ): array {
+		foreach ( $patch['gateways'] ?? array() as $id => $gateway ) {
+			if ( \array_key_exists( 'allowed_readers', $gateway ) ) {
+				unset( $existing['gateways'][ $id ]['allowed_readers'] );
+			}
+		}
+		return parent::merge( $existing, $patch );
+	}
+
+	/**
+	 * Normalize gateway settings before storage.
+	 *
+	 * @param array $settings Settings to save.
+	 * @return array
+	 */
+	protected function sanitize( array $settings ): array {
+		foreach ( $settings['gateways'] ?? array() as $id => $gateway ) {
+			// Computed on every read; a PATCH echoes the view back, so keep it out of the option.
+			unset( $settings['gateways'][ $id ]['capture_mode'], $settings['gateways'][ $id ]['kind'] );
+			// A writer that skipped the endpoint (save_settings) cannot store a value the list and the
+			// till would refuse; it becomes no rounding. The pre-save filter runs after this.
+			$increment = (string) ( $gateway['rounding_increment'] ?? '' );
+			$settings['gateways'][ $id ]['rounding_increment'] = \in_array( $increment, self::ROUNDING_INCREMENTS, true ) ? $increment : '';
+			if ( \array_key_exists( 'default_reader', $gateway ) ) {
+				$settings['gateways'][ $id ]['default_reader'] = (string) $gateway['default_reader'];
+			}
+			if ( \array_key_exists( 'lock_to_default', $gateway ) ) {
+				$settings['gateways'][ $id ]['lock_to_default'] = (bool) $gateway['lock_to_default'];
+			}
+			if ( \array_key_exists( 'allowed_readers', $gateway ) ) {
+				$readers = array_filter( (array) $gateway['allowed_readers'], 'is_string' );
+				$settings['gateways'][ $id ]['allowed_readers'] = array_values( array_unique( array_diff( $readers, array( '' ) ) ) );
+			}
+		}
+		return $settings;
 	}
 
 	/**
@@ -177,9 +247,24 @@ class Payment_Gateways_Section extends Abstract_Section {
 					'order'        => 999,
 					'order_status' => $default_status,
 				),
-				$gateways_settings['gateways'][ $id ] ?? array()
+				array(
+					'default_reader'     => '',
+					'allowed_readers'    => array(),
+					'lock_to_default'    => false,
+					'rounding_increment' => '',
+				),
+				$gateways_settings['gateways'][ $id ] ?? array(),
+				// The bare mode: a handler may scope the resolved value as `<mode>:<provider>`.
+				array(
+					'capture_mode' => explode( ':', Descriptor_Builder::resolve_mode( $gateway ), 2 )[0],
+					'kind'         => Descriptor_Builder::resolve_kind( $gateway ),
+				)
 			);
 
+			// A stored value the list no longer carries reads as no rounding, so the modal never sends it back.
+			if ( ! \in_array( $response['gateways'][ $id ]['rounding_increment'], self::ROUNDING_INCREMENTS, true ) ) {
+				$response['gateways'][ $id ]['rounding_increment'] = '';
+			}
 			if ( ! is_string( $response['gateways'][ $id ]['title'] ) || '' === trim( $response['gateways'][ $id ]['title'] ) ) {
 				$response['gateways'][ $id ]['title'] = $contract->get_display_title( $gateway );
 			}
@@ -197,8 +282,9 @@ class Payment_Gateways_Section extends Abstract_Section {
 		 *
 		 * @param array $settings The payment gateways settings.
 		 *
-		 * @hook woocommerce_pos_payment_gateways_settings
+		 * @hook wcpos_payment_gateways_settings
 		 */
-		return apply_filters( 'woocommerce_pos_payment_gateways_settings', $response );
+		$filtered = apply_filters( 'wcpos_payment_gateways_settings', $response );
+		return apply_filters_deprecated( 'woocommerce_pos_payment_gateways_settings', array( $filtered ), '2.0.0', 'wcpos_payment_gateways_settings' );
 	}
 }

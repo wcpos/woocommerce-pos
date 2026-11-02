@@ -14,7 +14,13 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
+use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 
 /**
  * Pos_Order_Audit service.
@@ -23,9 +29,47 @@ final class Pos_Order_Audit {
 	/**
 	 * Audit keys the SERVER derives — a client-supplied value is never accepted.
 	 *
+	 * `_pos_payment_asserted` is a legacy marker (ADR 0035 path 3, removed under ADR 0040):
+	 * orders written before 2.0.0 carry it, and a client still may not write it.
+	 *
 	 * @var string[]
 	 */
-	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version' );
+	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count' );
+
+	/**
+	 * Meta the server alone writes: the ledger and its index rows, the Tip fee's row mark (item meta, also
+	 * stripped from pushed lines by Order_Write_Payload), the command and completion maps,
+	 * the gateway attempt history and stamp, the v1 checkout state, and the WooCommerce money meta a
+	 * push could address by id on posts storage. A new server-owned key joins this list in the change that introduces it (ADR 0040 rule 2).
+	 *
+	 * @var string[]
+	 */
+	public const SERVER_MONEY_META_KEYS = array(
+		Ledger::META_KEY,
+		Ledger::INDEX_META_KEY,
+		Ledger::PAYMENT_ID_META_KEY,
+		Ledger::LIVE_LEG_META_KEY,
+		Ledger::SESSION_META_KEY,
+		Ledger::TIP_FEE_META_KEY,
+		Command_Log::META_KEY,
+		Completion_Stamp::COMPLETED_AT_META_KEY,
+		Completion_Stamp::META_KEY,
+		Fiscal_Record_Writers::PENDING_META_KEY,
+		Attempts::META_KEY,
+		'_payment_method',
+		'_payment_method_title',
+		'_transaction_id',
+		'_date_paid',
+		'_paid_date',
+		Checkout_State_Repository::META_KEY,
+	);
+
+	/**
+	 * Top-level wc/v3 fields that carry money; dropped from every push (ADR 0040 rule 2).
+	 *
+	 * @var string[]
+	 */
+	public const SERVER_MONEY_FIELDS = array( 'set_paid', 'date_paid', 'date_paid_gmt', 'transaction_id', 'payment_method', 'payment_method_title' );
 
 	/**
 	 * Audit keys sourced from the till at the sale (client-supplied, validated,
@@ -33,7 +77,16 @@ final class Pos_Order_Audit {
 	 *
 	 * @var string[]
 	 */
-	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback' );
+	private const TILL_META_KEYS = array( '_pos_store', '_pos_cash_amount_tendered', '_pos_cash_change', '_pos_card_cashback', '_wcpos_register', '_wcpos_till', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
+
+	/**
+	 * Write-once sale provenance tuple.
+	 *
+	 * @return string[]
+	 */
+	public static function provenance_meta_keys(): array {
+		return array( '_wcpos_register', '_wcpos_till', '_wcpos_sale_time', '_wcpos_sale_tz', '_wcpos_sale_counter', '_wcpos_session', '_wcpos_app_version', '_wcpos_app_build' );
+	}
 
 	/**
 	 * The subset of till keys that are monetary AMOUNTS (unsigned plain decimals);
@@ -54,12 +107,34 @@ final class Pos_Order_Audit {
 	}
 
 	/**
-	 * Every audit key: the server-derived and the till-sourced set.
+	 * Every key a client may not write directly: the server-derived audit keys, the
+	 * till-sourced set (filled by the write path, never by the forward) and the
+	 * server-owned money keys.
 	 *
 	 * @return string[]
 	 */
 	public static function audit_meta_keys(): array {
-		return array_merge( self::SERVER_META_KEYS, self::TILL_META_KEYS );
+		return array_merge( self::SERVER_META_KEYS, self::TILL_META_KEYS, self::SERVER_MONEY_META_KEYS );
+	}
+
+	/**
+	 * Every key an order write strips from client meta: the audit and money keys, plus the
+	 * live order data store's internal keys. WooCommerce routes an internal key to its setter
+	 * (`_created_via`, `_order_key`, `_date_completed`…) or stores it as a plain row that the
+	 * posts store reads back as the order's own data (`_order_currency`, `_order_stock_reduced`,
+	 * `_customer_user`…), so a `meta_data` entry would write the order (ADR 0040 rule 2).
+	 *
+	 * @return string[]
+	 */
+	public static function protected_order_meta_keys(): array {
+		$internal = array();
+		try {
+			$internal = ( new \WC_Order() )->get_data_store()->get_internal_meta_keys();
+		} catch ( \Throwable $error ) {
+			$internal = array();
+		}
+
+		return array_values( array_unique( array_merge( self::audit_meta_keys(), \is_array( $internal ) ? $internal : array() ) ) );
 	}
 
 	/**
@@ -102,13 +177,14 @@ final class Pos_Order_Audit {
 	 * @return array
 	 */
 	public static function strip_audit_meta( array $meta_data, array $protected_meta_ids = array() ): array {
-		$strip = self::audit_meta_keys();
+		$strip = self::protected_order_meta_keys();
 
 		return array_values(
 			array_filter(
 				$meta_data,
 				static function ( $entry ) use ( $strip, $protected_meta_ids ) {
-					if ( \in_array( self::entry_key( $entry ), $strip, true ) ) {
+					$key = self::entry_key( $entry );
+					if ( null !== $key && self::is_one_of( $key, $strip ) ) {
 						return false;
 					}
 					$id = \is_array( $entry ) ? ( $entry['id'] ?? null ) : ( \is_object( $entry ) ? ( $entry->id ?? null ) : null );
@@ -117,6 +193,25 @@ final class Pos_Order_Audit {
 				}
 			)
 		);
+	}
+
+	/**
+	 * Whether a meta key is one of `$keys` as the meta tables compare keys: ignoring case and
+	 * trailing spaces (`_ci` PAD SPACE), so `_WCPOS_PAYMENTS` counts as the ledger key. A strip
+	 * matches this way; a reader of a server-owned key matches byte-exactly (ADR 0040 rule 2).
+	 *
+	 * @param string   $key  Meta key.
+	 * @param string[] $keys Protected keys.
+	 */
+	public static function is_one_of( string $key, array $keys ): bool {
+		$key = strtolower( rtrim( $key, ' ' ) );
+		foreach ( $keys as $protected ) {
+			if ( strtolower( $protected ) === $key ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -131,11 +226,11 @@ final class Pos_Order_Audit {
 		if ( ! \is_object( $order ) || ! method_exists( $order, 'get_meta_data' ) ) {
 			return array();
 		}
-		$keys = self::audit_meta_keys();
+		$keys = self::protected_order_meta_keys();
 		$ids  = array();
 		foreach ( $order->get_meta_data() as $meta ) {
 			$data = \is_object( $meta ) && method_exists( $meta, 'get_data' ) ? $meta->get_data() : array();
-			if ( isset( $data['id'], $data['key'] ) && \in_array( (string) $data['key'], $keys, true ) ) {
+			if ( isset( $data['id'], $data['key'] ) && self::is_one_of( (string) $data['key'], $keys ) ) {
 				$ids[] = (int) $data['id'];
 			}
 		}
@@ -185,11 +280,66 @@ final class Pos_Order_Audit {
 		if ( ! \is_scalar( $value ) || '' === (string) $value ) {
 			return false;
 		}
+		$value = (string) $value;
+		switch ( $key ) {
+			case '_wcpos_register':
+			case '_wcpos_till':
+			case '_wcpos_session':
+				return Pos_Uuid::is_uuid( $value );
+			case '_wcpos_sale_time':
+				// The full ISO 8601 shape with an explicit offset — PHP's parser is far
+				// more permissive than the contract, so the grammar is checked first.
+				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/D', $value ) ) {
+					return false;
+				}
+				// Any parseable offset timestamp is kept, however wrong the clock:
+				// skew is a Store health finding, never a rejection (fiscal groundwork).
+				try {
+					$parsed = new \DateTimeImmutable( $value );
+				} catch ( \Exception $error ) {
+					return false;
+				}
+				// PHP normalises 2026-02-30 to 2026-03-02 instead of failing: refuse
+				// anything the parser had to repair.
+				$errors = \DateTimeImmutable::getLastErrors();
+				if ( \is_array( $errors ) && ( $errors['warning_count'] > 0 || $errors['error_count'] > 0 ) ) {
+					return false;
+				}
+				return substr( $value, 0, 19 ) === $parsed->format( 'Y-m-d\TH:i:s' );
+			case '_wcpos_sale_tz':
+				return in_array( $value, timezone_identifiers_list(), true );
+			case '_wcpos_sale_counter':
+				return 1 === preg_match( '/^[1-9]\d{0,17}$/D', $value );
+			case '_wcpos_app_version':
+			case '_wcpos_app_build':
+				return self::char_length( $value ) <= 64;
+		}
 		if ( \in_array( $key, self::CASH_META_KEYS, true ) && 1 !== preg_match( '/^\d+(?:\.\d+)?$/', (string) $value ) ) {
 			return false;
 		}
 
 		return true;
+	}
+
+	/**
+	 * Character length with or without ext-mbstring (optional on supported hosts).
+	 *
+	 * @param string $value The value.
+	 *
+	 * @return int
+	 */
+	public static function char_length( string $value ): int {
+		if ( \function_exists( 'mb_strlen' ) ) {
+			return mb_strlen( $value, 'UTF-8' );
+		}
+		if ( \function_exists( 'iconv_strlen' ) ) {
+			$length = iconv_strlen( $value, 'UTF-8' );
+			if ( false !== $length ) {
+				return $length;
+			}
+		}
+		$count = preg_match_all( '/./su', $value );
+		return false === $count ? \strlen( $value ) : $count;
 	}
 
 	/**

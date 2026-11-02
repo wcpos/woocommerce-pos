@@ -42,7 +42,7 @@ class Test_Variation_Writer extends WP_UnitTestCase {
 		$writer       = new Variation_Writer();
 		$response     = $writer->document( array( 'route' => '/wc/v3/products' ), $variation_id, static function () {} );
 		$document     = $writer->build_response_document( $response->get_data(), $record_id, array(), $variation_id, static function () {} );
-		$meta         = wp_list_pluck( $document['payload']['meta_data'], 'value', 'key' );
+		$meta         = wp_list_pluck( $document['meta_data'], 'value', 'key' );
 
 		$this->assertSame( $record_id, $meta['_woocommerce_pos_uuid'] );
 	}

@@ -11,7 +11,6 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use IntlDateFormatter;
-use WC_DateTime;
 
 /**
  * Receipt_Date_Formatter class.
@@ -66,22 +65,6 @@ class Receipt_Date_Formatter {
 	 * Intl none style fallback value.
 	 */
 	private const INTL_NONE = -1;
-
-	/**
-	 * Build all practical display formats for a WooCommerce date.
-	 *
-	 * @param WC_DateTime|null $date   WooCommerce date.
-	 * @param string|null      $locale Optional locale override.
-	 *
-	 * @return array<string, string>
-	 */
-	public static function from_wc_datetime( ?WC_DateTime $date, ?string $locale = null ): array {
-		if ( ! $date ) {
-			return self::empty();
-		}
-
-		return self::from_timestamp( $date->getTimestamp(), $date->getTimezone(), $locale );
-	}
 
 	/**
 	 * Build all practical display formats for a timestamp.
@@ -342,6 +325,25 @@ class Receipt_Date_Formatter {
 		}
 
 		return $time_format;
+	}
+
+	/**
+	 * Clock convention for offline renderers, or null to use locale defaults.
+	 *
+	 * @return bool|null
+	 */
+	public static function hour12(): ?bool {
+		$token = self::hour_token();
+		return null === $token ? null : 'h' === $token[0];
+	}
+
+	/**
+	 * ICU hour token for offline renderers, including zero-padding intent.
+	 *
+	 * @return string|null
+	 */
+	public static function hour_token(): ?string {
+		return self::get_icu_hour_token( self::get_time_format_option() );
 	}
 
 	/**

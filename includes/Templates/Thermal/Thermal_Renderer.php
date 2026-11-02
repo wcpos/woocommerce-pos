@@ -23,7 +23,7 @@ namespace WCPOS\WooCommercePOS\Templates\Thermal;
 use InvalidArgumentException;
 use Mustache\Engine as Mustache_Engine;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
-use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WC_Abstract_Order;
 
 /**
@@ -61,13 +61,14 @@ class Thermal_Renderer {
 	 * @param WC_Abstract_Order $order       The order to render.
 	 * @param string            $wire_format The target wire format.
 	 * @param array             $options     Render options.
+	 * @param array|null        $receipt_data Optional canonical receipt payload.
 	 *
 	 * @throws InvalidArgumentException When the wire format is not supported.
 	 *
 	 * @return array{body:string, cut:string|null, drawer:string|null}
 	 */
-	public function render_with_control( array $template, WC_Abstract_Order $order, string $wire_format, array $options = array() ): array {
-		$ast = $this->build_ast( $template, $order );
+	public function render_with_control( array $template, WC_Abstract_Order $order, string $wire_format, array $options = array(), ?array $receipt_data = null ): array {
+		$ast = $this->build_ast( $template, $order, $receipt_data );
 
 		switch ( $wire_format ) {
 			case 'escpos':
@@ -139,7 +140,7 @@ class Thermal_Renderer {
 		// Pre-format money/display fields so {{*_display}} placeholders resolve,
 		// mirroring Logicless_Renderer.
 		$currency = $data['order']['currency'] ?? 'USD';
-		$data     = Receipt_Data_Schema::format_money_fields( $data, $currency );
+		$data     = Receipt_Money_Formatter::format( $data, $currency );
 
 		// Safety net for templates that wrap content in {{#t}}...{{/t}} markers.
 		$data['t'] = true;

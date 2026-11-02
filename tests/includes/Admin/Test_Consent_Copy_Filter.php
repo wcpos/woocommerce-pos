@@ -12,7 +12,7 @@ use WCPOS\WooCommercePOS\Admin\Consent;
 use WP_UnitTestCase;
 
 /**
- * Verifies that `woocommerce_pos_consent_copy` filter results appear in
+ * Verifies that `wcpos_consent_copy` filter results appear in
  * the `wcpos.consent` inline config object produced by Consent::inline_script().
  *
  * @internal
@@ -49,7 +49,7 @@ class Test_Consent_Copy_Filter extends WP_UnitTestCase {
 	 */
 	public function test_consent_copy_filter_overrides_reach_the_inline_config(): void {
 		add_filter(
-			'woocommerce_pos_consent_copy',
+			'wcpos_consent_copy',
 			function ( array $copy ): array {
 				$copy['title'] = 'Use my store numbers?';
 

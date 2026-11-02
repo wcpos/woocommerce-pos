@@ -10,13 +10,13 @@ For maintainers cutting or recovering a free-plugin release. Release scope belon
 | `release.yml` manual dispatch | Required `version` without `v`; checks out tag `v<version>` | Rebuilds that tag and uploads ZIP to its existing release, bypassing the unchanged-version skip. Refuses a header mismatch, a missing release, or a published release that already carries the ZIP. Does not create or publish a release. |
 | `wporg-deploy.yml` | Published release event, or manual `version`; checks out the tag | Builds from source and deploys to WordPress.org SVN. Does **not** consume the GitHub ZIP. |
 | `manual-release.yml` | Manual `releaseVersion`; selected workflow ref | Creates a new draft from that checkout. Not an existing-tag recovery path. |
-| `opfs-worker-drift.yml` | Every `main` PR/push, daily schedule, or manual run | Compares vendored worker bytes with the newest stable bundle tag in the plugin's major/minor line. Any mismatch or failed fetch fails the check. |
+| `opfs-worker-drift.yml` | Every `main` PR/push, daily schedule, or manual run | Compares vendored SQLite worker and WASM bytes with the newest stable bundle tag in the plugin's major/minor line. Any mismatch or failed fetch fails the check. |
 
 ## Release order
 
 1. Confirm owner-approved scope and lane. Publish the intended web-bundle tag **before** preparing the plugin version bump; plugin, bundle, Pro and desktop versions need not match.
-2. Re-vendor `wcpos/web-bundle`'s `build/opfs.worker.js` from the newest stable tag in the plugin's major/minor line to `assets/js/opfs.worker.js`. Use the exact-tag command printed by the drift check, not the bundle branch tip.
-3. Include that worker in the plugin release PR. Require a fresh green **OPFS Worker Drift** check before merging the version bump; it already checks every `main` PR, not only worker-file changes. It cannot see an intended bundle tag that has not been published yet.
+2. Re-vendor `wcpos/web-bundle`'s `build/sqlite.worker.js` and `build/sqlite3.wasm` from the newest stable tag in the plugin's major/minor line to `assets/js/sqlite.worker.js` and `assets/js/sqlite3.wasm`. Use the exact-tag commands printed by the drift check, not the bundle branch tip.
+3. Include both assets in the plugin release PR. Require a fresh green **OPFS Worker Drift** check before merging the version bump; it already checks every `main` PR, not only worker-file changes. It cannot see an intended bundle tag that has not been published yet.
 4. After the push release build, verify the draft's tag/source and download its `woocommerce-pos.zip` for inspection before publishing. Verify WordPress.org's stable tag and tagged files separately after deploy. Pro must vendor the intended free release; verify its ZIP independently.
 
 ## Recover a missing GitHub ZIP

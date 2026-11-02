@@ -8,6 +8,11 @@ import { initReactI18next, Trans as ReactTrans } from 'react-i18next';
 
 import localesData from './locales.json';
 
+// The next trunk pins TRANSLATION_VERSION to the moving @next branch ref of wcpos/translations.
+const ROLLING_TRANSLATION_REF = 'next';
+const PINNED_CACHE_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ROLLING_CACHE_EXPIRATION_MS = 12 * 60 * 60 * 1000; // 12 hours
+
 export interface Locale {
 	name: string;
 	nativeName?: string;
@@ -67,6 +72,12 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 	const instance = i18n.createInstance();
 	const locale = detectLocale();
 	const translationVersion = getTranslationVersion();
+	// A rolling ref changes content under the same name, so its localStorage copy
+	// expires after 12 hours (how often jsDelivr refreshes a branch ref) instead of a week.
+	const cacheExpirationMs =
+		translationVersion === ROLLING_TRANSLATION_REF
+			? ROLLING_CACHE_EXPIRATION_MS
+			: PINNED_CACHE_EXPIRATION_MS;
 
 	const initOptions: Record<string, unknown> = {
 		lng: locale,
@@ -85,7 +96,7 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 			backendOptions: [
 				{
 					prefix: 'wcpos_i18n_',
-					expirationTime: 7 * 24 * 60 * 60 * 1000, // 7 days
+					expirationTime: cacheExpirationMs,
 					defaultVersion: translationVersion,
 				},
 				{

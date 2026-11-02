@@ -25,7 +25,7 @@ class Gateways {
 	/**
 	 * Add POS gateways
 	 * BEWARE: some gateways/themes/plugins call this very early on every page!!
-	 * We cannot guarantee that $wp is set, so we cannot use woocommerce_pos_request.
+	 * We cannot guarantee that $wp is set, so we cannot use wcpos_request.
 	 *
 	 * @param array $gateways The registered payment gateways.
 	 *
@@ -83,12 +83,12 @@ class Gateways {
 	 */
 	public function available_payment_gateways( ?array $gateways ): ?array {
 		// early exit.
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			return $gateways;
 		}
 
 		// use POS settings.
-		$settings = woocommerce_pos_get_settings( 'payment_gateways' );
+		$settings = wcpos_get_settings( 'payment_gateways' );
 
 		/*
 		 * Get all payment gateways.

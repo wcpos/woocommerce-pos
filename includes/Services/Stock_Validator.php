@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Order;
 use WC_Order_Item_Product;
 use WC_Product;
@@ -558,7 +557,7 @@ class Stock_Validator {
 	private function reserved_stock_query( int $owner_id, int $exclude_order_id ): string {
 		global $wpdb;
 
-		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			$join         = "{$wpdb->prefix}wc_orders orders ON stock_table.order_id = orders.id";
 			$where_status = "orders.status IN ( 'wc-checkout-draft', 'wc-pending' )";
 		} else {
@@ -660,16 +659,12 @@ class Stock_Validator {
 	 */
 	private function exempt_statuses(): array {
 		$statuses = apply_filters(
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Backward-compatible public filter.
-			'woocommerce_pos_stock_validation_exempt_statuses',
+			'wcpos_stock_validation_exempt_statuses',
 			array( 'pos-open', 'pos-partial', 'pending', 'auto-draft', 'checkout-draft', 'draft', 'cancelled', 'refunded', 'failed', 'trash' )
 		);
+		$statuses = apply_filters_deprecated( 'woocommerce_pos_stock_validation_exempt_statuses', array( $statuses ), '2.0.0', 'wcpos_stock_validation_exempt_statuses' );
 
-		return apply_filters(
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Intentional public WCPOS hook.
-			'wcpos_stock_validation_exempt_statuses',
-			$statuses
-		);
+		return $statuses;
 	}
 
 	/**

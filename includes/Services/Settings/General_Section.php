@@ -35,6 +35,9 @@ class General_Section extends Abstract_Section {
 	 */
 	public function defaults(): array {
 		return array(
+			'register_sessions'           => false,
+			'variance_threshold'          => null,
+			'expected_close_time'         => null,
 			'pos_only_products'           => false,
 			'decimal_qty'                 => false,
 			'force_ssl'                   => true,
@@ -57,7 +60,7 @@ class General_Section extends Abstract_Section {
 	/**
 	 * The PERSISTED tracking consent, bypassing the read view.
 	 *
-	 * `read()` ends by applying `woocommerce_pos_general_settings`, so the
+	 * `read()` ends by applying `wcpos_general_settings`, so the
 	 * ordinary accessor lets any plugin filtering that hook manufacture a
 	 * consent the merchant never gave. Telemetry send-gates must ask the
 	 * database instead. Still runs `migrate()`, so a merchant whose choice
@@ -109,6 +112,12 @@ class General_Section extends Abstract_Section {
 	 * @param array $settings Merged settings.
 	 */
 	protected function compose( array $settings ): array {
+		foreach ( array( 'variance_threshold', 'expected_close_time' ) as $key ) {
+			if ( '' === ( $settings[ $key ] ?? null ) ) {
+				$settings[ $key ] = null;
+			}
+		}
+
 		$settings['store_tax_ids']  = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
 		$settings['store_defaults'] = Store_Defaults::fallbacks();
 
@@ -121,6 +130,12 @@ class General_Section extends Abstract_Section {
 	 * @param array $settings General settings.
 	 */
 	protected function sanitize( array $settings ): array {
+		foreach ( array( 'variance_threshold', 'expected_close_time' ) as $key ) {
+			if ( '' === ( $settings[ $key ] ?? null ) ) {
+				$settings[ $key ] = null;
+			}
+		}
+
 		if ( \array_key_exists( 'store_tax_ids', $settings ) ) {
 			$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
 		}
@@ -185,6 +200,21 @@ class General_Section extends Abstract_Section {
 	 */
 	public function endpoint_args(): array {
 		return array(
+			'register_sessions'          => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_bool( $param );
+				},
+			),
+			'variance_threshold'         => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return null === $param || ( \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^\d+(?:\.\d+)?$/D', $param ) ) );
+				},
+			),
+			'expected_close_time'        => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return null === $param || ( \is_string( $param ) && ( '' === $param || 1 === preg_match( '/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $param ) ) );
+				},
+			),
 			'pos_only_products'          => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return \is_bool( $param );

@@ -1,0 +1,391 @@
+<?php
+/**
+ * Register closure REST resource.
+ *
+ * @package WCPOS\WooCommercePOS\API\V2
+ */
+
+namespace WCPOS\WooCommercePOS\API\V2;
+
+use WCPOS\WooCommercePOS\Services\Store_Reach;
+use WCPOS\WooCommercePOS\API\V1\Raw_Response;
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Closure_Csv;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WP_Error;
+use WP_REST_Response;
+
+/** Permissions and client input validation for immutable closures. */
+class Closures_Controller extends \WP_REST_Controller {
+	/** REST namespace.
+	 *
+	 * @var string
+	 */
+	protected $namespace = 'wcpos/v2';
+	/** Resource base.
+	 *
+	 * @var string
+	 */
+	protected $rest_base = 'closures';
+
+	/** Register documents, copies and recounts. */
+	public function register_routes(): void {
+		foreach ( array(
+			'/closures' => 'GET,POST',
+			'/closures/last' => 'GET',
+			'/closures/export' => 'GET',
+			'/closures/(?P<closure_id>[0-9a-fA-F-]{36})' => 'GET',
+			'/closures/(?P<closure_id>[0-9a-fA-F-]{36})/print' => 'POST',
+			'/closures/(?P<closure_id>[0-9a-fA-F-]{36})/recount' => 'POST',
+		) as $route => $methods ) {
+			register_rest_route(
+				$this->namespace,
+				$route,
+				array(
+					'methods' => $methods,
+					'callback' => array( $this, 'dispatch' ),
+					'permission_callback' => array( $this, 'permissions_check' ),
+				)
+			);
+		}
+	}
+
+	/** Offline replay and cookie requests do not require a protocol claim. */
+	public function wcpos_route_classifications(): array {
+		// `/closures` covers `/closures/export` by slash-prefix match, so the
+		// admin screen's cookie request needs no protocol claim and no new entry.
+		return array( 'protocol_exempt' => array( '/wcpos/v2/closures' ) );
+	}
+
+	/** Reads, cash writes and manager-only recounts have distinct capabilities.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return bool|WP_Error
+	 */
+	public function permissions_check( $request ) {
+		$route = strtolower( rtrim( $request->get_route(), '/' ) );
+		// WCPOS access is the floor for every method, so no capability grants a route on its own.
+		$required = array( 'access_woocommerce_pos' );
+		if ( '/recount' === substr( $route, -8 ) ) {
+			// A supplied override is authenticated in dispatch before reading the document.
+			if ( ! $request->has_param( 'approval' ) ) {
+				$required[] = 'manage_woocommerce_pos_closures';
+			}
+		} elseif ( 'POST' === $request->get_method() ) {
+			$required[] = 'manage_woocommerce_pos_cash';
+		} else {
+			// Writing the document is a cash duty; reading it back is also a report.
+			$required[] = 'view_woocommerce_pos_reports';
+		}
+		// A print hands over the figures, so a blind cashier may write a closure but never print one.
+		if ( '/print' === substr( $route, -6 ) ) {
+			$required[] = 'view_woocommerce_pos_reports';
+		}
+		if ( '/wcpos/v2/closures/export' === $route ) {
+			$required[] = 'manage_woocommerce_pos';
+		}
+		foreach ( $required as $cap ) {
+			if ( ! current_user_can( $cap ) ) {
+				return $this->error( 'rest_forbidden', rest_authorization_required_code() );
+			}
+		}
+		return true;
+	}
+
+	/** Strip the figures a blind count exists to hide.
+	 *
+	 * An id-only create is an idempotent replay that returns the stored row, so without this
+	 * a cashier holding only the cash capability could read any closure by replaying its id.
+	 * Every expected-side figure is report-only: expectations, variance, period and perpetual
+	 * totals, breakdowns and findings (which carry the approval variance). The till's own
+	 * facts and the counters it needs to mint its next number are not figures and stay.
+	 *
+	 * @param array|null $row Closure row.
+	 * @return array|null
+	 */
+	public static function visible( $row ) {
+		if ( ! is_array( $row ) || current_user_can( 'view_woocommerce_pos_reports' ) ) {
+			return $row;
+		}
+		// A carried count is server-derived, not the blind cashier's own count.
+		if ( 'store_switch' === ( $row['reason'] ?? null ) ) {
+			unset( $row['counted'] );
+		}
+		// Manager approval permits the recount write, not access to hidden report figures.
+		// The unsalted payload checksum would allow guessing the hidden variance.
+		unset( $row['payload']['variance'], $row['checksum'] );
+		return array_diff_key( $row, array_flip( array( 'expected', 'till_expected', 'variance', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'breakdowns', 'findings' ) ) );
+	}
+
+	/** Dispatch, preserving the URL document UUID separately from a recount's body id.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function dispatch( $request ) {
+		try {
+			$store = new Closure_Store();
+			$url = $request->get_url_params();
+			$id = isset( $url['closure_id'] ) ? strtolower( $url['closure_id'] ) : null;
+			$route = strtolower( rtrim( $request->get_route(), '/' ) );
+			$approver_id = null;
+			if ( '/recount' === substr( $route, -8 ) && ! current_user_can( 'manage_woocommerce_pos_closures' ) ) {
+				$approval = $request['approval'];
+				if ( ! is_array( $approval ) || ! is_string( $approval['username'] ?? null ) || ! is_string( $approval['password'] ?? null ) ) {
+					return $this->error( 'wcpos_recount_approval_invalid', 403 );
+				}
+				$user = wp_authenticate( $approval['username'], $approval['password'] );
+				if ( is_wp_error( $user ) ) {
+					return $this->error( 'wcpos_recount_approval_invalid', 403 );
+				}
+				if ( ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
+					return $this->error( 'wcpos_recount_approval_forbidden', 403 );
+				}
+				$approver_id = $user->ID;
+			}
+
+			if ( null !== $id ) {
+				$row = $store->get( $id );
+				// Out of reach answers exactly as absent, before any print, recount or correction read.
+				if ( ! $row || ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+					return $this->error( 'wcpos_closure_not_found', 404 );
+				}
+				if ( '/print' === substr( $route, -6 ) ) {
+					try {
+						$row = $store->record_print( $id );
+					} catch ( \RuntimeException $error ) {
+						Logger::warning( $error->getMessage(), array( 'closure_id' => $id ) );
+						return $this->error( 'wcpos_closure_write_failed', 500 );
+					}
+					if ( $row ) {
+						$store->log_printed( $row );
+					}
+				} elseif ( '/recount' === substr( $route, -8 ) ) {
+					$counted = $this->tenders( $request['counted'] );
+					if ( ! Pos_Uuid::is_uuid( $request['id'] ) || null === $counted || ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {
+						return $this->error( 'rest_invalid_param', 400 );
+					}
+					$row = $store->recount( $row, strtolower( $request['id'] ), $counted, sanitize_textarea_field( $request['reason'] ), $approver_id );
+				}
+				if ( 'GET' === $request->get_method() ) {
+					$row['corrections'] = $store->corrections_for( $id );
+				}
+				return new WP_REST_Response( $this->visible( $row ) );
+			}
+			if ( 'GET' === $request->get_method() ) {
+				if ( '/wcpos/v2/closures/export' === $route ) {
+					return $this->export( $store, $request );
+				}
+				$args = $this->list_args( $request );
+				if ( is_wp_error( $args ) ) {
+					return $args;
+				}
+				$reach = Store_Reach::for_request( $request );
+				$args = $reach->narrow( $args );
+				if ( '/last' === substr( $route, -5 ) ) {
+					if ( empty( $args['register_id'] ) ) {
+						return $this->error( 'rest_invalid_param', 400 );
+					}
+					$args = array_merge(
+						$args,
+						array(
+							'number_order' => true,
+							'page' => 1,
+							'per_page' => 1,
+						)
+					);
+					$row = $store->list( $args )[0] ?? null;
+					// Mid-fold the newest closure may live only in a legacy table, whose read is not
+					// narrowed to the caller's stores, so reach is checked here before it is served.
+					$latest = $store->is_folding() ? $store->last( $args['register_id'], $args ) : null;
+					if ( $latest && $latest['number'] > ( $row['number'] ?? 0 ) && $reach->admits( $latest['store_id'] ) ) {
+						$row = $latest;
+					}
+					return new WP_REST_Response( $this->visible( $row ) );
+				}
+				return new WP_REST_Response( array_map( array( $this, 'visible' ), $store->with_correction_counts( $store->list( $args ) ) ) );
+			}
+			$reach = Store_Reach::for_request( $request );
+			if ( ! Pos_Uuid::is_uuid( $request['id'] ) ) {
+				return $this->error( 'rest_invalid_param', 400 );
+			}
+			$id = strtolower( $request['id'] );
+			$request->set_param( 'id', $id );
+			$row = $store->get( $id );
+			if ( $row && $reach->admits( $row['store_id'] ) ) {
+				$store->log_replay( $row );
+				return new WP_REST_Response( $this->visible( $row ) );
+			}
+			// An id-only replay of a closure that is absent (or hidden) answers like a hidden one.
+			if ( null === $request->get_param( 'session_id' ) ) {
+				return $this->error( 'wcpos_closure_not_found', 404 );
+			}
+			$fields = $this->fields( $request );
+			if ( is_wp_error( $fields ) ) {
+				return $fields;
+			}
+			$request->set_param( 'session_id', $fields['session_id'] );
+			$session = apply_filters( 'wcpos_session_row', ( new Register_Session_Store() )->get( $fields['session_id'] ), $request );
+			$session = apply_filters_deprecated( 'woocommerce_pos_session_row', array( $session, $request ), '2.0.0', 'wcpos_session_row' );
+			if ( ! $session || ! $reach->admits( $session['store_id'] ) ) {
+				return $this->error( 'wcpos_session_not_found', 404 );
+			}
+			$created = false;
+			$row = $store->create( $fields, $created );
+			if ( ! is_wp_error( $row ) && ! $reach->admits( $row['store_id'] ) ) {
+				return $this->error( 'wcpos_closure_not_found', 404 );
+			}
+			return is_wp_error( $row ) ? $row : new WP_REST_Response( $this->visible( $row ), $created ? 201 : 200 );
+		} catch ( \RuntimeException $error ) {
+			return $this->error( 'wcpos_closure_write_failed', 500 );
+		}
+	}
+
+	/** Export the whole set within store reach, ignoring caller filters.
+	 *
+	 * @param Closure_Store    $store Closure store.
+	 * @param \WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function export( Closure_Store $store, $request ) {
+		$reach = Store_Reach::for_request( $request );
+		if ( $reach->is_malformed() ) {
+			// Store_Reach has logged the unreadable answer; an export is never urgent enough to serve unscoped.
+			return $this->error( 'wcpos_closure_export_failed', 500 );
+		}
+		try {
+			$csv = ( new Closure_Csv() )->build( $store, $reach->narrow( array() ) );
+		} catch ( \RuntimeException $error ) {
+			return $this->error( 'wcpos_closure_export_failed', 500 );
+		}
+		$site = sanitize_title( get_bloginfo( 'name' ) );
+		if ( '' === $site ) {
+			$site = (string) get_current_blog_id();
+		}
+		return Raw_Response::serve(
+			$csv,
+			'text/csv; charset=utf-8',
+			array(
+				'Content-Disposition' => 'attachment; filename="wcpos-closures-' . $site . '-' . gmdate( 'Y-m-d' ) . '.csv"',
+				'Content-Length' => (string) strlen( $csv ),
+				'Cache-Control' => 'no-store',
+			)
+		);
+	}
+
+	/** Validate the immutable client fields, excluding server-owned columns.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return array|WP_Error
+	 */
+	private function fields( $request ) {
+		if ( ! Pos_Uuid::is_uuid( $request['session_id'] ) || ! is_string( $request['software_version'] ) || Pos_Order_Audit::char_length( $request['software_version'] ) > 64 || ! is_array( $request['breakdowns'] ) ) {
+			return $this->error( 'rest_invalid_param', 400 );
+		}
+		if ( $request->has_param( 'business_day' ) && ! Closure_Store::is_business_day( $request['business_day'] ) ) {
+			return $this->error( 'rest_invalid_param', 400 );
+		}
+		$fields = array(
+			'id' => strtolower( $request['id'] ),
+			'business_day' => $request['business_day'],
+			'session_id' => strtolower( $request['session_id'] ),
+			'software_version' => sanitize_text_field( $request['software_version'] ),
+			'breakdowns' => $request['breakdowns'],
+		);
+		foreach ( array( 'number', 'unsynced_count', 'first_sale_counter', 'last_sale_counter' ) as $key ) {
+			$value = $request[ $key ];
+			$nullable = in_array( $key, array( 'first_sale_counter', 'last_sale_counter' ), true );
+			if ( ! ( $nullable && null === $value ) && ( ! is_scalar( $value ) || ! preg_match( '/^\d{1,18}$/D', (string) $value ) || ( 'number' === $key && $value < 1 ) || ( 'unsynced_count' === $key && $value > 2147483647 ) ) ) {
+				return $this->error( 'rest_invalid_param', 400 );
+			}
+			$fields[ $key ] = null === $value ? null : (int) $value;
+		}
+		foreach ( array( 'opened_at', 'closed_at', 'printed_at' ) as $key ) {
+			if ( 'printed_at' === $key && null === $request[ $key ] ) {
+				$fields[ $key . '_gmt' ] = null;
+				continue;
+			}
+			if ( ! is_string( $request[ $key ] ) || ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $request[ $key ] ) ) {
+				return $this->error( 'rest_invalid_param', 400 );
+			}
+			$fields[ $key . '_gmt' ] = gmdate( 'Y-m-d H:i:s', strtotime( $request[ $key ] ) );
+		}
+		foreach ( array( 'till_expected', 'counted' ) as $key ) {
+			$fields[ $key ] = $this->tenders( $request[ $key ], 'till_expected' === $key );
+			if ( null === $fields[ $key ] ) {
+				return $this->error( 'rest_invalid_param', 400 );
+			}
+		}
+		foreach ( array( 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total', 'unsynced_total' ) as $key ) {
+			$fields[ $key ] = $this->decimal( $request[ $key ] );
+			if ( null === $fields[ $key ] ) {
+				return $this->error( 'rest_invalid_param', 400 );
+			}
+		}
+		return $fields;
+	}
+
+	/** Validate tender maps, allowing a negative till expectation.
+	 *
+	 * @param mixed $value Input map.
+	 * @param bool  $signed Allow negative balances.
+	 */
+	private function tenders( $value, bool $signed = false ): ?array {
+		return Closure_Store::tenders( $value, $signed );
+	}
+
+	/** Preserve decimal precision and reject values outside storage range.
+	 *
+	 * @param mixed $value Decimal input.
+	 * @param bool  $signed Allow negatives.
+	 */
+	private function decimal( $value, bool $signed = false ): ?string {
+		if ( ! is_string( $value ) || ! preg_match( $signed ? '/^-?\d{1,15}(?:\.\d{1,4})?$/D' : '/^\d{1,15}(?:\.\d{1,4})?$/D', $value ) ) {
+			return null;
+		}
+		return Closure_Store::sum( array( $value ) );
+	}
+
+	/** Validate list filters; Store_Reach narrows them in dispatch().
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return array|WP_Error
+	 */
+	private function list_args( $request ) {
+		$args = array();
+		foreach ( array( 'register_id', 'store_id', 'after', 'before', 'page', 'per_page' ) as $key ) {
+			if ( ! $request->has_param( $key ) ) {
+				continue;
+			}
+			$value = $request[ $key ];
+			if ( in_array( $key, array( 'after', 'before' ), true ) ) {
+				if ( ! is_string( $value ) || ( ! Closure_Store::is_business_day( $value ) && ! Pos_Order_Audit::is_valid_till_value( '_wcpos_sale_time', $value ) ) ) {
+					return $this->error( 'rest_invalid_param', 400 );
+				}
+				$args[ $key . '_business_day' ] = substr( $value, 0, 10 );
+				$value = Closure_Store::is_business_day( $value ) ? $value : gmdate( 'Y-m-d H:i:s', strtotime( $value ) );
+			} elseif ( 'register_id' === $key ) {
+				if ( ! Pos_Uuid::is_uuid( $value ) ) {
+					return $this->error( 'rest_invalid_param', 400 );
+				}
+				$value = strtolower( $value );
+			} elseif ( ! is_scalar( $value ) || ! preg_match( '/^[1-9]\d{0,17}$/D', (string) $value ) || ( 'per_page' === $key && $value > Closure_Store::MAX_PER_PAGE ) ) {
+				return $this->error( 'rest_invalid_param', 400 );
+			}
+			$args[ $key ] = $value;
+		}
+		return $args;
+	}
+
+	/** Shared closure error envelope.
+	 *
+	 * @param string $code Error code.
+	 * @param int    $status HTTP status.
+	 */
+	private function error( string $code, int $status ): WP_Error {
+		return new WP_Error( $code, __( 'The closure request could not be completed.', 'woocommerce-pos' ), array( 'status' => $status ) );
+	}
+}

@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates\Thermal;
 
 // Current-lane consumer signal; these emitter tests do not dispatch REST requests.
+use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Qr;
 use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Thermal_Emitter;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Bounds;
 use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Markup_Parser;
@@ -943,6 +944,7 @@ PHP;
 
 		$this->assertTrue( $this->includes_sequence( $qrcode, array( 0x1d, 0x28, 0x6b ) ) );
 		$this->assertTrue( $this->includes_sequence( $qrcode, $this->ascii_bytes( 'XYZ' ) ) );
+		$this->assertSame( "\x1b\x40" . Escpos_Qr::bytes( 'XYZ', 4 ), $qrcode );
 	}
 
 	/**
@@ -1337,5 +1339,22 @@ PHP;
 		$this->assertSame( 0, proc_close( $process ), $errors );
 
 		return (string) $output;
+	}
+
+	/**
+	 * A QR node without a size preserves the original complete byte sequence.
+	 */
+	public function test_qrcode_default_size_matches_literal_sequence(): void {
+		$bytes = $this->render( '<receipt><qrcode>ABC</qrcode></receipt>' );
+
+		$this->assertSame(
+			"\x1b\x40"
+			. "\x1d\x28\x6b\x04\x00\x31\x41\x32\x00"
+			. "\x1d\x28\x6b\x03\x00\x31\x43\x04"
+			. "\x1d\x28\x6b\x03\x00\x31\x45\x31"
+			. "\x1d\x28\x6b\x06\x00\x31\x50\x30ABC"
+			. "\x1d\x28\x6b\x03\x00\x31\x51\x30",
+			$bytes
+		);
 	}
 }

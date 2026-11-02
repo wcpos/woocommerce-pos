@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 
 use Automattic\WooCommerce\Admin\PageController;
 use WCPOS\WooCommercePOS\Admin\Analytics;
+use WCPOS\WooCommercePOS\Admin\Font_Pack_Notice;
 use WCPOS\WooCommercePOS\Admin\Notices;
 use WCPOS\WooCommercePOS\Admin\Orders\HPOS_List_Orders;
 use WCPOS\WooCommercePOS\Admin\Orders\HPOS_Single_Order;
@@ -65,6 +66,10 @@ class Admin {
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ), 5 );
 		add_action( 'admin_init', array( $this, 'init' ) );
+		// Self-heals a version bump whose upgrade never reached woocommerce_init, which
+		// Activator::version_check() documents as permanent. Gated on an option, so this is a
+		// version comparison on every admin load and nothing more.
+		add_action( 'admin_init', array( '\WCPOS\WooCommercePOS\Templates\Gallery_Update_Status', 'maintain' ) );
 		add_action( 'admin_init', array( $this, 'register_scripts' ) );
 		add_action( 'current_screen', array( $this, 'current_screen' ) );
 
@@ -87,6 +92,7 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
+		new Font_Pack_Notice();
 	}
 
 	/**
@@ -128,18 +134,10 @@ class Admin {
 	 * @param WP_Screen $current_screen Current screen object.
 	 */
 	public function current_screen( $current_screen ): void {
-		/*
-		 * Backwards compatibility for WCPOS Pro 1.4.2 and below.
-		 * DO NOT USE THIS!
-		 *
-		 * @TODO: Remove in WCPOS 2.0.0.
-		 */
-		$this->screen_handlers['product'] = apply_filters( 'woocommerce_pos_single_product_admin_class', Single_Product::class );
-
 		/**
 		 * Filters the screen handlers for WCPOS admin screens.
 		 *
-		 * @hook woocommerce_pos_admin_screen_handlers
+		 * @hook wcpos_admin_screen_handlers
 		 *
 		 * @since 1.4.10
 		 *
@@ -147,7 +145,8 @@ class Admin {
 		 *                                  Handler can be a class name or a callback array.
 		 * @param WP_Screen $current_screen The current WP_Screen object being loaded in the admin.
 		 */
-		$handlers = apply_filters( 'woocommerce_pos_admin_screen_handlers', $this->screen_handlers, $current_screen );
+		$handlers = apply_filters( 'wcpos_admin_screen_handlers', $this->screen_handlers, $current_screen );
+		$handlers = apply_filters_deprecated( 'woocommerce_pos_admin_screen_handlers', array( $handlers, $current_screen ), '2.0.0', 'wcpos_admin_screen_handlers' );
 
 		// Check if the current screen has a handler.
 		if ( isset( $handlers[ $current_screen->id ] ) ) {

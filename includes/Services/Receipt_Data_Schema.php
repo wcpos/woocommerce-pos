@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
+
 /**
  * Receipt_Data_Schema class.
  */
@@ -23,6 +25,8 @@ class Receipt_Data_Schema {
 	const REQUIRED_KEYS = array(
 		'order',
 		'store',
+		// `software` and `register` (schema 1.4) are deliberately NOT required:
+		// stored 1.3 snapshots have neither, and they must keep validating.
 		'cashier',
 		'customer',
 		'lines',
@@ -43,7 +47,7 @@ class Receipt_Data_Schema {
 	/**
 	 * Receipt data schema contract version.
 	 */
-	const SCHEMA_VERSION = '1.2.0';
+	const SCHEMA_VERSION = '1.4.0';
 
 	/**
 	 * Money keys that must be present in totals.
@@ -186,132 +190,18 @@ class Receipt_Data_Schema {
 	);
 
 	/**
-	 * Format money fields in receipt data using wc_price().
-	 *
-	 * Recursively walks the data structure and replaces numeric values
-	 * whose terminal key matches a known money field with a formatted
-	 * currency string (e.g. "$29.99").
-	 *
-	 * @param array               $data               Receipt data array (or nested sub-array).
-	 * @param string              $currency           WooCommerce currency code.
-	 * @param array<string,mixed> $presentation_hints Receipt presentation hints.
-	 *
-	 * @return array Data with money fields formatted as strings.
-	 */
-	public static function format_money_fields( array $data, string $currency = 'USD', array $presentation_hints = array() ): array {
-		static $lookup = null;
-		static $zero_falsy = null;
-		if ( null === $lookup ) {
-			$lookup     = array_flip( self::MONEY_FIELDS );
-			$zero_falsy = array_flip( self::ZERO_FALSY_MONEY_FIELDS );
-		}
-
-		if ( empty( $presentation_hints ) && isset( $data['presentation_hints'] ) && \is_array( $data['presentation_hints'] ) ) {
-			$presentation_hints = $data['presentation_hints'];
-		}
-
-		$price_args = self::get_price_format_args( $currency, $presentation_hints );
-		$result = array();
-
-		foreach ( $data as $k => $value ) {
-			if ( \is_array( $value ) ) {
-				$result[ $k ] = self::format_money_fields( $value, $currency, $presentation_hints );
-			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
-				// ──────────────────────────────────────────────────────────
-				// Money fields: KEEP the numeric value at the bare key and
-				// ADD a `<key>_display` companion holding the locale-formatted
-				// currency string. Mirrors the JS `formatReceiptData` shape
-				// exactly so a single Mustache template renders the same way
-				// in both the studio (JS) and production print (PHP).
-				//
-				// DO NOT change this back to in-place replacement — bare keys
-				// must be numeric so app code can still do math on them, and
-				// templates have a stable `_display` variant to render
-				// currency without re-implementing wc_price() in JS.
-				// ──────────────────────────────────────────────────────────
-				$numeric    = (float) $value;
-				$is_zero_falsy = ( 0.0 === $numeric && isset( $zero_falsy[ $k ] ) );
-				// Conditional-display fields (change, tendered, discounts, etc.) keep
-				// the bare key as integer 0 when the value is zero so Mustache section
-				// guards (`{{#change}}…{{/change}}`) treat them as falsy and the rest
-				// of the test suite's `assertSame( 0, … )` checks stay green.
-				$result[ $k ]              = $is_zero_falsy ? 0 : $numeric;
-				$result[ $k . '_display' ] = $is_zero_falsy
-					? ''
-					: html_entity_decode(
-						wp_strip_all_tags(
-							wc_price( $numeric, $price_args )
-						),
-						ENT_QUOTES | ENT_SUBSTITUTE,
-						'UTF-8'
-					);
-			} else {
-				$result[ $k ] = $value;
-			}
-		}
-
-		return $result;
-	}
-
-	/**
-	 * Build wc_price() arguments from presentation hints.
-	 *
-	 * @param string              $currency           WooCommerce currency code.
-	 * @param array<string,mixed> $presentation_hints Receipt presentation hints.
-	 *
-	 * @return array<string,mixed>
-	 */
-	private static function get_price_format_args( string $currency, array $presentation_hints ): array {
-		$args = array( 'currency' => $currency );
-
-		if ( isset( $presentation_hints['currency_position'] ) ) {
-			$args['price_format'] = self::get_price_format_for_position( (string) $presentation_hints['currency_position'] );
-		}
-		if ( isset( $presentation_hints['price_decimal_separator'] ) ) {
-			$args['decimal_separator'] = (string) $presentation_hints['price_decimal_separator'];
-		}
-		if ( isset( $presentation_hints['price_thousand_separator'] ) ) {
-			$args['thousand_separator'] = (string) $presentation_hints['price_thousand_separator'];
-		}
-		if ( isset( $presentation_hints['price_num_decimals'] ) && is_numeric( $presentation_hints['price_num_decimals'] ) ) {
-			$args['decimals'] = (int) $presentation_hints['price_num_decimals'];
-		}
-
-		return $args;
-	}
-
-	/**
-	 * Convert a WooCommerce currency position option to a wc_price format.
-	 *
-	 * @param string $position WooCommerce currency position.
-	 *
-	 * @return string wc_price format.
-	 */
-	private static function get_price_format_for_position( string $position ): string {
-		switch ( $position ) {
-			case 'right':
-				return '%2$s%1$s';
-			case 'left_space':
-				return '%1$s %2$s';
-			case 'right_space':
-				return '%2$s %1$s';
-			case 'left':
-			default:
-				return '%1$s%2$s';
-		}
-	}
-
-	/**
 	 * Get the field tree for the template editor field picker.
 	 *
 	 * Returns a structured array describing template-picker sections and fields
 	 * from the receipt_data contract. Used by the JS field picker sidebar.
 	 * Internal sections (e.g. presentation_hints) are intentionally excluded.
 	 *
+	 * @param string $type Template type. Display adds ledger and payment fields.
+	 *
 	 * @return array<string, array{label: string, is_array?: bool, fields: array<string, array{type: string, label: string}>}>
 	 */
-	public static function get_field_tree(): array {
-		return array(
+	public static function get_field_tree( string $type = 'receipt' ): array {
+		$tree = array(
 			'order'       => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Order', 'woocommerce-pos' ),
 				'fields' => array(
@@ -456,6 +346,13 @@ class Receipt_Data_Schema {
 					'name'             => array(
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer Name', 'woocommerce-pos' ),
+					),
+					'first_name'       => array(
+						'type'  => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __(
+							'Customer First Name',
+							'woocommerce-pos'
+						),
 					),
 					'billing_address'  => array(
 						'type'  => 'object',
@@ -1196,9 +1093,124 @@ class Receipt_Data_Schema {
 					),
 				),
 			),
+			'software' => array(
+				'label' => /* translators: Receipt section in the template editor. */ __( 'Software', 'woocommerce-pos' ),
+				'fields' => array(
+					'name' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Software Name', 'woocommerce-pos' ),
+						'default' => 'WCPOS',
+					),
+					'plugin_version' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Plugin Version', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'app_version' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'App Version', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'app_build' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'App Build', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'platform' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Platform', 'woocommerce-pos' ),
+						'default' => '',
+					),
+				),
+			),
+			'register' => array(
+				'label' => /* translators: Receipt section in the template editor. */ __( 'Register', 'woocommerce-pos' ),
+				'fields' => array(
+					'id' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Register ID', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'name' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Register Name', 'woocommerce-pos' ),
+						'default' => '',
+					),
+				),
+			),
 			'fiscal'      => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Fiscal', 'woocommerce-pos' ),
 				'fields' => array(
+					'document_type' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Document Type', 'woocommerce-pos' ),
+						'default' => 'sale',
+					),
+					'sale_time' => array(
+						'type' => 'object',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Time', 'woocommerce-pos' ),
+						'default' => null,
+						'nullable' => true,
+						'fields' => self::get_date_field_tree_fields(),
+					),
+					'received_at' => array(
+						'type' => 'object',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Received At', 'woocommerce-pos' ),
+						'default' => null,
+						'nullable' => true,
+						'fields' => self::get_date_field_tree_fields(),
+					),
+					'sale_tz' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Timezone', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'sale_counter' => array(
+						'type' => 'number',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Counter', 'woocommerce-pos' ),
+						'default' => null,
+						'nullable' => true,
+					),
+					'corrects' => array(
+						'type' => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Corrects', 'woocommerce-pos' ),
+						'default' => '',
+					),
+					'is_sale_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Sale Document', 'woocommerce-pos' ),
+						'default' => true,
+					),
+					'is_refund_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Refund Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_void_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Void Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_cancellation_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Cancellation Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_closure_document' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Closure Document', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_handover' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Hand-over slip', 'woocommerce-pos' ),
+						'default' => false,
+					),
+					'is_x_report' => array(
+						'type' => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is X Report', 'woocommerce-pos' ),
+						'default' => false,
+					),
 					'immutable_id'      => array(
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Immutable ID', 'woocommerce-pos' ),
@@ -1265,6 +1277,433 @@ class Receipt_Data_Schema {
 				'fields' => self::get_i18n_field_tree_fields(),
 			),
 		);
+		if ( 'report' === $type ) {
+			return self::get_report_field_tree( $tree );
+		}
+		if ( 'closure' === $type ) {
+			$tree = array_intersect_key( $tree, array_flip( array( 'order', 'order.printed', 'store', 'register', 'software', 'fiscal', 'i18n' ) ) );
+			$tree['order']['fields'] = array_intersect_key( $tree['order']['fields'], array_flip( array( 'currency' ) ) );
+			$tree['register']['fields']['store_id'] = array(
+				'type'  => 'number',
+				'label' => __( 'Store ID', 'woocommerce-pos' ),
+			);
+			$tree['software']['fields'] = array_intersect_key( $tree['software']['fields'], array_flip( array( 'name', 'plugin_version' ) ) );
+			$tree['closure'] = array(
+				'label' => __( 'Closure', 'woocommerce-pos' ),
+				'fields' => array(),
+			);
+			foreach ( array(
+				'sales' => 'sales',
+				'payment_methods' => 'payment_method',
+				'tax_rates' => 'tax_rates',
+				'perpetual' => 'perpetual_totals',
+				'movements' => 'cash_movements',
+				'discounts' => 'discounts',
+				'variance_note' => 'variance_note',
+				'denominations' => 'denominations',
+			) as $section => $label_key ) {
+				$tree['closure']['fields'][ 'has_' . $section ] = array(
+					'type' => 'boolean',
+					'label' => $tree['i18n']['fields'][ $label_key ]['label'],
+				);
+			}
+			$field_types = array_fill_keys( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ), 'money' );
+			$field_types += array_fill_keys( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ), 'number' );
+			$field_types += array_fill_keys( array( 'breakdowns.discounts.amount', 'breakdowns.average_sale', 'net_sales' ), 'money' );
+			$field_types += array_fill_keys( array( 'breakdowns.discounts.count', 'breakdowns.drawer_openings' ), 'number' );
+			foreach ( array(
+				'id' => __( 'Closure ID', 'woocommerce-pos' ),
+				'number' => __( 'Closure Number', 'woocommerce-pos' ),
+				'printed_number' => __( 'Printed Number', 'woocommerce-pos' ),
+				'register_id' => __( 'Register ID', 'woocommerce-pos' ),
+				'session_id' => __( 'Session ID', 'woocommerce-pos' ),
+				'business_day' => __( 'Business Day', 'woocommerce-pos' ),
+				'opened_at_gmt' => __( 'Opened (UTC)', 'woocommerce-pos' ),
+				'closed_at_gmt' => __( 'Closed (UTC)', 'woocommerce-pos' ),
+				'breakdowns.currency' => __( 'Currency recorded at closure (older documents use current store currency)', 'woocommerce-pos' ),
+				'breakdowns.timezone' => __( 'Timezone recorded at closure (older documents use current store timezone)', 'woocommerce-pos' ),
+				'breakdowns.labels.cashier_name' => __( 'Printed By', 'woocommerce-pos' ),
+				'breakdowns.labels.register_name' => __( 'Register Name', 'woocommerce-pos' ),
+				'breakdowns.labels.opened_by_name' => __( 'Opened By', 'woocommerce-pos' ),
+				'breakdowns.labels.closed_by_name' => __( 'Closed By', 'woocommerce-pos' ),
+				'breakdowns.labels.approved_by_name' => __( 'Approved By', 'woocommerce-pos' ),
+				'counted.cash' => __( 'Counted Cash', 'woocommerce-pos' ),
+				'counted.card' => __( 'Counted Card', 'woocommerce-pos' ),
+				'expected.cash' => __( 'Expected Cash', 'woocommerce-pos' ),
+				'expected.card' => __( 'Expected Card', 'woocommerce-pos' ),
+				'variance.cash' => __( 'Cash Variance', 'woocommerce-pos' ),
+				'variance.card' => __( 'Card Variance', 'woocommerce-pos' ),
+				'breakdowns.opening_float.expected' => __( 'Expected Opening Float', 'woocommerce-pos' ),
+				'breakdowns.opening_float.counted' => __( 'Counted Opening Float', 'woocommerce-pos' ),
+				'breakdowns.opening_float.variance' => __( 'Opening Variance', 'woocommerce-pos' ),
+				'breakdowns.discounts.count' => __( 'Discount count', 'woocommerce-pos' ),
+				'breakdowns.discounts.amount' => __( 'Discounts', 'woocommerce-pos' ),
+				'breakdowns.items_sold' => __( 'Items sold', 'woocommerce-pos' ),
+				'breakdowns.average_sale' => __( 'Average sale', 'woocommerce-pos' ),
+				'breakdowns.drawer_openings' => __( 'Drawer openings', 'woocommerce-pos' ),
+				'breakdowns.variance_note' => __( 'Difference note', 'woocommerce-pos' ),
+				'breakdowns.transaction_count' => __( 'Transactions', 'woocommerce-pos' ),
+				'breakdowns.refund_count' => __( 'Refunds', 'woocommerce-pos' ),
+				'unsynced_count' => __( 'Unsynced Sales', 'woocommerce-pos' ),
+				'unsynced_total' => __( 'Unsynced Total', 'woocommerce-pos' ),
+				'period_sales_total' => __( 'Period Sales', 'woocommerce-pos' ),
+				'period_refunds_total' => __( 'Period Refunds', 'woocommerce-pos' ),
+				'net_sales' => __( 'Net Sales', 'woocommerce-pos' ),
+				'perpetual_sales_total' => __( 'Perpetual Sales', 'woocommerce-pos' ),
+				'perpetual_refunds_total' => __( 'Perpetual Refunds', 'woocommerce-pos' ),
+				'software_version' => __( 'Software Version', 'woocommerce-pos' ),
+				'printed_at_gmt' => __( 'Printed At (UTC)', 'woocommerce-pos' ),
+				'print_count' => __( 'Print Count', 'woocommerce-pos' ),
+				'last_printed_at_gmt' => __( 'Last Printed At (UTC)', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree['closure']['fields'][ $field ] = array(
+					'type' => $field_types[ $field ] ?? 'string',
+					'label' => $label,
+				);
+			}
+			$tree['closure']['fields']['breakdowns.money_format'] = array(
+				'type' => 'object',
+				'label' => __( 'Money format recorded at closure', 'woocommerce-pos' ),
+				'fields' => array(),
+			);
+			foreach ( array(
+				'currency_position' => __( 'Currency Position', 'woocommerce-pos' ),
+				'currency_symbol' => __( 'Currency Symbol', 'woocommerce-pos' ),
+				'price_decimal_separator' => __( 'Decimal Separator', 'woocommerce-pos' ),
+				'price_thousand_separator' => __( 'Thousand Separator', 'woocommerce-pos' ),
+				'price_num_decimals' => __( 'Number of Decimals', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree['closure']['fields']['breakdowns.money_format']['fields'][ $field ] = array(
+					'type' => 'price_num_decimals' === $field ? 'number' : 'string',
+					'label' => $label,
+				);
+			}
+			$tree['closure.tenders'] = array(
+				'label' => __( 'Tenders', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields' => array(
+					'name' => array(
+						'type' => 'string',
+						'label' => __( 'Tender', 'woocommerce-pos' ),
+					),
+					'expected' => array(
+						'type' => 'money',
+						'label' => __( 'Expected', 'woocommerce-pos' ),
+					),
+					'counted' => array(
+						'type' => 'money',
+						'label' => __( 'Counted', 'woocommerce-pos' ),
+					),
+					'variance' => array(
+						'type' => 'money',
+						'label' => __( 'Variance', 'woocommerce-pos' ),
+					),
+				),
+			);
+			foreach ( array(
+				'counted' => __( 'Counted by Tender', 'woocommerce-pos' ),
+				'expected' => __( 'Expected by Tender', 'woocommerce-pos' ),
+				'variance' => __( 'Variance by Tender', 'woocommerce-pos' ),
+				'breakdowns.payment_methods' => __( 'Payment Methods', 'woocommerce-pos' ),
+				'breakdowns.tax_rates' => __( 'Tax Rates', 'woocommerce-pos' ),
+				'breakdowns.movements' => __( 'Cash Movements', 'woocommerce-pos' ),
+				'breakdowns.denominations' => __( 'Denominations', 'woocommerce-pos' ),
+				'breakdowns.cashiers' => __( 'Cashiers', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree['closure']['fields'][ $field ] = array(
+					'type' => 'array',
+					'label' => $label,
+				);
+			}
+			// Corrections supplement the frozen closure; shipped templates do not print them.
+			$tree['closure']['fields']['corrections'] = array(
+				'type' => 'array',
+				'is_array' => true,
+				'label' => __( 'Corrections', 'woocommerce-pos' ),
+				'fields' => array(
+					'id' => array(
+						'type' => 'number',
+						'label' => __( 'Record ID', 'woocommerce-pos' ),
+					),
+					'type' => array(
+						'type' => 'string',
+						'label' => __( 'Correction Type', 'woocommerce-pos' ),
+					),
+					'actor.id' => array(
+						'type' => 'number',
+						'label' => __( 'Actor ID', 'woocommerce-pos' ),
+					),
+					'actor.name' => array(
+						'type' => 'string',
+						'label' => __( 'Actor Name', 'woocommerce-pos' ),
+					),
+					'approver.id' => array(
+						'type' => 'number',
+						'label' => __( 'Approver ID', 'woocommerce-pos' ),
+					),
+					'approver.name' => array(
+						'type' => 'string',
+						'label' => __( 'Approver Name', 'woocommerce-pos' ),
+					),
+					'reason' => array(
+						'type' => 'string',
+						'label' => __( 'Reason', 'woocommerce-pos' ),
+					),
+					'created_at' => array(
+						'type' => 'string',
+						'label' => __( 'Created (UTC)', 'woocommerce-pos' ),
+					),
+					// Type-specific figures; tender maps and scalar amounts are four-place decimal strings.
+					'figures' => array(
+						'label' => __( 'Correction Figures', 'woocommerce-pos' ),
+						'fields' => array(
+							'expected_delta' => array(
+								'type' => 'array',
+								'label' => __( 'Expected Delta by Tender', 'woocommerce-pos' ),
+							),
+							'sales_delta' => array(
+								'type' => 'money',
+								'label' => __( 'Late Sale Sales Delta', 'woocommerce-pos' ),
+							),
+							'refunds_delta' => array(
+								'type' => 'money',
+								'label' => __( 'Refunds Delta', 'woocommerce-pos' ),
+							),
+							'cash_delta' => array(
+								'type' => 'money',
+								'label' => __( 'Late Movement Cash Delta', 'woocommerce-pos' ),
+							),
+							'counted' => array(
+								'type' => 'array',
+								'label' => __( 'Recount Counted by Tender', 'woocommerce-pos' ),
+							),
+							'variance' => array(
+								'type' => 'array',
+								'label' => __( 'Recount Variance by Tender', 'woocommerce-pos' ),
+							),
+						),
+					),
+				),
+			);
+
+			foreach ( array(
+				'opened_at' => __( 'Opened', 'woocommerce-pos' ),
+				'closed_at' => __( 'Closed', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$tree[ 'closure.' . $field ] = array(
+					'label' => $label,
+					'fields' => self::get_date_field_tree_fields(),
+				);
+			}
+			$tree['closure.tenders']['fields']['variance_label'] = array(
+				'type' => 'string',
+				'label' => __( 'Variance Label (Over / Short / Exact)', 'woocommerce-pos' ),
+			);
+			$tree['closure.tenders']['fields']['label'] = array(
+				'type' => 'string',
+				'label' => __( 'Tender Title', 'woocommerce-pos' ),
+			);
+			$tree['closure.tenders']['fields']['has_variance'] = array(
+				'type' => 'boolean',
+				'label' => __( 'Non-zero Variance', 'woocommerce-pos' ),
+			);
+			$tree['closure.tenders']['fields']['variance_absolute_display'] = array(
+				'type' => 'string',
+				'label' => __( 'Absolute Variance (Formatted)', 'woocommerce-pos' ),
+			);
+			foreach ( array(
+				'payment_methods' => array(
+					'method' => __( 'Tender Key', 'woocommerce-pos' ),
+					'name' => __( 'Payment Method', 'woocommerce-pos' ),
+					'sales' => __( 'Sales', 'woocommerce-pos' ),
+					'refunds' => __( 'Refunds', 'woocommerce-pos' ),
+				),
+				'tax_rates' => array(
+					'name' => __( 'Tax Rate', 'woocommerce-pos' ),
+					'net' => __( 'Net', 'woocommerce-pos' ),
+					'tax' => __( 'Tax', 'woocommerce-pos' ),
+					'gross' => __( 'Gross', 'woocommerce-pos' ),
+				),
+				'movements' => array( 'amount' => __( 'Amount', 'woocommerce-pos' ) ),
+				'denominations' => array(
+					'value' => __( 'Value', 'woocommerce-pos' ),
+					'pieces' => __( 'Pieces', 'woocommerce-pos' ),
+					'amount' => __( 'Amount', 'woocommerce-pos' ),
+				),
+			) as $section => $fields ) {
+				$key = 'closure.breakdowns.' . $section;
+				$tree[ $key ] = array(
+					'label' => $tree['closure']['fields'][ 'breakdowns.' . $section ]['label'],
+					'is_array' => true,
+					'fields' => array(),
+				);
+				foreach ( $fields as $field => $label ) {
+					$tree[ $key ]['fields'][ $field ] = array(
+						'type' => 'pieces' === $field ? 'number' : ( in_array( $field, array( 'name', 'method' ), true ) ? 'string' : 'money' ),
+						'label' => $label,
+					);
+				}
+			}
+			$tree['closure.breakdowns.cashiers'] = array(
+				'label'    => __( 'Cashiers', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'id'   => array(
+						'type'  => 'number',
+						'label' => __( 'Cashier ID', 'woocommerce-pos' ),
+					),
+					'name' => array(
+						'type'  => 'string',
+						'label' => __( 'Cashier Name', 'woocommerce-pos' ),
+					),
+				),
+			);
+			unset( $tree['closure']['fields']['breakdowns.cashiers'] );
+			$movement_fields = &$tree['closure.breakdowns.movements']['fields'];
+			foreach ( array(
+				'type' => __( 'Type', 'woocommerce-pos' ),
+				'type_label' => __( 'Movement Label', 'woocommerce-pos' ),
+				'reason' => __( 'Reason', 'woocommerce-pos' ),
+				'created_at_gmt' => __( 'Created (UTC)', 'woocommerce-pos' ),
+			) as $field => $label ) {
+				$movement_fields[ $field ] = array(
+					'type' => 'string',
+					'label' => $label,
+				);
+			}
+			$movement_fields['voided'] = array(
+				'type' => 'boolean',
+				'label' => __( 'Voided', 'woocommerce-pos' ),
+			);
+			$movement_fields['created_at'] = array(
+				'type' => 'object',
+				'label' => __( 'Created', 'woocommerce-pos' ),
+				'fields' => self::get_date_field_tree_fields(),
+			);
+			unset( $movement_fields );
+			foreach ( array( 'closure', 'closure.tenders', 'closure.breakdowns.payment_methods', 'closure.breakdowns.tax_rates', 'closure.breakdowns.movements', 'closure.breakdowns.denominations' ) as $section ) {
+				foreach ( $tree[ $section ]['fields'] as $field => $definition ) {
+					if ( 'money' === $definition['type'] && ( 'closure' !== $section || ! preg_match( '/^(counted|expected|variance)\./', $field ) ) ) {
+						$tree[ $section ]['fields'][ $field . '_display' ] = array(
+							'type' => 'string',
+							'label' => $definition['label'] . ' (' . __( 'Formatted', 'woocommerce-pos' ) . ')',
+						);
+					}
+				}
+			}
+		}
+		if ( 'display' === $type ) {
+			$tree['ledger'] = array(
+				'label'  => __( 'Ledger', 'woocommerce-pos' ),
+				'fields' => array(
+					'status'     => array(
+						'type'  => 'string',
+						'label' => __( 'Status', 'woocommerce-pos' ),
+					),
+					'total'      => array(
+						'type'  => 'string',
+						'label' => __( 'Total', 'woocommerce-pos' ),
+					),
+					'total_raw'  => array(
+						'type'  => 'number',
+						'label' => __( 'Total (raw)', 'woocommerce-pos' ),
+					),
+					'paid'       => array(
+						'type'  => 'string',
+						'label' => __( 'Paid', 'woocommerce-pos' ),
+					),
+					'paid_raw'   => array(
+						'type'  => 'number',
+						'label' => __( 'Paid (raw)', 'woocommerce-pos' ),
+					),
+					'due'        => array(
+						'type'  => 'string',
+						'label' => __( 'Due', 'woocommerce-pos' ),
+					),
+					'due_raw'    => array(
+						'type'  => 'number',
+						'label' => __( 'Due (raw)', 'woocommerce-pos' ),
+					),
+					'change'     => array(
+						'type'  => 'string',
+						'label' => __( 'Change', 'woocommerce-pos' ),
+					),
+					'change_raw' => array(
+						'type'  => 'number',
+						'label' => __( 'Change (raw)', 'woocommerce-pos' ),
+					),
+				),
+			);
+			$tree['ledger.payments'] = array(
+				'label'    => __( 'Ledger payments', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'id'           => array(
+						'type'  => 'string',
+						'label' => __( 'ID', 'woocommerce-pos' ),
+					),
+					'method'       => array(
+						'type'  => 'string',
+						'label' => __( 'Method', 'woocommerce-pos' ),
+					),
+					'kind'         => array(
+						'type'  => 'string',
+						'label' => __( 'Kind', 'woocommerce-pos' ),
+					),
+					'status'       => array(
+						'type'  => 'string',
+						'label' => __( 'Status', 'woocommerce-pos' ),
+					),
+					'amount'       => array(
+						'type'  => 'string',
+						'label' => __( 'Amount', 'woocommerce-pos' ),
+					),
+					'amount_raw'   => array(
+						'type'  => 'number',
+						'label' => __( 'Amount (raw)', 'woocommerce-pos' ),
+					),
+					'tendered'     => array(
+						'type'  => 'string',
+						'label' => __( 'Tendered', 'woocommerce-pos' ),
+					),
+					'tendered_raw' => array(
+						'type'  => 'number',
+						'label' => __( 'Tendered (raw)', 'woocommerce-pos' ),
+					),
+					'change'       => array(
+						'type'  => 'string',
+						'label' => __( 'Change', 'woocommerce-pos' ),
+					),
+					'change_raw'   => array(
+						'type'  => 'number',
+						'label' => __( 'Change (raw)', 'woocommerce-pos' ),
+					),
+				),
+			);
+			$tree['assets'] = array(
+				'label'  => __( 'Assets', 'woocommerce-pos' ),
+				'fields' => array(
+					'url' => array(
+						'type'  => 'string',
+						'label' => __( 'Plugin image folder URL (example pictures)', 'woocommerce-pos' ),
+					),
+				),
+			);
+			$tree['payment'] = array(
+				'label'  => __( 'Payment', 'woocommerce-pos' ),
+				'fields' => array(
+					'state'      => array(
+						'type'  => 'string',
+						'label' => __( 'State', 'woocommerce-pos' ),
+					),
+					'message'    => array(
+						'type'  => 'string',
+						'label' => __( 'Message', 'woocommerce-pos' ),
+					),
+				),
+			);
+		}
+		return $tree;
 	}
 
 
@@ -1373,14 +1812,309 @@ class Receipt_Data_Schema {
 	}
 
 	/**
+	 * Reuse receipt identity/date fields for tabular documents.
+	 *
+	 * @param array $receipt Receipt field tree.
+	 * @return array Report field tree.
+	 */
+	private static function get_report_field_tree( array $receipt ): array {
+		$tree = array_intersect_key( $receipt, array_flip( array( 'store', 'store.address', 'store.tax_ids', 'register', 'cashier', 'software', 'fiscal', 'i18n' ) ) );
+		$identity = array(
+			'key' => array(
+				'type' => 'string',
+				'label' => __( 'Key', 'woocommerce-pos' ),
+			),
+			'label' => array(
+				'type' => 'string',
+				'label' => __( 'Label', 'woocommerce-pos' ),
+			),
+		);
+		$first = array(
+			'type' => 'boolean',
+			'label' => __( 'First entry', 'woocommerce-pos' ),
+		);
+		$cells = array(
+			'type' => 'array',
+			'is_array' => true,
+			'label' => __( 'Cells', 'woocommerce-pos' ),
+			'fields' => array(
+				'key' => $identity['key'],
+				'is_first' => $first,
+				'label' => array(
+					'type' => 'string',
+					'label' => __( 'Column label', 'woocommerce-pos' ),
+				),
+				'is_label' => array(
+					'type' => 'boolean',
+					'label' => __( 'Repeats the row heading', 'woocommerce-pos' ),
+				),
+				'value' => array(
+					'type' => 'string',
+					'label' => __( 'Value', 'woocommerce-pos' ),
+				),
+				'formatted' => array(
+					'type' => 'string',
+					'label' => __( 'Formatted', 'woocommerce-pos' ),
+				),
+				// The column's alignment, copied onto every cell so a logic-less template
+				// can align a number without knowing which column it is rendering.
+				'align' => array(
+					'type' => 'string',
+					'label' => __( 'Alignment', 'woocommerce-pos' ),
+				),
+			),
+		);
+		$rows = array(
+			'type' => 'array',
+			'is_array' => true,
+			'label' => __( 'Rows', 'woocommerce-pos' ),
+			'fields' => $identity + array( 'cells' => $cells ),
+		);
+		$totals = array(
+			'type' => 'object',
+			'label' => __( 'Totals', 'woocommerce-pos' ),
+			'fields' => array( 'cells' => $cells ),
+		);
+		$scope = array(
+			'mode' => array(
+				'type' => 'string',
+				'label' => __( 'Mode', 'woocommerce-pos' ),
+			),
+			'label' => $identity['label'],
+			'store_id' => $receipt['store']['fields']['id'],
+			'register_id' => $receipt['register']['fields']['id'],
+			'register_name' => $receipt['register']['fields']['name'],
+			'business_day' => array(
+				'type' => 'string',
+				'label' => __( 'Business Day', 'woocommerce-pos' ),
+			),
+			'session_id' => array(
+				'type' => 'string',
+				'label' => __( 'Session ID', 'woocommerce-pos' ),
+			),
+			'session_number' => array(
+				'type' => 'number',
+				'label' => __( 'Session Number', 'woocommerce-pos' ),
+			),
+		);
+		foreach ( array(
+			'opened_at' => __( 'Opened At', 'woocommerce-pos' ),
+			'closed_at' => __( 'Closed At', 'woocommerce-pos' ),
+			'from' => __( 'From', 'woocommerce-pos' ),
+			'to' => __( 'To', 'woocommerce-pos' ),
+		) as $key => $label ) {
+			$scope[ $key ] = array(
+				'type' => 'object',
+				'label' => $label,
+				'fields' => self::get_date_field_tree_fields(),
+			);
+		}
+		$tree['report'] = array(
+			'label' => __( 'Report', 'woocommerce-pos' ),
+			'fields' => array(
+				'key' => $identity['key'],
+				'title' => array(
+					'type' => 'string',
+					'label' => __( 'Title', 'woocommerce-pos' ),
+				),
+				'subtitle' => array(
+					'type' => 'string',
+					'label' => __( 'Subtitle', 'woocommerce-pos' ),
+				),
+				'scope' => array(
+					'type' => 'object',
+					'label' => __( 'Scope', 'woocommerce-pos' ),
+					'fields' => $scope,
+				),
+				'group_by' => array(
+					'type' => 'object',
+					'nullable' => true,
+					'label' => __( 'Group By', 'woocommerce-pos' ),
+					'fields' => $identity,
+				),
+				'columns' => array(
+					'type' => 'array',
+					'is_array' => true,
+					'label' => __( 'Columns', 'woocommerce-pos' ),
+					'fields' => $identity + array(
+						'is_first' => $first,
+						'type' => array(
+							'type' => 'string',
+							'label' => __( 'Type', 'woocommerce-pos' ),
+						),
+						'align' => array(
+							'type' => 'string',
+							'label' => __( 'Alignment', 'woocommerce-pos' ),
+						),
+					),
+				),
+				'column_count' => array(
+					'type'  => 'number',
+					'label' => __( 'Column Count', 'woocommerce-pos' ),
+				),
+				'rows' => $rows,
+				'groups' => array(
+					'type' => 'array',
+					'is_array' => true,
+					'label' => __( 'Groups', 'woocommerce-pos' ),
+					'fields' => $identity + array(
+						'rows' => $rows,
+						'subtotal' => array_merge( $totals, array( 'label' => __( 'Subtotal', 'woocommerce-pos' ) ) ),
+					),
+				),
+				'totals' => $totals,
+				'count' => array(
+					'type' => 'number',
+					'label' => __( 'Count', 'woocommerce-pos' ),
+				),
+				'has_groups' => array(
+					'type' => 'boolean',
+					'label' => __( 'Has Groups', 'woocommerce-pos' ),
+				),
+				'has_rows' => array(
+					'type' => 'boolean',
+					'label' => __( 'Has Rows', 'woocommerce-pos' ),
+				),
+				'generated_at' => array(
+					'type' => 'object',
+					'label' => __( 'Generated At', 'woocommerce-pos' ),
+					'fields' => self::get_date_field_tree_fields(),
+				),
+				'is_partial' => array(
+					'type' => 'boolean',
+					'label' => __( 'Is Partial', 'woocommerce-pos' ),
+				),
+				'partial_reason' => array(
+					'type' => 'string',
+					'label' => __( 'Partial Reason', 'woocommerce-pos' ),
+				),
+			),
+		);
+		$tree['fiscal']['fields']['is_report_document'] = array(
+			'type' => 'boolean',
+			'label' => __( 'Is Report Document', 'woocommerce-pos' ),
+		);
+		$core_roots = array_keys( $tree );
+		foreach ( Reports_Registry::all() as $key => $report ) {
+			foreach ( $report['extras'] as $path => $section ) {
+				// Extras live beside the core, never redefine its schema or required fields.
+				if ( ! is_array( $section ) || in_array( explode( '.', $path )[0], $core_roots, true ) ) {
+					continue;
+				}
+				if ( ! isset( $tree[ $path ] ) ) {
+					$section['label'] = $report['title'];
+					$tree[ $path ] = $section;
+					continue;
+				}
+				// Two reports sharing an extras path form the documented union rather than the
+				// later one replacing the earlier. Overwriting would drop the first report's
+				// fields from the picker, and -- because this tree derives the JSON schema -- a
+				// field redeclared with a different type would make the schema reject the first
+				// report's own documents. The incumbent field wins so the result does not depend
+				// on registration order; the collision is logged so it can be sorted out.
+				foreach ( (array) ( $section['fields'] ?? array() ) as $field => $definition ) {
+					if ( isset( $tree[ $path ]['fields'][ $field ] ) ) {
+						Logger::log(
+							sprintf( 'Report "%s" extras field "%s.%s" ignored: already declared by another report', $key, $path, $field )
+						);
+						continue;
+					}
+					$tree[ $path ]['fields'][ $field ] = $definition;
+				}
+			}
+		}
+		return $tree;
+	}
+
+	/**
+	 * Require all fields in the report branch; shared receipt fields stay optional.
+	 *
+	 * @param array $schema Report branch schema.
+	 * @return array Schema with nested required lists.
+	 */
+	private static function require_report_fields( array $schema ): array {
+		if ( isset( $schema['properties'] ) ) {
+			// is_first and a cell's column label are builder decoration, not required in older producer/preview documents.
+			$optional = isset( $schema['properties']['formatted'] ) ? array( 'is_first', 'label', 'is_label' ) : array( 'is_first' );
+			$schema['required'] = array_values( array_diff( array_keys( $schema['properties'] ), $optional ) );
+			$schema['properties'] = array_map( array( self::class, 'require_report_fields' ), $schema['properties'] );
+		}
+		if ( isset( $schema['items'] ) ) {
+			$schema['items'] = self::require_report_fields( $schema['items'] );
+		}
+		return $schema;
+	}
+
+	/**
 	 * Get the JSON Schema for canonical receipt_data payloads.
 	 *
 	 * PHP remains the source of truth in this repository. This export is used by
 	 * generated TypeScript artifacts and downstream renderer/studio checks.
 	 *
-	 * @return array<string, mixed> JSON-Schema-compatible receipt data schema.
+	 * @param string $type Document type; receipt remains the default.
+	 * @return array<string, mixed> JSON-Schema-compatible document schema.
 	 */
-	public static function get_json_schema(): array {
+	public static function get_json_schema( string $type = 'receipt' ): array {
+		if ( 'report' === $type ) {
+			$schema = array(
+				'$schema' => 'https://json-schema.org/draft/2020-12/schema',
+				'$id' => 'https://wcpos.com/schemas/report-data.schema.json',
+				'title' => 'ReportDocument',
+				'type' => 'object',
+				'required' => array( 'report', 'store', 'register', 'software', 'fiscal', 'i18n' ),
+				'properties' => array(),
+			);
+			foreach ( self::get_field_tree( 'report' ) as $path => $section ) {
+				self::merge_field_tree_section_schema( $schema, $path, $section );
+			}
+			$schema['properties']['report'] = self::require_report_fields( $schema['properties']['report'] );
+			$report =& $schema['properties']['report']['properties'];
+			$report['count']['type'] = 'integer';
+			$report['column_count']['type'] = 'integer';
+			$report['scope']['required'] = array( 'mode', 'label', 'store_id', 'register_id', 'register_name', 'business_day' );
+			$report['scope']['properties']['mode']['enum'] = array( 'session', 'range' );
+			$report['scope']['properties']['business_day']['pattern'] = '^\\d{4}-\\d{2}-\\d{2}$';
+			$report['scope']['anyOf'] = array(
+				array(
+					'type' => 'object',
+					'properties' => array(
+						'mode' => array(
+							'type' => 'string',
+							'enum' => array( 'session' ),
+						),
+					),
+					'required' => array( 'session_id', 'session_number', 'opened_at', 'closed_at' ),
+				),
+				array(
+					'type' => 'object',
+					'properties' => array(
+						'mode' => array(
+							'type' => 'string',
+							'enum' => array( 'range' ),
+						),
+					),
+					'required' => array( 'from', 'to' ),
+				),
+			);
+			$report['columns']['items']['properties']['type']['enum'] = array( 'text', 'number', 'money', 'percent', 'datetime' );
+			$report['columns']['items']['properties']['align']['enum'] = array( 'left', 'right' );
+			// The JS renderers' sanitiser drops array entries whose key starts with "_" (private
+			// metadata), so a row, group or cell key may not, or it would vanish from a preview.
+			$public_key = '^[^_]';
+			foreach ( array( 'columns', 'rows', 'groups' ) as $collection ) {
+				$report[ $collection ]['items']['properties']['key']['pattern'] = $public_key;
+			}
+			$report['rows']['items']['properties']['cells']['items']['properties']['key']['pattern']                          = $public_key;
+			$report['groups']['items']['properties']['rows']['items']['properties']['key']['pattern']                          = $public_key;
+			$report['groups']['items']['properties']['rows']['items']['properties']['cells']['items']['properties']['key']['pattern'] = $public_key;
+			$report['groups']['items']['properties']['subtotal']['properties']['cells']['items']['properties']['key']['pattern']      = $public_key;
+			$report['totals']['properties']['cells']['items']['properties']['key']['pattern']                                   = $public_key;
+			$schema['properties']['fiscal']['required'] = array( 'document_type', 'is_report_document' );
+			$schema['properties']['fiscal']['properties']['document_type']['enum'] = array( 'report' );
+			$schema['properties']['fiscal']['properties']['document_type']['default'] = 'report';
+			$schema['properties']['fiscal']['properties']['is_report_document']['enum'] = array( true );
+			return $schema;
+		}
 		$schema = array(
 			'$schema'              => 'https://json-schema.org/draft/2020-12/schema',
 			'$id'                  => 'https://wcpos.com/schemas/receipt-data.schema.json',
@@ -1541,6 +2275,15 @@ class Receipt_Data_Schema {
 			'type'        => $schema_type,
 			'description' => isset( $field['label'] ) ? (string) $field['label'] : '',
 		);
+
+		if ( array_key_exists( 'default', $field ) ) {
+			$schema['default'] = $field['default'];
+		}
+		if ( 'object' === $type && ! empty( $field['fields'] ) ) {
+			foreach ( $field['fields'] as $child_name => $child_field ) {
+				$schema['properties'][ $child_name ] = self::field_metadata_to_json_schema( $child_field );
+			}
+		}
 
 		if ( \in_array( $type, array( 'string[]', 'array' ), true ) ) {
 			$schema['items'] = array( 'type' => 'string[]' === $type ? 'string' : array( 'string', 'number', 'boolean', 'object', 'array', 'null' ) );

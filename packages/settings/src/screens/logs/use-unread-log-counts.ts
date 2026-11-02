@@ -48,7 +48,7 @@ export async function markLogsRead() {
 
 	try {
 		await apiFetch({
-			path: 'wcpos/v1/logs/mark-read?wcpos=1',
+			path: 'wcpos/v2/logs/mark-read?wcpos=1',
 			method: 'POST',
 		});
 	} catch {

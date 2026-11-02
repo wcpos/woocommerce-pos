@@ -96,7 +96,8 @@ class Feature_Flags {
 		 * @param array<string, string|bool> $flags       Resolved flag map.
 		 * @param string                     $distinct_id The visitor distinct id.
 		 */
-		return apply_filters( 'woocommerce_pos_landing_bootstrap_flags', $flags, $distinct_id );
+		$filtered = apply_filters( 'wcpos_landing_bootstrap_flags', $flags, $distinct_id );
+		return apply_filters_deprecated( 'woocommerce_pos_landing_bootstrap_flags', array( $filtered, $distinct_id ), '2.0.0', 'wcpos_landing_bootstrap_flags' );
 	}
 
 	/**

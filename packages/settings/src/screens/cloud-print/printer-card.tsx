@@ -168,7 +168,7 @@ export function PrinterCard({
 		setTesting(true);
 		try {
 			await apiFetch({
-				path: 'wcpos/v1/print-jobs/test?wcpos=1',
+				path: 'wcpos/v2/print-jobs/test?wcpos=1',
 				method: 'POST',
 				data: { printer_id: printer.id },
 			});

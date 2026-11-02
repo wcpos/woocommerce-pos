@@ -362,6 +362,32 @@ class Test_Save_Reentry_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A listener that threw out of an order save WooCommerce swallowed leaves no hook running: a later request-context save passes.
+	 *
+	 * `do_action()` pops `$wp_current_filter` only when its callbacks return, so the throw leaves
+	 * `woocommerce_before_order_object_save` on the stack although nothing is saving any more.
+	 */
+	public function test_guard_request_save_after_swallowed_listener_throw_passes(): void {
+		// Arrange.
+		$product_id = $this->create_managed_stock_product();
+		$order      = wc_create_order();
+		$throw      = static function (): void {
+			throw new \RuntimeException( 'A listener failed.' );
+		};
+		add_action( 'woocommerce_before_order_object_save', $throw );
+		$order->set_customer_note( 'Saved' );
+		$order->save();
+		remove_action( 'woocommerce_before_order_object_save', $throw );
+		$this->assertContains( 'woocommerce_before_order_object_save', $GLOBALS['wp_current_filter'], 'Precondition: the swallowed throw left the hook on the stack.' );
+
+		// Act.
+		$result = reentry_offender_update_post( $product_id );
+
+		// Assert.
+		$this->assertSame( $product_id, $result );
+	}
+
+	/**
 	 * A revision WordPress core saves inside a plugin's own request-context wp_update_post() is core's save and passes.
 	 */
 	public function test_guard_core_revision_inside_plugin_update_post_passes(): void {

@@ -1,5 +1,5 @@
 ---
-status: accepted — implementation staged (query-filter fix in 1.10.x; revision + envelope at the 1.11.0 gate, free#1752)
+status: implemented (query-filter fix in 1.10.x; revision + envelope landed on next for 1.11.0, free#1869)
 ---
 
 # Variations: a first-class record on the house paradigm
@@ -12,14 +12,13 @@ last date-based revision — to the house paradigm: a content hash over WooComme
 REST schema fields (filterable), computed at read time, never stored. Grounds: variations are
 the collection most likely to be edited concurrently (stock sync, wp-admin, another till) and
 had the weakest conflict detection (1-second date granularity; blindness to meta-only edits).
-The switch ships at the 1.11.0 protocol gate; the client stops synthesizing dates in the same
-release. Prerequisite built with it: `Variation_Writer::document()` must hand the revision
-function bare bytes — today it passes an augmented, uuid-stamped wrapper that is harmless
-only while the date branch ignores content.
+The switch landed on `next` for 1.11.0 behind the protocol-2 gate; those clients
+already consume the stamped hash. `Variation_Writer::document()` now supplies bare
+bytes before response augmentation; the flat and barcode lanes use the same recipe.
 
 **Envelope:** the `documents[].{id,parent_id,payload,_rxdb_digest}` wrapper was a lab-era
-accident — the client flattens it on arrival and `parent_id` rides the payload. It drops at
-the 1.11.0 gate, along with `/resolve/barcode`'s identical product wrapper.
+accident. It is removed on `next` for 1.11.0: variation rows and `/resolve/barcode`'s
+`match` are bare wc/v3 records, with transport stamps and UUID metadata.
 
 **Replica policy: complete, seeded by idle trickle.** Defer-hydration made offline
 completeness impossible (a barcode scan of a never-opened variation fails offline). An idle

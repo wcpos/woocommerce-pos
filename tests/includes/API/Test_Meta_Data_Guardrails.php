@@ -51,7 +51,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 
 		// Capture all Logger calls for assertion.
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				unset( $should_log ); // Intentionally unused.
 				$this->captured_logs[] = $message;
@@ -67,11 +67,11 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		$this->uninstall_sync_read_lane();
-		remove_all_filters( 'woocommerce_pos_logging' );
-		remove_all_filters( 'woocommerce_pos_meta_data_warning_threshold' );
-		remove_all_filters( 'woocommerce_pos_meta_data_error_threshold' );
-		remove_all_filters( 'woocommerce_pos_response_size_warning_threshold' );
-		remove_all_filters( 'woocommerce_pos_response_size_error_threshold' );
+		remove_all_filters( 'wcpos_logging' );
+		remove_all_filters( 'wcpos_meta_data_warning_threshold' );
+		remove_all_filters( 'wcpos_meta_data_error_threshold' );
+		remove_all_filters( 'wcpos_response_size_warning_threshold' );
+		remove_all_filters( 'wcpos_response_size_error_threshold' );
 		parent::tearDown();
 	}
 
@@ -263,7 +263,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	public function test_meta_count_warning_is_logged(): void {
 		// Lower the threshold for testing.
 		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
+			'wcpos_meta_data_warning_threshold',
 			function () {
 				return 10;
 			}
@@ -289,6 +289,18 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 		$this->assertTrue( $found, 'Expected meta count warning log not found. Logs: ' . implode( ' | ', $this->captured_logs ) );
+
+		// Verify warning was logged with the product ID.
+		$found = false;
+		foreach ( $this->captured_logs as $log ) {
+			if ( strpos( $log, 'meta_data entries' ) !== false
+				&& strpos( $log, (string) $product->get_id() ) !== false
+			) {
+				$found = true;
+				break;
+			}
+		}
+		$this->assertTrue( $found, 'meta_count_warning_fires_with_many_meta_keys: Expected meta count warning log not found. Logs: ' . implode( ' | ', $this->captured_logs ) );
 	}
 
 	/**
@@ -297,13 +309,13 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	public function test_meta_count_error_is_logged(): void {
 		// Lower thresholds for testing.
 		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
+			'wcpos_meta_data_warning_threshold',
 			function () {
 				return 5;
 			}
 		);
 		add_filter(
-			'woocommerce_pos_meta_data_error_threshold',
+			'wcpos_meta_data_error_threshold',
 			function () {
 				return 15;
 			}
@@ -399,7 +411,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 
 		// Lower the error threshold for testing.
 		add_filter(
-			'woocommerce_pos_meta_data_error_threshold',
+			'wcpos_meta_data_error_threshold',
 			function () {
 				return 20;
 			}
@@ -459,7 +471,7 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	public function test_response_size_warning_for_large_description(): void {
 		// Lower the threshold for testing.
 		add_filter(
-			'woocommerce_pos_response_size_warning_threshold',
+			'wcpos_response_size_warning_threshold',
 			function () {
 				return 1000; // 1KB.
 			}
@@ -489,58 +501,18 @@ class Test_Meta_Data_Guardrails extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test: meta count warning fires for products with many different meta keys.
-	 *
-	 * Note: the top meta keys context is appended after the logging filter fires,
-	 * so we verify the warning message itself and test the key extraction directly.
-	 */
-	public function test_meta_count_warning_fires_with_many_meta_keys(): void {
-		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
-			function () {
-				return 5;
-			}
-		);
-
-		$product = ProductHelper::create_simple_product(
-			array(
-				'regular_price' => 10,
-				'price'         => 10,
-			)
-		);
-		// Add recognizable meta keys.
-		$this->add_bulk_post_meta( $product->get_id(), 10, '_yoast_seo' );
-		$this->add_bulk_post_meta( $product->get_id(), 5, '_elementor' );
-
-		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
-		$this->server->dispatch( $request );
-
-		// Verify warning was logged with the product ID.
-		$found = false;
-		foreach ( $this->captured_logs as $log ) {
-			if ( strpos( $log, 'meta_data entries' ) !== false
-				&& strpos( $log, (string) $product->get_id() ) !== false
-			) {
-				$found = true;
-				break;
-			}
-		}
-		$this->assertTrue( $found, 'Expected meta count warning log not found. Logs: ' . implode( ' | ', $this->captured_logs ) );
-	}
-
-	/**
 	 * Test: thresholds are configurable via filters.
 	 */
 	public function test_thresholds_are_configurable_via_filters(): void {
 		// Set very high thresholds so no warnings fire.
 		add_filter(
-			'woocommerce_pos_meta_data_warning_threshold',
+			'wcpos_meta_data_warning_threshold',
 			function () {
 				return 9999;
 			}
 		);
 		add_filter(
-			'woocommerce_pos_meta_data_error_threshold',
+			'wcpos_meta_data_error_threshold',
 			function () {
 				return 99999;
 			}

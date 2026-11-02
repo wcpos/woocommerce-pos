@@ -19,16 +19,112 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 			$settings['barcode_field'] = '_rank_barcode';
 			return $settings;
 		};
-		add_filter( 'woocommerce_pos_general_settings', $this->barcode_settings );
+		add_filter( 'wcpos_general_settings', $this->barcode_settings );
 		parent::setUp();
 	}
 
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_general_settings', $this->barcode_settings );
+		remove_filter( 'wcpos_general_settings', $this->barcode_settings );
 		parent::tearDown();
 		$this->uninstall_sync_read_lane();
 		delete_option( 'woocommerce_pos_settings_general' );
 		delete_option( Pos_Visibility::OPTION );
+	}
+
+	/**
+	 * Product id sets match across lanes without leaving query callbacks installed.
+	 *
+	 * Include and exclude are read separately: WP_Query ignores `post__not_in` once
+	 * `post__in` is set, so a combined read is not a parity question.
+	 */
+	public function test_product_id_set_reads_match_and_leave_no_query_callbacks(): void {
+		// Arrange.
+		$this->install_sync_read_lane();
+		$a = ProductHelper::create_simple_product()->get_id();
+		$b = ProductHelper::create_simple_product()->get_id();
+		$c = ProductHelper::create_simple_product()->get_id();
+
+		// Act / Assert.
+		$this->assert_id_set_lane_parity(
+			array(
+				'/wcpos/v1/products' => array( 'wcpos_include' => array( $a, $b ) ),
+				'/wcpos/v2/products' => array( 'include' => "$a,$b" ),
+			),
+			array( $a, $b )
+		);
+		$this->assert_id_set_lane_parity(
+			array(
+				'/wcpos/v1/products' => array( 'wcpos_exclude' => array( $b ) ),
+				'/wcpos/v2/products' => array( 'exclude' => (string) $b ),
+			),
+			array( $a, $c )
+		);
+	}
+
+	/**
+	 * Variation id sets match across lanes without leaving query callbacks installed.
+	 */
+	public function test_variation_id_set_reads_match_and_leave_no_query_callbacks(): void {
+		// Arrange.
+		$this->install_sync_read_lane();
+		$ids = array_map( 'intval', ProductHelper::create_variation_product()->get_children() );
+		$a   = $ids[0];
+		$b   = $ids[1];
+
+		// Act / Assert.
+		$this->assert_id_set_lane_parity(
+			array(
+				'/wcpos/v1/products/variations' => array( 'wcpos_include' => array( $a, $b ) ),
+				'/wcpos/v2/variations'          => array( 'include' => "$a,$b" ),
+			),
+			array( $a, $b )
+		);
+		$this->assert_id_set_lane_parity(
+			array(
+				'/wcpos/v1/products/variations' => array( 'wcpos_exclude' => array( $b ) ),
+				'/wcpos/v2/variations'          => array( 'exclude' => (string) $b ),
+			),
+			array_values( array_diff( $ids, array( $b ) ) )
+		);
+	}
+
+	/**
+	 * Dispatch one id set on each lane; both return the expected ids and leave no callbacks behind.
+	 *
+	 * @param array<string, array> $lanes    Route => query params carrying the id set.
+	 * @param int[]                $expected Expected ids, in any order.
+	 */
+	private function assert_id_set_lane_parity( array $lanes, array $expected ): void {
+		sort( $expected );
+		$before = $this->query_hook_counts();
+
+		foreach ( $lanes as $route => $query ) {
+			$request = $this->wp_rest_get_request( $route );
+			$request->set_query_params( $query );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status(), $route );
+			$actual = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+			sort( $actual );
+			$this->assertSame( $expected, $actual, $route );
+			$this->assertSame( $before, $this->query_hook_counts(), $route );
+		}
+	}
+
+	/**
+	 * Count catalog query callbacks across every priority.
+	 *
+	 * @return array<string, int>
+	 */
+	private function query_hook_counts(): array {
+		$counts = array();
+		foreach ( array( 'posts_where', 'posts_clauses', 'posts_search', 'posts_join', 'posts_groupby', 'woocommerce_rest_product_object_query', 'woocommerce_rest_product_variation_object_query' ) as $hook ) {
+			$counts[ $hook ] = 0;
+			foreach ( $GLOBALS['wp_filter'][ $hook ]->callbacks ?? array() as $callbacks ) {
+				$counts[ $hook ] += \count( $callbacks );
+			}
+		}
+		return $counts;
 	}
 
 	/** Exact SKU and configured barcode matches rank first on both product lanes. */
@@ -126,8 +222,8 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 
 				// Assert.
 				$this->assertSame( 200, $response->get_status() );
-				$rows = '/wcpos/v2/variations' === $route ? $response->get_data()['documents'] : $response->get_data();
-				$this->assertSame( array( $target->get_id() ), wp_list_pluck( $rows, 'id' ) );
+				// On next every lane, v2 included, answers with the document list itself.
+				$this->assertSame( array( $target->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
 			} finally {
 				$GLOBALS['wp_filter'] = $snapshot;
 			}
@@ -155,10 +251,7 @@ class Test_Collection_Rules_Search_Parity extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 			// Assert.
 			$this->assertSame( 200, $response->get_status() );
-			// The flat variations route answers with the documents/meta envelope on this lane.
-			$data = $response->get_data();
-			$this->assertSame( array(), $data['documents'] );
-			$this->assertSame( 0, $data['meta']['returned'] );
+			$this->assertSame( array(), $response->get_data() );
 		} finally {
 			remove_action( 'pre_get_posts', $late_include, 99 );
 		}

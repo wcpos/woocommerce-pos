@@ -12,7 +12,7 @@ abstract class WCPOS_REST_Decimal_Quantity_Unit_Test_Case extends WCPOS_REST_Uni
 	public function setUp(): void {
 		// Apply decimal quantity filter BEFORE rest_api_init fires
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			array( $this, 'enable_decimal_quantities' ),
 			1 // High priority to run early
 		);
@@ -25,7 +25,7 @@ abstract class WCPOS_REST_Decimal_Quantity_Unit_Test_Case extends WCPOS_REST_Uni
 	}
 
 	public function tearDown(): void {
-		remove_filter( 'woocommerce_pos_general_settings', array( $this, 'enable_decimal_quantities' ), 1 );
+		remove_filter( 'wcpos_general_settings', array( $this, 'enable_decimal_quantities' ), 1 );
 		remove_filter( 'woocommerce_stock_amount', 'floatval' );
 		add_filter( 'woocommerce_stock_amount', 'intval' );
 

@@ -138,15 +138,17 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Paid statuses: the v2 push must surface the insufficient-stock 400
-	 * with the public error contract v1 pinned (code + per-line items).
+	 * Stock-reducing statuses: the v2 push must surface the insufficient-stock 400
+	 * with the public error contract v1 pinned (code + per-line items). Under
+	 * ADR 0040 the till pushes no paid status, so `on-hold` is the one pushable
+	 * status that reduces stock.
 	 *
 	 * @dataProvider paid_status_provider
 	 *
-	 * @param string $status   Target paid status.
+	 * @param string $status   Target stock-reducing status.
 	 * @param int    $sequence Unique envelope sequence.
 	 */
-	public function test_v2_push_paid_status_insufficient_stock_returns_400( string $status, int $sequence ): void {
+	public function test_v2_push_stock_reducing_status_insufficient_stock_returns_400( string $status, int $sequence ): void {
 		$this->set_prevent_overselling( true );
 		$product = $this->create_stock_product( 1 );
 
@@ -173,14 +175,13 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Paid statuses that must validate stock on the v2 push.
+	 * Pushable statuses that must validate stock on the v2 push.
 	 *
 	 * @return array<string,array{string,int}>
 	 */
 	public function paid_status_provider(): array {
 		return array(
-			'processing' => array( 'processing', 101 ),
-			'completed'  => array( 'completed', 102 ),
+			'on-hold' => array( 'on-hold', 101 ),
 		);
 	}
 
@@ -211,27 +212,26 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 	 */
 	public function exempt_status_provider(): array {
 		return array(
-			'pending'     => array( 'pending', 111 ),
-			'pos-open'    => array( 'pos-open', 112 ),
-			'pos-partial' => array( 'pos-partial', 113 ),
+			'pending'  => array( 'pending', 111 ),
+			'pos-open' => array( 'pos-open', 112 ),
 		);
 	}
 
 	/**
-	 * With the setting off, paid oversold orders pass through untouched.
+	 * With the setting off, oversold on-hold orders pass through untouched.
 	 */
 	public function test_v2_push_disabled_setting_does_not_validate_stock(): void {
 		$this->set_prevent_overselling( false );
 		$product = $this->create_stock_product( 1 );
 
-		$response = $this->push_order( $this->oversell_create_envelope( 121, 'processing', $product->get_id() ) );
+		$response = $this->push_order( $this->oversell_create_envelope( 121, 'on-hold', $product->get_id() ) );
 
 		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
 	}
 
 	/**
 	 * The checkout transition itself: an open POS draft syncs oversold, but
-	 * the v2 UPDATE that moves it to a paid status is rejected.
+	 * the v2 UPDATE that moves it to a stock-reducing status is rejected.
 	 */
 	public function test_v2_push_checkout_transition_update_validates_stock(): void {
 		$this->set_prevent_overselling( true );
@@ -248,7 +248,7 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 				'collection'   => 'orders',
 				'recordId'     => '20000000-0000-4000-8000-000000000131',
 				'baseRevision' => $created->get_data()['currentRevision'],
-				'payload'      => array( 'status' => 'processing' ),
+				'payload'      => array( 'status' => 'on-hold' ),
 			)
 		);
 		$data = $updated->get_data();
@@ -273,7 +273,7 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 			)
 		);
 
-		$response = $this->push_order( $this->oversell_create_envelope( 141, 'processing', $product->get_id(), 1 ) );
+		$response = $this->push_order( $this->oversell_create_envelope( 141, 'on-hold', $product->get_id(), 1 ) );
 		$data     = $response->get_data();
 
 		$this->assertSame( 400, $response->get_status(), wp_json_encode( $data ) );
@@ -283,13 +283,13 @@ class Test_Rest_Dispatch_Stock_Validation extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Backorder-allowing products do not block paid statuses.
+	 * Backorder-allowing products do not block stock-reducing statuses.
 	 */
 	public function test_v2_push_backorders_do_not_block(): void {
 		$this->set_prevent_overselling( true );
 		$product = $this->create_stock_product( 1, 'yes' );
 
-		$response = $this->push_order( $this->oversell_create_envelope( 151, 'processing', $product->get_id() ) );
+		$response = $this->push_order( $this->oversell_create_envelope( 151, 'on-hold', $product->get_id() ) );
 
 		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
 	}

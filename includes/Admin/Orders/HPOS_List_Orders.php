@@ -46,7 +46,7 @@ class HPOS_List_Orders extends List_Orders {
 	 * @return void
 	 */
 	public function orders_custom_column_content( string $column_name, $order ): void {
-		if ( 'wcpos' === $column_name && woocommerce_pos_is_pos_order( $order ) ) {
+		if ( 'wcpos' === $column_name && wcpos_is_pos_order( $order ) ) {
 			echo '<span class="wcpos-icon" title="POS Order"></span>';
 		}
 	}

@@ -73,6 +73,7 @@ class Single_Template {
 
 		add_action( 'add_meta_boxes_wcpos_template', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10, 2 );
+		add_action( 'wp_insert_post', array( $this, 'assign_new_template_type' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'admin_head-post.php', array( $this, 'hide_publish_status_controls' ) );
 		add_action( 'admin_head-post-new.php', array( $this, 'hide_publish_status_controls' ) );
@@ -82,6 +83,28 @@ class Single_Template {
 		// Remove the default content editor — our React app replaces it.
 		// Called directly because this class is instantiated after init.
 		remove_post_type_support( 'wcpos_template', 'editor' );
+	}
+
+	/**
+	 * Apply the gallery's type hint when WordPress creates a new auto-draft.
+	 *
+	 * @param int      $post_id Post ID.
+	 * @param \WP_Post $post    Post object.
+	 *
+	 * @return void
+	 */
+	public function assign_new_template_type( int $post_id, \WP_Post $post ): void {
+		global $pagenow;
+		if ( 'post-new.php' !== $pagenow || 'wcpos_template' !== $post->post_type || 'auto-draft' !== $post->post_status ) {
+			return;
+		}
+
+		// This gallery-link hint is not a form submission and needs no nonce.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$type = isset( $_GET['wcpos_type'] ) ? sanitize_key( wp_unslash( $_GET['wcpos_type'] ) ) : '';
+		if ( \in_array( $type, TemplatesManager::SUPPORTED_TYPES, true ) ) {
+			wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
+		}
 	}
 
 	/**
@@ -216,14 +239,24 @@ class Single_Template {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
 		$template    = TemplatesManager::get_template( $post->ID );
-		$engine      = self::get_editor_engine( $post );
+		$type        = $template['type'] ?? 'receipt';
+		$is_display  = 'display' === $type;
+		$engine      = $is_display ? 'logicless' : self::get_editor_engine( $post );
+		$is_new      = 'auto-draft' === $post->post_status;
+		$is_offline_document = 'report' === $type || ( 'closure' === $type && ( $is_new || 'legacy-php' !== $engine ) );
+		if ( $is_offline_document && 'legacy-php' === $engine ) {
+			$engine = 'logicless';
+		}
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
 		$is_premade  = $template && ! empty( $template['is_premade'] );
-		$is_new      = 'auto-draft' === $post->post_status;
 
-		$disabled = ! $is_new ? 'disabled="disabled"' : '';
+		$disabled = $is_display || ! $is_new ? 'disabled="disabled"' : '';
 
 		$engines = self::get_engine_options();
+		if ( $is_offline_document ) {
+			// Keep legacy available only for existing legacy closure templates.
+			unset( $engines['legacy-php'] );
+		}
 
 		$engine_descriptions = array(
 			'logicless'  => __( 'Prints using your browser\'s print dialog. Renders on the device without needing a server connection.', 'woocommerce-pos' ),
@@ -242,6 +275,9 @@ class Single_Template {
 					</option>
 				<?php endforeach; ?>
 			</select>
+			<?php if ( $is_display ) : ?>
+				<input type="hidden" name="wcpos_template_engine" value="logicless" />
+			<?php endif; ?>
 		</p>
 		<p id="wcpos-engine-description" class="description" style="margin-top: -8px;">
 			<?php echo esc_html( $engine_descriptions[ $engine ] ?? '' ); ?>
@@ -363,8 +399,16 @@ class Single_Template {
 		// post_status because save_post fires after WordPress has already
 		// transitioned auto-draft → draft/publish.
 		if ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
-			if ( isset( $_POST['wcpos_template_engine'] ) ) {
+			if ( ! empty( $terms ) && 'display' === $terms[0]->slug ) {
+				update_post_meta( $post_id, '_template_engine', 'logicless' );
+				update_post_meta( $post_id, '_template_output_type', 'html' );
+				update_post_meta( $post_id, '_template_language', 'html' );
+			} elseif ( isset( $_POST['wcpos_template_engine'] ) ) {
 				$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
+				if ( ! empty( $terms ) && \in_array( $terms[0]->slug, array( 'report', 'closure' ), true ) && 'legacy-php' === $engine ) {
+					// New offline documents cannot select the server-only PHP engine.
+					$engine = 'logicless';
+				}
 				if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {
 					update_post_meta( $post_id, '_template_engine', $engine );
 
@@ -538,19 +582,25 @@ class Single_Template {
 	}
 
 	/**
-	 * Build the sample receipt data passed to the template editor.
+	 * Build the template's own Preview Document; with no template, the plain sample receipt.
 	 *
-	 * Money fields are run through Receipt_Data_Schema::format_money_fields() so
+	 * Money fields are run through Receipt_Money_Formatter::format() so
 	 * the editor's sample-mode preview renders formatted currency strings — the
 	 * same shape the live /preview endpoint returns. Without this the starter
 	 * templates' `*_display` placeholders resolve to empty strings.
 	 *
+	 * @param array|null $template Optional template record for its preview profile.
+	 *
 	 * @return array<string,mixed>
 	 */
-	public static function get_sample_receipt_data(): array {
-		$raw = ( new \WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder() )->build();
+	public static function get_sample_receipt_data( ?array $template = null ): array {
+		$raw = ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->for_template(
+			$template ?? array(
+				'type' => 'receipt',
+			)
+		);
 
-		return \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::format_money_fields(
+		return \WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter::format(
 			$raw,
 			$raw['order']['currency'] ?? 'USD'
 		);
@@ -564,25 +614,48 @@ class Single_Template {
 	 * @return string JavaScript to inject before the editor script.
 	 */
 	private function get_editor_inline_script( \WP_Post $post ): string {
-		$template = TemplatesManager::get_template( $post->ID );
-		$engine   = self::get_editor_engine( $post );
+		$template        = TemplatesManager::get_template( $post->ID );
+		$engine          = self::get_editor_engine( $post );
+		$type            = $template['type'] ?? 'receipt';
+		$display_starter = 'display' === $type && '' === $post->post_content
+			? ( TemplatesManager::get_active_template( 'display' )['content'] ?? null )
+			: null;
 
-		// Get sample receipt data from the preview builder.
-		$sample_data = self::get_sample_receipt_data();
+		// Keep closure and report samples unformatted; receipt profiles get money companions.
+		$sample_data = \in_array( $type, array( 'closure', 'report' ), true )
+			? ( new \WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader() )->for_template(
+				$template ?? array(
+					'type' => $type,
+				)
+			)
+			: self::get_sample_receipt_data( $template );
 
 		$preview_url = rest_url( 'wcpos/v2/templates/' . $post->ID . '/preview' );
 
 		$paper_width = get_post_meta( $post->ID, '_template_paper_width', true );
 
 		$config = array(
-			'fieldSchema' => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree(),
-			'sampleData'  => $sample_data,
-			'engine'      => $engine,
-			'paperWidth'  => $paper_width ? $paper_width : null,
-			'templateId'  => $post->ID,
-			'previewUrl'  => $preview_url,
-			'postContent'  => $post->post_content,
-			'hasPosOrders' => (bool) wc_get_orders(
+			'isProActive'       => wcpos_is_pro_active(),
+			// The iframe must share wp-admin's origin for postMessage, so it follows this request's scheme.
+			'displayPreviewUrl' => set_url_scheme( wcpos_display_url(), is_ssl() ? 'https' : 'http' ),
+			'type'              => $type,
+			'displayStarter'    => $display_starter,
+			'reportStarters'    => 'report' === $type ? array(
+				'logicless' => TemplatesManager::get_gallery_template_by_key( 'report-default' )['content'],
+				'thermal' => TemplatesManager::get_gallery_template_by_key( 'thermal-report-80mm' )['content'],
+			) : null,
+			'closureStarters'    => 'closure' === $type ? array(
+				'logicless' => TemplatesManager::get_gallery_template_by_key( 'closure-default' )['content'],
+				'thermal' => TemplatesManager::get_gallery_template_by_key( 'thermal-closure-80mm' )['content'],
+			) : null,
+			'fieldSchema'       => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( $type ),
+			'sampleData'        => $sample_data,
+			'engine'            => $engine,
+			'paperWidth'        => $paper_width ? $paper_width : null,
+			'templateId'        => $post->ID,
+			'previewUrl'        => $preview_url,
+			'postContent'       => $post->post_content,
+			'hasPosOrders'      => (bool) wc_get_orders(
 				array(
 					'limit'       => 1,
 					'return'      => 'ids',

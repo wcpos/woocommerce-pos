@@ -36,7 +36,7 @@ class Test_Logger extends WC_Unit_Test_Case {
 
 		// Capture all log writes via the filter.
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				$this->logged_messages[] = $message;
 
@@ -52,7 +52,7 @@ class Test_Logger extends WC_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
-		remove_all_filters( 'woocommerce_pos_logging' );
+		remove_all_filters( 'wcpos_logging' );
 		Logger::reset_dedup_state();
 		parent::tearDown();
 	}

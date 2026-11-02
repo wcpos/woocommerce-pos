@@ -41,6 +41,7 @@ the right, identical pattern to the 80mm sibling — the renderer resolves
 the star to the remaining 32-CPL space at render time.
 -->
 <receipt paper-width="32">
+  {{#fiscal.is_reprint}}<align mode="center"><bold><text align="center" bold="true">{{i18n.copy}} {{fiscal.reprint_count}} · {{order.printed.datetime}}</text></bold></align>{{/fiscal.is_reprint}}
 
   <!-- ── Logo + store identity ─────────────── -->
   {{#store.logo}}
@@ -68,6 +69,9 @@ the star to the remaining 32-CPL space at render time.
   <!-- ── Document title + status ─────────────── -->
   <align mode="center">
     <bold><size width="2" height="2"><text>{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.tax_invoice}}{{/fiscal.document_label}}</text></size></bold>
+    {{#fiscal.is_refund_document}}
+    {{#fiscal.corrects}}<text>{{i18n.corrects}} {{fiscal.corrects}}</text>{{/fiscal.corrects}}
+    {{/fiscal.is_refund_document}}
     {{#order.status_label}}
     <text>[ {{order.status_label}} ]</text>
     {{/order.status_label}}
@@ -75,13 +79,13 @@ the star to the remaining 32-CPL space at render time.
   <line style="dashed" />
 
   <!-- ── Order info ─────────────── -->
-  <row>
+  {{#order.number}}<row>
     <col width="10">{{i18n.order}}:</col>
-    <col width="*" align="right">#{{order.number}}</col>
-  </row>
+    <col width="*" align="right">#{{#fiscal.is_refund_document}}{{fiscal.receipt_number}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.number}}{{/fiscal.is_refund_document}}</col>
+  </row>{{/order.number}}
   <row>
     <col width="10">{{i18n.date}}:</col>
-    <col width="*" align="right">{{order.created.datetime}}</col>
+    <col width="*" align="right">{{#fiscal.is_refund_document}}{{fiscal.sale_time.datetime}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{order.created.datetime}}{{/fiscal.is_refund_document}}</col>
   </row>
   {{#cashier.name}}
   <row>
@@ -288,7 +292,7 @@ the star to the remaining 32-CPL space at render time.
   <!-- ── Payments ─────────────── -->
   {{#payments.0}}
   <line />
-  <bold><text>{{i18n.paid}}</text></bold>
+  <bold><text>{{#fiscal.is_refund_document}}{{i18n.refunded_to}}{{/fiscal.is_refund_document}}{{^fiscal.is_refund_document}}{{i18n.paid}}{{/fiscal.is_refund_document}}</text></bold>
   {{/payments.0}}
   {{#payments}}
   <row>
@@ -313,8 +317,14 @@ the star to the remaining 32-CPL space at render time.
   <!-- ── Order barcode ─────────────── -->
   <feed lines="1" />
   <align mode="center">
-    <barcode type="code128" height="40">{{order.number}}</barcode>
+    {{#order.number}}<barcode type="code128" height="40">{{order.number}}</barcode>{{/order.number}}
   </align>
+
+  {{#fiscal.qr_payload}}<align mode="center"><qrcode size="4">{{fiscal.qr_payload}}</qrcode></align>{{/fiscal.qr_payload}}
+  {{#register.name}}<align mode="center"><text>{{i18n.register}}: {{register.name}}</text></align>{{/register.name}}
+  {{#fiscal.receipt_number}}<align mode="center"><text>#{{fiscal.receipt_number}}</text></align>{{/fiscal.receipt_number}}
+  {{#fiscal.sale_time.datetime}}<align mode="center"><text>{{i18n.sale_time}}: {{fiscal.sale_time.datetime}}</text></align>{{/fiscal.sale_time.datetime}}
+  {{#software.name}}<align mode="center"><text>{{software.name}} {{software.plugin_version}}{{#software.app_version}} · {{software.app_version}}{{/software.app_version}}</text></align>{{/software.name}}
 
   <!-- ── Personal note ─────────────── -->
   <feed lines="1" />

@@ -38,6 +38,33 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Customer-facing displays have non-empty translated labels for each state.
+	 */
+	public function test_get_labels_customer_display_keys_are_non_empty_strings(): void {
+		$keys = array(
+			'welcome',
+			'greeting',
+			'your_items',
+			'items_appear_here',
+			'you_saved',
+			'paid_so_far',
+			'present_card',
+			'approved',
+			'declined',
+			'try_another_card',
+			'paid_in_full',
+		);
+
+		$labels = Receipt_I18n_Labels::get_labels();
+
+		foreach ( $keys as $key ) {
+			$this->assertArrayHasKey( $key, $labels );
+			$this->assertIsString( $labels[ $key ] );
+			$this->assertNotSame( '', $labels[ $key ] );
+		}
+	}
+
+	/**
 	 * Savings templates expose concise merchant-facing labels.
 	 */
 	public function test_get_labels_includes_receipt_savings_keys(): void {

@@ -22,10 +22,43 @@ const PREVIEW_DEVICE_SCALE_FACTOR = 2;
 const A4_PREVIEW_CSS_WIDTH = 794;
 
 // Templates whose preview WebP dimensions must match the 58mm paper width.
-const THERMAL_58MM_KEYS = new Set(['thermal-simple-58mm', 'thermal-detailed-58mm']);
+const THERMAL_58MM_KEYS = new Set([
+	'thermal-simple-58mm',
+	'thermal-detailed-58mm',
+	'thermal-closure-58mm',
+	'thermal-report-58mm',
+]);
 
 // All thermal templates (need a preview WebP sized to 58mm or 80mm).
 const THERMAL_KEYS = new Set(getBundledGalleryKeys().filter((key) => key.startsWith('thermal-')));
+
+// Customer-display previews use screen viewports, not paper widths.
+const DISPLAY_VIEWPORTS: Record<string, { width: number; height: number }> = {
+	'display-pocket': { width: 390, height: 844 },
+	'display-marquee': { width: 1280, height: 800 },
+	'display-ledger': { width: 1280, height: 800 },
+	'display-seasons-greetings': { width: 1280, height: 800 },
+	'display-lunar-new-year': { width: 1280, height: 800 },
+	'display-eid': { width: 1280, height: 800 },
+	'display-diwali': { width: 1280, height: 800 },
+	'display-sale': { width: 1280, height: 800 },
+	'display-carousel': { width: 1280, height: 800 },
+	'display-specials': { width: 1280, height: 800 },
+	'display-follow': { width: 1280, height: 800 },
+	'display-valentines': { width: 1280, height: 800 },
+	'display-mothers-day': { width: 1280, height: 800 },
+	'display-fathers-day': { width: 1280, height: 800 },
+	'display-easter': { width: 1280, height: 800 },
+	'display-halloween': { width: 1280, height: 800 },
+	'display-thanksgiving': { width: 1280, height: 800 },
+	'display-hanukkah': { width: 1280, height: 800 },
+	'display-new-year': { width: 1280, height: 800 },
+	'display-nowruz': { width: 1280, height: 800 },
+	'display-black-friday': { width: 1280, height: 800 },
+};
+
+// Templates that must ship a committed preview image today.
+const PREVIEWED_KEYS = getBundledGalleryKeys();
 
 function findContentFile(key: string): string | null {
 	for (const ext of ['html', 'xml', 'php']) {
@@ -37,11 +70,22 @@ function findContentFile(key: string): string | null {
 	return null;
 }
 
-function readLosslessWebpDimensions(filePath: string): { width: number; height: number } {
+// The generator writes lossless WebP (VP8L) and falls back to lossy (VP8) for photographic
+// idle screens, so both simple-format headers are read here.
+function readWebpDimensions(filePath: string): { width: number; height: number } {
 	const buffer = fs.readFileSync(filePath);
 	expect(buffer.toString('ascii', 0, 4)).toBe('RIFF');
 	expect(buffer.toString('ascii', 8, 12)).toBe('WEBP');
-	expect(buffer.toString('ascii', 12, 16)).toBe('VP8L');
+	const chunk = buffer.toString('ascii', 12, 16);
+	if (chunk === 'VP8 ') {
+		// Key frame: 3-byte frame tag, then the 9d 01 2a start code, then 14-bit width and height.
+		expect(buffer.readUIntLE(23, 3)).toBe(0x2a019d);
+		return {
+			width: buffer.readUInt16LE(26) & 0x3fff,
+			height: buffer.readUInt16LE(28) & 0x3fff,
+		};
+	}
+	expect(chunk).toBe('VP8L');
 	expect(buffer[20]).toBe(0x2f);
 
 	const bits = buffer.readUInt32LE(21);
@@ -192,7 +236,7 @@ describe('gallery template assets', () => {
 	it('maps every bundled gallery template to a committed preview image', async () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
 
-		for (const key of getBundledGalleryKeys()) {
+		for (const key of PREVIEWED_KEYS) {
 			expect(fs.existsSync(path.join(previewDir, `${key}.webp`)), key).toBe(true);
 			expect(getGalleryPreviewSrc(key), key).toBe(
 				`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${key}.webp`
@@ -201,11 +245,20 @@ describe('gallery template assets', () => {
 	});
 
 	it('ships high-resolution preview source images for clean browser downscaling', () => {
-		for (const key of getBundledGalleryKeys()) {
+		for (const key of PREVIEWED_KEYS) {
+			const viewport = DISPLAY_VIEWPORTS[key];
+			if (viewport) {
+				const dimensions = readWebpDimensions(path.join(previewDir, `${key}.webp`));
+				expect(dimensions, key).toEqual({
+					width: viewport.width * PREVIEW_DEVICE_SCALE_FACTOR,
+					height: viewport.height * PREVIEW_DEVICE_SCALE_FACTOR,
+				});
+				continue;
+			}
 			const expectedWidth = THERMAL_KEYS.has(key)
 				? (THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR
 				: A4_PREVIEW_CSS_WIDTH * PREVIEW_DEVICE_SCALE_FACTOR;
-			const dimensions = readLosslessWebpDimensions(path.join(previewDir, `${key}.webp`));
+			const dimensions = readWebpDimensions(path.join(previewDir, `${key}.webp`));
 			expect(dimensions.width, key).toBe(expectedWidth);
 		}
 	});
@@ -214,7 +267,7 @@ describe('gallery template assets', () => {
 		for (const key of THERMAL_KEYS) {
 			const expectedWidth =
 				(THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR;
-			const dimensions = readLosslessWebpDimensions(path.join(previewDir, `${key}.webp`));
+			const dimensions = readWebpDimensions(path.join(previewDir, `${key}.webp`));
 			expect(dimensions.width, key).toBe(expectedWidth);
 		}
 	});

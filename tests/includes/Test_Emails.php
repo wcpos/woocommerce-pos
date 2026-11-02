@@ -71,14 +71,6 @@ class Test_Emails extends WC_Unit_Test_Case {
 	// ==========================================================================
 
 	/**
-	 * Test that Emails class can be instantiated.
-	 */
-	public function test_emails_class_instantiation(): void {
-		$emails = new Emails();
-		$this->assertInstanceOf( Emails::class, $emails );
-	}
-
-	/**
 	 * Test that admin email filters are registered.
 	 */
 	public function test_admin_email_filters_registered(): void {
@@ -850,7 +842,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			)
 		);
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'admin_emails' );
 
 		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
 		$this->assertTrue( $settings['enabled'], 'Master toggle should be true' );
@@ -870,7 +862,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			)
 		);
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'admin_emails' );
 
 		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
 		$this->assertFalse( $settings['enabled'], 'Master toggle should be false' );
@@ -889,7 +881,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			)
 		);
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'customer_emails' );
 
 		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
 		$this->assertFalse( $settings['enabled'], 'Master toggle should be false' );
@@ -902,7 +894,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 	public function test_cashier_emails_defaults_on_fresh_install(): void {
 		delete_option( 'woocommerce_pos_settings_checkout' );
 
-		$settings = woocommerce_pos_get_settings( 'checkout', 'cashier_emails' );
+		$settings = wcpos_get_settings( 'checkout', 'cashier_emails' );
 
 		$this->assertIsArray( $settings );
 		$this->assertFalse( $settings['enabled'], 'Cashier emails should default to disabled' );
@@ -929,7 +921,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$order  = $this->create_pos_order();
 
 		add_filter(
-			'woocommerce_pos_admin_email_enabled',
+			'wcpos_admin_email_enabled',
 			function ( $enabled, $email_id, $order, $email_class ) {
 				return false;
 			},
@@ -942,7 +934,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Admin email should be disabled via filter override' );
 
-		remove_all_filters( 'woocommerce_pos_admin_email_enabled' );
+		remove_all_filters( 'wcpos_admin_email_enabled' );
 	}
 
 	/**
@@ -961,7 +953,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$order  = $this->create_pos_order();
 
 		add_filter(
-			'woocommerce_pos_customer_email_enabled',
+			'wcpos_customer_email_enabled',
 			function ( $enabled, $email_id, $order, $email_class ) {
 				return false;
 			},
@@ -974,15 +966,15 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Customer email should be disabled via filter override' );
 
-		remove_all_filters( 'woocommerce_pos_customer_email_enabled' );
+		remove_all_filters( 'wcpos_customer_email_enabled' );
 	}
 
 	/**
-	 * Test that email IDs can be filtered via woocommerce_pos_admin_emails filter.
+	 * Test that email IDs can be filtered via wcpos_admin_emails filter.
 	 */
 	public function test_admin_email_ids_are_filterable(): void {
 		add_filter(
-			'woocommerce_pos_admin_emails',
+			'wcpos_admin_emails',
 			function ( $emails ) {
 				$emails[] = 'custom_admin_email';
 				return $emails;
@@ -996,15 +988,15 @@ class Test_Emails extends WC_Unit_Test_Case {
 			'Custom admin email filter should be registered'
 		);
 
-		remove_all_filters( 'woocommerce_pos_admin_emails' );
+		remove_all_filters( 'wcpos_admin_emails' );
 	}
 
 	/**
-	 * Test that email IDs can be filtered via woocommerce_pos_customer_emails filter.
+	 * Test that email IDs can be filtered via wcpos_customer_emails filter.
 	 */
 	public function test_customer_email_ids_are_filterable(): void {
 		add_filter(
-			'woocommerce_pos_customer_emails',
+			'wcpos_customer_emails',
 			function ( $emails ) {
 				$emails[] = 'custom_customer_email';
 				return $emails;
@@ -1018,7 +1010,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			'Custom customer email filter should be registered'
 		);
 
-		remove_all_filters( 'woocommerce_pos_customer_emails' );
+		remove_all_filters( 'wcpos_customer_emails' );
 	}
 
 	/**

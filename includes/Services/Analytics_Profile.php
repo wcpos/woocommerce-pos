@@ -24,7 +24,6 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
@@ -64,7 +63,7 @@ class Analytics_Profile {
 	 * WooCommerce core has no multi-currency concept, so presence has to be
 	 * inferred from the well-known implementations. This is a best-effort
 	 * signal for segmentation, not a contract — extend it via the
-	 * `woocommerce_pos_analytics_multi_currency` filter rather than assuming
+	 * `wcpos_analytics_multi_currency` filter rather than assuming
 	 * the list is complete.
 	 *
 	 * @var string[]
@@ -111,7 +110,7 @@ class Analytics_Profile {
 
 			// Environment shape.
 			'multisite'          => is_multisite(),
-			'hpos_enabled'       => $this->is_hpos_enabled(),
+			'hpos_enabled'       => Order_Meta_Store::hpos(),
 			'tax_enabled'        => function_exists( 'wc_tax_enabled' ) ? wc_tax_enabled() : false,
 			'multi_currency'     => $this->has_multi_currency(),
 
@@ -139,7 +138,8 @@ class Analytics_Profile {
 		 *
 		 * @param array<string, mixed> $properties The group properties.
 		 */
-		return apply_filters( 'woocommerce_pos_analytics_group_properties', $properties );
+		$filtered = apply_filters( 'wcpos_analytics_group_properties', $properties );
+		return apply_filters_deprecated( 'woocommerce_pos_analytics_group_properties', array( $filtered ), '2.0.0', 'wcpos_analytics_group_properties' );
 	}
 
 	/**
@@ -188,7 +188,8 @@ class Analytics_Profile {
 		 *
 		 * @param array<string, mixed> $summary The settings summary.
 		 */
-		return apply_filters( 'woocommerce_pos_analytics_settings_summary', $summary );
+		$filtered = apply_filters( 'wcpos_analytics_settings_summary', $summary );
+		return apply_filters_deprecated( 'woocommerce_pos_analytics_settings_summary', array( $filtered ), '2.0.0', 'wcpos_analytics_settings_summary' );
 	}
 
 	/**
@@ -283,19 +284,6 @@ class Analytics_Profile {
 	}
 
 	/**
-	 * Whether WooCommerce High-Performance Order Storage is in use.
-	 *
-	 * @return bool
-	 */
-	private function is_hpos_enabled(): bool {
-		if ( ! class_exists( OrderUtil::class ) ) {
-			return false;
-		}
-
-		return OrderUtil::custom_orders_table_usage_is_enabled();
-	}
-
-	/**
 	 * The class names checked to detect a multi-currency plugin.
 	 *
 	 * Exists as a method rather than reading the constant inline so the list is
@@ -332,6 +320,7 @@ class Analytics_Profile {
 		 *
 		 * @param bool $detected Whether a known multi-currency plugin was found.
 		 */
-		return (bool) apply_filters( 'woocommerce_pos_analytics_multi_currency', $detected );
+		$filtered = apply_filters( 'wcpos_analytics_multi_currency', $detected );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_analytics_multi_currency', array( $filtered ), '2.0.0', 'wcpos_analytics_multi_currency' );
 	}
 }

@@ -193,7 +193,8 @@ class Cashier extends WP_REST_Controller {
 		 * @param WP_User         $user    User object.
 		 * @param WP_REST_Request $request Request object.
 		 */
-		$data = apply_filters( 'woocommerce_pos_rest_prepare_cashier', $data, $user, $request );
+		$data = apply_filters( 'wcpos_rest_prepare_cashier', $data, $user, $request );
+		$data = apply_filters_deprecated( 'woocommerce_pos_rest_prepare_cashier', array( $data, $user, $request ), '2.0.0', 'wcpos_rest_prepare_cashier' );
 
 		return rest_ensure_response( $data );
 	}
@@ -299,6 +300,7 @@ class Cashier extends WP_REST_Controller {
 		 * @param Store           $store   Store object.
 		 * @param WP_REST_Request $request Request object.
 		 */
-		return apply_filters( 'woocommerce_pos_rest_prepare_store', $data, $store, $request );
+		$filtered = apply_filters( 'wcpos_rest_prepare_store', $data, $store, $request );
+		return apply_filters_deprecated( 'woocommerce_pos_rest_prepare_store', array( $filtered, $store, $request ), '2.0.0', 'wcpos_rest_prepare_store' );
 	}
 }

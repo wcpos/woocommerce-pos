@@ -14,10 +14,8 @@ use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
-use WCPOS\WooCommercePOS\Sync\Product_Search;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WP_Error;
-use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
@@ -46,8 +44,8 @@ use WP_REST_Server;
  * carries `images[]` instead of `image`, which blanked every variation thumbnail in the POS on
  * 1.10.0 and wrote the parent's image onto every order line (#1710).
  *
- * What stays ours, and only this: the sync document envelope the engine reads
- * (`documents[].{id,parent_id,payload,_rxdb_digest}`), POS visibility, the barcode carrier
+ * What stays ours, and only this: transport stamps on bare records,
+ * POS visibility, the barcode carrier
  * search, and the request bounds. Everything else is WooCommerce's.
  */
 class Variations_Controller extends WC_REST_Product_Variations_Controller {
@@ -201,7 +199,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	 * the change-signal tombstone path, not here).
 	 */
 	public function get_variations( WP_REST_Request $request ) {
-		$started     = microtime( true );
 		$search_meta = null;
 		if ( $request->has_param( 'sku' ) || $request->has_param( 'search' ) ) {
 			$validation = $this->validate_search_request( $request );
@@ -313,40 +310,18 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 			 * prepare_objects_query(). The query-level publish gate covers ALL lanes, including
 			 * `include`; this check only guards a status change between the id query and object load.
 			 *
-			 * `meta.requested` now counts the query-eligible ask: a disabled or query-filtered id is
+			 * The query-eligible ask excludes disabled or query-filtered ids: each is
 			 * absent from $ids. The client's targeted-pull shortfall — absence from documents — is
 			 * unchanged.
 			 */
 			if ( 'publish' !== $variation->get_status() ) {
 				continue;
 			}
-			$payload  = $serializer->serialize( $variation, $serialization_request );
-			$document = array(
-				'id'        => $id,
-				'parent_id' => (int) $variation->get_parent_id(),
-				'payload'   => $payload,
-			);
-			if ( isset( $digests[ $id ] ) ) {
-				$document['_rxdb_digest'] = $digests[ $id ];
-			}
-			$documents[] = $document;
+			$bare        = $serializer->serialize( $variation, $serialization_request, false );
+			$documents[] = Product_Serializer::stamp_record( $bare, $variation, $serialization_request, $digests );
 		}
 
-		$meta = array(
-			'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-			'requested'   => \count( $ids ),
-			'returned'    => \count( $documents ),
-		);
-		if ( null !== $search_meta ) {
-			$meta = array_merge( $meta, $search_meta );
-		}
-
-		$response = rest_ensure_response(
-			array(
-				'documents' => $documents,
-				'meta'      => $meta,
-			)
-		);
+		$response = rest_ensure_response( $documents );
 
 		/*
 		 * The pagination WooCommerce would have sent.
@@ -402,34 +377,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 	}
 
 	/**
-	 * Apply the declared POS variation sorts to the SQL clauses.
-	 *
-	 * `posts_clauses` fires for EVERY WP_Query, so the body is guarded by post type and by
-	 * the plan itself — it contributes nothing unless this request claimed one of the
-	 * declared sorts.
-	 *
-	 * @param array    $clauses  Associative array of the clauses for the query.
-	 * @param WP_Query $wp_query The WP_Query instance.
-	 *
-	 * @deprecated Collection Rules now installs this behavior; retained for Pro callers.
-	 * @return array
-	 */
-	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
-		if ( null === $this->wcpos_sort_request ) {
-			return $clauses;
-		}
-
-		$post_type = $wp_query->query_vars['post_type'] ?? null;
-		if ( 'product_variation' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product_variation', $post_type, true ) ) ) {
-			return $clauses;
-		}
-
-		$plan = Collection_Rules::for_request( 'variations', $this->wcpos_sort_request, self::WCPOS_SORT_PARAM_MAP );
-
-		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
-	}
-
-	/**
 	 * WooCommerce's collection params, plus the sort keys the POS grids offer.
 	 *
 	 * `orderby` is a validated enum. Appending here is what lets `prepare_objects_query()` act on
@@ -452,18 +399,6 @@ class Variations_Controller extends WC_REST_Product_Variations_Controller {
 		}
 
 		return $params;
-	}
-
-	/**
-	 * De-duplicate variation searches joined through matching meta rows.
-	 *
-	 * @param string   $groupby Existing GROUP BY clause.
-	 * @param WP_Query $query   Query being filtered.
-	 *
-	 * @deprecated Collection Rules owns variation grouping.
-	 */
-	public function group_search_results( string $groupby, WP_Query $query ): string {
-		return Product_Search::variation_groupby( $groupby, $query->query_vars );
 	}
 
 	/**

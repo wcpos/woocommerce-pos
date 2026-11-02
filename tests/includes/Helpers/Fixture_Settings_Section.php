@@ -13,7 +13,7 @@ use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 /**
  * A stand-in for an extension-owned Settings Section.
  *
- * Registers through the public `woocommerce_pos_register_settings_sections`
+ * Registers through the public `wcpos_register_settings_sections`
  * seam exactly the way Pro's License_Section does, so tests can prove that a
  * section registered by a third party gets a working HTTP surface — GET, POST,
  * and endpoint-arg validation — without the free plugin knowing it exists.
@@ -39,14 +39,14 @@ class Fixture_Settings_Section extends Abstract_Section {
 	 * Hook the registration action. Call before rest_api_init runs.
 	 */
 	public static function register(): void {
-		add_action( 'woocommerce_pos_register_settings_sections', array( __CLASS__, 'register_section' ) );
+		add_action( 'wcpos_register_settings_sections', array( __CLASS__, 'register_section' ) );
 	}
 
 	/**
 	 * Unhook the registration action.
 	 */
 	public static function unregister(): void {
-		remove_action( 'woocommerce_pos_register_settings_sections', array( __CLASS__, 'register_section' ) );
+		remove_action( 'wcpos_register_settings_sections', array( __CLASS__, 'register_section' ) );
 	}
 
 	/**

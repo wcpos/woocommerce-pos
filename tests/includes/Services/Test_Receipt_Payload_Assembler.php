@@ -93,11 +93,48 @@ class Test_Receipt_Payload_Assembler extends WP_UnitTestCase {
 			'is_reprint'        => false,
 			'reprint_count'     => 0,
 			'extra_fields'      => array(),
+			'document_type' => 'sale',
+			'sale_time' => null,
+			'sale_tz' => '',
+			'sale_counter' => null,
+			'received_at' => null,
+			'corrects' => '',
+			'is_sale_document' => true,
+			'is_refund_document' => false,
+			'is_void_document' => false,
+			'is_cancellation_document' => false,
+			'is_closure_document' => false,
+			'is_x_report' => false,
+			'is_handover' => false,
 		);
 
 		$fiscal = Receipt_Payload_Assembler::fiscal( array_reverse( $values, true ) );
 
 		$this->assertSame( $values, $fiscal );
+		foreach ( array(
+			'sale' => 'is_sale_document',
+			'refund' => 'is_refund_document',
+			'void' => 'is_void_document',
+			'cancellation' => 'is_cancellation_document',
+			'closure' => 'is_closure_document',
+			'x_report' => 'is_x_report',
+			'xreport' => 'is_x_report',
+			'handover' => 'is_handover',
+		) as $type => $flag ) {
+			$values['document_type'] = $type;
+			$fiscal = Receipt_Payload_Assembler::fiscal( $values );
+			$this->assertTrue( $fiscal[ $flag ] );
+			foreach ( array( 'is_sale_document', 'is_refund_document', 'is_void_document', 'is_cancellation_document', 'is_closure_document', 'is_x_report', 'is_handover' ) as $candidate ) {
+				// An X-report is a closure document; a hand-over slip is an X-report and a closure document.
+				$implied = ( 'is_x_report' === $flag && 'is_closure_document' === $candidate )
+					|| ( 'is_handover' === $flag && in_array( $candidate, array( 'is_x_report', 'is_closure_document' ), true ) );
+				if ( $candidate === $flag || $implied ) {
+					$this->assertTrue( $fiscal[ $candidate ], $type . ': ' . $candidate );
+				} else {
+					$this->assertFalse( $fiscal[ $candidate ], $type . ': ' . $candidate );
+				}
+			}
+		}
 	}
 
 	/**
@@ -111,6 +148,8 @@ class Test_Receipt_Payload_Assembler extends WP_UnitTestCase {
 		return array(
 			'order'              => array( 'id' => 42 ),
 			'store'              => array( 'name' => 'Test Store' ),
+			'software'           => array( 'name' => 'WCPOS' ),
+			'register'           => array( 'id' => 'till' ),
 			'cashier'            => array( 'name' => 'Cashier' ),
 			'customer'           => array( 'name' => 'Customer' ),
 			'lines'              => array(),
@@ -136,6 +175,8 @@ class Test_Receipt_Payload_Assembler extends WP_UnitTestCase {
 		return array(
 			'order',
 			'store',
+			'software',
+			'register',
 			'cashier',
 			'customer',
 			'lines',

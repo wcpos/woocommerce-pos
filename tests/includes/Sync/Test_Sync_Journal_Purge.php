@@ -41,8 +41,8 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 	 * Remove retention filters and cron state added by individual tests.
 	 */
 	public function tearDown(): void {
-		remove_all_filters( 'woocommerce_pos_change_log_tombstone_retention_days' );
-		remove_all_filters( 'woocommerce_pos_sync_mutation_failure_retention_days' );
+		remove_all_filters( 'wcpos_change_log_tombstone_retention_days' );
+		remove_all_filters( 'wcpos_sync_mutation_failure_retention_days' );
 		Sync_Journal::reset_prune_watermarks();
 		wp_clear_scheduled_hook( Sync_Journal_Purge::PURGE_HOOK );
 		parent::tearDown();
@@ -383,7 +383,7 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 	 */
 	public function test_purge_expired_with_zero_retention_filter_keeps_aged_tombstones(): void {
 		// Arrange.
-		add_filter( 'woocommerce_pos_change_log_tombstone_retention_days', '__return_zero' );
+		add_filter( 'wcpos_change_log_tombstone_retention_days', '__return_zero' );
 		$this->journal->record( 'product', 11, true, '', 'test', false );
 		$aged_tombstone = $this->journal->head_sequence();
 		$this->journal->record( 'product', 22, false, '', 'test', false );
@@ -428,7 +428,7 @@ class Test_Sync_Journal_Purge extends Sync_Store_Test_Case {
 	 */
 	public function test_purge_expired_reserves_a_slice_for_opted_in_failure_retention(): void {
 		add_filter(
-			'woocommerce_pos_sync_mutation_failure_retention_days',
+			'wcpos_sync_mutation_failure_retention_days',
 			static function (): int {
 				return 30;
 			}

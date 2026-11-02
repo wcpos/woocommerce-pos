@@ -29,6 +29,10 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	// An unreachable CDN costs the 10 s request timeout per attempt, so retry at most hourly.
 	private const DOWNLOAD_FAILED_CACHE_TTL = HOUR_IN_SECONDS;
 	private const DOWNLOAD_LOCK_TTL = 30;
+	// A rolling ref changes content under the same name.
+	private const ROLLING_TRANSLATION_VERSION = 'next';
+	// Twelve hours matches how often jsDelivr refreshes a branch ref.
+	private const ROLLING_TRANSLATION_CACHE_TTL = 12 * HOUR_IN_SECONDS;
 
 	/**
 	 * Text domain for the plugin.
@@ -143,7 +147,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		 *
 		 * @param bool $maintain Default from {@see i18n::is_maintenance_request()}.
 		 */
-		return (bool) apply_filters( 'woocommerce_pos_i18n_maintain', self::is_maintenance_request() );
+		$filtered = apply_filters( 'wcpos_i18n_maintain', self::is_maintenance_request() );
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_i18n_maintain', array( $filtered ), '2.0.0', 'wcpos_i18n_maintain' );
 	}
 
 	/**
@@ -280,7 +285,11 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 				if ( $downloaded ) {
 					// Recompute file path — download_translation() may have switched to fallback path.
 					$file = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
-					set_transient( $this->transient_key . '_' . $candidate_locale, $this->version, WEEK_IN_SECONDS );
+					set_transient(
+						$this->transient_key . '_' . $candidate_locale,
+						$this->version,
+						self::ROLLING_TRANSLATION_VERSION === $this->version ? self::ROLLING_TRANSLATION_CACHE_TTL : WEEK_IN_SECONDS
+					);
 					delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
 					delete_transient( $this->get_write_failed_transient_key() );
 					delete_transient( $this->get_download_failed_transient_key( $requested_locale ) );

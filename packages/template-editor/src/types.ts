@@ -15,6 +15,12 @@ export interface SectionInfo {
 export type FieldSchema = Record<string, SectionInfo>;
 
 export interface EditorConfig {
+	type: 'receipt' | 'display' | 'report' | 'closure';
+	displayStarter: string | null;
+	closureStarters?: Partial<Record<EditorConfig['engine'], string>> | null;
+	reportStarters?: Partial<Record<EditorConfig['engine'], string>> | null;
+	isProActive: boolean;
+	displayPreviewUrl: string;
 	fieldSchema: FieldSchema;
 	sampleData: Record<string, unknown>;
 	engine: 'logicless' | 'legacy-php' | 'thermal';

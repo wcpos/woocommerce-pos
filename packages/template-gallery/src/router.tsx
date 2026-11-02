@@ -1,9 +1,5 @@
-import {
-	createRouter,
-	createRootRoute,
-	createRoute,
-	createHashHistory,
-} from '@tanstack/react-router';
+import { createBrowserHistory, parseHref } from '@tanstack/history';
+import { createRouter, createRootRoute, createRoute } from '@tanstack/react-router';
 import apiFetch from '@wordpress/api-fetch';
 
 import { GalleryLayout } from './layouts/gallery-layout';
@@ -17,16 +13,29 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/',
-	loader: () => {
+	validateSearch: (
+		search: Record<string, unknown>
+	): { type: 'receipt' | 'display' | 'closure' | 'report' } => ({
+		type:
+			search.type === 'report'
+				? 'report'
+				: search.type === 'closure'
+					? 'closure'
+					: search.type === 'display'
+						? 'display'
+						: 'receipt',
+	}),
+	loaderDeps: ({ search: { type } }) => ({ type }),
+	loader: ({ deps: { type } }) => {
 		queryClient.prefetchQuery({
-			queryKey: ['templates', 'receipt'],
-			queryFn: () => apiFetch({ path: 'wcpos/v1/templates?wcpos=1&type=receipt', method: 'GET' }),
+			queryKey: ['templates', type],
+			queryFn: () => apiFetch({ path: `wcpos/v1/templates?wcpos=1&type=${type}`, method: 'GET' }),
 			retry: 1,
 		});
 		queryClient.prefetchQuery({
-			queryKey: ['gallery-templates', 'receipt'],
+			queryKey: ['gallery-templates', type],
 			queryFn: () =>
-				apiFetch({ path: 'wcpos/v1/templates/gallery?wcpos=1&type=receipt', method: 'GET' }),
+				apiFetch({ path: `wcpos/v1/templates/gallery?wcpos=1&type=${type}`, method: 'GET' }),
 			retry: 1,
 		});
 	},
@@ -38,5 +47,16 @@ const routeTree = rootRoute.addChildren([indexRoute]);
 export const router = createRouter({
 	routeTree,
 	basepath: '/',
-	history: createHashHistory(),
+	// WordPress owns the outer query string; hash history must not append it to the route.
+	history: createBrowserHistory({
+		window,
+		parseLocation: () => parseHref(window.location.hash.slice(1) || '/', window.history.state),
+		createHref: (href) => `${window.location.pathname}${window.location.search}#${href}`,
+	}),
 });
+
+declare module '@tanstack/react-router' {
+	interface Register {
+		router: typeof router;
+	}
+}

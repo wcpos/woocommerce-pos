@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 
 /**
  * REST-dispatched existence endpoint status tests.
@@ -17,6 +16,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
  * @covers \WCPOS\WooCommercePOS\API\V2\Integrity_Controller
  */
 class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	/**
 	 * Initialize REST routes before status checks.
 	 */
@@ -114,7 +114,7 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		$product->set_status( 'draft' );
 		$product->save();
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 
 		$this->assertSame( array( $product->get_id() ), array_column( $this->digests( array( $product->get_id() ) ), 'id' ) );
 		$this->assertSame( array(), $this->digests( array( $product->get_id() ), 'products', 'publish' ) );
@@ -132,9 +132,7 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 		$draft_parent->save();
 		$published_variation = (int) $published_parent->get_children()[0];
 		$draft_variation     = (int) $draft_parent->get_children()[0];
-		$digest              = new Integrity_Digest();
-		$digest->upsert_digest( $published_variation );
-		$digest->upsert_digest( $draft_variation );
+		$this->seed_digests( 'variations', $published_variation, $draft_variation );
 
 		$this->assertSame( 'publish', get_post_status( $draft_variation ) );
 		$this->assertSame(
@@ -152,7 +150,7 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		$product->set_status( 'draft' );
 		$product->save();
-		( new Integrity_Digest() )->upsert_digest( $product->get_id() );
+		$this->seed_digests( 'products', $product->get_id() );
 
 		$this->assertSame(
 			$this->digests( array( $product->get_id() ) ),
@@ -212,7 +210,7 @@ class Test_Sync_Existence_Status extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_customer_digests_include_non_customer_roles_and_ignore_publish_status(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		( new Integrity_Digest() )->upsert_customer_digest( $user_id );
+		$this->seed_digests( 'customers', $user_id );
 
 		$this->assertSame(
 			array( $user_id ),

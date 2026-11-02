@@ -67,6 +67,72 @@ class Test_Access_Section extends WP_UnitTestCase {
 		$this->assertTrue( $admin['capabilities']['wcpos']['manage_woocommerce_pos'] );
 	}
 
+	/** Verify every exposed cashier group has defaults. */
+	public function test_read_returns_cashier_defaults_for_every_exposed_group(): void {
+		// Arrange.
+		$section = $this->section;
+
+		// Act.
+		$cashier = $section->read()['cashier'];
+
+		// Assert.
+		$this->assertSame( array( 'wcpos', 'wc', 'wp' ), array_keys( $cashier['defaults'] ) );
+		foreach ( $cashier['capabilities'] as $group => $caps ) {
+			$this->assertSame( array_keys( $caps ), array_keys( $cashier['defaults'][ $group ] ) );
+		}
+		$this->assertTrue( $cashier['defaults']['wcpos']['access_woocommerce_pos'] );
+		$this->assertTrue( $cashier['defaults']['wc']['edit_products'] );
+		$this->assertTrue( $cashier['defaults']['wp']['read'] );
+		$this->assertFalse( $cashier['defaults']['wc']['delete_products'] );
+		$this->assertFalse( $cashier['defaults']['wcpos']['manage_woocommerce_pos'] );
+	}
+
+	/** WCPOS does not own the shop manager's WC or WP permissions. */
+	public function test_read_returns_only_wcpos_defaults_for_shop_manager(): void {
+		// Arrange.
+		$section = $this->section;
+
+		// Act.
+		$defaults = $section->read()['shop_manager']['defaults'];
+
+		// Assert.
+		$this->assertSame( array( 'wcpos' ), array_keys( $defaults ) );
+		$this->assertTrue( $defaults['wcpos']['access_woocommerce_pos'] );
+		$this->assertArrayNotHasKey( 'wc', $defaults );
+		$this->assertArrayNotHasKey( 'wp', $defaults );
+	}
+
+	/** Roles without a WCPOS definition default to no POS permissions. */
+	public function test_read_returns_false_wcpos_defaults_for_roles_without_pos_access(): void {
+		// Arrange.
+		$section = $this->section;
+
+		// Act.
+		$defaults = $section->read()['editor']['defaults'];
+
+		// Assert.
+		$this->assertFalse( $defaults['wcpos']['access_woocommerce_pos'] );
+	}
+
+	/** Restoring defaults uses the existing write path. */
+	public function test_write_of_defaults_restores_cashier_role(): void {
+		// Arrange.
+		$role = get_role( 'cashier' );
+		$role->remove_cap( 'edit_products' );
+		$role->add_cap( 'delete_products' );
+		$role->add_cap( 'other_plugin_permission' );
+		$defaults = $this->section->read()['cashier']['defaults'];
+
+		// Act.
+		$result = $this->section->write( array( 'cashier' => array( 'capabilities' => $defaults ) ) );
+
+		// Assert.
+		$this->assertTrue( $role->has_cap( 'edit_products' ) );
+		$this->assertFalse( $role->has_cap( 'delete_products' ) );
+		$this->assertTrue( $role->has_cap( 'other_plugin_permission' ) );
+		$this->assertSame( $defaults, $result['cashier']['capabilities'] );
+	}
+
 	/**
 	 * Catalog mutation capabilities can be granted through Access settings.
 	 */
@@ -246,7 +312,7 @@ class Test_Access_Section extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Granting a capability added via the woocommerce_pos_access_settings filter succeeds.
+	 * Granting a capability added via the wcpos_access_settings filter succeeds.
 	 */
 	public function test_write_grants_filter_added_capability(): void {
 		$capability = 'wcpos_extension_test_cap';
@@ -265,7 +331,7 @@ class Test_Access_Section extends WP_UnitTestCase {
 			return $settings;
 		};
 
-		add_filter( 'woocommerce_pos_access_settings', $filter );
+		add_filter( 'wcpos_access_settings', $filter );
 
 		try {
 			$result = $this->section->write(
@@ -283,7 +349,7 @@ class Test_Access_Section extends WP_UnitTestCase {
 			$this->assertTrue( get_role( 'subscriber' )->has_cap( $capability ) );
 			$this->assertTrue( $result['subscriber']['capabilities']['extensions'][ $capability ] );
 		} finally {
-			remove_filter( 'woocommerce_pos_access_settings', $filter );
+			remove_filter( 'wcpos_access_settings', $filter );
 		}
 	}
 
@@ -408,5 +474,42 @@ class Test_Access_Section extends WP_UnitTestCase {
 		$cashier_role = get_role( 'cashier' );
 		$this->assertNotNull( $cashier_role, 'Expected cashier role to be registered in test fixtures.' );
 		$this->assertFalse( $cashier_role->has_cap( 'delete_products' ) );
+	}
+	/** Cashiers handle cash and reports; managers also close and reassign sales. */
+	public function test_effective_till_capabilities_follow_default_roles(): void {
+		( new \WCPOS\WooCommercePOS\Activator() )->single_activate( false );
+		foreach ( array( 'cashier', 'shop_manager' ) as $role ) {
+			$user = get_user_by( 'id', self::factory()->user->create( array( 'role' => $role ) ) );
+			$caps = Access_Section::effective_capabilities( $user );
+			$this->assertContains( 'manage_woocommerce_pos_cash', $caps );
+			$this->assertContains( 'view_woocommerce_pos_reports', $caps );
+			if ( 'cashier' === $role ) {
+				$this->assertNotContains( 'manage_woocommerce_pos_closures', $caps );
+				$this->assertNotContains( 'reassign_woocommerce_pos_sales', $caps );
+			} else {
+				$this->assertContains( 'manage_woocommerce_pos_closures', $caps );
+				$this->assertContains( 'reassign_woocommerce_pos_sales', $caps );
+			}
+		}
+	}
+
+	/**
+	 * The reported-only capabilities reach the app (manage_woocommerce gates a card provider's
+	 * terms, delete_users gates deleting a customer) but are never Access screen toggles.
+	 */
+	public function test_reported_only_capabilities_reach_the_app_but_are_never_toggles(): void {
+		( new \WCPOS\WooCommercePOS\Activator() )->single_activate( false );
+		foreach ( Access_Section::REPORTED_ONLY_CAPABILITIES as $cap ) {
+			$this->assertNotContains( $cap, Access_Section::capability_names() );
+		}
+		$admin   = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$manager = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'shop_manager' ) ) );
+		$cashier = get_user_by( 'id', self::factory()->user->create( array( 'role' => 'cashier' ) ) );
+		$this->assertContains( 'manage_woocommerce', Access_Section::effective_capabilities( $manager ) );
+		$this->assertNotContains( 'manage_woocommerce', Access_Section::effective_capabilities( $cashier ) );
+		// delete_users is an administrator's: a shop manager deletes no accounts.
+		$this->assertContains( 'delete_users', Access_Section::effective_capabilities( $admin ) );
+		$this->assertNotContains( 'delete_users', Access_Section::effective_capabilities( $manager ) );
+		$this->assertNotContains( 'delete_users', Access_Section::effective_capabilities( $cashier ) );
 	}
 }

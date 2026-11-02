@@ -18,7 +18,8 @@ if ( empty( $order ) ) {
 	return;
 }
 
-$document = apply_filters( 'woocommerce_pos_wp_overnight_pdf_document', null, 'invoice', $order );
+$document = apply_filters( 'wcpos_wp_overnight_pdf_document', null, 'invoice', $order );
+$document = apply_filters_deprecated( 'woocommerce_pos_wp_overnight_pdf_document', array( $document, 'invoice', $order ), '2.0.0', 'wcpos_wp_overnight_pdf_document' );
 
 if ( null === $document && \function_exists( 'wcpdf_get_document' ) ) {
 	$document = wcpdf_get_document( 'invoice', $order, true );

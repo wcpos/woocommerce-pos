@@ -3,7 +3,7 @@ import { test, expect } from '../fixtures/admin';
 test.describe('Access Settings', () => {
 	test.beforeEach(async ({ adminPage }) => {
 		const settingsLoaded = adminPage.waitForResponse(
-			(resp) => resp.url().includes('wcpos/v1/settings/access') && resp.status() === 200,
+			(resp) => resp.url().includes('wcpos/v2/settings/access') && resp.status() === 200,
 			{ timeout: 30000 }
 		);
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings#/access');

@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Template_Router;
+use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -44,7 +45,7 @@ class Frontend {
 	public function get_template(): void {
 		// force ssl.
 		if ( ! is_ssl() && Settings::instance()->force_ssl_enabled() ) {
-			wp_safe_redirect( woocommerce_pos_url() );
+			wp_safe_redirect( wcpos_url() );
 			exit;
 		}
 
@@ -64,20 +65,16 @@ class Frontend {
 		$this->no_cache();
 
 		// last chance before frontend template is rendered.
-		do_action( 'woocommerce_pos_frontend_template_redirect' );
-
-		/*
-		 * Deprecated action.
-		 *
-		 * @TODO remove in 1.5.0
-		 */
-		if ( has_action( 'woocommerce_pos_template_redirect' ) ) {
-			do_action_deprecated( 'woocommerce_pos_template_redirect', array(), 'Version_1.4.0', 'woocommerce_pos_frontend_template_redirect' );
-		}
+		do_action( 'wcpos_frontend_template_redirect' );
+		do_action_deprecated( 'woocommerce_pos_frontend_template_redirect', array(), '2.0.0', 'wcpos_frontend_template_redirect' );
 
 		// add head & footer actions.
-		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
-		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
+		add_action( 'wcpos_head', array( $this, 'head' ) );
+		add_action( 'wcpos_footer', array( $this, 'footer' ) );
+		// A theme's pos.php override fires the 1.x names itself; the bridge
+		// lives on the listener side (ADR 0041).
+		add_action( 'woocommerce_pos_head', array( $this, 'legacy_head' ) );
+		add_action( 'woocommerce_pos_footer', array( $this, 'legacy_footer' ) );
 
 		// Generate user credentials BEFORE including template to ensure cookies can be set.
 		// The set_web_session_cookie() call in Auth::get_user_data() requires headers not yet sent.
@@ -94,7 +91,7 @@ class Frontend {
 		// with `access_woocommerce_pos`, past the SSL redirect.
 		( new Lifecycle_Events() )->report_app_opened();
 
-		include woocommerce_pos_locate_template( 'pos.php' );
+		include wcpos_locate_template( 'pos.php' );
 		exit;
 	}
 
@@ -107,6 +104,22 @@ class Frontend {
 	 */
 	public function login_url( $login_url ) {
 		return add_query_arg( SHORT_NAME, '1', $login_url );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_head` (1.x) as `wcpos_head`.
+	 */
+	public function legacy_head(): void {
+		_deprecated_hook( 'woocommerce_pos_head', '2.0.0', 'wcpos_head' );
+		do_action( 'wcpos_head' );
+	}
+
+	/**
+	 * Re-fire `woocommerce_pos_footer` (1.x) as `wcpos_footer`.
+	 */
+	public function legacy_footer(): void {
+		_deprecated_hook( 'woocommerce_pos_footer', '2.0.0', 'wcpos_footer' );
+		do_action( 'wcpos_footer' );
 	}
 
 	/**
@@ -157,12 +170,13 @@ class Frontend {
 		 *                          Defaults to checking WCPOS_DEVELOPMENT constant,
 		 *                          then $_ENV['DEVELOPMENT'].
 		 *
-		 * @hook woocommerce_pos_development_mode
+		 * @hook wcpos_development_mode
 		 */
-		return (bool) apply_filters(
-			'woocommerce_pos_development_mode',
+		$filtered = apply_filters(
+			'wcpos_development_mode',
 			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) ) )
 		);
+		return (bool) apply_filters_deprecated( 'woocommerce_pos_development_mode', array( $filtered ), '2.0.0', 'wcpos_development_mode' );
 	}
 
 	/**
@@ -200,9 +214,10 @@ class Frontend {
 		 * full base URL (anything containing `://`, e.g. a local dev server or an EAS
 		 * preview) also work.
 		 *
-		 * @hook woocommerce_pos_web_bundle_ref
+		 * @hook wcpos_web_bundle_ref
 		 */
-		$bundle_ref = (string) apply_filters( 'woocommerce_pos_web_bundle_ref', $explicit_bundle_ref ?? $default_bundle_ref );
+		$bundle_ref = apply_filters( 'wcpos_web_bundle_ref', $explicit_bundle_ref ?? $default_bundle_ref );
+		$bundle_ref = (string) apply_filters_deprecated( 'woocommerce_pos_web_bundle_ref', array( $bundle_ref ), '2.0.0', 'wcpos_web_bundle_ref' );
 		$bundle_ref = trim( $bundle_ref );
 		if ( '' === $bundle_ref ) {
 			$bundle_ref = $default_bundle_ref;
@@ -222,7 +237,7 @@ class Frontend {
 			// jsDelivr web-bundle lane (e.g. `1.9`, `1.10`, `next`, a tag or commit).
 			$cdn_base_url = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@' . rawurlencode( $bundle_ref ) . '/build';
 		}
-		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
+		$wcpos_base_path      = rtrim( wp_parse_url( wcpos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
 			function ( $store ) {
 				return $store->get_data();
@@ -231,19 +246,40 @@ class Frontend {
 		);
 
 		$site_uuid        = wcpos_get_site_uuid();
-		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/opfs.worker.js' );
-		if ( false === $opfs_worker_hash ) {
-			$opfs_worker_hash = VERSION;
-		}
+		$opfs_worker_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/sqlite.worker.js' );
+		$worker_version   = false === $opfs_worker_hash ? null : Web_Bundle_Loader_Config::worker_rxdb_version( PLUGIN_PATH . 'assets/js/sqlite.worker.js', $opfs_worker_hash );
+		$sqlite_wasm_hash = hash_file( 'sha256', PLUGIN_PATH . 'assets/js/sqlite3.wasm' );
+		// Hash the concatenated worker and WASM SHA-256 digests so either asset busts
+		// the manifest and worker caches together (wcpos/monorepo#2242).
+		$opfs_worker_hash = false === $opfs_worker_hash || false === $sqlite_wasm_hash
+			? VERSION
+			: hash( 'sha256', $opfs_worker_hash . $sqlite_wasm_hash );
 
 		// Pos_Uuid is the sole authority for `_woocommerce_pos_uuid`: the value here
 		// must match what /cashier and /customers serve, or the client forks identities.
 		$user_uuid = Pos_Uuid::ensure_user_uuid( $user );
 
+		$pro_version  = \defined( '\WCPOS\WooCommercePOSPro\VERSION' ) ? (string) \constant( '\WCPOS\WooCommercePOSPro\VERSION' ) : null;
+		$manifest_url = Web_Bundle_Loader_Config::uses_manifest( $bundle_ref, $development, $bundle_overridden )
+			? Web_Bundle_Loader_Config::manifest_url( $bundle_ref, VERSION, $pro_version, $worker_version, null !== $pro_version || Web_Bundle_Loader_Config::is_prerelease( VERSION ) ? $site_uuid : null )
+			: null;
+
 		$vars = array(
+			'loader'         => array(
+				'manifest_url'      => $manifest_url,
+				'fallback_manifest' => $cdn_base_url . '/metadata.json?v=' . $opfs_worker_hash,
+				'fallback_base'     => $cdn_base_url,
+				'beacon_url'        => Web_Bundle_Loader_Config::BEACON_URL,
+				'timeout_ms'        => Web_Bundle_Loader_Config::MANIFEST_TIMEOUT_MS,
+				'lane'              => 'next' === $bundle_ref ? 'next' : ( preg_match( '/^[0-9]+\.[0-9]+$/', $bundle_ref ) ? $bundle_ref : null ),
+				'worker_version'    => $worker_version,
+				'plugin_version'    => VERSION,
+				'pro_version'       => $pro_version,
+				'signing_keys'      => Web_Bundle_Loader_Config::SIGNING_PUBLIC_KEYS_JWK,
+			),
 			'version'        => VERSION,
 			'manifest'       => $cdn_base_url . '/metadata.json?v=' . $opfs_worker_hash,
-			'homepage'       => woocommerce_pos_url(),
+			'homepage'       => wcpos_url(),
 			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
 				'uuid'               => $site_uuid,
@@ -261,6 +297,8 @@ class Frontend {
 				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v2' ) ),
 				'wcpos_login_url'    => Template_Router::get_auth_url(),
 				'locale'             => get_locale(),
+				// The browser POS never calls wcpos/v2/site: this block IS its site row.
+				'search_meta_keys'   => Collection_Rules::client_search_meta_keys(),
 			),
 			'wp_credentials' => $this->wp_credentials,
 			'stores'         => $stores,
@@ -275,9 +313,10 @@ class Frontend {
 		 *
 		 * @since 1.0.0
 		 *
-		 * @hook woocommerce_pos_inline_vars
+		 * @hook wcpos_inline_vars
 		 */
-		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
+		$vars = apply_filters( 'wcpos_inline_vars', $vars );
+		$vars = apply_filters_deprecated( 'woocommerce_pos_inline_vars', array( $vars ), '2.0.0', 'wcpos_inline_vars' );
 		$initial_props = wp_json_encode( $vars );
 		$cdn_base_url  = wp_json_encode( $cdn_base_url );
 
@@ -288,43 +327,12 @@ class Frontend {
 		$opfs_worker = add_query_arg(
 			'ver',
 			$opfs_worker_hash,
-			PLUGIN_URL . 'assets/js/opfs.worker.js'
+			PLUGIN_URL . 'assets/js/sqlite.worker.js'
 		);
 
-		// getScript helper and initialProps.
+		// Frontend globals and initialProps.
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
 		echo "<script>
-    function getScript(source, callback, onError) {
-        var script = document.createElement('script');
-        script.async = true;
-        script.onload = script.onreadystatechange = function(_, isAbort) {
-            if (isAbort || !script.readyState || /loaded|complete/.test(script.readyState)) {
-                script.onload = script.onreadystatechange = null;
-                script = undefined;
-                if (!isAbort && callback) setTimeout(callback, 0);
-            }
-        };
-        script.onerror = function() {
-            script.onload = script.onreadystatechange = null;
-            if (onError) onError(new Error('Failed to load script: ' + source));
-        };
-        script.src = source;
-        document.head.appendChild(script);
-    }
-
-    function loadCSS(source, callback) {
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = source;
-        link.onload = function() {
-            if (callback) callback();
-        };
-        link.onerror = function() {
-            console.error('Failed to load CSS file:', source);
-        };
-        document.head.appendChild(link);
-    }
-
     var idbWorker = '{$idb_worker}';
     var opfsWorker = '{$opfs_worker}';
     var initialProps = {$initial_props};
@@ -332,49 +340,8 @@ class Frontend {
 	var baseUrl = '{$wcpos_base_path}';
     </script>" . "\n";
 
-		echo "<script>
-		// no-cache: revalidate the manifest with the CDN (ETag/304) on every boot.
-		// jsDelivr serves it with max-age=604800 and the ?v= buster only changes on
-		// plugin deploys, so a default fetch pins users to a stale bundle for up to
-		// 7 days after a web-bundle publish.
-		var request = new Request(initialProps.manifest, { cache: 'no-cache' });
-
-		window.fetch(request)
-				.then(function(response) { return response.json(); })
-				.then(function(data) {
-						// v1 metadata uses 'bundles' array (metro runtime, common, entry)
-						// v0 fallback uses single 'bundle' string
-						var webMeta = (data && data.fileMetadata && data.fileMetadata.web) || {};
-						var bundles = Array.isArray(webMeta.bundles)
-								? webMeta.bundles.filter(Boolean)
-								: (webMeta.bundle ? [webMeta.bundle] : []);
-
-						if (!bundles.length) {
-								throw new Error('No JavaScript bundles declared in metadata.json');
-						}
-
-						function loadBundles(index) {
-								if (index >= bundles.length) return;
-								var source = cdnBaseUrl + '/' + bundles[index];
-								getScript(source, function() {
-										loadBundles(index + 1);
-								}, function(error) {
-										console.error(error.message);
-								});
-						}
-
-						if (data.fileMetadata.web.css) {
-								loadCSS(cdnBaseUrl + '/' + data.fileMetadata.web.css, function() {
-										loadBundles(0);
-								});
-						} else {
-								loadBundles(0);
-						}
-				})
-				.catch(function(error) {
-						console.error('Error fetching manifest:', error);
-				});
-		</script>" . "\n";
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Trusted, bundled loader printed inline.
+		echo '<script>' . file_get_contents( PLUGIN_PATH . 'assets/js/pos-loader.js' ) . "</script>\n";
 	}
 
 	/**
@@ -389,7 +356,7 @@ class Frontend {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook
 		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout', false );
 
-		$redirect_to  = urlencode( woocommerce_pos_url() );
+		$redirect_to  = urlencode( wcpos_url() );
 		$reauth       = 1;
 		$wcpos        = 1;
 		$logout_nonce = wp_create_nonce( 'log-out' );

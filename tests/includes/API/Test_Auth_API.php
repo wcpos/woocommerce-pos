@@ -435,54 +435,34 @@ class Test_Auth_API extends WP_UnitTestCase {
 		$result = $this->api->check_session_permissions( $request );
 
 		$this->assertTrue( $result );
-	}
 
-	/**
-	 * Test permission check for admin accessing other user's sessions.
-	 */
-	public function test_check_session_permissions_for_admin(): void {
 		wp_set_current_user( $this->admin_user->ID );
 
 		$request = $this->create_request( array( 'user_id' => $this->regular_user->ID ) );
 		$result = $this->api->check_session_permissions( $request );
 
-		$this->assertTrue( $result );
-	}
+		$this->assertTrue( $result, 'check_session_permissions_for_admin' );
 
-	/**
-	 * Test permission check for shop manager accessing other user's sessions.
-	 */
-	public function test_check_session_permissions_for_shop_manager(): void {
 		wp_set_current_user( $this->shop_manager_user->ID );
 
 		$request = $this->create_request( array( 'user_id' => $this->regular_user->ID ) );
 		$result = $this->api->check_session_permissions( $request );
 
-		$this->assertTrue( $result );
-	}
+		$this->assertTrue( $result, 'check_session_permissions_for_shop_manager' );
 
-	/**
-	 * Test permission check for regular user accessing other user's sessions.
-	 */
-	public function test_check_session_permissions_for_regular_user(): void {
 		wp_set_current_user( $this->regular_user->ID );
 
 		$request = $this->create_request( array( 'user_id' => $this->admin_user->ID ) );
 		$result = $this->api->check_session_permissions( $request );
 
-		$this->assertFalse( $result );
-	}
+		$this->assertFalse( $result, 'check_session_permissions_for_regular_user' );
 
-	/**
-	 * Test permission check when not logged in.
-	 */
-	public function test_check_session_permissions_when_not_logged_in(): void {
 		wp_set_current_user( 0 );
 
 		$request = $this->create_request( array( 'user_id' => $this->regular_user->ID ) );
 		$result = $this->api->check_session_permissions( $request );
 
-		$this->assertFalse( $result );
+		$this->assertFalse( $result, 'check_session_permissions_when_not_logged_in' );
 	}
 
 	/**
@@ -495,29 +475,20 @@ class Test_Auth_API extends WP_UnitTestCase {
 		$result = $this->api->check_admin_permissions( $request );
 
 		$this->assertTrue( $result );
-	}
 
-	/**
-	 * Test admin permission check for shop manager.
-	 */
-	public function test_check_admin_permissions_for_shop_manager(): void {
 		wp_set_current_user( $this->shop_manager_user->ID );
 
 		$request = $this->create_request();
 		$result = $this->api->check_admin_permissions( $request );
 
-		$this->assertTrue( $result );
-	}
+		$this->assertTrue( $result, 'check_admin_permissions_for_shop_manager' );
 
-	/**
-	 * Test admin permission check for regular user.
-	 */
-	public function test_check_admin_permissions_for_regular_user(): void {
 		wp_set_current_user( $this->regular_user->ID );
 
 		$request = $this->create_request();
 		$result = $this->api->check_admin_permissions( $request );
 
-		$this->assertFalse( $result );
+		$this->assertFalse( $result, 'check_admin_permissions_for_regular_user' );
 	}
+
 }

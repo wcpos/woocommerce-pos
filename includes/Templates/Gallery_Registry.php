@@ -2,7 +2,7 @@
 /**
  * Gallery Template Registry.
  *
- * Translatable catalogue of bundled receipt/report templates. Returned per
+ * Translatable catalogue of bundled receipt, display, report and closure templates. Returned per
  * request so locale changes produce the right translation. Content lives
  * in sibling files (templates/gallery/<key>.html|xml|php) located by
  * Templates::get_gallery_templates().
@@ -23,7 +23,373 @@ class Gallery_Registry {
 	 * @return array<string,array<string,mixed>>
 	 */
 	public static function all(): array {
+		/**
+		 * Filter the bundled gallery template catalogue.
+		 *
+		 * The `version` on each entry is load-bearing: it is compared against the version recorded
+		 * on a merchant's installed copy to tell them theirs has fallen behind, so an entry added
+		 * here must carry one and must bump it whenever its markup changes.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param array<string,array<string,mixed>> $catalogue Gallery templates keyed by template key.
+		 */
+		$filtered = apply_filters( 'wcpos_gallery_templates', self::catalogue() );
+		return (array) apply_filters_deprecated( 'woocommerce_pos_gallery_templates', array( $filtered ), '2.0.0', 'wcpos_gallery_templates' );
+	}
+
+	/**
+	 * The catalogue as this build ships it, before any filtering.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	private static function catalogue(): array {
 		return array(
+			'display-pocket' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __(
+					'Pocket',
+					'woocommerce-pos'
+				),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __(
+					'Customer display for small screens: a docked running total, the newest item on top, full-screen payment states. For a phone on a stand.',
+					'woocommerce-pos'
+				),
+				'type'          => 'display',
+				'screen'        => 'small-screen',
+				'order'         => 20,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+			),
+			'display-marquee' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __(
+					'Marquee',
+					'woocommerce-pos'
+				),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __(
+					'Customer display for large screens: brand column with greeting and promo space, the just-added item as a hero, big totals. For a monitor or wide tablet.',
+					'woocommerce-pos'
+				),
+				'type'          => 'display',
+				'screen'        => 'large-screen',
+				'order'         => 30,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+			),
+			'display-ledger' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Ledger', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'The responsive default: itemised list with a totals panel on wide screens, a docked total on narrow ones. Install it to customise.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 10,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+			),
+			'display-carousel' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Carousel', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Rotate your own pictures between sales. Swap the three image links for yours and edit the captions; a small version keeps cycling under the totals.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 40,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-specials' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Specials board', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A short list of featured items and prices for the idle screen, with an "ask about today\'s specials" line on the order screens. Edit the four lines.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 41,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-follow' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Follow & review', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Your social handle and a QR code between sales; paste in your own QR image. Adds your handle to the order screens.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 42,
+				'category'      => 'general',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-seasons-greetings' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Season\'s Greetings', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'The Ledger with a festive idle screen for the December–January window; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 50,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-lunar-new-year' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Lunar New Year', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'The Ledger with a red-and-gold idle screen wishing customers good fortune; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 51,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-eid' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Eid Mubarak', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'The Ledger with a night-blue-and-gold idle screen for Ramadan and Eid al-Fitr; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 52,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-diwali' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Diwali', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'The Ledger with a warm idle screen of lights; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting to make it yours.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 53,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-valentines' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Valentine\'s Day', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A love letter with a wax seal on a blush ground; the theme carries a soft accent and a greeting line into the order screens. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 54,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-mothers-day' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Mother\'s Day', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A ring of petals around the greeting, with a soft accent on the order screens. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 55,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-fathers-day' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Father\'s Day', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A workshop card between plaid bands. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 56,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-easter' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Easter', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A row of patterned eggs on a spring gradient. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 57,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-halloween' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Halloween', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'An orange moon, bats and jagged grass. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 58,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-thanksgiving' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Thanksgiving', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A harvest wreath of leaves. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 59,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-hanukkah' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Hanukkah', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'A menorah of nine candles. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 60,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-new-year' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'New Year', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Confetti and a gold burst. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 61,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-nowruz' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Nowruz', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Tulips for the spring equinox. Edit the greeting.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 62,
+				'category'      => 'seasonal',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-sale' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Sale', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'The Ledger with a promotional idle screen: a headline and an offer line you edit for each promotion.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 70,
+				'category'      => 'promotion',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
+			'display-black-friday' => array(
+				/* translators: Gallery template name shown in the admin Template Gallery. */
+				'title'         => __( 'Black Friday', 'woocommerce-pos' ),
+				/* translators: Gallery template description shown in the admin Template Gallery. */
+				'description'   => __( 'Blackout with a deals ticker, and the offer line repeated on the order screens. Edit the offer.', 'woocommerce-pos' ),
+				'type'          => 'display',
+				'screen'        => 'responsive',
+				'order'         => 71,
+				'category'      => 'promotion',
+				'engine'        => 'logicless',
+				'output_type'   => 'html',
+				'paper_width'   => null,
+				'version'       => 1,
+				'preview_data'  => null,
+				'preview_state' => 'idle',
+			),
 			'detailed-receipt' => array(
 				/* translators: Gallery template name shown in the admin Template Gallery. */
 				'title'         => __( 'Detailed Receipt', 'woocommerce-pos' ),
@@ -34,7 +400,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'base-receipt',
 			),
 			'gift-receipt' => array(
@@ -47,7 +413,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'gift-receipt',
 			),
 			'invoice' => array(
@@ -60,7 +426,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'invoice',
 			),
 			'minimal-receipt' => array(
@@ -73,7 +439,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'base-receipt',
 			),
 			'narrow-receipt' => array(
@@ -85,7 +451,7 @@ class Gallery_Registry {
 				'category'      => 'receipt',
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'base-receipt',
 			),
 			'packing-slip' => array(
@@ -98,7 +464,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'packing-slip',
 			),
 			'quote' => array(
@@ -111,7 +477,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'quote',
 			),
 			'standard-receipt' => array(
@@ -124,7 +490,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'base-receipt',
 			),
 			'standard-receipt-rtl' => array(
@@ -138,7 +504,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'standard-receipt-rtl',
 			),
 			'thermal-detailed-58mm' => array(
@@ -151,7 +517,7 @@ class Gallery_Registry {
 				'engine'        => 'thermal',
 				'output_type'   => 'escpos',
 				'paper_width'   => '58mm',
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'base-receipt',
 			),
 			'thermal-detailed-80mm' => array(
@@ -164,7 +530,7 @@ class Gallery_Registry {
 				'engine'        => 'thermal',
 				'output_type'   => 'escpos',
 				'paper_width'   => '80mm',
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'base-receipt',
 			),
 			'thermal-kitchen-ticket' => array(
@@ -177,7 +543,7 @@ class Gallery_Registry {
 				'engine'        => 'thermal',
 				'output_type'   => 'escpos',
 				'paper_width'   => '80mm',
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'thermal-kitchen-ticket',
 			),
 			'thermal-simple-58mm' => array(
@@ -190,7 +556,7 @@ class Gallery_Registry {
 				'engine'        => 'thermal',
 				'output_type'   => 'escpos',
 				'paper_width'   => '58mm',
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'base-receipt',
 			),
 			'thermal-simple-80mm' => array(
@@ -203,7 +569,7 @@ class Gallery_Registry {
 				'engine'        => 'thermal',
 				'output_type'   => 'escpos',
 				'paper_width'   => '80mm',
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'base-receipt',
 			),
 			'thermal-simple-80mm-rtl' => array(
@@ -217,8 +583,119 @@ class Gallery_Registry {
 				'engine'        => 'thermal',
 				'output_type'   => 'escpos',
 				'paper_width'   => '80mm',
-				'version'       => 1,
+				'version'       => 2,
 				'preview_data'  => 'standard-receipt-rtl',
+			),
+			'report-default' => array(
+				'title' => __( 'Report', 'woocommerce-pos' ),
+				'description' => __( 'A tabular report with groups, subtotals and totals.', 'woocommerce-pos' ),
+				'type' => 'report',
+				'category' => 'general',
+				'engine' => 'logicless',
+				'output_type' => 'html',
+				'paper_width' => null,
+				'version' => 1,
+				'preview_data' => 'report-sales',
+			),
+			'report-letterhead' => array(
+				'title' => __( 'Report (Letterhead)', 'woocommerce-pos' ),
+				'description' => __( 'A printed report on the store\'s letterhead with the scope, the generated time and page-safe tables.', 'woocommerce-pos' ),
+				'type' => 'report',
+				'category' => 'general',
+				'engine' => 'logicless',
+				'output_type' => 'html',
+				'paper_width' => null,
+				'version' => 1,
+				'preview_data' => 'report-sales',
+			),
+			'thermal-report-80mm' => array(
+				'title' => __( 'Thermal Report', 'woocommerce-pos' ),
+				'description' => __( 'A tabular report with groups, subtotals and totals.', 'woocommerce-pos' ),
+				'type' => 'report',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '80mm',
+				'version' => 1,
+				'preview_data' => 'report-sales',
+			),
+			'thermal-report-58mm' => array(
+				'title' => __( 'Thermal Report (58mm)', 'woocommerce-pos' ),
+				'description' => __( 'A report for 58 mm paper: each row prints as a label line over its values.', 'woocommerce-pos' ),
+				'type' => 'report',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '58mm',
+				'version' => 1,
+				'preview_data' => 'report-sales',
+			),
+			'closure-default' => array(
+				'title' => __( 'Closure', 'woocommerce-pos' ),
+				'description' => __( 'Closure and X-report with tender counts, cash movements and totals.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'logicless',
+				'output_type' => 'html',
+				'paper_width' => null,
+				'version' => 3,
+				'preview_data' => 'closure',
+			),
+			'closure-detailed' => array(
+				'title' => __( 'Closure (Detailed)', 'woocommerce-pos' ),
+				'description' => __( 'The full closure with the denomination count and signature lines for the cashier and manager.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'logicless',
+				'output_type' => 'html',
+				'paper_width' => null,
+				'version' => 2,
+				'preview_data' => 'closure',
+			),
+			'thermal-closure-80mm' => array(
+				'title' => __( 'Thermal Closure', 'woocommerce-pos' ),
+				'description' => __( 'Closure and X-report with tender counts, cash movements and totals.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '80mm',
+				'version' => 3,
+				'preview_data' => 'closure',
+			),
+			'thermal-closure-58mm' => array(
+				'title' => __( 'Thermal Closure (58mm)', 'woocommerce-pos' ),
+				'description' => __( 'Closure and X-report for 58 mm paper. Tender, tax and payment tables stack as label lines over two-column rows.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '58mm',
+				'version' => 2,
+				'preview_data' => 'closure',
+			),
+			'thermal-closure-80mm-rtl' => array(
+				'title' => __( 'Thermal Closure 80mm (RTL)', 'woocommerce-pos' ),
+				'description' => __( 'Closure and X-report for 80 mm paper, with mirrored columns for right-to-left scripts.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '80mm',
+				'version' => 2,
+				'preview_data' => 'closure',
+				'direction' => 'rtl',
+			),
+			'thermal-count-slip-80mm' => array(
+				'title' => __( 'Count Slip (80mm)', 'woocommerce-pos' ),
+				'description' => __( 'The cashier\'s slip for the cash bag: float, counted tenders, denominations, movements, note and signature lines. No sales or tax figures.', 'woocommerce-pos' ),
+				'type' => 'closure',
+				'category' => 'general',
+				'engine' => 'thermal',
+				'output_type' => 'escpos',
+				'paper_width' => '80mm',
+				'version' => 2,
+				'preview_data' => 'closure',
 			),
 		);
 	}

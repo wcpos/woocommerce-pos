@@ -141,7 +141,7 @@ final class Rest_Cors {
 	 * The lanes the cache contract covers: the two shipped namespaces.
 	 *
 	 * Deliberately narrower than ROUTE_PATTERN — a namespace added through
-	 * `woocommerce_pos_rest_namespaces` publishes its own response semantics,
+	 * `wcpos_rest_namespaces` publishes its own response semantics,
 	 * and this guard has never covered it. Preflights are the exception:
 	 * every preflight this class ANSWERS gets the cache contract regardless
 	 * of lane ({@see self::rest_pre_serve_request()}), because the answer

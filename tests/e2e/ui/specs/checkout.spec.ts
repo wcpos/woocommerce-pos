@@ -6,7 +6,7 @@ test.describe('Checkout Settings', () => {
 		// networkidle can fire before React mounts and starts its API calls,
 		// so we explicitly wait for the settings response.
 		const settingsLoaded = adminPage.waitForResponse(
-			(resp) => resp.url().includes('wcpos/v1/settings/checkout') && resp.status() === 200,
+			(resp) => resp.url().includes('wcpos/v2/settings/checkout') && resp.status() === 200,
 			{ timeout: 30000 }
 		);
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings#/checkout');

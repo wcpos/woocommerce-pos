@@ -95,7 +95,7 @@ class Gateway_Contract {
 	 * @param WC_Payment_Gateway $gateway Gateway object.
 	 */
 	public function is_pos_enabled( WC_Payment_Gateway $gateway ): bool {
-		$settings = woocommerce_pos_get_settings( 'payment_gateways' );
+		$settings = wcpos_get_settings( 'payment_gateways' );
 
 		if ( is_wp_error( $settings ) ) {
 			return wc_string_to_bool( $gateway->enabled );
@@ -252,7 +252,6 @@ class Gateway_Contract {
 			return $this->get_adapter( $gateway )->get_pos_bootstrap_response( $context, $request );
 		}
 
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
 		return (array) apply_filters(
 			'wcpos_payment_gateway_bootstrap',
 			array(
@@ -265,7 +264,6 @@ class Gateway_Contract {
 			$context,
 			$request
 		);
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 	}
 
 	/**

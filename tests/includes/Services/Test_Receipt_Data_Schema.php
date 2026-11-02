@@ -20,13 +20,114 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Receipt_Data_Schema extends WP_UnitTestCase {
+	/** Closure fields and report first-entry flags are available in the editor. */
+	public function test_closure_fields_and_report_is_first_have_contract_types(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'closure' );
+		foreach ( array(
+			'breakdowns.discounts.count' => 'number',
+			'breakdowns.discounts.amount' => 'money',
+			'breakdowns.items_sold' => 'string',
+			'breakdowns.average_sale' => 'money',
+			'breakdowns.drawer_openings' => 'number',
+			'breakdowns.variance_note' => 'string',
+			'has_discounts' => 'boolean',
+			'has_variance_note' => 'boolean',
+			'has_denominations' => 'boolean',
+		) as $field => $type ) {
+			$this->assertSame( $type, $tree['closure']['fields'][ $field ]['type'] );
+		}
+		$denominations = $tree['closure.breakdowns.denominations'];
+		$this->assertTrue( $denominations['is_array'] );
+		$this->assertSame( 'money', $denominations['fields']['value']['type'] );
+		$this->assertSame( 'number', $denominations['fields']['pieces']['type'] );
+		$this->assertSame( 'money', $denominations['fields']['amount']['type'] );
+		$this->assertSame( 'string', $denominations['fields']['value_display']['type'] );
+		$fields = Receipt_Data_Schema::get_field_tree( 'report' )['report']['fields'];
+		foreach ( array( $fields['columns'], $fields['rows']['fields']['cells'], $fields['groups']['fields']['rows']['fields']['cells'], $fields['groups']['fields']['subtotal']['fields']['cells'], $fields['totals']['fields']['cells'] ) as $list ) {
+			$this->assertSame( 'boolean', $list['fields']['is_first']['type'] );
+		}
+	}
+
+	/** Corrections expose item fields inside a repeatable Mustache section. */
+	public function test_closure_field_tree_corrections_are_repeatable(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'closure' );
+		$corrections = $tree['closure']['fields']['corrections'];
+		$this->assertTrue( $corrections['is_array'] );
+		$this->assertEqualsCanonicalizing(
+			array( 'id', 'type', 'actor.id', 'actor.name', 'approver.id', 'approver.name', 'reason', 'created_at', 'figures' ),
+			array_keys( $corrections['fields'] )
+		);
+		$this->assertNotEmpty( $corrections['fields']['figures']['fields'] );
+	}
+
+	/** The tabular contract is separate from the unchanged receipt schema. */
+	public function test_report_tree_and_schema_publish_tabular_contract(): void {
+		$tree = Receipt_Data_Schema::get_field_tree( 'report' );
+		$report_keys = array( 'key', 'title', 'subtitle', 'scope', 'group_by', 'columns', 'column_count', 'rows', 'groups', 'totals', 'count', 'has_groups', 'has_rows', 'generated_at', 'is_partial', 'partial_reason' );
+		$this->assertEqualsCanonicalizing( $report_keys, array_keys( $tree['report']['fields'] ) );
+		$fields = $tree['report']['fields'];
+		foreach ( array( $fields['columns'], $fields['rows'], $fields['rows']['fields']['cells'], $fields['groups'], $fields['groups']['fields']['rows'], $fields['groups']['fields']['rows']['fields']['cells'], $fields['groups']['fields']['subtotal']['fields']['cells'], $fields['totals']['fields']['cells'] ) as $iterable ) {
+			$this->assertTrue( $iterable['is_array'] );
+			$this->assertNotEmpty( $iterable['fields'] );
+		}
+		$scope = $tree['report']['fields']['scope']['fields'];
+		$this->assertEqualsCanonicalizing( array( 'mode', 'label', 'store_id', 'register_id', 'register_name', 'business_day', 'session_id', 'session_number', 'opened_at', 'closed_at', 'from', 'to' ), array_keys( $scope ) );
+		foreach ( array( 'opened_at', 'closed_at', 'from', 'to' ) as $key ) {
+			$this->assertSame( Receipt_Data_Schema::get_field_tree()['order.printed']['fields'], $scope[ $key ]['fields'] );
+		}
+		$schema = Receipt_Data_Schema::get_json_schema( 'report' );
+		$this->assertSame( array( 'report', 'store', 'register', 'software', 'fiscal', 'i18n' ), $schema['required'] );
+		$fields = $schema['properties']['report']['properties'];
+		$this->assertSame( array( 'session', 'range' ), $fields['scope']['properties']['mode']['enum'] );
+		$this->assertSame( array( 'text', 'number', 'money', 'percent', 'datetime' ), $fields['columns']['items']['properties']['type']['enum'] );
+		$this->assertSame( array( 'left', 'right' ), $fields['columns']['items']['properties']['align']['enum'] );
+		$this->assertSame( 'integer', $fields['count']['type'] );
+		$this->assertSame( Receipt_Data_Schema::get_json_schema(), Receipt_Data_Schema::get_json_schema( 'receipt' ) );
+	}
+
+	/** Schema 1.4 publishes provenance without requiring optional fiscal fields. */
+	public function test_identity_contract_1_4(): void {
+		$schema = Receipt_Data_Schema::get_json_schema();
+		$tree   = Receipt_Data_Schema::get_field_tree();
+		$mock   = ( new Preview_Receipt_Builder() )->sample();
+		$this->assertSame( '1.4.0', $schema['x-schema-version'] );
+		$this->assertSame( 'COPY', Receipt_I18n_Labels::get_labels()['copy'] );
+		foreach ( array(
+			'software' => array( 'name', 'plugin_version', 'app_version', 'app_build', 'platform' ),
+			'register' => array( 'id', 'name' ),
+		) as $section => $keys ) {
+			// Optional at the validation boundary: a stored 1.3 snapshot has neither block.
+			$this->assertNotContains( $section, $schema['required'] );
+			$this->assertArrayHasKey( $section, $schema['properties'] );
+			$this->assertSame( $keys, array_keys( $tree[ $section ]['fields'] ) );
+			$this->assertSame( $keys, array_keys( $mock[ $section ] ) );
+		}
+		// The 1.3 required list is unchanged, so a 1.3 payload still satisfies 1.4.
+		$this->assertSame(
+			array( 'order', 'store', 'cashier', 'customer', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax', 'tax_summary', 'has_tax_summary', 'payments', 'refunds', 'fiscal', 'presentation_hints', 'i18n' ),
+			$schema['required']
+		);
+		foreach ( array( 'document_type', 'sale_time', 'sale_tz', 'sale_counter', 'received_at', 'corrects', 'is_sale_document', 'is_refund_document', 'is_void_document', 'is_cancellation_document', 'is_closure_document', 'is_x_report' ) as $key ) {
+			$this->assertArrayHasKey( $key, $tree['fiscal']['fields'] );
+			$this->assertArrayHasKey( $key, $mock['fiscal'] );
+			$this->assertArrayHasKey( 'default', $schema['properties']['fiscal']['properties'][ $key ] );
+		}
+		foreach ( array( 'sale_time', 'received_at' ) as $key ) {
+			$this->assertSame( array( 'object', 'null' ), $schema['properties']['fiscal']['properties'][ $key ]['type'] );
+			$this->assertSame( array_keys( $mock['order']['created'] ), array_keys( $mock['fiscal'][ $key ] ) );
+		}
+		$this->assertSame( 'sale', $mock['fiscal']['document_type'] );
+		$this->assertTrue( $mock['fiscal']['is_sale_document'] );
+		$this->assertSame( 'Europe/Madrid', $mock['fiscal']['sale_tz'] );
+	}
+
 	/**
 	 * MONEY_FIELDS is a hand-typed copy of every `money` leaf in the field tree,
 	 * declared ~130 lines away from the tree it mirrors, so the two drift in
 	 * silence. This test is the ratchet that makes drift impossible.
 	 *
 	 * The constant is deliberately NOT derived at runtime: it is an implicitly
-	 * public class constant, and `format_money_fields()` sits on the thermal
+	 * public class constant, and `Receipt_Money_Formatter::format()` sits on the thermal
 	 * print path, where walking the field tree (hundreds of leaves, each one
 	 * calling `__()`) on every render would be a real cost.
 	 */
@@ -206,7 +307,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree         = Receipt_Data_Schema::get_field_tree();
 		$line_fields  = $tree['lines']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertTrue( version_compare( Receipt_Data_Schema::SCHEMA_VERSION, '1.2.0', '>=' ) );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertArrayHasKey( $field, $line_fields );
@@ -230,7 +331,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree            = Receipt_Data_Schema::get_field_tree();
 		$discount_fields = $tree['discounts']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertTrue( version_compare( Receipt_Data_Schema::SCHEMA_VERSION, '1.2.0', '>=' ) );
 		$this->assertArrayHasKey( 'discount_type', $discount_fields );
 		$this->assertSame( 'string', $discount_fields['discount_type']['type'] );
 
@@ -254,7 +355,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree          = Receipt_Data_Schema::get_field_tree();
 		$total_fields  = $tree['totals']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertTrue( version_compare( Receipt_Data_Schema::SCHEMA_VERSION, '1.2.0', '>=' ) );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertContains( $field, Receipt_Data_Schema::TOTAL_MONEY_KEYS );
@@ -272,132 +373,12 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test money formatting adds _display variants alongside the numeric values.
-	 *
-	 * `format_money_fields` does NOT replace numbers in-place — it KEEPS the
-	 * numeric value at the bare key and ADDS a `<key>_display` companion with
-	 * the locale-formatted currency string. This shape mirrors the JS
-	 * `formatReceiptData` exactly so a single Mustache template renders the
-	 * same way in both pipelines.
-	 *
-	 * If this assertion ever has to be "fixed" by switching back to in-place
-	 * replacement, please don't — cross-pipeline templates depend on the
-	 * `_display` companion. See the comment block in
-	 * `Receipt_Data_Schema::format_money_fields()`.
-	 */
-	public function test_format_money_fields_uses_presentation_hints(): void {
-		$data = array(
-			'presentation_hints' => array(
-				'currency_position'        => 'right_space',
-				'price_thousand_separator' => ' ',
-				'price_decimal_separator'  => ',',
-				'price_num_decimals'       => 2,
-			),
-			'totals'             => array(
-				'total_incl'   => 1234.5,
-				'change_total' => 0,
-			),
-		);
-
-		$formatted = Receipt_Data_Schema::format_money_fields( $data, 'EUR' );
-
-		// Bare key remains numeric.
-		$this->assertSame( 1234.5, $formatted['totals']['total_incl'] );
-		// _display companion holds the formatted currency string.
-		$this->assertEquals( '1 234,50 €', $formatted['totals']['total_incl_display'] );
-		// Zero on a "zero-falsy" field stays numeric 0 so Mustache section
-		// guards (`{{#change_total}}…{{/change_total}}`) keep treating it as
-		// falsy; the _display companion is an empty string for the same case.
-		$this->assertSame( 0, $formatted['totals']['change_total'] );
-		$this->assertSame( '', $formatted['totals']['change_total_display'] );
-	}
-
-	/**
-	 * Savings values keep numeric bare keys and zero-falsy display companions.
-	 */
-	public function test_format_money_fields_formats_savings_and_preserves_unknown_nulls(): void {
-		$data = array(
-			'lines' => array(
-				array(
-					'regular_price' => 20,
-					'line_savings'  => 10,
-				),
-				array(
-					'regular_price' => null,
-					'line_savings'  => 0,
-				),
-			),
-		);
-
-		$formatted = Receipt_Data_Schema::format_money_fields( $data, 'USD' );
-
-		$this->assertSame( 20.0, $formatted['lines'][0]['regular_price'] );
-		$this->assertNotEmpty( $formatted['lines'][0]['regular_price_display'] );
-		$this->assertSame( 10.0, $formatted['lines'][0]['line_savings'] );
-		$this->assertNotEmpty( $formatted['lines'][0]['line_savings_display'] );
-		$this->assertNull( $formatted['lines'][1]['regular_price'] );
-		$this->assertArrayNotHasKey( 'regular_price_display', $formatted['lines'][1] );
-		$this->assertSame( 0, $formatted['lines'][1]['line_savings'] );
-		$this->assertSame( '', $formatted['lines'][1]['line_savings_display'] );
-	}
-
-	/**
-	 * Lock the v1 _display contract: bare money keys stay numeric across the
-	 * full receipt tree.
-	 *
-	 * Anti-revert assertion. If a future review feedback round suggests
-	 * "format money fields in-place so legacy templates keep rendering",
-	 * the suggestion is wrong — gallery templates use `_display` and rely
-	 * on bare keys being numeric for math (`{{#change_total}}` guards,
-	 * fee/shipping aggregation, etc.).
-	 */
-	public function test_format_money_fields_keeps_bare_keys_numeric(): void {
-		$data = array(
-			'totals' => array(
-				'total_incl'      => 99.99,
-				'subtotal_incl'   => 90.00,
-				'tax_total'       => 9.99,
-				'change_total'    => 0,
-			),
-			'lines'  => array(
-				array(
-					'name'           => 'Widget',
-					'qty'            => 1,
-					'unit_price'     => 99.99,
-					'line_total'     => 99.99,
-					'line_total_incl' => 99.99,
-				),
-			),
-			'payments' => array(
-				array(
-					'method_title' => 'Cash',
-					'amount'       => 100.00,
-					'tendered'     => 100.00,
-					'change'       => 0.01,
-				),
-			),
-		);
-
-		$formatted = Receipt_Data_Schema::format_money_fields( $data, 'USD' );
-
-		// Bare keys are numeric throughout.
-		$this->assertIsFloat( $formatted['totals']['total_incl'] );
-		$this->assertIsFloat( $formatted['lines'][0]['line_total_incl'] );
-		$this->assertIsFloat( $formatted['payments'][0]['amount'] );
-
-		// _display companions are non-empty currency strings (except zero-falsy).
-		$this->assertNotEmpty( $formatted['totals']['total_incl_display'] );
-		$this->assertNotEmpty( $formatted['lines'][0]['line_total_incl_display'] );
-		$this->assertNotEmpty( $formatted['payments'][0]['amount_display'] );
-	}
-
-	/**
 	 * Test get_field_tree returns all required sections.
 	 */
 	public function test_get_field_tree_returns_all_required_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$expected_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'store.tax_ids', 'store.address', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal', 'i18n' );
+		$expected_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'store.tax_ids', 'store.address', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal', 'software', 'register', 'i18n' );
 		foreach ( $expected_sections as $section ) {
 			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
@@ -439,7 +420,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
 		}
 
-		$scalar_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'cashier', 'customer', 'totals', 'fiscal' );
+		$scalar_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'order.printed', 'store', 'cashier', 'customer', 'totals', 'fiscal', 'software', 'register' );
 		foreach ( $scalar_sections as $section ) {
 			$this->assertFalse( $tree[ $section ]['is_array'] ?? false, "{$section} should not be marked as array" );
 		}
@@ -510,6 +491,17 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertSame( 'money', $tree['totals']['fields']['total_incl']['type'] );
 		$this->assertSame( 'money', $tree['lines']['fields']['line_total_incl']['type'] );
 		$this->assertSame( 'string', $tree['store']['fields']['name']['type'] );
+	}
+
+	/**
+	 * Customer first names are available in the editor and canonical JSON schema.
+	 */
+	public function test_customer_first_name_is_exposed_as_string(): void {
+		$tree   = Receipt_Data_Schema::get_field_tree();
+		$schema = Receipt_Data_Schema::get_json_schema();
+
+		$this->assertSame( 'string', $tree['customer']['fields']['first_name']['type'] );
+		$this->assertSame( 'string', $schema['properties']['customer']['properties']['first_name']['type'] );
 	}
 
 	/**

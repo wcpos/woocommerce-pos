@@ -11,9 +11,9 @@ namespace WCPOS\WooCommercePOS\Services\Settings;
  * The License Settings Section.
  *
  * In the free plugin this is a shim: the view is whatever the Pro plugin
- * injects via the woocommerce_pos_license_settings filter (empty array
+ * injects via the wcpos_license_settings filter (empty array
  * otherwise). A follow-up Pro PR replaces the filter hook with a real
- * registered section via woocommerce_pos_register_settings_sections.
+ * registered section via wcpos_register_settings_sections.
  *
  * NOTE: write() is not overridden — it inherits Abstract_Section::write()
  * and persists to woocommerce_pos_settings_license — but read() never
@@ -47,8 +47,9 @@ class License_Section extends Abstract_Section {
 		 *
 		 * @param array $settings The license settings.
 		 *
-		 * @hook woocommerce_pos_license_settings
+		 * @hook wcpos_license_settings
 		 */
-		return apply_filters( 'woocommerce_pos_license_settings', array() );
+		$filtered = apply_filters( 'wcpos_license_settings', array() );
+		return apply_filters_deprecated( 'woocommerce_pos_license_settings', array( $filtered ), '2.0.0', 'wcpos_license_settings' );
 	}
 }

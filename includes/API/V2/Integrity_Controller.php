@@ -53,9 +53,6 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 */
 	public const DRIFT_REBUILD_THRESHOLD = 3;
 
-	/** Legacy array option name; retained for callers, no longer read or written. */
-	public const DRIFT_STREAK_OPTION = 'wcpos_integrity_drift_streaks';
-
 	/** 1024 non-autoloaded rows fit ten tills x 26 buckets without rotating progress. */
 	public const DRIFT_STREAK_MAX_BUCKETS = 1024;
 
@@ -321,7 +318,8 @@ final class Integrity_Controller extends WP_REST_Controller {
 		}
 
 		$filters   = array( 'status' => (string) $request->get_param( 'status' ) );
-		$ttl       = (int) apply_filters( 'woocommerce_pos_integrity_scan_cache_ttl', 120 );
+		$ttl = apply_filters( 'wcpos_integrity_scan_cache_ttl', 120 );
+		$ttl = (int) apply_filters_deprecated( 'woocommerce_pos_integrity_scan_cache_ttl', array( $ttl ), '2.0.0', 'wcpos_integrity_scan_cache_ttl' );
 		$key_parts = array( $collection, $bucket_size, $filters, $window_start, $window_end );
 		$cache_key = 'wcpos_integrity_scan_' . md5( (string) wp_json_encode( $key_parts ) );
 		$cached    = 0 < $ttl ? get_transient( $cache_key ) : false;

@@ -12,6 +12,7 @@ import { queryClient } from './query-client';
 import AccessPage from './screens/access';
 import CheckoutPage from './screens/checkout';
 import CloudPrintPage from './screens/cloud-print';
+import ExportClosuresPage from './screens/export-closures';
 import ExtensionsPage from './screens/extensions';
 import GeneralPage from './screens/general';
 import LicensePage from './screens/license';
@@ -34,7 +35,7 @@ const indexRoute = createRoute({
 const settingsLoader = (id: string) => () => {
 	queryClient.prefetchQuery({
 		queryKey: [id],
-		queryFn: () => apiFetch({ path: `wcpos/v1/settings/${id}?wcpos=1`, method: 'GET' }),
+		queryFn: () => apiFetch({ path: `wcpos/v2/settings/${id}?wcpos=1`, method: 'GET' }),
 		retry: 1,
 	});
 };
@@ -80,13 +81,20 @@ const sessionsRoute = createRoute({
 	// No loader — sessions uses different API endpoints
 });
 
+const exportClosuresRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/export-closures',
+	component: ExportClosuresPage,
+	// No loader — this downloads a file, not a settings section.
+});
+
 const extensionsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/extensions',
 	loader: () => {
 		queryClient.prefetchQuery({
 			queryKey: ['extensions'],
-			queryFn: () => apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
+			queryFn: () => apiFetch({ path: 'wcpos/v2/extensions?wcpos=1', method: 'GET' }),
 			retry: 1,
 		});
 	},
@@ -113,6 +121,7 @@ const routeTree = rootRoute.addChildren([
 	cloudPrintRoute,
 	accessRoute,
 	sessionsRoute,
+	exportClosuresRoute,
 	extensionsRoute,
 	logsRoute,
 	licenseRoute,

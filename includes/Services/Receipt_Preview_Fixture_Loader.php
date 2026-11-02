@@ -25,12 +25,34 @@ class Receipt_Preview_Fixture_Loader {
 	/**
 	 * Build receipt preview data for a fixture profile.
 	 *
-	 * @param string|null $profile   Fixture profile name.
-	 * @param object|null $pos_store POS store object. Falls back to default store.
+	 * @param string|null        $profile   Fixture profile name.
+	 * @param object|string|null $pos_store POS store object used for the closure and receipt profiles, or report fixture key for the report profile.
 	 *
 	 * @return array Receipt data.
 	 */
 	public function build( ?string $profile = null, $pos_store = null ): array {
+		if ( 'report' === $profile ) {
+			$key = \in_array( $pos_store, array( 'sales', 'cash-movements' ), true ) ? $pos_store : 'sales';
+			return $this->load_overrides( 'report-' . $key );
+		}
+		$profile = $this->normalize_profile( $profile );
+		if ( 'closure' === $profile ) {
+			$fixture = $this->load_overrides( $profile );
+			$row = $fixture['closure'];
+			$row['register_id'] = 'preview';
+			// Preview the requested store's identity; without one the fixture's own store stands.
+			if ( \is_object( $pos_store ) && \method_exists( $pos_store, 'get_id' ) && 0 < (int) $pos_store->get_id() ) {
+				$row['store_id'] = (int) $pos_store->get_id();
+			}
+			$row['software_version'] = $fixture['software']['plugin_version'];
+			$row['breakdowns']['labels'] = array(
+				'register_name' => $fixture['register']['name'],
+				'opened_by_name' => 'Alex',
+				'closed_by_name' => 'Alex',
+				'approved_by_name' => 'Alex',
+			);
+			return ( new Receipt_Data_Builder() )->build_closure_document( $row );
+		}
 		$data = ( new Preview_Receipt_Builder() )->sample( $pos_store );
 
 		$base_overrides = $this->load_overrides( self::BASE_PROFILE );
@@ -38,7 +60,6 @@ class Receipt_Preview_Fixture_Loader {
 			$data = self::deep_merge( $data, $base_overrides );
 		}
 
-		$profile = $this->normalize_profile( $profile );
 		if ( self::BASE_PROFILE !== $profile ) {
 			$profile_overrides = $this->load_overrides( $profile );
 			if ( ! empty( $profile_overrides ) ) {
@@ -47,6 +68,34 @@ class Receipt_Preview_Fixture_Loader {
 		}
 
 		return Preview_Receipt_Builder::apply_receipt_data_filter( $this->resolve_assets( $data ) );
+	}
+
+	/**
+	 * The sample document a template previews with, money not yet formatted.
+	 *
+	 * The template's type picks the source: a report previews a report fixture, a closure the
+	 * closure fixture, every other type the sample receipt, overlaid with the template's gallery
+	 * preview profile when it has one. The REST preview and the template editor both ask here.
+	 *
+	 * @param array       $template   Template record; reads `type` and, when present, `preview_data`.
+	 * @param object|null $pos_store  Store the sample is for, or null for the default store.
+	 * @param mixed       $report_key Report fixture key for report templates; unknown keys preview 'sales'.
+	 *
+	 * @return array Receipt data.
+	 */
+	public function for_template( array $template, $pos_store = null, $report_key = 'sales' ): array {
+		$type = $template['type'] ?? 'receipt';
+		if ( 'report' === $type ) {
+			return $this->build( 'report', $report_key );
+		}
+		if ( 'closure' === $type ) {
+			return $this->build( 'closure', $pos_store );
+		}
+		$profile = $template['preview_data'] ?? null;
+
+		return \is_string( $profile )
+			? $this->build( $profile, $pos_store )
+			: ( new Preview_Receipt_Builder() )->build( $pos_store );
 	}
 
 	/**

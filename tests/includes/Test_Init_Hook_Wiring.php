@@ -46,25 +46,22 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 * `woocommerce_untrash_order` are absent for the same reason since #1805:
 	 * `Pos_Uuid::register_hooks()` (unconditional — identity is core) re-proves
 	 * uuid ownership on restore, so the latch only adds the observers' callbacks.
+	 * The nine visibility option hooks `Visibility_Observer` watches are absent
+	 * since #1862 for the same reason again: `Catalog_Visibility` registers them
+	 * unconditionally at the same priority, so they live in the unconditional
+	 * golden above and the latch only adds the observer's callbacks to them.
 	 *
 	 * @var string[]
 	 */
 	private const LATCHED_ONLY_HOOKS = array(
-		'add_option_woocommerce_pos_settings_general',
-		'add_option_woocommerce_pos_settings_visibility',
 		'add_user_role',
 		'added_term_meta',
 		'before_delete_post',
 		'created_term',
-		'delete_option',
-		'delete_option_woocommerce_pos_settings_general',
-		'delete_option_woocommerce_pos_settings_visibility',
 		'delete_term',
 		'delete_user',
 		'deleted_term_meta',
 		'edited_term',
-		'pre_update_option_woocommerce_pos_settings_general',
-		'pre_update_option_woocommerce_pos_settings_visibility',
 		// profile_update is now unconditional: session revocation listens on it at 10.
 		'remove_user_role',
 		'set_user_role',
@@ -73,8 +70,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		// hook carries no callback before Init runs, so under the latch it
 		// appears as a new hook name (this golden went red without the entry).
 		'shutdown',
-		'update_option_woocommerce_pos_settings_general',
-		'update_option_woocommerce_pos_settings_visibility',
 		'updated_term_meta',
 		'user_register',
 		'wcpos_sync_journal_purge',
@@ -86,11 +81,12 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'woocommerce_new_order',
 		'woocommerce_new_product',
 		'woocommerce_new_product_variation',
+		'wcpos_invalidate',
 		'woocommerce_pos_invalidate',
-		'woocommerce_pos_sync_order_pull_payloads',
-		'woocommerce_pos_sync_proxy_response',
-		'woocommerce_pos_sync_serialized_order',
-		'woocommerce_pos_sync_serialized_product',
+		'wcpos_sync_order_pull_payloads',
+		'wcpos_sync_proxy_response',
+		'wcpos_sync_serialized_order',
+		'wcpos_sync_serialized_product',
 		'woocommerce_tax_rate_added',
 		'woocommerce_tax_rate_deleted',
 		'woocommerce_tax_rate_updated',
@@ -224,10 +220,20 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'admin_enqueue_scripts'                                 => array( 10 ),
 			'admin_init'                                            => array( 10 ),
 			'admin_notices'                                         => array( 10 ),
+			// Catalog_Visibility (#1862): POS Only ⇒ catalog visibility hidden.
+			// Unconditional like Pos_Uuid — a storefront invariant, not a sync
+			// observer. Visibility_Observer adds its own callbacks on the same
+			// option hooks once the latch is set.
+			'add_option_woocommerce_pos_settings_general'           => array( 10 ),
+			'add_option_woocommerce_pos_settings_visibility'        => array( 10 ),
+			'delete_option'                                         => array( 10 ),
+			'delete_option_woocommerce_pos_settings_general'        => array( 10 ),
+			'delete_option_woocommerce_pos_settings_visibility'     => array( 10 ),
 			'determine_current_user'                                => array( 20 ),
 			'init'                                                  => array( 10 ),
 			'password_reset'                                        => array( 10 ),
-			'pre_update_option_woocommerce_pos_pro_settings_license' => array( 10 ),
+			'pre_update_option_woocommerce_pos_settings_general'    => array( 10 ),
+			'pre_update_option_woocommerce_pos_settings_visibility' => array( 10 ),
 			'profile_update'                                        => array( 10 ),
 			'query_vars'                                            => array( 10 ),
 			'rest_api_init'                                         => array( 10, 20 ),
@@ -246,14 +252,25 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// like stamp_on_save — identity is core. The sync observers add their
 			// own callbacks on the same two hooks once the latch is set.
 			'untrashed_post'                                        => array( 10 ),
+			'update_option_woocommerce_pos_settings_general'        => array( 10 ),
+			'update_option_woocommerce_pos_settings_visibility'     => array( 10 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
 			'wcpos_file_integrity_check'                            => array( 10 ),
+			// Font_Pack_Loader (row 3a): the background install needs its callback on
+			// every request, WP-Cron and Action Scheduler runs included.
+			'wcpos_install_font_packs'                              => array( 10 ),
 			'wcpos_integrity_digest_rebuild'                        => array( 10 ),
 			'wcpos_receipt_snapshot_cleanup'                        => array( 10 ),
+			// Payments_Sweeper (row 12b): a live payment leg is reconciled even while the
+			// sync schema is down, so the sweep and its interval register unlatched.
+			'wcpos_payments_sweep'                                  => array( 10 ),
+			'cron_schedules'                                        => array( 10 ),
 			'woocommerce_before_product_object_save'                => array( 10 ),
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
-			'woocommerce_pos_rest_api_controllers'                  => array( 10 ),
+			'woocommerce_duplicate_product_exclude_meta'            => array( 10 ),
+			'wcpos_rest_api_controllers'                  => array( 10 ),
+			'woocommerce_product_duplicate_before_save'             => array( 10 ),
 			'woocommerce_untrash_order'                             => array( 10 ),
 			'woocommerce_update_coupon'                             => array( 10 ),
 			'wp_logout'                                             => array( 10 ),
@@ -356,7 +373,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			function (): array {
 				return array(
 					'product' => $this->callback_labels( Augmentation_Pipeline::SERIALIZED_FILTER, 5 ),
-					'order'   => $this->callback_labels( 'woocommerce_pos_sync_serialized_order', 5 ),
+					'order'   => $this->callback_labels( 'wcpos_sync_serialized_order', 5 ),
 				);
 			}
 		);
@@ -395,8 +412,8 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 				$this->assertSame( $row['args'], $registered['accepted_args'] );
 				if ( 'determine_current_user' === $row['hook'] ) {
 					$this->assertSame( 20, $row['priority'] );
-					// Position of the guard row on this lane (four next-only rows are absent on main).
-					$this->assertSame( $latched ? 20 : 13, array_search( $row, $rows, true ) );
+					// JWT row index after three next-only rows; seven sync-latched rows are omitted when unlatched.
+					$this->assertSame( $latched ? 22 : 15, array_search( $row, $rows, true ) );
 					$auth_rows[] = self::label_for( $row['callback'] );
 				}
 			}
@@ -537,7 +554,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'pre_option_' . Sync_Api::SCHEMA_OPTION,
 			function () use ( &$reads ) {
 				++$reads;
-				$this->assertSame( 10, has_filter( 'woocommerce_pos_rest_api_controllers', array( Sync_Api::class, 'register_controllers' ) ) );
+				$this->assertSame( 10, has_filter( 'wcpos_rest_api_controllers', array( Sync_Api::class, 'register_controllers' ) ) );
 				$this->assertSame( 10, has_filter( 'wcpos_manifest_pre_latch_probe', '__return_null' ) );
 				$this->assertFalse( has_filter( 'init' ) );
 				$this->assertFalse( has_filter( 'determine_current_user' ) );
@@ -582,7 +599,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		$this->assertSame( 1, $reads );
 		$this->assertSame( 1, $init->declarations );
 		$this->assertSame( 10, has_filter( 'init', array( $init, 'init' ) ) );
-		$this->assertFalse( has_filter( 'woocommerce_pos_sync_serialized_order' ) );
+		$this->assertFalse( has_filter( 'wcpos_sync_serialized_order' ) );
 	}
 
 	/**
@@ -595,7 +612,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 				$this->assertFalse( has_filter( 'rest_post_dispatch' ) );
 
 				// Act.
-				$controllers = apply_filters( 'woocommerce_pos_rest_api_controllers', array() );
+				$controllers = apply_filters( 'wcpos_rest_api_controllers', array() );
 
 				// Assert.
 				$this->assertSame( Write_Controller::class, $controllers['sync-write'] );

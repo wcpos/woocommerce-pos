@@ -35,6 +35,7 @@ final class Route_Classifier {
 		'admin_op'                     => array(),
 		'permission_error_passthrough' => array(),
 		'rewrite_exempt'               => array(),
+		'protocol_exempt'              => array(),
 	);
 
 	/**
@@ -101,19 +102,7 @@ final class Route_Classifier {
 	 * @param string $route REST route.
 	 */
 	public function is_printer_token( string $route ): bool {
-		$route = strtolower( $route );
-
-		if ( $this->is_exact_match( 'printer_token', $route ) ) {
-			return true;
-		}
-
-		foreach ( $this->classifications['printer_token'] as $base ) {
-			if ( 0 === strpos( $route, $base . '/' ) ) {
-				return true;
-			}
-		}
-
-		return false;
+		return $this->is_exact_match( 'printer_token', $route ) || $this->is_slash_prefix_match( 'printer_token', $route );
 	}
 
 	/**
@@ -144,6 +133,41 @@ final class Route_Classifier {
 	}
 
 	/**
+	 * Check whether a route bypasses the minimum protocol gate.
+	 *
+	 * One rule: every `public` route and every `printer_token` route is exempt
+	 * by derivation — public routes are the pre-login connect probes, and
+	 * printer-token routes are polled by printers and the cloud-print relay,
+	 * so neither caller carries a client protocol signal by construction and
+	 * "update required" would be a lie. Anything else must be declared in
+	 * `protocol_exempt`; an entry covers itself and every route below it
+	 * (`/wcpos/v2/auth/` exempts the whole auth family). Never declare a
+	 * public or printer-token route here by hand — the drift guard pins the
+	 * derivation.
+	 *
+	 * @param string $route REST route.
+	 */
+	public function is_protocol_exempt( string $route ): bool {
+		return $this->is_public( $route )
+			|| $this->is_printer_token( $route )
+			|| $this->is_exact_match( 'protocol_exempt', $route )
+			|| $this->is_slash_prefix_match( 'protocol_exempt', $route );
+	}
+
+	/**
+	 * Get the routes stored for a classification.
+	 *
+	 * Exists for the drift guards in `tests/includes/API`, which walk a group
+	 * against the live route table; production code asks the predicates.
+	 *
+	 * @param string $classification Classification key.
+	 * @return string[] Classified routes.
+	 */
+	public function routes( string $classification ): array {
+		return $this->classifications[ $classification ] ?? array();
+	}
+
+	/**
 	 * Check for an exact route classification match.
 	 *
 	 * @param string $classification Classification key.
@@ -151,6 +175,28 @@ final class Route_Classifier {
 	 */
 	private function is_exact_match( string $classification, string $route ): bool {
 		return \in_array( strtolower( $route ), $this->classifications[ $classification ], true );
+	}
+
+	/**
+	 * Check for a slash-delimited route classification prefix match.
+	 *
+	 * Stricter than {@see self::is_prefix_match()}: `/wcpos/v2/status` must
+	 * not match `/wcpos/v2/status-report`, only routes below it. Every entry
+	 * is a base, with or without a trailing slash.
+	 *
+	 * @param string $classification Classification key.
+	 * @param string $route          REST route.
+	 */
+	private function is_slash_prefix_match( string $classification, string $route ): bool {
+		$route = strtolower( $route );
+
+		foreach ( $this->classifications[ $classification ] as $entry ) {
+			if ( 0 === strpos( $route, rtrim( $entry, '/' ) . '/' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

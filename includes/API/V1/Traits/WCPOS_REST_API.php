@@ -7,10 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\API\V1\Traits;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
@@ -180,9 +180,12 @@ trait WCPOS_REST_API {
 			return;
 		}
 
-		$warning_threshold = (int) apply_filters( 'woocommerce_pos_meta_data_warning_threshold', 50 );
-		$error_threshold   = (int) apply_filters( 'woocommerce_pos_meta_data_error_threshold', 500 );
-		$include_top_keys  = (bool) apply_filters( 'woocommerce_pos_meta_data_log_top_keys', false, $object, $count );
+		$warning_threshold = apply_filters( 'wcpos_meta_data_warning_threshold', 50 );
+		$warning_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_meta_data_warning_threshold', array( $warning_threshold ), '2.0.0', 'wcpos_meta_data_warning_threshold' );
+		$error_threshold = apply_filters( 'wcpos_meta_data_error_threshold', 500 );
+		$error_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_meta_data_error_threshold', array( $error_threshold ), '2.0.0', 'wcpos_meta_data_error_threshold' );
+		$include_top_keys = apply_filters( 'wcpos_meta_data_log_top_keys', false, $object, $count );
+		$include_top_keys = (bool) apply_filters_deprecated( 'woocommerce_pos_meta_data_log_top_keys', array( $include_top_keys, $object, $count ), '2.0.0', 'wcpos_meta_data_log_top_keys' );
 		$context           = $include_top_keys ? 'Top meta keys: ' . $this->wcpos_get_top_meta_keys( $raw_meta ) : null;
 
 		if ( $count >= $error_threshold ) {
@@ -282,8 +285,10 @@ trait WCPOS_REST_API {
 			}
 		}
 
-		$warning_threshold = (int) apply_filters( 'woocommerce_pos_response_size_warning_threshold', 100000 );
-		$error_threshold   = (int) apply_filters( 'woocommerce_pos_response_size_error_threshold', 500000 );
+		$warning_threshold = apply_filters( 'wcpos_response_size_warning_threshold', 100000 );
+		$warning_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_response_size_warning_threshold', array( $warning_threshold ), '2.0.0', 'wcpos_response_size_warning_threshold' );
+		$error_threshold = apply_filters( 'wcpos_response_size_error_threshold', 500000 );
+		$error_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_response_size_error_threshold', array( $error_threshold ), '2.0.0', 'wcpos_response_size_error_threshold' );
 
 		if ( $estimated_size >= $error_threshold ) {
 			$logged_ids[ $key ] = true;
@@ -314,13 +319,9 @@ trait WCPOS_REST_API {
 
 		switch ( $object_type ) {
 			case 'order':
-				if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-					$table  = "{$wpdb->prefix}wc_orders_meta";
-					$column = 'order_id';
-				} else {
-					$table  = $wpdb->postmeta;
-					$column = 'post_id';
-				}
+				$schema = Order_Meta_Store::schema();
+				$table  = $schema['meta'];
+				$column = $schema['owner'];
 				break;
 
 			case 'user':
@@ -363,20 +364,16 @@ trait WCPOS_REST_API {
 
 		switch ( $object_type ) {
 			case 'order':
-				if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-					$table   = "{$wpdb->prefix}wc_orders_meta";
-					$id_col  = 'order_id';
-					$meta_id = 'id';
-				} else {
-					$table   = $wpdb->postmeta;
-					$id_col  = 'post_id';
-					$meta_id = 'meta_id';
-				}
+				$schema  = Order_Meta_Store::schema();
+				$table   = $schema['meta'];
+				$id_col  = $schema['owner'];
+				$meta_id = $schema['meta_id'];
 				// The audit keys come from the shared authority so a new audit key
-				// reaches this degraded-meta read path without a second edit.
+				// reaches this degraded-meta read path without a second edit. The
+				// server-owned money keys are stripped from writes, not read here.
 				$keys = array_merge(
 					$keys,
-					Pos_Order_Audit::audit_meta_keys(),
+					array_diff( Pos_Order_Audit::audit_meta_keys(), Pos_Order_Audit::SERVER_MONEY_META_KEYS ),
 					array(
 						'_woocommerce_pos_tax_based_on',
 					)

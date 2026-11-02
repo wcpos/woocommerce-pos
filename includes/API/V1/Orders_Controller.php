@@ -14,19 +14,19 @@ if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
 }
 
 use WCPOS\WooCommercePOS\Services\Permission_Rules;
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use Exception;
 use WC_Abstract_Order;
 use WC_Data;
 use WC_Email_Customer_Invoice;
 use WC_Order;
 use WC_Order_Item;
-use WC_Order_Item_Fee;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
+use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
@@ -40,7 +40,6 @@ use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
-use WP_Query;
 use WP_REST_Server;
 
 /**
@@ -65,6 +64,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * The direct lane's narrowing map. `created_via` is DELIBERATELY absent: the rule row
 	 * exists (the proxy lane claims it), but `wcpos/v1` has never supported the filter and
 	 * adding it here would be a wire change, not a refactor. See `Sync\Collection_Rules`.
+	 * `search` is deliberately absent too: `wcpos/v1` order search has always been
+	 * WooCommerce's native search (no POS search was ever wired on this lane, here or on
+	 * `main`); POS order search is a `wcpos/v2` feature. Claiming it here would be a wire
+	 * change on a frozen lane, and would also need WooCommerce's own `s` handling
+	 * stripped from the request.
 	 *
 	 * @var array<string, string>
 	 */
@@ -75,6 +79,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		'exclude'     => 'wcpos_exclude',
 		'pos_cashier' => 'pos_cashier',
 		'pos_store'   => 'pos_store',
+		'pos_register' => 'pos_register',
 	);
 
 	/**
@@ -103,7 +108,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function __construct() {
 		$this->order_payload = new Order_Write_Payload();
-		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$this->hpos_enabled = Order_Meta_Store::hpos();
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
@@ -119,6 +124,18 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws \Throwable If checkout stock validation cannot be completed.
 	 */
 	protected function save_object( $request, $creating = false ) {
+		// Refuse an invalid or code-taken quick discount BEFORE the parent saves the
+		// prepared order, so a 400 never leaves a partially applied update behind.
+		$qd = new Quick_Discount();
+		try {
+			$error = $qd->register_from_lines( \is_array( $request['coupon_lines'] ?? null ) ? $request['coupon_lines'] : array() );
+			if ( is_wp_error( $error ) ) {
+				return $error;
+			}
+		} finally {
+			$qd->clear();
+		}
+
 		$validator = Stock_Validator::instance();
 		if ( ! $creating || ! \wcpos_request() || ! SettingsService::instance()->prevent_overselling_enabled() || ! $validator->should_validate_create_request( $request ) ) {
 			return parent::save_object( $request, $creating );
@@ -193,7 +210,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * @param bool $restore_stock Whether to restore stock. Default from settings.
 		 * @param int  $order_id      The order ID being deleted.
 		 */
-		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', $setting, $order_id );
+		$restore_stock = apply_filters( 'wcpos_restore_stock_on_delete', $setting, $order_id );
+		$restore_stock = apply_filters_deprecated( 'woocommerce_pos_restore_stock_on_delete', array( $restore_stock, $order_id ), '2.0.0', 'wcpos_restore_stock_on_delete' );
 		$force         = (bool) $request->get_param( 'force' );
 
 		// Force-delete permanently removes the order, so restore stock beforehand.
@@ -238,12 +256,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		$this->wcpos_request = $request;
 		// set hpos_enabled again for tests to work @TODO - fix this.
-		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$this->hpos_enabled = Order_Meta_Store::hpos();
 
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 1 );
-		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
 		// Negative-fee tax handling is registered globally by WCPOS\WooCommercePOS\Orders
 		// (request-gated) so the v2 push forward shares it — no per-dispatch registration.
 
@@ -381,7 +398,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 						// Pre-flight: check meta count before WC loads the full order.
 						$meta_count      = $this->wcpos_preflight_meta_count( $order_id, 'order' );
-						$error_threshold = (int) apply_filters( 'woocommerce_pos_meta_data_error_threshold', 500 );
+						$error_threshold = apply_filters( 'wcpos_meta_data_error_threshold', 500 );
+						$error_threshold = (int) apply_filters_deprecated( 'woocommerce_pos_meta_data_error_threshold', array( $error_threshold ), '2.0.0', 'wcpos_meta_data_error_threshold' );
 
 						if ( $meta_count >= $error_threshold ) {
 							return $this->wcpos_build_safe_order_response( $order_id, $meta_count );
@@ -547,23 +565,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$data['tax_ids'] = $tax_ids;
 			$response->set_data( $data );
 		}
-	}
-
-	/**
-	 * The way WooCommerce handles negative fees is ... weird.
-	 * They by-pass the normal tax calculation, disregard the tax_status and tax_class, and apply the taxes to the fee line.
-	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
-	 * the wrong result.
-	 *
-	 * The implementation lives in WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes,
-	 * registered globally and request-gated so the v2 push forward shares it (issue #1403).
-	 * This public method is preserved for backward compatibility and delegates.
-	 *
-	 * @param \WC_Order_Item_Fee $fee_item          The fee item.
-	 * @param array              $calculate_tax_for The tax calculation data.
-	 */
-	public function wcpos_order_item_fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
-		\WCPOS\WooCommercePOS\Orders::fee_after_calculate_taxes( $fee_item, $calculate_tax_for );
 	}
 
 	/**
@@ -897,6 +898,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			// Record provenance only; receipt calculations continue to infer historical
 			// pricing from the persisted line-item data of offline-synced orders.
 			$order->update_meta_data( '_woocommerce_pos_version', VERSION );
+			// A till-stamped sale time gets its server-received twin on v1 too.
+			if ( '' !== (string) $order->get_meta( '_wcpos_sale_time' ) && '' === (string) $order->get_meta( '_wcpos_sale_received_gmt' ) ) {
+				$order->update_meta_data( '_wcpos_sale_received_gmt', gmdate( 'Y-m-d\TH:i:s\Z' ) );
+			}
 		}
 
 		/**
@@ -923,69 +928,35 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Filter the order query.
+	 * Apply the collection's declared rules for the duration of a direct read.
 	 *
-	 * @param array           $args    Query arguments.
-	 * @param WP_REST_Request $request Request object.
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|WP_REST_Response
 	 */
-	public function wcpos_shop_order_query( array $args, WP_REST_Request $request ) {
-		// Which id-set rows this request claims is the declaration table's question,
-		// not a literal list of param names — so a new `id_set` row installs on this
-		// lane too, instead of only on the proxy lane.
-		if ( $this->wcpos_collection_plan( $request )->claims_id_sets() ) {
-			if ( $this->hpos_enabled ) {
-				add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orders_table_query_clauses' ), 10, 3 );
-			} else {
-				add_filter( 'posts_where', array( $this, 'wcpos_posts_where_order_include_exclude' ), 10, 2 );
+	public function get_items( $request ) {
+		return $this->wcpos_collection_plan( $request )->around(
+			function () use ( $request ) {
+				return parent::get_items( $request );
 			}
-		}
-
-		return $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, $args );
+		);
 	}
 
 	/**
 	 * The Collection Rules plan for the order query in flight.
 	 *
-	 * One declaration table feeds both Read Lanes; this lane keeps its own `add_filter`
-	 * topology (Pro subclasses these callbacks) and delegates only the clause bodies.
+	 * The direct lane's plan; `get_items()` runs the read inside `around()`.
 	 *
-	 * @param WP_REST_Request|null $request Request to plan against, defaulting to the dispatched one.
+	 * @param WP_REST_Request $request Request to plan against.
 	 *
 	 * @return Collection_Rules_Plan
 	 */
-	private function wcpos_collection_plan( ?WP_REST_Request $request = null ): Collection_Rules_Plan {
-		$request = $request instanceof WP_REST_Request ? $request : $this->wcpos_request;
-
+	private function wcpos_collection_plan( WP_REST_Request $request ): Collection_Rules_Plan {
 		return Collection_Rules::for_request(
 			'orders',
-			$request instanceof WP_REST_Request ? $request : new WP_REST_Request(),
+			$request,
 			self::WCPOS_COLLECTION_PARAM_MAP,
 			$this->hpos_enabled ? Collection_Rules::STORAGE_HPOS : Collection_Rules::STORAGE_POSTS
 		);
-	}
-
-	/**
-	 * Filter the WHERE clause of the query.
-	 *
-	 * @param string $where WHERE clause of the query.
-	 * @param object $query The WP_Query instance.
-	 *
-	 * @return string
-	 */
-	public function wcpos_posts_where_order_include_exclude( string $where, $query ) {
-		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_WHERE, $where, $query );
-	}
-
-	/**
-	 * Filters all query clauses at once.
-	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
-	 *
-	 * @param string[] $clauses Associative array of the clauses for the query.
-	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
-	 * @param array    $args    Query args.
-	 */
-	public function wcpos_hpos_orders_table_query_clauses( array $clauses, $query, array $args ) {
-		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, $clauses, $query );
 	}
 
 	/**
@@ -1000,8 +971,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		$start_time = microtime( true );
 
-		$hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$hpos_enabled = Order_Meta_Store::hpos();
 		$sql          = '';
+		$register     = sanitize_key( (string) $request->get_param( 'pos_register' ) );
 
 		$statuses = array_map(
 			function ( $status ) {
@@ -1021,6 +993,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			}
 
 			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->prefix}wc_orders.id" );
+			if ( '' !== $register ) {
+				$sql .= $wpdb->prepare( " AND EXISTS (SELECT 1 FROM {$wpdb->prefix}wc_orders_meta AS register_meta WHERE register_meta.order_id = {$wpdb->prefix}wc_orders.id AND register_meta.meta_key = '_wcpos_register' AND register_meta.meta_value = %s)", $register );
+			}
 			$sql .= " ORDER BY {$wpdb->prefix}wc_orders.date_created_gmt DESC";
 		} else {
 			$select_fields = Bulk_ID_Fast_Path::select_fields( $request, 'ID', 'post_modified_gmt' );
@@ -1033,6 +1008,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			}
 
 			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->posts}.ID" );
+			if ( '' !== $register ) {
+				$sql .= $wpdb->prepare( " AND EXISTS (SELECT 1 FROM {$wpdb->postmeta} AS register_meta WHERE register_meta.post_id = {$wpdb->posts}.ID AND register_meta.meta_key = '_wcpos_register' AND register_meta.meta_value = %s)", $register );
+			}
 			$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
 		}
 
@@ -1046,77 +1024,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Filters all query clauses at once.
-	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
-	 *
-	 * @param string[] $clauses Associative array of the clauses for the query.
-	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
-	 * @param array    $args    Query args.
-	 *
-	 * @return string[] $clauses
-	 */
-	public function wcpos_hpos_orderby_query( array $clauses, $query, $args ) {
-		return $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_HPOS_ORDERBY, $clauses, $query, (array) $args );
-	}
-
-	/**
-	 * Modify ORDER BY clause for legacy (non-HPOS) order status sorting.
-	 *
-	 * @param string   $orderby The ORDER BY clause.
-	 * @param WP_Query $query   The WP_Query instance.
-	 *
-	 * @return string Modified ORDER BY clause.
-	 */
-	public function wcpos_legacy_order_status_orderby( string $orderby, WP_Query $query ): string {
-		$rewritten = $this->wcpos_collection_plan()->filter( Collection_Rules_Plan::HOOK_POSTS_ORDERBY, $orderby, $query );
-
-		// Remove filter after use. The rule rewrites the clause only for a shop_order
-		// query, so a changed value is exactly the "this was our order query" signal the
-		// inline post_type check used to provide.
-		if ( $rewritten !== $orderby ) {
-			remove_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10 );
-		}
-
-		return $rewritten;
-	}
-
-	/**
-	 * Prepare objects query.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
-	 */
-	protected function prepare_objects_query( $request ) {
-		$args = parent::prepare_objects_query( $request );
-
-		/*
-		 * Extend the orderby parameter to include custom options.
-		 * Legacy order options.
-		 */
-		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
-			// Whether the claimed sort needs the legacy rewrite is declared by the sort's
-			// own row, so a second `posts_orderby` recipe reaches both Read Lanes.
-			if ( $this->wcpos_collection_plan( $request )->needs_legacy_posts_orderby() ) {
-				// Use posts_orderby filter since post_status isn't a valid WP_Query orderby.
-				add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
-			}
-
-			$args = $this->wcpos_collection_plan( $request )->filter( Collection_Rules_Plan::HOOK_PREPARE_ARGS, $args );
-		}
-
-		/*
-		 * Extend the orderby parameter to include custom options.
-		 * HOPS orders options.
-		 */
-		if ( isset( $request['orderby'] ) && $this->hpos_enabled ) {
-			add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orderby_query' ), 10, 3 );
-		}
-
-		return $args;
-	}
-
-	/**
 	 * Override WooCommerce V3's calculate_coupons to handle the POS sending
 	 * back full order data (including coupon line IDs).
 	 *
@@ -1126,7 +1033,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 *
 	 * Since the POS always sends the complete order object on updates, coupon_lines
 	 * will contain IDs from the previous response. We compare the requested coupon
-	 * codes with the existing ones on the order: if they match, we skip the
+	 * codes and quick-discount intents with the existing ones: if they match, we skip the
 	 * recalculation entirely (preserving stable line item IDs). If they differ,
 	 * we strip the IDs and delegate to the parent for the remove-and-reapply.
 	 *
@@ -1160,38 +1067,49 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			);
 		}
 
-		// Extract coupon codes from the request.
-		$requested_codes = array();
-		foreach ( $coupon_lines as $item ) {
-			$code = $item['code'] ?? '';
-			if ( '' !== $code ) {
-				$requested_codes[] = wc_strtolower( wc_format_coupon_code( wc_clean( $code ) ) );
+		$qd = new Quick_Discount();
+		try {
+			$error = $qd->register_from_lines( $coupon_lines );
+			if ( is_wp_error( $error ) ) {
+				throw new \WC_REST_Exception( $error->get_error_code(), $error->get_error_message(), 400 );
 			}
+			// Extract coupon codes from the request.
+			$requested_codes = array();
+			foreach ( $coupon_lines as $item ) {
+				$code = $item['code'] ?? '';
+				if ( '' !== $code ) {
+					$requested_codes[] = Quick_Discount::set_key( $code, Quick_Discount::intent_from_line( $item ) );
+				}
+			}
+
+			// Get the existing coupon codes on the order.
+			$existing_codes = array_map(
+				function ( $coupon ) {
+					return Quick_Discount::set_key( $coupon->get_code(), Quick_Discount::intent_from_item( $coupon ) );
+				},
+				array_values( $order->get_coupons() )
+			);
+
+			sort( $requested_codes );
+			sort( $existing_codes );
+
+			// If the coupon codes haven't changed, skip the remove-and-reapply.
+			// This preserves stable coupon line item IDs across saves.
+			if ( $requested_codes === $existing_codes ) {
+				return Order_Write_Payload::reapply_unchanged_coupons( $request, $order );
+			}
+
+			// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
+			foreach ( $coupon_lines as &$coupon_line ) {
+				unset( $coupon_line['id'] );
+			}
+			$request->set_param( 'coupon_lines', $coupon_lines );
+
+			$result = parent::calculate_coupons( $request, $order );
+			$qd->persist( $order );
+			return $result;
+		} finally {
+			$qd->clear();
 		}
-
-		// Get the existing coupon codes on the order.
-		$existing_codes = array_map(
-			function ( $coupon ) {
-				return wc_strtolower( $coupon->get_code() );
-			},
-			array_values( $order->get_coupons() )
-		);
-
-		sort( $requested_codes );
-		sort( $existing_codes );
-
-		// If the coupon codes haven't changed, skip the remove-and-reapply.
-		// This preserves stable coupon line item IDs across saves.
-		if ( $requested_codes === $existing_codes ) {
-			return Order_Write_Payload::reapply_unchanged_coupons( $request, $order );
-		}
-
-		// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
-		foreach ( $coupon_lines as &$coupon_line ) {
-			unset( $coupon_line['id'] );
-		}
-		$request->set_param( 'coupon_lines', $coupon_lines );
-
-		return parent::calculate_coupons( $request, $order );
 	}
 }

@@ -22,6 +22,12 @@ const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gall
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 794;
 const screenshotScale = 2;
+// Customer displays use phone or large-screen viewports rather than paper widths.
+const displayViewports = {
+	'display-pocket': { width: 390, height: 844 },
+	'display-marquee': { width: 1280, height: 800 },
+	default: { width: 1280, height: 800 },
+};
 
 const viteUrl = pathToFileURL(path.join(repoRoot, 'packages/template-gallery/node_modules/vite/dist/node/index.js')).href;
 const { createServer } = await import(viteUrl);
@@ -78,31 +84,61 @@ function replaceAssetUrls(value) {
 	if (value && typeof value === 'object') {
 		return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, replaceAssetUrls(v)]));
 	}
-	if (typeof value === 'string' && value.includes('/assets/img/template-gallery/preview-assets/')) {
-		const assetPath = value.slice(value.indexOf('/assets/img/template-gallery/preview-assets/') + 1);
+	if (typeof value === 'string' && value.includes('/assets/img/template-gallery/')) {
+		const assetPath = value.slice(value.indexOf('/assets/img/template-gallery/') + 1);
 		return '/@fs/${repoRootForBrowser}/' + assetPath;
 	}
 	return value;
 }
 
+// Display templates may define reusable blocks as <template data-wcpos-partial="name">
+// and use them as {{> name}}; the Pro display engine lifts them out the same way.
+function extractPartials(template) {
+	const parsed = document.createElement('template');
+	parsed.innerHTML = template;
+	// Serialising text escapes ">" and "&", which would hide {{> name}} and {{& name}} from Mustache.
+	const restoreTags = (html) => html.replace(/\{\{&gt;/g, '{{>').replace(/\{\{&amp;/g, '{{&');
+	const partials = {};
+	Array.from(parsed.content.children).forEach((element) => {
+		if (element.tagName === 'TEMPLATE' && element.dataset.wcposPartial) {
+			partials[element.dataset.wcposPartial] = restoreTags(element.innerHTML);
+			element.remove();
+		}
+	});
+	return { source: restoreTags(parsed.innerHTML), partials };
+}
+
 const receiptData = replaceAssetUrls(payload.receipt_data);
-const bodyHtml = payload.engine === 'thermal'
+const isDisplay = payload.type === 'display';
+const display = isDisplay ? extractPartials(payload.template_content) : null;
+const bodyHtml = !isDisplay && payload.engine === 'thermal'
 	? renderThermalPreview(payload.template_content, receiptData)
-	: renderLogiclessPreview(payload.template_content, { t: true, ...receiptData });
+	: renderLogiclessPreview(display?.source ?? payload.template_content, { t: true, ...receiptData }, display?.partials);
 
 const paper = document.getElementById('wcpos-preview-paper');
 const capture = document.getElementById('capture');
-const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
-const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
-// Capture high-resolution source images and let the gallery cards downscale them.
-// A4 templates use their real CSS paper width; Playwright's device scale factor
-// doubles the stored pixels; the screenshots are converted to lossless WebP below.
-const initialCaptureWidth = payload.engine === 'thermal' ? nativeWidth : ${a4PreviewWidth};
-const scale = payload.engine === 'thermal' ? 1 : initialCaptureWidth / nativeWidth;
-capture.style.width = initialCaptureWidth + 'px';
-paper.style.width = nativeWidth + 'px';
-paper.style.transform = 'scale(' + scale + ')';
-paper.innerHTML = bodyHtml;
+if (isDisplay) {
+	paper.innerHTML = bodyHtml;
+	paper.querySelectorAll('section[data-wcpos-state]').forEach((section) => {
+		if (section.dataset.wcposState !== (payload.preview_state ?? 'cart')) section.remove();
+	});
+	capture.style.width = window.innerWidth + 'px';
+	capture.style.height = window.innerHeight + 'px';
+	paper.style.width = window.innerWidth + 'px';
+	paper.style.transform = 'none';
+} else {
+	const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
+	const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
+	// Capture high-resolution source images and let the gallery cards downscale them.
+	// A4 templates use their real CSS paper width; Playwright's device scale factor
+	// doubles the stored pixels; the screenshots are converted to lossless WebP below.
+	const initialCaptureWidth = payload.engine === 'thermal' ? nativeWidth : ${a4PreviewWidth};
+	const scale = payload.engine === 'thermal' ? 1 : initialCaptureWidth / nativeWidth;
+	capture.style.width = initialCaptureWidth + 'px';
+	paper.style.width = nativeWidth + 'px';
+	paper.style.transform = 'scale(' + scale + ')';
+	paper.innerHTML = bodyHtml;
+}
 
 await Promise.all(Array.from(document.images).map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
 	img.addEventListener('load', resolve, { once: true });
@@ -111,14 +147,14 @@ await Promise.all(Array.from(document.images).map((img) => img.complete ? Promis
 await document.fonts.ready;
 await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-if (payload.engine === 'thermal') {
+if (!isDisplay && payload.engine === 'thermal') {
 	const measuredWidth = Math.ceil(Math.max(paper.scrollWidth, paper.getBoundingClientRect().width));
 	capture.style.width = measuredWidth + 'px';
 	paper.style.width = measuredWidth + 'px';
 	await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
-capture.style.height = Math.ceil(paper.getBoundingClientRect().height) + 'px';
+if (!isDisplay) capture.style.height = Math.ceil(paper.getBoundingClientRect().height) + 'px';
 window.__WCPOS_PREVIEW_READY__ = true;
 `
 );
@@ -138,16 +174,34 @@ if (!baseUrl) throw new Error('Unable to start Vite preview server');
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1800, height: 2400 }, deviceScaleFactor: screenshotScale });
+// Templates animate state changes and idle ornaments behind prefers-reduced-motion; a capture
+// wants the settled design, not a frame of the entrance.
+await page.emulateMedia({ reducedMotion: 'reduce' });
 
 try {
 	for (const payload of payloads) {
-		await page.goto(`${baseUrl}?key=${encodeURIComponent(payload.key)}`, { waitUntil: 'networkidle' });
+		const viewport = page.viewportSize();
+		if (payload.type === 'display') {
+			await page.setViewportSize(displayViewports[payload.key] ?? displayViewports.default);
+		}
+		await page.goto(`${baseUrl}?key=${encodeURIComponent(payload.key)}`, {
+			waitUntil: 'networkidle',
+		});
 		await page.waitForFunction(() => window.__WCPOS_PREVIEW_READY__ === true);
 		const capture = page.locator('#capture');
 		const pngPath = path.join(tempDir, `${payload.key}.png`);
 		const webpPath = path.join(outputDir, `${payload.key}.webp`);
 		await capture.screenshot({ path: pngPath });
-		execFileSync('cwebp', ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]);
+		if (payload.type === 'display') await page.setViewportSize(viewport);
+		// Receipts are text on paper and stay lossless so the type is crisp. Display captures are
+		// full-bleed art shown at card size, where lossless costs half a megabyte each (a photograph
+		// nearly two) and lossy at this quality is indistinguishable.
+		execFileSync(
+			'cwebp',
+			payload.type === 'display'
+				? ['-quiet', '-q', '90', '-m', '6', pngPath, '-o', webpPath]
+				: ['-quiet', '-lossless', '-z', '9', pngPath, '-o', webpPath]
+		);
 		console.log(`generated ${payload.key}.webp`);
 	}
 } finally {

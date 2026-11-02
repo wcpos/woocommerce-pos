@@ -34,6 +34,56 @@ use WCPOS\WooCommercePOS\Templates;
  */
 class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * Diagnostic preview HTML preserves rasterized barcode images.
+	 */
+	public function test_preview_html_keeps_barcode_images(): void {
+		// Arrange.
+		$post_id = $this->create_template( 'Barcode preview' );
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => '<div><barcode type="code128" height="40">{{order.number}}</barcode></div>',
+			)
+		);
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $post_id . '/preview' );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertStringContainsString( '<img', $data['preview_html'] );
+		$this->assertStringContainsString( 'data:image/png', $data['preview_html'] );
+	}
+
+	/** Both API lanes preview reports without selecting an order. */
+	public function test_report_previews_render_grouped_thermal_and_partial_documents(): void {
+		// wcpos/v2 inherits the v1 controller; the current lane is the one the till uses.
+		foreach ( array( 'report-default', 'thermal-report-80mm', 'plugin-core' ) as $key ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $key . '/preview' );
+			$request->set_param( 'type', 'report' );
+			$request->set_param( 'order_id', 999999 );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data();
+			$html = 'thermal-report-80mm' === $key
+				? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] )
+				: $data['preview_html'];
+			$this->assertStringContainsString( 'Sales report', $html );
+			$this->assertStringContainsString( 'Card payments', $html );
+			$request->set_param( 'report', 'cash-movements' );
+			$partial_response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $partial_response->get_status() );
+			$partial = $partial_response->get_data();
+			$html = 'thermal-report-80mm' === $key
+				? ( new \Mustache\Engine() )->render( $partial['template_content'], $partial['receipt_data'] )
+				: $partial['preview_html'];
+			$this->assertStringContainsString( 'Offline movements are not included.', $html );
+		}
+	}
+
+	/**
 	 * The Templates controller instance.
 	 *
 	 * @var Templates_Controller
@@ -55,8 +105,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		parent::tearDown();
 		delete_option( 'wcpos_template_order_receipt' );
 		delete_option( 'wcpos_template_order_report' );
+		delete_option( 'wcpos_template_order_display' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
+		delete_option( 'wcpos_active_template_display' );
+		delete_option( 'wcpos_active_template_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_display' );
 		remove_role( 'pos_cashier_test' );
 	}
 
@@ -115,7 +169,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/templates', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\w-]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/active', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/templates/gallery', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/templates/gallery', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/batch', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/install', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\d]+)', $routes );
@@ -286,6 +340,41 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test display templates are isolated from receipt listings.
+	 */
+	public function test_get_items_filters_display_templates_by_type(): void {
+		$post_id = $this->create_template( 'Customer Display', 'display' );
+
+		$display_request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$display_request->set_param( 'type', 'display' );
+		$display_response = $this->server->dispatch( $display_request );
+
+		$receipt_request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$receipt_request->set_param( 'type', 'receipt' );
+		$receipt_response = $this->server->dispatch( $receipt_request );
+
+		$this->assertContains( $post_id, array_column( $display_response->get_data(), 'id' ) );
+		$this->assertNotContains( $post_id, array_column( $receipt_response->get_data(), 'id' ) );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test a display template can be retrieved by ID.
+	 */
+	public function test_get_item_returns_display_template(): void {
+		$post_id = $this->create_template( 'Customer Display', 'display' );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $post_id );
+		$request->set_param( 'type', 'display' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'display', $response->get_data()['type'] );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
 	 * Test get_items with invalid type filter returns error.
 	 */
 	public function test_get_items_with_invalid_type(): void {
@@ -360,9 +449,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test virtual template paths cannot escape through a symlink.
 	 */
 	public function test_get_virtual_template_path_with_symlink_outside_templates_returns_null(): void {
-		$symlink_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/report.php';
+		// Every type now ships a core file, so the guard is exercised through the theme
+		// override directory, which the resolver trusts by the same realpath rule.
+		$theme_dir    = get_stylesheet_directory() . '/woocommerce-pos/';
+		$symlink_path = $theme_dir . 'report.html';
 
-		if ( file_exists( $symlink_path ) || is_link( $symlink_path ) ) {
+		if ( ! wp_mkdir_p( $theme_dir ) || file_exists( $symlink_path ) || is_link( $symlink_path ) ) {
 			$this->markTestSkipped( 'Unable to create an isolated symlink fixture.' );
 		}
 
@@ -377,7 +469,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 				$this->markTestSkipped( 'Symlinks are not available in this test environment.' );
 			}
 
-			$path = Templates::get_virtual_template_path( Templates::TEMPLATE_PLUGIN_CORE, 'report' );
+			$path = Templates::get_virtual_template_path( Templates::TEMPLATE_THEME, 'report' );
 
 			$this->assertNull( $path );
 		} finally {
@@ -463,7 +555,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_type_enum_values(): void {
 		$params = $this->endpoint->get_collection_params();
 
-		$this->assertEquals( array( 'receipt', 'report' ), $params['type']['enum'] );
+		$this->assertEquals( Templates::SUPPORTED_TYPES, $params['type']['enum'] );
 	}
 
 	/**
@@ -517,6 +609,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function create_cashier_user(): int {
 		// Ensure a disposable 'pos_cashier_test' role exists with only access cap.
+		delete_option( 'wcpos_active_template_display' );
+		delete_option( 'wcpos_active_template_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_display' );
 		remove_role( 'pos_cashier_test' );
 		add_role(
 			'pos_cashier_test',
@@ -796,6 +891,360 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	// ---- Task 7: Batch tests ----
 
+	// The display-activation cases below dispatch on wcpos/v2, the lane the app calls; V2 inherits
+	// this controller unchanged (tests/lane-coverage/README.md).
+	/**
+	 * Batch activation accepts enabled display IDs and is a non-update operation.
+	 */
+	public function test_batch_active_display_sets_option_and_survives_failed_updates(): void {
+		$post_id = $this->create_template( 'Active Display', 'display' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+		$request->set_body_params(
+			array(
+				'type' => 'display',
+				'active' => $post_id,
+				'update' => array( array( 'id' => 999999 ) ),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $post_id, get_option( 'wcpos_active_template_display' ) );
+		$this->assertSame( $post_id, $response->get_data()['active'] );
+		$this->assertArrayHasKey( 'error', $response->get_data()['update'][0] );
+	}
+
+	/**
+	 * Disabled, unknown and wrong-type active IDs leave the saved choice alone.
+	 */
+	public function test_batch_active_invalid_display_returns_400_without_changing_option(): void {
+		$active_id = $this->create_template( 'Active Display', 'display' );
+		$draft_id  = $this->create_template( 'Disabled Display', 'display', 'draft' );
+		$receipt_id = $this->create_template( 'Receipt' );
+		Templates::set_active_template_id( $active_id, 'display' );
+
+		foreach ( array( (string) $draft_id, 'unknown-template', (string) $receipt_id ) as $invalid_id ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+			$request->set_body_params(
+				array(
+					'type' => 'display',
+					'active' => $invalid_id,
+				)
+			);
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 400, $response->get_status() );
+			$this->assertSame( 'wcpos_template_invalid_active', $response->get_data()['code'] );
+			$this->assertSame( $active_id, get_option( 'wcpos_active_template_display' ) );
+		}
+	}
+
+	/**
+	 * Virtual activation validates the enabled state after batch toggles.
+	 */
+	public function test_batch_active_virtual_template_requires_enabled_state(): void {
+		// Projected state: enabling and activating in one request works even when the
+		// template is disabled going in.
+		Templates::set_virtual_template_disabled( 'plugin-core', true );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+		$request->set_body_params(
+			array(
+				'active' => 'plugin-core',
+				'enable_virtual' => array( 'plugin-core' ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'plugin-core', $response->get_data()['active'] );
+		$this->assertSame( 'plugin-core', get_option( 'wcpos_active_template_receipt' ) );
+
+		// Disabling and activating the same template is rejected before anything is written:
+		// the template stays enabled and the option is untouched.
+		$request->set_body_params(
+			array(
+				'active' => 'plugin-core',
+				'disable_virtual' => array( 'plugin-core' ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'wcpos_template_invalid_active', $response->get_data()['code'] );
+		$this->assertNotContains( 'plugin-core', Templates::get_disabled_virtual_templates( 'receipt' ) );
+		$this->assertSame( 'plugin-core', get_option( 'wcpos_active_template_receipt' ) );
+
+		Templates::set_virtual_template_disabled( 'plugin-core', true );
+		$request->set_body_params( array( 'active' => 'plugin-core' ) );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'plugin-core', get_option( 'wcpos_active_template_receipt' ) );
+	}
+
+	/**
+	 * Ordering and virtual toggles echo the resolved display selection.
+	 */
+	public function test_batch_non_update_operations_echo_active_display(): void {
+		$post_id = $this->create_template( 'Display', 'display' );
+		foreach ( array( 'order', 'disable_virtual', 'enable_virtual' ) as $operation ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+			$request->set_body_params(
+				array(
+					'type' => 'display',
+					$operation => array(),
+				)
+			);
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( $post_id, $response->get_data()['active'] );
+		}
+	}
+
+	/**
+	 * Unfiltered and filtered display lists mark exactly the selected item active.
+	 */
+	public function test_get_items_display_marks_exactly_one_active_template(): void {
+		$this->create_template( 'Display One', 'display' );
+		$active_id = $this->create_template( 'Display Two', 'display' );
+		Templates::set_active_template_id( $active_id, 'display' );
+
+		foreach ( array( '', 'Display' ) as $search ) {
+			$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+			$request->set_query_params(
+				array(
+					'type' => 'display',
+					'search' => $search,
+				)
+			);
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$active_count = 0;
+			foreach ( $response->get_data() as $item ) {
+				$this->assertSame( (string) $active_id === (string) $item['id'], $item['is_active'] );
+				$active_count += $item['is_active'] ? 1 : 0;
+			}
+			$this->assertSame( 1, $active_count );
+		}
+	}
+
+	/**
+	 * A store without an override shows the global Live display, not the first enabled one.
+	 */
+	public function test_get_items_store_scoped_display_marks_global_live_active(): void {
+		$first  = $this->create_template( 'Display A', 'display' );
+		$second = $this->create_template( 'Display B', 'display' );
+		Templates::save_template_order( array( $first, $second ), 'display' );
+		Templates::set_active_template_id( $second, 'display' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $second ]['is_active'] );
+		$this->assertFalse( $items[ $first ]['is_active'] );
+	}
+
+	/**
+	 * A store's enabled choice takes precedence over the global Live display.
+	 */
+	public function test_get_items_store_scoped_display_marks_the_stores_own_choice_active(): void {
+		$first  = $this->create_template( 'Display A', 'display' );
+		$second = $this->create_template( 'Display B', 'display' );
+		Templates::save_template_order( array( $first, $second ), 'display' );
+		Templates::set_active_template_id( $second, 'display' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $store_id, '_wcpos_active_display_templates', wp_json_encode( array( $first ) ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $first ]['is_active'] );
+		$this->assertFalse( isset( $items[ $second ] ) );
+	}
+
+	/**
+	 * An unavailable store choice falls back to global Live, not the first enabled display.
+	 */
+	public function test_get_items_store_scoped_display_with_only_disabled_overrides_marks_global_live_active(): void {
+		$first    = $this->create_template( 'Display A', 'display' );
+		$second   = $this->create_template( 'Display B', 'display' );
+		$disabled = $this->create_template( 'Display C', 'display', 'draft' );
+		Templates::save_template_order( array( $first, $second ), 'display' );
+		Templates::set_active_template_id( $second, 'display' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $store_id, '_wcpos_active_display_templates', wp_json_encode( array( $disabled ) ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $second ]['is_active'] );
+		$this->assertFalse( $items[ $first ]['is_active'] );
+		$this->assertFalse( isset( $items[ $disabled ] ) );
+	}
+
+	/**
+	 * Store-scoped receipts still select the first enabled template rather than Live.
+	 */
+	public function test_get_items_store_scoped_receipt_still_marks_first_enabled_active(): void {
+		$first  = $this->create_template( 'Receipt A' );
+		$second = $this->create_template( 'Receipt B' );
+		Templates::save_template_order( array( $first, $second ), 'receipt' );
+		Templates::set_active_template_id( $second, 'receipt' );
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'receipt' );
+		$request->set_param( 'store_id', $store_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = array_column( $response->get_data(), null, 'id' );
+		$this->assertTrue( $items[ $first ]['is_active'] );
+		$this->assertFalse( $items[ $second ]['is_active'] );
+	}
+
+	/**
+	 * "First enabled" means oldest created, whatever the post dates say: two
+	 * templates saved in the same second tie on post_date, and the fallback
+	 * that becomes Live must not depend on which one MySQL returns first.
+	 */
+	public function test_get_items_display_fallback_is_the_oldest_template_regardless_of_post_date(): void {
+		// Arrange: the older template (lower id) carries the EARLIER date, so
+		// post_date DESC — get_posts()'s default — would put the newer one first.
+		delete_option( 'wcpos_active_template_display' );
+		$first  = $this->create_template( 'First', 'display' );
+		$second = $this->create_template( 'Second', 'display' );
+		wp_update_post(
+			array(
+				'ID'            => $first,
+				'post_date'     => '2026-01-01 10:00:00',
+				'post_date_gmt' => '2026-01-01 10:00:00',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'            => $second,
+				'post_date'     => '2026-01-01 11:00:00',
+				'post_date_gmt' => '2026-01-01 11:00:00',
+			)
+		);
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $first, (int) get_option( 'wcpos_active_template_display' ) );
+		$ids = array_map(
+			static function ( $item ) {
+				return $item['id'];
+			},
+			array_values(
+				array_filter(
+					$response->get_data(),
+					static function ( $item ) use ( $first, $second ) {
+						return \in_array( (int) $item['id'], array( $first, $second ), true );
+					}
+				)
+			)
+		);
+		$this->assertSame( array( $first, $second ), array_map( 'intval', $ids ) );
+	}
+
+	/**
+	 * The admin display list pins the first-enabled fallback so the Live radio stays put.
+	 */
+	public function test_get_items_display_pins_the_fallback_as_live(): void {
+		delete_option( 'wcpos_active_template_display' );
+		$post_id = $this->create_template( 'First', 'display' );
+		$this->create_template( 'Second', 'display' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates' );
+		$request->set_param( 'type', 'display' );
+		$this->server->dispatch( $request );
+
+		$this->assertSame( $post_id, (int) get_option( 'wcpos_active_template_display' ) );
+	}
+
+	/**
+	 * A display batch cannot make a receipt id live by publishing it in the same request,
+	 * and the last status for an id in the update list is the one the projection uses.
+	 */
+	public function test_batch_active_projection_respects_type_and_update_order(): void {
+		$receipt_id = $this->create_template( 'Receipt', 'receipt' );
+		$display_id = $this->create_template( 'Display', 'display', 'draft' );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+		$request->set_body_params(
+			array(
+				'type'   => 'display',
+				'active' => $receipt_id,
+				'update' => array(
+					array(
+						'id' => $receipt_id,
+						'status' => 'publish',
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertFalse( get_option( 'wcpos_active_template_display' ) );
+
+		$request->set_body_params(
+			array(
+				'type'   => 'display',
+				'active' => $display_id,
+				'update' => array(
+					array(
+						'id' => $display_id,
+						'status' => 'draft',
+					),
+					array(
+						'id' => $display_id,
+						'status' => 'publish',
+					),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $display_id, (int) get_option( 'wcpos_active_template_display' ) );
+	}
+
 	/**
 	 * Test batch update multiple templates.
 	 */
@@ -884,6 +1333,26 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test display batch ordering uses the display-specific option.
+	 */
+	public function test_batch_reorder_saves_display_order(): void {
+		$post_id = $this->create_template( 'Display Order', 'display' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/batch' );
+		$request->set_body_params(
+			array(
+				'type'  => 'display',
+				'order' => array( $post_id ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( array( $post_id ), get_option( 'wcpos_template_order_display' ) );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
 	 * Test batch toggle virtual template disabled state.
 	 */
 	public function test_batch_toggle_virtual_template(): void {
@@ -965,6 +1434,108 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( is_numeric( $data['id'] ) );
 
 		wp_delete_post( $data['id'], true );
+	}
+
+	/** Closure previews ignore order selectors, including invalid and non-POS orders. */
+	public function test_preview_closure_ignores_order_and_returns_sample_data(): void {
+		$non_pos = OrderHelper::create_order();
+		$pos = OrderHelper::create_order();
+		$pos->set_created_via( 'woocommerce-pos' );
+		$pos->save();
+		foreach ( array( 'logicless', 'thermal' ) as $engine ) {
+			$id = $this->create_template( 'Closure preview', 'closure' );
+			update_post_meta( $id, '_template_engine', $engine );
+			foreach ( array( 'latest', 999999999, $non_pos->get_id(), $pos->get_id() ) as $order_id ) {
+				$request = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $id . '/preview' );
+				$request->set_param( 'order_id', $order_id );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$this->assertSame( 0, $data['order_id'] );
+				$this->assertSame( $engine, $data['engine'] );
+				$this->assertSame( 'closure', $data['receipt_data']['fiscal']['document_type'] );
+				foreach ( array( 'lines', 'totals', 'payments', 'customer', 'tax_summary' ) as $section ) {
+					$this->assertArrayNotHasKey( $section, $data['receipt_data'] );
+				}
+				$tree = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree( 'closure' );
+				$this->assertArrayHasKey( 'closure', $tree );
+				foreach ( array( 'lines', 'totals', 'payments', 'customer', 'tax_summary', 'order.created' ) as $section ) {
+					$this->assertArrayNotHasKey( $section, $tree );
+				}
+				$this->assertSame( array( 'currency' ), array_keys( $tree['order']['fields'] ) );
+				$this->assertArrayHasKey( 'store_id', $tree['register']['fields'] );
+				foreach ( array( 'number', 'printed_number', 'breakdowns.transaction_count', 'breakdowns.refund_count', 'unsynced_count', 'print_count' ) as $field ) {
+					$this->assertSame( 'number', $tree['closure']['fields'][ $field ]['type'] );
+				}
+				$this->assertSame( 'string', $tree['closure']['fields']['register_id']['type'] );
+				foreach ( array( 'counted.cash', 'counted.card', 'expected.cash', 'expected.card', 'variance.cash', 'variance.card', 'breakdowns.opening_float.expected', 'breakdowns.opening_float.counted', 'breakdowns.opening_float.variance', 'unsynced_total', 'period_sales_total', 'period_refunds_total', 'perpetual_sales_total', 'perpetual_refunds_total' ) as $field ) {
+					$this->assertSame( 'money', $tree['closure']['fields'][ $field ]['type'] );
+				}
+				foreach ( array( 'number', 'printed_number', 'register_id', 'opened_at_gmt', 'closed_at_gmt', 'counted.cash', 'expected.cash', 'variance.cash', 'breakdowns.payment_methods', 'breakdowns.tax_rates', 'breakdowns.movements', 'unsynced_count', 'perpetual_sales_total', 'software_version', 'printed_at_gmt' ) as $field ) {
+					$this->assertArrayHasKey( $field, $tree['closure']['fields'] );
+				}
+			}
+		}
+	}
+
+	/** Closure defaults render the fixture without an order in both preview lanes. */
+	public function test_closure_defaults_preview_fixture_and_x_report_copy(): void {
+		foreach ( array( 'v1', 'v2' ) as $lane ) {
+			foreach ( array( 'plugin-core', 'closure-default', 'thermal-closure-80mm' ) as $key ) {
+				$request = 'v2' === $lane
+					? $this->wp_rest_get_request( '/wcpos/v2/templates/' . $key . '/preview' )
+					: $this->wp_rest_get_request( '/wcpos/v1/templates/' . $key . '/preview' );
+				$request->set_param( 'type', 'closure' );
+				$request->set_param( 'order_id', 999999999 );
+				$response = $this->server->dispatch( $request );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$this->assertSame( 0, $data['order_id'] );
+				$this->assertNotEmpty( $data['receipt_data']['store']['name'] );
+				$this->assertSame(
+					array(
+						array(
+							'name' => 'cash',
+							'expected' => '180.0000',
+							'counted' => '178.0000',
+							'variance' => '-2.0000',
+						),
+						array(
+							'name' => 'card',
+							'expected' => '120.0000',
+							'counted' => '120.0000',
+							'variance' => '0.0000',
+						),
+					),
+					array_map(
+						static function ( $tender ) {
+							return array_intersect_key( $tender, array_flip( array( 'name', 'expected', 'counted', 'variance' ) ) ); },
+						$data['receipt_data']['closure']['tenders']
+					)
+				);
+				$html = $data['preview_html'] ?? ( new \Mustache\Engine() )->render( $data['template_content'], $data['receipt_data'] );
+				foreach ( array( 'Closure 42', 'Main register', 'Alex', 'Opening float', 'Short', 'Paid out', 'Petty cash', 'Voided', 'VAT 20%', 'WCPOS' ) as $text ) {
+					$this->assertStringContainsString( $text, $html );
+				}
+				if ( 'thermal-closure-80mm' !== $key ) {
+					$this->assertStringContainsString( 'Exact', $html );
+				}
+				$this->assertSame( 'Cash', $data['receipt_data']['closure']['tenders'][0]['label'] );
+				$this->assertNotEmpty( $data['receipt_data']['closure']['tenders'][0]['counted_display'] );
+				$this->assertNotEmpty( $data['receipt_data']['closure']['opened_at']['datetime'] );
+				$this->assertStringNotContainsString( '178.0000', $html );
+				$copy = $data['receipt_data'];
+				$copy['fiscal']['is_x_report'] = true;
+				$copy['fiscal']['is_reprint'] = true;
+				$copy['fiscal']['reprint_count'] = 2;
+				$copy['closure']['corrections'] = array( array( 'reason' => 'CORRECTION MUST NOT PRINT' ) );
+				$html = ( new \Mustache\Engine() )->render( $data['template_content'], $copy );
+				$this->assertStringContainsString( 'X-report', $html );
+				$this->assertStringContainsString( 'COPY 2', $html );
+				$this->assertStringNotContainsString( 'Closure 42', $html );
+				$this->assertStringNotContainsString( 'CORRECTION MUST NOT PRINT', $html );
+			}
+		}
 	}
 
 	// ---- Task 9: Preview tests ----
@@ -1150,6 +1721,83 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Display gallery listings preserve the absence of a receipt preview profile.
+	 */
+	public function test_gallery_display_templates_have_null_preview_profiles(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
+		$request->set_param( 'type', 'display' );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$templates = $response->get_data();
+		// Gallery order: screen-fit first (Ledger, then the screen-specific pair), then general, seasonal, and promotion.
+		$expected = array(
+			'display-ledger'            => 'general',
+			'display-pocket'            => 'general',
+			'display-marquee'           => 'general',
+			'display-carousel'          => 'general',
+			'display-specials'          => 'general',
+			'display-follow'            => 'general',
+			'display-seasons-greetings' => 'seasonal',
+			'display-lunar-new-year'    => 'seasonal',
+			'display-eid'               => 'seasonal',
+			'display-diwali'            => 'seasonal',
+			'display-valentines'        => 'seasonal',
+			'display-mothers-day'       => 'seasonal',
+			'display-fathers-day'       => 'seasonal',
+			'display-easter'            => 'seasonal',
+			'display-halloween'         => 'seasonal',
+			'display-thanksgiving'      => 'seasonal',
+			'display-hanukkah'          => 'seasonal',
+			'display-new-year'          => 'seasonal',
+			'display-nowruz'            => 'seasonal',
+			'display-sale'              => 'promotion',
+			'display-black-friday'      => 'promotion',
+		);
+		$this->assertSame( array_keys( $expected ), array_column( $templates, 'key' ) );
+		$screens = array(
+			'display-pocket' => 'small-screen',
+			'display-marquee' => 'large-screen',
+		);
+		foreach ( $templates as $template ) {
+			$this->assertArrayHasKey( 'screen', $template );
+			$this->assertSame( $screens[ $template['key'] ] ?? 'responsive', $template['screen'] );
+			$this->assertSame( 'display', $template['type'] );
+			$this->assertSame( $expected[ $template['key'] ], $template['category'] );
+			$this->assertArrayHasKey( 'preview_data', $template );
+			$this->assertNull( $template['preview_data'] );
+		}
+	}
+
+	/**
+	 * Gallery and installed display previews accept null profiles, including cache hits.
+	 */
+	public function test_preview_display_templates_with_null_profiles_returns_sample_data(): void {
+		foreach ( array( 'display-pocket', 'display-marquee' ) as $key ) {
+			$post_id = Templates::install_gallery_template( $key );
+			$this->assertIsInt( $post_id );
+
+			try {
+				foreach ( array( $key, $post_id, $post_id ) as $id ) {
+					$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/' . $id . '/preview' );
+					$response = $this->server->dispatch( $request );
+
+					$this->assertSame( 200, $response->get_status() );
+					$data = $response->get_data();
+					$this->assertIsArray( $data['receipt_data'] );
+					$this->assertSame( 'logicless', $data['engine'] );
+				}
+				$template = Templates::get_template( $post_id );
+				$this->assertArrayHasKey( 'preview_data', $template );
+				$this->assertNull( $template['preview_data'] );
+			} finally {
+				wp_delete_post( $post_id, true );
+			}
+		}
+	}
+
+	/**
 	 * Test installed invoice preview keeps the gallery fixture profile.
 	 */
 	public function test_preview_installed_invoice_template_uses_unpaid_fixture_data(): void {
@@ -1189,6 +1837,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'حبوب إسبرسو منزلية', $data['receipt_data']['lines'][0]['name'] );
 	}
 
+	/**
+	 * Previewing a gallery template returns the receipt data envelope.
+	 */
 	public function test_preview_returns_data_for_gallery_template(): void {
 		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
 		if ( empty( $gallery ) ) {
@@ -1232,7 +1883,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * without preview_html, causing "No preview available" in the gallery modal.
 	 */
 	public function test_preview_returns_html_for_logicless_template_with_order(): void {
-		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates( 'receipt' );
 
 		$logicless = null;
 		foreach ( $gallery as $t ) {
@@ -1272,7 +1923,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test preview returns thermal data for thermal gallery template.
 	 */
 	public function test_preview_returns_thermal_data_for_thermal_template(): void {
-		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates( 'receipt' );
 		$thermal = null;
 
 		foreach ( $gallery as $t ) {
@@ -1310,7 +1961,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
 			// Money fields: bare keys carry the numeric value, `<key>_display`
 			// holds the locale-formatted currency string. Mirrors the JS
-			// `formatReceiptData` contract — see Receipt_Data_Schema::format_money_fields().
+			// `formatReceiptData` contract — see Receipt_Money_Formatter::format().
 			$this->assertIsNumeric( $data['receipt_data']['totals']['total_incl'] );
 			$this->assertIsString( $data['receipt_data']['totals']['total_incl_display'] );
 		} finally {
@@ -1322,7 +1973,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test preview returns thermal data with mock data when no orders exist.
 	 */
 	public function test_preview_thermal_with_no_orders_uses_mock_data(): void {
-		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates( 'receipt' );
 		$thermal = null;
 
 		foreach ( $gallery as $t ) {
@@ -1700,7 +2351,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test gallery endpoint returns premade templates.
 	 */
 	public function test_gallery_endpoint_returns_premade_templates(): void {
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -1723,7 +2374,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test gallery includes both RTL templates with direction="rtl".
 	 */
 	public function test_gallery_includes_rtl_templates(): void {
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -1746,7 +2397,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test legacy gallery templates default to direction="ltr".
 	 */
 	public function test_gallery_legacy_templates_default_to_ltr_direction(): void {
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/templates/gallery' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );

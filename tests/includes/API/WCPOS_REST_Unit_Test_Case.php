@@ -152,7 +152,9 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A GET request carrying the header every WCPOS route requires.
+	 * Build a GET request the way a current POS client sends it: the WCPOS marker
+	 * plus the protocol signal the 2.0.0 gate requires (free#1868). Gate tests
+	 * strip the protocol header to model a pre-boundary client.
 	 *
 	 * @param string $path Route path.
 	 *
@@ -161,6 +163,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	public function wp_rest_get_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$request->set_method( 'GET' );
 		$request->set_route( $path );
 
@@ -177,6 +180,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	public function wp_rest_post_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$request->set_method( 'POST' );
 		$request->set_route( $path );
 
@@ -194,6 +198,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	public function wp_rest_patch_request( $path = '' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
+		$request->set_header( 'X-WCPOS-Protocol', '3' );
 		$request->set_method( 'POST' );
 		$request->set_route( $path );
 		$request->set_query_params( array( '_method' => 'PATCH' ) );
@@ -298,7 +303,7 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	 */
 	protected function setup_decimal_quantity_tests(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['decimal_qty'] = true;
 				return $settings;

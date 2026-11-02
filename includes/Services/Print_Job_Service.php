@@ -19,6 +19,7 @@ class Print_Job_Service {
 	const META_FORMAT     = '_wcpos_pj_format';
 	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
+	const META_PRINT_COUNT = '_wcpos_pj_print_count';
 	const META_UNCONFIRMED = '_wcpos_pj_unconfirmed';
 	const META_RETRIED_TO = '_wcpos_pj_retried_to';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
@@ -158,7 +159,8 @@ class Print_Job_Service {
 		if ( ! empty( $args['drawer_connector'] ) ) {
 			update_post_meta( $id, self::META_DRAWER_CONNECTOR, self::normalize_drawer_connector( (string) $args['drawer_connector'] ) );
 		}
-		do_action( 'woocommerce_pos_print_job_created', (int) $id, (string) $args['printer_id'] );
+		do_action( 'wcpos_print_job_created', (int) $id, (string) $args['printer_id'] );
+		do_action_deprecated( 'woocommerce_pos_print_job_created', array( (int) $id, (string) $args['printer_id'] ), '2.0.0', 'wcpos_print_job_created' );
 
 		return (int) $id;
 	}
@@ -232,19 +234,18 @@ class Print_Job_Service {
 	}
 
 	/**
-	 * Load a receipt template by id (numeric stored template or virtual slug).
+	 * Load a template by id (numeric stored template or virtual slug).
 	 *
 	 * Single source of truth for template resolution shared by render_payload(),
 	 * the auto-print trigger, and the manual print-jobs endpoint.
 	 *
 	 * @param string $template_id Template id (numeric) or virtual slug.
+	 * @param string $type        Template type a virtual slug is resolved in.
 	 *
 	 * @return array|null Template array, or null when not found.
 	 */
-	public static function load_template( string $template_id ): ?array {
-		return is_numeric( $template_id )
-			? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
-			: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
+	public static function load_template( string $template_id, string $type = 'receipt' ): ?array {
+		return \WCPOS\WooCommercePOS\Templates::find_template( $template_id, $type );
 	}
 
 	/**
@@ -291,7 +292,20 @@ class Print_Job_Service {
 
 			if ( 'pdf' === $job['pn_kind'] ) {
 				try {
-					return self::in_band( ( new Template_Pdf_Service() )->render( $template, $order ) );
+					$pdf_service = new Template_Pdf_Service();
+					if ( $pdf_service->is_native( $template ) ) {
+						// A native document cannot carry the marking, so it is not counted.
+						return self::in_band( $pdf_service->render( $template, $order ) );
+					}
+					return self::in_band(
+						$this->render_counted(
+							$job,
+							$order,
+							static function ( array $data ) use ( $pdf_service, $template, $order ): string {
+								return $pdf_service->render( $template, $order, $data );
+							}
+						)
+					);
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
 						sprintf( 'Cloud print: PrintNode PDF render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
@@ -303,11 +317,13 @@ class Print_Job_Service {
 
 			if ( 'escpos' === $job['pn_kind'] ) {
 				try {
-					return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control(
-						$template,
+					$drawer = $this->drawer_render_options( $job );
+					return $this->render_counted(
+						$job,
 						$order,
-						'escpos',
-						$this->drawer_render_options( $job )
+						static function ( array $data ) use ( $template, $order, $drawer ): array {
+							return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control( $template, $order, 'escpos', $drawer, $data );
+						}
 					);
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
@@ -345,11 +361,13 @@ class Print_Job_Service {
 			}
 
 			try {
-				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control(
-					$template,
+				$drawer = $this->drawer_render_options( $job );
+				return $this->render_counted(
+					$job,
 					$order,
-					$wire,
-					$this->drawer_render_options( $job )
+					static function ( array $data ) use ( $template, $order, $wire, $drawer ): array {
+						return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render_with_control( $template, $order, $wire, $drawer, $data );
+					}
 				);
 			} catch ( \Throwable $e ) {
 				// Defense in depth: never let a malformed template/payload bubble up
@@ -370,10 +388,17 @@ class Print_Job_Service {
 			}
 
 			try {
-				$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 				$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
 
-				return self::in_band( $adapter->transform( $data ) );
+				return self::in_band(
+					$this->render_counted(
+						$job,
+						$order,
+						static function ( array $data ) use ( $adapter ): string {
+							return $adapter->transform( $data );
+						}
+					)
+				);
 			} catch ( \Throwable $e ) {
 				// A stored job can carry a format the factory no longer supports
 				// (e.g. the removed fixed-layout starprnt placeholder). Fail closed
@@ -390,6 +415,58 @@ class Print_Job_Service {
 		$payload = base64_decode( (string) $job['payload'], true );
 
 		return self::in_band( false === $payload ? '' : $payload );
+	}
+
+	/**
+	 * Render a job under its print count: the count is reserved under the order lock
+	 * for the whole render and committed (on the order and on the job) only when the
+	 * render produced something, so a malformed template consumes nothing. A re-poll
+	 * of the same job re-uses the count it was given.
+	 *
+	 * If another print of the same order holds the lock for longer than the wait, the
+	 * job renders UNMARKED and uncounted rather than being lost: the cloud lanes treat
+	 * an empty body as a terminal failure, and a lost receipt is worse than one
+	 * missing from the audit count. Logged, so it is visible.
+	 *
+	 * @param array     $job    Job being rendered.
+	 * @param \WC_Order $order  Order being printed.
+	 * @param callable  $render function ( array $marked_data ): string|array — the branch's render.
+	 *
+	 * @return mixed The render result.
+	 */
+	private function render_counted( array $job, \WC_Order $order, callable $render ) {
+		$counter = new Receipt_Print_Counter();
+		$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$is_empty = static function ( $result ): bool {
+			return is_array( $result ) ? '' === (string) ( $result['body'] ?? '' ) : '' === (string) $result;
+		};
+		$count = (int) get_post_meta( (int) $job['id'], self::META_PRINT_COUNT, true );
+		if ( $count > 0 ) {
+			return $render( $counter->mark( $data, $count, $order ) );
+		}
+		try {
+			$reserved = 0;
+			$result   = $counter->count_after(
+				$order,
+				static function ( int $count ) use ( &$reserved, $order, $render, $counter, $data ) {
+					$reserved = $count;
+					return $render( $counter->mark( $data, $count, $order ) );
+				},
+				$is_empty
+			);
+			// The order's count is saved first (inside count_after); the job remembers
+			// its number only once that save is done, so a failed save cannot leave a
+			// job holding a number the order never took.
+			if ( ! $is_empty( $result ) ) {
+				update_post_meta( (int) $job['id'], self::META_PRINT_COUNT, $reserved );
+			}
+			return $result;
+		} catch ( Print_Counter_Busy_Exception $e ) {
+			\WCPOS\WooCommercePOS\Logger::log(
+				sprintf( 'Cloud print: print counter busy for order %d (job %d); printed unmarked and uncounted.', $order->get_id(), (int) $job['id'] )
+			);
+			return $render( $data );
+		}
 	}
 
 	/**
@@ -484,9 +561,8 @@ class Print_Job_Service {
 				'post_status'    => 'publish',
 				'posts_per_page' => isset( $filters['limit'] ) ? (int) $filters['limit'] : 50,
 				'paged'          => isset( $filters['page'] ) ? max( 1, (int) $filters['page'] ) : 1,
-				// Oldest-first by default: oldest_pending_gmt() reads row zero to
-				// find a printer's longest-waiting job. The queue *view* asks for
-				// DESC instead, where the newest job is the one being looked for.
+				// Oldest-first by default. The queue view requests DESC instead
+				// to show the newest jobs first.
 				'orderby'        => array(
 					'date' => $order,
 					'ID'   => $order,
@@ -597,37 +673,6 @@ class Print_Job_Service {
 		}
 
 		return $summary;
-	}
-
-	/**
-	 * The creation time (GMT, MySQL format) of a printer's oldest waiting job.
-	 *
-	 * Waiting means pending or claimed: a printer that fetched a job and then
-	 * died leaves it claimed forever, and that backlog must still surface.
-	 *
-	 * @param string $printer_id Printer id.
-	 *
-	 * @return string Empty when the printer has no waiting jobs.
-	 */
-	public function oldest_pending_gmt( string $printer_id ): string {
-		$oldest = '';
-		foreach ( array( self::STATUS_PENDING, self::STATUS_CLAIMED ) as $status ) {
-			$rows = $this->query_rows(
-				array(
-					'printer_id' => $printer_id,
-					'status'     => $status,
-					'limit'      => 1,
-				)
-			);
-			if ( ! empty( $rows ) && '' !== (string) $rows[0]['created_gmt'] ) {
-				$created = (string) $rows[0]['created_gmt'];
-				if ( '' === $oldest || $created < $oldest ) {
-					$oldest = $created;
-				}
-			}
-		}
-
-		return $oldest;
 	}
 
 	/**
@@ -944,22 +989,26 @@ class Print_Job_Service {
 	 * Delete terminal jobs past their retention window.
 	 *
 	 * Runs daily via PURGE_HOOK. Printed/cancelled jobs are kept for
-	 * `woocommerce_pos_print_job_retention_days` (default 7 — long enough
+	 * `wcpos_print_job_retention_days` (default 7 — long enough
 	 * for the duplicate-trigger guard and "did it print?" questions);
-	 * failed jobs for `woocommerce_pos_print_job_failed_retention_days`
+	 * failed jobs for `wcpos_print_job_failed_retention_days`
 	 * (default 30 — they represent unresolved problems). A filter
 	 * returning 0 or less keeps that class of job forever. Waiting jobs
 	 * (pending/claimed) are never purged.
 	 */
 	public function purge_expired(): void {
+		$retention_days = apply_filters( 'wcpos_print_job_retention_days', 7 );
+		$retention_days = apply_filters_deprecated( 'woocommerce_pos_print_job_retention_days', array( $retention_days ), '2.0.0', 'wcpos_print_job_retention_days' );
+		$failed_retention_days = apply_filters( 'wcpos_print_job_failed_retention_days', 30 );
+		$failed_retention_days = apply_filters_deprecated( 'woocommerce_pos_print_job_failed_retention_days', array( $failed_retention_days ), '2.0.0', 'wcpos_print_job_failed_retention_days' );
 		$windows = array(
 			array(
 				'statuses' => array( self::STATUS_PRINTED, self::STATUS_CANCELLED ),
-				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_retention_days', 7 ),
+				'days'     => (int) $retention_days,
 			),
 			array(
 				'statuses' => array( self::STATUS_FAILED ),
-				'days'     => (int) apply_filters( 'woocommerce_pos_print_job_failed_retention_days', 30 ),
+				'days'     => (int) $failed_retention_days,
 			),
 		);
 

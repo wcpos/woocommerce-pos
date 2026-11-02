@@ -30,13 +30,6 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
  */
 class Print_Jobs_Controller extends WP_REST_Controller {
 	/**
-	 * Legacy Epson timeout.
-	 *
-	 * @deprecated Use Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS.
-	 */
-	const EPSON_SDP_PRINT_TIMEOUT_MS = \WCPOS\WooCommercePOS\Services\Providers\Epson_Sdp_Adapter::EPSON_SDP_PRINT_TIMEOUT_MS;
-
-	/**
 	 * Endpoint namespace.
 	 *
 	 * @var string
@@ -79,12 +72,21 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 */
 	public function wcpos_route_classifications(): array {
 		return array(
-			'public'        => array(
+			'public'          => array(
 				"/{$this->namespace}/{$this->rest_base}/relay-verification",
 			),
-			'printer_token' => array(
+			'printer_token'   => array(
 				"/{$this->namespace}/{$this->rest_base}/cloudprnt",
 				"/{$this->namespace}/{$this->rest_base}/epson-sdp",
+			),
+			// The wp-admin settings screen drives the queue, reprint, test print,
+			// relay registration and the PrintNode / Star lookups with cookie auth
+			// and no client protocol claim; unchanged at the 2.0.0 boundary. The
+			// two discovery routes sit at the namespace root, outside the prefix.
+			'protocol_exempt' => array(
+				"/{$this->namespace}/{$this->rest_base}",
+				"/{$this->namespace}/printnode/printers",
+				"/{$this->namespace}/star-online/devices",
 			),
 		);
 	}

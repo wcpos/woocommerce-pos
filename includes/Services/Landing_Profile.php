@@ -13,7 +13,6 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
@@ -139,9 +138,10 @@ class Landing_Profile {
 		 * @param string $profile_url The profile endpoint URL.
 		 */
 		$profile_url = apply_filters(
-			'woocommerce_pos_updates_server_profile_url',
+			'wcpos_updates_server_profile_url',
 			self::UPDATES_SERVER_URL . '/v1/profile'
 		);
+		$profile_url = apply_filters_deprecated( 'woocommerce_pos_updates_server_profile_url', array( $profile_url ), '2.0.0', 'wcpos_updates_server_profile_url' );
 
 		return array(
 			'profile_url' => $profile_url,
@@ -203,7 +203,7 @@ class Landing_Profile {
 	private function get_pos_order_count(): int {
 		global $wpdb;
 
-		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			/* @phpstan-ignore-next-line */
 			$orders_table = method_exists( OrdersTableDataStore::class, 'get_orders_table_name' )
 				? OrdersTableDataStore::get_orders_table_name()

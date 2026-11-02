@@ -59,7 +59,8 @@ final class Request_Lane {
 			 *
 			 * @param string $lane One of the Request_Lane constants.
 			 */
-			self::$lane = (string) apply_filters( 'woocommerce_pos_request_lane', self::detect() );
+			self::$lane = (string) apply_filters( 'wcpos_request_lane', self::detect() );
+			self::$lane = (string) apply_filters_deprecated( 'woocommerce_pos_request_lane', array( self::$lane ), '2.0.0', 'wcpos_request_lane' );
 		}
 		return self::$lane;
 	}
@@ -94,7 +95,7 @@ final class Request_Lane {
 		if ( is_admin() ) {
 			return self::ADMIN;
 		}
-		if ( \function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() ) {
+		if ( \function_exists( 'wcpos_request' ) && wcpos_request() ) {
 			return self::POS;
 		}
 		$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only inspected for a prefix.

@@ -17,6 +17,40 @@ use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer;
  */
 class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 
+	/** Live rendering must carry the persisted fiscal identity through the real builder. */
+	public function test_live_render_uses_frozen_identity(): void {
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		$enrich = static function ( array $snapshot ) {
+			$snapshot['fiscal']['qr_payload'] = 'FROZEN-QR-243';
+			return $snapshot;
+		};
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		try {
+			\WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::sale( $order );
+		} finally {
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		}
+		$number = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->find_sale( $order->get_id() )['payload']['fiscal']['receipt_number'];
+		$template = array(
+			'engine' => 'logicless',
+			'content' => '<p style="font-family: Helvetica">ID:{{fiscal.receipt_number}} {{fiscal.qr_payload}}</p>',
+		);
+		$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+		$this->assertStringStartsWith( '%PDF-', $pdf );
+		preg_match_all( '/stream\r?\n(.*?)\r?\nendstream/s', $pdf, $streams );
+		$output = '';
+		foreach ( $streams[1] as $stream ) {
+			$decoded = @gzuncompress( $stream );
+			$output .= false === $decoded ? $stream : $decoded;
+		}
+		// Pdf_Font_Metrics aliases Helvetica to DejaVu Sans, a Unicode TrueType
+		// face, so Dompdf writes the text as UTF-16BE rather than cp1252.
+		$this->assertStringContainsString( mb_convert_encoding( 'FROZEN-QR-243', 'UTF-16BE', 'UTF-8' ), $output );
+		$this->assertStringContainsString( mb_convert_encoding( 'ID:' . $number, 'UTF-16BE', 'UTF-8' ), $output );
+	}
+
 	/**
 	 * It renders a thermal template for an order into PDF bytes.
 	 */
@@ -193,7 +227,7 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 	 * It returns WP Overnight's native invoice PDF bytes without re-rendering HTML.
 	 */
 	public function test_render_wp_overnight_invoice_uses_native_pdf_bytes(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$native_pdf = "%PDF-1.4\n% native wp overnight invoice\n";
 		$calls      = array();
@@ -228,7 +262,7 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 				}
 			};
 		};
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+		add_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10, 3 );
 
 		try {
 			$order    = OrderHelper::create_order();
@@ -241,8 +275,8 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 			$this->assertSame( 'invoice', $calls[0]['document_type'] );
 			$this->assertSame( $order->get_id(), $calls[0]['order_id'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+			remove_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 		}
 	}
 
@@ -250,7 +284,7 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 	 * It returns WP Overnight's native packing slip PDF bytes without re-rendering HTML.
 	 */
 	public function test_render_wp_overnight_packing_slip_uses_native_pdf_bytes(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$native_pdf = "%PDF-1.4\n% native wp overnight packing slip\n";
 		$calls      = array();
@@ -285,7 +319,7 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 				}
 			};
 		};
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+		add_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10, 3 );
 
 		try {
 			$order    = OrderHelper::create_order();
@@ -298,8 +332,8 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 			$this->assertSame( 'packing-slip', $calls[0]['document_type'] );
 			$this->assertSame( $order->get_id(), $calls[0]['order_id'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+			remove_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 		}
 	}
 
@@ -307,7 +341,7 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 	 * It rejects empty or non-PDF bytes from the WP Overnight native renderer.
 	 */
 	public function test_render_wp_overnight_native_pdf_rejects_invalid_bytes(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$callback = static function () {
 			return new class() {
@@ -319,7 +353,7 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 				}
 			};
 		};
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+		add_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10, 3 );
 
 		try {
 			$order    = OrderHelper::create_order();
@@ -330,8 +364,8 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 
 			( new Template_Pdf_Service() )->render( $template, $order );
 		} finally {
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
-			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+			remove_filter( 'wcpos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 		}
 	}
 

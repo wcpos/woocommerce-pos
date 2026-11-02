@@ -43,7 +43,7 @@ class Test_Received extends WCPOS_REST_Unit_Test_Case {
 		$original_get  = $_GET;
 		$buffer_level = ob_get_level();
 
-		add_filter( 'woocommerce_pos_locate_template', $template_filter, 10, 2 );
+		add_filter( 'wcpos_locate_template', $template_filter, 10, 2 );
 		$_GET['key'] = $order->get_order_key();
 		ob_start();
 
@@ -55,7 +55,7 @@ class Test_Received extends WCPOS_REST_Unit_Test_Case {
 				ob_end_clean();
 			}
 			$_GET = $original_get;
-			remove_filter( 'woocommerce_pos_locate_template', $template_filter, 10 );
+			remove_filter( 'wcpos_locate_template', $template_filter, 10 );
 		}
 	}
 

@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS\Tests;
 
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
@@ -23,11 +24,141 @@ use WP_UnitTestCase;
  */
 class Test_Templates extends WP_UnitTestCase {
 	/**
+	 * Numeric references resolve stored templates without enforcing the requested type.
+	 */
+	public function test_find_template_numeric_reference_returns_stored_template_of_any_type(): void {
+		// Arrange.
+		$id = self::factory()->post->create(
+			array(
+				'post_title'  => 'Display template',
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+			)
+		);
+		wp_set_object_terms( $id, 'display', 'wcpos_template_type' );
+		update_post_meta( $id, '_template_engine', 'logicless' );
+
+		// Act.
+		$template = Templates::find_template( (string) $id, 'receipt' );
+
+		// Assert.
+		$this->assertSame( 'display', $template['type'] );
+	}
+
+	/**
+	 * Virtual references resolve in the requested type.
+	 */
+	public function test_find_template_string_reference_resolves_virtual_template_in_type(): void {
+		// Arrange and act.
+		$template = Templates::find_template( Templates::TEMPLATE_PLUGIN_CORE, 'closure' );
+
+		// Assert.
+		$this->assertStringEndsWith( 'gallery/closure-default.html', $template['file_path'] );
+	}
+
+	/**
+	 * Gallery fallback is available only through the explicit gallery lookup.
+	 */
+	public function test_find_template_or_gallery_falls_back_to_gallery_key(): void {
+		// Arrange and act.
+		$template = Templates::find_template( 'standard-receipt' );
+		$gallery  = Templates::find_template_or_gallery( 'standard-receipt' );
+
+		// Assert.
+		$this->assertNull( $template );
+		$this->assertSame( 'gallery', $gallery['source'] );
+	}
+
+	/**
+	 * A missing numeric reference does not resolve through the gallery.
+	 */
+	public function test_find_template_or_gallery_numeric_reference_never_falls_back(): void {
+		// Arrange and act.
+		$template = Templates::find_template_or_gallery( '999999999' );
+
+		// Assert.
+		$this->assertNull( $template );
+	}
+
+	/** Reports have a usable virtual default and two installable formats. */
+	public function test_report_default_gallery_and_activation(): void {
+		$template = Templates::get_active_template( 'report' );
+		$this->assertTrue( $template['is_virtual'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/report-default.html' ), $template['content'] );
+		$gallery = Templates::get_gallery_templates( 'report' );
+		$this->assertSame( array( 'report-default', 'report-letterhead', 'thermal-report-58mm', 'thermal-report-80mm' ), array_column( $gallery, 'key' ) );
+		foreach ( $gallery as $entry ) {
+			$id = Templates::install_gallery_template( $entry['key'] );
+			$this->assertIsInt( $id );
+			Templates::set_active_template_id( $id, 'report' );
+			$this->assertSame( $id, Templates::get_active_template( 'report' )['id'] );
+		}
+	}
+
+	/** Closure defaults are filesystem templates, never editable posts. */
+	public function test_closure_supported_virtual_default(): void {
+		$this->assertContains( 'closure', Templates::SUPPORTED_TYPES );
+		$template = Templates::get_virtual_template( 'plugin-core', 'closure' );
+		$this->assertTrue( $template['is_virtual'] );
+		$this->assertSame( 'closure', $template['type'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( 'html', $template['language'] );
+		$this->assertSame( file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/closure-default.html' ), $template['content'] );
+		$this->assertSame( array( 'closure-default', 'closure-detailed', 'thermal-closure-58mm', 'thermal-closure-80mm', 'thermal-closure-80mm-rtl', 'thermal-count-slip-80mm' ), array_column( Templates::get_gallery_templates( 'closure' ), 'key' ) );
+		$this->assertStringEndsWith( '/templates/gallery/closure-default.html', $template['file_path'] );
+		$this->assertContains( 'plugin-core', array_column( Templates::detect_filesystem_templates( 'closure' ), 'id' ) );
+		$this->assertFalse( is_numeric( $template['id'] ) );
+	}
+
+	/**
+	 * Display fields extend the unchanged default receipt tree.
+	 */
+	public function test_field_tree_display_adds_ledger_and_payment_groups(): void {
+		$receipt = Receipt_Data_Schema::get_field_tree();
+		$display = Receipt_Data_Schema::get_field_tree( 'display' );
+
+		$this->assertSame( $receipt, Receipt_Data_Schema::get_field_tree( 'receipt' ) );
+		$this->assertArrayNotHasKey( 'ledger', $receipt );
+		$this->assertArrayNotHasKey( 'payment', $receipt );
+		$this->assertSame( 'Ledger', $display['ledger']['label'] );
+		$this->assertSame( 'Payment', $display['payment']['label'] );
+		$this->assertSame( array( 'state', 'message' ), array_keys( $display['payment']['fields'] ) );
+		$ledger = $display['ledger']['fields'];
+		$this->assertSame( 'string', $ledger['status']['type'] );
+		foreach ( array( 'total', 'paid', 'due', 'change' ) as $field ) {
+			$this->assertSame( 'string', $ledger[ $field ]['type'] );
+			$this->assertSame( 'number', $ledger[ $field . '_raw' ]['type'] );
+		}
+		$this->assertArrayNotHasKey( 'payments', $ledger );
+		$this->assertTrue( $display['ledger.payments']['is_array'] );
+		$this->assertSame( 'string', $display['ledger.payments']['fields']['method']['type'] );
+		$payments = $display['ledger.payments']['fields'];
+		$this->assertSame( array( 'id', 'method', 'kind', 'status', 'amount', 'amount_raw', 'tendered', 'tendered_raw', 'change', 'change_raw' ), array_keys( $payments ) );
+		foreach ( $payments as $key => $field ) {
+			$this->assertSame( substr( $key, -4 ) === '_raw' ? 'number' : 'string', $field['type'] );
+			$this->assertNotEmpty( $field['label'] );
+		}
+		$this->assertSame( array( 'url' ), array_keys( $display['assets']['fields'] ) );
+		$this->assertSame( 'string', $display['assets']['fields']['url']['type'] );
+		$this->assertArrayNotHasKey( 'assets', $receipt );
+		unset( $display['ledger'], $display['ledger.payments'], $display['payment'], $display['assets'] );
+		$this->assertSame( $receipt, $display );
+	}
+
+	/**
 	 * Test data directory for mock templates.
 	 *
 	 * @var string
 	 */
 	private $test_templates_dir;
+
+	/**
+	 * Stylesheet directory filter registered for the test theme.
+	 *
+	 * @var callable
+	 */
+	private $stylesheet_directory_filter;
 
 	/**
 	 * Set up test fixtures.
@@ -40,6 +171,11 @@ class Test_Templates extends WP_UnitTestCase {
 		if ( ! file_exists( $this->test_templates_dir ) ) {
 			mkdir( $this->test_templates_dir, 0755, true );
 		}
+
+		$this->stylesheet_directory_filter = function () {
+			return $this->test_templates_dir;
+		};
+		add_filter( 'stylesheet_directory', $this->stylesheet_directory_filter );
 
 		// Clean up any active template options.
 		delete_option( 'wcpos_active_template_receipt' );
@@ -67,8 +203,9 @@ class Test_Templates extends WP_UnitTestCase {
 		// The default-term latch survives between test classes while terms do
 		// not; clearing it lets a later class reseed the terms it relies on.
 		delete_option( Templates::DEFAULT_TERMS_OPTION );
-		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled' );
-		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_document' );
+		remove_all_filters( 'wcpos_wp_overnight_pdf_templates_enabled' );
+		remove_all_filters( 'wcpos_wp_overnight_pdf_document' );
+		remove_filter( 'stylesheet_directory', $this->stylesheet_directory_filter );
 	}
 
 	/**
@@ -252,6 +389,9 @@ class Test_Templates extends WP_UnitTestCase {
 	 * grayscales it), and coloured fills must be near-white 50-tints that use
 	 * negligible toner. Any other chromatic value fails this test and needs a
 	 * deliberate palette decision, not an ad-hoc colour.
+	 *
+	 * Display-type gallery templates are screens, never printed, so they are
+	 * exempt: a customer display carries the brand accent and a dark idle state.
 	 */
 	public function test_gallery_html_templates_use_print_safe_palette(): void {
 		$neutral_ink = array(
@@ -309,7 +449,14 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertNotFalse( $templates );
 		$this->assertNotEmpty( $templates );
 
+		$registry = \WCPOS\WooCommercePOS\Templates\Gallery_Registry::all();
+
 		foreach ( $templates as $template ) {
+			$key = pathinfo( $template, PATHINFO_FILENAME );
+			if ( 'display' === ( $registry[ $key ]['type'] ?? '' ) ) {
+				continue;
+			}
+
 			$content = file_get_contents( $template );
 			$label   = basename( $template );
 
@@ -630,10 +777,82 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test display virtual templates resolve theme HTML files as logicless templates.
+	 */
+	public function test_theme_display_virtual_template_resolves_html_file(): void {
+		$template_dir = $this->test_templates_dir . '/woocommerce-pos';
+		mkdir( $template_dir, 0755, true );
+		file_put_contents( $template_dir . '/display.html', '<main>{{store.name}}</main>' );
+
+		$template = Templates::get_virtual_template( Templates::TEMPLATE_THEME, 'display' );
+
+		$this->assertIsArray( $template );
+		$this->assertSame( '<main>{{store.name}}</main>', $template['content'] );
+		$this->assertSame( 'logicless', $template['engine'] );
+		$this->assertSame( 'html', $template['language'] );
+		$this->assertSame( 'display', $template['type'] );
+	}
+
+	/**
+	 * Test display virtual templates do not resolve legacy PHP files.
+	 */
+	public function test_theme_display_virtual_template_does_not_resolve_php_file(): void {
+		$template_dir = $this->test_templates_dir . '/woocommerce-pos';
+		mkdir( $template_dir, 0755, true );
+		file_put_contents( $template_dir . '/display.php', '<?php echo "legacy"; ?>' );
+
+		$this->assertNull( Templates::get_virtual_template_path( Templates::TEMPLATE_THEME, 'display' ) );
+	}
+
+	/**
+	 * Test receipt virtual templates continue to resolve theme PHP files.
+	 */
+	public function test_theme_receipt_virtual_template_still_resolves_php_file(): void {
+		$template_dir = $this->test_templates_dir . '/woocommerce-pos';
+		mkdir( $template_dir, 0755, true );
+		file_put_contents( $template_dir . '/receipt.php', '<main>Receipt</main>' );
+
+		$template = Templates::get_virtual_template( Templates::TEMPLATE_THEME, 'receipt' );
+
+		$this->assertIsArray( $template );
+		$this->assertSame( 'legacy-php', $template['engine'] );
+		$this->assertStringEndsWith( '/woocommerce-pos/receipt.php', $template['file_path'] );
+	}
+
+	/**
+	 * Test display virtual templates require a corresponding display file.
+	 */
+	public function test_core_display_virtual_template_returns_null_without_file(): void {
+		$this->assertNull( Templates::get_virtual_template( Templates::TEMPLATE_PLUGIN_CORE, 'display' ) );
+	}
+
+	/**
+	 * Test the Pro display virtual template title when a Pro display file is available.
+	 */
+	public function test_pro_display_virtual_template_uses_display_title(): void {
+		$template = Templates::get_virtual_template( Templates::TEMPLATE_PLUGIN_PRO, 'display' );
+		if ( ! $template ) {
+			$this->markTestSkipped( 'No active Pro display template path available.' );
+		}
+
+		$this->assertEquals( 'Pro Display', $template['title'] );
+		$this->assertEquals( '', $template['category'] );
+	}
+
+	/**
+	 * Test display fallback titles never use receipt wording.
+	 */
+	public function test_display_fallback_title_uses_display_wording(): void {
+		$this->assertSame( 'Display Template #42', Templates::get_fallback_template_title( 42, 'display', 'logicless' ) );
+		$this->assertSame( 'Display Template #42', Templates::get_fallback_template_title( 42, 'display', 'thermal', '80mm' ) );
+		$this->assertStringNotContainsString( 'Receipt', Templates::get_fallback_template_title( 42, 'display' ) );
+	}
+
+	/**
 	 * Test WP Overnight templates are not listed when the integration is unavailable.
 	 */
 	public function test_wp_overnight_templates_not_detected_when_integration_unavailable(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_false' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_false' );
 
 		$templates = Templates::detect_filesystem_templates( 'receipt' );
 		$ids       = array_column( $templates, 'id' );
@@ -646,7 +865,7 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test WP Overnight invoice and packing slip templates are listed when the integration is available.
 	 */
 	public function test_wp_overnight_templates_detected_when_integration_available(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$templates = Templates::detect_filesystem_templates( 'receipt' );
 		$by_id     = array_column( $templates, null, 'id' );
@@ -670,9 +889,9 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test the WP Overnight invoice template delegates rendering to the document API.
 	 */
 	public function test_wp_overnight_invoice_template_renders_document_html(): void {
-		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
 		add_filter(
-			'woocommerce_pos_wp_overnight_pdf_document',
+			'wcpos_wp_overnight_pdf_document',
 			static function ( $document, string $document_type, $order ) {
 				$GLOBALS['woocommerce_pos_wcpdf_get_document_calls'][] = array(
 					'document_type' => $document_type,
@@ -946,19 +1165,6 @@ class Test_Templates extends WP_UnitTestCase {
 
 
 	/**
-	 * Test legacy PHP starter templates are no longer registered.
-	 */
-	public function test_legacy_php_starter_templates_are_not_registered(): void {
-		$starters = Templates::get_starter_templates();
-		$keys     = array_keys( $starters );
-
-		$this->assertNotContains( 'gift-receipt', $keys );
-		$this->assertNotContains( 'minimal-receipt', $keys );
-		$this->assertNotContains( 'thermal-receipt', $keys );
-		$this->assertNotContains( 'simple-receipt', $keys );
-	}
-
-	/**
 	 * Test that template category taxonomy exists.
 	 */
 	public function test_template_category_taxonomy_exists(): void {
@@ -966,14 +1172,36 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test the display template type term is registered.
+	 */
+	public function test_display_template_type_registered(): void {
+		new Templates();
+
+		$term = get_term_by( 'slug', 'display', 'wcpos_template_type' );
+
+		$this->assertEquals( 'Display', $term->name );
+		$this->assertEquals( 'Customer-facing display templates', $term->description );
+	}
+
+	/**
 	 * Test that default template categories are registered.
 	 */
 	public function test_default_categories_registered(): void {
+		foreach ( array( 'responsive', 'small-screen', 'large-screen' ) as $slug ) {
+			$term = get_term_by( 'slug', $slug, 'wcpos_template_category' );
+			if ( $term ) {
+				wp_delete_term( $term->term_id, 'wcpos_template_category' );
+			}
+		}
 		// Re-trigger seeding to insert terms within this test's transaction:
 		// construction only seeds when the DEFAULT_TERMS_VERSION latch is below
 		// the current version (Test_Templates_Default_Terms pins that).
 		delete_option( Templates::DEFAULT_TERMS_OPTION );
 		new Templates();
+
+		foreach ( array( 'responsive', 'small-screen', 'large-screen' ) as $slug ) {
+			$this->assertNull( term_exists( $slug, 'wcpos_template_category' ) );
+		}
 
 		$receipt = term_exists( 'receipt', 'wcpos_template_category' );
 		$this->assertNotNull( $receipt );
@@ -995,6 +1223,16 @@ class Test_Templates extends WP_UnitTestCase {
 
 		$bar_ticket = term_exists( 'bar-ticket', 'wcpos_template_category' );
 		$this->assertNotNull( $bar_ticket );
+
+		foreach ( array(
+			'general' => 'General',
+			'seasonal' => 'Seasonal',
+			'promotion' => 'Promotion',
+		) as $slug => $label ) {
+			$term = get_term_by( 'slug', $slug, 'wcpos_template_category' );
+			$this->assertInstanceOf( \WP_Term::class, $term );
+			$this->assertSame( $label, $term->name );
+		}
 	}
 
 	/**
@@ -1034,14 +1272,19 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test every gallery preview_data profile has a matching JSON fixture.
+	 * Test every non-null gallery preview_data profile has a matching JSON fixture.
 	 */
 	public function test_gallery_template_preview_data_profiles_have_fixture_files(): void {
 		$templates = Templates::get_gallery_templates();
 		$this->assertNotEmpty( $templates, 'Expected at least one gallery template.' );
 
 		foreach ( $templates as $template ) {
-			$profile = $template['preview_data'] ?? '';
+			$this->assertArrayHasKey( 'preview_data', $template );
+			$profile = $template['preview_data'];
+			if ( null === $profile ) {
+				continue;
+			}
+			$this->assertIsString( $profile );
 			$this->assertNotEmpty( $profile, $template['key'] . ' should declare preview_data.' );
 			$this->assertFileExists(
 				\WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/preview-data/' . $profile . '.json',
@@ -1160,33 +1403,15 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertEquals( 'Standard Receipt', $post->post_title );
 		$this->assertNotEmpty( $post->post_content );
 
-		wp_delete_post( $post_id, true );
-	}
-
-	/**
-	 * Test install_gallery_template sets metadata.
-	 */
-	public function test_install_gallery_template_sets_metadata(): void {
-		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
-
-		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ) );
-		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
-		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
-
-		wp_delete_post( $post_id, true );
-	}
-
-	/**
-	 * Test install_gallery_template sets taxonomies.
-	 */
-	public function test_install_gallery_template_sets_taxonomies(): void {
-		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ), 'install_gallery_template_sets_metadata' );
+		$this->assertEquals( \WCPOS\WooCommercePOS\Templates\Gallery_Registry::all()['standard-receipt']['version'], (int) get_post_meta( $post_id, '_template_gallery_version', true ), 'install_gallery_template_sets_metadata' );
+		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ), 'install_gallery_template_sets_metadata' );
 
 		$type_terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
-		$this->assertEquals( 'receipt', $type_terms[0]->slug );
+		$this->assertEquals( 'receipt', $type_terms[0]->slug, 'install_gallery_template_sets_taxonomies' );
 
 		$cat_terms = wp_get_post_terms( $post_id, 'wcpos_template_category' );
-		$this->assertEquals( 'receipt', $cat_terms[0]->slug );
+		$this->assertEquals( 'receipt', $cat_terms[0]->slug, 'install_gallery_template_sets_taxonomies' );
 
 		wp_delete_post( $post_id, true );
 	}
@@ -1231,26 +1456,6 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test legacy set_active_template method.
-	 */
-	public function test_legacy_set_active_template_method(): void {
-		$post_id = $this->factory->post->create(
-			array(
-				'post_type'   => 'wcpos_template',
-				'post_status' => 'publish',
-				'post_title'  => 'Test',
-			)
-		);
-		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
-
-		// Use legacy method.
-		$result = Templates::set_active_template( $post_id );
-
-		$this->assertTrue( $result );
-		$this->assertTrue( Templates::is_active_template( $post_id, 'receipt' ) );
-	}
-
-	/**
 	 * Test get_gallery_template_by_key returns a template for a valid key.
 	 */
 	public function test_get_gallery_template_by_key_returns_template(): void {
@@ -1272,7 +1477,7 @@ class Test_Templates extends WP_UnitTestCase {
 	/**
 	 * Test gallery metadata lookup returns registry metadata without file contents.
 	 *
-	 * get_template() resolves preview_data through this lookup, so it must never
+	 * The get_template() method resolves preview_data through this lookup, so it must never
 	 * carry template content — reading content is what made the old path scan the
 	 * whole gallery directory.
 	 */
@@ -1345,7 +1550,7 @@ class Test_Templates extends WP_UnitTestCase {
 	/**
 	 * Test gallery template lookup by key still returns the bundled content.
 	 *
-	 * get_gallery_template_by_key() now reads only the requested key's file; the
+	 * The get_gallery_template_by_key() method now reads only the requested key's file; the
 	 * returned record must stay identical to the matching entry in the full list.
 	 */
 	public function test_get_gallery_template_by_key_matches_full_gallery_listing(): void {
@@ -1557,5 +1762,26 @@ class Test_Templates extends WP_UnitTestCase {
 		// Assert.
 		$this->assertTrue( $result );
 		$this->assertEquals( $raw, get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Store override IDs are strings; absent or malformed overrides are empty.
+	 */
+	public function test_get_store_template_ids_reads_the_override_as_strings(): void {
+		$store_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_store',
+				'post_status' => 'publish',
+			)
+		);
+
+		$this->assertSame( array(), Templates::get_store_template_ids( $store_id, 'display' ) );
+		update_post_meta( $store_id, '_wcpos_active_display_templates', '[3,"virtual-x"]' );
+		$this->assertSame( array( '3', 'virtual-x' ), Templates::get_store_template_ids( $store_id, 'display' ) );
+		update_post_meta( $store_id, '_wcpos_active_display_templates', '[3,[],null,"virtual-x"]' );
+		$this->assertSame( array( '3', 'virtual-x' ), Templates::get_store_template_ids( $store_id, 'display' ) );
+		update_post_meta( $store_id, '_wcpos_active_display_templates', 'malformed JSON' );
+		$this->assertSame( array(), Templates::get_store_template_ids( $store_id, 'display' ) );
+		$this->assertSame( array(), Templates::get_store_template_ids( 0, 'display' ) );
 	}
 }

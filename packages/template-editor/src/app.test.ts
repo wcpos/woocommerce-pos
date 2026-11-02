@@ -1,6 +1,121 @@
+import { act, createElement } from 'react';
+
+import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 
-import { getEditorLayoutStyle, STARTER_SHELLS, getThermalStarterShell } from './app';
+import {
+	App,
+	DISPLAY_STARTER_SHELL,
+	getDefaultDoc,
+	getEditorLayoutStyle,
+	STARTER_SHELLS,
+	getThermalStarterShell,
+} from './app';
+
+import type { EditorConfig } from './types';
+
+const config: EditorConfig = {
+	type: 'display',
+	displayStarter: null,
+	isProActive: true,
+	displayPreviewUrl: 'https://example.test/wcpos-display/',
+	fieldSchema: {},
+	sampleData: {},
+	engine: 'logicless',
+	paperWidth: null,
+	templateId: 123,
+	previewUrl: 'https://example.test/wp-json/wcpos/v2/templates/123/preview',
+	postContent: '',
+	hasPosOrders: false,
+};
+
+describe('display editor', () => {
+	it('uses saved content before the active display starter', () => {
+		expect(
+			getDefaultDoc({
+				...config,
+				postContent: 'Saved',
+				displayStarter: 'Active',
+			})
+		).toBe('Saved');
+	});
+
+	it('uses the active display starter before the shell', () => {
+		expect(getDefaultDoc({ ...config, displayStarter: 'Active' })).toBe('Active');
+	});
+
+	it('falls back to a shell containing all seven display states in order', () => {
+		expect(getDefaultDoc(config)).toBe(DISPLAY_STARTER_SHELL);
+		const container = document.createElement('div');
+		container.innerHTML = getDefaultDoc(config);
+		expect(
+			Array.from(
+				container.querySelectorAll('section'),
+				(section) => section.dataset.wcposState
+			)
+		).toEqual([
+			'idle',
+			'cart.empty',
+			'cart',
+			'payment.started',
+			'payment.approved',
+			'payment.declined',
+			'payment.complete',
+		]);
+		expect(DISPLAY_STARTER_SHELL.split('\n').length).toBeLessThan(60);
+	});
+
+	it.each(['logicless', 'thermal', 'legacy-php'] as const)(
+		'keeps the %s receipt defaults and saved content',
+		(engine) => {
+			const receipt = {
+				...config,
+				type: 'receipt' as const,
+				engine,
+				displayStarter: 'Display',
+			};
+			expect(getDefaultDoc(receipt)).toBe(STARTER_SHELLS[engine]);
+			expect(getDefaultDoc({ ...receipt, postContent: 'Saved' })).toBe('Saved');
+		}
+	);
+
+	it('renders the display preview without receipt controls and ignores receipt metabox events', async () => {
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const root = createRoot(container);
+		try {
+			await act(async () => root.render(createElement(App, { config })));
+			expect(container.querySelector('iframe')?.getAttribute('src')).toBe(
+				'https://example.test/wcpos-display/?preview=cart&template=123'
+			);
+			expect(container.textContent).toContain('Customer display template.');
+			expect(container.textContent).not.toContain('Sample Data');
+			expect(container.textContent).not.toContain('Receipt Printer template');
+			const editorContent = container.querySelector('.cm-content')?.textContent;
+			expect(editorContent).toContain('data-wcpos-state');
+			await act(async () => {
+				window.dispatchEvent(
+					new CustomEvent('wcposEngineChange', {
+						detail: { engine: 'thermal' },
+					})
+				);
+				window.dispatchEvent(
+					new CustomEvent('wcposPaperWidthChange', {
+						detail: { paperWidth: '58mm' },
+					})
+				);
+			});
+			expect(container.querySelector('.cm-content')?.textContent).toBe(editorContent);
+			expect(container.textContent).not.toContain('Receipt Printer template');
+			expect(container.querySelector('iframe')?.getAttribute('src')).toContain(
+				'/wcpos-display/'
+			);
+		} finally {
+			await act(async () => root.unmount());
+			container.remove();
+		}
+	});
+});
 
 describe('template editor layout', () => {
 	it('gives the editor row a definite bounded height so side panels scroll internally', () => {
@@ -62,8 +177,87 @@ describe('starter shells', () => {
 		expect(shell).toContain("$i18n['total']");
 		expect(shell).toContain("$i18n['thank_you_purchase']");
 		// Includes the print hook so the receipt actually prints.
-		expect(shell).toContain("do_action( 'woocommerce_pos_receipt_head' )");
+		expect(shell).toContain("do_action( 'wcpos_receipt_head' )");
 		// Does not call WC_Order methods directly.
 		expect(shell).not.toContain('$order->');
 	});
+});
+
+describe('report editor', () => {
+	it.each(['logicless', 'thermal'] as const)(
+		'uses the bootstrapped %s report starter',
+		(engine) => {
+			const report: EditorConfig = {
+				...config,
+				type: 'report',
+				engine,
+				reportStarters: {
+					logicless: '<h1>{{report.title}}</h1>',
+					thermal: '<receipt>{{report.title}}</receipt>',
+				},
+			};
+			expect(getDefaultDoc(report)).toBe(report.reportStarters?.[engine]);
+			expect(getDefaultDoc({ ...report, postContent: 'Saved report' })).toBe('Saved report');
+		}
+	);
+});
+
+describe('closure editor', () => {
+	it.each(['logicless', 'thermal'] as const)(
+		'uses the bootstrapped %s closure starter',
+		(engine) => {
+			const closure: EditorConfig = {
+				...config,
+				type: 'closure',
+				engine,
+				closureStarters: {
+					logicless: '<h1>{{closure.number}}</h1>',
+					thermal: '<receipt paper-width="48">{{closure.number}}</receipt>',
+				},
+			};
+			expect(getDefaultDoc(closure)).toBe(closure.closureStarters?.[engine]);
+			expect(getDefaultDoc({ ...closure, postContent: 'Saved closure' })).toBe(
+				'Saved closure'
+			);
+			if (engine === 'thermal') {
+				expect(getDefaultDoc({ ...closure, paperWidth: '58mm' })).toBe(
+					'<receipt paper-width="32">{{closure.number}}</receipt>'
+				);
+			}
+		}
+	);
+});
+
+describe('order preview toggle', () => {
+	it.each([true, false])(
+		'hides closure controls and retains receipt controls with orders=%s',
+		async (hasPosOrders) => {
+			const container = document.createElement('div');
+			document.body.appendChild(container);
+			const root = createRoot(container);
+			try {
+				for (const type of ['closure', 'receipt'] as const) {
+					await act(async () =>
+						root.render(
+							createElement(App, {
+								key: type,
+								config: {
+									...config,
+									type,
+									hasPosOrders,
+									postContent: '<p>Preview</p>',
+								},
+							})
+						)
+					);
+					expect(container.querySelectorAll('[role="radio"]')).toHaveLength(
+						type === 'closure' ? 0 : 2
+					);
+				}
+			} finally {
+				await act(async () => root.unmount());
+				container.remove();
+			}
+		}
+	);
 });

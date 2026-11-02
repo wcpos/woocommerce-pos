@@ -45,6 +45,9 @@ class Bootstrap {
 		tests_add_filter( 'muplugins_loaded', array( $this, 'manually_load_plugin' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
 		tests_add_filter( 'muplugins_loaded', array( $this, 'seed_woocommerce_options' ), 20 );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'install_font_packs' ), 30 );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'install_register_table' ), 30 );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'install_fiscal_record_table' ), 30 );
 		tests_add_filter( 'wp_loaded', array( $this, 'rebuild_roles_after_installs' ) );
 
 		// Start up the WP testing environment.
@@ -136,7 +139,7 @@ class Bootstrap {
 		// services. The suite exercises the full object graph the POS and its
 		// REST clients see, so pin the REST lane; tests about lane detection
 		// remove this filter and restore it.
-		add_filter( 'woocommerce_pos_request_lane', array( __CLASS__, 'default_request_lane' ) );
+		add_filter( 'wcpos_request_lane', array( __CLASS__, 'default_request_lane' ) );
 
 		// StaticMockerHack rewrites short class names and falls back through the
 		// global name. Alias the namespaced identity brain so unmocked methods keep
@@ -180,6 +183,33 @@ class Bootstrap {
 	}
 
 	/**
+	 * Install the receipt font pack the way a real site has it after the
+	 * background job ran. Nothing in the request path downloads fonts any more,
+	 * so without this the raster support probe reads as unsupported for the
+	 * whole run and every cloud-print media-type expectation loses `image/png`.
+	 * The checkout ships the pack, so this is a local copy, not a download.
+	 */
+	public function install_register_table(): void {
+		// Create the sessions table before the per-test transactions begin: dbDelta is
+		// DDL, and a CREATE TABLE inside a test commits that test's transaction. The
+		// register itself is the wcpos_register option, minted on first read.
+		( new \WCPOS\WooCommercePOS\Services\Register_Session_Store() )->install();
+	}
+
+	/** Install fiscal history before per-test transactions; dbDelta is DDL. */
+	public function install_fiscal_record_table(): void {
+		( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->install();
+	}
+
+	/**
+	 * Install the receipt font pack the way a real site has it after the
+	 * background job ran.
+	 */
+	public function install_font_packs(): void {
+		( new \WCPOS\WooCommercePOS\Services\Font_Pack_Loader() )->ensure_all();
+	}
+
+	/**
 	 * Rebuild the roles global once every install in the boot has run.
 	 *
 	 * On a fresh test database WooCommerce installs itself at init:5 and grants
@@ -220,6 +250,10 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/Helpers/HPOSToggleTrait.php';
 		require_once $this->plugin_dir . '/tests/Helpers/EmailHelper.php';
 		require_once $this->plugin_dir . '/tests/Helpers/FakeMutationStore.php';
+		require_once $this->plugin_dir . '/tests/Helpers/Money_Route_Envelope.php';
+		require_once $this->plugin_dir . '/tests/Helpers/Ledger_Seed.php';
+		require_once $this->plugin_dir . '/tests/Helpers/Register_Sale.php';
+		require_once $this->plugin_dir . '/tests/Helpers/Adopt_Refund_Test_Gateway.php';
 
 		// Tripwire: plugin code touching ORDER meta via get/update/add/delete_post_meta()
 		// fails the test with a LogicException naming the file and line. Order meta lives
@@ -227,7 +261,7 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/Helpers/Order_Postmeta_Guard.php';
 		\WCPOS\WooCommercePOS\Tests\Helpers\Order_Postmeta_Guard::install();
 
-		// Tripwire: plugin code saving a post, a WooCommerce object or terms from inside a
+		// Tripwire: plugin code saving a post or a WooCommerce object from inside a
 		// WordPress or WooCommerce save, status-transition, stock or checkout hook fails the
 		// test naming the file, line and hook. #2371 double-reduced stock this way.
 		require_once $this->plugin_dir . '/tests/Helpers/Save_Reentry_Guard.php';

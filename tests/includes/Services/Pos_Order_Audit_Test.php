@@ -15,6 +15,35 @@ use WP_UnitTestCase;
  */
 class Pos_Order_Audit_Test extends WP_UnitTestCase {
 	/**
+	 * Every key the live order data store treats as internal is stripped: WooCommerce routes such
+	 * a key to a setter, or reads its plain row back as the order's own data (ADR 0040 rule 2).
+	 */
+	public function test_strip_audit_meta_drops_every_internal_order_key(): void {
+		// Arrange.
+		$internal = \WC_Data_Store::load( 'order' )->get_internal_meta_keys();
+		$meta     = array(
+			array(
+				'key'   => 'public',
+				'value' => 'kept',
+			),
+		);
+		foreach ( $internal as $key ) {
+			$meta[] = array(
+				'key'   => $key,
+				'value' => 'x',
+			);
+		}
+
+		// Act.
+		$result = Pos_Order_Audit::strip_audit_meta( $meta );
+
+		// Assert.
+		$this->assertNotEmpty( $internal );
+		$this->assertContains( '_order_currency', $internal );
+		$this->assertSame( array( $meta[0] ), $result );
+	}
+
+	/**
 	 * Server-derived keys are removed on create; other meta passes through.
 	 */
 	public function test_sanitize_create_meta_strips_server_derived_keys(): void {
@@ -47,6 +76,22 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 			),
 			$result
 		);
+	}
+
+	/**
+	 * A client cannot supply the server-owned payment assertion on create.
+	 */
+	public function test_sanitize_create_meta_never_accepts_a_client_payment_assertion(): void {
+		$meta = array(
+			array(
+				'key'   => '_pos_payment_asserted',
+				'value' => 'offline',
+			),
+		);
+
+		$result = Pos_Order_Audit::sanitize_create_meta( $meta );
+
+		$this->assertSame( array(), $result );
 	}
 
 	/**
@@ -282,5 +327,115 @@ class Pos_Order_Audit_Test extends WP_UnitTestCase {
 		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_cash_change', array( '1' ) ) );
 		$this->assertTrue( Pos_Order_Audit::is_valid_till_value( '_pos_store', 'uuid-or-slug' ) );
 		$this->assertFalse( Pos_Order_Audit::is_valid_till_value( '_pos_store', '' ) );
+	}
+	/** Till UUIDs share the register's create and strip rules. */
+	public function test_till_uuid_is_validated_and_protected(): void {
+		$meta = array(
+			array(
+				'key' => '_wcpos_till',
+				'value' => wp_generate_uuid4(),
+			),
+		);
+		$this->assertSame( $meta, Pos_Order_Audit::sanitize_create_meta( $meta ) );
+		$this->assertSame( array(), Pos_Order_Audit::strip_audit_meta( $meta ) );
+		$this->assertContains( '_wcpos_till', Pos_Order_Audit::provenance_meta_keys() );
+		$meta[0]['value'] = 'bad';
+		$this->assertSame( array(), Pos_Order_Audit::sanitize_create_meta( $meta ) );
+	}
+
+	/**
+	 * The meta tables match `_WCPOS_PAYMENTS` and `_wcpos_payments ` to the ledger key, so the strip does too.
+	 */
+	public function test_strip_audit_meta_drops_case_and_trailing_space_variants_of_server_keys(): void {
+		// Arrange.
+		$meta = array(
+			array(
+				'key'   => '_WCPOS_PAYMENTS',
+				'value' => '{}',
+			),
+			array(
+				'key'   => '_Wcpos_Payment_Id',
+				'value' => 'x',
+			),
+			array(
+				'key'   => '_wcpos_completions ',
+				'value' => '[]',
+			),
+			array(
+				'key'   => '_POS_USER',
+				'value' => '1',
+			),
+			array(
+				'key'   => '_wcpos_payments_note',
+				'value' => 'kept',
+			),
+		);
+
+		// Act.
+		$result = Pos_Order_Audit::strip_audit_meta( $meta );
+
+		// Assert.
+		$this->assertSame(
+			array(
+				array(
+					'key'   => '_wcpos_payments_note',
+					'value' => 'kept',
+				),
+			),
+			$result
+		);
+	}
+
+	/**
+	 * A stored row under a variant spelling of a server key is protected by id like the key itself.
+	 */
+	public function test_audit_meta_ids_include_rows_under_a_variant_spelling(): void {
+		// Arrange.
+		$order = wc_create_order();
+		$order->add_meta_data( '_WCPOS_PAYMENTS', '{}' );
+		$order->add_meta_data( 'harmless', 'kept' );
+		$order->save();
+		$ids = array();
+		foreach ( wc_get_order( $order->get_id() )->get_meta_data() as $meta ) {
+			$ids[ $meta->key ] = (int) $meta->id;
+		}
+
+		// Act.
+		$protected = Pos_Order_Audit::audit_meta_ids( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertContains( $ids['_WCPOS_PAYMENTS'], $protected );
+		$this->assertNotContains( $ids['harmless'], $protected );
+	}
+
+	/**
+	 * Every order meta key a money module declares is server-owned, so a new key cannot skip the list.
+	 */
+	public function test_every_order_meta_key_the_money_modules_declare_is_server_owned(): void {
+		// Arrange.
+		$classes  = array(
+			\WCPOS\WooCommercePOS\Payments\Contract\Ledger::class,
+			\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::class,
+			\WCPOS\WooCommercePOS\Payments\Contract\Attempts::class,
+			\WCPOS\WooCommercePOS\Payments\Contract\Command_Log::class,
+			\WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::class,
+			\WCPOS\WooCommercePOS\Payments\Checkout_State_Repository::class,
+		);
+		$declared = array();
+		foreach ( $classes as $class ) {
+			foreach ( ( new \ReflectionClass( $class ) )->getConstants() as $name => $value ) {
+				if ( 1 === preg_match( '/META_KEY$/', $name ) ) {
+					$declared[] = $value;
+				}
+			}
+		}
+
+		// Act.
+		$missing = array_values( array_diff( $declared, Pos_Order_Audit::SERVER_MONEY_META_KEYS ) );
+
+		// Assert.
+		$this->assertGreaterThanOrEqual( 11, count( $declared ) );
+		$this->assertContains( '_wcpos_checkout_state', $declared );
+		$this->assertSame( array(), $missing );
 	}
 }

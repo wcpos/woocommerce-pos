@@ -3,7 +3,7 @@
  * Plugin Name:       WCPOS – Point of Sale for WooCommerce
  * Plugin URI:        https://wordpress.org/plugins/woocommerce-pos/
  * Description:       A simple front-end for taking WooCommerce orders at the Point of Sale. Requires <a href="http://wordpress.org/plugins/woocommerce/">WooCommerce</a>.
- * Version:           1.11.9
+ * Version:           2.0.0-beta.1
  * Author:            kilbot
  * Author URI:        http://wcpos.com
  * Text Domain:       woocommerce-pos
@@ -15,7 +15,7 @@
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
  * WC tested up to:   11.2.1
- * WC requires at least: 5.3
+ * WC requires at least: 9.0
  *
  * @see      http://wcpos.com
  * @package WCPOS\WooCommercePOS
@@ -25,7 +25,7 @@ namespace WCPOS\WooCommercePOS;
 
 // Define plugin constants (use define() with checks to avoid conflicts when Pro plugin is active).
 if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
-	\define( __NAMESPACE__ . '\VERSION', '1.11.9' );
+	\define( __NAMESPACE__ . '\VERSION', '2.0.0-beta.1' );
 }
 
 /*
@@ -43,7 +43,9 @@ if ( ! class_exists( API\V2\Ping::class, false ) ) {
 API\V2\Ping::maybe_serve();
 
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
-	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.11.1' );
+	// On next, this is wcpos/translations' moving jsDelivr branch ref, refreshed by the CDN within about 12 hours.
+	// On main, the release workflow replaces it with a CalVer tag; resolve this one-line conflict in main's favour when merging next.
+	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.11.2' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
 	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
@@ -63,7 +65,7 @@ if ( ! \defined( __NAMESPACE__ . '\PLUGIN_URL' ) ) {
 
 // Minimum requirements.
 if ( ! \defined( __NAMESPACE__ . '\WC_MIN_VERSION' ) ) {
-	\define( __NAMESPACE__ . '\WC_MIN_VERSION', '5.3' );
+	\define( __NAMESPACE__ . '\WC_MIN_VERSION', '9.0' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PHP_MIN_VERSION' ) ) {
 	\define( __NAMESPACE__ . '\PHP_MIN_VERSION', '7.4' );

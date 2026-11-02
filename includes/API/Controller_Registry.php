@@ -62,7 +62,7 @@ final class Controller_Registry {
 	/**
 	 * Get the filtered v1 controller map.
 	 *
-	 * @return array<string, class-string> The v1 map after woocommerce_pos_rest_api_controllers.
+	 * @return array<string, class-string> The v1 map after wcpos_rest_api_controllers.
 	 */
 	public static function v1_map(): array {
 		/**
@@ -90,7 +90,8 @@ final class Controller_Registry {
 		 *                           - 'tax_classes'           => Fully qualified name of the class handling tax classes.
 		 *                           - 'order_statuses'        => Fully qualified name of the class handling order statuses.
 		 */
-		return apply_filters( 'woocommerce_pos_rest_api_controllers', self::core_v1_map() );
+		$filtered = apply_filters( 'wcpos_rest_api_controllers', self::core_v1_map() );
+		return apply_filters_deprecated( 'woocommerce_pos_rest_api_controllers', array( $filtered ), '2.0.0', 'wcpos_rest_api_controllers' );
 	}
 
 	/**
@@ -145,6 +146,15 @@ final class Controller_Registry {
 			'echo_probe'  => V2\Echo_Probe::class,
 			'site'        => V2\Site::class,
 			'order_email' => V2\Order_Email_Controller::class,
+
+			// The register/session surface: v2-native, no v1 predecessor.
+			'payment_methods' => V2\Payment_Methods_Controller::class,
+			'payments'        => V2\Payments_Controller::class,
+			'registers'       => V2\Registers_Controller::class,
+			'sessions'        => V2\Sessions_Controller::class,
+			'closures'        => V2\Closures_Controller::class,
+			'records'         => V2\Records_Controller::class,
+			'reports'         => V2\Reports_Controller::class,
 		);
 		$map     = $natives + array_diff_key( $v1, array_flip( self::FROZEN_DATA_KEYS ) );
 
@@ -160,7 +170,8 @@ final class Controller_Registry {
 		 *
 		 * @param array $controllers Associative array of v2 service controller class names.
 		 */
-		return apply_filters( 'woocommerce_pos_rest_api_v2_controllers', $map );
+		$filtered = apply_filters( 'wcpos_rest_api_v2_controllers', $map );
+		return apply_filters_deprecated( 'woocommerce_pos_rest_api_v2_controllers', array( $filtered ), '2.0.0', 'wcpos_rest_api_v2_controllers' );
 	}
 
 	/**

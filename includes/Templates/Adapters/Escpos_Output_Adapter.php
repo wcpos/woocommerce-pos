@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Templates\Adapters;
 
 use WCPOS\WooCommercePOS\Interfaces\Receipt_Output_Adapter_Interface;
+use WCPOS\WooCommercePOS\Templates\Thermal\Escpos_Qr;
 
 /**
  * Escpos_Output_Adapter class.
@@ -130,8 +131,7 @@ class Escpos_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		if ( $print_qr ) {
 			$qr_payload = isset( $receipt_data['fiscal']['qr_payload'] ) ? (string) $receipt_data['fiscal']['qr_payload'] : '';
 			if ( '' !== $qr_payload ) {
-				$output_lines[] = self::ALIGN_CENTER . '[QR] ' . $this->fit_text( $qr_payload, $paper_width ) . self::LF;
-				$output_lines[] = self::ALIGN_LEFT;
+				$output_lines[] = self::ALIGN_CENTER . Escpos_Qr::bytes( $qr_payload, 4 ) . self::LF . self::ALIGN_LEFT;
 			}
 		}
 

@@ -18,6 +18,17 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class Order_Notes {
 	// phpcs:disable Squiz.Commenting.FunctionComment.MissingParamTag -- Concise helper summaries and signatures document the parameters.
+	/** Add a single note listing refused sale provenance edits. */
+	public static function add_provenance_refused_note( WC_Order $order, array $keys ): void {
+		$order->add_order_note(
+			sprintf(
+			/* translators: %s: comma-separated immutable provenance keys. */
+				__( 'POS provenance keys cannot be changed after the sale: %s', 'woocommerce-pos' ),
+				implode( ', ', $keys )
+			)
+		);
+	}
+
 	/** Resolve a cashier display name. */
 	public static function cashier_name( $user_id ): string {
 		$user = get_userdata( (int) $user_id );

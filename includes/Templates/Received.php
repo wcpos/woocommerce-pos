@@ -111,7 +111,7 @@ class Received {
 			// the REST server, which constructs the API and, on the free plugin, installs
 			// the option filter that keeps POS gateways to cash and card. Reading before
 			// it would honour a stored BACS status the free plugin does not allow.
-			$settled_status = woocommerce_pos_is_pos_order( $order )
+			$settled_status = wcpos_is_pos_order( $order )
 				? ( new Gateway_Contract() )->get_settled_order_status( $order->get_payment_method() )
 				: '';
 			$order_settled  = $order->is_paid() || ( '' !== $settled_status && $order->has_status( $settled_status ) );
@@ -121,7 +121,7 @@ class Received {
 				$order_complete = false;
 			}
 
-			include woocommerce_pos_locate_template( 'received.php' );
+			include wcpos_locate_template( 'received.php' );
 			exit;
 		} catch ( Exception $e ) {
 			\wc_print_notice( $e->getMessage(), 'error' );

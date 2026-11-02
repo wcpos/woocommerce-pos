@@ -21,7 +21,7 @@ interface Fast_Path_Behavior {
 	 * Answer the request directly when it is this behavior's fast-path shape.
 	 *
 	 * The response is returned as-is: no wc/v3 forward, no
-	 * `woocommerce_pos_sync_proxy_response` filter, no post-processing.
+	 * `wcpos_sync_proxy_response` filter, no post-processing.
 	 *
 	 * @param WP_REST_Request $request Original proxy request.
 	 *

@@ -37,18 +37,23 @@ class Test_Frontend extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The bundle manifest cache key changes with the OPFS worker.
+	 * The manifest and worker cache keys include both SQLite assets.
 	 */
-	public function test_manifest_cache_key_matches_opfs_worker_hash(): void {
+	public function test_manifest_and_worker_cache_keys_match_sqlite_asset_hashes(): void {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 
 		ob_start();
 		( new Frontend() )->footer();
 		$output = (string) ob_get_clean();
-		$hash   = hash_file( 'sha256', \WCPOS\WooCommercePOS\PLUGIN_PATH . 'assets/js/opfs.worker.js' );
+		$hash   = hash(
+			'sha256',
+			hash_file( 'sha256', \WCPOS\WooCommercePOS\PLUGIN_PATH . 'assets/js/sqlite.worker.js' ) .
+			hash_file( 'sha256', \WCPOS\WooCommercePOS\PLUGIN_PATH . 'assets/js/sqlite3.wasm' )
+		);
 
 		$this->assertStringContainsString( '/metadata.json?v=' . $hash, $output );
+		$this->assertStringContainsString( "var opfsWorker = '" . \WCPOS\WooCommercePOS\PLUGIN_URL . 'assets/js/sqlite.worker.js?ver=' . $hash . "';", $output );
 	}
 
 	/**
@@ -82,14 +87,14 @@ class Test_Frontend extends WP_UnitTestCase {
 		$past_gate = static function () {
 			throw new \RuntimeException( 'Frontend gate let a user without publish_shop_orders through.' );
 		};
-		add_action( 'woocommerce_pos_frontend_template_redirect', $past_gate );
+		add_action( 'wcpos_frontend_template_redirect', $past_gate );
 		$this->expectException( WPDieException::class );
 		$this->expectExceptionMessage( 'publish_shop_orders' );
 
 		try {
 			( new Frontend() )->get_template();
 		} finally {
-			remove_action( 'woocommerce_pos_frontend_template_redirect', $past_gate );
+			remove_action( 'wcpos_frontend_template_redirect', $past_gate );
 			remove_filter( 'wp_die_handler', $handler );
 			wp_set_current_user( 0 );
 			if ( null === $https ) {

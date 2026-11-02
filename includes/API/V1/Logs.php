@@ -42,6 +42,22 @@ class Logs extends WP_REST_Controller {
 	protected $rest_base = 'logs';
 
 	/**
+	 * Declare the protocol-gate classification.
+	 *
+	 * The wp-admin settings screen calls this surface with cookie auth and no
+	 * client protocol claim, and its wire shape did not change at the 2.0.0
+	 * boundary, so the whole prefix is exempt from the gate on both namespaces.
+	 * The sync surface stays gated (#1868).
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array(
+			'protocol_exempt' => array( "/{$this->namespace}/{$this->rest_base}" ),
+		);
+	}
+
+	/**
 	 * Core log source written to by the free plugin (and Pro, which reuses it).
 	 *
 	 * @var string
@@ -303,7 +319,8 @@ class Logs extends WP_REST_Controller {
 		 *
 		 * @param string|null $type 'file' or 'database', or null for auto-detection.
 		 */
-		$type = apply_filters( 'woocommerce_pos_log_handler_type', null );
+		$type = apply_filters( 'wcpos_log_handler_type', null );
+		$type = apply_filters_deprecated( 'woocommerce_pos_log_handler_type', array( $type ), '2.0.0', 'wcpos_log_handler_type' );
 		if ( $type ) {
 			return $type;
 		}

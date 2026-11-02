@@ -43,6 +43,7 @@ require_once $wcpos_root . '/includes/API/V2/Proxy/Proxy_Behavior.php';
 require_once $wcpos_root . '/includes/API/V2/Proxy/Scoped_Proxy_Behavior.php';
 require_once $wcpos_root . '/includes/API/V2/Proxy/Orders_Proxy_Behavior.php';
 
+require_once $wcpos_root . '/includes/Services/Order_Meta_Store.php';
 require_once $wcpos_root . '/includes/Sync/Meta_Entry.php';
 require_once $wcpos_root . '/includes/Sync/Collection_Rules.php';
 require_once $wcpos_root . '/includes/Sync/Collection_Rules_Plan.php';

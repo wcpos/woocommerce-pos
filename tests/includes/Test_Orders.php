@@ -20,6 +20,8 @@ use WC_Payment_Gateways;
 use WC_Product_Simple;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Orders;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Webview_Passthrough;
 use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
@@ -108,13 +110,6 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that Orders class can be instantiated.
-	 */
-	public function test_orders_class_instantiation(): void {
-		$this->assertInstanceOf( Orders::class, $this->orders );
-	}
-
-	/**
 	 * Test that POS order statuses are registered.
 	 */
 	public function test_pos_order_statuses_registered(): void {
@@ -133,6 +128,47 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		$this->assertStringContainsString( 'POS', $order_statuses['wc-pos-open'], 'pos-open label should contain POS' );
 		$this->assertStringContainsString( 'POS', $order_statuses['wc-pos-partial'], 'pos-partial label should contain POS' );
+	}
+
+	/**
+	 * Both POS open statuses are editable on every request, not only in wp-admin (ADR 0040 rule 4):
+	 * a layaway (`pos-partial`) takes a line edit without a status flip, and every paid,
+	 * completed, cancelled, refunded or failed order keeps WooCommerce's answer.
+	 *
+	 * @dataProvider editable_statuses
+	 *
+	 * @param string $status   Order status.
+	 * @param bool   $editable Expected is_editable() answer.
+	 */
+	public function test_order_is_editable_outside_admin_for_open_statuses_only( string $status, bool $editable ): void {
+		// Arrange.
+		$order_id = $this->create_pos_order( $status )->get_id();
+
+		// Act.
+		$actual = wc_get_order( $order_id )->is_editable();
+
+		// Assert.
+		$this->assertFalse( is_admin() );
+		$this->assertSame( $editable, $actual );
+	}
+
+	/**
+	 * Statuses and whether a line edit may land on them.
+	 *
+	 * @return array<string, array{string, bool}>
+	 */
+	public static function editable_statuses(): array {
+		return array(
+			'pos-open'    => array( 'pos-open', true ),
+			'pos-partial' => array( 'pos-partial', true ),
+			'pending'     => array( 'pending', true ),
+			'on-hold'     => array( 'on-hold', true ),
+			'processing'  => array( 'processing', false ),
+			'completed'   => array( 'completed', false ),
+			'cancelled'   => array( 'cancelled', false ),
+			'refunded'    => array( 'refunded', false ),
+			'failed'      => array( 'failed', false ),
+		);
 	}
 
 	/**
@@ -155,6 +191,74 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$valid_statuses = apply_filters( 'woocommerce_valid_order_statuses_for_payment', array( 'pending', 'failed' ), $order );
 
 		$this->assertContains( 'pos-partial', $valid_statuses, 'pos-partial should be valid for payment' );
+	}
+
+	/**
+	 * Test that POS statuses count as pending for core's held-stock check.
+	 */
+	public function test_pos_statuses_are_pending_statuses(): void {
+		$pending = apply_filters( 'woocommerce_order_is_pending_statuses', array( 'pending' ) );
+
+		$this->assertContains( 'pos-open', $pending );
+		$this->assertContains( 'pos-partial', $pending );
+		$this->assertContains( 'pending', $pending, 'core statuses are preserved' );
+
+		$inputs = array(
+			array( 'pending', 'pos-open' ),
+			array( 'pending', 'pos-partial' ),
+			array( 'pending', 'pos-open', 'pos-partial' ),
+		);
+
+		foreach ( $inputs as $statuses ) {
+			$pending = apply_filters( 'woocommerce_order_is_pending_statuses', $statuses );
+
+			$this->assertContains( 'pending', $pending, 'core statuses are preserved' );
+			$this->assertSame( 1, \count( array_keys( $pending, 'pos-open', true ) ) );
+			$this->assertSame( 1, \count( array_keys( $pending, 'pos-partial', true ) ) );
+		}
+	}
+
+	/**
+	 * Test that Stripe may process asynchronous payments on POS orders.
+	 */
+	public function test_pos_statuses_allowed_for_stripe_payment_processing(): void {
+		$allowed = apply_filters( 'wc_stripe_allowed_payment_processing_statuses', array( 'pending', 'failed' ) );
+
+		$this->assertContains( 'pos-open', $allowed );
+		$this->assertContains( 'pos-partial', $allowed );
+		$this->assertCount( 4, $allowed, 'each status is added once' );
+
+		$inputs = array(
+			array( 'pending', 'failed', 'pos-open' ),
+			array( 'pending', 'failed', 'pos-partial' ),
+			array( 'pending', 'failed', 'pos-open', 'pos-partial' ),
+		);
+
+		foreach ( $inputs as $statuses ) {
+			$allowed = apply_filters( 'wc_stripe_allowed_payment_processing_statuses', $statuses );
+
+			$this->assertContains( 'pending', $allowed, 'core statuses are preserved' );
+			$this->assertContains( 'failed', $allowed, 'core statuses are preserved' );
+			$this->assertSame( 1, \count( array_keys( $allowed, 'pos-open', true ) ) );
+			$this->assertSame( 1, \count( array_keys( $allowed, 'pos-partial', true ) ) );
+		}
+	}
+
+	/**
+	 * Test that POS statuses are excluded from WooCommerce Analytics.
+	 */
+	public function test_pos_statuses_excluded_from_analytics(): void {
+		$excluded = apply_filters( 'woocommerce_analytics_excluded_order_statuses', array( 'pending', 'failed', 'cancelled' ) );
+
+		$this->assertContains( 'pos-open', $excluded, 'an open cart must not count as a sale' );
+		$this->assertContains( 'pos-partial', $excluded, 'a half-paid order must not count as a sale' );
+		$this->assertContains( 'pending', $excluded, 'core exclusions are preserved' );
+		$this->assertSame( 1, \count( array_keys( $excluded, 'pos-open', true ) ), 'pos-open is added exactly once' );
+		$this->assertSame( 1, \count( array_keys( $excluded, 'pos-partial', true ) ), 'pos-partial is added exactly once' );
+		// Feeding the result back in must not duplicate the POS statuses (other callbacks may add their own).
+		$again = apply_filters( 'woocommerce_analytics_excluded_order_statuses', $excluded );
+		$this->assertSame( 1, \count( array_keys( $again, 'pos-open', true ) ) );
+		$this->assertSame( 1, \count( array_keys( $again, 'pos-partial', true ) ) );
 	}
 
 	/**
@@ -732,24 +836,10 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$hidden_meta = apply_filters( 'woocommerce_hidden_order_itemmeta', array() );
 
 		$this->assertContains( '_woocommerce_pos_uuid', $hidden_meta, 'UUID meta should be hidden' );
-	}
 
-	/**
-	 * Test that tax_status meta is hidden from order edit page.
-	 */
-	public function test_tax_status_meta_is_hidden(): void {
-		$hidden_meta = apply_filters( 'woocommerce_hidden_order_itemmeta', array() );
+		$this->assertContains( '_woocommerce_pos_tax_status', $hidden_meta, 'tax_status_meta_is_hidden: Tax status meta should be hidden' );
 
-		$this->assertContains( '_woocommerce_pos_tax_status', $hidden_meta, 'Tax status meta should be hidden' );
-	}
-
-	/**
-	 * Test that pos_data meta is hidden from order edit page.
-	 */
-	public function test_pos_data_meta_is_hidden(): void {
-		$hidden_meta = apply_filters( 'woocommerce_hidden_order_itemmeta', array() );
-
-		$this->assertContains( '_woocommerce_pos_data', $hidden_meta, 'POS data meta should be hidden' );
+		$this->assertContains( '_woocommerce_pos_data', $hidden_meta, 'pos_data_meta_is_hidden: POS data meta should be hidden' );
 	}
 
 	/**
@@ -1725,6 +1815,39 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * No payment was taken, so the ledger must not say it was.
+	 *
+	 * On the order-pay request the webview passthrough is armed for this order
+	 * before the gateway runs, and a transition to a paid status while it is
+	 * armed reads as an offline tender. The configured status is applied after
+	 * the gateway answered, so it must not mint a captured row.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::apply_unpaid_gateway_order_status
+	 */
+	public function test_unpaid_gateway_success_does_not_mint_webview_ledger_row(): void {
+		// Arrange.
+		Webview_Passthrough::register_hooks();
+		$this->set_gateway_settings( 'acme_quotes', 'wc-completed' );
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'acme_quotes' );
+		$order->set_total( '92.95' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		// Act: the pay form arms the passthrough, then the gateway returns success to the received page.
+		do_action( 'woocommerce_before_pay_action', $order );
+		apply_filters( 'woocommerce_payment_successful_result', $this->finished_result( $order ), $order->get_id() );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( 'completed', $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid(), 'An unpaid gateway must not stamp date_paid.' );
+		$this->assertSame( array(), Ledger::instance()->read( $fresh ), 'An unpaid gateway must not mint a captured ledger row.' );
+	}
+
+	/**
 	 * Data provider: offline gateways landing on a status WooCommerce does not call paid.
 	 *
 	 * @return array[]
@@ -2499,7 +2622,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * A nested payment on the same order must retain its configured status.
 	 *
 	 * bacs, not a made-up gateway: payment_complete_order_status() reads the
-	 * configured status through woocommerce_pos_get_settings(), which only knows
+	 * configured status through wcpos_get_settings(), which only knows
 	 * registered gateways, so an unknown id would answer 'completed' there.
 	 */
 	public function test_unpaid_gateway_success_lets_a_nested_payment_complete_on_the_same_order_keep_its_status(): void {

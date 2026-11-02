@@ -133,3 +133,24 @@ export function useDeleteTemplate() {
 		},
 	});
 }
+
+export function useSetActiveTemplate(type = 'receipt') {
+	const queryClient = useQueryClient();
+	const { addSnackbar } = useSnackbar();
+
+	return useMutation({
+		mutationFn: async (id: number | string) =>
+			apiFetch({
+				path: 'wcpos/v1/templates/batch?wcpos=1',
+				method: 'POST',
+				data: { type, active: id },
+			}),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ['templates'] });
+			addSnackbar({ message: t('snackbar.display_live'), status: 'success' });
+		},
+		onError: () => {
+			addSnackbar({ message: t('snackbar.update_failed'), status: 'error' });
+		},
+	});
+}

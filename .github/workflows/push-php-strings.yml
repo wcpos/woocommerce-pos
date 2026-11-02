@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - next
     paths:
       - 'languages/woocommerce-pos.pot'
   workflow_dispatch:
@@ -26,6 +27,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolve lane
+        id: resolve-lane
+        run: |
+          lane="$GITHUB_REF_NAME"
+          case "$lane" in
+            main|next) ;;
+            *)
+              echo "::error::Translations are sent only from main or next (got $lane)"
+              exit 1
+              ;;
+          esac
+          echo "lane=$lane" >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -64,6 +78,7 @@ jobs:
             -f event_type=update-free-pot \
             -f "client_payload[repo_name]=${{ github.event.repository.name }}" \
             -f "client_payload[ref]=${{ steps.push-source.outputs.ref }}" \
+            -f "client_payload[lane]=${{ steps.resolve-lane.outputs.lane }}" \
             -f "client_payload[pot_file]=woocommerce-pos.pot" \
             -f "client_payload[force]=${{ inputs.force || 'false' }}"
         env:

@@ -1,6 +1,8 @@
 import * as React from 'react';
 
-import { TemplatesTable } from '../components/active-templates-table';
+import { useSearch } from '@tanstack/react-router';
+
+import { TemplatesTable, isTemplateEnabled } from '../components/active-templates-table';
 import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
 import { GALLERY_GRID_CLASS, GALLERY_GRID_WRAPPER_CLASS } from '../components/skeleton';
@@ -12,6 +14,7 @@ import {
 	useToggleVirtualTemplate,
 	useReorderTemplates,
 	useDeleteTemplate,
+	useSetActiveTemplate,
 } from '../hooks/use-templates';
 import { t } from '../translations';
 
@@ -25,6 +28,7 @@ function matchesFilters(
 		engine?: string;
 		output_type?: string;
 		direction?: 'ltr' | 'rtl';
+		screen?: GalleryTemplate['screen'];
 	},
 	filters: FilterState
 ): boolean {
@@ -33,6 +37,10 @@ function matchesFilters(
 	}
 
 	if (filters.categories.length > 0 && !filters.categories.includes(template.category)) {
+		return false;
+	}
+
+	if (filters.screen !== 'all' && template.screen !== filters.screen) {
 		return false;
 	}
 
@@ -53,19 +61,23 @@ function matchesFilters(
 }
 
 export function GalleryGrid() {
-	const [filters, setFilters] = React.useState<FilterState>({ ...DEFAULT_FILTERS });
+	// Filters are kept per tab: a receipt-only category or search must not hide every display card.
+	const [filtersByType, setFiltersByType] = React.useState<Record<string, FilterState>>({});
 	const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 	const [previewId, setPreviewId] = React.useState<number | string | null>(null);
 
-	const type = 'receipt';
+	const { type } = useSearch({ from: '/' });
+	const filters = filtersByType[type] ?? DEFAULT_FILTERS;
+	const setFilters = (next: FilterState) => setFiltersByType((prev) => ({ ...prev, [type]: next }));
 
 	const { data: templates = [] } = useTemplates(type);
 	const { data: galleryTemplates = [] } = useGalleryTemplates(type);
 	const toggleTemplate = useToggleTemplate();
 	const toggleVirtualTemplate = useToggleVirtualTemplate(type);
-	const installGallery = useInstallGalleryTemplate();
+	const installGallery = useInstallGalleryTemplate(type);
 	const reorderTemplates = useReorderTemplates(type);
 	const deleteTemplate = useDeleteTemplate();
+	const setActiveTemplate = useSetActiveTemplate(type);
 
 	const filteredGallery = galleryTemplates.filter((tmpl: GalleryTemplate) =>
 		matchesFilters(tmpl, filters)
@@ -73,6 +85,8 @@ export function GalleryGrid() {
 
 	const adminUrl =
 		(window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
+
+	const isProActive = Boolean((window as any).wcpos?.templateGallery?.isProActive);
 
 	// Find the template being previewed
 	const previewTemplate =
@@ -122,18 +136,34 @@ export function GalleryGrid() {
 		<div className="wcpos:flex wcpos:flex-col wcpos:gap-6">
 			{/* Your Templates section */}
 			<section>
+				{type === 'display' && !isProActive && (
+					<p className="wcpos:text-sm wcpos:text-gray-500">
+						{t('gallery.display_needs_pro')}{' '}
+						<a
+							href="https://docs.wcpos.com/customer-display"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="wcpos:text-wp-admin-theme-color hover:wcpos:underline"
+						>
+							{t('layout.learn_more')}
+						</a>
+					</p>
+				)}
 				<div className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:mb-3">
 					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:m-0">
 						{t('gallery.your_templates')}
 					</h2>
 					<a
-						href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
+						href={`${adminUrl}/post-new.php?post_type=wcpos_template${type !== 'receipt' ? `&wcpos_type=${type}` : ''}`}
 						className="page-title-action"
 					>
 						{t('gallery.add_new')}
 					</a>
 				</div>
 				<TemplatesTable
+					type={type}
+					onSetActive={(id) => setActiveTemplate.mutate(id)}
+					settingActiveId={setActiveTemplate.isPending ? setActiveTemplate.variables : null}
 					templates={templates}
 					onPreview={setPreviewId}
 					onToggle={handleToggle}
@@ -141,6 +171,10 @@ export function GalleryGrid() {
 					onReorder={(orderedIds) => reorderTemplates.mutate(orderedIds)}
 					togglingId={togglingId}
 					deletingId={deleteTemplate.isPending ? (deleteTemplate.variables ?? null) : null}
+					// Installing the current version alongside is the same install the gallery does,
+					// so the merchant's edited copy is left exactly as it is and they port at leisure.
+					onInstallNewVersion={(galleryKey) => installGallery.mutate(galleryKey)}
+					installingNewVersion={installGallery.isPending}
 				/>
 			</section>
 
@@ -156,6 +190,8 @@ export function GalleryGrid() {
 					<div className="wcpos:flex wcpos:gap-6">
 						<FilterSidebar
 							filters={filters}
+							showOutputFilters={type !== 'display'}
+							showScreenFilter={type === 'display'}
 							onChange={setFilters}
 							availableCategories={Array.from(
 								new Set(galleryTemplates.map((tmpl) => tmpl.category).filter((c) => c.length > 0))
@@ -191,13 +227,21 @@ export function GalleryGrid() {
 			{previewTemplate && (
 				<PreviewModal
 					templateId={previewTemplateId ?? ''}
+					templateType={type}
 					templateName={previewTemplate.title}
 					templateDescription={previewTemplate.description}
 					isGallery={previewIsGallery}
 					onClose={() => setPreviewId(null)}
+					activateLabel={previewTemplate.type === 'display' ? t('modal.set_live') : undefined}
+					canActivate={
+						previewTemplate.type !== 'display' ||
+						(!previewIsGallery && isTemplateEnabled(previewTemplate as AnyTemplate))
+					}
 					onActivate={() => {
 						if (previewId == null) return;
-						handleToggle(previewId);
+						// A display has one Live template; receipts toggle enabled/disabled.
+						if (previewTemplate.type === 'display') setActiveTemplate.mutate(previewId);
+						else handleToggle(previewId);
 					}}
 					onCustomize={() => {
 						if (!previewIsGallery) return;

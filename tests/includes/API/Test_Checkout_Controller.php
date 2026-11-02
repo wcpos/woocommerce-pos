@@ -284,6 +284,44 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The till's checkout (the app calls it on wcpos/v2) records the payment its gateway completed before
+	 * it answers: the webview mint the payment hook deferred lands inside the request, not at its shutdown.
+	 */
+	public function test_post_checkout_pos_cash_records_the_payment_before_it_answers(): void {
+		// Arrange.
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'pos_cash',
+				'total'          => '50.00',
+			)
+		);
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' );
+		$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
+		$request->set_body_params(
+			array(
+				'gateway_id'   => 'pos_cash',
+				'action'       => 'start',
+				'payment_data' => array(
+					'amount_tendered' => '50.00',
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert: storage holds the row and its completion when the answer is built, with no shutdown in between.
+		$this->assertSame( 'completed', $response->get_data()['status'] );
+		$stored = wc_get_order( $order->get_id() );
+		$rows   = \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->read( $stored );
+		$this->assertSame( array( '50.00' ), array_column( $rows, 'amount' ) );
+		$this->assertSame( array( 'captured' ), array_column( $rows, 'status' ) );
+		$this->assertSame( array( $rows[0]['id'] ), \WCPOS\WooCommercePOS\Payments\Contract\Completion_History::of( $stored )->standing()['payment_ids'] );
+	}
+
+	/**
 	 * It returns the previously stored checkout state.
 	 */
 	public function test_get_checkout_returns_last_known_state(): void {
@@ -472,7 +510,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		add_filter(
-			'woocommerce_pos_payment_gateways_settings',
+			'wcpos_payment_gateways_settings',
 			static function ( $settings ) {
 				$settings['gateways']['bacs']['enabled'] = true;
 				return $settings;
@@ -539,7 +577,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		};
 
 		add_filter( 'woocommerce_payment_gateways', $add_gateway );
-		add_filter( 'woocommerce_pos_payment_gateways_settings', $enable_gateway );
+		add_filter( 'wcpos_payment_gateways_settings', $enable_gateway );
 		$registry                   = \WC_Payment_Gateways::instance();
 		$registry->payment_gateways = array();
 		$registry->init();
@@ -575,7 +613,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 'rdr_checkout', $data['provider_data']['reader_id'] );
 		} finally {
 			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
-			remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable_gateway );
+			remove_filter( 'wcpos_payment_gateways_settings', $enable_gateway );
 			$registry->payment_gateways = array();
 			$registry->init();
 		}

@@ -20,7 +20,6 @@ class Single_Order {
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_filter( 'wc_order_is_editable', array( $this, 'wc_order_is_editable' ), 10, 2 );
 		add_action( 'woocommerce_admin_order_data_after_order_details', array( $this, 'add_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'add_customer_change_note' ), 10 );
@@ -36,7 +35,7 @@ class Single_Order {
 		// @phpstan-ignore-next-line
 		if ( WC()->payment_gateways() ) {
 			$payment_gateways = WC()->payment_gateways->payment_gateways;
-			$settings = woocommerce_pos_get_settings( 'payment_gateways' );
+			$settings = wcpos_get_settings( 'payment_gateways' );
 
 			// Add POS gateways to the available gateways for the edit order dropdown.
 			foreach ( $payment_gateways as $gateway ) {
@@ -51,29 +50,13 @@ class Single_Order {
 	}
 
 	/**
-	 * Makes POS orders editable by default.
-	 *
-	 * @param bool              $is_editable Whether the order is editable.
-	 * @param WC_Abstract_Order $order       The order object.
-	 *
-	 * @return bool
-	 */
-	public function wc_order_is_editable( $is_editable, WC_Abstract_Order $order ) {
-		if ( 'pos-open' == $order->get_status() ) {
-			return true;
-		}
-
-		return $is_editable;
-	}
-
-	/**
 	 * Add cashier select to order page.
 	 *
 	 * @param WC_Abstract_Order $order Order object.
 	 */
 	public function add_cashier_select( $order ): void {
 		// only show if order created by POS.
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! wcpos_is_pos_order( $order ) ) {
 			return;
 		}
 
@@ -150,7 +133,7 @@ class Single_Order {
 			return;
 		}
 		$order = wc_get_order( $post_id );
-		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+		if ( ! $order instanceof WC_Order || ! wcpos_is_pos_order( $order ) ) {
 			return;
 		}
 		$old_customer_id = $order->get_customer_id();

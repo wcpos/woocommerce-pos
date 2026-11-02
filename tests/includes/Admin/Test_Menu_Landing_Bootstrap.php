@@ -54,7 +54,7 @@ class Test_Menu_Landing_Bootstrap extends WP_UnitTestCase {
 		// Consent ON: under the old code this is exactly when the plugin emitted
 		// a real posthog.init + identify, so the regression assertions below are
 		// meaningful rather than vacuous.
-		$this->original_general_settings = (array) woocommerce_pos_get_settings( 'general' );
+		$this->original_general_settings = (array) wcpos_get_settings( 'general' );
 		$settings                        = $this->original_general_settings;
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );

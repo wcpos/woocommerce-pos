@@ -84,7 +84,8 @@ class AJAX {
 	 * @return void
 	 */
 	public function load_single_product_class() {
-		$single_product_class = apply_filters( 'woocommerce_pos_single_product_admin_ajax_class', Single_Product::class );
+		$single_product_class = apply_filters( 'wcpos_single_product_admin_ajax_class', Single_Product::class );
+		$single_product_class = apply_filters_deprecated( 'woocommerce_pos_single_product_admin_ajax_class', array( $single_product_class ), '2.0.0', 'wcpos_single_product_admin_ajax_class' );
 		new $single_product_class();
 	}
 

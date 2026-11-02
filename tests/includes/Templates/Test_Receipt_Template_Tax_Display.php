@@ -15,7 +15,7 @@ namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
-use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
@@ -148,7 +148,7 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 		// Arrange.
 		$order        = $this->create_taxed_order( 'excl' );
 		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
-		$formatted    = Receipt_Data_Schema::format_money_fields( $receipt_data, $receipt_data['order']['currency'] );
+		$formatted    = Receipt_Money_Formatter::format( $receipt_data, $receipt_data['order']['currency'] );
 
 		// Sanity: the builder resolved the neutral line total to the tax-exclusive value.
 		$this->assertEquals(
@@ -187,7 +187,7 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 		// Arrange.
 		$order        = $this->create_taxed_order( 'incl' );
 		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
-		$formatted    = Receipt_Data_Schema::format_money_fields( $receipt_data, $receipt_data['order']['currency'] );
+		$formatted    = Receipt_Money_Formatter::format( $receipt_data, $receipt_data['order']['currency'] );
 
 		// Sanity: the builder resolved the neutral line total to the tax-inclusive value.
 		$this->assertEquals(

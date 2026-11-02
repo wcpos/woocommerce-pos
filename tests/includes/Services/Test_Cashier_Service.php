@@ -115,28 +115,11 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 			'/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i',
 			$uuid
 		);
-	}
 
-	/**
-	 * Test get_cashier_uuid returns consistent UUID.
-	 */
-	public function test_get_cashier_uuid_is_consistent(): void {
-		$uuid1 = $this->service->get_cashier_uuid( $this->user );
 		$uuid2 = $this->service->get_cashier_uuid( $this->user );
-
-		$this->assertEquals( $uuid1, $uuid2 );
-	}
-
-	/**
-	 * Test get_cashier_uuid persists to user meta.
-	 */
-	public function test_get_cashier_uuid_persists_to_user_meta(): void {
-		$uuid = $this->service->get_cashier_uuid( $this->user );
-
-		// Check it was stored in user meta.
+		$this->assertEquals( $uuid, $uuid2, 'get_cashier_uuid_is_consistent' );
 		$stored_uuid = get_user_meta( $this->user->ID, '_woocommerce_pos_uuid', true );
-
-		$this->assertEquals( $uuid, $stored_uuid );
+		$this->assertEquals( $uuid, $stored_uuid, 'get_cashier_uuid_persists_to_user_meta' );
 	}
 
 	/**
@@ -538,7 +521,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	 */
 	public function test_cashier_data_filter_applied(): void {
 		add_filter(
-			'woocommerce_pos_cashier_data',
+			'wcpos_cashier_data',
 			function ( $data, $user, $include_stores ) {
 				$data['custom_field'] = 'filtered_value';
 
@@ -553,7 +536,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		$this->assertArrayHasKey( 'custom_field', $data );
 		$this->assertEquals( 'filtered_value', $data['custom_field'] );
 
-		remove_all_filters( 'woocommerce_pos_cashier_data' );
+		remove_all_filters( 'wcpos_cashier_data' );
 	}
 
 	/**
@@ -561,7 +544,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 	 */
 	public function test_accessible_stores_filter_applied(): void {
 		add_filter(
-			'woocommerce_pos_cashier_accessible_stores',
+			'wcpos_cashier_accessible_stores',
 			function ( $stores, $user ) {
 				// Return empty array to test filter.
 				return array();
@@ -574,7 +557,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 
 		$this->assertEmpty( $stores );
 
-		remove_all_filters( 'woocommerce_pos_cashier_accessible_stores' );
+		remove_all_filters( 'wcpos_cashier_accessible_stores' );
 	}
 
 	/**

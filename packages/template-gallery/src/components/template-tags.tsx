@@ -26,9 +26,22 @@ export function TemplateTags({ template }: TemplateTagsProps) {
 	const thermal = isThermal(template);
 	const offline = isOffline(template);
 	const paperWidth = 'paper_width' in template && template.paper_width;
+	const screen = 'screen' in template && template.screen;
+	const screenLabels = {
+		responsive: 'filter.screen_responsive',
+		'small-screen': 'filter.screen_small',
+		'large-screen': 'filter.screen_large',
+	};
 
 	return (
 		<div className="wcpos:flex wcpos:gap-1 wcpos:flex-wrap wcpos:mt-0.5">
+			{template.type === 'display' && (
+				<>
+					{screen && <Chip variant="neutral">{t(screenLabels[screen])}</Chip>}
+					<Chip variant="neutral">{t(`category.${template.category}`)}</Chip>
+				</>
+			)}
+
 			{thermal ? (
 				<Chip variant="info" title={t('tags.receipt_printer_tip')}>
 					{t('tags.receipt_printer')}

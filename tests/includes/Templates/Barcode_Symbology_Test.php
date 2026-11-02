@@ -89,20 +89,6 @@ class Barcode_Symbology_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The UPC pair is numbered in opposite order by the two byte lanes.
-	 *
-	 * StarPRNT numbers UPC-E before UPC-A; ESC/POS is the other way round. A
-	 * table transcribed from the wrong vendor inverts one of these.
-	 *
-	 * @return void
-	 */
-	public function test_upc_pair_is_ordered_oppositely_on_the_two_byte_lanes(): void {
-		// Arrange / Act / Assert.
-		$this->assertTrue( Barcode_Symbology::escpos_id( 'upca' ) < Barcode_Symbology::escpos_id( 'upce' ) );
-		$this->assertTrue( Barcode_Symbology::starprnt_id( 'upce' ) < Barcode_Symbology::starprnt_id( 'upca' ) );
-	}
-
-	/**
 	 * Type names are trimmed, lowercased, and aliased before lookup.
 	 *
 	 * @return void

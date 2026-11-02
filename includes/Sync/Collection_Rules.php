@@ -7,8 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WP_REST_Request;
 
 /**
@@ -34,9 +35,9 @@ use WP_REST_Request;
  *   collection yields an EMPTY plan whose `filter()` is the identity and whose
  *   `around()` merely runs its callable. That is the adoption mechanism: a collection
  *   can be routed through the module before it has any rows, and nothing changes.
- * - `Collection_Rules_Plan::filter()` — the direct lane. Type-preserving clause
- *   bodies; it NEVER touches global filter state. Legacy callbacks can still delegate
- *   to it; collection reads use `around()` for search and visibility.
+ * - `Collection_Rules_Plan::filter()` — the clause-body dispatcher. Type-preserving;
+ *   it NEVER touches global filter state. `around()`'s bindings and non-installing
+ *   argument transforms call it; nothing hooks it directly.
  * - `Collection_Rules_Plan::around()` — the scoped read lanes, and the ONLY install path.
  *   Callbacks are installed, the forward runs, and every binding is unwound in reverse
  *   in a `finally`.
@@ -197,6 +198,11 @@ final class Collection_Rules {
 				'type'        => 'integer',
 				'required'    => false,
 			);
+			$params['pos_register'] = array(
+				'description' => /* translators: REST API schema field label or error message. */ __( 'Filter orders by POS register.', 'woocommerce-pos' ),
+				'type'        => 'string',
+				'required'    => false,
+			);
 		}
 
 		return $params;
@@ -232,29 +238,52 @@ final class Collection_Rules {
 	 *                    and postmeta under legacy.
 	 *   - `id_set`    => `array( 'operator' => 'IN'|'NOT IN' )` a raw id set the rule owns
 	 *                    outright (see the `when => search` note in the class docblock).
-	 *   - `sanitize`  => optional `'key'`, applied to each claimed value.
+	 *   - `any_of`    => per-storage column/meta carriers, for a value matching either the
+	 *                    HPOS column or an index meta row (multiple meta keys on posts).
+	 *   - `sanitize`  => optional `'key'` or `'gateway_id'`, applied to each claimed value.
 	 *
 	 * @internal
 	 *
-	 * @param string $collection Collection slug.
+	 * @param string $collection    Collection slug.
+	 * @param bool   $apply_filters False returns the declaration as shipped, before `wcpos_search_fields`.
 	 *
 	 * @return array{sorts?: array<string, array>, filters?: array<string, array>, search?: array<string, mixed>, visibility?: array<string, mixed>}
 	 */
-	public static function rules( string $collection ): array {
+	public static function rules( string $collection, bool $apply_filters = true ): array {
 		$rules = array(
 			'orders' => array(
 				'search' => array(
 					'param'      => 'search',
 					'term_cap'   => self::SEARCH_TERM_CAP,
 					'rank_exact' => false,
-					'carriers'   => array( 'id', 'billing_email', 'first_name', 'last_name', 'company', 'email', 'phone' ),
+					'carriers'   => array(
+						'id',
+						'billing_email',
+						'first_name',
+						'last_name',
+						'company',
+						'email',
+						'phone',
+						'shipping_first_name',
+						'shipping_last_name',
+						'shipping_company',
+						'shipping_phone',
+						'line_item_name',
+						'line_item_sku',
+						'number_meta',
+					),
+					'number_meta' => array( '_order_number', '_order_number_formatted' ),
+					'line_items'  => array(
+						'name' => 'order_item_name',
+						'sku'  => '_sku',
+					),
 					'hpos'       => array(
 						'orders'    => array( 'id', 'billing_email' ),
 						'addresses' => array( 'first_name', 'last_name', 'company', 'email', 'phone' ),
 					),
 					'posts'      => array(
 						'id'   => 'ID',
-						'meta' => array( '_billing_first_name', '_billing_last_name', '_billing_company', '_billing_email', '_billing_phone' ),
+						'meta' => array( '_billing_first_name', '_billing_last_name', '_billing_company', '_billing_email', '_billing_phone', '_shipping_first_name', '_shipping_last_name', '_shipping_company', '_shipping_phone' ),
 					),
 				),
 				'sorts' => array(
@@ -299,6 +328,21 @@ final class Collection_Rules {
 					),
 					'pos_store' => array(
 						'meta' => array( 'key' => '_pos_store' ),
+					),
+					'pos_register' => array(
+						'meta'     => array( 'key' => '_wcpos_register' ),
+						'sanitize' => 'key',
+					),
+					// v2-only row, like created_via; the frozen v1 map and schema omit it.
+					'payment_method' => array(
+						'any_of'   => array(
+							'hpos'  => array(
+								'column'   => 'payment_method',
+								'meta_key' => Ledger::INDEX_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Declaration row, not a live query arg.
+							),
+							'posts' => array( 'meta_keys' => array( '_payment_method', Ledger::INDEX_META_KEY ) ),
+						),
+						'sanitize' => 'gateway_id',
 					),
 
 					/*
@@ -364,6 +408,7 @@ final class Collection_Rules {
 					'where_backstop' => true,
 				),
 				'sorts' => self::catalog_meta_sorts(),
+				'filters' => self::catalog_id_sets(),
 			),
 			'variations' => array(
 				'search' => array(
@@ -388,6 +433,7 @@ final class Collection_Rules {
 					'where_backstop' => true,
 				),
 				'sorts' => self::catalog_meta_sorts(),
+				'filters' => self::catalog_id_sets(),
 			),
 
 			/*
@@ -407,6 +453,30 @@ final class Collection_Rules {
 			 * kinds this table has never expressed; that is a later increment.
 			 */
 			'customers' => array(
+				'search' => array(
+					'param'      => 'search',
+					'term_cap'   => self::SEARCH_TERM_CAP,
+					'users'      => array( 'user_email', 'user_login', 'display_name' ),
+					'meta'       => array( 'first_name', 'last_name', 'billing_first_name', 'billing_last_name', 'billing_email', 'billing_company', 'billing_phone', 'shipping_first_name', 'shipping_last_name', 'shipping_company', 'shipping_phone' ),
+					'phone_meta' => array( 'billing_phone', 'shipping_phone' ),
+					'carriers'   => array(
+						'user_email',
+						'user_login',
+						'display_name',
+						'first_name',
+						'last_name',
+						'billing_first_name',
+						'billing_last_name',
+						'billing_email',
+						'billing_company',
+						'billing_phone',
+						'shipping_first_name',
+						'shipping_last_name',
+						'shipping_company',
+						'shipping_phone',
+						'tax_ids',
+					),
+				),
 				'sorts' => array(
 					'first_name' => array(),
 					'last_name'  => array(),
@@ -417,7 +487,124 @@ final class Collection_Rules {
 			),
 		);
 
+		if ( $apply_filters && isset( $rules[ $collection ]['search'] ) ) {
+			/**
+			 * Widen the server-side search for a collection.
+			 *
+			 * This filter changes only the server's search query. The POS client does not read this declaration.
+			 *
+			 * A store adds a custom meta key by appending it to `meta` (customers) or `posts.meta` (orders). Order keys
+			 * go in `posts.meta` for both storages: they are searched in post meta on legacy storage and in the order
+			 * meta table under HPOS. Keys are passed to the query as values. The column lists (`users`, `hpos.addresses`)
+			 * accept only the columns the search builders know, and any other entry is ignored. `line_items` and
+			 * `hpos.orders` describe what is searched and do not change the query. No settings UI exists or is planned.
+			 *
+			 * @param array  $search     Search declaration.
+			 * @param string $collection Collection slug.
+			 */
+			$declared                        = $rules[ $collection ]['search'];
+			$filtered = apply_filters( 'wcpos_search_fields', $declared, $collection );
+			$filtered = apply_filters_deprecated( 'woocommerce_pos_search_fields', array( $filtered, $collection ), '2.0.0', 'wcpos_search_fields' );
+			$rules[ $collection ]['search'] = self::normalize_search_declaration( $declared, $filtered );
+		}
+
 		return $rules[ $collection ] ?? array();
+	}
+
+	/**
+	 * The meta keys a store ADDED to search through `wcpos_search_fields`, per collection,
+	 * in the form the POS client can search them: the keys the REST `meta_data` exposes.
+	 *
+	 * Published on the site payload so the till folds the same custom fields into its local
+	 * search that the server matches (monorepo#2411). Only additions are listed — the declared
+	 * fields are fixed in both codebases — and only keys without a leading underscore, which
+	 * WooCommerce treats as protected and withholds from `meta_data`. A protected key is still
+	 * searched on the server; it simply cannot be searched locally.
+	 *
+	 * @return array<string, string[]> Collection slug => added meta keys (customers, orders).
+	 */
+	public static function client_search_meta_keys(): array {
+		$added = array();
+		$paths = array(
+			'customers' => array( 'meta' ),
+			'orders'    => array( 'posts', 'meta' ),
+		);
+		foreach ( $paths as $collection => $path ) {
+			$declared = self::rules( $collection, false )['search'] ?? array();
+			$filtered = self::rules( $collection )['search'] ?? array();
+			foreach ( $path as $segment ) {
+				$declared = $declared[ $segment ] ?? array();
+				$filtered = $filtered[ $segment ] ?? array();
+			}
+			// Strings only on BOTH sides before the diff: array_diff() stringifies its operands,
+			// and a callback that appended an array or object would otherwise 500 this public
+			// endpoint and block every connect.
+			$strings = static fn( array $list ): array => array_filter( $list, 'is_string' );
+			$keys    = array_filter(
+				array_diff( $strings( (array) $filtered ), $strings( (array) $declared ) ),
+				static fn( string $key ) => '' !== $key && '_' !== $key[0]
+			);
+			$added[ $collection ] = array_values( array_unique( $keys ) );
+		}
+		return $added;
+	}
+
+	/**
+	 * Keep every list the builders merge over an array, whatever a filter callback returned.
+	 *
+	 * A callback that unsets `meta` or `posts.meta` would otherwise reach `array_merge()` as
+	 * null and turn the search request into a 500. Each key present in the declaration keeps
+	 * the filtered value when it has the declared type and falls back to the declared value
+	 * otherwise; keys the filter added pass through untouched.
+	 *
+	 * @param array $declared Declaration before the filter.
+	 * @param mixed $filtered What the filter returned.
+	 * @return array
+	 */
+	private static function normalize_search_declaration( array $declared, $filtered ): array {
+		if ( ! \is_array( $filtered ) ) {
+			return $declared;
+		}
+		foreach ( $declared as $key => $value ) {
+			if ( ! \is_array( $value ) ) {
+				continue;
+			}
+			$filtered[ $key ] = \is_array( $filtered[ $key ] ?? null )
+				? ( self::is_list( $value ) ? $filtered[ $key ] : self::normalize_search_declaration( $value, $filtered[ $key ] ) )
+				: $value;
+		}
+		return $filtered;
+	}
+
+	/**
+	 * Whether an array is a plain list (sequential integer keys).
+	 *
+	 * @param array $value Array to inspect.
+	 * @return bool
+	 */
+	private static function is_list( array $value ): bool {
+		return array_keys( $value ) === range( 0, \count( $value ) - 1 );
+	}
+
+	/**
+	 * The catalog collections' raw id sets — `wcpos/v1`'s `wcpos_include` / `wcpos_exclude`.
+	 *
+	 * Claimed only where a lane's narrowing map exposes them (today: the v1 product and
+	 * variation controllers), and applied by the plan's guarded, scoped `posts_where`
+	 * binding instead of a request-long callback. The default id-set parse reproduces
+	 * v1's historic `array_map( 'intval', (array) $value )` cast verbatim.
+	 *
+	 * @return array<string, array>
+	 */
+	private static function catalog_id_sets(): array {
+		return array(
+			'include' => array(
+				'id_set' => array( 'operator' => 'IN' ),
+			),
+			'exclude' => array(
+				'id_set' => array( 'operator' => 'NOT IN' ),
+			),
+		);
 	}
 
 	/**
@@ -480,8 +667,6 @@ final class Collection_Rules {
 			return self::STORAGE_POSTS;
 		}
 
-		return class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled()
-			? self::STORAGE_HPOS
-			: self::STORAGE_POSTS;
+		return Order_Meta_Store::hpos() ? self::STORAGE_HPOS : self::STORAGE_POSTS;
 	}
 }

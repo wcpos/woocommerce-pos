@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 use const WCPOS\WooCommercePOS\VERSION;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 
 /**
  * @internal
@@ -150,6 +151,29 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids     = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array( $order1->get_id(), $order2->get_id() ), $ids );
+	}
+
+	public function test_order_api_get_all_ids_with_register_returns_only_matching_cpt_order(): void {
+		$register = '550e8400-e29b-41d4-a716-446655440000';
+		OrderHelper::create_order();
+		$matching_order = OrderHelper::create_order();
+		$matching_order->add_meta_data( '_wcpos_register', $register, true );
+		$matching_order->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( array( $matching_order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'pos_register', $register );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $matching_order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
 	}
 
 	public function test_order_api_get_all_ids_with_date_modified_gmt(): void {
@@ -1278,6 +1302,51 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order_with_cashier->get_id() ), $ids );
 	}
 
+	public function test_filter_order_by_register_returns_only_that_registers_orders(): void {
+		$register = '550e8400-e29b-41d4-a716-446655440000';
+
+		// An order without a register (excluded) and one with (included).
+		OrderHelper::create_order();
+		$order_with_register = OrderHelper::create_order();
+		$order_with_register->add_meta_data( '_wcpos_register', $register, true );
+		$order_with_register->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'pos_register', $register );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $data );
+		$this->assertSame( array( $order_with_register->get_id() ), wp_list_pluck( $data, 'id' ) );
+
+		// Current-lane coverage alongside the legacy pin: the same filter on wcpos/v2.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $order_with_register->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
+	public function test_filter_order_by_register_on_v2_returns_only_that_registers_orders(): void {
+		$register = '550e8400-e29b-41d4-a716-446655440000';
+
+		// An order without a register (excluded) and one with (included).
+		OrderHelper::create_order();
+		$order_with_register = OrderHelper::create_order();
+		$order_with_register->add_meta_data( '_wcpos_register', $register, true );
+		$order_with_register->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertCount( 1, $data );
+		$this->assertSame( array( $order_with_register->get_id() ), wp_list_pluck( $data, 'id' ) );
+	}
+
 	public function test_filter_order_by_store(): void {
 		// Use a unique store ID for testing (doesn't need to be a real store post)
 		$test_store_id = 12345;
@@ -1727,7 +1796,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_order_links_force_ssl_disabled_preserves_home_scheme(): void {
 		// Arrange.
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['force_ssl'] = false;
 
@@ -2455,5 +2524,118 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 		$this->assertCount( 1, $uuids, 'There should be exactly one uuid after regeneration.' );
 		$this->assertTrue( Uuid::isValid( $uuids[0] ), 'The regenerated uuid should be valid.' );
+	}
+
+	/**
+	 * The v2 register filter returns only matching orders and none for an unknown UUID.
+	 */
+	public function test_v2_pos_register_filter_returns_only_matching_orders(): void {
+		// Arrange.
+		$register_a = '550e8400-e29b-41d4-a716-446655440000';
+		$register_b = '550e8400-e29b-41d4-a716-446655440001';
+		$order1     = OrderHelper::create_order();
+		$order2     = OrderHelper::create_order();
+		$order3     = OrderHelper::create_order();
+		$order1->add_meta_data( '_wcpos_register', $register_a, true );
+		$order1->save();
+		$order2->add_meta_data( '_wcpos_register', $register_a, true );
+		$order2->save();
+		$order3->add_meta_data( '_wcpos_register', $register_b, true );
+		$order3->save();
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', $register_a );
+		$response = $this->server->dispatch( $request );
+
+		// Assert exact membership, independent of default order.
+		$this->assertSame( 200, $response->get_status() );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+		$expected = array( $order1->get_id(), $order2->get_id() );
+		sort( $ids );
+		sort( $expected );
+		$this->assertSame( $expected, $ids );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'pos_register', '550e8400-e29b-41d4-a716-446655440002' );
+		$response = $this->server->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data() );
+	}
+
+	/**
+	 * A split ledger saved by the server indexes every tender for the v2 read filter. Under
+	 * ADR 0040 the ledger is written only by the server (the push lane strips it), so the
+	 * ledger save is the one writer of the index.
+	 */
+	public function test_ledger_save_builds_the_split_payment_method_filter_index(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
+		$rows = array(
+			array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '5.00', 'status' => 'captured' ),
+			array( 'id' => wp_generate_uuid4(), 'method_id' => 'stripe', 'amount' => '5.00', 'status' => 'captured' ),
+		);
+
+		// Act.
+		Ledger_Seed::rows( wc_get_order( $order->get_id() ), $rows, false );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+		$request->set_param( 'payment_method', 'stripe' );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $order->get_id() ), wp_list_pluck( $response->get_data(), 'id' ) );
+		$stored = wc_get_order( $order->get_id() );
+		$index = array_values( wp_list_pluck( $stored->get_meta( '_wcpos_payment_method', false ), 'value' ) );
+		sort( $index );
+		$this->assertSame( array( 'pos_cash', 'stripe' ), $index );
+	}
+
+	/** Both scalar-only orders and every tender of a split match on the v2 read route. */
+	public function test_v2_payment_method_filter_matches_scalar_and_split_orders(): void {
+		// Arrange.
+		$order_a = OrderHelper::create_order();
+		$order_b = OrderHelper::create_order();
+		$order_c = OrderHelper::create_order();
+		$order_a->set_payment_method( 'pos_cash' );
+		$order_b->set_payment_method( 'stripe' );
+		$order_c->set_payment_method( 'pos_cash' );
+		// A split: the index rows are derived from the ledger by the save hook, never hand-written.
+		$order_c->update_meta_data(
+			'_wcpos_payments',
+			array(
+				'schema'   => 1,
+				'payments' => array(
+					array( 'id' => wp_generate_uuid4(), 'method_id' => 'pos_cash', 'amount' => '5.00', 'status' => 'captured' ),
+					array( 'id' => wp_generate_uuid4(), 'method_id' => 'stripe', 'amount' => '5.00', 'status' => 'captured' ),
+				),
+			)
+		);
+		$order_a->save();
+		$order_b->save();
+		$order_c->save();
+
+		$cases = array(
+			'stripe'     => array( $order_b->get_id(), $order_c->get_id() ),
+			'pos_cash'   => array( $order_a->get_id(), $order_c->get_id() ),
+			'cod'        => array(),
+			'pos%3Acash' => array(),
+			''           => array(),
+		);
+		foreach ( $cases as $gateway => $expected ) {
+			// Act: REST receives the decoded query parameter, as with ?payment_method=pos%3Acash.
+			$request = $this->wp_rest_get_request( '/wcpos/v2/orders' );
+			$request->set_param( 'payment_method', rawurldecode( $gateway ) );
+			$response = $this->server->dispatch( $request );
+
+			// Assert exact membership, independent of the default ordering.
+			$this->assertSame( 200, $response->get_status() );
+			$ids = wp_list_pluck( $response->get_data(), 'id' );
+			sort( $ids );
+			sort( $expected );
+			$this->assertSame( $expected, $ids, 'Gateway: ' . $gateway );
+		}
 	}
 }

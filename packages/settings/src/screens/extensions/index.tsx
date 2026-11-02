@@ -50,7 +50,7 @@ function Extensions() {
 
 	const { data: extensions = [] } = useSuspenseQuery<Extension[]>({
 		queryKey: ['extensions'],
-		queryFn: () => apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
+		queryFn: () => apiFetch({ path: 'wcpos/v2/extensions?wcpos=1', method: 'GET' }),
 	});
 
 	const isPro = !!(window as any)?.wcpos?.settings?.getComponent?.('extensions.action');
@@ -58,7 +58,7 @@ function Extensions() {
 		setIsRefreshing(true);
 		try {
 			const data = await apiFetch<Extension[]>({
-				path: 'wcpos/v1/extensions?wcpos=1&force=1',
+				path: 'wcpos/v2/extensions?wcpos=1&force=1',
 				method: 'GET',
 			});
 			if (data.length === 0) {

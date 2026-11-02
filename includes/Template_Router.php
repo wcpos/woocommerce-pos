@@ -33,6 +33,12 @@ class Template_Router {
 	public const CHECKOUT_PATH = 'wcpos-checkout';
 
 	/**
+	 * Customer display host page path. Served by WCPOS Pro; Free links to it
+	 * from the templates gallery and editor.
+	 */
+	public const DISPLAY_PATH = 'wcpos-display';
+
+	/**
 	 * Rewrite regex of the retired /wcpos-login/ page.
 	 *
 	 * Earlier versions registered this rule; sites still carry it in their cached
@@ -194,7 +200,7 @@ class Template_Router {
 		global $wp;
 
 		// check is pos.
-		if ( ! woocommerce_pos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
+		if ( ! wcpos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
 			return $order_received_url;
 		}
 
@@ -238,7 +244,8 @@ class Template_Router {
 			if ( isset( $wp->query_vars[ $query_var ] ) ) {
 				$order_id = absint( $wp->query_vars[ $query_var ] );
 
-				if ( class_exists( $classname ) && $order_id ) {
+				// Receipt documents may be orderless; their handler owns document authorisation.
+				if ( class_exists( $classname ) && ( $order_id || 'wcpos-receipt' === $query_var ) ) {
 					$template = new $classname( $order_id );
 					$template->get_template();
 
@@ -297,9 +304,10 @@ class Template_Router {
 		 *
 		 * @param string $policy The CSP policy string. Default empty (no CSP set).
 		 *
-		 * @hook woocommerce_pos_content_security_policy
+		 * @hook wcpos_content_security_policy
 		 */
-		$policy = apply_filters( 'woocommerce_pos_content_security_policy', '' );
+		$policy = apply_filters( 'wcpos_content_security_policy', '' );
+		$policy = apply_filters_deprecated( 'woocommerce_pos_content_security_policy', array( $policy ), '2.0.0', 'wcpos_content_security_policy' );
 
 		if ( ! empty( $policy ) ) {
 			header( 'Content-Security-Policy: ' . $policy );

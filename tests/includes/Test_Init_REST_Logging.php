@@ -41,7 +41,7 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 		Logger::reset_dedup_state();
 
 		add_filter(
-			'woocommerce_pos_logging',
+			'wcpos_logging',
 			function ( $should_log, $message ) {
 				$this->logged_messages[] = $message;
 
@@ -61,7 +61,7 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 		$wp->query_vars = array();
 		delete_transient( 'wcpos_missing_request_marker_v1' );
 		delete_transient( 'wcpos_missing_request_marker_v2' );
-		remove_all_filters( 'woocommerce_pos_logging' );
+		remove_all_filters( 'wcpos_logging' );
 		Logger::reset_dedup_state();
 		parent::tearDown();
 	}
@@ -96,6 +96,19 @@ class Test_Init_REST_Logging extends WC_Unit_Test_Case {
 			array( '/wcpos/v2/orders: request marker missing (routes still registered via namespace detection).' ),
 			$this->logged_messages
 		);
+	}
+
+	/**
+	 * A payment provider's webhook never carries the marker: it is expected unmarked traffic.
+	 */
+	public function test_payment_webhook_without_marker_does_not_warn(): void {
+		global $wp;
+
+		$wp->query_vars = array( 'rest_route' => '/wcpos/v2/payments/webhook' );
+
+		$this->invoke_log_unmarked_wcpos_rest_request();
+
+		$this->assertCount( 0, $this->logged_messages );
 	}
 
 	/**

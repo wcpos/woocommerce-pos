@@ -5,6 +5,7 @@ export interface FilterState {
 	categories: string[];
 	output: 'all' | 'html' | 'escpos';
 	direction: 'all' | 'ltr' | 'rtl';
+	screen: 'all' | 'responsive' | 'small-screen' | 'large-screen';
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -12,9 +13,12 @@ export const DEFAULT_FILTERS: FilterState = {
 	categories: [],
 	output: 'all',
 	direction: 'all',
+	screen: 'all',
 };
 
 interface FilterSidebarProps {
+	showOutputFilters?: boolean;
+	showScreenFilter?: boolean;
 	filters: FilterState;
 	onChange: (filters: FilterState) => void;
 	availableCategories: string[];
@@ -23,6 +27,7 @@ interface FilterSidebarProps {
 }
 
 interface RadioGroupProps {
+	hidden?: boolean;
 	label: string;
 	name: string;
 	value: string;
@@ -32,10 +37,13 @@ interface RadioGroupProps {
 
 function formatLabel(slug: string): string {
 	if (slug === 'all') return t('filter.all');
-	return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	const fallback = slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	return t(`category.${slug}`, { defaultValue: fallback });
 }
 
-function RadioGroup({ label, name, value, options, onChange }: RadioGroupProps) {
+function RadioGroup({ hidden, label, name, value, options, onChange }: RadioGroupProps) {
+	if (hidden) return null;
+
 	return (
 		<fieldset className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
 			<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0 wcpos:pb-2">
@@ -66,11 +74,14 @@ function isFiltered(filters: FilterState): boolean {
 		filters.search !== '' ||
 		filters.categories.length > 0 ||
 		filters.output !== 'all' ||
-		filters.direction !== 'all'
+		filters.direction !== 'all' ||
+		filters.screen !== 'all'
 	);
 }
 
 export function FilterSidebar({
+	showOutputFilters = true,
+	showScreenFilter = false,
 	filters,
 	onChange,
 	availableCategories,
@@ -143,6 +154,21 @@ export function FilterSidebar({
 
 			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
 
+			{/* Screen */}
+			<RadioGroup
+				hidden={!showScreenFilter}
+				label={t('filter.screen')}
+				name="filter-screen"
+				value={filters.screen}
+				options={[
+					{ value: 'all', label: t('filter.all') },
+					{ value: 'responsive', label: t('filter.screen_responsive') },
+					{ value: 'small-screen', label: t('filter.screen_small') },
+					{ value: 'large-screen', label: t('filter.screen_large') },
+				]}
+				onChange={(v) => onChange({ ...filters, screen: v as FilterState['screen'] })}
+			/>
+
 			{/* Categories */}
 			<fieldset className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
 				<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0 wcpos:pb-2">
@@ -168,6 +194,7 @@ export function FilterSidebar({
 
 			{/* Format */}
 			<RadioGroup
+				hidden={!showOutputFilters}
 				label={t('filter.format')}
 				name="filter-format"
 				value={filters.output}
@@ -184,10 +211,13 @@ export function FilterSidebar({
 				}
 			/>
 
-			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
+			{showOutputFilters && (
+				<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
+			)}
 
 			{/* Direction */}
 			<RadioGroup
+				hidden={!showOutputFilters}
 				label={t('filter.direction')}
 				name="filter-direction"
 				value={filters.direction}

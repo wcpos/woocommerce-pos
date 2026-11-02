@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Compact contract-focused documentation.
 
 class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
+	use Seeds_Stored_Digests;
 	private int $product_id;
 
 	public function setUp(): void {
@@ -50,7 +51,7 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 	public function test_drift_interleaved_clients_preserve_both_increments(): void {
 		// Pause A immediately before its write; B writes without A re-reading state.
 		$interleave = function ( $sql ) use ( &$interleave ) {
-			if ( preg_match( '/^(INSERT|UPDATE)/i', $sql ) && ( false !== strpos( $sql, 'wcpos_drift_' ) || false !== strpos( $sql, Integrity_Controller::DRIFT_STREAK_OPTION ) ) ) {
+			if ( preg_match( '/^(INSERT|UPDATE)/i', $sql ) && false !== strpos( $sql, 'wcpos_drift_' ) ) {
 				remove_filter( 'query', $interleave );
 				$this->drill( 'till-B' );
 			}
@@ -115,7 +116,7 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		foreach ( array( 'till-A', 'till-B', 'till-C' ) as $instance ) {
 			$this->drill( $instance );
 		}
-		( new Integrity_Digest() )->upsert_digest( $this->product_id );
+		$this->seed_digests( 'products', $this->product_id );
 		$this->drill( 'till-A', false );
 		$this->make_stale( 'Another hookless edit' );
 		$this->drill( 'till-A' );
@@ -149,9 +150,12 @@ class Test_Integrity_Drift_Streak extends Sync_REST_Store_Test_Case {
 		$ids = array();
 		for ( $i = 0; $i < $count; ++$i ) {
 			$this->product_id = ProductHelper::create_simple_product()->get_id();
-			( new Integrity_Digest() )->upsert_digest( $this->product_id );
-			$this->make_stale();
 			$ids[] = $this->product_id;
+		}
+		$this->seed_digests( 'products', ...$ids );
+		foreach ( $ids as $id ) {
+			$this->product_id = $id;
+			$this->make_stale();
 		}
 		return $ids;
 	}

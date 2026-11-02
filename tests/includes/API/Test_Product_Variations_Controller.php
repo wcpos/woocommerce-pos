@@ -313,7 +313,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_variation_get_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => 'foo',
@@ -330,7 +330,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_response_contains_sku_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_sku',
@@ -371,7 +371,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_response_contains_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_some_field',
@@ -395,7 +395,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_update_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => 'barcode',
@@ -424,7 +424,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_get_global_unique_id_as_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_global_unique_id',
@@ -441,7 +441,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_response_contains_global_unique_id_as_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_global_unique_id',
@@ -467,7 +467,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_update_global_unique_id_as_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_global_unique_id',
@@ -534,7 +534,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_orderby_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_barcode',
@@ -676,7 +676,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'integer', $schema['properties']['stock_quantity']['type'] );
 
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$schema = $this->endpoint->get_item_schema();
 		$this->assertEquals( 'number', $schema['properties']['stock_quantity']['type'] );
@@ -684,7 +684,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_response_with_decimal_quantities(): void {
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
@@ -705,7 +705,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_variation_orderby_decimal_stock_quantity(): void {
 		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+		$this->assertTrue( wcpos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
@@ -747,7 +747,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_online_only_product_variations(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'pos_only_products' => true,
@@ -920,7 +920,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_all_variation_response_contains_barcode(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function () {
 				return array(
 					'barcode_field' => '_some_field',
@@ -948,7 +948,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_all_variation_search(): void {
 		// enable barcode and pos_only_products
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['barcode_field']     = '_barcode';
 				$settings['pos_only_products'] = true;
@@ -1053,7 +1053,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_variation_search_matches_every_term(): void {
 		add_filter(
-			'woocommerce_pos_general_settings',
+			'wcpos_general_settings',
 			function ( $settings ) {
 				$settings['barcode_field'] = '_barcode';
 				return $settings;

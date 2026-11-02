@@ -136,7 +136,7 @@ final class Config_Fingerprint {
 	 * A client cold-adopts a fingerprint key it has never stored, so a contract bump for one of
 	 * the six phase-1 collections only reaches tills whose server passed through a release that
 	 * served the key at the OLD version first — a server upgrade that skips straight past phase 1
-	 * cold-adopts at the new version with no re-pull. Between phase 1 and the 1.11.0 protocol
+	 * cold-adopts at the new version with no re-pull. Between phase 1 and the 2.0.0 protocol
 	 * gate this is moot (recipe changes are batched AT the gate, whose forced resync covers
 	 * them); if a pre-gate bump for one of the six is ever needed, it needs a first-seen
 	 * migration protocol first (#1756 phase 2/3 territory — see the issue).

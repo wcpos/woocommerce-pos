@@ -105,7 +105,8 @@ class Cashier {
 		 * @param WP_User $user User object.
 		 * @param bool    $include_stores Whether stores were included.
 		 */
-		return apply_filters( 'woocommerce_pos_cashier_data', $data, $user, $include_stores );
+		$filtered = apply_filters( 'wcpos_cashier_data', $data, $user, $include_stores );
+		return apply_filters_deprecated( 'woocommerce_pos_cashier_data', array( $filtered, $user, $include_stores ), '2.0.0', 'wcpos_cashier_data' );
 	}
 
 	/**
@@ -128,7 +129,8 @@ class Cashier {
 		 * @param array   $stores Array of Store objects.
 		 * @param WP_User $user   User object.
 		 */
-		return apply_filters( 'woocommerce_pos_cashier_accessible_stores', $stores, $user );
+		$filtered = apply_filters( 'wcpos_cashier_accessible_stores', $stores, $user );
+		return apply_filters_deprecated( 'woocommerce_pos_cashier_accessible_stores', array( $filtered, $user ), '2.0.0', 'wcpos_cashier_accessible_stores' );
 	}
 
 	/**

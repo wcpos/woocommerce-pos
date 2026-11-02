@@ -44,7 +44,7 @@ use WP_REST_Request;
  *
  * It does not authorize the store. Stores are a Pro concept; the free plugin
  * has no store registry and no notion of which stores a cashier may act as.
- * This is the same split as `woocommerce_pos_order_store_reassignment_allowed`
+ * This is the same split as `wcpos_order_store_reassignment_allowed`
  * (free#1550 / pro#426): free carries and shapes the scalar, Pro rules on it.
  *
  * It also never invents a scope. A missing, blank, zero or non-numeric header

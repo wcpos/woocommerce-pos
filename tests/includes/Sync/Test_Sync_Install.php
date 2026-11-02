@@ -150,6 +150,81 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * Schema 6 (#1757): order journal rows carry no revision value. An upgrading
+	 * install still holds pre-#1746 stored hashes and `'deleted'` tombstone
+	 * markers; the upgrade blanks them so the planner has one revision source,
+	 * and leaves catalogue/customer stamps alone.
+	 */
+	public function test_schema_6_upgrade_blanks_legacy_order_revisions(): void {
+		global $wpdb;
+		( new Activator() )->install_sync_schema();
+		update_option( Api::SCHEMA_OPTION, '5', false );
+		$journal = new Sync_Journal();
+		$journal->record( 'order', 41, false, 'sha256:legacy', 'hook:update', false );
+		$journal->record( 'order', 42, true, 'deleted', 'hook:delete', false );
+		$journal->record( 'product', 43, false, '2026-07-10 00:00:00', 'hook:update', false );
+
+		( new Activator() )->install_sync_schema();
+
+		$rows = $wpdb->get_results( 'SELECT object_type, revision FROM ' . $journal->table_name() . ' ORDER BY sequence', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$this->assertSame(
+			array(
+				array(
+					'object_type' => 'order',
+					'revision' => '',
+				),
+				array(
+					'object_type' => 'order',
+					'revision' => '',
+				),
+				array(
+					'object_type' => 'product',
+					'revision' => '2026-07-10 00:00:00',
+				),
+			),
+			$rows
+		);
+		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
+	}
+
+	/**
+	 * A failed schema-6 blanking keeps the OLD latch (like the schema-3 step), so
+	 * the next install retries instead of latching over rows that still carry a
+	 * stored order revision the planner could never see again.
+	 */
+	public function test_schema_6_upgrade_keeps_old_latch_when_blanking_fails(): void {
+		global $wpdb;
+		( new Activator() )->install_sync_schema();
+		update_option( Api::SCHEMA_OPTION, '5', false );
+		$journal = new Sync_Journal();
+		$journal->record( 'order', 51, false, 'sha256:legacy', 'hook:update', false );
+
+		// Break only the blanking UPDATE: point it at a table that does not exist.
+		$break_blanking = static function ( string $query ): string {
+			return false !== strpos( $query, "SET revision = ''" ) ? "UPDATE wcpos_no_such_table SET revision = '' WHERE 1 = 0" : $query;
+		};
+		add_filter( 'query', $break_blanking );
+		$suppress = $wpdb->suppress_errors();
+		( new Activator() )->install_sync_schema();
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $break_blanking );
+
+		// get_row, not get_var: get_var() maps an empty-string value to null by design.
+		$revision_of_51 = static function () use ( $wpdb, $journal ): ?string {
+			$row = $wpdb->get_row( 'SELECT revision FROM ' . $journal->table_name() . ' WHERE object_id = 51', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+			return \is_array( $row ) ? (string) $row['revision'] : null;
+		};
+
+		$this->assertSame( '5', get_option( Api::SCHEMA_OPTION, null ) );
+		$this->assertSame( 'sha256:legacy', $revision_of_51() );
+
+		( new Activator() )->install_sync_schema();
+
+		$this->assertSame( '', $revision_of_51() );
+		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
+	}
+
+	/**
 	 * A failed repair clears the current latch so a later install retries.
 	 */
 	public function test_failed_repair_clears_current_latch_and_next_install_repairs_schema(): void {
@@ -291,6 +366,90 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 
 		$this->assertTrue( Health::is_healthy() );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
+	}
+
+	/**
+	 * A failed business-day upgrade preserves the latch and releases the lock without throwing.
+	 */
+	public function test_version_check_business_day_upgrade_failure_is_logged_not_thrown(): void {
+		global $wpdb;
+
+		update_option( 'woocommerce_pos_db_version', \WCPOS\WooCommercePOS\VERSION );
+		update_option( Api::SCHEMA_OPTION, '6', false );
+		delete_option( 'woocommerce_pos_db_upgrade_lock.lock' );
+		remove_all_actions( 'woocommerce_init' );
+
+		$break_business_day_read = static function ( string $query ): string {
+			return false !== strpos( $query, 'business_day IS NULL' ) ? 'SELECT id, opened_at_gmt FROM wcpos_no_such_table WHERE 1 = 0' : $query;
+		};
+		add_filter( 'query', $break_business_day_read );
+		$logged      = array();
+		$capture_log = static function ( bool $enabled, string $message ) use ( &$logged ): bool {
+			$logged[] = $message;
+			return $enabled;
+		};
+		// The Logger suppresses a consecutive duplicate before the filter runs; the latch test
+		// logs this same line, so start from clean dedup state whatever the test order.
+		\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
+		add_filter( 'wcpos_logging', $capture_log, 10, 2 );
+		$suppress = $wpdb->suppress_errors();
+
+		try {
+			$activator     = new Activator();
+			$reflection    = new \ReflectionClass( $activator );
+			$version_check = $reflection->getMethod( 'version_check' );
+			$version_check->setAccessible( true );
+			$version_check->invoke( $activator );
+
+			do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+		} finally {
+			remove_filter( 'query', $break_business_day_read );
+			remove_filter( 'wcpos_logging', $capture_log, 10 );
+			\WCPOS\WooCommercePOS\Logger::reset_dedup_state();
+			$wpdb->suppress_errors( $suppress );
+		}
+
+		$this->assertSame( '6', get_option( Api::SCHEMA_OPTION, null ) );
+		$this->assertFalse( get_option( 'woocommerce_pos_db_upgrade_lock.lock', false ) );
+		$this->assertCount( 1, array_filter( $logged, static fn( string $m ): bool => false !== strpos( $m, 'WCPOS database upgrade failed: Business day upgrade read failed.' ) ) );
+	}
+
+	/**
+	 * A failed upgrade puts the plugin-version latch back, so the next request re-detects it.
+	 */
+	public function test_version_check_failed_upgrade_restores_the_plugin_version_latch(): void {
+		global $wpdb;
+
+		update_option( 'woocommerce_pos_db_version', '1.10.0' );
+		update_option( Api::SCHEMA_OPTION, '6', false );
+		delete_option( 'woocommerce_pos_db_upgrade_lock.lock' );
+		remove_all_actions( 'woocommerce_init' );
+
+		$break_business_day_read = static function ( string $query ): string {
+			return false !== strpos( $query, 'business_day IS NULL' ) ? 'SELECT id, opened_at_gmt FROM wcpos_no_such_table WHERE 1 = 0' : $query;
+		};
+		add_filter( 'query', $break_business_day_read );
+		$suppress = $wpdb->suppress_errors();
+
+		try {
+			$activator     = new Activator();
+			$reflection    = new \ReflectionClass( $activator );
+			$version_check = $reflection->getMethod( 'version_check' );
+			$version_check->setAccessible( true );
+			$version_check->invoke( $activator );
+
+			// bump_versions() has already advanced the latch at this point; the failure must undo it.
+			$this->assertSame( \WCPOS\WooCommercePOS\VERSION, get_option( 'woocommerce_pos_db_version' ) );
+
+			do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+		} finally {
+			remove_filter( 'query', $break_business_day_read );
+			$wpdb->suppress_errors( $suppress );
+		}
+
+		$this->assertSame( '1.10.0', get_option( 'woocommerce_pos_db_version' ) );
+		$this->assertSame( '6', get_option( Api::SCHEMA_OPTION, null ) );
+		$this->assertFalse( get_option( 'woocommerce_pos_db_upgrade_lock.lock', false ) );
 	}
 
 	/**

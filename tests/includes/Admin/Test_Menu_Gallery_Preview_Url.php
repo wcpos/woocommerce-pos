@@ -40,8 +40,8 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		unset( $_ENV['WCPOS_WEB_BUNDLE_REF'], $_ENV['DEVELOPMENT'] );
-		remove_all_filters( 'woocommerce_pos_template_gallery_preview_base_url' );
-		remove_all_filters( 'woocommerce_pos_development_mode' );
+		remove_all_filters( 'wcpos_template_gallery_preview_base_url' );
+		remove_all_filters( 'wcpos_development_mode' );
 		wp_set_current_user( 0 );
 		wp_deregister_script( 'wcpos-template-gallery' );
 		parent::tearDown();
@@ -111,7 +111,7 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 	public function test_preview_url_filter_uses_custom_host(): void {
 		// Arrange.
 		add_filter(
-			'woocommerce_pos_template_gallery_preview_base_url',
+			'wcpos_template_gallery_preview_base_url',
 			static function () {
 				return 'https://example.com/previews';
 			}
@@ -127,7 +127,7 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 	 */
 	public function test_preview_url_development_filter_uses_local_files(): void {
 		// Arrange.
-		add_filter( 'woocommerce_pos_development_mode', '__return_true' );
+		add_filter( 'wcpos_development_mode', '__return_true' );
 		// Act.
 		$this->menu->enqueue_gallery_assets();
 		// Assert.

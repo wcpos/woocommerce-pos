@@ -26,7 +26,16 @@ final class Api {
 	public const ADMIN_OP_PATHS  = array( 'uuid/backfill', 'orders/index/backfill', 'integrity/rebuild' );
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
 	// 5: (status, created_at) index on the mutations table for retention pruning.
-	public const SCHEMA_VERSION  = '5';
+	// 6: order journal rows carry no revision value (#1757); the upgrade blanks pre-#1746 stored hashes and 'deleted' markers.
+	// 7: device business-day stamps on sessions and closures, with a site-timezone backfill.
+	// 8: fiscal corrections track the closure carrying their perpetual deltas.
+	// 9: sessions bind manager approval to counted and expected snapshots.
+	// 10: closures fold into their session rows; the legacy closures table is copied and dropped.
+	// 11: cash movements fold into a JSON array on their session rows; the legacy movements table is copied and dropped.
+	// 12: Free's one register moves into the wcpos_register option; the legacy registers table is copied and dropped.
+	// 13: sessions record who started the count (counting_by) beside when.
+	// 14: sessions record carried float provenance.
+	public const SCHEMA_VERSION  = '14';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**
@@ -57,7 +66,7 @@ final class Api {
 	public static function register_controllers( array $controllers ): array {
 		// Reason: Init::hook_rows() retains these registrars here, not at plugins_loaded.
 		// Moving them earlier changes hook visibility and same-priority extension ordering
-		// before woocommerce_pos_rest_api_controllers runs (including unmarked requests).
+		// before wcpos_rest_api_controllers runs (including unmarked requests).
 		Response_Telemetry::register_hooks();
 		Retry_After_Mirror::register_hooks();
 		Response_Envelope::register_hooks();

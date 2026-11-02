@@ -23,8 +23,8 @@ final class Order_Serializer {
 
 	/**
 	 * The pull lane's set: the shared v2 augmentations plus the public
-	 * `woocommerce_pos_sync_serialized_order` filter. The filter is pull-only —
-	 * the proxy lane runs `woocommerce_pos_sync_proxy_response` instead, and the
+	 * `wcpos_sync_serialized_order` filter. The filter is pull-only —
+	 * the proxy lane runs `wcpos_sync_proxy_response` instead, and the
 	 * write path deliberately keeps third-party read filters off its acks.
 	 */
 	public const PULL_AUGMENTATIONS = array( 'tax_ids', 'image_cast', 'item_uuids', 'links', 'serialized_filter' );
@@ -93,12 +93,26 @@ final class Order_Serializer {
 			 * Allows explicit lab inspection without bypassing WooCommerce/WP REST response preparation.
 			 * This filter is additive and must not remove WooCommerce REST fields.
 			 */
-			$payload = (array) apply_filters( 'woocommerce_pos_sync_serialized_order', $payload, $order, $request );
+			$payload = apply_filters( 'wcpos_sync_serialized_order', $payload, $order, $request );
+			$payload = (array) apply_filters_deprecated( 'woocommerce_pos_sync_serialized_order', array( $payload, $order, $request ), '2.0.0', 'wcpos_sync_serialized_order' );
 		}
 
 		return $payload;
 	}
 
+	/**
+	 * The pull lane's order document — and the form its revision hashes.
+	 *
+	 * NOT a pre-augmentation form: `wcpos_sync_serialized_order` is
+	 * where this lane runs `Meta_Normalizer::normalize` (priority 5), and the
+	 * other two revision sites normalize too (the CAS re-read through
+	 * `Product_Serializer::dispatched_bare_read()`, the proxy stamp behind that
+	 * lane's own priority-5 normalizer). Third-party ADDITIONS ride outside the
+	 * hash regardless — {@see self::canonical_form()} scopes it to the schema.
+	 *
+	 * @param int             $order_id Order to serialize.
+	 * @param WP_REST_Request $request  Serialization request.
+	 */
 	public function serialize_order( int $order_id, WP_REST_Request $request ): array {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
@@ -106,19 +120,6 @@ final class Order_Serializer {
 		}
 
 		return $this->document( $order, self::PULL_AUGMENTATIONS, $request );
-	}
-
-	/**
-	 * Add the v1-owned order fields missing from stock wc/v3 serialization.
-	 *
-	 * Retained as the named shorthand for the three payload augmentations (links
-	 * excluded); `document()` is the entry point new callers should use.
-	 *
-	 * @param array     $payload Serialized order payload.
-	 * @param \WC_Order $order   The order backing the payload.
-	 */
-	public function augment_order_payload( array $payload, WC_Order $order ): array {
-		return $this->document( $payload, array( 'tax_ids', 'image_cast', 'item_uuids' ), null, $order );
 	}
 
 	/**
@@ -147,7 +148,7 @@ final class Order_Serializer {
 	 * Mirror each served line/shipping/fee/coupon item's POS uuid into its
 	 * `meta_data`, stamping the order item first when it has none.
 	 *
-	 * Coupon lines are load-bearing here (v1 stamped ALL item types —
+	 * Coupon lines are load-bearing here (v1 stamps every item type but tax —
 	 * V1/Orders_Controller::wcpos_order_get_items): the client pairs pushed
 	 * vs acked lines strictly by uuid with no positional fallback, so a
 	 * served coupon line WITHOUT a uuid can never be paired — a server-side
@@ -249,17 +250,112 @@ final class Order_Serializer {
 		return self::add_receipt_link( $payload, $order );
 	}
 
+	/**
+	 * THE order both lanes compare a claimed revision against: the bare wc/v3 read with six-decimal
+	 * precision and POS links, read once here for the push lane (`Order_Writer::document()`) and the
+	 * money-command lane ({@see self::current_state()}) so they agree on what "current" means
+	 * (ADR 0040 rule 6, ADR 0033). A failed read is returned as it came back: never hashed, and never
+	 * given the pay or receipt link, which carry the order key.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	public static function compared_read( int $order_id ): \WP_REST_Response {
+		$response = Product_Serializer::dispatched_bare_read( '/wc/v3/orders/' . $order_id, array( 'dp' => '6' ) );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $order_id );
+		if ( $response->get_status() < 400 && is_array( $data ) && $order ) {
+			$response->set_data( self::add_pos_links( $data, $order ) );
+		}
+		return $response;
+	}
+
+	/**
+	 * The compared order and its revision, for the money-command lane. A failed inner read (no read
+	 * permission, a vanished order) is returned as its error, never hashed.
+	 *
+	 * @param int $order_id Order id.
+	 * @return array{document: array, revision: string}|\WP_Error
+	 */
+	public static function current_state( int $order_id ) {
+		$response = self::compared_read( $order_id );
+		$data     = $response->get_data();
+		if ( $response->get_status() >= 400 || ! is_array( $data ) ) {
+			$error = is_array( $data ) ? $data : array();
+			return new \WP_Error( (string) ( $error['code'] ?? 'wcpos_order_unreadable' ), (string) ( $error['message'] ?? '' ), array( 'status' => max( 400, $response->get_status() ) ) );
+		}
+		return array(
+			'document' => $data,
+			'revision' => self::canonical_revision( $data ),
+		);
+	}
+
 	/*
 	 * canonical_revision() is THE single order revision recipe.
 	 * The pre-1.10.0 versioned recipe list and grace comparer were retired per
 	 * docs/adr/0033 (free#1745).
 	 */
 
-	/** THE canonical order revision: identity-stripped, then Revision::compute. */
+	/** THE canonical order revision: the schema-scoped canonical form, hashed. */
 	public static function canonical_revision( array $payload ): string {
-		// tax_ids is a read-time decoration (Tax_Id_Reader) that wc/v3's own
-		// serialization never carries — exclude it so pull, proxy, and write-ack
-		// revisions agree with a bare wc/v3 read of the same order.
+		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::canonical_form( $payload ) ) );
+	}
+
+	/**
+	 * The exact array {@see self::canonical_revision()} hashes, for tests and
+	 * diagnostics that need to name a differing field rather than compare digests.
+	 *
+	 * COHERENCE CONTRACT: every site that computes an order revision — the
+	 * pull-time compute in `Order_Pull_Planner`'s fallback closure, the CAS re-read
+	 * in `Order_Writer::document()` reached through
+	 * `API\V2\Write_Controller::revision_for()`, and the proxy stamp in
+	 * {@see Revision::stamp_proxy_revisions()} — runs this function in the same
+	 * runtime, so all three see the same filter output and hash identical bytes.
+	 * Site-local customisation is therefore safe; changing what a filter returns
+	 * costs exactly one self-healing 409 per order, once.
+	 *
+	 * The form is scoped to the top-level keys of WooCommerce's own order REST
+	 * schema, read from a subclass that keeps `register_rest_field` additions out
+	 * and rebuilt per call — schema membership is site-dependent and must never
+	 * freeze for a process. That closes free#1744 by construction: third-party REST
+	 * fields and anything the public `wcpos_sync_serialized_order` filter
+	 * adds sit outside the hash, so a read-time decoration can never 409 a till.
+	 * The generated timestamps are excluded too: WooCommerce moves `date_modified`
+	 * on every save, a semantic no-op included, so hashing it would 409 the next
+	 * writer for nothing. `date_paid*` and `date_completed*` stay — those move with
+	 * status content.
+	 *
+	 * @param array $payload Serialized order payload (transport stamps are ignored).
+	 * @return array Schema-scoped, identity-stripped, canonicalized order.
+	 */
+	public static function canonical_form( array $payload ): array {
+		// WooCommerce merges register_rest_field additions inside get_item_schema().
+		$controller = new class() extends WC_REST_Orders_Controller {
+			/** Keep the core schema; extensions opt in through the revision-fields filter. */
+			protected function add_additional_fields_schema( $schema ) {
+				return $schema;
+			}
+		};
+		$fields = array_diff(
+			array_keys( $controller->get_item_schema()['properties'] ),
+			array( 'date_created', 'date_created_gmt', 'date_modified', 'date_modified_gmt' )
+		);
+
+		/**
+		 * Filters the top-level order fields the canonical revision hashes.
+		 *
+		 * Adding a key brings a site-local field into CAS on every order write;
+		 * removing one takes it out. Read the coherence contract above first.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string[] $fields Top-level order keys inside the hash.
+		 */
+		$fields = apply_filters( 'wcpos_sync_order_revision_fields', $fields );
+		$fields = (array) apply_filters_deprecated( 'woocommerce_pos_sync_order_revision_fields', array( $fields ), '2.0.0', 'wcpos_sync_order_revision_fields' );
+
+		// tax_ids is a read-time decoration (Tax_Id_Reader) wc/v3 never carries and
+		// _rxdb_digest is transport metadata; neither is a schema key, so scoping
+		// drops them. The unset keeps them out of a site that names either above.
 		unset( $payload['tax_ids'], $payload['_rxdb_digest'] );
 
 		// HPOS removes these internal fields only after the restored order's save
@@ -279,7 +375,9 @@ final class Order_Serializer {
 			);
 		}
 
-		return Revision::compute( self::strip_item_identity_meta( self::strip_identity_meta( $payload ) ) );
+		$payload = self::strip_item_identity_meta( self::strip_identity_meta( $payload ) );
+
+		return Revision::canonicalize( array_intersect_key( $payload, array_flip( $fields ) ) );
 	}
 
 	/**

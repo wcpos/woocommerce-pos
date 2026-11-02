@@ -12,6 +12,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
+use WCPOS\WooCommercePOS\Catalog_Visibility;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Post;
@@ -268,9 +269,20 @@ class Single_Product {
 		if ( ! $selected ) {
 			$selected = '';
 			if ( 'add' == get_current_screen()->action ) {
-				$selected = apply_filters( 'woocommerce_pos_default_product_visibility', '', $post );
+				$selected = apply_filters( 'wcpos_default_product_visibility', '', $post );
+				$selected = apply_filters_deprecated( 'woocommerce_pos_default_product_visibility', array( $selected, $post ), '2.0.0', 'wcpos_default_product_visibility' );
 			}
 		}
+
+		// What the catalog visibility goes back to when the product leaves POS
+		// Only (#1862); the template shows it once POS Only is deselected.
+		$visibility_options   = wc_get_product_visibility_options();
+		$prior_catalog        = get_post_meta( $post->ID, Catalog_Visibility::PRIOR_META, true );
+		$prior_catalog_label  = $visibility_options[ \is_string( $prior_catalog ) && isset( $visibility_options[ $prior_catalog ] ) ? $prior_catalog : 'visible' ];
+
+		$product              = wc_get_product( $post->ID );
+		$forced_catalog       = $product ? ( new Catalog_Visibility() )->forced_visibility( $product ) : null;
+		$forced_catalog_label = null === $forced_catalog ? null : $visibility_options[ $forced_catalog ];
 
 		include 'templates/post-metabox-visibility-select.php';
 	}
@@ -336,6 +348,7 @@ class Single_Product {
 		 *
 		 * @param array $excluded_fields Array of field keys to exclude from custom barcode input.
 		 */
-		return apply_filters( 'woocommerce_pos_excluded_custom_barcode_fields', $excluded_fields );
+		$filtered = apply_filters( 'wcpos_excluded_custom_barcode_fields', $excluded_fields );
+		return apply_filters_deprecated( 'woocommerce_pos_excluded_custom_barcode_fields', array( $filtered ), '2.0.0', 'wcpos_excluded_custom_barcode_fields' );
 	}
 }

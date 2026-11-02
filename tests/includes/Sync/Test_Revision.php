@@ -59,6 +59,80 @@ class Test_Revision extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Meta rows hash as an id-less set: ids and row order are storage facts, not content.
+	 * Entries may be arrays or WC_Meta_Data objects; both reduce to the same pair. Applies
+	 * at any depth (an order's line-item meta included).
+	 */
+	public function test_meta_row_ids_order_and_object_shape_do_not_change_revision(): void {
+		$as_arrays = array(
+			'name'       => 'Pants',
+			'meta_data'  => array(
+				array( 'id' => 11, 'key' => 'colour', 'value' => 'red' ),
+				array( 'id' => 12, 'key' => 'size', 'value' => array( 'w' => 32, 'l' => 34 ) ),
+			),
+			'line_items' => array(
+				array( 'id' => 1, 'meta_data' => array( array( 'id' => 21, 'key' => 'note', 'value' => 'gift' ) ) ),
+			),
+		);
+		$resaved_reordered = $as_arrays;
+		$resaved_reordered['meta_data'] = array(
+			array( 'id' => 99, 'key' => 'size', 'value' => array( 'l' => 34, 'w' => 32 ) ),
+			array( 'id' => 98, 'key' => 'colour', 'value' => 'red' ),
+		);
+		$resaved_reordered['line_items'][0]['meta_data'][0]['id'] = 77;
+		$as_objects = $as_arrays;
+		$as_objects['meta_data'] = array_map(
+			static function ( array $entry ): \WC_Meta_Data {
+				return new \WC_Meta_Data( $entry );
+			},
+			$as_arrays['meta_data']
+		);
+
+		$this->assertSame( Revision::compute( $as_arrays ), Revision::compute( $resaved_reordered ) );
+		$this->assertSame( Revision::compute( $as_arrays ), Revision::compute( $as_objects ) );
+	}
+
+	/**
+	 * A changed meta value, or a changed meta key, still changes the revision.
+	 */
+	public function test_meta_content_changes_change_revision(): void {
+		$base = array( 'meta_data' => array( array( 'id' => 11, 'key' => 'colour', 'value' => 'red' ) ) );
+		$changed_value = array( 'meta_data' => array( array( 'id' => 11, 'key' => 'colour', 'value' => 'blue' ) ) );
+		$changed_key   = array( 'meta_data' => array( array( 'id' => 11, 'key' => 'color', 'value' => 'red' ) ) );
+
+		$this->assertNotSame( Revision::compute( $base ), Revision::compute( $changed_value ) );
+		$this->assertNotSame( Revision::compute( $base ), Revision::compute( $changed_key ) );
+	}
+
+	/**
+	 * Generated creation and modification timestamps are not variation content.
+	 */
+	public function test_variation_revision_ignores_generated_dates(): void {
+		// `sku` is a variation schema field; `name` is not (WooCommerce serves it but does
+		// not declare it), so a non-schema field could never move the hash here.
+		$before = array(
+			'sku'               => 'PANTS-1',
+			'date_created'      => '2026-09-05T19:14:30',
+			'date_created_gmt'  => '2026-09-05T19:14:30',
+			'date_modified'     => '2026-09-05T19:14:30',
+			'date_modified_gmt' => '2026-09-05T19:14:30',
+		);
+		$after = array_merge(
+			$before,
+			array(
+				'date_created'      => '2026-09-05T19:14:31',
+				'date_created_gmt'  => '2026-09-05T19:14:31',
+				'date_modified'     => '2026-09-05T19:14:31',
+				'date_modified_gmt' => '2026-09-05T19:14:31',
+			)
+		);
+
+		$this->assertSame( Revision::compute_variation( $before ), Revision::compute_variation( $after ) );
+		$after['sku'] = 'SHIRTS-1';
+		$this->assertNotSame( Revision::compute_variation( $before ), Revision::compute_variation( $after ) );
+	}
+
+	/**
 	 * Taxonomy lists without an id on every entry retain their order.
 	 */
 	public function test_idless_taxonomy_term_order_changes_revision(): void {
@@ -122,5 +196,63 @@ class Test_Revision extends WP_UnitTestCase {
 		$reordered['images'] = array_reverse( $reordered['images'] );
 
 		$this->assertNotSame( Revision::compute( $original ), Revision::compute( $reordered ) );
+	}
+
+	/**
+	 * A claim that is the current revision is not stale.
+	 */
+	public function test_revision_stale_with_the_current_revision_returns_null(): void {
+		// Arrange.
+		$document = array(
+			'id'     => 7,
+			'status' => 'pending',
+		);
+		$current  = Revision::compute( $document );
+
+		// Act.
+		$facts = Revision::stale( $current, $current, $document );
+
+		// Assert.
+		$this->assertNull( $facts );
+	}
+
+	/**
+	 * A claim against another revision gets the current revision and document back.
+	 */
+	public function test_revision_stale_with_another_revision_returns_the_current_revision_and_document(): void {
+		// Arrange.
+		$document = array(
+			'id'     => 7,
+			'status' => 'processing',
+		);
+		$current  = Revision::compute( $document );
+
+		// Act.
+		$facts = Revision::stale( 'sha256:STALE', $current, $document );
+
+		// Assert.
+		$this->assertSame(
+			array(
+				'currentRevision' => $current,
+				'current'         => $document,
+			),
+			$facts
+		);
+	}
+
+	/**
+	 * A revision that is not a hash (a date-shaped claim) compares as a plain string.
+	 */
+	public function test_revision_stale_with_a_date_revision_compares_as_a_string(): void {
+		// Arrange.
+		$document = array( 'id' => 7 );
+
+		// Act.
+		$same    = Revision::stale( '2026-07-01T10:00:00', '2026-07-01T10:00:00', $document );
+		$changed = Revision::stale( '2026-07-01T10:00:00', '2026-07-01T10:00:01', $document );
+
+		// Assert.
+		$this->assertNull( $same );
+		$this->assertSame( '2026-07-01T10:00:01', $changed['currentRevision'] );
 	}
 }

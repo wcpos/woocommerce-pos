@@ -1,0 +1,183 @@
+<!--
+Marquee — WCPOS Pro customer display template for large screens.
+Three zones: a brand column on the left (logo, greeting, your own promo
+copy or images — edit the template), the item list in the middle with the
+just-added item promoted to a hero, and totals on the right. Payment states
+swap the totals for a status card. Rows carry data-wcpos-line-key for the
+host's .wcpos-line-new cue.
+-->
+<style>
+:root{--mq-ink:#0f172a;--mq-muted:#64748b;--mq-line:#e2e8f0;--mq-bg:#f8fafc;--mq-brand:#0b1220;--mq-accent:#0f766e;--mq-ok:#15803d;--mq-bad:#b91c1c}
+html,body{margin:0;min-height:100%}
+.wcpos-mq,.wcpos-mq *{box-sizing:border-box}
+.wcpos-mq{height:100vh;height:100dvh;display:grid;grid-template-columns:clamp(300px,26vw,520px) minmax(0,1fr) clamp(340px,24vw,520px);background:var(--mq-bg);color:var(--mq-ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wcpos-mq__brand{display:flex;flex-direction:column;padding:clamp(32px,3vw,64px) clamp(28px,2.5vw,56px);background:linear-gradient(160deg,#0b1220,#134e4a);color:#fff}
+.wcpos-mq__logo{display:block;max-width:100%;max-height:160px;object-fit:contain}
+.wcpos-mq__name{font-size:clamp(36px,2.6vw,56px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.wcpos-mq__greeting{margin-top:28px;font-size:clamp(28px,2vw,42px);font-weight:700;color:#5eead4}
+.wcpos-mq__promo{margin-top:auto;padding:24px;border-radius:16px;background:rgba(255,255,255,.08);font-size:clamp(18px,1.2vw,26px);line-height:1.45;color:#cbd5e1}
+.wcpos-mq__promo b{display:block;color:#fff;font-size:24px;margin-bottom:6px}
+.wcpos-mq__list{display:flex;flex-direction:column;min-width:0;padding:clamp(32px,3vw,64px) clamp(32px,3vw,64px) 40px;overflow:auto}
+.wcpos-mq__caption{margin:0 0 20px;color:var(--mq-muted);font-size:clamp(14px,.9vw,18px);font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.wcpos-mq__items{display:flex;flex-direction:column-reverse;justify-content:flex-end;flex:1}
+.wcpos-mq__row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:20px;align-items:baseline;padding:20px 0;border-bottom:1px solid var(--mq-line);font-size:clamp(24px,1.7vw,40px)}
+.wcpos-mq__qty{min-width:2.4em}
+.wcpos-mq__qty{color:var(--mq-muted);font-weight:500;font-variant-numeric:tabular-nums}
+.wcpos-mq__name-l,.wcpos-mq__price{font-weight:600}
+.wcpos-mq__price{font-variant-numeric:tabular-nums}
+.wcpos-mq__meta{display:block;margin-top:4px;color:var(--mq-muted);font-size:clamp(16px,1.1vw,24px);font-weight:400}
+/* The just-added row becomes the hero: bigger type, accent card, pinned top by column-reverse. */
+.wcpos-mq__row.wcpos-line-new{grid-template-columns:auto minmax(0,1fr) auto;margin:0 0 28px;padding:28px 32px;border:0;border-radius:20px;background:#fff;box-shadow:0 18px 40px rgba(15,23,42,.10),inset 6px 0 0 var(--mq-accent);font-size:clamp(34px,2.4vw,60px);animation:mq-in .4s ease-out}
+.wcpos-mq__row.wcpos-line-new .wcpos-mq__qty{font-size:.6em}
+.wcpos-mq__row.wcpos-line-new .wcpos-mq__meta{font-size:.5em}
+.wcpos-mq__empty{display:flex;flex:1;align-items:center;justify-content:center;color:var(--mq-muted);font-size:clamp(24px,1.7vw,36px);text-align:center}
+.wcpos-mq__panel{display:flex;flex-direction:column;padding:clamp(32px,3vw,64px) clamp(28px,2.2vw,48px);border-left:1px solid var(--mq-line);background:#fff}
+.wcpos-mq__totals,.wcpos-mq__payment{margin-top:auto}
+.wcpos-mq__total-row{display:flex;justify-content:space-between;gap:20px;padding:10px 0;color:var(--mq-muted);font-size:clamp(20px,1.3vw,30px)}
+.wcpos-mq__total-row--paid{color:var(--mq-ok)}
+.wcpos-mq__money{font-variant-numeric:tabular-nums}
+.wcpos-mq__grand{align-items:baseline;margin-top:14px;padding-top:20px;border-top:3px solid var(--mq-ink);color:var(--mq-ink);font-size:clamp(48px,3.6vw,84px);font-weight:800}
+.wcpos-mq__grand span:first-child{font-size:clamp(16px,1vw,22px);font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+.wcpos-mq__saved{margin-top:18px;padding:14px 16px;border-radius:10px;background:#ecfdf5;color:var(--mq-ok);font-size:clamp(18px,1.2vw,26px);font-weight:600}
+.wcpos-mq__payment{display:flex;flex-direction:column;gap:20px}
+.wcpos-mq__card{padding:clamp(24px,2vw,40px);border-radius:20px;background:var(--mq-accent);color:#fff}
+.wcpos-mq__card--ok{background:var(--mq-ok)}
+.wcpos-mq__card--bad{background:var(--mq-bad)}
+.wcpos-mq__icon{display:grid;place-items:center;width:clamp(72px,5vw,110px);height:clamp(72px,5vw,110px);margin-bottom:18px;border-radius:50%;background:rgba(255,255,255,.18);font-size:46px}
+.wcpos-mq__spinner{border:7px solid rgba(255,255,255,.35);border-top-color:#fff;background:transparent;animation:mq-spin 1.1s linear infinite}
+.wcpos-mq__card-title{font-size:clamp(14px,1vw,20px);letter-spacing:.12em;text-transform:uppercase;opacity:.85}
+.wcpos-mq__card-amount{margin-top:8px;font-size:clamp(44px,3.4vw,76px);font-weight:800;letter-spacing:-.02em}
+.wcpos-mq__message{margin-top:10px;font-size:clamp(18px,1.3vw,28px);line-height:1.4;opacity:.92}
+.wcpos-mq--idle{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;background:linear-gradient(160deg,#0b1220,#134e4a);color:#fff;text-align:center}
+.wcpos-mq--idle .wcpos-mq__logo{max-width:min(480px,50vw);max-height:260px}
+.wcpos-mq--idle .wcpos-mq__name{font-size:min(88px,12vw);overflow-wrap:anywhere;padding:0 24px}
+.wcpos-mq__welcome{color:#99f6e4;font-size:clamp(22px,2vw,40px)}
+@keyframes mq-spin{to{transform:rotate(360deg)}}
+@keyframes mq-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.wcpos-mq__spinner,.wcpos-mq__row.wcpos-line-new{animation:none}}
+/* Not designed for narrow screens: below 1000px the brand column folds away. */
+@media (max-width:1200px){
+  .wcpos-mq{grid-template-columns:minmax(0,1fr) 340px}
+  .wcpos-mq__brand{display:none}
+}
+/* Phones: stack, totals docked. Marquee is not designed for this; it just stays usable. */
+@media (max-width:700px){
+  .wcpos-mq{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+  .wcpos-mq__list{padding:20px}
+  .wcpos-mq__row.wcpos-line-new{padding:16px 18px;margin-bottom:16px}
+  .wcpos-mq__panel{max-height:48dvh;padding:14px 20px 20px;border-left:0;border-top:1px solid var(--mq-line);overflow:auto}
+  .wcpos-mq__totals,.wcpos-mq__payment{margin-top:0}
+  .wcpos-mq__grand{font-size:30px}
+  .wcpos-mq__card{display:grid;grid-template-columns:auto 1fr;column-gap:16px;align-items:center}
+  .wcpos-mq__icon{width:48px;height:48px;margin:0;font-size:26px;grid-row:1 / -1}
+  .wcpos-mq__card-amount{font-size:30px}
+}
+</style>
+
+<section class="wcpos-mq wcpos-mq--idle" data-wcpos-state="idle">
+  {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
+  {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
+  <div class="wcpos-mq__welcome">{{i18n.welcome}}</div>
+</section>
+
+<section class="wcpos-mq" data-wcpos-state="cart">
+  <aside class="wcpos-mq__brand">
+    {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
+    {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
+    <div class="wcpos-mq__promo"><b>Edit me</b>Your promo copy or images go here — this is plain HTML in the template.</div>
+  </aside>
+  <div class="wcpos-mq__list">
+    <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
+    {{#totals.total_qty}}
+    <div class="wcpos-mq__items">
+      {{#lines}}<div class="wcpos-mq__row" data-wcpos-line-key="{{key}}"><span class="wcpos-mq__qty">{{qty}} &times;</span><span class="wcpos-mq__name-l">{{name}}{{#meta}}<span class="wcpos-mq__meta">{{key}}: {{value}}</span>{{/meta}}</span><span class="wcpos-mq__price">{{line_total_display}}</span></div>{{/lines}}
+    </div>
+    {{/totals.total_qty}}
+    {{^totals.total_qty}}<div class="wcpos-mq__empty">{{i18n.items_appear_here}}</div>{{/totals.total_qty}}
+  </div>
+  <aside class="wcpos-mq__panel">
+    {{#totals.total_qty}}
+    <div class="wcpos-mq__totals">
+      <div class="wcpos-mq__total-row"><span>{{i18n.subtotal}}</span><span class="wcpos-mq__money">{{totals.subtotal_display}}</span></div>
+      {{#fees}}<div class="wcpos-mq__total-row"><span>{{label}}</span><span class="wcpos-mq__money">{{total_display}}</span></div>{{/fees}}
+      {{#shipping}}<div class="wcpos-mq__total-row"><span>{{label}}</span><span class="wcpos-mq__money">{{total_display}}</span></div>{{/shipping}}
+      {{#discounts}}<div class="wcpos-mq__total-row"><span>{{#label}}{{label}}{{/label}}{{^label}}{{i18n.discount}}{{/label}}</span><span class="wcpos-mq__money">-{{total_display}}</span></div>{{/discounts}}
+      {{#totals.tax_total}}<div class="wcpos-mq__total-row"><span>{{#tax.display_excl}}{{i18n.total_tax}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}</span><span class="wcpos-mq__money">{{totals.tax_total_display}}</span></div>{{/totals.tax_total}}
+      <div class="wcpos-mq__total-row wcpos-mq__grand"><span>{{i18n.total}}</span><span class="wcpos-mq__money">{{totals.total_incl_display}}</span></div>
+      {{#totals.total_saved}}<div class="wcpos-mq__saved">{{i18n.you_saved}} {{totals.total_saved_display}}</div>{{/totals.total_saved}}
+    </div>
+    {{/totals.total_qty}}
+  </aside>
+</section>
+
+<section class="wcpos-mq" data-wcpos-state="payment">
+  <aside class="wcpos-mq__brand">
+    {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
+    {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
+  </aside>
+  <div class="wcpos-mq__list">
+    <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
+    <div class="wcpos-mq__items">{{#lines}}<div class="wcpos-mq__row" data-wcpos-line-key="{{key}}"><span class="wcpos-mq__qty">{{qty}} &times;</span><span class="wcpos-mq__name-l">{{name}}{{#meta}}<span class="wcpos-mq__meta">{{key}}: {{value}}</span>{{/meta}}</span><span class="wcpos-mq__price">{{line_total_display}}</span></div>{{/lines}}</div>
+  </div>
+  <aside class="wcpos-mq__panel">
+    <div class="wcpos-mq__payment">
+      <div><div class="wcpos-mq__total-row"><span>{{i18n.total}}</span><span class="wcpos-mq__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-mq__total-row wcpos-mq__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-mq__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
+      <div class="wcpos-mq__card"><div class="wcpos-mq__icon wcpos-mq__spinner" aria-hidden="true"></div><div class="wcpos-mq__card-title">{{i18n.present_card}}</div><div class="wcpos-mq__card-amount wcpos-mq__money">{{ledger.due}}</div></div>
+    </div>
+  </aside>
+</section>
+
+<section class="wcpos-mq" data-wcpos-state="payment.approved">
+  <aside class="wcpos-mq__brand">
+    {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
+    {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
+  </aside>
+  <div class="wcpos-mq__list">
+    <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
+    <div class="wcpos-mq__items">{{#lines}}<div class="wcpos-mq__row" data-wcpos-line-key="{{key}}"><span class="wcpos-mq__qty">{{qty}} &times;</span><span class="wcpos-mq__name-l">{{name}}{{#meta}}<span class="wcpos-mq__meta">{{key}}: {{value}}</span>{{/meta}}</span><span class="wcpos-mq__price">{{line_total_display}}</span></div>{{/lines}}</div>
+  </div>
+  <aside class="wcpos-mq__panel">
+    <div class="wcpos-mq__payment">
+      <div><div class="wcpos-mq__total-row"><span>{{i18n.total}}</span><span class="wcpos-mq__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-mq__total-row wcpos-mq__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-mq__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
+      <div class="wcpos-mq__card wcpos-mq__card--ok"><div class="wcpos-mq__icon" aria-hidden="true">&#10003;</div><div class="wcpos-mq__card-title">{{i18n.approved}}</div><div class="wcpos-mq__card-amount wcpos-mq__money">{{ledger.due}}</div>{{#payment.message}}<div class="wcpos-mq__message">{{payment.message}}</div>{{/payment.message}}</div>
+    </div>
+  </aside>
+</section>
+
+<section class="wcpos-mq" data-wcpos-state="payment.declined">
+  <aside class="wcpos-mq__brand">
+    {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
+    {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
+    {{#customer.id}}{{#customer.first_name}}<div class="wcpos-mq__greeting">{{i18n.greeting}} {{customer.first_name}}!</div>{{/customer.first_name}}{{/customer.id}}
+  </aside>
+  <div class="wcpos-mq__list">
+    <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
+    <div class="wcpos-mq__items">{{#lines}}<div class="wcpos-mq__row" data-wcpos-line-key="{{key}}"><span class="wcpos-mq__qty">{{qty}} &times;</span><span class="wcpos-mq__name-l">{{name}}{{#meta}}<span class="wcpos-mq__meta">{{key}}: {{value}}</span>{{/meta}}</span><span class="wcpos-mq__price">{{line_total_display}}</span></div>{{/lines}}</div>
+  </div>
+  <aside class="wcpos-mq__panel">
+    <div class="wcpos-mq__payment">
+      <div><div class="wcpos-mq__total-row"><span>{{i18n.total}}</span><span class="wcpos-mq__money">{{ledger.total}}</span></div>{{#ledger.paid_raw}}<div class="wcpos-mq__total-row wcpos-mq__total-row--paid"><span>{{i18n.paid_so_far}}</span><span class="wcpos-mq__money">{{ledger.paid}}</span></div>{{/ledger.paid_raw}}</div>
+      <div class="wcpos-mq__card wcpos-mq__card--bad"><div class="wcpos-mq__icon" aria-hidden="true">&times;</div><div class="wcpos-mq__card-title">{{i18n.declined}}</div><div class="wcpos-mq__card-amount wcpos-mq__money">{{ledger.due}}</div>{{#payment.message}}<div class="wcpos-mq__message">{{payment.message}}</div>{{/payment.message}}{{^payment.message}}<div class="wcpos-mq__message">{{i18n.try_another_card}}</div>{{/payment.message}}</div>
+    </div>
+  </aside>
+</section>
+
+<section class="wcpos-mq" data-wcpos-state="payment.complete">
+  <aside class="wcpos-mq__brand">
+    {{#store.logo}}<img class="wcpos-mq__logo" src="{{store.logo}}" alt="{{store.name}}">{{/store.logo}}
+    {{^store.logo}}<div class="wcpos-mq__name">{{store.name}}</div>{{/store.logo}}
+    <div class="wcpos-mq__greeting">{{i18n.thank_you}}{{#customer.id}}{{#customer.first_name}}, {{customer.first_name}}{{/customer.first_name}}{{/customer.id}}!</div>
+  </aside>
+  <div class="wcpos-mq__list">
+    <div class="wcpos-mq__caption">{{i18n.your_items}}</div>
+    <div class="wcpos-mq__items">{{#lines}}<div class="wcpos-mq__row" data-wcpos-line-key="{{key}}"><span class="wcpos-mq__qty">{{qty}} &times;</span><span class="wcpos-mq__name-l">{{name}}{{#meta}}<span class="wcpos-mq__meta">{{key}}: {{value}}</span>{{/meta}}</span><span class="wcpos-mq__price">{{line_total_display}}</span></div>{{/lines}}</div>
+  </div>
+  <aside class="wcpos-mq__panel">
+    <div class="wcpos-mq__payment">
+      <div class="wcpos-mq__card wcpos-mq__card--ok"><div class="wcpos-mq__icon" aria-hidden="true">&#10003;</div><div class="wcpos-mq__card-title">{{i18n.paid_in_full}}</div><div class="wcpos-mq__card-amount wcpos-mq__money">{{totals.total_incl_display}}</div>{{#ledger.change_raw}}<div class="wcpos-mq__message">{{i18n.change}} {{ledger.change}}</div>{{/ledger.change_raw}}</div>
+    </div>
+  </aside>
+</section>

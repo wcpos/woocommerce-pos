@@ -98,7 +98,7 @@ class Test_Catalog_Proxy_Cache_Priming extends WCPOS_REST_Unit_Test_Case {
 		remove_filter( 'query', $capture_query );
 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		$this->assertCount( 4, $response->get_data()['documents'] );
+		$this->assertCount( 4, $response->get_data() );
 		// The shared PARENT product legitimately hydrates once per request
 		// (O(1), not per-variation) — only per-VARIATION single-id reads are
 		// the N+1 signature this change eliminates.

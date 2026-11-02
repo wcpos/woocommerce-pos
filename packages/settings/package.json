@@ -34,7 +34,7 @@
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.0.1",
-    "@wordpress/env": "^11.5.0",
+    "@wordpress/env": "^11.15.0",
     "eslint": "^10.8.1",
     "jsdom": "^30.0.1",
     "prettier": "^3.8.3",

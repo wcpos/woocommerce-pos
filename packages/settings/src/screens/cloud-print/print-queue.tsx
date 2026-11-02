@@ -23,7 +23,7 @@ import {
 import { useReceiptTemplateNames } from '../../hooks/use-receipt-templates';
 import { t } from '../../translations';
 
-const QUEUE_ENDPOINT = 'wcpos/v1/print-jobs/queue';
+const QUEUE_ENDPOINT = 'wcpos/v2/print-jobs/queue';
 const QUEUE_QUERY_KEY = 'print-queue';
 const PER_PAGE = 20;
 const REFETCH_MS = 30_000;
@@ -196,7 +196,7 @@ export function PrintQueue() {
 
 	const retryJob = useMutation({
 		mutationFn: (id: number) =>
-			apiFetch({ path: `wcpos/v1/print-jobs/${id}/reprint?wcpos=1`, method: 'POST' }),
+			apiFetch({ path: `wcpos/v2/print-jobs/${id}/reprint?wcpos=1`, method: 'POST' }),
 		onSuccess: invalidate,
 		onError: (error, id) => {
 			const retryError = error as { code?: string; data?: { retried_to?: number } };
@@ -241,18 +241,19 @@ export function PrintQueue() {
 		},
 	});
 
-	// A cancel can empty the current page (e.g. the last row of page 2):
-	// clamp back into range instead of stranding the admin on a blank page.
+	// A cancel can empty the current page (e.g. the last row of page 2): clamp
+	// back into range instead of stranding the admin on a blank page.
+	//
+	// Adjusting during render rather than in an effect is React's documented way
+	// to correct state that a new value has invalidated: React discards this
+	// render and re-runs the component immediately, so the blank page is never
+	// painted. The effect this replaces painted it first and corrected after.
 	const fetchedTotal = data?.total;
-	React.useEffect(() => {
-		if (typeof fetchedTotal !== 'number') {
-			return;
-		}
-		const pages = Math.max(1, Math.ceil(fetchedTotal / PER_PAGE));
-		if (page > pages) {
-			setPage(pages);
-		}
-	}, [fetchedTotal, page]);
+	const fetchedPages =
+		typeof fetchedTotal === 'number' ? Math.max(1, Math.ceil(fetchedTotal / PER_PAGE)) : null;
+	if (fetchedPages !== null && page > fetchedPages) {
+		setPage(fetchedPages);
+	}
 
 	// Also guards a malformed response — a queue view that can't render is
 	// invisible, never a crashed settings screen.

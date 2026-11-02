@@ -3,13 +3,17 @@ import apiFetch from '@wordpress/api-fetch';
 
 import type { PreviewResponse } from '../types';
 
-export function usePreview(templateId: number | string | null, orderId?: number | string) {
+export function usePreview(
+	templateId: number | string | null,
+	orderId?: number | string,
+	type = 'receipt'
+) {
 	const hasTemplateId = templateId !== undefined && templateId !== null;
 
 	return useQuery({
-		queryKey: ['preview', templateId, orderId],
+		queryKey: ['preview', templateId, orderId, type],
 		queryFn: () => {
-			const params = new URLSearchParams({ wcpos: '1' });
+			const params = new URLSearchParams({ wcpos: '1', type });
 			if (orderId !== undefined && orderId !== null) {
 				params.set('order_id', String(orderId));
 			}

@@ -15,7 +15,6 @@ use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Create_Identity;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
-use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -478,41 +477,50 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$current = $this->document_for( $meta, $id );
-		if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
-			return $current;
-		}
-		$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
-		$current_revision = $this->revision_for( $meta, $id, $current_bare );
-		if ( $m['baseRevision'] !== $current_revision ) {
-			return new WP_REST_Response(
-				array(
-					'code' => 'woo_rxdb_sync_conflict',
-					'message' => 'baseRevision is stale.',
-					'current' => $current->get_data(),
-					'currentRevision' => $current_revision,
-				),
-				409
-			);
-		}
-		if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
-			$late                = $prepared['context_factory']();
-			$prepared['payload']  = $late['payload'];
-			$prepared['context']  = $late['context'];
-		}
+		// The writer's lock spans the current read, the compare, the pre-read and the write, so
+		// nothing it serialises against can land between the compare and the write.
+		$status  = 0;
+		$failure = $writer->with_write_lock(
+			$id,
+			$m['payload'],
+			function () use ( $meta, $id, $m, $writer, $prepared, &$status ) {
+				$current = $this->document_for( $meta, $id );
+				if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
+					return $current;
+				}
+				$current_bare = is_array( $current->get_data() ) ? $current->get_data() : array();
+				$stale        = Revision::stale( $m['baseRevision'], $this->revision_for( $meta, $id, $current_bare ), $current_bare );
+				if ( null !== $stale ) {
+					return $this->stale_conflict( $stale );
+				}
+				if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
+					$late = $prepared['context_factory']();
+					if ( is_wp_error( $late ) ) {
+						return $late;
+					}
+					$prepared['payload'] = $late['payload'];
+					$prepared['context'] = $late['context'];
+				}
 
-		$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
-		if ( is_wp_error( $response ) ) {
-			return $response;
+				$response = $writer->forward( $prepared, \Closure::fromCallable( array( $this, 'forward' ) ) );
+				if ( is_wp_error( $response ) ) {
+					return $response;
+				}
+				if ( $response->get_status() >= 400 ) {
+					return new WP_REST_Response( $response->get_data(), $response->get_status() );
+				}
+				$data   = $response->get_data();
+				$status = $response->get_status();
+				$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
+				return null;
+			}
+		);
+		if ( null !== $failure ) {
+			return $failure;
 		}
-		if ( $response->get_status() >= 400 ) {
-			return new WP_REST_Response( $response->get_data(), $response->get_status() );
-		}
-		$data = $response->get_data();
-		$writer->after_update( $id, $m['payload'], $current_bare, is_array( $data ) ? $data : array(), $prepared['context'] );
 
 		$this->store->persist_uuid( $meta['id_type'], $id, $m['recordId'] );
-		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
+		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $status );
 		if ( is_wp_error( $finalized ) ) {
 			return $finalized;
 		}
@@ -542,33 +550,37 @@ class Write_Controller extends WP_REST_Controller {
 			);
 		}
 
+		// The writer's lock spans the current read, the compare and the delete, as on update.
 		$writer  = $this->writer( $meta );
-		$current = $this->document_for( $meta, $id );
-		if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
-			return $current;
-		}
-		$current_bare     = is_array( $current->get_data() ) ? $current->get_data() : array();
-		$current_revision = $this->revision_for( $meta, $id, $current_bare );
-		if ( $m['baseRevision'] !== $current_revision ) {
-			return new WP_REST_Response(
-				array(
-					'code' => 'woo_rxdb_sync_conflict',
-					'message' => 'baseRevision is stale.',
-					'current' => $current->get_data(),
-					'currentRevision' => $current_revision,
-				),
-				409
-			);
-		}
+		$status  = 0;
+		$failure = $writer->with_delete_lock(
+			$id,
+			function () use ( $meta, $id, $m, $writer, &$status ) {
+				$current = $this->document_for( $meta, $id );
+				if ( ! ( $current instanceof WP_REST_Response ) || $current->get_status() >= 400 ) {
+					return $current;
+				}
+				$current_bare = is_array( $current->get_data() ) ? $current->get_data() : array();
+				$stale        = Revision::stale( $m['baseRevision'], $this->revision_for( $meta, $id, $current_bare ), $current_bare );
+				if ( null !== $stale ) {
+					return $this->stale_conflict( $stale );
+				}
 
-		$response = $writer->delete( $meta, $id, $m, \Closure::fromCallable( array( $this, 'dispatch_write' ) ), \Closure::fromCallable( array( $this, 'can_forward_delete' ) ) );
-		if ( is_wp_error( $response ) ) {
-			return $response;
+				$response = $writer->delete( $meta, $id, $m, \Closure::fromCallable( array( $this, 'dispatch_write' ) ), \Closure::fromCallable( array( $this, 'can_forward_delete' ) ) );
+				if ( is_wp_error( $response ) ) {
+					return $response;
+				}
+				if ( $response->get_status() >= 400 ) {
+					return new WP_REST_Response( $response->get_data(), $response->get_status() );
+				}
+				$status = $response->get_status();
+				return null;
+			}
+		);
+		if ( null !== $failure ) {
+			return $failure;
 		}
-		if ( $response->get_status() >= 400 ) {
-			return new WP_REST_Response( $response->get_data(), $response->get_status() );
-		}
-		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $response->get_status() );
+		$finalized = $this->checkpoint_and_finalize( $m['mutationId'], $id, $status );
 		return is_wp_error( $finalized ) ? $finalized : new WP_REST_Response( (object) array(), 200 );
 	}
 
@@ -715,11 +727,6 @@ class Write_Controller extends WP_REST_Controller {
 		}
 	}
 
-	/** @deprecated Use Permission_Rules::wc_filter(). */
-	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
-		return Permission_Rules::wc_filter( $permission, $context, $object_id, $post_type, 'writes' );
-	}
-
 	/**
 	 * Read this collection's document for one record, through its writer.
 	 *
@@ -739,21 +746,7 @@ class Write_Controller extends WP_REST_Controller {
 
 	/** Read and normalize a generic wc/v3 response document. */
 	private function default_document_for( array $meta, int $id, array $params = array() ) {
-		$request = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
-		Store_Scope::stamp( $request );
-		foreach ( $params as $key => $value ) {
-			$request->set_param( $key, $value );
-		}
-		$response = Store_Scope::in_v2_lane(
-			static function () use ( $request ) {
-				return rest_do_request( $request );
-			}
-		);
-		$data = $response->get_data();
-		if ( is_array( $data ) ) {
-			$response->set_data( Meta_Normalizer::normalize( $data ) );
-		}
-		return $response;
+		return Product_Serializer::dispatched_bare_read( $meta['route'] . '/' . $id, $params );
 	}
 
 	/** Apply generic product augmentation and inject the client UUID. */
@@ -811,32 +804,30 @@ class Write_Controller extends WP_REST_Controller {
 		return $this->respond( is_array( $bare ) ? $bare : array(), $record_id, $status ?? $document->get_status(), $meta, $id, $writer );
 	}
 
+	/**
+	 * The push lane's 409 for a stale baseRevision, in its wire key order.
+	 *
+	 * @param array{currentRevision: string, current: array} $facts From Revision::stale().
+	 */
+	private function stale_conflict( array $facts ): WP_REST_Response {
+		return new WP_REST_Response(
+			array(
+				'code'            => 'woo_rxdb_sync_conflict',
+				'message'         => 'baseRevision is stale.',
+				'current'         => $facts['current'],
+				'currentRevision' => $facts['currentRevision'],
+			),
+			409
+		);
+	}
+
+	/**
+	 * Compute CAS over bare bytes: schema-scoped variation content, never dates or id fallbacks.
+	 * A constant or stamp-dependent revision could silently accept stale till stock writes.
+	 */
 	private function revision_for( array $meta, int $id, array $bare ): string {
 		if ( 'product_variation' === ( $meta['post_type'] ?? '' ) ) {
-			/*
-			 * A variation's revision is its `date_modified_gmt`, deliberately: the client's targeted
-			 * pull synthesizes exactly that as `sync.revision`, so both sides agree without the
-			 * variations lane needing a stamped `_rxdb_revision`.
-			 *
-			 * Read the date from WHEREVER it is — nested under `payload` in today's
-			 * `{ id, parent_id, payload }` wrapper, or top level once that wrapper is dropped.
-			 *
-			 * This used to read `$bare['payload']['date_modified_gmt']` only, with `$bare['id']` as
-			 * the fallback. Against a FLAT document that silently degrades to the variation's own
-			 * ID — a value that never changes again. The failure would be total and invisible:
-			 * the ack would hand the client the id as `currentRevision`, and from then on every
-			 * stale baseRevision would equal every recomputed one — the strict revision
-			 * comparison would pass every queued write. Two tills editing the same
-			 * variation hours apart would both pass the precondition; the per-record lock would
-			 * serialize them, so there would be no error — just a lost update, every time.
-			 *
-			 * The `$bare['id']` fallback is kept ONLY for a document carrying no date at all, and is
-			 * now unreachable for any real variation serialization.
-			 */
-			$payload = isset( $bare['payload'] ) && is_array( $bare['payload'] ) ? $bare['payload'] : array();
-			$date    = $payload['date_modified_gmt'] ?? $bare['date_modified_gmt'] ?? null;
-
-			return (string) ( $date ?? $bare['id'] ?? $id );
+			return Revision::compute_variation( $bare );
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) && $id > 0 ) {
 			return Order_Serializer::canonical_revision( $bare );

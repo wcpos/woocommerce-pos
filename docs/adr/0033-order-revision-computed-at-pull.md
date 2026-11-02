@@ -1,5 +1,5 @@
 ---
-status: accepted — compute-at-pull landed (free#1745 landed the retirement; free#1746 landed compute-at-pull; the schema-scoped recipe rides the 1.11.0 gate)
+status: implemented — compute-at-pull landed (free#1745 landed the retirement; free#1746 landed compute-at-pull), and the schema-scoped recipe with its generated-date exclusion landed on `next` for 1.11.0 behind the protocol gate (free#1870)
 ---
 
 # Order revision: content hash, computed at pull time, never stored
@@ -9,8 +9,8 @@ sha256 content hash, the same paradigm as every other CAS'd collection, but is t
 at pull time from the exact payload being served and never persisted. Under this decision the
 journal row's `revision` column is written empty for orders and `/orders/pull`'s computing
 fallback (already shipping for pre-backfill rows) becomes the only revision source; that
-change landed in free#1746 (legacy rows keep serving their stored hashes through the
-planner's stored-wins branch until they age out). Write-side CAS is unaffected either way: it has
+change landed in free#1746; the planner's stored-wins branch that served legacy rows' hashes
+in the meantime was retired for 1.11.0 by free#1757, whose schema-6 upgrade blanks them. Write-side CAS is unaffected either way: it has
 always recomputed from a fresh re-read and never consulted the stored value.
 
 **Why not stored-at-save (the 1.10.0 design):** the write-time hash serializes the full
@@ -28,9 +28,12 @@ WooCommerce 11.1.0-beta.2 source; free#1746 pins it with a test). HPOS adds
 second-granularity collisions (one checkout's four saves share a second) and a
 caller-supplied-date hole (`wc_create_refund`).
 
-**Fingerprint scope (lands with free#1746):** the hashed form becomes the bare, pre-filter
-payload restricted to the top-level fields of WooCommerce's own REST order schema, plus the
-existing volatile-field strips. Third-party additions (`register_rest_field`, prepare-filter
+**Fingerprint scope (landed with free#1870):** the hashed form is the served payload — the
+lane's normalized document, not a pre-filter form, because every hash site must see the same
+meta normalization — restricted to the top-level fields of WooCommerce's own REST order schema
+minus the generated timestamps (`date_created*`, `date_modified*`, which move on a no-op save),
+plus the existing volatile-field strips, with meta rows hashed as an id-less, order-independent
+set. Third-party additions (`register_rest_field`, prepare-filter
 injections, the pull-only `woocommerce_pos_sync_serialized_order` filter) ride outside the
 hash by construction, so third-party payload noise cannot cause spurious 409s — at the
 accepted cost that conflicts on non-schema fields go undetected (concurrent order editing

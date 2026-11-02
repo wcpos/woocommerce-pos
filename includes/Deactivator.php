@@ -58,6 +58,11 @@ class Deactivator {
 		$lifecycle->report_deactivation();
 		$lifecycle->clear_schedule();
 
+		// POS Only products carry a forced WooCommerce catalog visibility
+		// (#1862); give them their own value back so nothing plugin-managed
+		// outlives the plugin. Activation re-applies it.
+		( new \WCPOS\WooCommercePOS\Catalog_Visibility() )->restore_all();
+
 		// remove pos capabilities.
 		$this->remove_pos_capability();
 
@@ -66,6 +71,7 @@ class Deactivator {
 
 		// stop the journal retention purge.
 		wp_clear_scheduled_hook( \WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge::PURGE_HOOK );
+		wp_clear_scheduled_hook( \WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper::HOOK );
 
 		// stop the file integrity checks (daily and post-update).
 		wp_unschedule_hook( \WCPOS\WooCommercePOS\Services\File_Integrity::CRON_HOOK );

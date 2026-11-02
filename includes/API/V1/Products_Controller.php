@@ -18,15 +18,12 @@ use WC_Data;
 use WC_Product;
 use WC_Product_Variable;
 use WC_REST_Products_Controller;
-use WCPOS\WooCommercePOS\API\Product_Search;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
 use WCPOS\WooCommercePOS\Services\Variable_Price_Range;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
-use WCPOS\WooCommercePOS\Sync\Collection_Rules_Plan;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
-use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -37,7 +34,6 @@ use WP_REST_Response;
  */
 class Products_Controller extends WC_REST_Products_Controller {
 	use Traits\Product_Helpers;
-	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
@@ -56,14 +52,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	protected $allow_decimal_quantities = false;
 
 	/**
-	 * Store the current request object.
-	 *
-	 * @var WP_REST_Request|null
-	 */
-	protected $wcpos_request;
-
-	/**
-	 * Request keys the product Collection Rules plan reads on this lane.
+	 * Request keys the product Collection Rules plan reads on this lane
+	 * (sort, search, and the `wcpos_include`/`wcpos_exclude` id sets).
 	 *
 	 * @var array
 	 */
@@ -71,6 +61,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 		'orderby' => 'orderby',
 		'order'   => 'order',
 		'search'  => 'search',
+		'include' => 'wcpos_include',
+		'exclude' => 'wcpos_exclude',
 	);
 
 	/**
@@ -91,11 +83,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return mixed $dispatch_result Dispatch result, will be used if not empty.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
-		$this->wcpos_request = $request;
-
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'wcpos_pre_insert_product_object' ), 10, 3 );
-		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
 
 		/*
 		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
@@ -391,63 +380,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 	}
 
 	/**
-	 * Filter to adjust the WordPress search SQL query
-	 * - Search for the product title and SKU and barcode
-	 * - Do not search product description.
-	 *
-	 * @param string   $search   The search SQL query.
-	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 *
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
-		return Product_Search::posts_search( $search, $wp_query );
-	}
-
-	/**
-	 * Filters all query clauses at once, for convenience.
-	 *
-	 * Covers the WHERE, GROUP BY, JOIN, ORDER BY, DISTINCT,
-	 * fields (SELECT), and LIMIT clauses.
-	 *
-	 * @param string[] $clauses  Associative array of the clauses for the query.
-	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
-	 */
-	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
-		if ( ! isset( $this->wcpos_request ) ) {
-			return $clauses;
-		}
-
-		$post_type = $wp_query->query_vars['post_type'] ?? null;
-		if ( 'product' !== $post_type && ( ! \is_array( $post_type ) || ! \in_array( 'product', $post_type, true ) ) ) {
-			return $clauses;
-		}
-
-		$plan = Collection_Rules::for_request( 'products', $this->wcpos_request, self::WCPOS_SORT_PARAM_MAP );
-
-		return $plan->filter( Collection_Rules_Plan::HOOK_POSTS_CLAUSES, $clauses, $wp_query );
-	}
-
-	/**
-	 * Filter the query arguments for a request.
-	 *
-	 * @param array           $args    Key value array of query var to query value.
-	 * @param WP_REST_Request $request The request used.
-	 *
-	 * @return array $args Key value array of query var to query value.
-	 */
-	public function wcpos_product_query( array $args, WP_REST_Request $request ) {
-		// Check for wcpos_include/wcpos_exclude parameter.
-		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
-			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 20, 2 );
-		}
-
-		return $args;
-	}
-
-	/**
 	 * Check whether the parent WooCommerce REST controller already supports a collection param.
 	 *
 	 * If WooCommerce adds native REST support for Store API-style product filters, WCPOS
@@ -598,81 +530,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 		return $tax_query;
 	}
 
-	/**
-	 * Filters the JOIN clause of the query.
-	 *
-	 * @param string   $join  The JOIN clause of the query.
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 *
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_join_to_products_search( string $join, WP_Query $query ) {
-		return Product_Search::posts_join( $join, $query );
-	}
-
-	/**
-	 * Filters the GROUP BY clause of the query.
-	 *
-	 * @param string   $groupby The GROUP BY clause of the query.
-	 * @param WP_Query $query   The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 *
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_groupby_product_search( string $groupby, WP_Query $query ) {
-		return Product_Search::posts_groupby( $groupby, $query );
-	}
-
-	/**
-	 * Filters the WHERE clause of the query.
-	 *
-	 * Exclusion set and feature gate both come from Sync\Pos_Visibility, the single POS visibility
-	 * authority.
-	 *
-	 * @param string   $where The WHERE clause of the query.
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 *
-	 * @deprecated Collection Rules now installs this behavior.
-	 */
-	public function wcpos_posts_where_product_exclude_online_only( string $where, WP_Query $query ) {
-		global $wpdb;
-
-		return ( new Pos_Visibility() )->apply_to_sql_where( $where, "{$wpdb->posts}.ID", Pos_Visibility::PRODUCTS );
-	}
-
-	/**
-	 * Filters the WHERE clause of the query.
-	 *
-	 * @param string   $where The WHERE clause of the query.
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
-	 */
-	public function wcpos_posts_where_product_include_exclude( string $where, WP_Query $query ) {
-		global $wpdb;
-
-		// Handle 'wcpos_include'.
-		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
-			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
-			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
-		}
-
-		// Handle 'wcpos_exclude'.
-		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
-			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
-			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
-		}
-
-		return $where;
-	}
-
 
 	/**
 	 * Returns array of all product ids, name.
@@ -726,7 +583,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		 * mapped onto `meta_key` + `orderby => meta_value` here any more. That pair
 		 * INNER JOINs postmeta, so it dropped every product with no value for the key —
 		 * a sort acting as a filter (#1779 follow-up). `Sync\Collection_Rules` declares
-		 * them and `wcpos_posts_clauses()` applies them as a LEFT JOIN, on this lane and
+		 * them and its plan applies them on `posts_clauses` as a LEFT JOIN, on this lane and
 		 * on the v2 proxy alike.
 		 */
 

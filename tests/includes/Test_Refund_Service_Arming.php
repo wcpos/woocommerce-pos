@@ -106,9 +106,9 @@ class Test_Refund_Service_Arming extends WC_Unit_Test_Case {
 	}
 
 	private function run_storefront_init(): void {
-		remove_all_filters( 'woocommerce_pos_request_lane' );
+		remove_all_filters( 'wcpos_request_lane' );
 		add_filter(
-			'woocommerce_pos_request_lane',
+			'wcpos_request_lane',
 			static function (): string {
 				return Request_Lane::STOREFRONT;
 			}

@@ -31,12 +31,12 @@ use WP_REST_Server;
  * and the WCPOS-extended customer sorts),
  * plus the underlying status + pagination headers
  * (so the client's existing array-shaped parsing and `length < per_page`
- * pagination keep working), then exposes a single `woocommerce_pos_sync_proxy_response`
+ * pagination keep working), then exposes a single `wcpos_sync_proxy_response`
  * filter seam — `($data, $resource, $request)` — so replication can shape the
  * batch in one place. Today it is a faithful pass-through; the point is the
  * controlled seam + decoupling the client from wc/v3 routes/versioning.
  *
- * Per-object serialization customization (`woocommerce_pos_sync_serialized_product`
+ * Per-object serialization customization (`wcpos_sync_serialized_product`
  * etc.) stays on the per-id paths — variations/resolve/changes — where the WC
  * object is actually loaded; this list proxy keeps wc/v3's own serialization and
  * filters the batch as a whole.
@@ -96,7 +96,8 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		if ( $response->is_error() ) {
 			return $response;
 		}
-		$data = apply_filters( 'woocommerce_pos_sync_proxy_response', $response->get_data(), $resource, $request );
+		$data = apply_filters( 'wcpos_sync_proxy_response', $response->get_data(), $resource, $request );
+		$data = apply_filters_deprecated( 'woocommerce_pos_sync_proxy_response', array( $data, $resource, $request ), '2.0.0', 'wcpos_sync_proxy_response' );
 		$response->set_data( $behavior->post_process( $data ) );
 
 		return $response;

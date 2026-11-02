@@ -14,6 +14,8 @@ if ( ! \defined( 'ABSPATH' ) ) {
  *
  * @var \WCPOS\WooCommercePOS\Admin\Products\Single_Product $this
  * @var string $selected
+ * @var string $prior_catalog_label
+ * @var string|null $forced_catalog_label
  */
 ?>
 
@@ -55,6 +57,24 @@ if ( ! \defined( 'ABSPATH' ) ) {
 	  </a>
 		</p>
 	</div>
+	<?php if ( null !== $forced_catalog_label ) { ?>
+	<p id="pos-visibility-catalog-note" class="description" style="display:none" data-forced-label="<?php echo esc_attr( $forced_catalog_label ); ?>">
+		<?php
+		if ( wc_get_product_visibility_options()['hidden'] === $forced_catalog_label ) {
+			esc_html_e( 'POS Only products are never shown in the online catalog or search.', 'woocommerce-pos' );
+		} else {
+			/* translators: %s: a WooCommerce catalog visibility option, e.g. "Search results only". */
+			echo esc_html( sprintf( __( 'Catalog visibility is kept at “%s” while this product is POS Only.', 'woocommerce-pos' ), $forced_catalog_label ) );
+		}
+		?>
+	</p>
+	<p id="pos-visibility-catalog-restore-note" class="description" style="display:none" data-prior-label="<?php echo esc_attr( $prior_catalog_label ); ?>">
+		<?php
+		/* translators: %s: a WooCommerce catalog visibility option, e.g. "Shop and search results". */
+		echo esc_html( sprintf( __( 'Catalog visibility goes back to “%s” when you update. Change it afterwards if you want something else.', 'woocommerce-pos' ), $prior_catalog_label ) );
+		?>
+	</p>
+	<?php } ?>
 	<script>
 		(function () {
 			const display = document.getElementById('pos-visibility-display'),
@@ -64,6 +84,48 @@ if ( ! \defined( 'ABSPATH' ) ) {
 				save = document.getElementById('pos-visibility-save');
 
 			let current = document.querySelector('input[name="_pos_visibility"]:checked');
+
+			// Lock WooCommerce's Catalog visibility control while POS Only is the
+			// confirmed choice. Display only: the radios keep the merchant's stored
+			// value so the server can record it as the prior before forcing the filtered value.
+			// While the product IS POS Only its catalog visibility cannot be edited
+			// here at all (the server re-asserts that value on every save), so deselecting
+			// POS Only shows what it goes back to instead of offering the control.
+			const lockedOnLoad = !!current && current.value === 'pos_only';
+			function syncCatalogVisibility() {
+				const catalog = document.getElementById('catalog-visibility'),
+					catalogDisplay = document.getElementById('catalog-visibility-display'),
+					catalogSelect = document.getElementById('catalog-visibility-select'),
+					note = document.getElementById('pos-visibility-catalog-note'),
+					restoreNote = document.getElementById('pos-visibility-catalog-restore-note');
+				// WooCommerce core markup; bail if any of it moved.
+				if (!current || !catalog || !catalogDisplay || !catalogSelect || !note || !note.dataset.forcedLabel || !restoreNote) return;
+				const edit = catalog.querySelector('a.edit-catalog-visibility');
+				if (!('posPrev' in catalogDisplay.dataset)) {
+					catalogDisplay.dataset.posPrev = catalogDisplay.textContent;
+				}
+				catalog.appendChild(note);
+				catalog.appendChild(restoreNote);
+				if (current.value === 'pos_only') {
+					catalogDisplay.textContent = note.dataset.forcedLabel;
+					if (edit) edit.style.display = 'none';
+					catalogSelect.style.display = 'none';
+					note.style.display = 'block';
+					restoreNote.style.display = 'none';
+				} else if (lockedOnLoad) {
+					catalogDisplay.textContent = restoreNote.dataset.priorLabel;
+					if (edit) edit.style.display = 'none';
+					catalogSelect.style.display = 'none';
+					note.style.display = 'none';
+					restoreNote.style.display = 'block';
+				} else {
+					catalogDisplay.textContent = catalogDisplay.dataset.posPrev;
+					if (edit) edit.style.display = '';
+					catalogSelect.style.display = '';
+					note.style.display = 'none';
+					restoreNote.style.display = 'none';
+				}
+			}
 
 			function toggleSelect() {
 				select.style.display = select.style.display === 'none' ? 'block' : 'none';
@@ -92,7 +154,9 @@ if ( ! \defined( 'ABSPATH' ) ) {
 				current = document.querySelector('input[name="_pos_visibility"]:checked');
 				updateDisplay();
 				toggleSelect();
+				syncCatalogVisibility();
 			});
+			syncCatalogVisibility();
 		})();
 	</script>
 </div>

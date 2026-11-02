@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WCPOS\WooCommercePOS\Services\Barcode_Field;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Queries use internal table names and generated SQL fragments.
@@ -98,8 +99,10 @@ final class Digest_Index {
 	 */
 	public const OBJECT_TYPES_SQL = "('product','variation')";
 
-	private const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
-	private const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
+	/** The wp_posts types that make up the product id-space, as an SQL list. */
+	public const PRODUCT_POST_TYPES_SQL = "('product','product_variation')";
+	/** Statuses outside the live product (and order) set, as an SQL list. The published-only scope is published_product_predicate_sql(). */
+	public const EXCLUDED_POST_STATUSES_SQL = "('trash','auto-draft')";
 
 	/**
 	 * Request-level memo for {@see digested_meta_keys}, KEYED BY BLOG ID. The hook write path
@@ -298,7 +301,7 @@ final class Digest_Index {
 	 */
 	public function order_digest_select_sql( string $id_condition = '' ): string {
 		global $wpdb;
-		$hpos = $this->orders_are_hpos();
+		$hpos = Order_Meta_Store::hpos();
 		$id_col = $hpos ? 'o.id' : 'p.ID';
 		$condition = '' === $id_condition ? '' : ' AND ' . str_replace( '{id}', $id_col, $id_condition );
 
@@ -331,6 +334,20 @@ final class Digest_Index {
 			. ' WHERE ' . $this->live_order_predicate_sql( 'p' )
 			. $condition
 			. ' GROUP BY p.ID';
+	}
+
+	/**
+	 * Whether an order was created within the integrity window (ADR 0036).
+	 * NULL means the order is gone, so stored-side scans can still detect deletes.
+	 *
+	 * @internal Engine-internal SQL predicate; $id_expr is never request data.
+	 */
+	public function order_window_predicate_sql( string $id_expr ): string {
+		$schema = Order_Meta_Store::schema();
+
+		return "(SELECT window_order.{$schema['created']} IS NOT NULL AND window_order.{$schema['created']} >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL "
+			. Integrity_Digest::ORDER_DIGEST_WINDOW_DAYS . ' DAY)'
+			. " FROM {$schema['orders']} window_order WHERE window_order.{$schema['id']} = {$id_expr})";
 	}
 
 	/**
@@ -503,7 +520,7 @@ final class Digest_Index {
 	 */
 	public function order_live_row_exists_sql( string $id_expr ): string {
 		global $wpdb;
-		if ( $this->orders_are_hpos() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return "EXISTS (SELECT 1 FROM {$orders_table} lo WHERE lo.id = {$id_expr}"
 				. ' AND ' . $this->live_order_predicate_sql( 'lo' ) . ')';
@@ -546,7 +563,8 @@ final class Digest_Index {
 		}
 		$publish      = isset( Collections::row( $collection )['digest']['published_ids'] ) && 'publish' === ( $filters['status'] ?? '' );
 		$object_types = "('" . implode( "','", $digest['object_types'] ) . "')";
-		$current_sql  = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' );
+		$order_window = 'orders' === $collection ? ' AND ' . $this->order_window_predicate_sql( $digest['id_column'] ) : '';
+		$current_sql  = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' . $order_window );
 		$current_scope = $publish ? $this->product_servable_predicate_sql( 't.id', true ) : array(
 			'sql' => '',
 			'args' => array(),
@@ -557,6 +575,8 @@ final class Digest_Index {
 		);
 		$current_join  = $publish ? $this->servable_product_join_sql( 't.id' ) : '';
 		$stored_join   = $publish ? $this->servable_product_join_sql( 'd.object_id' ) : '';
+		// A gone order has no creation date; retain its stored digest as the deletion signal until rebuild.
+		$stored_order_window = 'orders' === $collection ? ' AND COALESCE(' . $this->order_window_predicate_sql( 'd.object_id' ) . ', 1)' : '';
 
 		// Current side: one SQL pass — per-row canonical digests aggregated
 		// per bucket inside the DB engine. Raw rows are digested for
@@ -583,6 +603,7 @@ final class Digest_Index {
 				'SELECT FLOOR(d.object_id / %d) AS bucket, COUNT(*) AS record_count, BIT_XOR(d.digest) AS digest'
 				. ' FROM ' . $this->table_name() . ' d' . $stored_join
 				. ' WHERE d.object_type IN ' . $object_types
+				. $stored_order_window
 				. ' AND d.object_id >= %d AND d.object_id < %d' . ( '' === $stored_scope['sql'] ? '' : ' AND ' . $stored_scope['sql'] )
 				. ' GROUP BY bucket ORDER BY bucket',
 				$bucket_size,
@@ -631,7 +652,7 @@ final class Digest_Index {
 		$live_max  = $this->live_max_id_sql( $collection, $publish );
 		$max_query = 'SELECT GREATEST(COALESCE((' . $live_max['sql'] . '), 0),'
 			. ' COALESCE((SELECT MAX(d.object_id) FROM ' . $this->table_name() . ' d'
-			. ' WHERE d.object_type IN ' . $object_types . '), 0))';
+			. ' WHERE d.object_type IN ' . $object_types . $stored_order_window . '), 0))';
 		$max_id    = (int) $wpdb->get_var( empty( $live_max['args'] ) ? $max_query : $wpdb->prepare( $max_query, ...$live_max['args'] ) );
 
 		return array(
@@ -732,7 +753,8 @@ final class Digest_Index {
 		if ( null === $digest ) {
 			return array();
 		}
-		$inner_sql = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' );
+		$order_window = 'orders' === $collection ? ' AND ' . $this->order_window_predicate_sql( $digest['id_column'] ) : '';
+		$inner_sql = $this->{$digest['select']}( $digest['id_column'] . ' >= %d AND ' . $digest['id_column'] . ' < %d' . $order_window );
 		if ( isset( $digest['servable'] ) ) {
 			$servable_join = " INNER JOIN {$wpdb->posts} catalog_post ON catalog_post.ID = cur.id";
 			if ( 'publish' === ( $filters['status'] ?? '' ) ) {
@@ -866,7 +888,7 @@ final class Digest_Index {
 	 * {@see live_product_predicate_sql}.
 	 */
 	private function live_order_predicate_sql( string $alias ): string {
-		if ( $this->orders_are_hpos() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			return "{$alias}.type = 'shop_order' AND {$alias}.status NOT IN " . self::EXCLUDED_POST_STATUSES_SQL;
 		}
 
@@ -927,15 +949,17 @@ final class Digest_Index {
 
 	private function order_live_max_id_sql(): array {
 		global $wpdb;
-		if ( $this->orders_are_hpos() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			$orders_table = $wpdb->prefix . 'wc_orders';
 			return array(
-				'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' ),
+				'sql' => "SELECT MAX(o.id) FROM {$orders_table} o WHERE " . $this->live_order_predicate_sql( 'o' )
+					. ' AND ' . $this->order_window_predicate_sql( 'o.id' ),
 				'args' => array(),
 			);
 		}
 		return array(
-			'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' ),
+			'sql' => "SELECT MAX(p.ID) FROM {$wpdb->posts} p WHERE " . $this->live_order_predicate_sql( 'p' )
+				. ' AND ' . $this->order_window_predicate_sql( 'p.ID' ),
 			'args' => array(),
 		);
 	}
@@ -986,20 +1010,11 @@ final class Digest_Index {
 				array_map(
 					'intval',
 					array_merge(
-						$this->visibility->online_only_product_ids(),
-						$this->visibility->online_only_variation_ids()
+						$this->visibility->hidden_ids( Pos_Visibility::PRODUCTS ),
+						$this->visibility->hidden_ids( Pos_Visibility::VARIATIONS )
 					)
 				)
 			)
 		);
-	}
-
-	/** True when orders use HPOS (WooCommerce's own tables); false → legacy CPT (wp_posts). */
-	private function orders_are_hpos(): bool {
-		$order_util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
-		if ( class_exists( $order_util ) && method_exists( $order_util, 'custom_orders_table_usage_is_enabled' ) ) {
-			return (bool) call_user_func( array( $order_util, 'custom_orders_table_usage_is_enabled' ) );
-		}
-		return false; // no WC / older WC → CPT
 	}
 }

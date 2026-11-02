@@ -66,7 +66,7 @@ class Store_Defaults {
 	 * @return array<int,array<string,string>>
 	 */
 	public static function tax_ids(): array {
-		$general = woocommerce_pos_get_settings( 'general' );
+		$general = wcpos_get_settings( 'general' );
 		if ( ! \is_array( $general ) || ! isset( $general['store_tax_ids'] ) ) {
 			return array();
 		}
@@ -131,7 +131,7 @@ class Store_Defaults {
 	 * @param string $key Setting key.
 	 */
 	private static function pos_setting( string $key ): string {
-		$general = woocommerce_pos_get_settings( 'general' );
+		$general = wcpos_get_settings( 'general' );
 		if ( ! \is_array( $general ) || ! isset( $general[ $key ] ) || ! \is_string( $general[ $key ] ) ) {
 			return '';
 		}

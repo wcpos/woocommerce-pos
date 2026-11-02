@@ -173,7 +173,7 @@ class Test_Orders_Stock_Restore extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_stock_not_restored_when_filter_disabled(): void {
 		// Disable via filter.
-		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_false' );
+		add_filter( 'wcpos_restore_stock_on_delete', '__return_false' );
 
 		try {
 			$product = ProductHelper::create_simple_product(
@@ -203,7 +203,7 @@ class Test_Orders_Stock_Restore extends WCPOS_REST_Unit_Test_Case {
 			$product = wc_get_product( $product->get_id() );
 			$this->assertEquals( 6, $product->get_stock_quantity() );
 		} finally {
-			remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_false' );
+			remove_filter( 'wcpos_restore_stock_on_delete', '__return_false' );
 		}
 	}
 

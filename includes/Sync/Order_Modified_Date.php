@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 
 /**
  * Advance stale CPT order post dates after meta-only saves.
@@ -20,7 +20,7 @@ class Order_Modified_Date {
 	 * @param int $order_id The order post ID.
 	 */
 	public static function touch( int $order_id ): void {
-		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		if ( Order_Meta_Store::hpos() ) {
 			return;
 		}
 		global $wpdb;

@@ -49,13 +49,12 @@ spl_autoload_register(
 			'WCPOS\WooCommercePOS\API\Taxes_Controller'              => 'WCPOS\WooCommercePOS\API\V1\Taxes_Controller',
 			'WCPOS\WooCommercePOS\API\Templates_Controller'          => 'WCPOS\WooCommercePOS\API\V1\Templates_Controller',
 			'WCPOS\WooCommercePOS\API\Traits\Product_Helpers'        => 'WCPOS\WooCommercePOS\API\V1\Traits\Product_Helpers',
-			'WCPOS\WooCommercePOS\API\Traits\Query_Helpers'          => 'WCPOS\WooCommercePOS\API\V1\Traits\Query_Helpers',
 			'WCPOS\WooCommercePOS\API\Traits\Uuid_Handler'           => 'WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler',
 			'WCPOS\WooCommercePOS\API\Traits\WCPOS_REST_API'         => 'WCPOS\WooCommercePOS\API\V1\Traits\WCPOS_REST_API',
 
 			// The wcpos/v2 service twins were folded into Controller_Registry in 1.10.19.
 			// It stamps every v2 entry, so subclasses registered through
-			// woocommerce_pos_rest_api_v2_controllers still answer under wcpos/v2.
+			// wcpos_rest_api_v2_controllers still answer under wcpos/v2.
 			// Outside the registry, a subclass inherits v1 and must set its own namespace.
 			'WCPOS\WooCommercePOS\API\V2\Auth'                           => 'WCPOS\WooCommercePOS\API\V1\Auth',
 			'WCPOS\WooCommercePOS\API\V2\Cashier'                        => 'WCPOS\WooCommercePOS\API\V1\Cashier',

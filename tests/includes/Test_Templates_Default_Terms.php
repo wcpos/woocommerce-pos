@@ -91,6 +91,28 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
 	}
 
+	public function test_a_failed_display_type_insert_leaves_the_latch_unset(): void {
+		// Every supported type is verified before latching, not a hand-kept
+		// list: `display` seeded unverified until the check read SUPPORTED_TYPES.
+		delete_option( Templates::DEFAULT_TERMS_OPTION );
+		$this->delete_default_term( 'display', 'wcpos_template_type' );
+		$refuse = static function ( $term, $taxonomy ) {
+			return ( 'wcpos_template_type' === $taxonomy && 'Display' === $term ) ? new \WP_Error( 'test_refused', 'refused' ) : $term;
+		};
+		add_filter( 'pre_insert_term', $refuse, 10, 2 );
+
+		new Templates();
+		remove_filter( 'pre_insert_term', $refuse, 10 );
+
+		$this->assertNull( term_exists( 'display', 'wcpos_template_type' ) );
+		$this->assertFalse( get_option( Templates::DEFAULT_TERMS_OPTION ), 'A seed missing the display type must not be marked complete.' );
+
+		new Templates();
+
+		$this->assertNotFalse( term_exists( 'display', 'wcpos_template_type' ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+	}
+
 	public function test_plugin_activation_rearms_the_seed(): void {
 		( new Activator() )->single_activate( false );
 
@@ -105,6 +127,86 @@ class Test_Templates_Default_Terms extends WP_UnitTestCase {
 
 		$this->assertNotFalse( term_exists( 'kitchen-ticket', 'wcpos_template_category' ) );
 		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+	}
+
+	public function test_version_upgrade_seeds_general_category(): void {
+		update_option( Templates::DEFAULT_TERMS_OPTION, 4, true );
+		$this->delete_default_term( 'general', 'wcpos_template_category' );
+
+		new Templates();
+
+		$this->assertInstanceOf( \WP_Term::class, get_term_by( 'slug', 'general', 'wcpos_template_category' ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+	}
+
+	/** @dataProvider legacy_display_categories */
+	public function test_version_upgrade_migrates_only_legacy_gallery_categories( string $legacy_category ): void {
+		$posts = array();
+		foreach ( array( 'display-pocket', 'display-marquee', 'display-ledger' ) as $gallery_key ) {
+			$posts[ $gallery_key ] = self::factory()->post->create(
+				array(
+					'post_type'   => 'wcpos_template',
+					'post_status' => 'publish',
+				)
+			);
+			update_post_meta( $posts[ $gallery_key ], '_template_gallery_key', $gallery_key );
+			wp_set_object_terms( $posts[ $gallery_key ], $legacy_category, 'wcpos_template_category' );
+		}
+
+		$customized = self::factory()->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $customized, '_template_gallery_key', 'display-pocket' );
+		wp_set_object_terms( $customized, 'promotion', 'wcpos_template_category' );
+		// A legacy install that also carries a merchant-assigned category keeps it.
+		$mixed = self::factory()->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+			)
+		);
+		update_post_meta( $mixed, '_template_gallery_key', 'display-marquee' );
+		wp_set_object_terms( $mixed, array( $legacy_category, 'promotion' ), 'wcpos_template_category' );
+		update_option( Templates::DEFAULT_TERMS_OPTION, Templates::DEFAULT_TERMS_VERSION - 1, true );
+
+		new Templates();
+
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $posts['display-pocket'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $posts['display-marquee'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $posts['display-ledger'], 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( array( 'promotion' ), wp_get_post_terms( $customized, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertEqualsCanonicalizing( array( 'promotion', 'general' ), wp_get_post_terms( $mixed, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+	}
+
+	public function test_failed_category_migration_keeps_legacy_term_and_latch_until_success(): void {
+		$post_id = Templates::install_gallery_template( 'display-pocket' );
+		wp_set_object_terms( $post_id, 'standard', 'wcpos_template_category' );
+		$this->delete_default_term( 'general', 'wcpos_template_category' );
+		update_option( Templates::DEFAULT_TERMS_OPTION, Templates::DEFAULT_TERMS_VERSION - 1, true );
+		$refuse = static function ( $term, $taxonomy ) {
+			return 'wcpos_template_category' === $taxonomy ? new \WP_Error( 'test_refused', 'refused' ) : $term;
+		};
+		add_filter( 'pre_insert_term', $refuse, 10, 2 );
+		try {
+			new Templates();
+		} finally {
+			remove_filter( 'pre_insert_term', $refuse, 10 );
+		}
+
+		$this->assertSame( array( 'standard' ), wp_get_post_terms( $post_id, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION - 1, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+
+		new Templates();
+
+		$this->assertSame( array( 'general' ), wp_get_post_terms( $post_id, 'wcpos_template_category', array( 'fields' => 'slugs' ) ) );
+		$this->assertSame( Templates::DEFAULT_TERMS_VERSION, (int) get_option( Templates::DEFAULT_TERMS_OPTION ) );
+	}
+
+	public function legacy_display_categories(): array {
+		return array( array( 'display' ), array( 'standard' ), array( 'responsive' ), array( 'small-screen' ), array( 'large-screen' ) );
 	}
 
 	private function delete_default_term( string $slug, string $taxonomy ): void {

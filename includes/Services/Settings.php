@@ -41,7 +41,7 @@ class Settings {
 
 	/**
 	 * The Section Registry. Built lazily on first access so registrants can
-	 * hook `woocommerce_pos_register_settings_sections` during plugins_loaded.
+	 * hook `wcpos_register_settings_sections` during plugins_loaded.
 	 *
 	 * @var null|Section_Registry
 	 */
@@ -83,9 +83,10 @@ class Settings {
 			 *
 			 * @param Section_Registry $registry The Section Registry.
 			 *
-			 * @hook woocommerce_pos_register_settings_sections
+			 * @hook wcpos_register_settings_sections
 			 */
-			do_action( 'woocommerce_pos_register_settings_sections', $this->registry );
+			do_action( 'wcpos_register_settings_sections', $this->registry );
+			do_action_deprecated( 'woocommerce_pos_register_settings_sections', array( $this->registry ), '2.0.0', 'wcpos_register_settings_sections' );
 		}
 
 		return $this->registry;
@@ -101,7 +102,7 @@ class Settings {
 
 	/**
 	 * Constructor is private to prevent direct instantiation.
-	 * Use woocommerce_pos_get_settings() instead.
+	 * Use wcpos_get_settings() instead.
 	 * Or Settings::instance() if you must.
 	 */
 	private function __construct() {
@@ -189,7 +190,7 @@ class Settings {
 	 * The error returned for a settings id with no registered Settings Section.
 	 *
 	 * Registering a section through the
-	 * `woocommerce_pos_register_settings_sections` action is the only supported
+	 * `wcpos_register_settings_sections` action is the only supported
 	 * way to add a settings group; there is no generic option fallback.
 	 *
 	 * @param string $id The settings section ID.
@@ -488,21 +489,6 @@ class Settings {
 	}
 
 	/**
-	 * Delete settings in WP options table.
-	 *
-	 * @param string $id The settings section ID.
-	 *
-	 * @return bool|WP_Error
-	 */
-	public static function delete_settings( $id ) {
-		if ( ! is_super_admin() && ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
-		}
-
-		return delete_option( self::$db_prefix . $id );
-	}
-
-	/**
 	 * Get the database version.
 	 *
 	 * @return string
@@ -622,16 +608,6 @@ class Settings {
 		}
 
 		return '';
-	}
-
-	/**
-	 * Whether the JWT may be passed as a query parameter.
-	 *
-	 * @deprecated The `use_jwt_as_param` setting was removed. `?authorization=` is accepted
-	 *             on REST requests only (Auth::get_auth_header()); this always returns false.
-	 */
-	public function use_jwt_as_param_enabled(): bool {
-		return false;
 	}
 
 	/**

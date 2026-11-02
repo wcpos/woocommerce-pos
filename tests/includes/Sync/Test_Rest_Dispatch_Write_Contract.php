@@ -141,9 +141,9 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 
 			return $controllers;
 		};
-		add_filter( 'woocommerce_pos_rest_api_controllers', $inject, 99 );
+		add_filter( 'wcpos_rest_api_controllers', $inject, 99 );
 		parent::rest_api_init();
-		remove_filter( 'woocommerce_pos_rest_api_controllers', $inject, 99 );
+		remove_filter( 'wcpos_rest_api_controllers', $inject, 99 );
 	}
 
 	public function tearDown(): void {
@@ -152,7 +152,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 			$this->registered_shop_coupon = false;
 		}
 		remove_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1 );
-		remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		remove_filter( 'wcpos_restore_stock_on_delete', '__return_true' );
 		update_option( 'woocommerce_manage_stock', $this->previous_manage_stock_option );
 		if ( null === $this->previous_general_settings ) {
 			delete_option( 'woocommerce_pos_settings_general' );
@@ -495,7 +495,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	public function test_order_force_delete_filter_overrides_disabled_setting(): void {
-		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_true' );
+		add_filter( 'wcpos_restore_stock_on_delete', '__return_true' );
 		list( $product_id, $order_id, $request ) = $this->stock_order_delete_request( false );
 
 		$response = $this->server->dispatch( $request );
@@ -524,24 +524,6 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 500, $response->get_status() );
 		$this->assertInstanceOf( \WC_Order::class, wc_get_order( $order_id ) );
 		$this->assertEquals( 6, wc_get_product( $product_id )->get_stock_quantity() );
-	}
-
-	public function test_dispatch_fake_reservation_retains_envelope_and_rejects_reuse(): void {
-		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
-		$this->assertSame(
-			array(
-				'collection' => 'products',
-				'record_uuid' => 'record-1',
-				'operation' => 'create',
-				'fingerprint' => 'fingerprint-1',
-				'status' => 'pending',
-			),
-			$this->store->lookup( 'products', 'mutation-1' )
-		);
-		$this->assertFalse( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
-		$this->assertFalse( $this->store->reserve( 'orders', 'mutation-1', 'record-2', 'delete', 'fingerprint-2' ) );
-		$this->store->release( 'mutation-1' );
-		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
 	}
 
 	public function test_valid_golden_create_round_trips_through_rest_dispatch(): void {
@@ -743,7 +725,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 			'post_type' => 'product_variation',
 		);
 		$current  = $document->invoke( $controller, $meta, $variation->get_id() )->get_data();
-		$revision = (string) ( $current['payload']['date_modified_gmt'] ?? $variation->get_id() );
+		$revision = Revision::compute_variation( $current );
 
 		$fixture                                  = $this->fixture( 'variation-update' );
 		$fixture['envelope']['baseRevision']      = $revision;

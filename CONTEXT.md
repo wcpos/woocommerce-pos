@@ -40,7 +40,7 @@ One POS query behaviour for one collection — the params it claims, the clauses
 _Avoid_: query filter, orderby mapping, proxy mirror
 
 **Read Lane**:
-One of the two paths a collection read reaches the client by — the direct lane (`wcpos/v1` controllers, plus the flat `wcpos/v2` routes with no `wc/v3` proxy backing, e.g. `/variations`) and the proxy lane (`wcpos/v2` → `wc/v3`). Behaviour that exists on one lane only is a parity bug, not a design. (Code comments also say "lane" for the request shapes *within* one route — include lane, discovery lane; that narrower sense is not this term.)
+One of the two paths a collection read reaches the client by — the direct lane (`wcpos/v1` controllers, plus the flat `wcpos/v2` routes with no `wc/v3` proxy backing, e.g. `/variations`) and the proxy lane (`wcpos/v2` → `wc/v3`). Behaviour that exists on one lane only is a parity bug, not a design. (Code comments also say "lane" for the request shapes *within* one route — include lane, discovery lane; that narrower sense is not this term.) Every Read Lane installs its Collection Rules only through the plan's scoped install (`around()`), so nothing a read adds outlives the read.
 _Avoid_: v1/v2 API, endpoint version
 
 **Write Payload shape**:
@@ -77,3 +77,47 @@ THE content fingerprint of a record — a sha256 over its schema-scoped, canonic
 serialization, computed at read time, never stored. The `baseRevision` a client echoes for
 optimistic concurrency.
 _Avoid_: version, hash (unqualified), rev
+
+### Till
+
+**Register**:
+The server record of one cash drawer: sessions open on it and its closures number in one gap-free sequence. It belongs to at most one store (`store_id` is NULL on Free and for an unassigned register). Only an administrator moves it between stores, and only while no session is open. A move carries no history, because every closure records the store its register belonged to when it was written. A register is the drawer, not the device: several devices may point at one register.
+_Avoid_: till (in code or UI), terminal, device, station
+
+**Till session**:
+One register's opened-to-closed period, `open` → `counting` → `closed`. It opens with a counted float and closes with a count. It is keyed on the register, never the cashier. The code says `session` in `Register_Session_Store`, `Sessions_Controller` and `/wcpos/v2/sessions`. That is not the auth session (a refresh-token family in `Session_Registry`), so say "till session" wherever the two could meet.
+_Avoid_: shift, drawer session, cash session; bare "session" in auth code
+
+**Closure**:
+The immutable, numbered document `Closure_Store::create()` writes once when a till session closes. It holds expected, counted and variance per payment method, the period and perpetual grand totals, and the breakdowns as recorded. It is never edited: a later change is a Correction that points at it. Its print is the Z-report. The X-report is a live print of an open session and is never stored.
+_Avoid_: Z-report (for the record), end of day, shift report
+
+**Business day**:
+The trading day a till session, and so its closure, belongs to: the date in the store's timezone on which the session opened. It is stamped on the session at opening and copied onto the closure. The closure never takes it from its own request. A session that runs past midnight is one day's trade. Legacy unstamped rows derive it from `opened_at_gmt` in `wp_timezone()`, the way `Activator::upgrade_business_days()` back-fills them.
+_Avoid_: calendar day, day start, cutoff time
+
+**Correction**:
+A write-once fiscal record with a `closure_id`. It changes what a closure settles to without touching the closure. The types are `recount`, `late_sale`, `late_refund` (including a post-closure `reallocation` between tenders) and `late_movement`. A closure reads as recorded plus its corrections. `Closure_Store::corrections_for()` is the one projection.
+_Avoid_: adjustment, amendment, edit, re-close
+
+**Expected**:
+What each tender should hold at the end of a till session: the counted opening float plus every cash-kind leg (any gateway whose kind is `cash`, not only `pos_cash`), the session's refund rows and paid-in minus paid-out for cash, and for any other tender the sum of its captured legs bound to the session plus its refund rows. `Session_Figures::expected()` is the one derivation. A correction's expected delta uses the same tender rule without the float or movements (`Session_Figures::tender_totals()`), and the written record freezes every tender, not only cash.
+_Avoid_: drawer total, balance, takings
+
+**Late**:
+A leg, refund or cash movement of a till session that the session's closure did not count. The closure records what it counted on the row itself: `closure_id` on each ledger leg (written only by `Ledger::stamp_closure()`; an order write can neither remove nor forge it), and `_wcpos_closure` on each refund (a cash refund has no ledger row). A movement is counted when it was written before the closure; the two serialize on the register. A late row never edits the closure. It produces a Correction that holds only the late rows. Late is a fact about the row, never a comparison of clocks.
+_Avoid_: post-close, after the cutoff (for lateness), orphan sale
+
+**Store reach**:
+The stores whose registers, till sessions, closures, fiscal records and reports one caller may read. The Store Reach module resolves it once per request from `woocommerce_pos_closures_list_args` applied to an EMPTY base. No `store_id` key means unrestricted. A well-formed list, even an empty one, restricts. Anything unreadable denies everything. A row with no store (NULL or 0) is outside a restricted reach unless the answer also carries `'unassigned' => true`; under Pro that is administrators only. A named record out of reach answers exactly as an absent one (404, never 403). A collection is narrowed in its SQL. This is not the Store scope, which is the store a till *claims* (`X-WCPOS-Store`), and not the Report Scope Gate, which is the tier boundary (a visible 403).
+_Avoid_: store scope (for this), authorized-stores filter, store permission
+
+### Payments
+
+**Leg**:
+One attempt to take money for an order through one payment method. It is stored as one row of the order's Ledger (`_wcpos_payments`) and keyed by a client-minted UUID, which doubles as the attempt id. A leg moves `pending → authorized → captured` or ends `failed`/`voided`, only through the Ledger's transition table. Authorized and captured legs *count* toward paid. Pending, authorized and captured legs are *live* and block a second leg for the same balance. "Row" is the stored shape; the wire calls it a `payment`.
+_Avoid_: tender, transaction, payment attempt
+
+**Allocation**:
+One part of a WooCommerce refund assigned to one counting leg: `refunds[] = {id, amount, status pending|succeeded|failed, provider_ref}`. Pending and succeeded allocations reserve the leg's refundable amount. Succeeded ones sum to `refunded_amount`. The allocations of one refund across legs never exceed the refund. Written only by the Ledger: allocated by `refund()`, settled by `settle_allocation()`.
+_Avoid_: refund line, refund leg

@@ -13,9 +13,9 @@ namespace WCPOS\WooCommercePOS\Sync;
  * A served record reaches the client down one of two lanes:
  *
  * - the BATCH lane — the catalog proxy hands a whole wc/v3 LIST to the public
- *   `woocommerce_pos_sync_proxy_response` filter;
+ *   `wcpos_sync_proxy_response` filter;
  * - the PER-OBJECT lane — {@see Product_Serializer} hands ONE serialized product
- *   to the public `woocommerce_pos_sync_serialized_product` filter.
+ *   to the public `wcpos_sync_serialized_product` filter.
  *
  * Every augmentation used to be wired to BOTH filters by hand, so each stamper
  * shipped as a pair of near-identical twins (`stamp_proxy_*` / `stamp_serialized_*`)
@@ -48,12 +48,12 @@ final class Augmentation_Pipeline {
 	/**
 	 * The batch lane's public filter name.
 	 */
-	public const PROXY_FILTER = 'woocommerce_pos_sync_proxy_response';
+	public const PROXY_FILTER = 'wcpos_sync_proxy_response';
 
 	/**
 	 * The per-object product lane's public filter name.
 	 */
-	public const SERIALIZED_FILTER = 'woocommerce_pos_sync_serialized_product';
+	public const SERIALIZED_FILTER = 'wcpos_sync_serialized_product';
 
 	/**
 	 * Lane id for the catalog-proxy batch response.

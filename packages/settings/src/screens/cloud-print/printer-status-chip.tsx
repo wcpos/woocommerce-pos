@@ -13,7 +13,7 @@ import type {
 	CloudStatus,
 } from '../../hooks/use-cloud-print-settings';
 
-const ENDPOINT = 'wcpos/v1/settings/cloud-print?wcpos=1';
+const ENDPOINT = 'wcpos/v2/settings/cloud-print?wcpos=1';
 const STATUS_REFRESH_MS = 30000;
 
 type StatusSubscriber = (settings: CloudPrintSettings) => void;

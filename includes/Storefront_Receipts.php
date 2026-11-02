@@ -19,7 +19,7 @@ class Storefront_Receipts {
 	public function __construct() {
 		add_shortcode( 'wcpos_receipt', array( $this, 'receipt_shortcode' ) );
 
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! wcpos_request() ) {
 			add_filter( 'woocommerce_my_account_my_orders_actions', array( $this, 'add_my_account_action' ), 10, 2 );
 		}
 	}
@@ -98,10 +98,11 @@ class Storefront_Receipts {
 		 *
 		 * @since 1.9.11
 		 *
-		 * @hook woocommerce_pos_storefront_receipt_my_account_button
+		 * @hook wcpos_storefront_receipt_my_account_button
 		 */
-		$default_enabled = wp_validate_boolean( woocommerce_pos_get_settings( 'general', 'storefront_receipt_enabled' ) );
-		$enabled         = (bool) apply_filters( 'woocommerce_pos_storefront_receipt_my_account_button', $default_enabled, $order );
+		$default_enabled = wp_validate_boolean( wcpos_get_settings( 'general', 'storefront_receipt_enabled' ) );
+		$enabled = apply_filters( 'wcpos_storefront_receipt_my_account_button', $default_enabled, $order );
+		$enabled = (bool) apply_filters_deprecated( 'woocommerce_pos_storefront_receipt_my_account_button', array( $enabled, $order ), '2.0.0', 'wcpos_storefront_receipt_my_account_button' );
 		if ( ! $enabled || null === Templates::get_active_template_id( 'receipt' ) ) {
 			return $actions;
 		}
@@ -116,13 +117,14 @@ class Storefront_Receipts {
 		 *
 		 * @since 1.9.11
 		 *
-		 * @hook woocommerce_pos_storefront_receipt_order_statuses
+		 * @hook wcpos_storefront_receipt_order_statuses
 		 */
-		$statuses = (array) apply_filters(
-			'woocommerce_pos_storefront_receipt_order_statuses',
+		$statuses = apply_filters(
+			'wcpos_storefront_receipt_order_statuses',
 			array( 'processing', 'completed', 'refunded' ),
 			$order
 		);
+		$statuses = (array) apply_filters_deprecated( 'woocommerce_pos_storefront_receipt_order_statuses', array( $statuses, $order ), '2.0.0', 'wcpos_storefront_receipt_order_statuses' );
 		if ( ! $order->has_status( $statuses ) ) {
 			return $actions;
 		}
@@ -131,7 +133,7 @@ class Storefront_Receipts {
 		// value is passed through the existing, already-validated ?template= path
 		// (published receipt templates only); an invalid value simply falls back
 		// to the active template when the receipt renders.
-		$template = sanitize_text_field( (string) woocommerce_pos_get_settings( 'general', 'storefront_receipt_template' ) );
+		$template = sanitize_text_field( (string) wcpos_get_settings( 'general', 'storefront_receipt_template' ) );
 
 		$actions['wcpos-receipt'] = array(
 			'url'        => self::get_receipt_url( $order, 'pdf', $template ),

@@ -74,11 +74,11 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			return $data;
 		};
 
-		add_filter( 'woocommerce_pos_receipt_data', $filter, 10, 3 );
+		add_filter( 'wcpos_receipt_data', $filter, 10, 3 );
 		try {
 			$payload = $this->builder->build();
 		} finally {
-			remove_filter( 'woocommerce_pos_receipt_data', $filter, 10 );
+			remove_filter( 'wcpos_receipt_data', $filter, 10 );
 		}
 
 		$this->assertSame(
@@ -195,13 +195,13 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 		try {
 			update_option( 'woocommerce_currency', 'USD' );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data = $this->builder->build();
 
 			$this->assertEquals( 'JPY', $data['order']['currency'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			update_option( 'woocommerce_currency', $original_currency );
 		}
 	}
@@ -226,13 +226,13 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		};
 
 		try {
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data = $this->builder->build();
 
 			$this->assertEquals( 'de_DE', $data['presentation_hints']['locale'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 		}
 	}
 
@@ -265,7 +265,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		};
 
 		try {
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data = $this->builder->build();
 			$expected_created = Receipt_Date_Formatter::from_timestamp(
@@ -276,11 +276,12 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 			$this->assertEquals( 'es_ES', $data['presentation_hints']['locale'] );
 			$this->assertEquals( $expected_created, $data['order']['created'] );
+			$this->assertStringNotContainsString( 'am', strtolower( $data['fiscal']['sale_time']['time'] ) );
 			$normalized_time = strtolower( $data['order']['created']['time'] );
 			$this->assertStringNotContainsString( 'am', $normalized_time );
 			$this->assertStringNotContainsString( 'pm', $normalized_time );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 		}
 	}
 
@@ -307,6 +308,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$before = time();
 			$data   = $this->builder->build( $store );
 			$after  = time();
+			$this->assertSame( '2024-01-16', $data['fiscal']['received_at']['date_ymd'] );
 
 			$expected_store_dates = array_unique(
 				array(
@@ -408,7 +410,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			update_option( 'woocommerce_tax_total_display', 'itemized' );
 			update_option( 'woocommerce_tax_round_at_subtotal', 'no' );
 			update_option( 'woocommerce_prices_include_tax', 'no' );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data  = $this->builder->build();
 			$hints = $data['presentation_hints'];
@@ -428,7 +430,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertEquals( 'yes', $hints['rounding_mode'] );
 			$this->assertArrayNotHasKey( 'order_barcode_type', $hints );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			update_option( 'woocommerce_currency_pos', $original_currency_pos );
 			update_option( 'woocommerce_price_thousand_sep', $original_thousand_sep );
 			update_option( 'woocommerce_price_decimal_sep', $original_decimal_sep );
@@ -497,7 +499,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		try {
 			update_option( 'woocommerce_price_thousand_sep', ',' );
 			update_option( 'woocommerce_price_display_suffix', ' including tax' );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data  = $this->builder->build();
 			$hints = $data['presentation_hints'];
@@ -505,7 +507,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertSame( '', $hints['price_thousand_separator'] );
 			$this->assertSame( '', $hints['price_display_suffix'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			update_option( 'woocommerce_price_thousand_sep', $original_thousand_sep );
 			update_option( 'woocommerce_price_display_suffix', $original_price_suffix );
 		}
@@ -570,7 +572,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		};
 
 		try {
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data = $this->builder->build();
 
@@ -579,7 +581,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertNull( $data['store']['opening_hours_inline'] );
 			$this->assertNull( $data['store']['opening_hours_notes'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 		}
 	}
 
@@ -638,12 +640,12 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		try {
 			set_theme_mod( 'custom_logo', $logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data = $this->builder->build();
 			$this->assertSame( $logo_url, $data['store']['logo'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
 		}
@@ -706,12 +708,12 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		try {
 			set_theme_mod( 'custom_logo', $logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data = $this->builder->build();
 			$this->assertNull( $data['store']['logo'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
 		}
@@ -789,12 +791,12 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		try {
 			set_theme_mod( 'custom_logo', $site_logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
-			add_filter( 'woocommerce_pos_get_store', $store_filter );
+			add_filter( 'wcpos_get_store', $store_filter );
 
 			$data = $this->builder->build();
 			$this->assertSame( $logo_url, $data['store']['logo'] );
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'wcpos_get_store', $store_filter );
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
 		}
@@ -1160,6 +1162,17 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	public function test_build_returns_fiscal_with_all_fields(): void {
 		$data   = $this->builder->build();
 		$fiscal = $data['fiscal'];
+		$this->assertSame( 'WCPOS', $data['software']['name'] );
+		$this->assertNotEmpty( $data['software']['plugin_version'] );
+		$this->assertNotEmpty( $data['software']['app_version'] );
+		$this->assertNotEmpty( $data['register']['name'] );
+		$this->assertSame( 'sale', $fiscal['document_type'] );
+		$this->assertTrue( $fiscal['is_sale_document'] );
+		$this->assertSame( 'Europe/Madrid', $fiscal['sale_tz'] );
+		$this->assertStringContainsString( '11:30', $fiscal['sale_time']['time'] );
+		$this->assertIsArray( $fiscal['received_at'] );
+		$this->assertSame( 42, $fiscal['sale_counter'] );
+		$this->assertSame( '', $fiscal['corrects'] );
 
 		// Existing fields.
 		$this->assertArrayHasKey( 'immutable_id', $fiscal );
@@ -1261,13 +1274,13 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$honolulu_filter = $store_filter_factory( 'Pacific/Honolulu' );
 
 		try {
-			add_filter( 'woocommerce_pos_get_store', $auckland_filter );
+			add_filter( 'wcpos_get_store', $auckland_filter );
 			$auckland = $this->builder->build();
-			remove_filter( 'woocommerce_pos_get_store', $auckland_filter );
+			remove_filter( 'wcpos_get_store', $auckland_filter );
 
-			add_filter( 'woocommerce_pos_get_store', $honolulu_filter );
+			add_filter( 'wcpos_get_store', $honolulu_filter );
 			$honolulu = $this->builder->build();
-			remove_filter( 'woocommerce_pos_get_store', $honolulu_filter );
+			remove_filter( 'wcpos_get_store', $honolulu_filter );
 
 			$this->assertSame( 'Pacific/Auckland', $auckland['presentation_hints']['timezone'] );
 			$this->assertSame( 'Pacific/Honolulu', $honolulu['presentation_hints']['timezone'] );
@@ -1283,8 +1296,8 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 				$honolulu['order']['created']['datetime']
 			);
 		} finally {
-			remove_filter( 'woocommerce_pos_get_store', $auckland_filter );
-			remove_filter( 'woocommerce_pos_get_store', $honolulu_filter );
+			remove_filter( 'wcpos_get_store', $auckland_filter );
+			remove_filter( 'wcpos_get_store', $honolulu_filter );
 		}
 	}
 }

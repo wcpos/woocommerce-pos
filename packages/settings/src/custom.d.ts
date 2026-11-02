@@ -3,6 +3,9 @@
 
 declare global {
 	interface WcposSettings {
+		currencySymbol?: string;
+		currencyDecimals?: number;
+		getComponent?: (key: string) => import('react').ComponentType | undefined;
 		environment?: { cloudflare?: { proxied: boolean; plugin_active: boolean } };
 		barcodes?: string[];
 		order_statuses?: Record<string, string>;
@@ -21,7 +24,7 @@ declare global {
 			settings?: WcposSettings;
 			[key: string]: unknown;
 		};
-		wpApiSettings?: { root?: string };
+		wpApiSettings?: { root?: string; nonce?: string };
 	}
 }
 
