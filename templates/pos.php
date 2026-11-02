@@ -15,7 +15,8 @@
 	<meta charset="utf-8"/>
 
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-	<meta name="theme-color" content="#000000">
+	<!-- The splash colour: the app's --color-splash (apps/main/global.css, @theme static), always light. -->
+	<meta name="theme-color" content="#F0F4F8">
 	<meta name="mobile-web-app-capable" content="yes">
 
 	<link rel="icon" href="<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/img/favicon.ico">
@@ -81,6 +82,8 @@
 		  }
 		}*/
 
+		/* The same splash the app draws once its JS runs (packages/core/src/screens/splash, bg-splash =
+		   --color-splash #F0F4F8 in apps/main/global.css): one colour from the first paint to the POS. */
 		#splash {
 			display: flex;
 			flex-direction: column;
@@ -88,7 +91,7 @@
 			align-items: center;
 			height: 100%;
 			width: 100%;
-			background-color: #fafbfc;
+			background-color: #F0F4F8;
 		}
 
 		#splash img {
