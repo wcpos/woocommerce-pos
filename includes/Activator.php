@@ -1384,6 +1384,39 @@ class Activator {
 	}
 
 	/**
+	 * The update files a move from $old to $current runs, in table order.
+	 *
+	 * A prerelease build counts as its release. PHP orders `2.0.0-beta.1` BEFORE `2.0.0`, so
+	 * compared raw, a 1.11.x → 2.0.0-beta.1 upgrade would skip update-2.0.0.php and the beta
+	 * would run on an unmigrated site. The stamp that follows (`-beta.2`, then `2.0.0`) runs the
+	 * release's updater again; every updater is idempotent by contract, so that is harmless.
+	 *
+	 * @param array<string, string> $db_updates Version => update file, ascending.
+	 * @param string                $old        Stored plugin version.
+	 * @param string                $current    Installed plugin version.
+	 *
+	 * @return string[] Update files to include.
+	 */
+	public static function pending_db_updates( array $db_updates, string $old, string $current ): array {
+		// version_check() also reaches db_upgrade() for a sync-schema or role-caps repair with
+		// the version already stamped; a stamp that has not moved has no updater to run, and
+		// without this line a stamped prerelease would re-run its release's updater on every
+		// such request.
+		if ( version_compare( $old, $current, '>=' ) ) {
+			return array();
+		}
+		$current_release = (string) preg_replace( '/[-+].*$/', '', $current );
+		$pending         = array();
+		foreach ( $db_updates as $version => $updater ) {
+			if ( version_compare( (string) $version, $old, '>' ) && version_compare( (string) $version, $current_release, '<=' ) ) {
+				$pending[] = $updater;
+			}
+		}
+
+		return $pending;
+	}
+
+	/**
 	 * Upgrade database.
 	 *
 	 * @param string $old     Old version.
@@ -1403,11 +1436,8 @@ class Activator {
 			'1.10.0'       => 'updates/update-1.10.0.php',
 			'2.0.0'        => 'updates/update-2.0.0.php',
 		);
-		foreach ( $db_updates as $version => $updater ) {
-			if ( version_compare( $version, $old, '>' ) &&
-			 version_compare( $version, $current, '<=' ) ) {
-				include $updater;
-			}
+		foreach ( self::pending_db_updates( $db_updates, (string) $old, (string) $current ) as $updater ) {
+			include $updater;
 		}
 
 		// Bring untouched gallery copies up to the bundled markup. Runs here for immediacy on a
