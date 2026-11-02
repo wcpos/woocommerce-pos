@@ -23,10 +23,12 @@ on:
   pull_request:
     branches:
       - main
+      - 1.11.x
       - next
   push:
     branches:
       - main
+      - 1.11.x
       - next
     paths:
       - "tests/**"

@@ -17,9 +17,11 @@ on:
   pull_request:
     branches:
       - main
+      - 1.11.x
   push:
     branches:
       - main
+      - 1.11.x
   schedule:
     - cron: '17 6 * * *'
   workflow_dispatch:
