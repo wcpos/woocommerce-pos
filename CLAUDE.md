@@ -110,28 +110,12 @@ If wp-env fails because of port conflicts or environment initialization, diagnos
 
 ## Branch lanes
 
-Two trunks, one standard release cycle. Which phase we are in is a fact you read off the remote, not off this file — this note was once left saying "`next` is dead" for a week after `next` had been revived, and it sent agents to the wrong lane.
+Three trunks during the 2.0 beta period (from the 2.0 promotion of 2026-11-02 until 2.0 GA):
 
-- **`main`** — the released line. Patch releases (`1.x.y`) are cut from its tip, so anything merged here ships in the next patch. Only fixes for the released version target `main`.
-- **`next`** — the feature lane for the next minor/major. New features, breaking changes, and bug fixes that only matter because of that work branch from `origin/next` and target `next`. `main` moves daily and is merged into `next` regularly, never the other way around until release.
+- **`main`** — WCPOS 2.0, this branch: `2.0.0-beta.1` now, GA later. dev-free runs it; the web lane is `@2.0`. Fixes for 2.0 branch from `origin/main` and target `main`. `release.yml` on a push here creates a draft prerelease while the header version carries `-beta`.
+- **`1.11.x`** — the stable patch line for merchants still on 1.11. A 1.11 fix branches from `origin/1.11.x` and targets `1.11.x`; it has no dev site (Paul, 2026-11-01). A fix 2.0 also needs is re-applied to `main` through a PR of its own.
+- **`next`** — frozen until 2.0 GA; nothing targets it. At GA it is re-cut from `main`.
 
-**The cycle:** `next` is live while the next version is being built. Just before release it is moved to `main` for final testing against dev-free and dev-pro — a freeze of a week or more during which `next` genuinely is dead and everything goes to `main`. Once the version ships, `next` is re-cut from `main` and becomes the working lane again.
-
-**How to tell which phase you are in** (do this before choosing a lane, every session):
-
-```bash
-git fetch -q origin
-git rev-list --left-right --count origin/main...origin/next   # <only-on-main>  <only-on-next>
-```
-
-Read the counts:
-
-- **Right-hand count above 0** — `next` has commits `main` lacks, so `next` is live: feature and breaking work targets `next`.
-- **Left-hand count above 0, right-hand 0** — `main` has moved on and `next` has not, so we are in the freeze: target `main`.
-- **`0 0`** — the tips are equal. A freshly re-cut `next` looks exactly like the first hours of a freeze, and the count cannot tell them apart. Ask Paul which phase it is; do not default to `main`, or the first `next`-only commit never gets made.
-
-If the remote contradicts this note, the remote wins.
-
-Never commit directly to either trunk — branch off the right one in a worktree and target the PR's base at the same lane.
+Never commit directly to a trunk — branch off the right one in a worktree and target the PR's base at the same lane. When the lane is not explicit, ask "main or 1.11.x?" rather than defaulting.
 
 **Patch compatibility rule (Paul, 2026-10-19).** Every patch on a lane is compatible with every other patch on that lane, in both directions: a `2.0.N` plugin works with any `2.0.M` app or web bundle and vice versa. The web lane forces it (every plugin on `@<major.minor>` loads the newest bundle on that ref) and desktop and mobile merchants update when they choose, so a plugin released today serves apps a month old. The app has no upper bound on the plugin version it accepts; the plugin staying backward compatible within the lane is the only thing that keeps that pairing working. So a `main` PR that touches a REST route, a response field, a header in the CORS floor, an option the app reads, the sync protocol, or a vendored worker answers one question: *would this fail against the lane floor, the `<major.minor>.0` app or bundle, or any patch between it and the tip?* The floor, not "one patch older": a merchant on a 2.0.0 desktop app can still be served by the 2.0.5 plugin. Adding something behind a fallback is a patch. Removing or renaming anything a client reads (a route, a field, a header, an option) is never a one-step change at any version: a minor bump isolates the web bundle (the lane ref) and newer apps (their plugin floor), but nothing isolates an older desktop or mobile app from a newer plugin, so keep serving the old shape for at least one full minor (deprecate in `X.Y`, remove in `X.Y+2` at the earliest) until a plugin-side app floor exists, which it does not today. Anything else that fails the question bumps the minor across every line; it never ships as a patch. The RxDB worker check (`opfs-worker-drift.yml`) is the mechanical case of this rule; the rest is review judgement. The rule and the train-time box live in roadmap `docs/releases/RELEASE-CHECKLIST.md`. The lane-floor E2E leg is filed as #2323 and not built yet; until it is, the question above is answered by review, not CI.

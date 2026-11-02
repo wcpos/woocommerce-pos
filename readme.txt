@@ -130,6 +130,28 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 2.0.0-beta.1 - 2026/11/02 =
+
+**Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales.** Rolling back to 1.11 also starts from an empty local database, so sync before you roll back too. The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
+
+WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers handled at the register itself, with a cash drawer that opens and closes with each shift. Every screen is redrawn, and the till keeps taking cash when the connection drops.
+
+- **A checkout that belongs to the POS.** Checkout opens in a tender pane beside the cart instead of sending every sale through WooCommerce's order-pay page.
+- **Split payments.** Take one order in several payments, for example part cash and part card.
+- **Card readers connected straight to the POS (Pro).** Stripe Terminal and SumUp readers pair with the till over Bluetooth; Tap to Pay on iPhone and Android with Stripe.
+- **Registers and cash drawer sessions.** Opening float, cash in and out, a count at close and the difference against what was expected; set up in POS > Settings > General > Register. Free includes one register; more registers need Pro.
+- **Closures are saved, numbered documents** you can reprint, recount and export as CSV from POS Settings.
+- **Cash sales keep going when the connection drops.**
+- **A new Reports screen** with a comparison period, a chart and cards for orders, products, taxes, refunds, payments, categories and cashiers.
+- **A customer-facing display (Pro).** Open the display page on any device's browser and pair it to a till with a code.
+- **A redesigned POS** with a Scale setting for compact, regular or spacious layouts.
+- **POS Only products are hidden from your online shop.** Marking a product POS Only sets its catalog visibility to Hidden; existing POS Only products are updated once at upgrade.
+- **The POS loads from cdn.wcpos.com, with jsDelivr as the fallback.** The bundle is signed and checked before it runs.
+- **The template gallery has Receipts, Reports, Closures, Display and Email tabs**, and receipt fonts download on demand.
+- **The cashier who opened a session cannot approve its own variance**, and the Access screen can restore the default capabilities.
+- **The experimental magnetic card reader is removed.** Card terminal extensions (Stripe, SumUp and the others) need WCPOS Pro from 2.0.
+- Developers: sync protocol 3; every plugin hook is now named `wcpos_*` (the `woocommerce_pos_*` names still fire as deprecated aliases); the 1.x compatibility shims are removed; translations pinned to 2026.11.2. Full notes: https://github.com/wcpos/roadmap/blob/main/docs/releases/notes/2.0.0-plugin.md
+
 = 1.11.9 - 2026/11/01 =
 
 - **Fixed POS sales saving with no tax on stores that calculate tax by the customer shipping address** -- a regression in 1.11.8. A sale with no shipping address is taxed at the customer billing address, else at the shop base address, as WooCommerce does; the till showed the right tax all along. Orders saved by 1.11.8 with no tax are corrected with Recalculate on the order's edit screen.
