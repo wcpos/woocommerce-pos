@@ -130,6 +130,19 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 2.0.0-beta.2 - 2026/11/03 =
+
+Beta 2 of the WCPOS 2.0 public beta. Install it by hand over beta 1; it is never offered as an update. **New testers: sync every till before upgrading from 1.11**, and read the 2.0.0-beta.1 entry below for what 2.0 changes.
+
+Since beta 1:
+
+- **Fonts.** A Fonts setting under Settings > Theme: match the theme, or pick one of five type sets.
+- **The Free upgrade strip is the topmost row on every page**, in the warning colour on every theme.
+- **Theme fixes.** The cards under a stacked product tile take the theme's tile radius, and the Market stall theme's primary colour is the coral from its design.
+- **The POS mark is redrawn**: a slate wall behind a crimson and off-white awning, with a shadow under the awning.
+- **The POS page's splash matches the app's splash**: the same light colour, and a light browser bar on phones instead of a black one.
+- Developers: translations pinned to 2026.11.4.
+
 = 2.0.0-beta.1 - 2026/11/02 =
 
 **Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales.** Rolling back to 1.11 also starts from an empty local database, so sync before you roll back too. The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
