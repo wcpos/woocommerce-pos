@@ -227,7 +227,7 @@ function Gateways() {
 	 * Sort gateways by order.
 	 * NOTE: This will convert associative array to indexed array, we will need to keyBy when saving.
 	 */
-	const gateways = sortBy(data?.gateways as Record, ['order', 'id']);
+	const gateways = sortBy(data?.gateways as Record<string, GatewayItem>, ['order', 'id']);
 
 	React.useEffect(() => {
 		return monitorForElements({

@@ -298,7 +298,7 @@ export function PrintQueue() {
 	const statusOptions = [
 		{
 			label: t('cloud_print.queue_status_active', 'Needs attention ({count})', {
-				count: String(activeCount),
+				count: activeCount,
 			}),
 			value: 'active',
 		},
@@ -334,7 +334,7 @@ export function PrintQueue() {
 								? t(
 										'cloud_print.queue_stale_never',
 										'{printer} has never fetched a job. {count} receipts are waiting — check the printer is on and its Server URL is set.',
-										{ printer: printer.name, count: String(printer.pending) }
+										{ printer: printer.name, count: printer.pending }
 									)
 								: t(
 										'cloud_print.queue_stale',
@@ -342,7 +342,7 @@ export function PrintQueue() {
 										{
 											printer: printer.name,
 											ago: relativeAge(new Date(printer.last_seen * 1000)),
-											count: String(printer.pending),
+											count: printer.pending,
 										}
 									)}
 						</span>
@@ -353,7 +353,7 @@ export function PrintQueue() {
 							disabled={cancelJobs.isPending}
 						>
 							{t('cloud_print.queue_cancel_all', 'Cancel all {count}', {
-								count: String(printer.pending),
+								count: printer.pending,
 							})}
 						</Button>
 					</div>
@@ -402,7 +402,7 @@ export function PrintQueue() {
 								disabled={cancelJobs.isPending}
 							>
 								{t('cloud_print.queue_cancel_selected', 'Cancel selected ({count})', {
-									count: String(cancellableSelected.length),
+									count: cancellableSelected.length,
 								})}
 							</Button>
 						)}
@@ -414,7 +414,7 @@ export function PrintQueue() {
 								disabled={deleteJobs.isPending}
 							>
 								{t('cloud_print.queue_delete_selected', 'Delete selected ({count})', {
-									count: String(selected.size),
+									count: selected.size,
 								})}
 							</Button>
 						)}

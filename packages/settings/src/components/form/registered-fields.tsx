@@ -2,7 +2,9 @@ import * as React from 'react';
 
 import { useRegisteredFields, useFieldModifications } from '../../store/use-registry';
 
-import type { FieldRegistration } from '../../store/types';
+import type { FieldComponentProps, FieldRegistration } from '../../store/types';
+
+type FieldComponent = React.ComponentType<FieldComponentProps>;
 
 interface RegisteredFieldsProps {
 	page: string;
@@ -18,24 +20,22 @@ function FieldRenderer({
 	field,
 	data,
 	mutate,
-}: {
+}: FieldComponentProps & {
 	field: FieldRegistration;
-	data: Record<string, unknown>;
-	mutate: (data: Record<string, unknown>) => void;
 }) {
 	const modifications = useFieldModifications(field.page, field.id);
-	const [LazyComponent, setLazyComponent] = React.useState<React.ComponentType | null>(null);
+	const [LazyComponent, setLazyComponent] = React.useState<FieldComponent | null>(null);
 
 	const isLazy = typeof field.component === 'function' && !('$$typeof' in field.component);
 
 	React.useEffect(() => {
 		if (isLazy) {
-			const loader = field.component as () => Promise<{ default: React.ComponentType }>;
+			const loader = field.component as () => Promise<{ default: FieldComponent }>;
 			loader().then((mod) => setLazyComponent(() => mod.default));
 		}
 	}, [field.component, isLazy]);
 
-	const Component = isLazy ? LazyComponent : (field.component as React.ComponentType);
+	const Component = isLazy ? LazyComponent : (field.component as FieldComponent);
 
 	if (!Component) {
 		return null;

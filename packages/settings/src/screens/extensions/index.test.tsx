@@ -13,20 +13,31 @@ vi.mock('../../lib/analytics', () => ({
 	captureUpgradeCtaViewed: vi.fn(),
 }));
 
-const oldExtension = {
+const oldExtension: Extension = {
 	slug: 'old-extension',
 	name: 'Old Extension',
 	description: '',
+	version: '',
+	author: '',
 	category: 'other',
 	tags: [],
+	requires_wp: '',
+	requires_wc: '',
+	requires_wcpos: '',
+	requires_pro: false,
+	icon: '',
+	homepage: '',
+	download_url: '',
+	latest_version: '',
+	released_at: '',
 	status: 'active',
-} as Extension;
+};
 
-const newExtension = {
+const newExtension: Extension = {
 	...oldExtension,
 	slug: 'new-extension',
 	name: 'New Extension',
-} as Extension;
+};
 
 function renderScreen() {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

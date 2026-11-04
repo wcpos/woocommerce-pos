@@ -12,7 +12,9 @@ export interface FieldRegistration {
 	page: string;
 	section?: string;
 	id: string;
-	component: ComponentType | (() => Promise<{ default: ComponentType }>);
+	component:
+		| ComponentType<FieldComponentProps>
+		| (() => Promise<{ default: ComponentType<FieldComponentProps> }>);
 	priority?: number;
 	after?: string;
 	before?: string;
