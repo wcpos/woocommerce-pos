@@ -27,7 +27,8 @@ const variantClasses: Record<CanonicalButtonVariant, string> = {
 	destructive: 'wcpos:bg-red-600 wcpos:text-white wcpos:hover:bg-red-700 wcpos:focus:ring-red-500',
 	outline:
 		'wcpos:bg-transparent wcpos:text-wp-admin-theme-color wcpos:border wcpos:border-wp-admin-theme-color wcpos:hover:bg-wp-admin-theme-color-lightest wcpos:focus:ring-wp-admin-theme-color',
-	ghost: 'wcpos:bg-transparent wcpos:text-gray-700 wcpos:hover:bg-gray-100 wcpos:focus:ring-wp-admin-theme-color',
+	ghost:
+		'wcpos:bg-transparent wcpos:text-gray-700 wcpos:hover:bg-gray-100 wcpos:focus:ring-wp-admin-theme-color',
 	'ghost-destructive':
 		'wcpos:bg-transparent wcpos:text-red-600 wcpos:hover:bg-red-50 wcpos:focus:ring-red-500',
 	text: 'wcpos:bg-transparent wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:focus:ring-wp-admin-theme-color',

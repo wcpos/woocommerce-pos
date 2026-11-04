@@ -1,7 +1,7 @@
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
 
 import classNames from 'classnames';
+import * as ReactDOM from 'react-dom';
 
 export interface ComboboxOption {
 	value: string;
@@ -45,8 +45,7 @@ export interface ComboboxProps {
 const TRIGGER_CLASSES =
 	'wcpos:relative wcpos:flex wcpos:w-full wcpos:items-center wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:text-sm wcpos:shadow-xs wcpos:transition-colors wcpos:duration-150 wcpos:focus-within:border-wp-admin-theme-color wcpos:focus-within:ring-2 wcpos:focus-within:ring-wp-admin-theme-color';
 
-const TRIGGER_DISABLED_CLASSES =
-	'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed';
+const TRIGGER_DISABLED_CLASSES = 'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed';
 
 // Inherits font-size/family/color from the trigger so callers can restyle via
 // className (e.g. wcpos:font-mono wcpos:text-xs for the tax-id override field).
@@ -124,15 +123,12 @@ export function Combobox({
 		const baseList: ResolvedOption[] =
 			!remoteFiltered && open && q
 				? options.filter(
-						(opt) =>
-							normalize(opt.label).includes(q) || normalize(opt.value).includes(q)
+						(opt) => normalize(opt.label).includes(q) || normalize(opt.value).includes(q)
 					)
 				: options.slice();
 
 		if (open && allowCustomValue && createLabel && trimmed) {
-			const exact = options.some(
-				(opt) => normalize(opt.label) === q || normalize(opt.value) === q
-			);
+			const exact = options.some((opt) => normalize(opt.label) === q || normalize(opt.value) === q);
 			if (!exact) {
 				baseList.push({
 					value: trimmed,
@@ -173,9 +169,7 @@ export function Combobox({
 
 	const commitCurrentInput = React.useCallback(() => {
 		const trimmed = inputValue.trim();
-		const exactByLabel = options.find(
-			(opt) => normalize(opt.label) === normalize(trimmed)
-		);
+		const exactByLabel = options.find((opt) => normalize(opt.label) === normalize(trimmed));
 		if (exactByLabel) {
 			setInputValue(exactByLabel.label);
 			close();
@@ -213,10 +207,7 @@ export function Combobox({
 
 		const handleClickOutside = (event: MouseEvent) => {
 			const target = event.target as Node;
-			if (
-				triggerRef.current?.contains(target) ||
-				popoverRef.current?.contains(target)
-			) {
+			if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) {
 				return;
 			}
 			commitCurrentInputRef.current();
@@ -244,9 +235,7 @@ export function Combobox({
 
 	React.useEffect(() => {
 		if (!open || !listRef.current) return;
-		const node = listRef.current.querySelector<HTMLLIElement>(
-			`[data-index="${activeIndex}"]`
-		);
+		const node = listRef.current.querySelector<HTMLLIElement>(`[data-index="${activeIndex}"]`);
 		node?.scrollIntoView?.({ block: 'nearest' });
 	}, [open, activeIndex]);
 
@@ -275,10 +264,7 @@ export function Combobox({
 		// blur, click that didn't fire mousedown-outside first) commits via the ref so
 		// the eventual onChange is naturally deduped against the committed value.
 		const next = event.relatedTarget as Node | null;
-		if (
-			next &&
-			(triggerRef.current?.contains(next) || popoverRef.current?.contains(next))
-		) {
+		if (next && (triggerRef.current?.contains(next) || popoverRef.current?.contains(next))) {
 			return;
 		}
 		commitCurrentInputRef.current();
@@ -368,11 +354,7 @@ export function Combobox({
 		<>
 			<div
 				ref={triggerRef}
-				className={classNames(
-					TRIGGER_CLASSES,
-					disabled && TRIGGER_DISABLED_CLASSES,
-					className
-				)}
+				className={classNames(TRIGGER_CLASSES, disabled && TRIGGER_DISABLED_CLASSES, className)}
 			>
 				<input
 					ref={inputRef}
@@ -464,9 +446,7 @@ export function Combobox({
 											onClick={() => commitOption(option)}
 											className={classNames(
 												'wcpos:flex wcpos:cursor-pointer wcpos:items-center wcpos:rounded wcpos:px-2 wcpos:py-1 wcpos:text-sm',
-												option.isCreate
-													? 'wcpos:text-wp-admin-theme-color'
-													: 'wcpos:text-gray-700',
+												option.isCreate ? 'wcpos:text-wp-admin-theme-color' : 'wcpos:text-gray-700',
 												isActive && 'wcpos:bg-gray-100',
 												isSelected && 'wcpos:font-medium'
 											)}

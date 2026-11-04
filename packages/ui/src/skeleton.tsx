@@ -17,10 +17,7 @@ export interface SkeletonProps extends Omit<React.HTMLAttributes<HTMLDivElement>
 export function Skeleton({ className, width, height, style, ...props }: SkeletonProps) {
 	return (
 		<div
-			className={classNames(
-				'wcpos:animate-pulse wcpos:rounded wcpos:bg-gray-200',
-				className
-			)}
+			className={classNames('wcpos:animate-pulse wcpos:rounded wcpos:bg-gray-200', className)}
 			style={{ width, height, ...style }}
 			{...props}
 		/>

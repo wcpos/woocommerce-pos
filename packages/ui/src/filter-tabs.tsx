@@ -93,9 +93,7 @@ export function FilterTabs({ items, value, onChange, className, ...props }: Filt
 						onClick={() => onChange(item.key)}
 						className={classNames(
 							'wcpos:relative wcpos:z-10 wcpos:px-3 wcpos:py-1 wcpos:rounded-full wcpos:text-sm wcpos:font-medium wcpos:transition-colors wcpos:bg-transparent wcpos:border-0',
-							item.disabled
-								? 'wcpos:cursor-not-allowed wcpos:opacity-50'
-								: 'wcpos:cursor-pointer',
+							item.disabled ? 'wcpos:cursor-not-allowed wcpos:opacity-50' : 'wcpos:cursor-pointer',
 							isActive ? 'wcpos:text-white' : 'wcpos:text-gray-600 wcpos:hover:text-gray-900'
 						)}
 					>

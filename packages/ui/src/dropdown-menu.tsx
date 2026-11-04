@@ -1,7 +1,7 @@
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
 
 import classNames from 'classnames';
+import * as ReactDOM from 'react-dom';
 
 export interface DropdownMenuProps {
 	/** Element that opens the menu when clicked. */
@@ -73,10 +73,7 @@ export function DropdownMenu({
 
 		const handleClickOutside = (event: MouseEvent) => {
 			const target = event.target as Node;
-			if (
-				triggerRef.current?.contains(target) ||
-				menuRef.current?.contains(target)
-			) {
+			if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) {
 				return;
 			}
 			close();

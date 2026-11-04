@@ -39,14 +39,7 @@ function Card({ active = false, className, children, ...props }: CardProps) {
 
 function CardBody({ noPadding = false, className, children, ...props }: CardBodyProps) {
 	return (
-		<div
-			className={classNames(
-				'wcpos:flex-1',
-				!noPadding && 'wcpos:p-4',
-				className
-			)}
-			{...props}
-		>
+		<div className={classNames('wcpos:flex-1', !noPadding && 'wcpos:p-4', className)} {...props}>
 			{children}
 		</div>
 	);

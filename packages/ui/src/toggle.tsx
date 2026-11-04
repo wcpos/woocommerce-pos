@@ -3,8 +3,7 @@ import * as React from 'react';
 import classNames from 'classnames';
 
 type ToggleA11yProps =
-	| { label: string; 'aria-label'?: never }
-	| { label?: undefined; 'aria-label': string };
+	{ label: string; 'aria-label'?: never } | { label?: undefined; 'aria-label': string };
 
 export type ToggleProps = {
 	checked: boolean;
@@ -70,9 +69,7 @@ export function Toggle({
 					// 2px of vertical breathing room inside the 20px visible track.
 					'wcpos:relative wcpos:inline-flex wcpos:items-center wcpos:h-5 wcpos:w-9 wcpos:shrink-0 wcpos:rounded-full wcpos:border-2 wcpos:border-transparent wcpos:p-0 wcpos:m-0 wcpos:align-middle wcpos:transition-colors wcpos:duration-200 wcpos:ease-in-out wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:ring-offset-2',
 					checked ? 'wcpos:bg-wp-admin-theme-color' : 'wcpos:bg-gray-200',
-					disabled
-						? 'wcpos:opacity-50 wcpos:cursor-not-allowed'
-						: 'wcpos:cursor-pointer'
+					disabled ? 'wcpos:opacity-50 wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer'
 				)}
 			>
 				<span
@@ -88,8 +85,7 @@ export function Toggle({
 						id={labelId}
 						className={classNames(
 							disabled ? 'wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer',
-							labelClassName ??
-								'wcpos:text-sm wcpos:font-medium wcpos:text-gray-900'
+							labelClassName ?? 'wcpos:text-sm wcpos:font-medium wcpos:text-gray-900'
 						)}
 					>
 						{label}

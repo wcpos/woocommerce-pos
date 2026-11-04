@@ -62,8 +62,7 @@ export function SnackbarProvider({ children, boundsElement }: SnackbarProviderPr
 			setBounds({ left: rect.left, width: rect.width });
 		};
 		update();
-		const observer =
-			typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+		const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
 		observer?.observe(boundsEl);
 		window.addEventListener('resize', update);
 		return () => {
@@ -87,10 +86,7 @@ export function SnackbarProvider({ children, boundsElement }: SnackbarProviderPr
 
 	return (
 		<SnackbarContext.Provider value={{ addSnackbar }}>
-			<div
-				ref={containerRef}
-				className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col"
-			>
+			<div ref={containerRef} className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col">
 				<div
 					className="wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,32px)] wcpos:z-50 wcpos:overflow-hidden"
 					style={slotStyle}
