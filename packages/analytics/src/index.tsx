@@ -4,9 +4,20 @@ import { Notice } from '@wordpress/components';
 
 import { t, i18nPromise } from './translations';
 
+/** One entry in WooCommerce Admin's `woocommerce_admin_reports_list` filter. */
+interface ReportPage {
+	report: string;
+	component: React.ComponentType<Record<string, unknown>>;
+	[key: string]: unknown;
+}
+
+interface WrappedReportProps extends Record<string, unknown> {
+	Component: React.ComponentType<Record<string, unknown>>;
+}
+
 const globalHooks = window.wp && window.wp.hooks;
 
-function WrappedReport({ Component, ...props }) {
+function WrappedReport({ Component, ...props }: WrappedReportProps) {
 	// The state value is intentionally unread; changing it re-renders once
 	// translations have loaded so t() calls use the loaded strings.
 	const [, setIsReady] = React.useState(false);
@@ -46,15 +57,21 @@ function WrappedReport({ Component, ...props }) {
 }
 
 if (globalHooks) {
-	globalHooks.addFilter('woocommerce_admin_reports_list', 'woocommerce-pos', (pages) => {
-		return pages.map((item) => {
-			if (item.report === 'orders') {
-				return {
-					...item,
-					component: (props) => <WrappedReport Component={item.component} {...props} />,
-				};
-			}
-			return item;
-		});
-	});
+	globalHooks.addFilter(
+		'woocommerce_admin_reports_list',
+		'woocommerce-pos',
+		(pages: ReportPage[]) => {
+			return pages.map((item) => {
+				if (item.report === 'orders') {
+					return {
+						...item,
+						component: (props: Record<string, unknown>) => (
+							<WrappedReport Component={item.component} {...props} />
+						),
+					};
+				}
+				return item;
+			});
+		}
+	);
 }
