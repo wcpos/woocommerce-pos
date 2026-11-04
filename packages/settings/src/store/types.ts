@@ -12,9 +12,13 @@ export interface FieldRegistration {
 	page: string;
 	section?: string;
 	id: string;
-	component:
-		| ComponentType<FieldComponentProps>
-		| (() => Promise<{ default: ComponentType<FieldComponentProps> }>);
+	/**
+	 * Rendered with {@link FieldComponentProps} inside a Suspense boundary, so a
+	 * code-split field is `React.lazy(() => import('./field'))`. A bare loader
+	 * function is not accepted: a plain function component is indistinguishable
+	 * from one at runtime.
+	 */
+	component: ComponentType<FieldComponentProps>;
 	priority?: number;
 	after?: string;
 	before?: string;
