@@ -3,14 +3,7 @@ import * as React from 'react';
 import classNames from 'classnames';
 
 export type ChipVariant =
-	| 'neutral'
-	| 'info'
-	| 'success'
-	| 'warning'
-	| 'error'
-	| 'critical'
-	| 'debug'
-	| 'brand';
+	'neutral' | 'info' | 'success' | 'warning' | 'error' | 'critical' | 'debug' | 'brand';
 
 export type ChipShape = 'pill' | 'round';
 export type ChipSize = 'sm' | 'xs';

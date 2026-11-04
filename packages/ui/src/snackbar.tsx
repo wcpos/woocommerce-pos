@@ -19,12 +19,7 @@ const statusClasses: Record<SnackbarStatus, string> = {
 	info: 'wcpos:bg-gray-700 wcpos:text-white',
 };
 
-export function Snackbar({
-	message,
-	status = 'saving',
-	onRemove,
-	timeout = true,
-}: SnackbarProps) {
+export function Snackbar({ message, status = 'saving', onRemove, timeout = true }: SnackbarProps) {
 	const [visible, setVisible] = React.useState(false);
 
 	// Slide in on mount.

@@ -137,9 +137,33 @@ const TAX_ID_TYPE_TO_COUNTRY: Record<string, string> = {
 };
 
 const EU_VAT_COUNTRIES = new Set([
-	'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR',
-	'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO',
-	'SE', 'SI', 'SK',
+	'AT',
+	'BE',
+	'BG',
+	'CY',
+	'CZ',
+	'DE',
+	'DK',
+	'EE',
+	'ES',
+	'FI',
+	'FR',
+	'GR',
+	'HR',
+	'HU',
+	'IE',
+	'IT',
+	'LT',
+	'LU',
+	'LV',
+	'MT',
+	'NL',
+	'PL',
+	'PT',
+	'RO',
+	'SE',
+	'SI',
+	'SK',
 ]);
 
 function defaultTaxIdTypeFor(country: string | undefined): string {
@@ -324,9 +348,7 @@ export const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>
 		// Stable per-row IDs used as React keys so DOM nodes track the
 		// underlying TaxId rather than its array position. IDs are local
 		// to this component and never persisted.
-		const [rowIds, setRowIds] = React.useState<string[]>(() =>
-			taxIds.map(() => generateRowId())
-		);
+		const [rowIds, setRowIds] = React.useState<string[]>(() => taxIds.map(() => generateRowId()));
 		const [draft, setDraft] = React.useState<{ id: string; taxId: TaxId } | null>(null);
 
 		// Reconcile rowIds when the source array length changes from outside
@@ -337,9 +359,8 @@ export const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>
 					return prev;
 				}
 				if (prev.length < taxIds.length) {
-					const additions = Array.from(
-						{ length: taxIds.length - prev.length },
-						() => generateRowId()
+					const additions = Array.from({ length: taxIds.length - prev.length }, () =>
+						generateRowId()
 					);
 					return [...prev, ...additions];
 				}

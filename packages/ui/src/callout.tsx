@@ -25,8 +25,7 @@ export interface CalloutProps {
 
 const STATUS_CLASSES: Record<CalloutStatus, string> = {
 	info: 'wcpos:bg-blue-50 wcpos:border-blue-200 wcpos:text-blue-800 wcpos:border-l-blue-500',
-	success:
-		'wcpos:bg-green-50 wcpos:border-green-200 wcpos:text-green-800 wcpos:border-l-green-500',
+	success: 'wcpos:bg-green-50 wcpos:border-green-200 wcpos:text-green-800 wcpos:border-l-green-500',
 	warning:
 		'wcpos:bg-yellow-50 wcpos:border-yellow-200 wcpos:text-yellow-800 wcpos:border-l-yellow-500',
 	error: 'wcpos:bg-red-50 wcpos:border-red-200 wcpos:text-red-800 wcpos:border-l-red-500',
@@ -46,13 +45,7 @@ const DEFAULT_ICONS: Record<CalloutStatus, string> = {
  * visible in a section. For transient, dismissible alerts after an action,
  * use `Notice` instead.
  */
-export function Callout({
-	status = 'info',
-	title,
-	icon,
-	children,
-	className,
-}: CalloutProps) {
+export function Callout({ status = 'info', title, icon, children, className }: CalloutProps) {
 	const resolvedIcon = icon === undefined ? DEFAULT_ICONS[status] : icon;
 
 	return (

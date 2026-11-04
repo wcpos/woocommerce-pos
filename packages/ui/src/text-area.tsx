@@ -19,8 +19,7 @@ export const TextArea = React.forwardRef<HTMLTextAreaElement, TextAreaProps>(
 					error
 						? 'wcpos:border-red-300 wcpos:focus:border-red-500 wcpos:focus:ring-red-500'
 						: 'wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color wcpos:focus:ring-wp-admin-theme-color',
-					props.disabled &&
-						'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed',
+					props.disabled && 'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed',
 					className
 				)}
 				{...props}

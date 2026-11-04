@@ -44,10 +44,7 @@ export function Modal({
 
 	return (
 		<div className="wcpos:relative wcpos:z-50">
-			<div
-				className="wcpos:fixed wcpos:inset-0 wcpos:bg-black/30"
-				aria-hidden="true"
-			/>
+			<div className="wcpos:fixed wcpos:inset-0 wcpos:bg-black/30" aria-hidden="true" />
 			<div
 				className="wcpos:fixed wcpos:inset-0 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:p-4"
 				onClick={() => onClose(false)}
@@ -73,10 +70,7 @@ export function Modal({
 						</h2>
 					)}
 					{description && (
-						<p
-							id={descriptionId}
-							className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4"
-						>
+						<p id={descriptionId} className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">
 							{description}
 						</p>
 					)}
