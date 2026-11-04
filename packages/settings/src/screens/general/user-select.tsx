@@ -26,7 +26,7 @@ function UserSelect({ disabled = false, selected, onSelect }: UserSelectProps) {
 	const { data, isFetching } = useQuery<User[]>({
 		queryKey: ['users', query],
 		queryFn: async () => {
-			const response = await apiFetch<Record>({
+			const response = await apiFetch<Record<string, unknown>>({
 				path: `wp/v2/users?search=${encodeURIComponent(query)}`,
 				method: 'GET',
 			}).catch((err) => {

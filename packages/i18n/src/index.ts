@@ -31,11 +31,16 @@ export interface CreateI18nOptions {
 }
 
 declare global {
+	/**
+	 * The `window.wcpos` boot global. Each package declares the fields it reads;
+	 * declarations merge, so every package must type `Window.wcpos` as this interface.
+	 */
+	interface WcposGlobal {
+		translationVersion?: string;
+	}
+
 	interface Window {
-		wcpos?: {
-			settings?: Record<string, unknown>;
-			translationVersion?: string;
-		};
+		wcpos?: WcposGlobal;
 	}
 }
 

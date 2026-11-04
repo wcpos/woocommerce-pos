@@ -5,21 +5,6 @@ import { act } from 'react';
 import { cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-declare global {
-	interface Window {
-		wcpos?: {
-			consent?: {
-				restUrl: string;
-				dismissUrl: string;
-				nonce: string;
-				showModal?: boolean;
-				showCallout?: boolean;
-				copy?: Record<string, string>;
-			};
-		};
-	}
-}
-
 describe('consent bootstrap', () => {
 	beforeEach(() => {
 		vi.resetModules();

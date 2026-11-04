@@ -14,6 +14,15 @@ import {
 } from './table';
 import { TextInput } from './text-input';
 
+/**
+ * The `window.wcpos.settings` fields this field reads. `@wcpos/ui` is compiled
+ * by several hosts (free settings, Pro settings, Pro store-edit) that each declare
+ * `Window.wcpos` differently, so it names its own view instead of relying on one.
+ */
+type TaxIdsWindow = {
+	wcpos?: { settings?: { storeCountry?: string; countries?: Record<string, string> } };
+};
+
 export interface TaxId {
 	type: string;
 	value: string;
@@ -181,7 +190,7 @@ function defaultCountryForTaxIdType(type: string, currentCountry?: string): stri
 			return current;
 		}
 
-		const storeCountry = window?.wcpos?.settings?.storeCountry?.toUpperCase();
+		const storeCountry = (window as TaxIdsWindow)?.wcpos?.settings?.storeCountry?.toUpperCase();
 		if (storeCountry && EU_VAT_COUNTRIES.has(storeCountry)) {
 			return storeCountry;
 		}
@@ -257,7 +266,7 @@ interface TaxIdRowProps {
 function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 	const [valueDraft, setValueDraft] = React.useState(taxId.value);
 	const [labelDraft, setLabelDraft] = React.useState(taxId.label ?? '');
-	const countries = window?.wcpos?.settings?.countries ?? {};
+	const countries = (window as TaxIdsWindow)?.wcpos?.settings?.countries ?? {};
 
 	React.useEffect(() => {
 		setValueDraft(taxId.value);
@@ -420,7 +429,7 @@ export const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>
 		const addRow = React.useCallback(() => {
 			setDraft((current) => {
 				if (current) return current;
-				const storeCountry = window?.wcpos?.settings?.storeCountry;
+				const storeCountry = (window as TaxIdsWindow)?.wcpos?.settings?.storeCountry;
 				const taxId: TaxId = {
 					type: defaultTaxIdTypeFor(storeCountry),
 					value: '',

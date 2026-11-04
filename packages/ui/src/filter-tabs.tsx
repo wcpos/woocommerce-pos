@@ -9,7 +9,7 @@ export interface FilterTabItem {
 }
 
 export interface FilterTabsProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange'> {
-	items: FilterTabItem[];
+	items: readonly FilterTabItem[];
 	value: string;
 	onChange: (value: string) => void;
 }

@@ -1,3 +1,4 @@
+/// <reference path="./svg.d.ts" />
 /// <reference types="vite/client" />
 /// <reference types="vite-plugin-svgr/client" />
 
@@ -19,11 +20,14 @@ declare global {
 		site_uuid?: string;
 	}
 
+	/** Merges with the `WcposGlobal` declared by `@wcpos/i18n`. */
+	interface WcposGlobal {
+		settings?: WcposSettings;
+		[key: string]: unknown;
+	}
+
 	interface Window {
-		wcpos?: {
-			settings?: WcposSettings;
-			[key: string]: unknown;
-		};
+		wcpos?: WcposGlobal;
 		wpApiSettings?: { root?: string; nonce?: string };
 	}
 }

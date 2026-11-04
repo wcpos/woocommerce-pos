@@ -6,9 +6,12 @@ import { useSnackbar } from '@wcpos/ui';
 
 import useNotices from '../hooks/use-notices';
 
-type PlaceholderKeys = keyof typeof placeholders;
+/**
+ * Settings sections served by `wcpos/v2/settings/{id}`.
+ */
+type SettingsId = 'general' | 'checkout' | 'payment-gateways' | 'access' | 'license' | 'tax_ids';
 
-const useSettingsApi = (id: PlaceholderKeys) => {
+const useSettingsApi = (id: SettingsId) => {
 	const queryClient = useQueryClient();
 	const { addSnackbar } = useSnackbar();
 	const { setNotice } = useNotices();
@@ -17,7 +20,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 	const { data } = useSuspenseQuery({
 		queryKey: [id],
 		queryFn: async () => {
-			const response = await apiFetch<Record>({
+			const response = await apiFetch<Record<string, unknown>>({
 				path: endpoint,
 				method: 'GET',
 			}).catch((err) => {
@@ -35,8 +38,8 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 	});
 
 	const mutation = useMutation({
-		mutationFn: async (data: Record) => {
-			const response = await apiFetch<Record>({
+		mutationFn: async (data: Record<string, unknown>) => {
+			const response = await apiFetch<Record<string, unknown>>({
 				path: endpoint,
 				method: 'POST',
 				data,

@@ -9,15 +9,18 @@ import { ConsentModal } from './consent-modal';
 import './index.css';
 
 declare global {
-	interface Window {
-		wcpos?: {
-			consent?: ConsentConfig & {
-				/** If true, auto-open the pop-up modal on mount. */
-				showModal?: boolean;
-				/** If true, render the inline callout. */
-				showCallout?: boolean;
-			};
+	/** Merges with the `WcposGlobal` declared by `@wcpos/i18n`. */
+	interface WcposGlobal {
+		consent?: ConsentConfig & {
+			/** If true, auto-open the pop-up modal on mount. */
+			showModal?: boolean;
+			/** If true, render the inline callout. */
+			showCallout?: boolean;
 		};
+	}
+
+	interface Window {
+		wcpos?: WcposGlobal;
 	}
 }
 
