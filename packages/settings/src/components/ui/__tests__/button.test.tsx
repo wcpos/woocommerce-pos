@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { render, screen, fireEvent } from '@testing-library/react';
 
-import { Button as UiButton } from '@wcpos/ui';
+import { Button as UiButton, LinkButton } from '@wcpos/ui';
 
 import { Button } from '../button';
 
@@ -153,5 +153,30 @@ describe('Button', () => {
 	it('renders Button from @wcpos/ui', () => {
 		render(<UiButton>Package Button</UiButton>);
 		expect(screen.getByRole('button')).toHaveTextContent('Package Button');
+	});
+});
+
+describe('LinkButton', () => {
+	it('renders an anchor that looks like the matching Button variant', () => {
+		render(
+			<>
+				<UiButton variant="outline">Action</UiButton>
+				<LinkButton variant="outline" href="/wp-admin/edit.php?post_type=wcpos_store">
+					Manage stores
+				</LinkButton>
+			</>
+		);
+		const link = screen.getByRole('link', { name: 'Manage stores' });
+		expect(link).toHaveAttribute('href', '/wp-admin/edit.php?post_type=wcpos_store');
+		expect(link.className).toContain('wcpos:no-underline');
+		const buttonClasses = screen.getByRole('button').className.split(' ');
+		for (const name of buttonClasses) {
+			expect(link.className.split(' ')).toContain(name);
+		}
+	});
+
+	it('defaults to the secondary variant like Button', () => {
+		render(<LinkButton href="/somewhere">Go</LinkButton>);
+		expect(screen.getByRole('link').className).toContain('wcpos:border-gray-300');
 	});
 });

@@ -15,7 +15,9 @@ export type ToggleProps = {
 	/**
 	 * Override the default label styling. The default is
 	 * `text-sm font-medium text-gray-900`. Use to render a smaller/muted
-	 * label (e.g. `text-xs font-normal text-gray-500`).
+	 * label (e.g. `text-xs font-normal text-gray-500`). With a `description`
+	 * the switch is top-aligned to a 20px label line, so a smaller label
+	 * sits about 1px off; no consumer combines the two today.
 	 */
 	labelClassName?: string;
 } & ToggleA11yProps;
@@ -42,7 +44,10 @@ export function Toggle({
 	return (
 		<div
 			className={classNames(
-				'wcpos:flex wcpos:items-center wcpos:gap-3',
+				// With a description the switch lines up with the label (both 20px tall)
+				// instead of floating between the label and its help line.
+				'wcpos:flex wcpos:gap-3',
+				description ? 'wcpos:items-start' : 'wcpos:items-center',
 				className
 			)}
 		>
@@ -90,7 +95,12 @@ export function Toggle({
 						{label}
 					</label>
 					{description && (
-						<p id={descriptionId} className="wcpos:text-sm wcpos:text-gray-500">
+						<p
+							id={descriptionId}
+							// Same help-line style as FormRow's description; `m-0` strips the
+							// 1em wp-admin paragraph margin that pushed it away from the label.
+							className="wcpos:m-0 wcpos:mt-1 wcpos:text-xs wcpos:text-gray-500"
+						>
 							{description}
 						</p>
 					)}

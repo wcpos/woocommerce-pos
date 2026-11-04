@@ -1,4 +1,10 @@
-export { Button, type ButtonProps, type ButtonVariant } from './button';
+export {
+	Button,
+	LinkButton,
+	type ButtonProps,
+	type ButtonVariant,
+	type LinkButtonProps,
+} from './button';
 export { Toggle, type ToggleProps } from './toggle';
 export { Checkbox, type CheckboxProps } from './checkbox';
 export { TextInput, type TextInputProps } from './text-input';

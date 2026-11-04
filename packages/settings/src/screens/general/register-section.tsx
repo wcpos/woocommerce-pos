@@ -185,7 +185,7 @@ export function RegisterSection({ data, mutate }: RegisterSectionProps) {
 					})}
 				</>
 			)}
-			<p className="wcpos:text-xs wcpos:text-gray-500">
+			<p className="wcpos:m-0 wcpos:mt-2 wcpos:text-xs wcpos:text-gray-500">
 				<a
 					href={UPGRADE_URL}
 					target="_blank"

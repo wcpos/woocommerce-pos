@@ -46,6 +46,31 @@ describe('Toggle', () => {
 		expect(screen.getByText('Turns on the thing')).toBeInTheDocument();
 	});
 
+	it('centres the switch on a lone label', () => {
+		render(<Toggle checked={false} onChange={() => {}} label="Enable feature" />);
+		const row = screen.getByRole('switch').parentElement!;
+		expect(row.className).toContain('wcpos:items-center');
+		expect(row.className).not.toContain('wcpos:items-start');
+	});
+
+	it('aligns the switch with the label line and keeps the description tight when both are shown', () => {
+		render(
+			<Toggle
+				checked={false}
+				onChange={() => {}}
+				label="Enable feature"
+				description="Turns on the thing"
+			/>
+		);
+		const row = screen.getByRole('switch').parentElement!;
+		expect(row.className).toContain('wcpos:items-start');
+		expect(row.className).not.toContain('wcpos:items-center');
+		const description = screen.getByText('Turns on the thing');
+		expect(description.className).toContain('wcpos:m-0');
+		expect(description.className).toContain('wcpos:mt-1');
+		expect(description.className).toContain('wcpos:text-xs');
+	});
+
 	it('disables the switch when disabled prop is true', () => {
 		const onChange = vi.fn();
 		render(<Toggle checked={false} onChange={onChange} disabled aria-label="Test toggle" />);
