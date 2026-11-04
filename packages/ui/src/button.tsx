@@ -106,7 +106,8 @@ export interface LinkButtonProps extends React.AnchorHTMLAttributes<HTMLAnchorEl
 
 /**
  * An anchor styled exactly like `Button`, for navigation that should look like
- * an action (e.g. "Manage stores" linking to another admin screen).
+ * an action (e.g. "Manage stores" linking to another admin screen). Navigation
+ * only: there is no disabled state, use `Button` for an action that can be off.
  */
 export function LinkButton({
 	variant = 'secondary',

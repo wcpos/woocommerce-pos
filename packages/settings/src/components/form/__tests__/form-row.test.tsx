@@ -41,6 +41,17 @@ describe('FormRow', () => {
 		expect(screen.getByText('Enter your email address')).toBeInTheDocument();
 	});
 
+	it('keeps the description tight against the control', () => {
+		render(
+			<FormRow description="Enter your email address">
+				<input type="email" />
+			</FormRow>
+		);
+		const description = screen.getByText('Enter your email address');
+		expect(description.className).toContain('wcpos:m-0');
+		expect(description.className).toContain('wcpos:mt-1');
+	});
+
 	it('does not render a description when omitted', () => {
 		const { container } = render(
 			<FormRow>

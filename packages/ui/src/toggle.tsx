@@ -15,7 +15,9 @@ export type ToggleProps = {
 	/**
 	 * Override the default label styling. The default is
 	 * `text-sm font-medium text-gray-900`. Use to render a smaller/muted
-	 * label (e.g. `text-xs font-normal text-gray-500`).
+	 * label (e.g. `text-xs font-normal text-gray-500`). With a `description`
+	 * the switch is top-aligned to a 20px label line, so a smaller label
+	 * sits about 1px off; no consumer combines the two today.
 	 */
 	labelClassName?: string;
 } & ToggleA11yProps;

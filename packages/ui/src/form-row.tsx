@@ -28,7 +28,13 @@ export function FormRow({ label, htmlFor, description, children, className }: Fo
 			<div className="wcpos:flex-1 wcpos:min-w-0">
 				{children}
 				{description && (
-					<p className="wcpos:mt-1 wcpos:text-xs wcpos:text-gray-500">{description}</p>
+					<p
+						// `m-0` strips wp-admin's 1em paragraph margin so rows with a help
+						// line are not taller at the bottom than rows without one.
+						className="wcpos:m-0 wcpos:mt-1 wcpos:text-xs wcpos:text-gray-500"
+					>
+						{description}
+					</p>
 				)}
 			</div>
 		</div>
