@@ -27,9 +27,7 @@ function Table({ className, tableClassName, children, ...props }: TableProps) {
 			)}
 			{...props}
 		>
-			<table className={classNames('wcpos:w-full wcpos:text-sm', tableClassName)}>
-				{children}
-			</table>
+			<table className={classNames('wcpos:w-full wcpos:text-sm', tableClassName)}>{children}</table>
 		</div>
 	);
 }
@@ -54,64 +52,68 @@ function TableBody({ className, children, ...props }: TableBodyProps) {
  * Header row. Applies the canonical gray-50 background and uppercase
  * meta-text styling so consumers don't need to remember the tokens.
  */
-const TableHeaderRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(
-	function TableHeaderRow({ className, children, ...props }, ref) {
-		return (
-			<tr
-				ref={ref}
-				className={classNames(
-					'wcpos:bg-gray-50 wcpos:text-left wcpos:text-xs wcpos:uppercase wcpos:tracking-wide wcpos:text-gray-500',
-					className
-				)}
-				{...props}
-			>
-				{children}
-			</tr>
-		);
-	}
-);
+const TableHeaderRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(function TableHeaderRow(
+	{ className, children, ...props },
+	ref
+) {
+	return (
+		<tr
+			ref={ref}
+			className={classNames(
+				'wcpos:bg-gray-50 wcpos:text-left wcpos:text-xs wcpos:uppercase wcpos:tracking-wide wcpos:text-gray-500',
+				className
+			)}
+			{...props}
+		>
+			{children}
+		</tr>
+	);
+});
 
-const TableRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(
-	function TableRow({ className, children, ...props }, ref) {
-		return (
-			<tr
-				ref={ref}
-				className={classNames('wcpos:border-t wcpos:border-gray-100', className)}
-				{...props}
-			>
-				{children}
-			</tr>
-		);
-	}
-);
+const TableRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(function TableRow(
+	{ className, children, ...props },
+	ref
+) {
+	return (
+		<tr
+			ref={ref}
+			className={classNames('wcpos:border-t wcpos:border-gray-100', className)}
+			{...props}
+		>
+			{children}
+		</tr>
+	);
+});
 
-const TableHead = React.forwardRef<HTMLTableCellElement, TableHeadProps>(
-	function TableHead({ className, children, ...props }, ref) {
-		return (
-			<th
-				ref={ref}
-				className={classNames('wcpos:px-3 wcpos:py-2 wcpos:font-medium', className)}
-				{...props}
-			>
-				{children}
-			</th>
-		);
-	}
-);
+const TableHead = React.forwardRef<HTMLTableCellElement, TableHeadProps>(function TableHead(
+	{ className, children, ...props },
+	ref
+) {
+	return (
+		<th
+			ref={ref}
+			className={classNames('wcpos:px-3 wcpos:py-2 wcpos:font-medium', className)}
+			{...props}
+		>
+			{children}
+		</th>
+	);
+});
 
-const TableCell = React.forwardRef<HTMLTableCellElement, TableCellProps>(
-	function TableCell({ className, children, ...props }, ref) {
-		return (
-			<td
-				ref={ref}
-				className={classNames('wcpos:px-3 wcpos:py-2 wcpos:align-middle', className)}
-				{...props}
-			>
-				{children}
-			</td>
-		);
-	}
-);
+const TableCell = React.forwardRef<HTMLTableCellElement, TableCellProps>(function TableCell(
+	{ className, children, ...props },
+	ref
+) {
+	return (
+		<td
+			ref={ref}
+			className={classNames('wcpos:px-3 wcpos:py-2 wcpos:align-middle', className)}
+			{...props}
+		>
+			{children}
+		</td>
+	);
+});
 
 Table.Header = TableHeader;
 Table.HeaderRow = TableHeaderRow;
@@ -120,12 +122,4 @@ Table.Row = TableRow;
 Table.Head = TableHead;
 Table.Cell = TableCell;
 
-export {
-	Table,
-	TableHeader,
-	TableHeaderRow,
-	TableBody,
-	TableRow,
-	TableHead,
-	TableCell,
-};
+export { Table, TableHeader, TableHeaderRow, TableBody, TableRow, TableHead, TableCell };

@@ -1,7 +1,7 @@
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
 
 import classNames from 'classnames';
+import * as ReactDOM from 'react-dom';
 
 export interface CountrySelectProps {
 	/** Map of country code → display name (e.g. WC()->countries->get_countries()). */
@@ -31,8 +31,7 @@ export interface CountrySelectProps {
 const TRIGGER_CLASSES =
 	'wcpos:flex wcpos:w-full wcpos:items-center wcpos:justify-between wcpos:gap-2 wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:px-2.5 wcpos:py-1.5 wcpos:text-left wcpos:text-sm wcpos:shadow-xs wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:border-wp-admin-theme-color';
 
-const TRIGGER_DISABLED_CLASSES =
-	'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed';
+const TRIGGER_DISABLED_CLASSES = 'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed';
 
 function normalize(text: string): string {
 	return text.toLowerCase();
@@ -84,8 +83,7 @@ export function CountrySelect({
 		const q = normalize(filter.trim());
 		if (!q) return allOptions;
 		return allOptions.filter(
-			(opt) =>
-				normalize(opt.label).includes(q) || normalize(opt.value).includes(q)
+			(opt) => normalize(opt.label).includes(q) || normalize(opt.value).includes(q)
 		);
 	}, [allOptions, filter]);
 
@@ -148,10 +146,7 @@ export function CountrySelect({
 
 		const handleClickOutside = (event: MouseEvent) => {
 			const target = event.target as Node;
-			if (
-				triggerRef.current?.contains(target) ||
-				popoverRef.current?.contains(target)
-			) {
+			if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) {
 				return;
 			}
 			close();
@@ -181,9 +176,7 @@ export function CountrySelect({
 	// Scroll the active option into view as the user navigates.
 	React.useEffect(() => {
 		if (!open || !listRef.current) return;
-		const node = listRef.current.querySelector<HTMLLIElement>(
-			`[data-index="${activeIndex}"]`
-		);
+		const node = listRef.current.querySelector<HTMLLIElement>(`[data-index="${activeIndex}"]`);
 		node?.scrollIntoView?.({ block: 'nearest' });
 	}, [open, activeIndex]);
 
@@ -241,10 +234,7 @@ export function CountrySelect({
 		}
 	};
 
-	const activeId =
-		filteredOptions.length > 0
-			? `${listboxId}-option-${activeIndex}`
-			: undefined;
+	const activeId = filteredOptions.length > 0 ? `${listboxId}-option-${activeIndex}` : undefined;
 
 	return (
 		<>
@@ -260,18 +250,9 @@ export function CountrySelect({
 				disabled={disabled}
 				onClick={() => (open ? close() : openPopover())}
 				onKeyDown={handleTriggerKeyDown}
-				className={classNames(
-					TRIGGER_CLASSES,
-					disabled && TRIGGER_DISABLED_CLASSES,
-					className
-				)}
+				className={classNames(TRIGGER_CLASSES, disabled && TRIGGER_DISABLED_CLASSES, className)}
 			>
-				<span
-					className={classNames(
-						'wcpos:truncate',
-						!selectedLabel && 'wcpos:text-gray-500'
-					)}
-				>
+				<span className={classNames('wcpos:truncate', !selectedLabel && 'wcpos:text-gray-500')}>
 					{selectedLabel || placeholder || ''}
 				</span>
 				<svg
@@ -318,9 +299,7 @@ export function CountrySelect({
 						>
 							{filteredOptions.map((option, index) => {
 								const isActive = index === activeIndex;
-								const isSelected = option.isClear
-									? value === ''
-									: option.value === value;
+								const isSelected = option.isClear ? value === '' : option.value === value;
 								return (
 									<li
 										key={option.isClear ? '__clear__' : option.value}
@@ -337,9 +316,10 @@ export function CountrySelect({
 												? 'wcpos:text-gray-500'
 												: 'wcpos:justify-between wcpos:text-gray-700',
 											isActive && 'wcpos:bg-gray-100',
-											isSelected && (option.isClear
-												? 'wcpos:font-medium wcpos:text-gray-700'
-												: 'wcpos:font-medium')
+											isSelected &&
+												(option.isClear
+													? 'wcpos:font-medium wcpos:text-gray-700'
+													: 'wcpos:font-medium')
 										)}
 									>
 										{option.isClear ? (
@@ -347,9 +327,7 @@ export function CountrySelect({
 										) : (
 											<>
 												<span className="wcpos:truncate">{option.label}</span>
-												<span className="wcpos:text-xs wcpos:text-gray-400">
-													{option.value}
-												</span>
+												<span className="wcpos:text-xs wcpos:text-gray-400">{option.value}</span>
 											</>
 										)}
 									</li>

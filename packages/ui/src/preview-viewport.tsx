@@ -29,8 +29,10 @@ export const PAPER_DIMENSIONS: Record<PreviewPaperWidth, ContentSize> = {
 	'80mm': { width: 302, height: 520 },
 };
 
-export interface PreviewViewportProps
-	extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
+export interface PreviewViewportProps extends Omit<
+	React.HTMLAttributes<HTMLDivElement>,
+	'children'
+> {
 	children: React.ReactNode;
 	paperWidth?: PreviewPaperWidth;
 	zoomInLabel: string;
@@ -38,9 +40,16 @@ export interface PreviewViewportProps
 	contentClassName?: string;
 }
 
-function pickAutoFitZoom(paperW: number, paperH: number, availW: number, availH: number): PreviewZoom {
+function pickAutoFitZoom(
+	paperW: number,
+	paperH: number,
+	availW: number,
+	availH: number
+): PreviewZoom {
 	if (availW <= 0 || availH <= 0) return 100;
-	const candidates = PREVIEW_ZOOM_STEPS.filter((z) => z <= 100).slice().reverse();
+	const candidates = PREVIEW_ZOOM_STEPS.filter((z) => z <= 100)
+		.slice()
+		.reverse();
 	for (const z of candidates) {
 		const s = z / 100;
 		if (paperW * s <= availW && paperH * s <= availH) return z;
@@ -101,7 +110,7 @@ export function PreviewViewport({
 			const height = body.scrollHeight;
 			if (width <= 0 || height <= 0) return;
 			setContentSize((prev) =>
-				prev && prev.width === width && prev.height === height ? prev : { width, height },
+				prev && prev.width === width && prev.height === height ? prev : { width, height }
 			);
 		};
 
@@ -206,7 +215,7 @@ export function PreviewViewport({
 			ref={containerRef}
 			className={classNames(
 				'wcpos:relative wcpos:flex wcpos:min-h-0 wcpos:flex-1 wcpos:flex-col wcpos:rounded wcpos:border wcpos:border-gray-200 wcpos:bg-gray-100',
-				className,
+				className
 			)}
 			{...props}
 		>

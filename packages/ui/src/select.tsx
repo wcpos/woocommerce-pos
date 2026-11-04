@@ -41,9 +41,7 @@ export function Select({
 		<select
 			value={String(value)}
 			onChange={(event) => {
-				const selected = options.find(
-					(option) => String(option.value) === event.target.value
-				);
+				const selected = options.find((option) => String(option.value) === event.target.value);
 				if (selected) onChange(selected);
 			}}
 			disabled={disabled}
@@ -51,8 +49,7 @@ export function Select({
 				inline ? 'wcpos:inline-block' : 'wcpos:block wcpos:w-full',
 				'wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs',
 				'wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:border-wp-admin-theme-color',
-				disabled &&
-					'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed',
+				disabled && 'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed',
 				className
 			)}
 			{...props}

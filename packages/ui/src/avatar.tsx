@@ -75,12 +75,7 @@ export function Avatar({
 	}, [src]);
 
 	return (
-		<span
-			className={classNames(
-				'wcpos:relative wcpos:inline-flex wcpos:shrink-0',
-				className
-			)}
-		>
+		<span className={classNames('wcpos:relative wcpos:inline-flex wcpos:shrink-0', className)}>
 			<span
 				className={classNames(
 					'wcpos:inline-flex wcpos:items-center wcpos:justify-center',

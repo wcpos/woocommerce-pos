@@ -40,7 +40,9 @@ export function FormSection({
 	return (
 		<div
 			className={classNames(
-				divider ? 'wcpos:border-b wcpos:border-gray-200 wcpos:pb-6 wcpos:pt-4' : 'wcpos:pb-4 wcpos:mb-4',
+				divider
+					? 'wcpos:border-b wcpos:border-gray-200 wcpos:pb-6 wcpos:pt-4'
+					: 'wcpos:pb-4 wcpos:mb-4',
 				className
 			)}
 		>
@@ -49,10 +51,10 @@ export function FormSection({
 					className={classNames(
 						'wcpos:mb-3',
 						hasHeaderRight &&
-						classNames(
-							'wcpos:flex wcpos:items-center',
-							hasHeading ? 'wcpos:justify-between' : 'wcpos:justify-end'
-						)
+							classNames(
+								'wcpos:flex wcpos:items-center',
+								hasHeading ? 'wcpos:justify-between' : 'wcpos:justify-end'
+							)
 					)}
 				>
 					{hasHeading && (
@@ -64,10 +66,7 @@ export function FormSection({
 							)}
 							{description && (
 								<p
-									className={classNames(
-										'wcpos:text-sm wcpos:text-gray-500',
-										title && 'wcpos:mt-1'
-									)}
+									className={classNames('wcpos:text-sm wcpos:text-gray-500', title && 'wcpos:mt-1')}
 								>
 									{description}
 								</p>
