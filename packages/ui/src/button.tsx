@@ -37,6 +37,21 @@ function normalizeVariant(variant: ButtonVariant): CanonicalButtonVariant {
 	return variant === 'danger' ? 'destructive' : variant;
 }
 
+function buttonClasses(variant: ButtonVariant, disabled: boolean, className?: string): string {
+	const normalizedVariant = normalizeVariant(variant);
+	const sizeClasses =
+		normalizedVariant === 'text' ? 'wcpos:px-0 wcpos:py-0' : 'wcpos:px-3 wcpos:py-1.5';
+
+	return classNames(
+		'wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:rounded-md wcpos:text-sm wcpos:font-medium wcpos:transition-colors wcpos:duration-150',
+		'wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-offset-2',
+		sizeClasses,
+		variantClasses[normalizedVariant],
+		disabled ? 'wcpos:opacity-50 wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer',
+		className
+	);
+}
+
 export function Button({
 	variant = 'secondary',
 	loading = false,
@@ -47,21 +62,12 @@ export function Button({
 	...props
 }: ButtonProps) {
 	const isDisabled = disabled || loading;
-	const normalizedVariant = normalizeVariant(variant);
-	const sizeClasses = normalizedVariant === 'text' ? 'wcpos:px-0 wcpos:py-0' : 'wcpos:px-3 wcpos:py-1.5';
 
 	return (
 		<button
 			type={type}
 			disabled={isDisabled}
-			className={classNames(
-				'wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:rounded-md wcpos:text-sm wcpos:font-medium wcpos:transition-colors wcpos:duration-150',
-				'wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-offset-2',
-				sizeClasses,
-				variantClasses[normalizedVariant],
-				isDisabled ? 'wcpos:opacity-50 wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer',
-				className
-			)}
+			className={buttonClasses(variant, isDisabled, className)}
 			{...props}
 		>
 			{loading && (
@@ -90,5 +96,31 @@ export function Button({
 			)}
 			{children}
 		</button>
+	);
+}
+
+export interface LinkButtonProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
+	variant?: ButtonVariant;
+	href: string;
+}
+
+/**
+ * An anchor styled exactly like `Button`, for navigation that should look like
+ * an action (e.g. "Manage stores" linking to another admin screen).
+ */
+export function LinkButton({
+	variant = 'secondary',
+	className,
+	children,
+	...props
+}: LinkButtonProps) {
+	return (
+		<a
+			// wp-admin underlines every anchor; the button look has none.
+			className={buttonClasses(variant, false, classNames('wcpos:no-underline', className))}
+			{...props}
+		>
+			{children}
+		</a>
 	);
 }

@@ -42,7 +42,10 @@ export function Toggle({
 	return (
 		<div
 			className={classNames(
-				'wcpos:flex wcpos:items-center wcpos:gap-3',
+				// With a description the switch lines up with the label (both 20px tall)
+				// instead of floating between the label and its help line.
+				'wcpos:flex wcpos:gap-3',
+				description ? 'wcpos:items-start' : 'wcpos:items-center',
 				className
 			)}
 		>
@@ -90,7 +93,12 @@ export function Toggle({
 						{label}
 					</label>
 					{description && (
-						<p id={descriptionId} className="wcpos:text-sm wcpos:text-gray-500">
+						<p
+							id={descriptionId}
+							// Same help-line style as FormRow's description; `m-0` strips the
+							// 1em wp-admin paragraph margin that pushed it away from the label.
+							className="wcpos:m-0 wcpos:mt-1 wcpos:text-xs wcpos:text-gray-500"
+						>
 							{description}
 						</p>
 					)}
