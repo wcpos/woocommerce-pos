@@ -4,8 +4,6 @@ import { useRegisteredFields, useFieldModifications } from '../../store/use-regi
 
 import type { FieldComponentProps, FieldRegistration } from '../../store/types';
 
-type FieldComponent = React.ComponentType<FieldComponentProps>;
-
 interface RegisteredFieldsProps {
 	page: string;
 	section?: string;
@@ -14,7 +12,8 @@ interface RegisteredFieldsProps {
 }
 
 /**
- * Wrapper that resolves a single field (handling lazy imports) and applies modifications.
+ * Renders one registered field with its modifications applied. Lazy fields are
+ * `React.lazy` components, so Suspense covers the load; nothing renders until then.
  */
 function FieldRenderer({
 	field,
@@ -24,24 +23,13 @@ function FieldRenderer({
 	field: FieldRegistration;
 }) {
 	const modifications = useFieldModifications(field.page, field.id);
-	const [LazyComponent, setLazyComponent] = React.useState<FieldComponent | null>(null);
+	const Component = field.component;
 
-	const isLazy = typeof field.component === 'function' && !('$$typeof' in field.component);
-
-	React.useEffect(() => {
-		if (isLazy) {
-			const loader = field.component as () => Promise<{ default: FieldComponent }>;
-			loader().then((mod) => setLazyComponent(() => mod.default));
-		}
-	}, [field.component, isLazy]);
-
-	const Component = isLazy ? LazyComponent : (field.component as FieldComponent);
-
-	if (!Component) {
-		return null;
-	}
-
-	return <Component data={data} mutate={mutate} {...modifications} />;
+	return (
+		<React.Suspense fallback={null}>
+			<Component data={data} mutate={mutate} {...modifications} />
+		</React.Suspense>
+	);
 }
 
 export function RegisteredFields({ page, section, data, mutate }: RegisteredFieldsProps) {

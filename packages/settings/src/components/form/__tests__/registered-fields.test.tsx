@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 
 import { RegisteredFields } from '../registered-fields';
 
-import type { FieldRegistration } from '../../../store/types';
+import type { FieldComponentProps, FieldRegistration } from '../../../store/types';
 
 // Mock the store hooks to avoid useSyncExternalStore infinite loop in tests
 const mockUseRegisteredFields = vi.fn<(page: string, section?: string) => FieldRegistration[]>();
@@ -27,11 +27,11 @@ describe('RegisteredFields', () => {
 	});
 
 	it('renders a registered field component', () => {
+		// A plain function component, nothing marking it as React's: the renderer
+		// must not mistake it for a loader and call it without props.
 		function TestField() {
 			return <div>Custom Field</div>;
 		}
-		// Mark as a React component so FieldRenderer does not treat it as a lazy loader
-		(TestField as any).$$typeof = Symbol.for('react.element');
 
 		mockUseRegisteredFields.mockReturnValue([
 			{
@@ -57,11 +57,9 @@ describe('RegisteredFields', () => {
 		function FieldA() {
 			return <div>Field A</div>;
 		}
-		(FieldA as any).$$typeof = Symbol.for('react.element');
 		function FieldB() {
 			return <div>Field B</div>;
 		}
-		(FieldB as any).$$typeof = Symbol.for('react.element');
 
 		mockUseRegisteredFields.mockReturnValue([
 			{ id: 'field-a', page: 'general', component: FieldA, priority: 5 },
@@ -86,7 +84,6 @@ describe('RegisteredFields', () => {
 				</div>
 			);
 		}
-		(SpyField as any).$$typeof = Symbol.for('react.element');
 
 		mockUseRegisteredFields.mockReturnValue([
 			{ id: 'spy-field', page: 'general', component: SpyField },
@@ -95,6 +92,28 @@ describe('RegisteredFields', () => {
 		render(<RegisteredFields page="general" data={testData} mutate={testMutate} />);
 
 		expect(screen.getByTestId('data-value')).toHaveTextContent('{"foo":"bar"}');
+	});
+
+	it('renders a React.lazy field once its module resolves', async () => {
+		const LazyField = React.lazy(() =>
+			Promise.resolve({
+				default: function LazyLoaded({ data }: FieldComponentProps) {
+					return <div>Lazy {String(data.foo)}</div>;
+				},
+			})
+		);
+
+		mockUseRegisteredFields.mockReturnValue([
+			{ id: 'lazy-field', page: 'general', component: LazyField },
+		]);
+
+		const { container } = render(
+			<RegisteredFields page="general" data={{ foo: 'bar' }} mutate={() => {}} />
+		);
+
+		// Suspense fallback is null: nothing shows while the module loads.
+		expect(container.innerHTML).toBe('');
+		expect(await screen.findByText('Lazy bar')).toBeInTheDocument();
 	});
 
 	it('calls useRegisteredFields with the correct page and section', () => {
