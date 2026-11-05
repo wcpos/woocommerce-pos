@@ -181,10 +181,22 @@ class Frontend {
 
 	/**
 	 * CDN lane shared by plugin assets and font packs.
+	 *
+	 * A released version resolves to the lane's `@&lt;major.minor>` jsDelivr range.
+	 * A prerelease (`2.0.0-beta.2`) pins its own tag instead: jsDelivr's semver
+	 * range excludes prerelease tags, so `@2.0` is a 404 until `2.0.0` is cut.
+	 *
+	 * @param string|null $version Plugin version; defaults to the running VERSION.
 	 */
-	public static function cdn_ref(): string {
-		$ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
-		return 'next' === self::explicit_web_bundle_ref() ? 'next' : $ref;
+	public static function cdn_ref( ?string $version = null ): string {
+		if ( 'next' === self::explicit_web_bundle_ref() ) {
+			return 'next';
+		}
+		$version = $version ?? VERSION;
+		if ( Web_Bundle_Loader_Config::is_prerelease( $version ) ) {
+			return $version;
+		}
+		return implode( '.', \array_slice( explode( '.', $version ), 0, 2 ) );
 	}
 
 	/**
@@ -234,7 +246,10 @@ class Frontend {
 		 *                   dev-next sets WCPOS_WEB_BUNDLE_REF=next to load it.
 		 */
 		// When `next` becomes `main`, the released ref simply becomes the new
-		// major.minor (e.g. `@1.11`) via this default.
+		// major.minor (e.g. `@1.11`) via this default. Unlike cdn_ref(), a
+		// prerelease plugin stays on the range: wcpos/web-bundle cuts its own
+		// released tags (2.0.x), so `@2.0` resolves there while
+		// `web-bundle@2.0.0-beta.2` does not exist.
 		$default_bundle_ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
 
 		/**
