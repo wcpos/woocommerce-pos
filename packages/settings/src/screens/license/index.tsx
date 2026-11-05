@@ -149,16 +149,19 @@ function License() {
 					</a>
 				</div>
 				<Notice status="info" isDismissible={false} className="wcpos:w-full">
-					{t('license.existing_license_prefix')}{' '}
-					<a
-						href="https://docs.wcpos.com/getting-started/pro-license#installation"
-						target="_blank"
-						rel="noopener noreferrer"
-						className="wcpos:font-medium wcpos:underline"
-					>
-						{t('license.existing_license_link')}
-					</a>{' '}
-					{t('license.existing_license_suffix')}
+					<Trans
+						i18nKey="license.existing_license"
+						components={{
+							a: (
+								<a
+									href="https://docs.wcpos.com/getting-started/pro-license#installation"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="wcpos:font-medium wcpos:underline"
+								/>
+							),
+						}}
+					/>
 				</Notice>
 			</div>
 		);

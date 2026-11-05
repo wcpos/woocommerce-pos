@@ -16,7 +16,7 @@ import {
 
 import { Combobox, type ComboboxOption } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
-import { t } from '../../translations';
+import { t, Trans } from '../../translations';
 
 /**
  * Friendly labels for tax-ID types. Matches Tax_Id_Types constants on the
@@ -158,9 +158,13 @@ function DetectionBanner({ plugins, overrideCount }: DetectionBannerProps) {
 				<div className="wcpos:flex-1 wcpos:text-sm">
 					{detected ? (
 						<>
-							<div className="wcpos:font-medium">
-								{detectedNames.join(', ')}{' '}
-								<span className="wcpos:font-normal">{t('tax_ids.banner_is_installed')}</span>
+							<div className="wcpos:font-normal">
+								<Trans
+									i18nKey="tax_ids.banner_installed"
+									count={detectedNames.length}
+									values={{ names: detectedNames.join(', ') }}
+									components={{ plugins: <span className="wcpos:font-medium" /> }}
+								/>
 							</div>
 							<div className="wcpos:text-xs wcpos:text-gray-600 wcpos:mt-1">
 								{t('tax_ids.banner_detected_explainer')}

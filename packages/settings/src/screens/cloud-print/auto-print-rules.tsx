@@ -1,7 +1,7 @@
 import { Button, Callout, Select } from '@wcpos/ui';
 
 import { templateOptionsForProvider } from './providers';
-import { t } from '../../translations';
+import { t, Trans } from '../../translations';
 
 import type {
 	CloudAssignment,
@@ -209,14 +209,10 @@ export function AutoPrintRules({
 			</Callout>
 
 			<p className="wcpos:text-sm wcpos:text-gray-500">
-				{t(
-					'cloud_print.rules_subline_pre',
-					'Each rule prints the chosen template automatically when an order matches. Templates come from '
-				)}
-				<a href={TEMPLATES_URL} target="_blank" rel="noreferrer">
-					{t('cloud_print.templates_link', 'POS › Templates')}
-				</a>
-				{t('cloud_print.rules_subline_post', '. More than one rule can run for the same order.')}
+				<Trans
+					i18nKey="cloud_print.rules_subline"
+					components={{ a: <a href={TEMPLATES_URL} target="_blank" rel="noreferrer" /> }}
+				/>
 			</p>
 
 			{assignments.length === 0 ? (
@@ -235,67 +231,81 @@ export function AutoPrintRules({
 								data-testid={`rule-${i}`}
 								className="wcpos:flex wcpos:flex-wrap wcpos:items-center wcpos:gap-x-1.5 wcpos:gap-y-1 wcpos:text-sm"
 							>
-								<span>{t('cloud_print.rule_print', 'Automatically print')}</span>
-								<Select
-									inline
-									data-testid={`rule-scope-${i}`}
-									aria-label={t('cloud_print.rule_scope_label', 'Which orders to print')}
-									className="wcpos:max-w-full"
-									style={sentenceSelectWidth(options, value)}
-									value={value}
-									options={options}
-									onChange={({ value: nextValue }) => update(i, parseApplies(String(nextValue)))}
+								<Trans
+									i18nKey="cloud_print.rule_sentence"
+									components={{
+										scope: (
+											<Select
+												inline
+												data-testid={`rule-scope-${i}`}
+												aria-label={t('cloud_print.rule_scope_label', 'Which orders to print')}
+												className="wcpos:max-w-full"
+												style={sentenceSelectWidth(options, value)}
+												value={value}
+												options={options}
+												onChange={({ value: nextValue }) =>
+													update(i, parseApplies(String(nextValue)))
+												}
+											/>
+										),
+										printer: (
+											<Select
+												inline
+												data-testid={`rule-printer-${i}`}
+												aria-label={t('cloud_print.rule_printer_label', 'Printer')}
+												className="wcpos:max-w-full"
+												style={sentenceSelectWidth(printerOptions, a.printer_id)}
+												value={a.printer_id}
+												options={printerOptions}
+												onChange={({ value }) => update(i, changePrinter(a, String(value)))}
+											/>
+										),
+										template: (
+											<Select
+												inline
+												data-testid={`rule-template-${i}`}
+												aria-label={t('cloud_print.rule_template_label', 'Receipt template')}
+												className="wcpos:max-w-full"
+												style={sentenceSelectWidth(
+													templateSelectOptions(optionsForPrinter(a.printer_id), a.template_id),
+													a.template_id
+												)}
+												value={a.template_id}
+												options={templateSelectOptions(
+													optionsForPrinter(a.printer_id),
+													a.template_id
+												)}
+												onChange={({ value }) => update(i, { template_id: String(value) })}
+											/>
+										),
+										copies: (
+											<Select
+												inline
+												data-testid={`rule-copies-${i}`}
+												aria-label={t('cloud_print.rule_copies_label', 'Number of copies')}
+												className="wcpos:max-w-full"
+												style={sentenceSelectWidth(copiesOptions, a.copies ?? 1)}
+												value={a.copies ?? 1}
+												options={copiesOptions}
+												onChange={({ value }) => update(i, { copies: Number(value) })}
+											/>
+										),
+										trigger: (
+											<Select
+												inline
+												data-testid={`rule-trigger-${i}`}
+												aria-label={t('cloud_print.rule_trigger_label', 'When to print')}
+												className="wcpos:max-w-full"
+												style={sentenceSelectWidth(triggerOptions, a.trigger ?? 'paid')}
+												value={a.trigger ?? 'paid'}
+												options={triggerOptions}
+												onChange={({ value }) =>
+													update(i, { trigger: value === 'created' ? 'created' : 'paid' })
+												}
+											/>
+										),
+									}}
 								/>
-								<span>{t('cloud_print.rule_to', 'to')}</span>
-								<Select
-									inline
-									data-testid={`rule-printer-${i}`}
-									aria-label={t('cloud_print.rule_printer_label', 'Printer')}
-									className="wcpos:max-w-full"
-									style={sentenceSelectWidth(printerOptions, a.printer_id)}
-									value={a.printer_id}
-									options={printerOptions}
-									onChange={({ value }) => update(i, changePrinter(a, String(value)))}
-								/>
-								<span>{t('cloud_print.rule_using', 'using the')}</span>
-								<Select
-									inline
-									data-testid={`rule-template-${i}`}
-									aria-label={t('cloud_print.rule_template_label', 'Receipt template')}
-									className="wcpos:max-w-full"
-									style={sentenceSelectWidth(
-										templateSelectOptions(optionsForPrinter(a.printer_id), a.template_id),
-										a.template_id
-									)}
-									value={a.template_id}
-									options={templateSelectOptions(optionsForPrinter(a.printer_id), a.template_id)}
-									onChange={({ value }) => update(i, { template_id: String(value) })}
-								/>
-								<span>{t('cloud_print.rule_template_suffix', 'template,')}</span>
-								<Select
-									inline
-									data-testid={`rule-copies-${i}`}
-									aria-label={t('cloud_print.rule_copies_label', 'Number of copies')}
-									className="wcpos:max-w-full"
-									style={sentenceSelectWidth(copiesOptions, a.copies ?? 1)}
-									value={a.copies ?? 1}
-									options={copiesOptions}
-									onChange={({ value }) => update(i, { copies: Number(value) })}
-								/>
-								<span>{t('cloud_print.rule_trigger_join', ',')}</span>
-								<Select
-									inline
-									data-testid={`rule-trigger-${i}`}
-									aria-label={t('cloud_print.rule_trigger_label', 'When to print')}
-									className="wcpos:max-w-full"
-									style={sentenceSelectWidth(triggerOptions, a.trigger ?? 'paid')}
-									value={a.trigger ?? 'paid'}
-									options={triggerOptions}
-									onChange={({ value }) =>
-										update(i, { trigger: value === 'created' ? 'created' : 'paid' })
-									}
-								/>
-								<span>{t('cloud_print.rule_copies_suffix', '.')}</span>
 								<Button
 									variant="ghost-destructive"
 									data-testid={`rule-remove-${i}`}

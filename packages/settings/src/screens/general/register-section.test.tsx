@@ -7,12 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RegisterSection, type RegisterSectionProps } from './register-section';
 import Notice from '../../components/notice';
 import useNotices, { NoticesProvider } from '../../hooks/use-notices';
+import { i18n } from '../../translations';
 import en from '../../translations/locales/en/wp-admin-settings.json';
 
 const apiFetchMock = vi.fn();
 const capture = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
-vi.mock('../../translations', () => ({ t: (key: string) => en[key as keyof typeof en] ?? key }));
 vi.mock('../../lib/analytics', () => ({
 	captureUpgradeCtaClicked: (...args: unknown[]) => capture(...args),
 }));
@@ -33,15 +33,26 @@ function SharedNotice() {
 function renderSection(data: RegisterSectionProps['data'] = on) {
 	const mutate = vi.fn();
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-	const view = render(
+	const tree = (next: RegisterSectionProps['data']) => (
 		<QueryClientProvider client={client}>
 			<NoticesProvider>
 				<SharedNotice />
-				<RegisterSection data={data} mutate={mutate} />
+				<RegisterSection data={next} mutate={mutate} />
 			</NoticesProvider>
 		</QueryClientProvider>
 	);
-	return { ...view, mutate };
+	const view = render(tree(data));
+	return {
+		...view,
+		mutate,
+		rerenderWith: (next: RegisterSectionProps['data']) => view.rerender(tree(next)),
+	};
+}
+
+const swapped = new Map<string, string>();
+function swapMessage(key: keyof typeof en, value: string) {
+	swapped.set(key, en[key]);
+	i18n.addResource('en', 'wp-admin-settings', key, value);
 }
 
 beforeEach(() => {
@@ -51,6 +62,8 @@ beforeEach(() => {
 });
 afterEach(() => {
 	delete window.wcpos;
+	swapped.forEach((value, key) => i18n.addResource('en', 'wp-admin-settings', key, value));
+	swapped.clear();
 });
 
 describe('General Register section', () => {
@@ -188,6 +201,42 @@ describe('General Register section', () => {
 		fireEvent.change(input, { target: { value: '20' } });
 		fireEvent.blur(input);
 		expect(await screen.findByText('Save failed')).toBeInTheDocument();
+	});
+
+	it.each([
+		['settings.ask_manager_limit', '<amount/> <label>by more than</label>', 'variance_threshold'],
+		['settings.close_reminder_time', '<time/> <label>at</label>', 'expected_close_time'],
+	] as const)('a translation can put the input before the words (%s)', (key, message, id) => {
+		swapMessage(key, message);
+		const { container } = renderSection();
+		const input = container.querySelector(`input#${id}`)!;
+		const label = container.querySelector(`label[for="${id}"]`)!;
+		expect(input.closest('.wcpos\\:w-36')?.parentElement).toBe(label.parentElement);
+		expect(input.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('the amount input shows the new value when the saved limit changes', () => {
+		const { rerenderWith } = renderSection();
+		expect(screen.getByLabelText('by more than')).toHaveValue('5.00');
+		rerenderWith({ ...on, variance_threshold: '12.50' });
+		expect(screen.getByLabelText('by more than')).toHaveValue('12.50');
+	});
+
+	it('the amount input keeps focus and typed text when the section rerenders', () => {
+		const { rerenderWith } = renderSection();
+		const input = screen.getByLabelText('by more than');
+		input.focus();
+		fireEvent.change(input, { target: { value: '7.25' } });
+		rerenderWith({ ...on });
+		expect(screen.getByLabelText('by more than')).toBe(input);
+		expect(input).toHaveFocus();
+		expect(input).toHaveValue('7.25');
+	});
+
+	it('the label still points at its input', () => {
+		renderSection();
+		expect(screen.getByLabelText('by more than')).toHaveAttribute('id', 'variance_threshold');
+		expect(screen.getByLabelText('at')).toHaveAttribute('id', 'expected_close_time');
 	});
 
 	it('links to Pro and tracks the placement', () => {

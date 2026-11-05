@@ -152,3 +152,21 @@ describe('License activation identity join', () => {
 		expect(url.searchParams.has('site_uuid')).toBe(false);
 	});
 });
+
+describe('License notice', () => {
+	it('the existing license notice is one message with its link', async () => {
+		routeSettings({ activated: false });
+
+		renderScreen();
+
+		const link = await screen.findByRole('link', { name: 'installation instructions' });
+		expect(link).toHaveAttribute(
+			'href',
+			'https://docs.wcpos.com/getting-started/pro-license#installation'
+		);
+		expect(link).toHaveAttribute('target', '_blank');
+		expect(link.parentElement?.textContent).toBe(
+			'Already have a Pro license? Follow the installation instructions to download and install the Pro plugin. Once installed, you can safely remove the free version.'
+		);
+	});
+});

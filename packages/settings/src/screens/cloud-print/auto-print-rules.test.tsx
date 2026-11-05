@@ -1,9 +1,11 @@
 import * as React from 'react';
 
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AutoPrintRules } from './auto-print-rules';
+import { i18n } from '../../translations';
+import en from '../../translations/locales/en/wp-admin-settings.json';
 
 import type { CloudAssignment, CloudPrinter } from '../../hooks/use-cloud-print-settings';
 
@@ -46,26 +48,69 @@ function renderRules(overrides: Partial<AutoPrintRulesTestProps> = {}) {
 	return { ...utils, onChange, printers, assignments };
 }
 
+const swapped = new Map<string, string>();
+function swapMessage(key: keyof typeof en, value: string) {
+	swapped.set(key, en[key]);
+	i18n.addResource('en', 'wp-admin-settings', key, value);
+}
+
+afterEach(() => {
+	swapped.forEach((value, key) => i18n.addResource('en', 'wp-admin-settings', key, value));
+	swapped.clear();
+});
+
+// The row's own text nodes in order, with each control shown as [its test id].
+function sentence(row: HTMLElement): string {
+	return Array.from(row.childNodes)
+		.map((node) => (node instanceof HTMLElement ? `[${node.dataset.testid}]` : node.textContent))
+		.join('');
+}
+
 describe('AutoPrintRules', () => {
-	it('renders each assignment as a sentence with five selects', () => {
+	it('renders the rule as one sentence in English order', () => {
 		renderRules();
 
-		expect(screen.getByTestId('rule-0')).toBeInTheDocument();
 		expect(screen.getByTestId('rule-1')).toBeInTheDocument();
+		expect(sentence(screen.getByTestId('rule-0'))).toBe(
+			'Automatically print [rule-scope-0] to [rule-printer-0] using the [rule-template-0] template, [rule-copies-0], [rule-trigger-0].[rule-remove-0]'
+		);
+	});
 
-		// Sentence fragments are present.
-		expect(screen.getAllByText(/Automatically print/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/^to$/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/using the/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/template,/i).length).toBeGreaterThan(0);
+	it('a translation can reorder the rule controls', () => {
+		swapMessage(
+			'cloud_print.rule_sentence',
+			'<trigger/>, print <copies/> of <template/> on <printer/> for <scope/>.'
+		);
+		const { onChange } = renderRules();
 
-		// Five selects per row.
-		const row0 = screen.getByTestId('rule-0');
-		expect(within(row0).getByTestId('rule-scope-0')).toBeInTheDocument();
-		expect(within(row0).getByTestId('rule-printer-0')).toBeInTheDocument();
-		expect(within(row0).getByTestId('rule-template-0')).toBeInTheDocument();
-		expect(within(row0).getByTestId('rule-copies-0')).toBeInTheDocument();
-		expect(within(row0).getByTestId('rule-trigger-0')).toBeInTheDocument();
+		const trigger = screen.getByTestId('rule-trigger-0');
+		const scope = screen.getByTestId('rule-scope-0');
+		expect(trigger.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(sentence(screen.getByTestId('rule-0'))).toBe(
+			'[rule-trigger-0], print [rule-copies-0] of [rule-template-0] on [rule-printer-0] for [rule-scope-0].[rule-remove-0]'
+		);
+
+		fireEvent.change(trigger, { target: { value: 'created' } });
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect((onChange.mock.calls[0][0] as CloudAssignment[])[0]).toEqual({
+			printer_id: 'kitchen',
+			store_id: 0,
+			scope: 'pos',
+			template_id: '11',
+			trigger: 'created',
+		});
+	});
+
+	it('a translation can move the templates link', () => {
+		swapMessage(
+			'cloud_print.rules_subline',
+			'<a>POS › Templates</a>: each rule prints its template when an order matches.'
+		);
+		renderRules();
+
+		const link = screen.getByRole('link', { name: 'POS › Templates' });
+		expect(link.parentElement?.firstChild).toBe(link);
+		expect(link).toHaveAttribute('href', 'edit.php?post_type=wcpos_template');
 	});
 
 	it('renders the trigger select defaulting to paid when the assignment has none', () => {
