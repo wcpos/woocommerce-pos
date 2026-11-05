@@ -64,11 +64,16 @@ class Test_Frontend extends WP_UnitTestCase {
 	 * The `next` web-bundle override still wins over any version.
 	 */
 	public function test_cdn_ref_next_override_wins_over_prerelease_version(): void {
+		$previous                     = $_ENV['WCPOS_WEB_BUNDLE_REF'] ?? null;
 		$_ENV['WCPOS_WEB_BUNDLE_REF'] = 'next';
 		try {
 			$this->assertSame( 'next', Frontend::cdn_ref( '2.0.0-beta.2' ) );
 		} finally {
-			unset( $_ENV['WCPOS_WEB_BUNDLE_REF'] );
+			if ( null === $previous ) {
+				unset( $_ENV['WCPOS_WEB_BUNDLE_REF'] );
+			} else {
+				$_ENV['WCPOS_WEB_BUNDLE_REF'] = $previous;
+			}
 		}
 	}
 
