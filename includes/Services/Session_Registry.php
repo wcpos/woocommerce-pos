@@ -90,6 +90,11 @@ final class Session_Registry {
 	public const MAX_SESSIONS_ROW_BYTES = 6291456;
 
 	/**
+	 * Browser label for WCPOS app sessions; rows stored earlier keep their old label.
+	 */
+	private const APP_BROWSER_LABEL = 'WCPOS';
+
+	/**
 	 * Read the stored session map without guarding or modifying it.
 	 *
 	 * @param int $user_id The user ID.
@@ -169,9 +174,9 @@ final class Session_Registry {
 				$device_info['build'] = $build;
 			}
 
-			// Set browser to WooCommerce POS for native apps.
+			// Set browser to the WCPOS app label for native apps.
 			if ( 'web' !== $platform ) {
-				$device_info['browser'] = 'WooCommerce POS';
+				$device_info['browser'] = self::APP_BROWSER_LABEL;
 			}
 		}
 
@@ -599,11 +604,11 @@ final class Session_Registry {
 			return $device_info;
 		}
 
-		// Detect WooCommerce POS apps first (custom identifiers)
+		// Detect WCPOS apps first (custom identifiers)
 		// Check for Electron app (including just "WooCommercePOS" in user agent with Electron).
 		if ( preg_match( '/Electron/i', $user_agent ) && preg_match( '/WooCommercePOS|WCPOS/i', $user_agent ) ) {
 			$device_info['app_type']    = 'electron_app';
-			$device_info['browser']     = 'WooCommerce POS';
+			$device_info['browser']     = self::APP_BROWSER_LABEL;
 			$device_info['device_type'] = 'desktop';
 			// Try to extract WooCommercePOS version.
 			if ( preg_match( '/WooCommercePOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
@@ -613,7 +618,7 @@ final class Session_Registry {
 			}
 		} elseif ( preg_match( '/WCPOS[-_]?iOS|WooCommercePOS[-_]?iOS/i', $user_agent ) ) {
 			$device_info['app_type']     = 'ios_app';
-			$device_info['browser']      = 'WooCommerce POS';
+			$device_info['browser']      = self::APP_BROWSER_LABEL;
 			// Default to tablet unless explicitly detected as phone.
 			$device_info['device_type']  = preg_match( '/iphone|ipod/i', $user_agent ) ? 'mobile' : 'tablet';
 			if ( preg_match( '/WCPOS[-_]?iOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
@@ -623,7 +628,7 @@ final class Session_Registry {
 			}
 		} elseif ( preg_match( '/WCPOS[-_]?Android|WooCommercePOS[-_]?Android/i', $user_agent ) ) {
 			$device_info['app_type']     = 'android_app';
-			$device_info['browser']      = 'WooCommerce POS';
+			$device_info['browser']      = self::APP_BROWSER_LABEL;
 			// Default to tablet unless explicitly detected as mobile.
 			$device_info['device_type']  = preg_match( '/mobile/i', $user_agent ) && ! preg_match( '/tablet/i', $user_agent ) ? 'mobile' : 'tablet';
 			if ( preg_match( '/WCPOS[-_]?Android[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
@@ -645,7 +650,7 @@ final class Session_Registry {
 		}
 
 		// Detect browser (skip if we already detected a WCPOS app).
-		if ( 'WooCommerce POS' !== $device_info['browser'] ) {
+		if ( self::APP_BROWSER_LABEL !== $device_info['browser'] ) {
 			if ( preg_match( '/MSIE|Trident/i', $user_agent ) ) {
 				$device_info['browser'] = 'Internet Explorer';
 				if ( preg_match( '/MSIE ([0-9.]+)/', $user_agent, $matches ) ) {

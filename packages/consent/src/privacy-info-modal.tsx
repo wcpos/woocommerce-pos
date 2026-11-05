@@ -42,7 +42,7 @@ export function PrivacyInfoModal({ open, onClose, copy }: PrivacyInfoModalProps)
 				</li>
 			</ul>
 			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">
-				{consentText(copy, 'privacy_note', 'consent.modal_exclusions')}
+				{consentText(copy, 'privacy_note', 'consent.modal_exclusions_v2')}
 			</p>
 			<div className="wcpos:flex wcpos:justify-end">
 				<Button onClick={onClose}>{t('consent.dismiss')}</Button>

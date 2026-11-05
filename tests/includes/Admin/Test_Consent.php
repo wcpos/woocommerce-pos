@@ -53,6 +53,7 @@ class Test_Consent extends WP_UnitTestCase {
 		SettingsService::instance()->save_settings( 'general', $settings );
 
 		delete_transient( Consent::MODAL_TRANSIENT );
+		delete_transient( Consent::REACH_TRANSIENT );
 
 		$this->consent = new Consent();
 	}
@@ -73,6 +74,7 @@ class Test_Consent extends WP_UnitTestCase {
 			remove_action( 'rest_api_init', array( $this->consent, 'register_routes' ), 10 );
 		}
 		delete_transient( Consent::MODAL_TRANSIENT );
+		delete_transient( Consent::REACH_TRANSIENT );
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 	}
@@ -567,5 +569,99 @@ class Test_Consent extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'rest_no_route', $response->get_data()['code'] );
+	}
+
+
+	/**
+	 * Render the mount point for a hook suffix and return the output.
+	 *
+	 * @param string $hook_suffix Admin page hook suffix.
+	 */
+	private function render_mount_point( string $hook_suffix ): string {
+		ob_start();
+		$this->consent->maybe_render_mount_point( $hook_suffix );
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Activation and update set the reach transient for 7 days; a decided site does not get it.
+	 */
+	public function test_activation_and_update_set_reach_transient_for_seven_days(): void {
+		$this->consent->on_plugin_activated( plugin_basename( PLUGIN_FILE ) );
+		$this->assertSame( 7 * DAY_IN_SECONDS, Consent::REACH_TRANSIENT_TTL );
+		$this->assertEqualsWithDelta( time() + Consent::REACH_TRANSIENT_TTL, (int) get_option( '_transient_timeout_' . Consent::REACH_TRANSIENT ), 5 );
+
+		delete_transient( Consent::REACH_TRANSIENT );
+		$this->consent->on_upgrader_process_complete(
+			null,
+			array(
+				'type'   => 'plugin',
+				'action' => 'update',
+				'plugin' => plugin_basename( PLUGIN_FILE ),
+			)
+		);
+		$this->assertEqualsWithDelta( time() + Consent::REACH_TRANSIENT_TTL, (int) get_option( '_transient_timeout_' . Consent::REACH_TRANSIENT ), 5 );
+
+		delete_transient( Consent::REACH_TRANSIENT );
+		$settings                     = SettingsService::instance()->get_settings( 'general' );
+		$settings['tracking_consent'] = 'denied';
+		SettingsService::instance()->save_settings( 'general', $settings );
+		$this->consent->on_plugin_activated( plugin_basename( PLUGIN_FILE ) );
+		$this->assertFalse( get_transient( Consent::REACH_TRANSIENT ), 'A decided site must not get the reach window.' );
+	}
+
+	/**
+	 * WooCommerce screens show the callout only while the reach transient lives.
+	 */
+	public function test_mount_point_on_woocommerce_screens_follows_reach_transient(): void {
+		$this->assertSame( '', $this->render_mount_point( 'woocommerce_page_wc-orders' ) );
+		$this->assertSame( '', $this->render_mount_point( 'toplevel_page_woocommerce' ) );
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $this->render_mount_point( 'plugins.php' ) );
+
+		set_transient( Consent::REACH_TRANSIENT, 1, Consent::REACH_TRANSIENT_TTL );
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $this->render_mount_point( 'woocommerce_page_wc-orders' ) );
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $this->render_mount_point( 'toplevel_page_woocommerce' ) );
+		$this->assertSame( '', $this->render_mount_point( 'edit.php' ) );
+	}
+
+	/**
+	 * With the reach transient live, a user without the capability and a decided site still get nothing.
+	 */
+	public function test_reach_transient_keeps_capability_and_decision_gates(): void {
+		set_transient( Consent::REACH_TRANSIENT, 1, Consent::REACH_TRANSIENT_TTL );
+		$admin_id = get_current_user_id();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		$this->assertSame( '', $this->render_mount_point( 'woocommerce_page_wc-orders' ) );
+
+		wp_set_current_user( $admin_id );
+		$settings                     = SettingsService::instance()->get_settings( 'general' );
+		$settings['tracking_consent'] = 'allowed';
+		SettingsService::instance()->save_settings( 'general', $settings );
+		$this->assertSame( '', $this->render_mount_point( 'woocommerce_page_wc-orders' ) );
+	}
+
+	/**
+	 * Saving a choice and an explicit dismiss both end the reach window.
+	 */
+	public function test_save_consent_and_dismiss_clear_reach_transient(): void {
+		set_transient( Consent::REACH_TRANSIENT, 1, Consent::REACH_TRANSIENT_TTL );
+		$request = new WP_REST_Request( 'POST', '/wcpos/v1/consent' );
+		$request->set_param( 'consent', 'denied' );
+		$this->consent->save_consent( $request );
+		$this->assertFalse( get_transient( Consent::REACH_TRANSIENT ) );
+
+		set_transient( Consent::REACH_TRANSIENT, 1, Consent::REACH_TRANSIENT_TTL );
+		$this->consent->dismiss_callout();
+		$this->assertFalse( get_transient( Consent::REACH_TRANSIENT ) );
+	}
+
+	/**
+	 * WooCommerce's React screens hide admin notices, so they are not reach screens.
+	 */
+	public function test_reach_transient_skips_woocommerce_react_screen(): void {
+		set_transient( Consent::REACH_TRANSIENT, 1, Consent::REACH_TRANSIENT_TTL );
+		$this->assertSame( '', $this->render_mount_point( 'woocommerce_page_wc-admin' ) );
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $this->render_mount_point( 'woocommerce_page_wc-orders' ) );
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $this->render_mount_point( 'woocommerce_page_wc-settings' ) );
 	}
 }

@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 use ReflectionClass;
 use WP_UnitTestCase;
 use WCPOS\WooCommercePOS\Activator;
+use WCPOS\WooCommercePOS\Admin\Consent;
 
 /**
  * Tests for Activator behavior.
@@ -2726,5 +2727,21 @@ class Test_Activator extends WP_UnitTestCase {
 		// A stamped prerelease reached again by a sync-schema or role-caps repair: nothing to run.
 		$this->assertSame( array(), Activator::pending_db_updates( $table, '2.0.0-beta.1', '2.0.0-beta.1' ) );
 		$this->assertSame( array_values( $table ), Activator::pending_db_updates( $table, '1.9.5', '2.0.0-beta.1' ) );
+	}
+
+	/**
+	 * Activation and upgrade open the 7-day consent reach window on an undecided site only.
+	 *
+	 * @covers ::single_activate
+	 */
+	public function test_single_activate_sets_reach_transient_only_on_undecided_site(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'tracking_consent' => 'undecided' ) );
+		( new Activator() )->single_activate( false, false );
+		$this->assertEqualsWithDelta( time() + 7 * DAY_IN_SECONDS, (int) get_option( '_transient_timeout_' . Consent::REACH_TRANSIENT ), 5 );
+
+		delete_transient( Consent::REACH_TRANSIENT );
+		update_option( 'woocommerce_pos_settings_general', array( 'tracking_consent' => 'denied' ) );
+		( new Activator() )->single_activate( false, false );
+		$this->assertFalse( get_transient( Consent::REACH_TRANSIENT ) );
 	}
 }
