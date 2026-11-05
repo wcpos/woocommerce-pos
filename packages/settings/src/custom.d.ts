@@ -7,7 +7,10 @@ declare global {
 		currencySymbol?: string;
 		currencyDecimals?: number;
 		getComponent?: (key: string) => import('react').ComponentType | undefined;
-		environment?: { cloudflare?: { proxied: boolean; plugin_active: boolean } };
+		environment?: {
+			cloudflare?: { proxied: boolean; plugin_active: boolean };
+			order_storage?: { hpos: boolean; settings_url: string };
+		};
 		barcodes?: string[];
 		order_statuses?: Record<string, string>;
 		countries?: Record<string, string>;
