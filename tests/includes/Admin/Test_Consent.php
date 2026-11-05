@@ -645,7 +645,7 @@ class Test_Consent extends WP_UnitTestCase {
 	 */
 	public function test_save_consent_and_dismiss_clear_reach_transient(): void {
 		set_transient( Consent::REACH_TRANSIENT, 1, Consent::REACH_TRANSIENT_TTL );
-		$request = new WP_REST_Request( 'POST', '/wcpos/v1/consent' );
+		$request = new WP_REST_Request( 'POST' );
 		$request->set_param( 'consent', 'denied' );
 		$this->consent->save_consent( $request );
 		$this->assertFalse( get_transient( Consent::REACH_TRANSIENT ) );
