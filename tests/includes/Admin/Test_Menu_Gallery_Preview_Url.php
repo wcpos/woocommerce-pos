@@ -97,8 +97,8 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 	 */
 	public function test_preview_url_other_override_uses_cdn_ref(): void {
 		// Arrange.
-		$_ENV['WCPOS_WEB_BUNDLE_REF'] = 'somebranch';
 		$ref                        = Frontend::cdn_ref();
+		$_ENV['WCPOS_WEB_BUNDLE_REF'] = 'somebranch';
 		// Act.
 		$this->menu->enqueue_gallery_assets();
 		// Assert.
