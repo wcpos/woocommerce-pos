@@ -8,9 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\Admin;
 
 use WCPOS\WooCommercePOS\Admin\Menu;
+use WCPOS\WooCommercePOS\Templates\Frontend;
 use WP_UnitTestCase;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
-use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Tests preview hosting through the gallery bootstrap.
@@ -69,11 +69,11 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Released sites use their plugin major.minor lane.
+	 * Menu delegates the default ref to Frontend::cdn_ref().
 	 */
-	public function test_preview_url_default_uses_release_lane(): void {
+	public function test_preview_url_default_uses_cdn_ref(): void {
 		// Arrange.
-		$ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
+		$ref = Frontend::cdn_ref();
 		// Act.
 		$this->menu->enqueue_gallery_assets();
 		// Assert.
@@ -93,12 +93,12 @@ class Test_Menu_Gallery_Preview_Url extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Other bundle overrides do not change the preview lane.
+	 * Other bundle overrides do not change the preview ref.
 	 */
-	public function test_preview_url_other_override_uses_release_lane(): void {
+	public function test_preview_url_other_override_uses_cdn_ref(): void {
 		// Arrange.
+		$ref                        = Frontend::cdn_ref();
 		$_ENV['WCPOS_WEB_BUNDLE_REF'] = 'somebranch';
-		$ref                        = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
 		// Act.
 		$this->menu->enqueue_gallery_assets();
 		// Assert.

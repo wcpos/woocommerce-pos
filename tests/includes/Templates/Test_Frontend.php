@@ -37,6 +37,47 @@ class Test_Frontend extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A released version maps to the lane's `@<major.minor>` jsDelivr range.
+	 */
+	public function test_cdn_ref_released_version_uses_major_minor_lane(): void {
+		$this->assertSame( '1.11', Frontend::cdn_ref( '1.11.9' ) );
+		$this->assertSame( '2.0', Frontend::cdn_ref( '2.0.0' ) );
+	}
+
+	/**
+	 * A prerelease version pins the exact tag: jsDelivr's `@2.0` is a semver
+	 * range that matches no prerelease tag, so it 404s until `2.0.0` is cut.
+	 */
+	public function test_cdn_ref_prerelease_version_pins_the_exact_tag(): void {
+		$this->assertSame( '2.0.0-beta.2', Frontend::cdn_ref( '2.0.0-beta.2' ) );
+		$this->assertSame( '2.1.0-rc.1', Frontend::cdn_ref( '2.1.0-rc.1' ) );
+	}
+
+	/**
+	 * With no argument the ref is derived from the running plugin version.
+	 */
+	public function test_cdn_ref_defaults_to_the_plugin_version(): void {
+		$this->assertSame( Frontend::cdn_ref( \WCPOS\WooCommercePOS\VERSION ), Frontend::cdn_ref() );
+	}
+
+	/**
+	 * The `next` web-bundle override still wins over any version.
+	 */
+	public function test_cdn_ref_next_override_wins_over_prerelease_version(): void {
+		$previous                     = $_ENV['WCPOS_WEB_BUNDLE_REF'] ?? null;
+		$_ENV['WCPOS_WEB_BUNDLE_REF'] = 'next';
+		try {
+			$this->assertSame( 'next', Frontend::cdn_ref( '2.0.0-beta.2' ) );
+		} finally {
+			if ( null === $previous ) {
+				unset( $_ENV['WCPOS_WEB_BUNDLE_REF'] );
+			} else {
+				$_ENV['WCPOS_WEB_BUNDLE_REF'] = $previous;
+			}
+		}
+	}
+
+	/**
 	 * The manifest and worker cache keys include both SQLite assets.
 	 */
 	public function test_manifest_and_worker_cache_keys_match_sqlite_asset_hashes(): void {
