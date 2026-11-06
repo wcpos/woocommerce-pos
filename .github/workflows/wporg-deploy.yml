@@ -28,6 +28,39 @@ jobs:
           # branch this workflow definition came from.
           ref: ${{ inputs.version && format('v{0}', inputs.version) || github.ref }}
 
+      # The lane scripts come from the WORKFLOW revision, checked out on their own AFTER the
+      # release tree (a root checkout into a non-repository directory wipes it), because a
+      # manual run of an older tag checks out a tree that predates them. The nested directory
+      # starts with a dot so .distignore keeps it out of the deploy.
+      - name: 🧰 Checkout release tooling (workflow revision)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tooling
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      # Before 2.0 GA a 1.11 patch deploys to trunk as always (pre-ga). Once a stable 2.x
+      # release exists, a 1.11 patch may only add tags/<version>/, so trunk/, assets/ and the
+      # Stable tag stay on 2.x (post-ga). Decided from the repo's releases at run time; any
+      # unknown fails the run here, before the build.
+      - name: 🔀 Choose the WordPress.org lane
+        id: lane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ inputs.version || github.event.release.tag_name }}
+        run: |
+          version=${RELEASE_VERSION#v}
+          lane=$(bash "$GITHUB_WORKSPACE/.release-tooling/.github/scripts/release-lane.sh" "$version")
+          if [[ "$lane" != pre-ga && "$lane" != post-ga ]]; then
+            echo "::error::Unknown WordPress.org lane '$lane'"
+            exit 1
+          fi
+          echo "lane=$lane" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "WordPress.org lane for $version: **$lane**" >> "$GITHUB_STEP_SUMMARY"
+
       - name: 🏗 Setup pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
 
@@ -54,6 +87,7 @@ jobs:
         run: sudo find /etc/apt/sources.list.d -type f ! -name 'ubuntu.sources' -delete
 
       - name: 📦 WordPress Plugin Deploy
+        if: steps.lane.outputs.lane == 'pre-ga'
         id: deploy
         uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # stable
         env:
@@ -62,3 +96,16 @@ jobs:
           SLUG: woocommerce-pos
           # Empty on release events, so the action derives it from the tag.
           VERSION: ${{ inputs.version }}
+
+      # The 10up action always writes trunk, so after GA a 1.11 patch goes through this
+      # tags-only commit instead. The dry run against a local SVN repository runs first.
+      - name: 🏷 WordPress.org tag only (1.x patch after 2.0)
+        if: steps.lane.outputs.lane == 'post-ga'
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          VERSION: ${{ steps.lane.outputs.version }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y subversion
+          bash "$GITHUB_WORKSPACE/.release-tooling/.github/scripts/test-wporg-tag-only.sh"
+          bash "$GITHUB_WORKSPACE/.release-tooling/.github/scripts/wporg-tag-only.sh" woocommerce-pos "$VERSION" "$GITHUB_WORKSPACE"
