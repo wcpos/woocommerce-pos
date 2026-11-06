@@ -88,7 +88,7 @@ class Ledger {
 	 *
 	 * @var string[]
 	 */
-	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'authorized_at_gmt', 'provider_refs', 'receipt' );
+	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'capture_mode', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'authorized_at_gmt', 'provider_refs', 'receipt' );
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	/** Only captured money pays a sale (ADR 0040 rule 1, D6): an authorization is money in motion. */
@@ -573,6 +573,29 @@ class Ledger {
 	}
 
 	/**
+	 * Select the till's allowed connection, defaulting to the primary for existing callers.
+	 *
+	 * @param array $descriptor Payment method descriptor.
+	 * @param array $input      Payment input.
+	 * @return array|WP_Error
+	 */
+	private function requested_capture( array $descriptor, array $input ) {
+		if ( ! array_key_exists( 'capture_mode', $input ) ) {
+			return $descriptor['capture'];
+		}
+		$mode = $input['capture_mode'];
+		$capture = is_string( $mode ) ? Descriptor_Builder::capture_entry( $descriptor, $mode ) : null;
+		if ( null === $capture ) {
+			return new WP_Error(
+				'wcpos_capture_mode_not_allowed',
+				__( 'This till asked for a reader connection the store does not allow for this payment method.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+		return $capture;
+	}
+
+	/**
 	 * Validate and record money already taken.
 	 *
 	 * @param WC_Order           $order   Order object.
@@ -594,6 +617,13 @@ class Ledger {
 		$rows   = $this->read( $order );
 		$stored = $this->find_in_rows( $rows, strtolower( $input['id'] ) );
 		if ( $stored ) {
+			if ( isset( $input['capture_mode'] ) &amp;&amp; is_string( $input['capture_mode'] ) &amp;&amp; $input['capture_mode'] !== $stored['capture_mode'] ) {
+				return new WP_Error(
+					'wcpos_capture_mode_conflict',
+					__( 'This payment was started on a different reader connection.', 'woocommerce-pos' ),
+					array( 'status' => 409 )
+				);
+			}
 			return $this->replay( $order, $stored, $input, $amount, $currency ); // A route replay heals in Command_Log::run().
 		}
 		// A closed sale takes no new tender (§4.2). A paid one keeps the refused-row record below
@@ -607,7 +637,12 @@ class Ledger {
 		if ( is_wp_error( $descriptor ) ) {
 			return $descriptor;
 		}
-		if ( ! $this->is_recordable( $descriptor ) ) {
+		$capture = $this->requested_capture( $descriptor, $input );
+		if ( is_wp_error( $capture ) ) {
+			return $capture;
+		}
+		// An omitted mode uses the primary capture block, whose capabilities live at the top level.
+		if ( ! $this->is_recordable( $capture + array( 'capabilities' => $descriptor['capabilities'] ) ) ) {
 			return new WP_Error(
 				'wcpos_method_not_recordable',
 				__( 'This payment method cannot be recorded; it has to run its own payment leg.', 'woocommerce-pos' ),
@@ -627,7 +662,7 @@ class Ledger {
 				return $this->invalid( __( 'Tendered amount is invalid for this payment method.', 'woocommerce-pos' ) );
 			}
 			$value = wc_format_decimal( $input['tendered'], wc_get_price_decimals() );
-			if ( 'cash' !== $descriptor['kind'] || empty( $descriptor['capabilities']['change'] ) || '' === $value || ! is_numeric( $value ) || Money::minor( $value ) &lt; Money::minor( $amount ) ) {
+			if ( 'cash' !== $descriptor['kind'] || empty( ( $capture['capabilities'] ?? $descriptor['capabilities'] )['change'] ) || '' === $value || ! is_numeric( $value ) || Money::minor( $value ) &lt; Money::minor( $amount ) ) {
 				return $this->invalid( __( 'Tendered amount is invalid for this payment method.', 'woocommerce-pos' ) );
 			}
 			$tendered = Money::normalize( $value );
@@ -640,9 +675,9 @@ class Ledger {
 				'source'          => 'app',
 				'order_id'        => $order->get_id(),
 				'method_id'       => $descriptor['id'],
-				'provider'        => $descriptor['capture']['provider'],
+				'provider'        => $capture['provider'],
 				'kind'            => $descriptor['kind'],
-				'capture_mode'    => $descriptor['capture']['mode'],
+				'capture_mode'    => $capture['mode'],
 				'amount'          => $amount,
 				'currency'        => $currency,
 				'tendered'        => $tendered,
@@ -790,6 +825,13 @@ class Ledger {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( $row ) {
+			if ( isset( $input['capture_mode'] ) &amp;&amp; is_string( $input['capture_mode'] ) &amp;&amp; $input['capture_mode'] !== $row['capture_mode'] ) {
+				return new WP_Error(
+					'wcpos_capture_mode_conflict',
+					__( 'This payment was started on a different reader connection.', 'woocommerce-pos' ),
+					array( 'status' => 409 )
+				);
+			}
 			$replayed = $this->replay( $order, $row, $input, $amount, $currency );
 			if ( is_wp_error( $replayed ) ) {
 				return $replayed;
@@ -843,6 +885,10 @@ class Ledger {
 				'handoff' => $handoff,
 			);
 		}
+		$capture = $this->requested_capture( $descriptor, $input );
+		if ( is_wp_error( $capture ) ) {
+			return $capture;
+		}
 		// Only a NEW leg needs the method enabled: a replay or resume above answers what already started.
 		if ( ! $descriptor['pos_enabled'] ) {
 			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is disabled.', 'woocommerce-pos' ), array( 'status' => 403 ) );
@@ -884,9 +930,9 @@ class Ledger {
 				'commands' => $this->with_command( array(), $command )['commands'] ?? array(),
 				'source' => in_array( $input['source'] ?? '', self::SOURCES, true ) ? $input['source'] : 'app',
 				'method_id' => $descriptor['id'],
-				'provider' => $descriptor['capture']['provider'],
+				'provider' => $capture['provider'],
 				'kind' => $descriptor['kind'],
-				'capture_mode' => $descriptor['capture']['mode'],
+				'capture_mode' => $capture['mode'],
 				'amount' => $amount,
 				'currency' => $currency,
 				'status' => 'pending',
@@ -1075,7 +1121,8 @@ class Ledger {
 		$difference = $valid ? Money::minor( $confirmed ) - Money::minor( $row['amount'] ) : 0;
 		$currency   = ! array_key_exists( 'currency', $new ) || $new['currency'] === $row['currency'];
 		$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
-		$tip        = $difference > 0 &amp;&amp; 'on_reader' === ( $descriptor['capabilities']['tips'] ?? 'none' );
+		$capture    = $descriptor ? Descriptor_Builder::capture_entry( $descriptor, (string) $row['capture_mode'] ) : null;
+		$tip        = $difference > 0 &amp;&amp; 'on_reader' === ( ( $capture['capabilities'] ?? $descriptor['capabilities'] )['tips'] ?? 'none' );
 		if ( ! $valid || ! $currency || ( 0 !== $difference &amp;&amp; ! $tip ) ) {
 			$applied['status']         = 'failed';
 			$applied['failure_reason'] = 'amount_mismatch';
@@ -2341,8 +2388,10 @@ class Ledger {
 	 */
 	private function tipped( array $old, array $new ): bool {
 		$tip = Money::minor( $new['tip'] ?? 0 );
+		$descriptor = Descriptor_Builder::instance()->get( (string) $old['method_id'] );
+		$capture = $descriptor ? Descriptor_Builder::capture_entry( $descriptor, (string) $old['capture_mode'] ) : null;
 		return 'captured' === $new['status'] &amp;&amp; null === ( $old['tip'] ?? null ) &amp;&amp; $tip > 0 &amp;&amp; Money::minor( $new['amount'] ) === Money::minor( $old['amount'] ) + $tip
-			&amp;&amp; 'on_reader' === ( Descriptor_Builder::instance()->get( (string) $old['method_id'] )['capabilities']['tips'] ?? 'none' );
+			&amp;&amp; 'on_reader' === ( ( $capture['capabilities'] ?? $descriptor['capabilities'] )['tips'] ?? 'none' );
 	}
 
 	/**
@@ -2949,7 +2998,7 @@ class Ledger {
 	}
 
 	/**
-	 * Whether a descriptor may be recorded through `POST orders/{id}/payments`.
+	 * Whether a capture entry may be recorded through `POST orders/{id}/payments`.
 	 *
 	 * Record asserts money that was already taken, so it is only for methods that take
 	 * it away from the server: `manual` methods handed over at the till, and `device`
@@ -2958,14 +3007,14 @@ class Ledger {
 	 * has to run its own leg through `intent`/`capture`, so a caller-asserted captured
 	 * row here would mark the order paid with no provider transaction behind it.
 	 *
-	 * @param array $descriptor Payment method descriptor.
+	 * @param array $capture Selected capture entry.
 	 */
-	private function is_recordable( array $descriptor ): bool {
-		if ( 'manual' === ( $descriptor['capture']['mode'] ?? '' ) ) {
+	private function is_recordable( array $capture ): bool {
+		if ( 'manual' === ( $capture['mode'] ?? '' ) ) {
 			return true;
 		}
 
-		return in_array( (string) ( $descriptor['capabilities']['offline'] ?? 'none' ), array( 'record', 'queue' ), true );
+		return in_array( (string) ( $capture['capabilities']['offline'] ?? 'none' ), array( 'record', 'queue' ), true );
 	}
 
 	/**
@@ -3075,7 +3124,7 @@ class Ledger {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="wcpos_admin_screen_handlers.html">wcpos_admin_screen_handlers</a></li><li><a href="wcpos_content_security_policy.html">wcpos_content_security_policy</a></li><li><a href="wcpos_development_mode.html">wcpos_development_mode</a></li><li><a href="wcpos_font_pack_sources.html">wcpos_font_pack_sources</a></li><li><a href="wcpos_font_packs.html">wcpos_font_packs</a></li><li><a href="wcpos_license_settings.html">wcpos_license_settings</a></li><li><a href="wcpos_payment_gateway_readers.html">wcpos_payment_gateway_readers</a></li><li><a href="wcpos_payment_gateways_settings.html">wcpos_payment_gateways_settings</a></li><li><a href="wcpos_payment_method_capture_mode.html">wcpos_payment_method_capture_mode</a></li><li><a href="wcpos_payment_method_fields.html">wcpos_payment_method_fields</a></li><li><a href="wcpos_payment_method_kind.html">wcpos_payment_method_kind</a></li><li><a href="wcpos_payment_recorded.html">wcpos_payment_recorded</a></li><li><a href="wcpos_payment_refused.html">wcpos_payment_refused</a></li><li><a href="wcpos_pre_save_%257B$id%257D_settings.html">wcpos_pre_save_{$id}_settings</a></li><li><a href="wcpos_receipt_data.html">wcpos_receipt_data</a></li><li><a href="wcpos_refund_allocated.html">wcpos_refund_allocated</a></li><li><a href="wcpos_register_settings_sections.html">wcpos_register_settings_sections</a></li><li><a href="wcpos_report_data.html">wcpos_report_data</a></li><li><a href="wcpos_reports.html">wcpos_reports</a></li><li><a href="wcpos_saved_%257B$id%257D_settings.html">wcpos_saved_{$id}_settings</a></li><li><a href="wcpos_template_gallery_preview_base_url.html">wcpos_template_gallery_preview_base_url</a></li><li><a href="wcpos_web_bundle_ref.html">wcpos_web_bundle_ref</a></li><li><a href="wcpos_%257B$id%257D_settings.html">wcpos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="wcpos_active_receipt_template.html">wcpos_active_receipt_template</a></li><li><a href="wcpos_admin_notices.html">wcpos_admin_notices</a></li><li><a href="wcpos_inline_vars.html">wcpos_inline_vars</a></li><li><a href="wcpos_jwt_access_token_expire.html">wcpos_jwt_access_token_expire</a></li><li><a href="wcpos_jwt_refresh_token_before_sign.html">wcpos_jwt_refresh_token_before_sign</a></li><li><a href="wcpos_jwt_refresh_token_expire.html">wcpos_jwt_refresh_token_expire</a></li><li><a href="wcpos_locate_template.html">wcpos_locate_template</a></li><li><a href="wcpos_wp_overnight_pdf_templates_enabled.html">wcpos_wp_overnight_pdf_templates_enabled</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="wcpos_admin_screen_handlers.html">wcpos_admin_screen_handlers</a></li><li><a href="wcpos_content_security_policy.html">wcpos_content_security_policy</a></li><li><a href="wcpos_development_mode.html">wcpos_development_mode</a></li><li><a href="wcpos_font_pack_sources.html">wcpos_font_pack_sources</a></li><li><a href="wcpos_font_packs.html">wcpos_font_packs</a></li><li><a href="wcpos_license_settings.html">wcpos_license_settings</a></li><li><a href="wcpos_payment_gateway_readers.html">wcpos_payment_gateway_readers</a></li><li><a href="wcpos_payment_gateways_settings.html">wcpos_payment_gateways_settings</a></li><li><a href="wcpos_payment_method_capture_mode.html">wcpos_payment_method_capture_mode</a></li><li><a href="wcpos_payment_method_capture_modes.html">wcpos_payment_method_capture_modes</a></li><li><a href="wcpos_payment_method_fields.html">wcpos_payment_method_fields</a></li><li><a href="wcpos_payment_method_kind.html">wcpos_payment_method_kind</a></li><li><a href="wcpos_payment_recorded.html">wcpos_payment_recorded</a></li><li><a href="wcpos_payment_refused.html">wcpos_payment_refused</a></li><li><a href="wcpos_pre_save_%257B$id%257D_settings.html">wcpos_pre_save_{$id}_settings</a></li><li><a href="wcpos_receipt_data.html">wcpos_receipt_data</a></li><li><a href="wcpos_refund_allocated.html">wcpos_refund_allocated</a></li><li><a href="wcpos_register_settings_sections.html">wcpos_register_settings_sections</a></li><li><a href="wcpos_report_data.html">wcpos_report_data</a></li><li><a href="wcpos_reports.html">wcpos_reports</a></li><li><a href="wcpos_saved_%257B$id%257D_settings.html">wcpos_saved_{$id}_settings</a></li><li><a href="wcpos_template_gallery_preview_base_url.html">wcpos_template_gallery_preview_base_url</a></li><li><a href="wcpos_web_bundle_ref.html">wcpos_web_bundle_ref</a></li><li><a href="wcpos_%257B$id%257D_settings.html">wcpos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="wcpos_active_receipt_template.html">wcpos_active_receipt_template</a></li><li><a href="wcpos_admin_notices.html">wcpos_admin_notices</a></li><li><a href="wcpos_inline_vars.html">wcpos_inline_vars</a></li><li><a href="wcpos_jwt_access_token_expire.html">wcpos_jwt_access_token_expire</a></li><li><a href="wcpos_jwt_refresh_token_before_sign.html">wcpos_jwt_refresh_token_before_sign</a></li><li><a href="wcpos_jwt_refresh_token_expire.html">wcpos_jwt_refresh_token_expire</a></li><li><a href="wcpos_locate_template.html">wcpos_locate_template</a></li><li><a href="wcpos_wp_overnight_pdf_templates_enabled.html">wcpos_wp_overnight_pdf_templates_enabled</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li></ul>
 </nav>
 
 <br class="clear">

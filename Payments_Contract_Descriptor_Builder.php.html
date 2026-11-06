@@ -172,6 +172,21 @@ class Descriptor_Builder {
 	}
 
 	/**
+	 * Look up an allowed connection and its capabilities.
+	 *
+	 * @param array  $descriptor Payment method descriptor.
+	 * @param string $mode       Bare capture mode.
+	 */
+	public static function capture_entry( array $descriptor, string $mode ): ?array {
+		foreach ( $descriptor['capture']['modes'] as $entry ) {
+			if ( $mode === $entry['mode'] ) {
+				return $entry;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Assemble one descriptor in wire-key order.
 	 *
 	 * @param WC_Payment_Gateway $gateway  Gateway instance.
@@ -188,20 +203,54 @@ class Descriptor_Builder {
 			) : null;
 		// The filter may answer with a provider-scoped key (`device:stripe`); the
 		// wire mode stays bare and the provider only steers the handler lookup.
-		$mode_key         = self::resolve_mode( $gateway );
-		$mode_parts       = explode( ':', $mode_key, 2 );
-		$mode             = $mode_parts[0];
-		$registry         = Capture_Mode_Registry::instance();
-		$handler          = $registry->resolve( $mode, $mode_parts[1] ?? null );
-		if ( ! $handler ) {
-			if ( empty( self::$logged_missing_modes[ $mode ] ) ) {
-				Logger::log( sprintf( 'No WCPOS capture-mode handler registered for "%s"; using webview.', $mode ) );
-				self::$logged_missing_modes[ $mode ] = true;
+		$mode_keys = array( self::resolve_mode( $gateway ) );
+		/**
+		 * Filters the ordered capture modes allowed for a POS payment method.
+		 *
+		 * @since 2.0.0
+		 * @hook wcpos_payment_method_capture_modes
+		 *
+		 * @param array              $mode_keys Capture mode keys, optionally provider-scoped.
+		 * @param WC_Payment_Gateway $gateway   Gateway instance.
+		 */
+		// A filter answering a bare string (the singular hook's shape) must not fatal every payment.
+		$mode_keys = array_filter( (array) apply_filters( 'wcpos_payment_method_capture_modes', $mode_keys, $gateway ), 'is_string' );
+		$registry  = Capture_Mode_Registry::instance();
+		$resolved  = array();
+		foreach ( array_unique( $mode_keys ) as $mode_key ) {
+			$mode_parts = explode( ':', $mode_key, 2 );
+			$mode       = $mode_parts[0];
+			$handler    = $registry->resolve( $mode, $mode_parts[1] ?? null );
+			if ( ! $handler ) {
+				if ( empty( self::$logged_missing_modes[ $mode ] ) ) {
+					Logger::log( sprintf( 'No WCPOS capture-mode handler registered for "%s"; ignoring mode.', $mode ) );
+					self::$logged_missing_modes[ $mode ] = true;
+				}
+				continue;
 			}
-			$mode    = 'webview';
-			$handler = $registry->get( $mode );
+			$resolved[ $mode_key ] = $handler->describe( $gateway );
 		}
-		$described    = $handler ? $handler->describe( $gateway ) : array();
+		if ( empty( $resolved ) ) {
+			$handler = $registry->get( 'webview' );
+			$resolved['webview'] = $handler ? $handler->describe( $gateway ) : array();
+		}
+		$modes = array();
+		foreach ( $resolved as $key => $description ) {
+			$entry = (array) ( $description['capture'] ?? array() );
+			$bare  = isset( $entry['mode'] ) ? (string) $entry['mode'] : explode( ':', $key, 2 )[0];
+			if ( in_array( $bare, array_column( $modes, 'mode' ), true ) ) {
+				continue; // `device` and `device:stripe` name one connection; the till picks by bare mode.
+			}
+			$modes[] = array(
+				'mode'     => $bare,
+				'provider' => isset( $entry['provider'] ) &amp;&amp; is_string( $entry['provider'] ) ? $entry['provider'] : null,
+				'hardware' => isset( $entry['hardware'] ) &amp;&amp; is_array( $entry['hardware'] ) ? $entry['hardware'] : null,
+				'capabilities' => self::normalize_capabilities( (array) ( $description['capabilities'] ?? array() ) ),
+				'provider_data' => (array) ( $description['provider_data'] ?? array() ),
+			);
+		}
+		$mode         = $modes[0]['mode'];
+		$described    = reset( $resolved );
 		$capture      = (array) ( $described['capture'] ?? array() );
 		$capabilities = (array) ( $described['capabilities'] ?? array() );
 		$provider     = $capture['provider'] ?? null;
@@ -211,12 +260,6 @@ class Descriptor_Builder {
 			? $gateway_settings['order_status'] : 'completed';
 		$order_status = 0 === strpos( $order_status, 'wc-' ) ? substr( $order_status, 3 ) : $order_status;
 		$provider_data = (array) ( $described['provider_data'] ?? array() );
-		$amount        = array( 'partial' => (bool) ( $capabilities['amount']['partial'] ?? false ) );
-		foreach ( array( 'min', 'max' ) as $bound ) {
-			if ( isset( $capabilities['amount'][ $bound ] ) &amp;&amp; is_numeric( $capabilities['amount'][ $bound ] ) ) {
-				$amount[ $bound ] = Money::normalize( $capabilities['amount'][ $bound ] );
-			}
-		}
 
 		$descriptor = array(
 			'schema'        => 1,
@@ -230,18 +273,9 @@ class Descriptor_Builder {
 				'provider'          => is_string( $provider ) ? $provider : null,
 				'hardware'          => isset( $capture['hardware'] ) &amp;&amp; is_array( $capture['hardware'] ) ? $capture['hardware'] : null,
 				'webview_available' => (bool) ( $capture['webview_available'] ?? false ),
+				'modes'             => $modes,
 			),
-			'capabilities'  => array(
-				'amount'  => $amount,
-				'change'  => (bool) ( $capabilities['change'] ?? false ),
-				'refunds' => array(
-					'via'     => (string) ( $capabilities['refunds']['via'] ?? 'none' ),
-					'partial' => (bool) ( $capabilities['refunds']['partial'] ?? false ),
-				),
-				'tips'    => (string) ( $capabilities['tips'] ?? 'none' ),
-				'offline' => (string) ( $capabilities['offline'] ?? 'none' ),
-				'void'    => (bool) ( $capabilities['void'] ?? false ),
-			),
+			'capabilities'  => self::normalize_capabilities( $capabilities ),
 			'defaults'      => array(
 				'order_status' => $order_status ? $order_status : 'completed',
 				'rounding' => $rounding,
@@ -254,6 +288,32 @@ class Descriptor_Builder {
 			$descriptor['fields'] = $fields;
 		}
 		return $descriptor;
+	}
+
+	/**
+	 * Normalize a handler's capabilities with the contract defaults.
+	 *
+	 * @param array $capabilities Handler capabilities.
+	 */
+	private static function normalize_capabilities( array $capabilities ): array {
+		$amount = array( 'partial' => (bool) ( $capabilities['amount']['partial'] ?? false ) );
+		foreach ( array( 'min', 'max' ) as $bound ) {
+			if ( isset( $capabilities['amount'][ $bound ] ) &amp;&amp; is_numeric( $capabilities['amount'][ $bound ] ) ) {
+				$amount[ $bound ] = Money::normalize( $capabilities['amount'][ $bound ] );
+			}
+		}
+
+		return array(
+			'amount'  => $amount,
+			'change'  => (bool) ( $capabilities['change'] ?? false ),
+			'refunds' => array(
+				'via'     => (string) ( $capabilities['refunds']['via'] ?? 'none' ),
+				'partial' => (bool) ( $capabilities['refunds']['partial'] ?? false ),
+			),
+			'tips'    => (string) ( $capabilities['tips'] ?? 'none' ),
+			'offline' => (string) ( $capabilities['offline'] ?? 'none' ),
+			'void'    => (bool) ( $capabilities['void'] ?? false ),
+		);
 	}
 }
 </code></pre>
@@ -274,7 +334,7 @@ class Descriptor_Builder {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="wcpos_admin_screen_handlers.html">wcpos_admin_screen_handlers</a></li><li><a href="wcpos_content_security_policy.html">wcpos_content_security_policy</a></li><li><a href="wcpos_development_mode.html">wcpos_development_mode</a></li><li><a href="wcpos_font_pack_sources.html">wcpos_font_pack_sources</a></li><li><a href="wcpos_font_packs.html">wcpos_font_packs</a></li><li><a href="wcpos_license_settings.html">wcpos_license_settings</a></li><li><a href="wcpos_payment_gateway_readers.html">wcpos_payment_gateway_readers</a></li><li><a href="wcpos_payment_gateways_settings.html">wcpos_payment_gateways_settings</a></li><li><a href="wcpos_payment_method_capture_mode.html">wcpos_payment_method_capture_mode</a></li><li><a href="wcpos_payment_method_fields.html">wcpos_payment_method_fields</a></li><li><a href="wcpos_payment_method_kind.html">wcpos_payment_method_kind</a></li><li><a href="wcpos_payment_recorded.html">wcpos_payment_recorded</a></li><li><a href="wcpos_payment_refused.html">wcpos_payment_refused</a></li><li><a href="wcpos_pre_save_%257B$id%257D_settings.html">wcpos_pre_save_{$id}_settings</a></li><li><a href="wcpos_receipt_data.html">wcpos_receipt_data</a></li><li><a href="wcpos_refund_allocated.html">wcpos_refund_allocated</a></li><li><a href="wcpos_register_settings_sections.html">wcpos_register_settings_sections</a></li><li><a href="wcpos_report_data.html">wcpos_report_data</a></li><li><a href="wcpos_reports.html">wcpos_reports</a></li><li><a href="wcpos_saved_%257B$id%257D_settings.html">wcpos_saved_{$id}_settings</a></li><li><a href="wcpos_template_gallery_preview_base_url.html">wcpos_template_gallery_preview_base_url</a></li><li><a href="wcpos_web_bundle_ref.html">wcpos_web_bundle_ref</a></li><li><a href="wcpos_%257B$id%257D_settings.html">wcpos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="wcpos_active_receipt_template.html">wcpos_active_receipt_template</a></li><li><a href="wcpos_admin_notices.html">wcpos_admin_notices</a></li><li><a href="wcpos_inline_vars.html">wcpos_inline_vars</a></li><li><a href="wcpos_jwt_access_token_expire.html">wcpos_jwt_access_token_expire</a></li><li><a href="wcpos_jwt_refresh_token_before_sign.html">wcpos_jwt_refresh_token_before_sign</a></li><li><a href="wcpos_jwt_refresh_token_expire.html">wcpos_jwt_refresh_token_expire</a></li><li><a href="wcpos_locate_template.html">wcpos_locate_template</a></li><li><a href="wcpos_wp_overnight_pdf_templates_enabled.html">wcpos_wp_overnight_pdf_templates_enabled</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="wcpos_admin_screen_handlers.html">wcpos_admin_screen_handlers</a></li><li><a href="wcpos_content_security_policy.html">wcpos_content_security_policy</a></li><li><a href="wcpos_development_mode.html">wcpos_development_mode</a></li><li><a href="wcpos_font_pack_sources.html">wcpos_font_pack_sources</a></li><li><a href="wcpos_font_packs.html">wcpos_font_packs</a></li><li><a href="wcpos_license_settings.html">wcpos_license_settings</a></li><li><a href="wcpos_payment_gateway_readers.html">wcpos_payment_gateway_readers</a></li><li><a href="wcpos_payment_gateways_settings.html">wcpos_payment_gateways_settings</a></li><li><a href="wcpos_payment_method_capture_mode.html">wcpos_payment_method_capture_mode</a></li><li><a href="wcpos_payment_method_capture_modes.html">wcpos_payment_method_capture_modes</a></li><li><a href="wcpos_payment_method_fields.html">wcpos_payment_method_fields</a></li><li><a href="wcpos_payment_method_kind.html">wcpos_payment_method_kind</a></li><li><a href="wcpos_payment_recorded.html">wcpos_payment_recorded</a></li><li><a href="wcpos_payment_refused.html">wcpos_payment_refused</a></li><li><a href="wcpos_pre_save_%257B$id%257D_settings.html">wcpos_pre_save_{$id}_settings</a></li><li><a href="wcpos_receipt_data.html">wcpos_receipt_data</a></li><li><a href="wcpos_refund_allocated.html">wcpos_refund_allocated</a></li><li><a href="wcpos_register_settings_sections.html">wcpos_register_settings_sections</a></li><li><a href="wcpos_report_data.html">wcpos_report_data</a></li><li><a href="wcpos_reports.html">wcpos_reports</a></li><li><a href="wcpos_saved_%257B$id%257D_settings.html">wcpos_saved_{$id}_settings</a></li><li><a href="wcpos_template_gallery_preview_base_url.html">wcpos_template_gallery_preview_base_url</a></li><li><a href="wcpos_web_bundle_ref.html">wcpos_web_bundle_ref</a></li><li><a href="wcpos_%257B$id%257D_settings.html">wcpos_{$id}_settings</a></li></ul><h3>Filters</h3><ul><li><a href="wcpos_active_receipt_template.html">wcpos_active_receipt_template</a></li><li><a href="wcpos_admin_notices.html">wcpos_admin_notices</a></li><li><a href="wcpos_inline_vars.html">wcpos_inline_vars</a></li><li><a href="wcpos_jwt_access_token_expire.html">wcpos_jwt_access_token_expire</a></li><li><a href="wcpos_jwt_refresh_token_before_sign.html">wcpos_jwt_refresh_token_before_sign</a></li><li><a href="wcpos_jwt_refresh_token_expire.html">wcpos_jwt_refresh_token_expire</a></li><li><a href="wcpos_locate_template.html">wcpos_locate_template</a></li><li><a href="wcpos_wp_overnight_pdf_templates_enabled.html">wcpos_wp_overnight_pdf_templates_enabled</a></li><li><a href="woocommerce_pos_tools_settings.html">woocommerce_pos_tools_settings</a></li></ul>
 </nav>
 
 <br class="clear">
