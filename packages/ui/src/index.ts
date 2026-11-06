@@ -35,6 +35,8 @@ export { FormRow, type FormRowProps } from './form-row';
 export { FormSection, type FormSectionProps } from './form-section';
 export { FilterTabs, type FilterTabsProps, type FilterTabItem } from './filter-tabs';
 export { Chip, type ChipProps, type ChipVariant, type ChipShape, type ChipSize } from './chip';
+export { NavGroup, type NavGroupProps } from './nav-group';
+export { NavItem, type NavItemProps, type SeverityBadge, type TextBadge } from './nav-item';
 export {
 	Avatar,
 	getInitials,
