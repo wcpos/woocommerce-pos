@@ -706,4 +706,23 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 		$this->assertMatchesRegularExpression( '/DejaVuSans-Bold/', implode( ' ', $fonts ) );
 		$this->assertNotContains( 'Helvetica-Oblique', $fonts );
 	}
+
+	/**
+	 * The image size limit is fixed, not seeded from the host's memory_limit.
+	 */
+	public function test_image_byte_size_limit_ignores_the_host_memory_limit(): void {
+		// Arrange.
+		$original = ini_get( 'memory_limit' );
+		try {
+			foreach ( array( '-1', '512M' ) as $memory_limit ) {
+				ini_set( 'memory_limit', $memory_limit ); // phpcs:ignore WordPress.PHP.IniSet.memory_limit_Disallowed
+				// Act.
+				$dompdf = $this->invoke_private_method( 'build', array( '<p>Receipt</p>', array() ) );
+				// Assert.
+				$this->assertSame( 134217728, $dompdf->getOptions()->getImageByteSizeLimit(), 'memory_limit ' . $memory_limit );
+			}
+		} finally {
+			ini_set( 'memory_limit', $original ); // phpcs:ignore WordPress.PHP.IniSet.memory_limit_Disallowed
+		}
+	}
 }
