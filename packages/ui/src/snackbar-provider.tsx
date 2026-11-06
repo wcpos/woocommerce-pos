@@ -4,8 +4,10 @@ import { Snackbar, SnackbarProps } from './snackbar';
 
 export type AddSnackbarInput = Omit<SnackbarProps, 'id'> & { id?: string };
 
-interface SnackbarContextValue {
+export interface SnackbarContextValue {
 	addSnackbar: (snackbar: AddSnackbarInput) => void;
+	/** Removes the snackbar with this id at once, without the slide-out. */
+	removeSnackbar: (id: string) => void;
 }
 
 export const SnackbarContext = React.createContext<SnackbarContextValue | null>(null);
@@ -85,7 +87,7 @@ export function SnackbarProvider({ children, boundsElement }: SnackbarProviderPr
 		: { left: 0, right: 0 };
 
 	return (
-		<SnackbarContext.Provider value={{ addSnackbar }}>
+		<SnackbarContext.Provider value={{ addSnackbar, removeSnackbar }}>
 			<div ref={containerRef} className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col">
 				<div
 					className="wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,32px)] wcpos:z-50 wcpos:overflow-hidden"

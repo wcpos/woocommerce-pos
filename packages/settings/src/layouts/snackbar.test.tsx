@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
 
-import { Snackbar } from '@wcpos/ui';
+import { Snackbar, SnackbarProvider, useSnackbar } from '@wcpos/ui';
 
 describe('Snackbar', () => {
 	afterEach(() => {
@@ -113,6 +113,26 @@ describe('Snackbar', () => {
 		expect(onRemove).toHaveBeenCalledTimes(1);
 	});
 
+	it('does not restart auto-dismiss when onRemove changes identity', () => {
+		vi.useFakeTimers();
+		const first = vi.fn();
+		const second = vi.fn();
+		const { rerender } = render(
+			<Snackbar id="save" status="success" message="Saved." onRemove={first} />
+		);
+
+		act(() => {
+			vi.advanceTimersByTime(1000);
+		});
+		rerender(<Snackbar id="save" status="success" message="Saved." onRemove={second} />);
+		act(() => {
+			vi.advanceTimersByTime(1300);
+		});
+
+		expect(first).not.toHaveBeenCalled();
+		expect(second).toHaveBeenCalledTimes(1);
+	});
+
 	it('auto-dismisses when actions is empty', () => {
 		vi.useFakeTimers();
 		const onRemove = vi.fn();
@@ -125,5 +145,35 @@ describe('Snackbar', () => {
 		});
 
 		expect(onRemove).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('SnackbarProvider', () => {
+	function Harness() {
+		const { addSnackbar, removeSnackbar } = useSnackbar();
+		return (
+			<>
+				<button type="button" onClick={() => addSnackbar({ id: 'note', message: 'Hello.' })}>
+					add
+				</button>
+				<button type="button" onClick={() => removeSnackbar('note')}>
+					remove
+				</button>
+			</>
+		);
+	}
+
+	it('removes a snackbar by id through useSnackbar', () => {
+		render(
+			<SnackbarProvider>
+				<Harness />
+			</SnackbarProvider>
+		);
+
+		fireEvent.click(screen.getByRole('button', { name: 'add' }));
+		expect(screen.getByText('Hello.')).not.toBeNull();
+
+		fireEvent.click(screen.getByRole('button', { name: 'remove' }));
+		expect(screen.queryByText('Hello.')).toBeNull();
 	});
 });

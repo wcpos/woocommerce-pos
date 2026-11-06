@@ -48,7 +48,13 @@ export {
 	type AvatarStatus,
 } from './avatar';
 export { Snackbar, type SnackbarProps, type SnackbarStatus } from './snackbar';
-export { SnackbarProvider, SnackbarContext, useSnackbar } from './snackbar-provider';
+export {
+	SnackbarProvider,
+	SnackbarContext,
+	useSnackbar,
+	type AddSnackbarInput,
+	type SnackbarContextValue,
+} from './snackbar-provider';
 export {
 	Table,
 	TableHeader,

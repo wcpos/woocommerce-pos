@@ -49,12 +49,19 @@ export function Snackbar({
 		return () => cancelAnimationFrame(frame);
 	}, [message]);
 
+	// The provider passes a new onRemove on every render; reading it through a
+	// ref keeps `dismiss` stable so those renders do not restart the timer.
+	const onRemoveRef = React.useRef(onRemove);
+	React.useLayoutEffect(() => {
+		onRemoveRef.current = onRemove;
+	});
+
 	// Slide out, then remove once the 300ms transition has finished.
 	const dismiss = React.useCallback(() => {
 		setVisible(false);
 		clearTimeout(removeTimer.current);
-		removeTimer.current = setTimeout(() => onRemove?.(), 300);
-	}, [onRemove]);
+		removeTimer.current = setTimeout(() => onRemoveRef.current?.(), 300);
+	}, []);
 
 	// Never call onRemove after unmount.
 	React.useEffect(() => () => clearTimeout(removeTimer.current), []);
