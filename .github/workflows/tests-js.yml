@@ -20,6 +20,8 @@ on:
       - ".github/scripts/sync-tested-up-to.sh"
       - ".github/scripts/test-sync-tested-up-to.sh"
       - ".github/scripts/test-tests-php-change-detection.sh"
+      - ".github/scripts/release-lane.sh"
+      - ".github/scripts/test-release-lane.sh"
       - ".github/workflows/*.yml"
       - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
@@ -43,6 +45,8 @@ on:
       - ".github/scripts/sync-tested-up-to.sh"
       - ".github/scripts/test-sync-tested-up-to.sh"
       - ".github/scripts/test-tests-php-change-detection.sh"
+      - ".github/scripts/release-lane.sh"
+      - ".github/scripts/test-release-lane.sh"
       - ".github/workflows/*.yml"
       - ".github/workflows/deploy-dev.yml"
       - ".github/workflows/push-js-strings.yml"
@@ -82,6 +86,9 @@ jobs:
 
       - name: Validate PHP test workflow triggers
         run: bash .github/scripts/test-tests-php-change-detection.sh
+
+      - name: Validate WordPress.org release lane
+        run: bash .github/scripts/test-release-lane.sh
 
       - name: Setup pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
