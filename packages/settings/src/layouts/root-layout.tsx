@@ -6,7 +6,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { ShellLayout } from '@wcpos/ui';
 
 import { Footer } from './footer';
-import { NavSidebar } from './nav-sidebar';
+import { SettingsNavSidebar } from './nav-sidebar';
 import ErrorFallback from '../components/error';
 import Notice from '../components/notice';
 import {
@@ -58,7 +58,10 @@ export function RootLayout() {
 	return (
 		<ShellLayout
 			sidebar={
-				<NavSidebar isOpen={isMobileNavOpen} onNavItemClick={() => setIsMobileNavOpen(false)} />
+				<SettingsNavSidebar
+					isOpen={isMobileNavOpen}
+					onNavItemClick={() => setIsMobileNavOpen(false)}
+				/>
 			}
 			title={
 				<h1 className="wcpos:text-lg wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">

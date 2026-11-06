@@ -36,7 +36,7 @@ export { FormSection, type FormSectionProps } from './form-section';
 export { FilterTabs, type FilterTabsProps, type FilterTabItem } from './filter-tabs';
 export { Chip, type ChipProps, type ChipVariant, type ChipShape, type ChipSize } from './chip';
 export { NavGroup, type NavGroupProps } from './nav-group';
-export { NavItem, type NavItemProps, type SeverityBadge, type TextBadge } from './nav-item';
+export { NavItem, type NavItemProps } from './nav-item';
 export { NavSidebar, type NavSidebarProps } from './nav-sidebar';
 export { ShellLayout, type ShellLayoutProps } from './shell-layout';
 export {

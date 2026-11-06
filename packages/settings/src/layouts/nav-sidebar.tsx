@@ -1,26 +1,25 @@
-import { NavSidebar as UINavSidebar } from '@wcpos/ui';
+import { NavGroup, NavSidebar } from '@wcpos/ui';
 
-import { NavGroup } from './nav-group';
-import { NavItem } from './nav-item';
+import { RouteNavItem } from './nav-item';
 import PosIcon from '../../assets/wcpos-icon.svg';
 import { useUpdateExtensionsCount } from '../screens/extensions/use-update-extensions-count';
 import { useUnreadLogCounts } from '../screens/logs/use-unread-log-counts';
 import { useRegisteredPages } from '../store/use-registry';
 import { t } from '../translations';
 
-interface NavSidebarProps {
+interface SettingsNavSidebarProps {
 	isOpen: boolean;
 	onNavItemClick?: () => void;
 }
 
-export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
+export function SettingsNavSidebar({ isOpen, onNavItemClick }: SettingsNavSidebarProps) {
 	const toolsPages = useRegisteredPages('tools');
 	const accountPages = useRegisteredPages('account');
 	const updateExtensionsCount = useUpdateExtensionsCount();
 	const unreadLogCounts = useUnreadLogCounts();
 
 	return (
-		<UINavSidebar
+		<NavSidebar
 			isOpen={isOpen}
 			brand={
 				<>
@@ -32,16 +31,16 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 			}
 		>
 			<NavGroup heading={t('common.settings')}>
-				<NavItem to="/general" label={t('common.general')} onClick={onNavItemClick} />
-				<NavItem to="/checkout" label={t('common.checkout')} onClick={onNavItemClick} />
-				<NavItem
+				<RouteNavItem to="/general" label={t('common.general')} onClick={onNavItemClick} />
+				<RouteNavItem to="/checkout" label={t('common.checkout')} onClick={onNavItemClick} />
+				<RouteNavItem
 					to="/cloud-print"
 					label={t('common.cloud_print', 'Cloud Print')}
 					onClick={onNavItemClick}
 				/>
-				<NavItem to="/access" label={t('common.access')} onClick={onNavItemClick} />
-				<NavItem to="/sessions" label={t('sessions.sessions')} onClick={onNavItemClick} />
-				<NavItem
+				<RouteNavItem to="/access" label={t('common.access')} onClick={onNavItemClick} />
+				<RouteNavItem to="/sessions" label={t('sessions.sessions')} onClick={onNavItemClick} />
+				<RouteNavItem
 					to="/extensions"
 					label={t('common.extensions', 'Extensions')}
 					badge={updateExtensionsCount ?? undefined}
@@ -50,28 +49,38 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 			</NavGroup>
 
 			<NavGroup heading={t('common.tools', 'Tools')}>
-				<NavItem
+				<RouteNavItem
 					to="/export-closures"
 					label={t('export_closures.title', 'Export closures')}
 					onClick={onNavItemClick}
 				/>
-				<NavItem
+				<RouteNavItem
 					to="/logs"
 					label={t('common.logs', 'Logs')}
 					badge={unreadLogCounts}
 					onClick={onNavItemClick}
 				/>
 				{toolsPages.map((page) => (
-					<NavItem key={page.id} to={`/${page.id}`} label={page.label} onClick={onNavItemClick} />
+					<RouteNavItem
+						key={page.id}
+						to={`/${page.id}`}
+						label={page.label}
+						onClick={onNavItemClick}
+					/>
 				))}
 			</NavGroup>
 
 			<NavGroup heading={t('common.account', 'Account')}>
-				<NavItem to="/license" label={t('common.license')} onClick={onNavItemClick} />
+				<RouteNavItem to="/license" label={t('common.license')} onClick={onNavItemClick} />
 				{accountPages.map((page) => (
-					<NavItem key={page.id} to={`/${page.id}`} label={page.label} onClick={onNavItemClick} />
+					<RouteNavItem
+						key={page.id}
+						to={`/${page.id}`}
+						label={page.label}
+						onClick={onNavItemClick}
+					/>
 				))}
 			</NavGroup>
-		</UINavSidebar>
+		</NavSidebar>
 	);
 }
