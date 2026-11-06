@@ -28,6 +28,11 @@ use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
  */
 class Menu {
 	/**
+	 * Origin the welcome screen's landing bundle (CSS and JS) loads from.
+	 */
+	const LANDING_CDN_ORIGIN = 'https://cdn.jsdelivr.net';
+
+	/**
 	 * Unique top level menu identifier.
 	 *
 	 * @var string
@@ -242,7 +247,11 @@ class Menu {
 
 			$is_development = isset( $_ENV['DEVELOPMENT'] )
 			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );
-			$url            = $is_development ? 'http://localhost:9000/' : 'https://cdn.jsdelivr.net/gh/wcpos/wp-admin-landing@2/assets/';
+			$url            = $is_development ? 'http://localhost:9000/' : self::LANDING_CDN_ORIGIN . '/gh/wcpos/wp-admin-landing@2/assets/';
+
+			if ( ! $is_development ) {
+				add_action( 'admin_print_styles', array( $this, 'print_landing_resource_hints' ), 1 );
+			}
 
 			// Enqueue the landing page CSS from CDN.
 			wp_enqueue_style(
@@ -277,6 +286,32 @@ class Menu {
 			// shares the bundle's localStorage identity, breaks the anon-bucket
 			// exposure, and double-fires CTA tracking.
 			wp_add_inline_script( 'wcpos-welcome', $this->landing_inline_script(), 'before' );
+		}
+	}
+
+	/**
+	 * Print connection warm-up hints for the welcome screen.
+	 *
+	 * Hooked to `admin_print_styles` at priority 1, ahead of core's styles at
+	 * 20, so DNS and TLS setup start before the stylesheets are requested.
+	 * Printed by hand because core hooks `wp_resource_hints` to `wp_head`
+	 * only, so that filter does nothing in wp-admin.
+	 *
+	 * The CDN preconnect has no `crossorigin`: welcome.css and welcome.js load
+	 * as plain `<link>` and `<script>` tags, and browsers keep CORS and
+	 * non-CORS connections apart, so a CORS preconnect would go unused.
+	 * PostHog's requests are CORS, so its preconnect keeps the attribute.
+	 *
+	 * A preconnect sends the merchant's IP to the host, so the PostHog line
+	 * prints only when the persisted tracking consent allows analytics.
+	 */
+	public function print_landing_resource_hints(): void {
+		echo '<link rel="preconnect" href="' . esc_url( self::LANDING_CDN_ORIGIN ) . '">' . "\n";
+		echo '<link rel="dns-prefetch" href="' . esc_url( self::LANDING_CDN_ORIGIN ) . '">' . "\n";
+
+		$analytics = Analytics::instance();
+		if ( $analytics->is_enabled() ) {
+			echo '<link rel="preconnect" href="' . esc_url( $analytics->get_host() ) . '" crossorigin>' . "\n";
 		}
 	}
 

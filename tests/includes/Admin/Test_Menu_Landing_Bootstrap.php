@@ -68,6 +68,7 @@ class Test_Menu_Landing_Bootstrap extends WP_UnitTestCase {
 	public function tearDown(): void {
 		SettingsService::instance()->save_settings( 'general', $this->original_general_settings );
 		remove_filter( 'pre_http_request', '__return_empty_array' );
+		remove_action( 'admin_print_styles', array( $this->menu, 'print_landing_resource_hints' ), 1 );
 		Analytics::reset_instance();
 		wp_set_current_user( 0 );
 		wp_deregister_script( 'wcpos-welcome' );
@@ -119,5 +120,91 @@ class Test_Menu_Landing_Bootstrap extends WP_UnitTestCase {
 		$this->menu->enqueue_landing_scripts_and_styles( $this->menu->toplevel_screen_id );
 
 		$this->assertStringNotContainsString( 'upgrade_cta_clicked', $this->inline_scripts( 'after' ) );
+	}
+
+	/**
+	 * Captures what the resource hint printer writes.
+	 *
+	 * @return string The printed hints.
+	 */
+	private function resource_hints(): string {
+		ob_start();
+		$this->menu->print_landing_resource_hints();
+
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * The landing page prints its hints ahead of core's styles (priority 20).
+	 */
+	public function test_landing_page_registers_resource_hints_before_admin_styles(): void {
+		$this->menu->enqueue_landing_scripts_and_styles( $this->menu->toplevel_screen_id );
+
+		$this->assertSame( 1, has_action( 'admin_print_styles', array( $this->menu, 'print_landing_resource_hints' ) ) );
+	}
+
+	/**
+	 * No other admin screen gets the hints.
+	 */
+	public function test_other_screens_get_no_resource_hints(): void {
+		$this->menu->enqueue_landing_scripts_and_styles( 'edit.php' );
+
+		$this->assertFalse( has_action( 'admin_print_styles', array( $this->menu, 'print_landing_resource_hints' ) ) );
+	}
+
+	/**
+	 * Development loads the bundle from localhost, so the CDN hints would be wasted.
+	 */
+	public function test_development_gets_no_resource_hints(): void {
+		$original_env        = $_ENV;
+		$_ENV['DEVELOPMENT'] = '1';
+
+		$this->menu->enqueue_landing_scripts_and_styles( $this->menu->toplevel_screen_id );
+		$_ENV = $original_env;
+
+		$this->assertFalse( has_action( 'admin_print_styles', array( $this->menu, 'print_landing_resource_hints' ) ) );
+	}
+
+	/**
+	 * With consent the CDN and PostHog hints are all printed.
+	 */
+	public function test_resource_hints_with_consent(): void {
+		$output = $this->resource_hints();
+
+		$this->assertStringContainsString( '<link rel="preconnect" href="https://cdn.jsdelivr.net">' . "\n", $output );
+		$this->assertStringContainsString( '<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">' . "\n", $output );
+		$this->assertStringContainsString( '<link rel="preconnect" href="https://ph.wcpos.com" crossorigin>' . "\n", $output );
+	}
+
+	/**
+	 * Without consent nothing connects to PostHog.
+	 */
+	public function test_resource_hints_without_consent_skip_posthog(): void {
+		$settings                     = $this->original_general_settings;
+		$settings['tracking_consent'] = 'denied';
+		SettingsService::instance()->save_settings( 'general', $settings );
+		Analytics::reset_instance();
+
+		$output = $this->resource_hints();
+
+		$this->assertStringContainsString( '<link rel="preconnect" href="https://cdn.jsdelivr.net">', $output );
+		$this->assertStringContainsString( '<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">', $output );
+		$this->assertStringNotContainsString( 'ph.wcpos.com', $output );
+	}
+
+	/**
+	 * The PostHog hint follows the configured analytics host.
+	 */
+	public function test_resource_hints_use_the_filtered_analytics_host(): void {
+		$host = static function () {
+			return 'https://analytics.example.com';
+		};
+		add_filter( 'wcpos_posthog_host', $host );
+
+		$output = $this->resource_hints();
+		remove_filter( 'wcpos_posthog_host', $host );
+
+		$this->assertStringContainsString( '<link rel="preconnect" href="https://analytics.example.com" crossorigin>', $output );
+		$this->assertStringNotContainsString( 'ph.wcpos.com', $output );
 	}
 }
