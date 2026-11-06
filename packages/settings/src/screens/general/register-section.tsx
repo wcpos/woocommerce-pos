@@ -9,7 +9,7 @@ import { FormRow, FormSection } from '../../components/form';
 import { FormSkeleton } from '../../components/skeleton';
 import useNotices from '../../hooks/use-notices';
 import { captureUpgradeCtaClicked } from '../../lib/analytics';
-import { t } from '../../translations';
+import { t, Trans } from '../../translations';
 
 import type { GeneralSettingsProps } from './index';
 
@@ -137,10 +137,22 @@ export function RegisterSection({ data, mutate }: RegisterSectionProps) {
 
 					{(
 						[
-							['variance_threshold', 'ask_manager', 'by_more_than', DEFAULT_VARIANCE_LIMIT],
-							['expected_close_time', 'close_reminder', 'close_at', DEFAULT_CLOSE_TIME],
+							[
+								'variance_threshold',
+								'ask_manager',
+								'ask_manager_limit',
+								'amount',
+								DEFAULT_VARIANCE_LIMIT,
+							],
+							[
+								'expected_close_time',
+								'close_reminder',
+								'close_reminder_time',
+								'time',
+								DEFAULT_CLOSE_TIME,
+							],
 						] as const
-					).map(([key, label, connector, defaultValue]) => {
+					).map(([key, label, message, slot, defaultValue]) => {
 						const input = {
 							id: key,
 							required: true,
@@ -168,16 +180,21 @@ export function RegisterSection({ data, mutate }: RegisterSectionProps) {
 										onChange={(enabled) => mutate({ [key]: enabled ? defaultValue : null })}
 									/>
 									{data[key] != null && (
-										<>
-											<label htmlFor={key}>{t('settings.' + connector)}</label>
-											<div className="wcpos:w-36">
-												{key === 'variance_threshold' ? (
-													<MoneyInput key={data[key]} {...input} symbol={symbol} />
-												) : (
-													<TimeInput key={data[key]} {...input} />
-												)}
-											</div>
-										</>
+										<Trans
+											i18nKey={'settings.' + message}
+											components={{
+												label: <label htmlFor={key} />,
+												[slot]: (
+													<div className="wcpos:w-36">
+														{key === 'variance_threshold' ? (
+															<MoneyInput key={data[key]} {...input} symbol={symbol} />
+														) : (
+															<TimeInput key={data[key]} {...input} />
+														)}
+													</div>
+												),
+											}}
+										/>
 									)}
 								</div>
 							</FormRow>
