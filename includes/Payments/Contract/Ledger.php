@@ -629,7 +629,7 @@ class Ledger {
 				return $this->invalid( __( 'Tendered amount is invalid for this payment method.', 'woocommerce-pos' ) );
 			}
 			$value = wc_format_decimal( $input['tendered'], wc_get_price_decimals() );
-			if ( 'cash' !== $descriptor['kind'] || empty( $descriptor['capabilities']['change'] ) || '' === $value || ! is_numeric( $value ) || Money::minor( $value ) < Money::minor( $amount ) ) {
+			if ( 'cash' !== $descriptor['kind'] || empty( ( $capture['capabilities'] ?? $descriptor['capabilities'] )['change'] ) || '' === $value || ! is_numeric( $value ) || Money::minor( $value ) < Money::minor( $amount ) ) {
 				return $this->invalid( __( 'Tendered amount is invalid for this payment method.', 'woocommerce-pos' ) );
 			}
 			$tendered = Money::normalize( $value );
