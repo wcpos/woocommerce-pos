@@ -36,6 +36,15 @@ class Pdf_Renderer {
 	private const FIT_HEIGHT_SEARCH_STEPS = 18;
 
 	/**
+	 * Dompdf's cap on an image's estimated decoded size: 128 MiB.
+	 *
+	 * Fixed so a receipt does not depend on the host's memory_limit (Dompdf
+	 * seeds the cap from it by default). The value matches what that default
+	 * gave on a 128M host, so such a host loses nothing.
+	 */
+	private const IMAGE_BYTE_SIZE_LIMIT = 134217728;
+
+	/**
 	 * Render an HTML document to PDF bytes.
 	 *
 	 * @param string $html HTML document to render.
@@ -190,6 +199,7 @@ class Pdf_Renderer {
 		$options->set( 'isRemoteEnabled', false );
 		$options->set( 'isPhpEnabled', false );
 		$options->set( 'isJavascriptEnabled', false );
+		$options->set( 'imageByteSizeLimit', self::IMAGE_BYTE_SIZE_LIMIT );
 		$options->set( 'defaultFont', isset( $opts['default_font'] ) ? (string) $opts['default_font'] : 'dejavu sans' );
 		// Keep Dompdf's bundled fonts as the font source (default fontDir), but
 		// direct its writable caches at a WCPOS-owned temp dir.
