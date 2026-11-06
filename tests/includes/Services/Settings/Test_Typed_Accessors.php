@@ -88,9 +88,101 @@ class Test_Typed_Accessors extends WP_UnitTestCase {
 		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_script_handles' => array( 'theme-script' ) ) );
 
 		$this->assertSame(
+			array( 'admin-bar', 'wc-add-to-cart', 'theme-script' ),
+			Settings::instance()->dequeue_script_handles()
+		);
+	}
+
+	/**
+	 * Below Stripe's fix the gated script joins the floor, ahead of the saved list.
+	 */
+	public function test_dequeue_scripts_stripe_below_fix_floors_gated_handle(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_script_handles' => array( 'theme-script' ) ) );
+
+		$this->assertSame(
+			array( 'admin-bar', 'wc-add-to-cart', 'wc-stripe-upe-classic', 'theme-script' ),
+			Settings::instance()->dequeue_script_handles( '11.1.0' )
+		);
+	}
+
+	/**
+	 * From Stripe's fix onwards the gated script is not dequeued.
+	 */
+	public function test_dequeue_scripts_stripe_at_fix_leaves_out_gated_handle(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_script_handles' => array( 'theme-script' ) ) );
+
+		foreach ( array( '11.1.1', '11.2.0' ) as $version ) {
+			$this->assertSame(
+				array( 'admin-bar', 'wc-add-to-cart', 'theme-script' ),
+				Settings::instance()->dequeue_script_handles( $version )
+			);
+		}
+	}
+
+	/**
+	 * A saved list from the old locked form loses the gated script from Stripe's fix onwards.
+	 */
+	public function test_dequeue_scripts_stripe_at_fix_strips_stale_saved_handle(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_script_handles' => array( 'wc-stripe-upe-classic', 'theme-script' ) ) );
+
+		$this->assertSame(
+			array( 'admin-bar', 'wc-add-to-cart', 'theme-script' ),
+			Settings::instance()->dequeue_script_handles( '11.1.1' )
+		);
+	}
+
+	/**
+	 * Without Stripe a saved gated handle is the merchant's own choice and stays.
+	 */
+	public function test_dequeue_scripts_stripe_absent_keeps_saved_handle(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_script_handles' => array( 'wc-stripe-upe-classic', 'theme-script' ) ) );
+
+		$this->assertSame(
 			array( 'admin-bar', 'wc-add-to-cart', 'wc-stripe-upe-classic', 'theme-script' ),
 			Settings::instance()->dequeue_script_handles()
 		);
+	}
+
+	/**
+	 * Below Stripe's fix both gated styles join the floor, ahead of the saved list.
+	 */
+	public function test_dequeue_styles_stripe_below_fix_floors_gated_handles(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_style_handles' => array( 'theme-style' ) ) );
+		$defaults = Settings::instance()->sections()->get( 'checkout' )->defaults();
+
+		$this->assertSame(
+			array_merge( $defaults['dequeue_style_handles'], array( 'wc-stripe-upe-classic', 'stripelink_styles', 'theme-style' ) ),
+			Settings::instance()->dequeue_style_handles( '11.1.0' )
+		);
+	}
+
+	/**
+	 * A saved list from the old locked form loses both gated styles from Stripe's fix onwards.
+	 */
+	public function test_dequeue_styles_stripe_at_fix_strips_stale_saved_handles(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'dequeue_style_handles' => array( 'wc-stripe-upe-classic', 'stripelink_styles', 'theme-style' ) ) );
+		$defaults = Settings::instance()->sections()->get( 'checkout' )->defaults();
+
+		$this->assertSame(
+			array_merge( $defaults['dequeue_style_handles'], array( 'theme-style' ) ),
+			Settings::instance()->dequeue_style_handles( '11.1.1' )
+		);
+	}
+
+	/**
+	 * The floor holds the gated handles only below Stripe's fix.
+	 */
+	public function test_dequeue_script_floor_follows_the_gate(): void {
+		$settings = Settings::instance();
+
+		$this->assertContains( 'wc-stripe-upe-classic', $settings->dequeue_script_floor( '11.1.0' ) );
+		$this->assertNotContains( 'wc-stripe-upe-classic', $settings->dequeue_script_floor( '11.1.1' ) );
+		$this->assertNotContains( 'wc-stripe-upe-classic', $settings->dequeue_script_floor() );
+		foreach ( array( 'wc-stripe-upe-classic', 'stripelink_styles' ) as $handle ) {
+			$this->assertContains( $handle, $settings->dequeue_style_floor( '11.1.0' ) );
+			$this->assertNotContains( $handle, $settings->dequeue_style_floor( '11.1.1' ) );
+			$this->assertNotContains( $handle, $settings->dequeue_style_floor() );
+		}
 	}
 
 	/**
