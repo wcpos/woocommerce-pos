@@ -34,7 +34,7 @@ function UserListItem({ user, isSelected, isYou, isActiveNow, onSelect }: UserLi
 				'wcpos:flex wcpos:w-full wcpos:items-center wcpos:gap-3 wcpos:rounded-md wcpos:border wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:transition-colors',
 				isSelected
 					? 'wcpos:border-wp-admin-theme-color wcpos:bg-wp-admin-theme-color-lightest'
-					: 'wcpos:border-transparent wcpos:bg-white hover:wcpos:border-gray-200 hover:wcpos:bg-gray-50'
+					: 'wcpos:border-transparent wcpos:bg-white wcpos:hover:border-gray-200 wcpos:hover:bg-gray-50'
 			)}
 		>
 			<Avatar

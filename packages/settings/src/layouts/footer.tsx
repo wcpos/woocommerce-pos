@@ -12,7 +12,7 @@ export function Footer() {
 					href="https://docs.wcpos.com"
 					target="_blank"
 					rel="noreferrer"
-					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 hover:wcpos:text-gray-900 wcpos:no-underline"
+					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 wcpos:hover:text-gray-900 wcpos:no-underline"
 				>
 					<span className="wcpos:h-3.5 wcpos:w-3.5">
 						<Book fill="#6b7280" />
@@ -24,7 +24,7 @@ export function Footer() {
 					href="https://faq.wcpos.com"
 					target="_blank"
 					rel="noreferrer"
-					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 hover:wcpos:text-gray-900 wcpos:no-underline"
+					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 wcpos:hover:text-gray-900 wcpos:no-underline"
 				>
 					<span className="wcpos:h-3.5 wcpos:w-3.5">
 						<Question fill="#6b7280" />
@@ -38,7 +38,7 @@ export function Footer() {
 					href="mailto:support@wcpos.com"
 					target="_blank"
 					rel="noreferrer"
-					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 hover:wcpos:text-gray-900 wcpos:no-underline"
+					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 wcpos:hover:text-gray-900 wcpos:no-underline"
 				>
 					<span className="wcpos:h-3.5 wcpos:w-3.5">
 						<Email fill="#6b7280" />

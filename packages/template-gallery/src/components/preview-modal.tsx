@@ -233,7 +233,7 @@ function DisplayStateStrip({
 								tabIndex={selected ? 0 : -1}
 								data-state={value}
 								onClick={() => onChange(value)}
-								className={`wcpos:flex wcpos:items-center wcpos:gap-2.5 wcpos:w-full wcpos:text-left wcpos:rounded-md wcpos:border-2 wcpos:p-1 wcpos:cursor-pointer wcpos:bg-transparent ${selected ? 'wcpos:border-wp-admin-theme-color wcpos:bg-blue-50' : 'wcpos:border-transparent hover:wcpos:bg-gray-100'}`}
+								className={`wcpos:flex wcpos:items-center wcpos:gap-2.5 wcpos:w-full wcpos:text-left wcpos:rounded-md wcpos:border-2 wcpos:p-1 wcpos:cursor-pointer wcpos:bg-transparent ${selected ? 'wcpos:border-wp-admin-theme-color wcpos:bg-blue-50' : 'wcpos:border-transparent wcpos:hover:bg-gray-100'}`}
 							>
 								<div
 									className="wcpos:relative wcpos:shrink-0 wcpos:overflow-hidden wcpos:rounded wcpos:bg-white wcpos:shadow-sm"
@@ -417,7 +417,7 @@ function PreviewModalContent({
 							ref={closeButtonRef}
 							type="button"
 							onClick={onClose}
-							className="wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:text-2xl wcpos:leading-none wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1"
+							className="wcpos:text-gray-400 wcpos:hover:text-gray-600 wcpos:text-2xl wcpos:leading-none wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1"
 							aria-label={t('modal.close')}
 						>
 							&times;
@@ -475,7 +475,7 @@ function PreviewModalContent({
 									href="https://docs.wcpos.com/customer-display"
 									target="_blank"
 									rel="noopener noreferrer"
-									className="wcpos:text-wp-admin-theme-color hover:wcpos:underline"
+									className="wcpos:text-wp-admin-theme-color wcpos:hover:underline"
 								>
 									{t('layout.learn_more')}
 								</a>
@@ -554,7 +554,7 @@ function PreviewModalContent({
 								href={preview.preview_url}
 								target="_blank"
 								rel="noopener noreferrer"
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-gray-700 wcpos:bg-white wcpos:border wcpos:border-gray-300 wcpos:rounded wcpos:no-underline hover:wcpos:bg-gray-50"
+								className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-gray-700 wcpos:bg-white wcpos:border wcpos:border-gray-300 wcpos:rounded wcpos:no-underline wcpos:hover:bg-gray-50"
 							>
 								{t('modal.open_new_tab')}
 							</a>

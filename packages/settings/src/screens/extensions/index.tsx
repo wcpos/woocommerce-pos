@@ -130,7 +130,7 @@ function Extensions() {
 					placeholder={t('extensions.search_placeholder', 'Search extensions...')}
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
-					className="wcpos:block wcpos:min-w-0 wcpos:flex-1 wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:px-3 wcpos:py-2 wcpos:text-sm focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-wp-admin-theme-color"
+					className="wcpos:block wcpos:min-w-0 wcpos:flex-1 wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color"
 				/>
 				<Button variant="secondary" loading={isRefreshing} onClick={refresh}>
 					{isRefreshing

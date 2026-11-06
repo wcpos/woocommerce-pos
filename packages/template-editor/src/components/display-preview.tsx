@@ -124,7 +124,7 @@ export function DisplayPreview({
 							href="https://docs.wcpos.com/customer-display"
 							target="_blank"
 							rel="noopener noreferrer"
-							className="wcpos:text-wp-admin-theme-color hover:wcpos:underline"
+							className="wcpos:text-wp-admin-theme-color wcpos:hover:underline"
 						>
 							{t('editor.learn_more')}
 						</a>

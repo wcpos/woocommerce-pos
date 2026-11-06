@@ -264,14 +264,14 @@ function DraggableRow({
 					<button
 						type="button"
 						onClick={() => onPreview(template.id)}
-						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+						className="wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 					>
 						{t('common.preview')}
 					</button>
 					{editUrl && (
 						<a
 							href={editUrl}
-							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:no-underline"
+							className="wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:no-underline"
 						>
 							{t('common.edit')}
 						</a>
@@ -281,7 +281,7 @@ function DraggableRow({
 							type="button"
 							onClick={() => onInstallNewVersion((template as Template).gallery_key as string)}
 							disabled={isInstallingNewVersion}
-							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
+							className="wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:disabled:opacity-50 wcpos:disabled:cursor-not-allowed"
 						>
 							{t('table.install_new_version')}
 						</button>
@@ -295,7 +295,7 @@ function DraggableRow({
 								}
 							}}
 							disabled={isDeleting}
-							className="wcpos:text-xs wcpos:text-red-600 hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
+							className="wcpos:text-xs wcpos:text-red-600 wcpos:hover:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:disabled:opacity-50 wcpos:disabled:cursor-not-allowed"
 						>
 							{t('common.delete')}
 						</button>

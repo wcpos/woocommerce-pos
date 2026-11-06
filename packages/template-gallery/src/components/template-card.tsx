@@ -102,7 +102,7 @@ export function TemplateCard(props: TemplateCardProps) {
 				<button
 					type="button"
 					onClick={onPreview}
-					className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+					className="wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 				>
 					{t('common.preview')}
 				</button>
@@ -120,7 +120,7 @@ export function TemplateCard(props: TemplateCardProps) {
 					<button
 						type="button"
 						onClick={props.onEdit}
-						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+						className="wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 					>
 						{t('common.edit')}
 					</button>
