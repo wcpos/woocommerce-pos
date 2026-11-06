@@ -11,8 +11,11 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
+require_once dirname( __DIR__ ) . '/Helpers/MyParcel_Caller_Stub.php';
+
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use MyParcelNL\WooCommerce\Tests\MyParcel_Caller_Stub;
 use WC_Order;
 use WC_Order_Item_Product;
 use WC_Payment_Gateway;
@@ -1155,6 +1158,64 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		$this->assertInstanceOf( 'WC_Product_Simple', $product );
 		$this->assertEquals( array( 42, 99 ), $product->get_category_ids(), 'Misc product should have category IDs from POS data' );
+	}
+
+	/**
+	 * MyParcel gets plain WooCommerce's answer (false) for a misc line, not the
+	 * ID-0 stand-in that breaks its product cache.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/2468
+	 */
+	public function test_order_item_product_myparcel_caller_gets_false_for_misc_item(): void {
+		$item = $this->create_misc_item_with_price( '12.00' );
+
+		$product = MyParcel_Caller_Stub::product_for( $item );
+
+		$this->assertFalse( $product );
+	}
+
+	/**
+	 * MyParcel still gets the real product for a normal line.
+	 */
+	public function test_order_item_product_myparcel_caller_gets_real_product_for_normal_item(): void {
+		$product = ProductHelper::create_simple_product();
+		$order   = OrderHelper::create_order( array( 'product' => $product ) );
+		$items   = $order->get_items();
+		$item    = reset( $items );
+
+		$result = MyParcel_Caller_Stub::product_for( $item );
+
+		$this->assertInstanceOf( 'WC_Product', $result );
+		$this->assertSame( $product->get_id(), $result->get_id() );
+	}
+
+	/**
+	 * Every caller other than MyParcel keeps the misc stand-in and its price.
+	 */
+	public function test_order_item_product_other_caller_keeps_misc_stand_in(): void {
+		$item = $this->create_misc_item_with_price( '12.00' );
+
+		$product = $item->get_product();
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $product );
+		$this->assertSame( '12.00', $product->get_price() );
+	}
+
+	/**
+	 * A MyParcel frame far down the stack (an email sent during a status
+	 * transition a MyParcel hook sits under) does not take the stand-in away.
+	 */
+	public function test_order_item_product_distant_myparcel_frame_keeps_misc_stand_in(): void {
+		$item = $this->create_misc_item_with_price( '12.00' );
+
+		$product = MyParcel_Caller_Stub::call(
+			function () use ( $item ) {
+				return $this->product_via_nested_calls( $item, 12 );
+			}
+		);
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $product );
+		$this->assertSame( '12.00', $product->get_price() );
 	}
 
 	/**
@@ -3352,5 +3413,50 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$order->save();
 
 		return $order;
+	}
+
+	/**
+	 * Helper to create a saved misc line (product_id 0) with POS price data.
+	 *
+	 * @param string $price The misc price stored in _woocommerce_pos_data.
+	 *
+	 * @return WC_Order_Item_Product The saved line item.
+	 */
+	private function create_misc_item_with_price( string $price ): WC_Order_Item_Product {
+		$order = $this->create_pos_order();
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Misc Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => $price,
+				'regular_price' => $price,
+			)
+		);
+		$item->save();
+		$order->add_item( $item );
+		$order->save();
+
+		return $item;
+	}
+
+	/**
+	 * Helper that nests $depth calls before asking the item for its product,
+	 * so a caller frame ends up far down the stack.
+	 *
+	 * @param WC_Order_Item_Product $item  The order item.
+	 * @param int                   $depth Remaining levels to nest.
+	 *
+	 * @return bool|\WC_Product
+	 */
+	private function product_via_nested_calls( WC_Order_Item_Product $item, int $depth ) {
+		if ( $depth > 0 ) {
+			return $this->product_via_nested_calls( $item, $depth - 1 );
+		}
+
+		return $item->get_product();
 	}
 }
