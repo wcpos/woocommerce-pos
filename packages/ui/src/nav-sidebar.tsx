@@ -21,8 +21,11 @@ export interface NavSidebarProps {
 	/**
 	 * Below `lg`, the open sidebar floats over the page under the WP admin bar,
 	 * with a backdrop that calls `onClose`, instead of pushing the content
-	 * aside; when closed it is `invisible` (out of the tab order) below `lg`.
-	 * At `lg` and up it is the static sidebar either way. Defaults to `false`.
+	 * aside. Both stack above the WP admin menu (z-index 9990) and below the
+	 * admin bar (99999). When closed it is `invisible` below `lg` in place of
+	 * `inert`, which cannot be scoped to a breakpoint: that keeps its links out
+	 * of the tab order. At `lg` and up it is the static sidebar either way.
+	 * Defaults to `false`.
 	 */
 	overlay?: boolean;
 }
@@ -48,7 +51,7 @@ export function NavSidebar({
 				'wcpos:lg:ml-0',
 				isOpen ? 'wcpos:ml-0' : 'wcpos:-ml-56',
 				overlay &&
-					'wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,0px)] wcpos:bottom-0 wcpos:left-0 wcpos:z-40 wcpos:lg:static wcpos:lg:top-auto',
+					'wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,0px)] wcpos:bottom-0 wcpos:left-0 wcpos:z-[9992] wcpos:lg:static wcpos:lg:top-auto wcpos:lg:z-auto',
 				overlay && !isOpen && 'wcpos:invisible wcpos:lg:visible',
 			]
 				.filter(Boolean)
@@ -88,7 +91,7 @@ export function NavSidebar({
 					type="button"
 					aria-label={closeLabel}
 					onClick={onClose}
-					className="wcpos:fixed wcpos:inset-0 wcpos:z-30 wcpos:bg-black/40 wcpos:lg:hidden"
+					className="wcpos:fixed wcpos:inset-0 wcpos:z-[9991] wcpos:bg-black/40 wcpos:lg:hidden"
 				/>
 			)}
 		</>

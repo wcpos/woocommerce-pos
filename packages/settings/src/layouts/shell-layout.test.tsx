@@ -129,11 +129,14 @@ describe('ShellLayout', () => {
 		const aside = container.querySelector('aside') as HTMLElement;
 		expect(aside.className).toContain('wcpos:fixed');
 		expect(aside.className).toContain('wcpos:lg:static');
+		expect(aside.className).toContain('wcpos:z-[9992]');
+		expect(aside.className).toContain('wcpos:lg:z-auto');
 		expect(aside.className).not.toContain('wcpos:invisible');
 
 		const backdrop = container.querySelector('aside + button') as HTMLButtonElement;
 		expect(backdrop.getAttribute('aria-label')).toBe('Close menu');
 		expect(backdrop.className).toContain('wcpos:lg:hidden');
+		expect(backdrop.className).toContain('wcpos:z-[9991]');
 		fireEvent.click(backdrop);
 		expect(onClose).toHaveBeenCalledTimes(1);
 
