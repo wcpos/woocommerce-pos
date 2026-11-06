@@ -3,6 +3,7 @@ import * as React from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import Gateways from './gateways';
+import { HposNotice } from './hpos-notice';
 import Error from '../../components/error';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
@@ -94,6 +95,7 @@ function Checkout() {
 
 	return (
 		<>
+			<HposNotice />
 			<FormSection>
 				<FormRow>
 					<Label tip={t('checkout.prevent_overselling_tip')}>

@@ -7,6 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Admin;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\Utilities\OrderUtil;
+
 /**
  * Test case for settings inline script data.
  */
@@ -102,5 +105,51 @@ class Test_Settings_InlineScript extends \WP_UnitTestCase {
 			get_option( 'woocommerce_pos_uuid' ),
 			'inline script must not lazily create the site uuid'
 		);
+	}
+
+	/**
+	 * Test the environment reports HPOS order storage and the WooCommerce settings URL.
+	 */
+	public function test_inline_script_order_storage_with_hpos_reports_hpos_true(): void {
+		// Arrange.
+		$original = OrderUtil::custom_orders_table_usage_is_enabled();
+		OrderHelper::create_order_custom_table_if_not_exist();
+		OrderHelper::toggle_cot_feature_and_usage( true );
+		$settings = new \WCPOS\WooCommercePOS\Admin\Settings();
+		$method   = new \ReflectionMethod( \WCPOS\WooCommercePOS\Admin\Settings::class, 'inline_script' );
+		$method->setAccessible( true );
+		try {
+			// Act.
+			$script = str_replace( ' ', '', $method->invoke( $settings ) );
+			// Assert.
+			$this->assertStringContainsString( '"order_storage":{"hpos":true,', $script );
+			$this->assertStringContainsString(
+				'"settings_url":' . json_encode( admin_url( 'admin.php?page=wc-settings&tab=advanced&section=features' ) ),
+				$script
+			);
+		} finally {
+			OrderHelper::toggle_cot_feature_and_usage( $original );
+		}
+	}
+
+	/**
+	 * Test the environment reports legacy order storage as hpos false.
+	 */
+	public function test_inline_script_order_storage_with_legacy_reports_hpos_false(): void {
+		// Arrange.
+		$original = OrderUtil::custom_orders_table_usage_is_enabled();
+		OrderHelper::toggle_cot_feature_and_usage( false );
+		$settings = new \WCPOS\WooCommercePOS\Admin\Settings();
+		$method   = new \ReflectionMethod( \WCPOS\WooCommercePOS\Admin\Settings::class, 'inline_script' );
+		$method->setAccessible( true );
+		try {
+			// Act.
+			$script = str_replace( ' ', '', $method->invoke( $settings ) );
+			// Assert.
+			$this->assertStringContainsString( '"order_storage":{"hpos":false,', $script );
+			$this->assertStringContainsString( '"settings_url":', $script );
+		} finally {
+			OrderHelper::toggle_cot_feature_and_usage( $original );
+		}
 	}
 }
