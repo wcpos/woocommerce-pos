@@ -10,6 +10,11 @@ export interface ShellLayoutProps {
 	mobileNavOpen: boolean;
 	onToggleMobileNav: () => void;
 	footer?: ReactNode;
+	/**
+	 * Accessible label for the hamburger. Consumers should pass a translated
+	 * string. Defaults to "Open main menu".
+	 */
+	menuLabel?: string;
 	/** Main content. */
 	children: ReactNode;
 }
@@ -21,6 +26,7 @@ export function ShellLayout({
 	mobileNavOpen,
 	onToggleMobileNav,
 	footer,
+	menuLabel = 'Open main menu',
 	children,
 }: ShellLayoutProps) {
 	return (
@@ -29,10 +35,10 @@ export function ShellLayout({
 
 			<div className="wcpos:flex-1 wcpos:flex wcpos:flex-col wcpos:min-w-0">
 				{/* Title bar */}
-				<div className="wcpos:flex wcpos:items-center wcpos:px-6 wcpos:border-b wcpos:border-gray-200 wcpos:shrink-0 wcpos:h-12">
+				<div className="wcpos:flex wcpos:items-center wcpos:px-6 wcpos:border-b wcpos:border-gray-200 wcpos:shrink-0 wcpos:min-h-12 wcpos:flex-wrap">
 					<button
 						type="button"
-						aria-label="Open main menu"
+						aria-label={menuLabel}
 						aria-expanded={mobileNavOpen}
 						onClick={onToggleMobileNav}
 						className="wcpos:lg:hidden wcpos:p-2 wcpos:mr-2 wcpos:rounded-md wcpos:text-gray-600 wcpos:hover:bg-gray-100"
