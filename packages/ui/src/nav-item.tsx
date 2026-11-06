@@ -37,7 +37,7 @@ function renderBadge(badge: NavItemProps['badge']) {
 
 	if ('label' in badge) {
 		return (
-			<Chip variant={badge.variant} size="xs">
+			<Chip variant={badge.variant} shape="round" size="xs">
 				{badge.label}
 			</Chip>
 		);

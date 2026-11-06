@@ -37,7 +37,9 @@ describe('NavItem', () => {
 			/>
 		);
 
-		expect(screen.getByText('1 open').className).toContain('wcpos:bg-green-50');
+		const chip = screen.getByText('1 open');
+		expect(chip.className).toContain('wcpos:bg-green-50');
+		expect(chip.className).toContain('wcpos:min-w-5');
 	});
 
 	it('renders error and warning counts as two chips', () => {
