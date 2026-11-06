@@ -109,7 +109,9 @@ class Payment_Methods_Controller extends WC_REST_Controller {
 		if ( ! $descriptor ) {
 			return new WP_Error( 'wcpos_payment_method_not_found', __( 'Payment method not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
-		$handler = Capture_Mode_Registry::instance()->resolve( $descriptor['capture']['mode'], $descriptor['capture']['provider'] );
+		// Bootstrap only supplies provider material for the device connection.
+		$capture = Descriptor_Builder::capture_entry( $descriptor, 'device' ) ?? $descriptor['capture'];
+		$handler = Capture_Mode_Registry::instance()->resolve( $capture['mode'], $capture['provider'] );
 		if ( ! $handler ) {
 			return new WP_Error( 'wcpos_capture_mode_unsupported', __( 'Payment capture mode is unsupported.', 'woocommerce-pos' ), array( 'status' => 501 ) );
 		}

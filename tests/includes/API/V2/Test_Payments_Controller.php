@@ -1116,6 +1116,289 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( $data['prompt'] );
 	}
 
+	/**
+	 * A new payment stores the chosen connection and uses its provider for intent dispatch.
+	 *
+	 * @dataProvider allowed_capture_modes
+	 *
+	 * @param string $operation Operation.
+	 * @param array  $extra Extra.
+	 * @param string $expected_mode Expected mode.
+	 * @param string $expected_provider Expected provider.
+	 */
+	public function test_payment_allowed_capture_mode_stamps_selected_provider( string $operation, array $extra, string $expected_mode, string $expected_provider ): void {
+		$filter = $this->use_two_capture_modes();
+		try {
+			$order = $this->create_pos_order();
+			$payment = $this->payment( 'pos_cash', '20.00', $extra );
+			$response = 'record' === $operation ? $this->record( $order, $payment ) : $this->command(
+				$this->payment_path( $order, $payment['id'] ) . '/intent',
+				$this->envelope(
+					$order,
+					array(
+						'payment' => $payment,
+						'context' => array( 'reader' => 'reader-1' ),
+					)
+				)
+			);
+			$this->assertSame( 200, $response->get_status() );
+			$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] );
+			$this->assertSame( $expected_mode, $row['capture_mode'] );
+			$this->assertSame( $expected_provider, $row['provider'] );
+			$this->assertSame( $expected_mode, $response->get_data()['payment']['capture_mode'] );
+			if ( 'intent' === $operation ) {
+				$this->assertSame( $expected_provider, $response->get_data()['handoff']['handler'] );
+			}
+		} finally {
+			$this->remove_two_capture_modes( $filter );
+		}
+	}
+
+	/** Default and explicit secondary selection both apply to record and intent. */
+	public function allowed_capture_modes(): array {
+		return array(
+			'intent secondary' => array( 'intent', array( 'capture_mode' => 'device' ), 'device', 'reader_test' ),
+			'intent default' => array( 'intent', array(), 'server', 'cloud_test' ),
+			'record secondary' => array( 'record', array( 'capture_mode' => 'device' ), 'device', 'reader_test' ),
+			'record default' => array( 'record', array(), 'server', 'cloud_test' ),
+		);
+	}
+
+	/**
+	 * A disallowed or malformed selection cannot create a payment row.
+	 *
+	 * @dataProvider disallowed_capture_modes
+	 *
+	 * @param string $operation Operation.
+	 * @param mixed  $mode Mode.
+	 */
+	public function test_payment_disallowed_capture_mode_returns_400_without_row( string $operation, $mode ): void {
+		$filter = $this->use_two_capture_modes();
+		try {
+			$order = $this->create_pos_order();
+			$payment = $this->payment( 'pos_cash', '20.00', array( 'capture_mode' => $mode ) );
+			$response = 'record' === $operation ? $this->record( $order, $payment ) : $this->command(
+				$this->payment_path( $order, $payment['id'] ) . '/intent',
+				$this->envelope(
+					$order,
+					array(
+						'payment' => $payment,
+						'context' => array( 'reader' => 'reader-1' ),
+					)
+				)
+			);
+			$this->assertSame( 400, $response->get_status() );
+			$this->assertSame( 'wcpos_capture_mode_not_allowed', $response->get_data()['code'] );
+			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+			$this->assertSame( 0, Route_Handler::$intents );
+		} finally {
+			$this->remove_two_capture_modes( $filter );
+		}
+	}
+
+	/** A bare allowed mode is required, not a provider-scoped key or a non-string. */
+	public function disallowed_capture_modes(): array {
+		return array(
+			'intent outside set' => array( 'intent', 'manual' ),
+			'record outside set' => array( 'record', 'manual' ),
+			'intent scoped key' => array( 'intent', 'device:reader_test' ),
+			'record null' => array( 'record', null ),
+			'intent array' => array( 'intent', array( 'device' ) ),
+		);
+	}
+
+	/** The primary's offline policy cannot authorize or block the secondary connection. */
+	public function test_record_secondary_offline_queue_uses_own_capabilities(): void {
+		$filter = $this->use_two_capture_modes();
+		Cloud_Route_Handler::$offline = 'none';
+		try {
+			$order = $this->create_pos_order();
+			$refused = $this->record( $order, $this->payment( 'pos_cash', '20.00' ) );
+			$this->assertSame( 400, $refused->get_status() );
+			$this->assertSame( 'wcpos_method_not_recordable', $refused->get_data()['code'] );
+			$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+
+			$payment = $this->payment( 'pos_cash', '20.00', array( 'capture_mode' => 'device' ) );
+			$accepted = $this->record( $order, $payment );
+			$this->assertSame( 200, $accepted->get_status() );
+			$row = Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] );
+			$this->assertSame( 'device', $row['capture_mode'] );
+			$this->assertSame( 'reader_test', $row['provider'] );
+		} finally {
+			$this->remove_two_capture_modes( $filter );
+		}
+	}
+
+	/** A fresh command cannot resume an existing leg on a different connection. */
+	public function test_intent_replay_conflicting_capture_mode_returns_409_and_omitted_mode_resumes(): void {
+		$filter = $this->use_two_capture_modes();
+		try {
+			$order = $this->create_pos_order();
+			$payment = $this->payment( 'pos_cash', '20.00', array( 'capture_mode' => 'device' ) );
+			$path = $this->payment_path( $order, $payment['id'] ) . '/intent';
+			$context = array( 'reader' => 'reader-1' );
+			$first = $this->command(
+				$path,
+				$this->envelope(
+					$order,
+					array(
+						'payment' => $payment,
+						'context' => $context,
+					)
+				)
+			);
+			$this->assertSame( 200, $first->get_status() );
+			$before = Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] );
+
+			$payment['capture_mode'] = 'server';
+			$conflict = $this->command(
+				$path,
+				$this->envelope(
+					$order,
+					array(
+						'payment' => $payment,
+						'context' => $context,
+					)
+				)
+			);
+			$this->assertSame( 409, $conflict->get_status() );
+			$this->assertSame( 'wcpos_capture_mode_conflict', $conflict->get_data()['code'] );
+			$this->assertSame( $before, Ledger::instance()->find( wc_get_order( $order->get_id() ), $payment['id'] ) );
+			$this->assertSame( 1, Route_Handler::$intents );
+
+			unset( $payment['capture_mode'] );
+			$resumed = $this->command(
+				$path,
+				$this->envelope(
+					$order,
+					array(
+						'payment' => $payment,
+						'context' => $context,
+					)
+				)
+			);
+			$this->assertSame( 200, $resumed->get_status() );
+			$this->assertSame( 'device', $resumed->get_data()['payment']['capture_mode'] );
+			$this->assertSame( 'reader_test', $resumed->get_data()['handoff']['handler'] );
+			$this->assertSame( 2, Route_Handler::$intents );
+		} finally {
+			$this->remove_two_capture_modes( $filter );
+		}
+	}
+
+	/** A record replay checks the stored connection before returning the existing row. */
+	public function test_record_replay_conflicting_capture_mode_returns_409(): void {
+		$filter = $this->use_two_capture_modes();
+		try {
+			$order = $this->create_pos_order();
+			$payment = $this->payment( 'pos_cash', '20.00', array( 'capture_mode' => 'device' ) );
+			$ledger = Ledger::instance();
+			$first = $ledger->record( $order, $payment );
+			$this->assertNotWPError( $first );
+			$before = $ledger->find( wc_get_order( $order->get_id() ), $payment['id'] );
+			$payment['capture_mode'] = 'server';
+			$conflict = $ledger->record( wc_get_order( $order->get_id() ), $payment );
+			$this->assertWPError( $conflict );
+			$this->assertSame( 'wcpos_capture_mode_conflict', $conflict->get_error_code() );
+			$this->assertSame( 409, $conflict->get_error_data()['status'] );
+			$this->assertSame( $before, $ledger->find( wc_get_order( $order->get_id() ), $payment['id'] ) );
+			unset( $payment['capture_mode'] );
+			$resumed = $ledger->record( wc_get_order( $order->get_id() ), $payment );
+			$this->assertNotWPError( $resumed );
+			$this->assertSame( 'device', $resumed['capture_mode'] );
+		} finally {
+			$this->remove_two_capture_modes( $filter );
+		}
+	}
+
+	/**
+	 * Provider-confirmed tips follow the row's connection, including already captured rows.
+	 *
+	 * @dataProvider capture_mode_tip_cases
+	 *
+	 * @param string $mode Stored mode.
+	 * @param bool   $captured Whether money was already recorded.
+	 * @param bool   $retired Whether the stored mode is no longer allowed.
+	 * @param bool   $accepted Whether the confirmation is an allowed tip.
+	 */
+	public function test_confirmation_uses_row_capture_mode_tip_capability( string $mode, bool $captured, bool $retired, bool $accepted ): void {
+		$filter = $this->use_two_capture_modes();
+		$remaining = static fn() => array( 'device:reader_test' );
+		try {
+			$order = $this->create_pos_order();
+			$payment = $this->payment( 'pos_cash', '20.00', array( 'capture_mode' => $mode ) );
+			$ledger = Ledger::instance();
+			$first = $captured ? $ledger->record( $order, $payment ) : $ledger->intent( $order, $payment['id'], $payment, array( 'reader' => 'reader-1' ) );
+			$this->assertNotWPError( $first );
+			if ( $retired ) {
+				add_filter( 'wcpos_payment_method_capture_modes', $remaining, 20 );
+			}
+
+			$result = $ledger->apply_result(
+				wc_get_order( $order->get_id() ),
+				$payment['id'],
+				array(
+					'status' => 'captured',
+					'amount' => '22.00',
+					'currency' => 'USD',
+				)
+			);
+			if ( $accepted ) {
+				$this->assertNotWPError( $result );
+			} else {
+				$this->assertWPError( $result );
+			}
+			$row = $ledger->find( wc_get_order( $order->get_id() ), $payment['id'] );
+			$this->assertSame( $accepted ? 'captured' : 'failed', $row['status'] );
+			$this->assertSame( $accepted ? '22.00' : '20.00', $row['amount'] );
+			$this->assertSame( $accepted ? '2.00' : null, $row['tip'] );
+			if ( ! $accepted ) {
+				$this->assertSame( 'amount_mismatch', $row['failure_reason'] );
+			}
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $remaining, 20 );
+			$this->remove_two_capture_modes( $filter );
+		}
+	}
+
+	/** Both tip checks use per-entry rules, with primary rules only for retired modes. */
+	public function capture_mode_tip_cases(): array {
+		return array(
+			'secondary pending' => array( 'device', false, false, true ),
+			'secondary captured' => array( 'device', true, false, true ),
+			'primary pending' => array( 'server', false, false, false ),
+			'primary captured' => array( 'server', true, false, false ),
+			'retired pending' => array( 'server', false, true, true ),
+			'retired captured' => array( 'server', true, true, true ),
+		);
+	}
+
+	/** Register independently routed cloud and device handlers. */
+	private function use_two_capture_modes(): \Closure {
+		$registry = \WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance();
+		$registry->register( 'server:cloud_test', Cloud_Route_Handler::class );
+		$registry->register( 'device:reader_test', Device_Route_Handler::class );
+		Route_Handler::$intents = 0;
+		Route_Handler::$intent_errors = array();
+		$filter = static fn() => array( 'server:cloud_test', 'device:reader_test' );
+		add_filter( 'wcpos_payment_method_capture_modes', $filter );
+		return $filter;
+	}
+
+	/**
+	 * Restore process-global registrations after each two-mode scenario.
+	 *
+	 * @param \Closure $filter Filter.
+	 */
+	private function remove_two_capture_modes( \Closure $filter ): void {
+		Cloud_Route_Handler::$offline = 'record';
+		remove_filter( 'wcpos_payment_method_capture_modes', $filter );
+		$reflection = new \ReflectionClass( \WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::class );
+		$property = $reflection->getProperty( 'instance' );
+		$property->setAccessible( true );
+		$property->setValue( null, null );
+	}
+
 	/** Intent and capture return the current payment summary. */
 	public function test_intent_and_capture_return_handoff_and_locked_fresh_order_summary(): void {
 		\WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance()->register( 'route_test', Route_Handler::class );
@@ -2834,5 +3117,50 @@ class Failure_Route_Handler extends Route_Handler {
 			)
 		);
 	}
+}
+
+/** A cloud reader identifies its provider in the transient intent handoff. */
+class Cloud_Route_Handler extends Route_Handler {
+	/**
+	 * Primary offline capability for each scenario.
+	 *
+	 * @var string
+	 */
+	public static $offline = 'record';
+
+	public const MODE = 'server';
+	public const PROVIDER = 'cloud_test';
+
+	/**
+	 * Describe for the fixture.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway.
+	 */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		$descriptor = parent::describe( $gateway );
+		$descriptor['capture']['mode'] = static::MODE;
+		$descriptor['capture']['provider'] = static::PROVIDER;
+		$descriptor['capabilities']['offline'] = 'device' === static::MODE ? 'queue' : self::$offline;
+		$descriptor['capabilities']['tips'] = 'device' === static::MODE ? 'on_reader' : 'none';
+		return $descriptor;
+	}
+
+	/**
+	 * Intent for the fixture.
+	 *
+	 * @param array $row Row.
+	 * @param array $context Context.
+	 */
+	public function intent( array $row, array $context ) {
+		$result = parent::intent( $row, $context );
+		$result['handoff']['handler'] = static::PROVIDER;
+		return $result;
+	}
+}
+
+/** Secondary device provider; a wrong primary dispatch cannot answer its handoff. */
+class Device_Route_Handler extends Cloud_Route_Handler {
+	public const MODE = 'device';
+	public const PROVIDER = 'reader_test';
 }
 // phpcs:enable Generic.Files.OneObjectStructurePerFile.MultipleFound
