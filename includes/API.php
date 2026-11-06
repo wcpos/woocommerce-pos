@@ -66,9 +66,17 @@ class API {
 	protected $authenticated_via_wcpos = false;
 
 	/**
+	 * WCPOS answers on rest_dispatch_request, keyed by request because rest_do_request() can nest.
+	 *
+	 * @var \SplObjectStorage
+	 */
+	private $short_circuits;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
+		$this->short_circuits = new \SplObjectStorage();
 		$this->register_routes();
 
 		/*
@@ -84,6 +92,8 @@ class API {
 		// These filters allow changes to the WC REST API response.
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_wcpos_callback' ), PHP_INT_MAX, 4 );
+		// First, so telemetry, the error reporter and every other listener see the answer the client will get.
+		add_filter( 'rest_request_after_callbacks', array( $this, 'restore_short_circuit' ), PHP_INT_MIN, 3 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'clear_third_party_jwt_error' ), 50, 3 );
 		add_filter( 'rest_post_dispatch', array( $this, 'rest_post_dispatch' ), 10, 3 );
@@ -517,13 +527,52 @@ class API {
 
 		if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
 			try {
-				return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
+				$result = $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
 			} catch ( \Error $error ) {
 				return self::unavailable_or_rethrow( $error );
 			}
+
+			// A later listener returning null (WP Activity Log does, at PHP_INT_MAX) makes core run
+			// the paginated callback; keep this GET answer for restore_short_circuit(). Never writes.
+			if ( 'GET' === $request->get_method() && $result instanceof WP_REST_Response && $result !== $dispatch_result ) {
+				$this->short_circuits[ $request ] = $result;
+			}
+
+			return $result;
 		}
 
 		return $dispatch_result;
+	}
+
+	/**
+	 * Put back the answer a WCPOS controller made on rest_dispatch_request.
+	 *
+	 * When a later listener nulls that answer, core runs the paginated callback and the
+	 * POS would sync one page as the whole catalogue. Runs first on
+	 * rest_request_after_callbacks, so WCPOS telemetry, the error reporter and every
+	 * other listener see the restored answer and may still change it. A WP_Error is
+	 * never replaced: a later listener refused the request, or the callback failed.
+	 * The entry is always removed.
+	 *
+	 * @param mixed           $response Result after the callbacks ran.
+	 * @param array           $handler  Route handler used for the request.
+	 * @param WP_REST_Request $request  Request used to generate the response.
+	 *
+	 * @return mixed
+	 */
+	public function restore_short_circuit( $response, $handler, $request ) {
+		if ( ! \is_object( $request ) || ! isset( $this->short_circuits[ $request ] ) ) {
+			return $response;
+		}
+
+		$remembered = $this->short_circuits[ $request ];
+		unset( $this->short_circuits[ $request ] );
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		return $remembered;
 	}
 
 	/**
