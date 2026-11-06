@@ -46,17 +46,25 @@ export function Snackbar({
 		return () => cancelAnimationFrame(frame);
 	}, [message]);
 
-	// Auto-dismiss: slide out then remove.
+	// Slide out, then remove once the 300ms transition has finished.
+	const removeTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const dismiss = React.useCallback(() => {
+		setVisible(false);
+		clearTimeout(removeTimer.current);
+		removeTimer.current = setTimeout(() => onRemove?.(), 300);
+	}, [onRemove]);
+
+	// Never call onRemove after unmount.
+	React.useEffect(() => () => clearTimeout(removeTimer.current), []);
+
+	// Auto-dismiss.
 	// "saving" status never auto-dismisses — it's meant to be replaced by a
 	// terminal status (success/error) when the operation completes.
 	React.useEffect(() => {
 		if (!message || status === 'saving' || !autoDismiss) return;
-		const timer = setTimeout(() => {
-			setVisible(false);
-			setTimeout(() => onRemove?.(), 300);
-		}, 2000);
+		const timer = setTimeout(dismiss, 2000);
 		return () => clearTimeout(timer);
-	}, [message, status, onRemove, autoDismiss]);
+	}, [message, status, dismiss, autoDismiss]);
 
 	if (!message) return null;
 
@@ -72,18 +80,23 @@ export function Snackbar({
 		>
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:gap-4">
 				<span>{message}</span>
-				{actions?.map((action) => (
+				{actions?.map((action, index) => (
 					<button
-						key={action.label}
+						key={index}
 						type="button"
 						onClick={action.onClick}
-						className="wcpos:font-semibold wcpos:underline-offset-2"
+						className="wcpos:shrink-0 wcpos:whitespace-nowrap wcpos:cursor-pointer wcpos:font-semibold wcpos:underline wcpos:underline-offset-2"
 					>
 						{action.label}
 					</button>
 				))}
-				{dismissible && (
-					<button type="button" aria-label={dismissLabel} onClick={onRemove}>
+				{dismissible && onRemove && (
+					<button
+						type="button"
+						aria-label={dismissLabel}
+						onClick={dismiss}
+						className="wcpos:shrink-0 wcpos:cursor-pointer wcpos:px-1 wcpos:leading-none wcpos:hover:opacity-80"
+					>
 						&times;
 					</button>
 				)}
