@@ -31,6 +31,15 @@ use WCPOS\WooCommercePOS\Payments\Paid_Date_Suppression;
  */
 class Orders {
 	/**
+	 * Stack frames searched for a MyParcel caller — see is_myparcel_caller().
+	 *
+	 * MyParcel's own call reaches the helper at frame 5; ten keeps that and
+	 * misses a MyParcel hook far down the stack, such as one a status
+	 * transition (and its emails, which need the misc product) runs under.
+	 */
+	private const MYPARCEL_CALLER_FRAMES = 10;
+
+	/**
 	 * Map of temporary product IDs to category IDs for coupon validation.
 	 *
 	 * Static because multiple Orders instances may register hooks on the same
@@ -709,6 +718,10 @@ class Orders {
 				return $product;
 			}
 
+			if ( $this->is_myparcel_caller() ) {
+				return $product;
+			}
+
 			$product = new WC_Product_Simple();
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
@@ -1189,5 +1202,25 @@ class Orders {
 		$product->set_object_read( false );
 		$product->set_sku( $sku );
 		$product->set_object_read( true );
+	}
+
+	/**
+	 * Whether MyParcel is asking for an order item's product.
+	 *
+	 * MyParcel's PDK caches products by id and treats the key "0" as "no key",
+	 * so the ID-0 misc product fatals its order push. It handles `false`, and it
+	 * exposes no filter around order lines, so MyParcel gets WooCommerce's own
+	 * answer. Remove when the PDK fix ships (woocommerce-pos#2468).
+	 *
+	 * @return bool
+	 */
+	private function is_myparcel_caller(): bool {
+		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, self::MYPARCEL_CALLER_FRAMES ) as $frame ) {
+			if ( isset( $frame['class'] ) && 0 === strpos( $frame['class'], 'MyParcelNL\\' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

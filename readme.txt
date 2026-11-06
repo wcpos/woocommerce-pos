@@ -134,6 +134,7 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 - **PDF receipts cap images at 128 MB on every host.** The limit used to follow the host's memory_limit, so the same receipt image rendered on one host and showed a broken-image placeholder on another.
 - **A sale with two coupons on a line whose price includes tax now totals exactly as WooCommerce does.**
 - **Reloading the POS no longer raises an "unknown tax rate" warning before the store's tax rates have been read.**
+- **A sale with a miscellaneous product no longer crashes on stores running MyParcel 6.x.**
 - **A store that is slow to answer when connecting is no longer reported as blocking WCPOS.**
 - **A 1.11 till that meets a store already on WCPOS 2.0 is told to sync before updating, with a link to the upgrade guide.**
 - Developers: the app's translations come from the 2026.11.1-card tag.
