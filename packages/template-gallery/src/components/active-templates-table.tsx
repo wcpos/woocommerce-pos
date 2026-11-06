@@ -89,6 +89,10 @@ interface DraggableRowProps {
 	/** Install the current bundled version alongside the merchant's edited copy. */
 	onInstallNewVersion?: (galleryKey: string) => void;
 	isInstallingNewVersion?: boolean;
+	isFirst: boolean;
+	isLast: boolean;
+	/** Swap this row with its neighbour: -1 moves it up, 1 moves it down. */
+	onMove: (direction: -1 | 1) => void;
 }
 
 function DraggableRow({
@@ -104,6 +108,9 @@ function DraggableRow({
 	isDeleting,
 	onInstallNewVersion,
 	isInstallingNewVersion,
+	isFirst,
+	isLast,
+	onMove,
 }: DraggableRowProps) {
 	const rowRef = React.useRef<HTMLTableRowElement>(null);
 	const handleRef = React.useRef<HTMLTableCellElement>(null);
@@ -234,6 +241,28 @@ function DraggableRow({
 				<div className="wcpos:flex wcpos:gap-3 wcpos:items-center">
 					<button
 						type="button"
+						data-move="up"
+						data-template-id={template.id}
+						onClick={() => onMove(-1)}
+						disabled={isFirst}
+						aria-label={t('table.move_up', { title: template.title })}
+						className="wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:disabled:opacity-50 wcpos:disabled:cursor-not-allowed"
+					>
+						<span aria-hidden="true">&#8593;</span>
+					</button>
+					<button
+						type="button"
+						data-move="down"
+						data-template-id={template.id}
+						onClick={() => onMove(1)}
+						disabled={isLast}
+						aria-label={t('table.move_down', { title: template.title })}
+						className="wcpos:text-xs wcpos:text-wp-admin-theme-color wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:disabled:opacity-50 wcpos:disabled:cursor-not-allowed"
+					>
+						<span aria-hidden="true">&#8595;</span>
+					</button>
+					<button
+						type="button"
 						onClick={() => onPreview(template.id)}
 						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 					>
@@ -357,6 +386,43 @@ export function TemplatesTable({
 		});
 	}, [templates]);
 
+	// Keyboard reorder: the same id list a drop sends, one step at a time.
+	const lastMoveRef = React.useRef<{
+		id: number | string;
+		direction: -1 | 1;
+		target: number;
+	} | null>(null);
+	const moveTemplate = (id: number | string, direction: -1 | 1) => {
+		const index = templates.findIndex((t) => t.id === id);
+		const target = index + direction;
+		if (index < 0 || target < 0 || target >= templates.length) return;
+		const ids = templates.map((t) => t.id);
+		[ids[index], ids[target]] = [ids[target], ids[index]];
+		lastMoveRef.current = { id, direction, target };
+		onReorderRef.current(ids);
+	};
+
+	// Focus follows the moved row once the saved order arrives: the save is not optimistic
+	// and may fail, so any other change to `templates` leaves the pending move alone. Moving
+	// the row's DOM node drops focus, and a button that has just become disabled cannot hold
+	// it, so fall back to the other direction's button. If the user has moved focus elsewhere
+	// in the meantime, leave it there.
+	React.useEffect(() => {
+		const move = lastMoveRef.current;
+		const table = tableRef.current;
+		if (!move || !table || templates[move.target]?.id !== move.id) return;
+		lastMoveRef.current = null;
+
+		// Each row renders Move up before Move down.
+		const [up, down] = Array.from(
+			table.querySelectorAll<HTMLButtonElement>('button[data-move]')
+		).filter((button) => button.dataset.templateId === String(move.id));
+		const active = document.activeElement;
+		if (active !== document.body && active !== up && active !== down) return;
+		const [same, other] = move.direction === -1 ? [up, down] : [down, up];
+		(same?.disabled ? other : same)?.focus();
+	}, [templates]);
+
 	if (templates.length === 0) {
 		return (
 			<div className="wcpos:bg-white wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:p-8 wcpos:text-center">
@@ -413,6 +479,9 @@ export function TemplatesTable({
 							isDeleting={template.id === deletingId}
 							onInstallNewVersion={onInstallNewVersion}
 							isInstallingNewVersion={installingNewVersion}
+							isFirst={index === 0}
+							isLast={index === templates.length - 1}
+							onMove={(direction) => moveTemplate(template.id, direction)}
 						/>
 					))}
 				</tbody>
