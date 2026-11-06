@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-interface NavGroupProps {
+export interface NavGroupProps {
 	heading: string;
 	children: ReactNode;
 }

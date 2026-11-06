@@ -9,7 +9,16 @@ export interface SnackbarProps {
 	message: string;
 	status?: SnackbarStatus;
 	onRemove?: () => void;
+	/** Defaults to `false` when `actions` or `dismissible` is given, otherwise `true`. */
 	timeout?: boolean;
+	/** Rendered as text buttons after the message. */
+	actions?: { label: string; onClick: () => void }[];
+	/** Renders an × (only when `onRemove` is given) that slides the bar out, then calls `onRemove`. */
+	dismissible?: boolean;
+	/** Accessible label for the dismiss control. */
+	dismissLabel?: string;
+	/** Changes on every addSnackbar for this id; resets the slide-in and any pending removal. */
+	revision?: number;
 }
 
 const statusClasses: Record<SnackbarStatus, string> = {
@@ -19,27 +28,55 @@ const statusClasses: Record<SnackbarStatus, string> = {
 	info: 'wcpos:bg-gray-700 wcpos:text-white',
 };
 
-export function Snackbar({ message, status = 'saving', onRemove, timeout = true }: SnackbarProps) {
+export function Snackbar({
+	message,
+	revision,
+	status = 'saving',
+	onRemove,
+	timeout,
+	actions,
+	dismissible = false,
+	dismissLabel = 'Dismiss',
+}: SnackbarProps) {
+	// A snackbar the user can act on stays until they do.
+	const autoDismiss = timeout ?? !((actions?.length ?? 0) > 0 || dismissible);
 	const [visible, setVisible] = React.useState(false);
+	const removeTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-	// Slide in on mount.
+	// Slide in on mount, and again when the provider reuses this instance
+	// under the same id with a new message or revision: that drops any pending removal.
 	React.useEffect(() => {
+		clearTimeout(removeTimer.current);
 		if (!message) return;
 		const frame = requestAnimationFrame(() => setVisible(true));
 		return () => cancelAnimationFrame(frame);
-	}, [message]);
+	}, [message, revision]);
 
-	// Auto-dismiss: slide out then remove.
+	// The provider passes a new onRemove on every render; reading it through a
+	// ref keeps `dismiss` stable so those renders do not restart the timer.
+	const onRemoveRef = React.useRef(onRemove);
+	React.useLayoutEffect(() => {
+		onRemoveRef.current = onRemove;
+	});
+
+	// Slide out, then remove once the 300ms transition has finished.
+	const dismiss = React.useCallback(() => {
+		setVisible(false);
+		clearTimeout(removeTimer.current);
+		removeTimer.current = setTimeout(() => onRemoveRef.current?.(), 300);
+	}, []);
+
+	// Never call onRemove after unmount.
+	React.useEffect(() => () => clearTimeout(removeTimer.current), []);
+
+	// Auto-dismiss.
 	// "saving" status never auto-dismisses — it's meant to be replaced by a
 	// terminal status (success/error) when the operation completes.
 	React.useEffect(() => {
-		if (!message || status === 'saving' || !timeout) return;
-		const timer = setTimeout(() => {
-			setVisible(false);
-			setTimeout(() => onRemove?.(), 300);
-		}, 2000);
+		if (!message || status === 'saving' || !autoDismiss) return;
+		const timer = setTimeout(dismiss, 2000);
 		return () => clearTimeout(timer);
-	}, [message, status, onRemove, timeout]);
+	}, [message, revision, status, dismiss, autoDismiss]);
 
 	if (!message) return null;
 
@@ -53,7 +90,29 @@ export function Snackbar({ message, status = 'saving', onRemove, timeout = true 
 					: 'wcpos:-translate-y-full wcpos:opacity-0'
 			)}
 		>
-			{message}
+			<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:gap-4">
+				<span>{message}</span>
+				{actions?.map((action, index) => (
+					<button
+						key={index}
+						type="button"
+						onClick={action.onClick}
+						className="wcpos:shrink-0 wcpos:whitespace-nowrap wcpos:cursor-pointer wcpos:font-semibold wcpos:underline wcpos:underline-offset-2"
+					>
+						{action.label}
+					</button>
+				))}
+				{dismissible && onRemove && (
+					<button
+						type="button"
+						aria-label={dismissLabel}
+						onClick={dismiss}
+						className="wcpos:shrink-0 wcpos:cursor-pointer wcpos:px-1 wcpos:leading-none wcpos:hover:opacity-80"
+					>
+						&times;
+					</button>
+				)}
+			</div>
 		</div>
 	);
 }

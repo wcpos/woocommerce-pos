@@ -1,23 +1,23 @@
-import { Link, useMatchRoute } from '@tanstack/react-router';
-import classNames from 'classnames';
+import { useLinkProps, useMatchRoute } from '@tanstack/react-router';
 
-import { Chip } from '@wcpos/ui';
+import { Chip, NavItem } from '@wcpos/ui';
 
 interface SeverityBadge {
 	error?: number;
 	warning?: number;
 }
 
-interface NavItemProps {
+interface RouteNavItemProps {
 	to: string;
 	label: string;
 	badge?: number | SeverityBadge;
 	onClick?: () => void;
 }
 
-export function NavItem({ to, label, badge, onClick }: NavItemProps) {
+export function RouteNavItem({ to, label, badge, onClick }: RouteNavItemProps) {
 	const matchRoute = useMatchRoute();
-	const isActive = matchRoute({ to });
+	const linkProps = useLinkProps({ to, onClick });
+	const active = !!matchRoute({ to });
 
 	const renderBadge = () => {
 		if (badge == null) return null;
@@ -51,19 +51,12 @@ export function NavItem({ to, label, badge, onClick }: NavItemProps) {
 	};
 
 	return (
-		<Link
-			to={to}
-			onClick={onClick}
+		<NavItem
+			{...linkProps}
+			active={active}
+			label={label}
+			badge={renderBadge()}
 			data-testid={`settings-nav-${to.replace(/^\//, '')}`}
-			className={classNames(
-				'wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:no-underline wcpos:border-l-3 wcpos:transition-colors wcpos:hover:bg-gray-100 wcpos:focus-visible:outline-none wcpos:focus-visible:bg-gray-100',
-				isActive
-					? 'wcpos:border-wp-admin-theme-color wcpos:bg-wp-admin-theme-color-lightest wcpos:text-gray-900 wcpos:font-semibold'
-					: 'wcpos:border-transparent wcpos:text-gray-600 wcpos:hover:text-gray-900 wcpos:hover:bg-gray-50'
-			)}
-		>
-			{label}
-			{renderBadge()}
-		</Link>
+		/>
 	);
 }
