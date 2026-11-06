@@ -3,19 +3,24 @@ import * as React from 'react';
 import {
 	createMemoryHistory,
 	createRootRoute,
+	createRoute,
 	createRouter,
 	RouterProvider,
 } from '@tanstack/react-router';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 import { RouteNavItem } from './nav-item';
 
 function renderAt(path: string, ui: React.ReactNode) {
+	const root = createRootRoute({ component: () => <>{ui}</> });
 	const router = createRouter({
-		routeTree: createRootRoute({ component: () => <>{ui}</> }),
+		routeTree: root.addChildren([
+			createRoute({ getParentRoute: () => root, path: 'extensions', component: () => null }),
+		]),
 		history: createMemoryHistory({ initialEntries: [path] }),
 	});
-	return render(<RouterProvider router={router} />);
+	render(<RouterProvider router={router} />);
+	return router;
 }
 
 describe('RouteNavItem', () => {
@@ -40,5 +45,21 @@ describe('RouteNavItem', () => {
 
 		const link = await screen.findByTestId('settings-nav-extensions');
 		expect(link.querySelector('span')).toBeNull();
+	});
+
+	it('calls the onClick passed by the sidebar when the link is clicked', async () => {
+		const onClick = vi.fn();
+		const router = renderAt(
+			'/',
+			<RouteNavItem to="/extensions" label="Extensions" onClick={onClick} />
+		);
+
+		const link = await screen.findByTestId('settings-nav-extensions');
+		await act(async () => {
+			fireEvent.click(link);
+		});
+
+		expect(onClick).toHaveBeenCalledTimes(1);
+		expect(router.state.location.pathname).toBe('/extensions');
 	});
 });
