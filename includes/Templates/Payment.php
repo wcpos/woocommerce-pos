@@ -110,7 +110,7 @@ class Payment {
 	 *
 	 * It runs twice, at wp_enqueue_scripts and again just before the footer scripts print, so the
 	 * list binds the whole page: some gateways enqueue from wp_footer (WooCommerce Stripe's
-	 * classic checkout script, which blocks every non-Stripe submit since Stripe 11.1.0).
+	 * classic checkout script, removed below Stripe 11.1.1 because there it blocks every non-Stripe submit).
 	 *
 	 * @since 1.3.0
 	 */
@@ -232,22 +232,25 @@ class Payment {
 	/**
 	 * Render the troubleshooting form HTML.
 	 *
+	 * @param null|string $stripe_version WooCommerce Stripe version; null reads WC_STRIPE_VERSION.
+	 *
 	 * @return string
 	 */
-	public function get_troubleshooting_form_html(): string {
+	public function get_troubleshooting_form_html( ?string $stripe_version = null ): string {
 		global $wp_styles, $wp_scripts;
 		$style_handles  = $wp_styles->queue;
 		$script_handles = $wp_scripts->queue;
-		$defaults       = Settings::instance()->sections()->get( 'checkout' )->defaults();
+		$style_floor    = Settings::instance()->dequeue_style_floor( $stripe_version );
+		$script_floor   = Settings::instance()->dequeue_script_floor( $stripe_version );
 
 		$style_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_style_handles',
-			Settings::instance()->dequeue_style_handles()
+			Settings::instance()->dequeue_style_handles( $stripe_version )
 		);
 
 		$script_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_script_handles',
-			Settings::instance()->dequeue_script_handles()
+			Settings::instance()->dequeue_script_handles( $stripe_version )
 		);
 
 		$merged_style_handles  = array_unique( array_merge( $style_handles, $style_exclude_list ) );
@@ -281,7 +284,7 @@ class Payment {
 									<h3><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Disable Selected Styles', 'woocommerce-pos' ); ?></h3>
 									<?php
 									foreach ( $merged_style_handles as $handle ) {
-										$is_default = \in_array( $handle, $defaults['dequeue_style_handles'] ?? array(), true );
+										$is_default = \in_array( $handle, $style_floor, true );
 										$checked    = ! $is_default && ! \in_array( $handle, $style_exclude_list, true ) ? 'checked' : '';
 										?>
 										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="styles[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?> <?php disabled( $is_default ); ?>>
@@ -293,7 +296,7 @@ class Payment {
 									<h3><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Disable Selected Scripts', 'woocommerce-pos' ); ?></h3>
 									<?php
 									foreach ( $merged_script_handles as $handle ) {
-										$is_default = \in_array( $handle, $defaults['dequeue_script_handles'] ?? array(), true );
+										$is_default = \in_array( $handle, $script_floor, true );
 										$checked    = ! $is_default && ! \in_array( $handle, $script_exclude_list, true ) ? 'checked' : '';
 										?>
 										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="scripts[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?> <?php disabled( $is_default ); ?>>
