@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 2.0.0\n"
+"Project-Id-Version: WCPOS 2.0.0-beta.2\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-02T00:17:06+00:00\n"
+"POT-Creation-Date: 2026-11-06T15:58:32+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -103,30 +103,30 @@ msgstr ""
 
 #. translators: WordPress admin menu label for WCPOS.
 #. translators: Order channel filter value shown in WooCommerce admin for POS orders.
-#: includes/Admin/Menu.php:117
-#: includes/Admin/Menu.php:119
+#: includes/Admin/Menu.php:122
+#: includes/Admin/Menu.php:124
 #: includes/Admin/Orders/List_Orders.php:42
 msgid "POS"
 msgstr ""
 
 #. translators: WordPress admin menu label for WCPOS.
-#: includes/Admin/Menu.php:129
-#: includes/Admin/Menu.php:131
+#: includes/Admin/Menu.php:134
+#: includes/Admin/Menu.php:136
 msgid "View POS"
 msgstr ""
 
 #. translators: WordPress admin submenu label that opens WCPOS settings.
 #. translators: Plugin row action link that opens WCPOS settings.
-#: includes/Admin/Menu.php:139
-#: includes/Admin/Menu.php:141
+#: includes/Admin/Menu.php:144
+#: includes/Admin/Menu.php:146
 #: includes/Admin/Plugins.php:38
 msgid "Settings"
 msgstr ""
 
 #. translators: WordPress admin menu label for WCPOS.
 #. translators: Receipt template post type or template option label.
-#: includes/Admin/Menu.php:151
-#: includes/Admin/Menu.php:153
+#: includes/Admin/Menu.php:156
+#: includes/Admin/Menu.php:158
 #: includes/Templates.php:217
 #: includes/Templates.php:222
 msgid "Templates"
@@ -135,13 +135,13 @@ msgstr ""
 #. translators: WordPress admin menu label for WCPOS.
 #. translators: Plugin admin screen label or notice for WCPOS.
 #. translators: Product POS visibility or barcode label in WooCommerce admin.
-#: includes/Admin/Menu.php:163
+#: includes/Admin/Menu.php:168
 #: includes/Admin/Plugins.php:54
 #: includes/Admin/Products/Single_Product.php:208
 msgid "Upgrade to Pro"
 msgstr ""
 
-#: includes/Admin/Menu.php:426
+#: includes/Admin/Menu.php:461
 msgid "You do not have permission to access this page."
 msgstr ""
 
@@ -292,7 +292,7 @@ msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
 #. translators: Checkout/payment form error message title.
-#: includes/Admin/Settings.php:60
+#: includes/Admin/Settings.php:61
 #: includes/Form_Handler.php:54
 #: includes/Form_Handler.php:66
 #: includes/Form_Handler.php:80
@@ -303,7 +303,7 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: includes/Admin/Settings.php:61
+#: includes/Admin/Settings.php:62
 msgid "Settings failed to load, please contact support"
 msgstr ""
 
