@@ -9,7 +9,14 @@ export interface SnackbarProps {
 	message: string;
 	status?: SnackbarStatus;
 	onRemove?: () => void;
+	/** Defaults to `false` when `actions` or `dismissible` is given, otherwise `true`. */
 	timeout?: boolean;
+	/** Rendered as text buttons after the message. */
+	actions?: { label: string; onClick: () => void }[];
+	/** Renders an × that calls `onRemove`. */
+	dismissible?: boolean;
+	/** Accessible label for the dismiss control. */
+	dismissLabel?: string;
 }
 
 const statusClasses: Record<SnackbarStatus, string> = {
@@ -19,7 +26,17 @@ const statusClasses: Record<SnackbarStatus, string> = {
 	info: 'wcpos:bg-gray-700 wcpos:text-white',
 };
 
-export function Snackbar({ message, status = 'saving', onRemove, timeout = true }: SnackbarProps) {
+export function Snackbar({
+	message,
+	status = 'saving',
+	onRemove,
+	timeout,
+	actions,
+	dismissible = false,
+	dismissLabel = 'Dismiss',
+}: SnackbarProps) {
+	// A snackbar the user can act on stays until they do.
+	const autoDismiss = timeout ?? !((actions?.length ?? 0) > 0 || dismissible);
 	const [visible, setVisible] = React.useState(false);
 
 	// Slide in on mount.
@@ -33,13 +50,13 @@ export function Snackbar({ message, status = 'saving', onRemove, timeout = true 
 	// "saving" status never auto-dismisses — it's meant to be replaced by a
 	// terminal status (success/error) when the operation completes.
 	React.useEffect(() => {
-		if (!message || status === 'saving' || !timeout) return;
+		if (!message || status === 'saving' || !autoDismiss) return;
 		const timer = setTimeout(() => {
 			setVisible(false);
 			setTimeout(() => onRemove?.(), 300);
 		}, 2000);
 		return () => clearTimeout(timer);
-	}, [message, status, onRemove, timeout]);
+	}, [message, status, onRemove, autoDismiss]);
 
 	if (!message) return null;
 
@@ -53,7 +70,24 @@ export function Snackbar({ message, status = 'saving', onRemove, timeout = true 
 					: 'wcpos:-translate-y-full wcpos:opacity-0'
 			)}
 		>
-			{message}
+			<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:gap-4">
+				<span>{message}</span>
+				{actions?.map((action) => (
+					<button
+						key={action.label}
+						type="button"
+						onClick={action.onClick}
+						className="wcpos:font-semibold wcpos:underline-offset-2"
+					>
+						{action.label}
+					</button>
+				))}
+				{dismissible && (
+					<button type="button" aria-label={dismissLabel} onClick={onRemove}>
+						&times;
+					</button>
+				)}
+			</div>
 		</div>
 	);
 }
