@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
-Stable tag: 1.11.9
+Stable tag: 1.11.10
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -127,6 +127,16 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.11.10 - 2026/11/06 =
+
+- **A store running a plugin that returns nothing from WordPress's REST dispatch filter syncs its whole catalogue again.** WP Activity Log's Redirection sensor does this; the POS asked for every product id, got one page of ten, and silently never finished syncing.
+- **PDF receipts cap images at 128 MB on every host.** The limit used to follow the host's memory_limit, so the same receipt image rendered on one host and showed a broken-image placeholder on another.
+- **A sale with two coupons on a line whose price includes tax now totals exactly as WooCommerce does.**
+- **Reloading the POS no longer raises an "unknown tax rate" warning before the store's tax rates have been read.**
+- **A store that is slow to answer when connecting is no longer reported as blocking WCPOS.**
+- **A 1.11 till that meets a store already on WCPOS 2.0 is told to sync before updating, with a link to the upgrade guide.**
+- Developers: the app's translations come from the 2026.11.1-card tag.
 
 = 1.11.9 - 2026/11/01 =
 
