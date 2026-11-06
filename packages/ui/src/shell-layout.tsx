@@ -35,7 +35,7 @@ export function ShellLayout({
 						aria-label="Open main menu"
 						aria-expanded={mobileNavOpen}
 						onClick={onToggleMobileNav}
-						className="wcpos:lg:hidden wcpos:p-2 wcpos:mr-2 wcpos:rounded-md wcpos:text-gray-600 hover:wcpos:bg-gray-100"
+						className="wcpos:lg:hidden wcpos:p-2 wcpos:mr-2 wcpos:rounded-md wcpos:text-gray-600 wcpos:hover:bg-gray-100"
 					>
 						<svg
 							className="wcpos:h-5 wcpos:w-5"
