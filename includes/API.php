@@ -567,9 +567,10 @@ class API {
 	 * When a later listener nulls that answer, core runs the paginated callback and the
 	 * POS would sync one page as the whole catalogue. Runs first on
 	 * rest_request_after_callbacks, so WCPOS telemetry, the error reporter and every
-	 * other listener see the restored answer and may still change it. A WP_Error is
-	 * never replaced: a later listener refused the request, or the callback failed.
-	 * The entry is always removed.
+	 * other listener see the restored answer and may still change it. A WP_Error or an
+	 * error-status WP_REST_Response is never replaced: a later listener refused the
+	 * request (a 429, say), or the callback failed. A 2xx is still replaced, because it
+	 * may be the paginated callback's single page. The entry is always removed.
 	 *
 	 * @param mixed           $response Result after the callbacks ran.
 	 * @param array           $handler  Route handler used for the request.
@@ -585,7 +586,7 @@ class API {
 		$remembered = $this->short_circuits[ $request ];
 		unset( $this->short_circuits[ $request ] );
 
-		if ( is_wp_error( $response ) ) {
+		if ( is_wp_error( $response ) || ( $response instanceof WP_REST_Response && $response->is_error() ) ) {
 			return $response;
 		}
 
