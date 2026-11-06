@@ -146,5 +146,7 @@
 	"snackbar.install_failed": "Failed to install template",
 	"table.update_available": "Update available",
 	"table.update_available_title": "This template is based on v{installed} of \"{name}\"; v{latest} is now bundled. Your edits are kept — installing adds the new version as a separate template.",
-	"table.install_new_version": "Install new version"
+	"table.install_new_version": "Install new version",
+	"table.move_up": "Move {title} up",
+	"table.move_down": "Move {title} down"
 }
