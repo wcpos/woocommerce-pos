@@ -64,14 +64,14 @@ const LEVEL_TEXT: Record<string, string> = {
 };
 
 const LEVEL_HOVER: Record<string, string> = {
-	emergency: 'hover:wcpos:bg-red-50',
-	alert: 'hover:wcpos:bg-red-50',
-	critical: 'hover:wcpos:bg-red-50',
-	error: 'hover:wcpos:bg-red-50',
-	warning: 'hover:wcpos:bg-amber-50',
-	notice: 'hover:wcpos:bg-blue-50',
-	info: 'hover:wcpos:bg-blue-50',
-	debug: 'hover:wcpos:bg-gray-50',
+	emergency: 'wcpos:hover:bg-red-50',
+	alert: 'wcpos:hover:bg-red-50',
+	critical: 'wcpos:hover:bg-red-50',
+	error: 'wcpos:hover:bg-red-50',
+	warning: 'wcpos:hover:bg-amber-50',
+	notice: 'wcpos:hover:bg-blue-50',
+	info: 'wcpos:hover:bg-blue-50',
+	debug: 'wcpos:hover:bg-gray-50',
 };
 
 const LEVEL_CHIP: Record<string, ChipVariant> = {
@@ -376,7 +376,7 @@ function Logs() {
 							setExpandedKey(null);
 						}}
 						disabled={page <= 1}
-						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 disabled:wcpos:opacity-50"
+						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 wcpos:disabled:opacity-50"
 					>
 						{t('common.previous', 'Previous')}
 					</button>
@@ -389,7 +389,7 @@ function Logs() {
 							setExpandedKey(null);
 						}}
 						disabled={page >= totalPages}
-						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 disabled:wcpos:opacity-50"
+						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 wcpos:disabled:opacity-50"
 					>
 						{t('common.next', 'Next')}
 					</button>

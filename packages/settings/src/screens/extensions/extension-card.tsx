@@ -83,7 +83,7 @@ function VersionLine({ extension }: { extension: Extension }) {
 						href={currentUrl}
 						target="_blank"
 						rel="noopener noreferrer"
-						className="hover:wcpos:text-gray-600 wcpos:transition-colors"
+						className="wcpos:hover:text-gray-600 wcpos:transition-colors"
 					>
 						v{installed_version}
 					</a>
@@ -96,7 +96,7 @@ function VersionLine({ extension }: { extension: Extension }) {
 						href={updateUrl}
 						target="_blank"
 						rel="noopener noreferrer"
-						className="wcpos:text-yellow-700 hover:wcpos:text-yellow-800 wcpos:transition-colors"
+						className="wcpos:text-yellow-700 wcpos:hover:text-yellow-800 wcpos:transition-colors"
 					>
 						v{latest_version}
 					</a>
@@ -117,7 +117,7 @@ function VersionLine({ extension }: { extension: Extension }) {
 					href={url}
 					target="_blank"
 					rel="noopener noreferrer"
-					className="hover:wcpos:text-gray-600 wcpos:transition-colors"
+					className="wcpos:hover:text-gray-600 wcpos:transition-colors"
 				>
 					v{version}
 				</a>
@@ -178,7 +178,7 @@ function FooterAction({ extension }: { extension: Extension }) {
 						<button
 							type="button"
 							disabled
-							className="wcpos:inline-flex wcpos:items-center wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:px-3 wcpos:py-1.5 wcpos:text-xs wcpos:font-medium wcpos:text-gray-700 disabled:wcpos:opacity-60 disabled:wcpos:cursor-not-allowed"
+							className="wcpos:inline-flex wcpos:items-center wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:px-3 wcpos:py-1.5 wcpos:text-xs wcpos:font-medium wcpos:text-gray-700 wcpos:disabled:opacity-60 wcpos:disabled:cursor-not-allowed"
 						>
 							{t('extensions.install', 'Install')}
 						</button>

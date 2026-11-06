@@ -77,7 +77,7 @@ function SessionCard({
 				'wcpos:rounded-md wcpos:border wcpos:bg-white wcpos:p-3 wcpos:transition-colors',
 				session.is_current
 					? 'wcpos:border-wp-admin-theme-color wcpos:ring-1 wcpos:ring-wp-admin-theme-color/30'
-					: 'wcpos:border-gray-200 hover:wcpos:border-gray-300'
+					: 'wcpos:border-gray-200 wcpos:hover:border-gray-300'
 			)}
 		>
 			<div className="wcpos:flex wcpos:items-start wcpos:gap-3">
@@ -146,8 +146,8 @@ function SessionCard({
 
 					{session.user_agent && (
 						<details className="wcpos:mt-2 wcpos:group">
-							<summary className="wcpos:flex wcpos:cursor-pointer wcpos:select-none wcpos:items-center wcpos:gap-1 wcpos:text-[11px] wcpos:text-gray-500 hover:wcpos:text-gray-700">
-								<span className="wcpos:text-[8px] wcpos:transition-transform group-open:wcpos:rotate-90">
+							<summary className="wcpos:flex wcpos:cursor-pointer wcpos:select-none wcpos:items-center wcpos:gap-1 wcpos:text-[11px] wcpos:text-gray-500 wcpos:hover:text-gray-700">
+								<span className="wcpos:text-[8px] wcpos:transition-transform wcpos:group-open:rotate-90">
 									&#9654;
 								</span>
 								{t('sessions.user_agent')}

@@ -35,7 +35,7 @@ export function GalleryGridSkeleton() {
 					{Array.from({ length: 3 }).map((_, i) => (
 						<div
 							key={i}
-							className="wcpos:flex wcpos:items-center wcpos:gap-4 wcpos:px-4 wcpos:py-3 wcpos:border-b wcpos:border-gray-100 last:wcpos:border-b-0"
+							className="wcpos:flex wcpos:items-center wcpos:gap-4 wcpos:px-4 wcpos:py-3 wcpos:border-b wcpos:border-gray-100 wcpos:last:border-b-0"
 						>
 							<Skeleton className="wcpos:h-4 wcpos:w-6" />
 							<Skeleton className="wcpos:h-4 wcpos:flex-1" width={`${40 + ((i * 15) % 30)}%`} />

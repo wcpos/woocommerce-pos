@@ -97,7 +97,7 @@ export function FilterSidebar({
 					aria-label={t('filter.expand')}
 					aria-expanded={false}
 					aria-controls="template-filters-sidebar"
-					className="wcpos:p-2 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:bg-white wcpos:cursor-pointer wcpos:text-gray-600 hover:wcpos:border-gray-400"
+					className="wcpos:p-2 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:bg-white wcpos:cursor-pointer wcpos:text-gray-600 wcpos:hover:border-gray-400"
 				>
 					&#9776;
 				</button>
@@ -136,7 +136,7 @@ export function FilterSidebar({
 					aria-label={t('filter.collapse')}
 					aria-expanded
 					aria-controls="template-filters-sidebar"
-					className="wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:text-lg wcpos:leading-none"
+					className="wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:text-gray-400 wcpos:hover:text-gray-600 wcpos:text-lg wcpos:leading-none"
 				>
 					&#10005;
 				</button>
@@ -149,7 +149,7 @@ export function FilterSidebar({
 				placeholder={t('filter.search_placeholder')}
 				value={filters.search}
 				onChange={(e) => handleSearchChange(e.target.value)}
-				className="wcpos:w-full wcpos:px-3 wcpos:py-1.5 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:text-sm focus:wcpos:outline-none focus:wcpos:ring-1 focus:wcpos:ring-wp-admin-theme-color focus:wcpos:border-wp-admin-theme-color"
+				className="wcpos:w-full wcpos:px-3 wcpos:py-1.5 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:text-sm wcpos:focus:outline-hidden wcpos:focus:ring-1 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:border-wp-admin-theme-color"
 			/>
 
 			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
@@ -239,7 +239,7 @@ export function FilterSidebar({
 				<button
 					type="button"
 					onClick={handleClear}
-					className="wcpos:text-sm wcpos:text-wp-admin-theme-color wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer hover:wcpos:underline"
+					className="wcpos:text-sm wcpos:text-wp-admin-theme-color wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:hover:underline"
 				>
 					{t('filter.clear_all')}
 				</button>
