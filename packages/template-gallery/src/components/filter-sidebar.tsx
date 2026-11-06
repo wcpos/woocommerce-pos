@@ -149,7 +149,7 @@ export function FilterSidebar({
 				placeholder={t('filter.search_placeholder')}
 				value={filters.search}
 				onChange={(e) => handleSearchChange(e.target.value)}
-				className="wcpos:w-full wcpos:px-3 wcpos:py-1.5 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:text-sm wcpos:focus:outline-none wcpos:focus:ring-1 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:border-wp-admin-theme-color"
+				className="wcpos:w-full wcpos:px-3 wcpos:py-1.5 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:text-sm wcpos:focus:outline-hidden wcpos:focus:ring-1 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:border-wp-admin-theme-color"
 			/>
 
 			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
