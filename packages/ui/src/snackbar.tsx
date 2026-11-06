@@ -13,7 +13,7 @@ export interface SnackbarProps {
 	timeout?: boolean;
 	/** Rendered as text buttons after the message. */
 	actions?: { label: string; onClick: () => void }[];
-	/** Renders an × that calls `onRemove`. */
+	/** Renders an × (only when `onRemove` is given) that slides the bar out, then calls `onRemove`. */
 	dismissible?: boolean;
 	/** Accessible label for the dismiss control. */
 	dismissLabel?: string;
@@ -38,16 +38,18 @@ export function Snackbar({
 	// A snackbar the user can act on stays until they do.
 	const autoDismiss = timeout ?? !((actions?.length ?? 0) > 0 || dismissible);
 	const [visible, setVisible] = React.useState(false);
+	const removeTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-	// Slide in on mount.
+	// Slide in on mount, and again when the provider reuses this instance
+	// under the same id with a new message: that drops any pending removal.
 	React.useEffect(() => {
+		clearTimeout(removeTimer.current);
 		if (!message) return;
 		const frame = requestAnimationFrame(() => setVisible(true));
 		return () => cancelAnimationFrame(frame);
 	}, [message]);
 
 	// Slide out, then remove once the 300ms transition has finished.
-	const removeTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const dismiss = React.useCallback(() => {
 		setVisible(false);
 		clearTimeout(removeTimer.current);

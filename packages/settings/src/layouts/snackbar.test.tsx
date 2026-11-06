@@ -62,6 +62,22 @@ describe('Snackbar', () => {
 		expect(onRemove).not.toHaveBeenCalled();
 	});
 
+	it('drops a pending removal when reused with a new message', () => {
+		vi.useFakeTimers();
+		const onRemove = vi.fn();
+		const { rerender } = render(
+			<Snackbar id="save" status="error" message="Couldn't save." dismissible onRemove={onRemove} />
+		);
+
+		fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+		rerender(<Snackbar id="save" status="saving" message="Saving…" onRemove={onRemove} />);
+		act(() => {
+			vi.advanceTimersByTime(300);
+		});
+
+		expect(onRemove).not.toHaveBeenCalled();
+	});
+
 	it('does not auto-dismiss when dismissible', () => {
 		vi.useFakeTimers();
 		const onRemove = vi.fn();
