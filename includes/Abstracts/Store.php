@@ -170,7 +170,7 @@ class Store extends \WC_Data {
 	}
 
 	/**
-	 * Set WooCommerce POS settings.
+	 * Set WCPOS settings.
 	 */
 	public function set_woocommerce_pos_settings() {
 		$this->set_prop( 'default_customer', Settings::instance()->default_customer_id() );

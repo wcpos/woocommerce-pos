@@ -209,7 +209,7 @@ class Test_Session_Registry extends WP_UnitTestCase {
 
 		$this->assertEquals( 'ios_app', $device_info['app_type'] );
 		$this->assertEquals( 'tablet', $device_info['device_type'] );
-		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( 'WCPOS', $device_info['browser'] );
 		$this->assertEquals( '1.4.0', $device_info['browser_version'] );
 		$this->assertEquals( '412', $device_info['build'] );
 	}
@@ -224,7 +224,7 @@ class Test_Session_Registry extends WP_UnitTestCase {
 
 		$this->assertEquals( 'android_app', $device_info['app_type'] );
 		$this->assertEquals( 'tablet', $device_info['device_type'] );
-		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( 'WCPOS', $device_info['browser'] );
 		$this->assertEquals( '2.0.1', $device_info['browser_version'] );
 		$this->assertEquals( '77', $device_info['build'] );
 	}
@@ -239,7 +239,7 @@ class Test_Session_Registry extends WP_UnitTestCase {
 
 		$this->assertEquals( 'electron_app', $device_info['app_type'] );
 		$this->assertEquals( 'desktop', $device_info['device_type'] );
-		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( 'WCPOS', $device_info['browser'] );
 		$this->assertEquals( '3.1.0', $device_info['browser_version'] );
 		$this->assertEquals( '5', $device_info['build'] );
 	}
@@ -271,7 +271,7 @@ class Test_Session_Registry extends WP_UnitTestCase {
 
 		$this->assertEquals( 'ios_app', $device_info['app_type'] );
 		$this->assertEquals( 'tablet', $device_info['device_type'] );
-		$this->assertEquals( 'WooCommerce POS', $device_info['browser'] );
+		$this->assertEquals( 'WCPOS', $device_info['browser'] );
 		$this->assertEquals( '120.0.0.0', $device_info['browser_version'] );
 		$this->assertArrayNotHasKey( 'build', $device_info );
 	}

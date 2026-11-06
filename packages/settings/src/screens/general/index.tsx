@@ -3,7 +3,7 @@ import * as React from 'react';
 import { isNumber, isString } from 'lodash';
 
 import { PrivacyInfoModal } from '@wcpos/consent';
-import { type TaxId } from '@wcpos/ui';
+import { Callout, type TaxId } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { CloudflareCallout } from './cloudflare-callout';
@@ -15,7 +15,7 @@ import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
 import { FormSkeleton, Skeleton } from '../../components/skeleton';
-import { Toggle, Checkbox } from '../../components/ui';
+import { Button, Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { syncConsent } from '../../lib/analytics';
 import { t } from '../../translations';
@@ -110,6 +110,15 @@ function General() {
 				RegisterSection) as React.ComponentType<RegisterSectionProps>,
 		[]
 	);
+
+	const setTrackingConsent = (choice: 'allowed' | 'denied') => {
+		// Apply it to the live client first. The page does not reload on
+		// save, so a client initialised while consent was allowed would
+		// otherwise keep capturing for the rest of the session after the
+		// user opted out.
+		syncConsent(choice);
+		mutate({ tracking_consent: choice });
+	};
 
 	return (
 		<>
@@ -215,20 +224,26 @@ function General() {
 				</React.Suspense>
 			</FormSection>
 			<FormSection title={t('settings.privacy_section_title')} divider>
+				{data?.tracking_consent === 'undecided' && (
+					<div data-testid="privacy-undecided-prompt" className="wcpos:mb-4">
+						<Callout status="info">
+							<p className="wcpos:m-0">{t('settings.privacy_undecided_prompt')}</p>
+							<div className="wcpos:mt-2 wcpos:flex wcpos:gap-2">
+								<Button onClick={() => setTrackingConsent('allowed')}>
+									{t('settings.privacy_undecided_allow')}
+								</Button>
+								<Button variant="secondary" onClick={() => setTrackingConsent('denied')}>
+									{t('settings.privacy_undecided_deny')}
+								</Button>
+							</div>
+						</Callout>
+					</div>
+				)}
 				<FormRow>
 					<Label>
 						<Toggle
 							checked={data?.tracking_consent === 'allowed'}
-							onChange={(enabled: boolean) => {
-								const choice = enabled ? 'allowed' : 'denied';
-
-								// Apply it to the live client first. The page does not
-								// reload on save, so a client initialised while consent
-								// was allowed would otherwise keep capturing for the
-								// rest of the session after the user opted out.
-								syncConsent(choice);
-								mutate({ tracking_consent: choice });
-							}}
+							onChange={(enabled: boolean) => setTrackingConsent(enabled ? 'allowed' : 'denied')}
 							label={t('settings.allow_anonymous_usage_data_v2')}
 						/>
 					</Label>

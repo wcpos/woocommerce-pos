@@ -62,6 +62,13 @@ class Consent {
 	public const CALLOUT_HIDE_TTL = 7 * DAY_IN_SECONDS;
 
 	/**
+	 * Set on activation/update; while it lives (7 days) the callout also
+	 * shows on WooCommerce screens. MODAL_TRANSIENT is too short for this.
+	 */
+	public const REACH_TRANSIENT     = 'wcpos_consent_reach';
+	public const REACH_TRANSIENT_TTL = 7 * DAY_IN_SECONDS;
+
+	/**
 	 * Hook suffixes where the inline callout + modal mount point are
 	 * allowed. The Plugins screen is the primary target (users land
 	 * here after activation) and the Dashboard is the fallback.
@@ -69,6 +76,19 @@ class Consent {
 	 * @var string[]
 	 */
 	private const ALLOWED_HOOK_SUFFIXES = array( 'plugins.php', 'index.php' );
+
+	/**
+	 * Hook suffix prefix of WooCommerce submenu screens (Orders, Settings, ...),
+	 * allowed with toplevel_page_woocommerce while REACH_TRANSIENT lives.
+	 */
+	private const WOOCOMMERCE_HOOK_SUFFIX_PREFIX = 'woocommerce_page_';
+
+	/**
+	 * WooCommerce's React screens (Home, Analytics) move admin notices into a
+	 * hidden #wp__notice-list, so the callout would be recorded as viewed
+	 * without being seen. Never a reach screen.
+	 */
+	private const WOOCOMMERCE_REACT_HOOK_SUFFIX = 'woocommerce_page_wc-admin';
 
 	/**
 	 * Register lifecycle + REST hooks.
@@ -155,6 +175,7 @@ class Consent {
 		}
 
 		set_transient( self::MODAL_TRANSIENT, 1, self::MODAL_TRANSIENT_TTL );
+		set_transient( self::REACH_TRANSIENT, 1, self::REACH_TRANSIENT_TTL );
 
 		// Activation/update re-surfaces the callout — clear any prior
 		// "hide for now" state for the current user so the prompt is
@@ -348,6 +369,7 @@ class Consent {
 		// Decision recorded — clear any pending auto-open flag and any
 		// lingering "hide for now" user meta so the state is coherent.
 		delete_transient( self::MODAL_TRANSIENT );
+		delete_transient( self::REACH_TRANSIENT );
 		$user_id = get_current_user_id();
 		if ( $user_id ) {
 			delete_user_meta( $user_id, self::CALLOUT_HIDE_META );
@@ -386,6 +408,7 @@ class Consent {
 
 		$hidden_until = time() + self::CALLOUT_HIDE_TTL;
 		update_user_meta( $user_id, self::CALLOUT_HIDE_META, $hidden_until );
+		delete_transient( self::REACH_TRANSIENT ); // An explicit dismiss ends the reach window.
 
 		return new WP_REST_Response( array( 'hiddenUntil' => $hidden_until ), 200 );
 	}
@@ -400,7 +423,10 @@ class Consent {
 			return false;
 		}
 
-		if ( ! \in_array( $hook_suffix, self::ALLOWED_HOOK_SUFFIXES, true ) ) {
+		$is_reach_screen = ( 'toplevel_page_woocommerce' === $hook_suffix || 0 === strpos( $hook_suffix, self::WOOCOMMERCE_HOOK_SUFFIX_PREFIX ) )
+			&& self::WOOCOMMERCE_REACT_HOOK_SUFFIX !== $hook_suffix
+			&& false !== get_transient( self::REACH_TRANSIENT );
+		if ( ! \in_array( $hook_suffix, self::ALLOWED_HOOK_SUFFIXES, true ) && ! $is_reach_screen ) {
 			return false;
 		}
 

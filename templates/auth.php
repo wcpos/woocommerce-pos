@@ -21,7 +21,7 @@ $error        = $wcpos_auth_instance->get_error();
 ?><!DOCTYPE html>
 <html <?php language_attributes(); ?>>
 <head>
-	<title><?php _e('WooCommerce POS Login'); ?></title>
+	<title><?php esc_html_e( 'WCPOS Login', 'woocommerce-pos' ); ?></title>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel='stylesheet' id='dashicons-css' href='<?php echo includes_url( 'css/dashicons.min.css' ); ?>?ver=<?php echo get_bloginfo( 'version' ); ?>' media='all' />
@@ -37,7 +37,7 @@ $error        = $wcpos_auth_instance->get_error();
 <div id="login">
 	<div style="text-align: center;">
 		<a href="<?php echo esc_url( home_url( '/' ) ); ?>" title="<?php echo esc_attr( get_bloginfo( 'name', 'display' ) ); ?>" tabindex="-1">
-			<img src="<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/img/wcpos-icon.svg" alt="WooCommerce POS" style="width: 100px; height: 100px;"/>
+			<img src="<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/img/wcpos-icon.svg" alt="WCPOS" style="width: 100px; height: 100px;"/>
 		</a>
 	</div>
 

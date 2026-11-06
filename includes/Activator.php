@@ -189,7 +189,8 @@ class Activator {
 			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
 		}
 
-		// Flag the consent pop-up for the next admin page load. Done here
+		// Flag the consent pop-up for the next admin page load, and open the
+		// 7-day window that shows the callout on WooCommerce screens. Done here
 		// because the `activated_plugin` action in Admin\Consent fires
 		// inside the activation request, at which point our plugin's
 		// `plugins_loaded` callback hasn't yet instantiated Init on a
@@ -204,6 +205,7 @@ class Activator {
 			: 'undecided';
 		if ( 'undecided' === $tracking_consent ) {
 			set_transient( Consent::MODAL_TRANSIENT, 1, Consent::MODAL_TRANSIENT_TTL );
+			set_transient( Consent::REACH_TRANSIENT, 1, Consent::REACH_TRANSIENT_TTL );
 		}
 
 		if ( $install_sync_schema ) {
