@@ -78,6 +78,67 @@ describe('Snackbar', () => {
 		expect(onRemove).not.toHaveBeenCalled();
 	});
 
+	it('drops a pending removal and slides back in when reused with the same message', () => {
+		vi.useFakeTimers();
+		const onRemove = vi.fn();
+		const { rerender } = render(
+			<Snackbar
+				id="a"
+				status="error"
+				message="Couldn't save."
+				dismissible
+				onRemove={onRemove}
+				revision={1}
+			/>
+		);
+
+		fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+		act(() => {
+			vi.advanceTimersByTime(100);
+		});
+		rerender(
+			<Snackbar
+				id="a"
+				status="error"
+				message="Couldn't save."
+				dismissible
+				onRemove={onRemove}
+				revision={2}
+			/>
+		);
+		act(() => {
+			vi.advanceTimersByTime(300);
+		});
+
+		expect(onRemove).not.toHaveBeenCalled();
+		const bar = screen.getByText("Couldn't save.").parentElement?.parentElement as HTMLElement;
+		expect(bar.className).toContain('wcpos:translate-y-0 wcpos:opacity-100');
+	});
+
+	it('restarts auto-dismiss when reused with the same message', () => {
+		vi.useFakeTimers();
+		const onRemove = vi.fn();
+		const { rerender } = render(
+			<Snackbar id="a" status="success" message="Saved." onRemove={onRemove} revision={1} />
+		);
+
+		act(() => {
+			vi.advanceTimersByTime(2100);
+		});
+		rerender(
+			<Snackbar id="a" status="success" message="Saved." onRemove={onRemove} revision={2} />
+		);
+		act(() => {
+			vi.advanceTimersByTime(300);
+		});
+		expect(onRemove).not.toHaveBeenCalled();
+
+		act(() => {
+			vi.advanceTimersByTime(2000);
+		});
+		expect(onRemove).toHaveBeenCalledTimes(1);
+	});
+
 	it('does not auto-dismiss when dismissible', () => {
 		vi.useFakeTimers();
 		const onRemove = vi.fn();
@@ -153,7 +214,10 @@ describe('SnackbarProvider', () => {
 		const { addSnackbar, removeSnackbar } = useSnackbar();
 		return (
 			<>
-				<button type="button" onClick={() => addSnackbar({ id: 'note', message: 'Hello.' })}>
+				<button
+					type="button"
+					onClick={() => addSnackbar({ id: 'note', message: 'Hello.', dismissible: true })}
+				>
 					add
 				</button>
 				<button type="button" onClick={() => removeSnackbar('note')}>
@@ -175,5 +239,24 @@ describe('SnackbarProvider', () => {
 
 		fireEvent.click(screen.getByRole('button', { name: 'remove' }));
 		expect(screen.queryByText('Hello.')).toBeNull();
+	});
+
+	it('keeps a snackbar re-added with the same message while it slides out', () => {
+		vi.useFakeTimers();
+		render(
+			<SnackbarProvider>
+				<Harness />
+			</SnackbarProvider>
+		);
+
+		fireEvent.click(screen.getByRole('button', { name: 'add' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+		fireEvent.click(screen.getByRole('button', { name: 'add' }));
+		act(() => {
+			vi.advanceTimersByTime(300);
+		});
+
+		expect(screen.getByText('Hello.')).not.toBeNull();
+		vi.useRealTimers();
 	});
 });

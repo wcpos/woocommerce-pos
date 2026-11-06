@@ -17,6 +17,8 @@ export interface SnackbarProps {
 	dismissible?: boolean;
 	/** Accessible label for the dismiss control. */
 	dismissLabel?: string;
+	/** Changes on every addSnackbar for this id; resets the slide-in and any pending removal. */
+	revision?: number;
 }
 
 const statusClasses: Record<SnackbarStatus, string> = {
@@ -28,6 +30,7 @@ const statusClasses: Record<SnackbarStatus, string> = {
 
 export function Snackbar({
 	message,
+	revision,
 	status = 'saving',
 	onRemove,
 	timeout,
@@ -41,13 +44,13 @@ export function Snackbar({
 	const removeTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 	// Slide in on mount, and again when the provider reuses this instance
-	// under the same id with a new message: that drops any pending removal.
+	// under the same id with a new message or revision: that drops any pending removal.
 	React.useEffect(() => {
 		clearTimeout(removeTimer.current);
 		if (!message) return;
 		const frame = requestAnimationFrame(() => setVisible(true));
 		return () => cancelAnimationFrame(frame);
-	}, [message]);
+	}, [message, revision]);
 
 	// The provider passes a new onRemove on every render; reading it through a
 	// ref keeps `dismiss` stable so those renders do not restart the timer.
@@ -73,7 +76,7 @@ export function Snackbar({
 		if (!message || status === 'saving' || !autoDismiss) return;
 		const timer = setTimeout(dismiss, 2000);
 		return () => clearTimeout(timer);
-	}, [message, status, dismiss, autoDismiss]);
+	}, [message, revision, status, dismiss, autoDismiss]);
 
 	if (!message) return null;
 

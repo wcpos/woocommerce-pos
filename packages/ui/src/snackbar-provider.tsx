@@ -22,6 +22,7 @@ interface SnackbarProviderProps {
 }
 
 let snackbarCounter = 0;
+let snackbarRevision = 0;
 
 function generateSnackbarId(): string {
 	if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -75,7 +76,8 @@ export function SnackbarProvider({ children, boundsElement }: SnackbarProviderPr
 
 	const addSnackbar = React.useCallback((snackbar: AddSnackbarInput) => {
 		const id = snackbar.id ?? generateSnackbarId();
-		setSnackbars([{ ...snackbar, id }]);
+		snackbarRevision += 1;
+		setSnackbars([{ ...snackbar, id, revision: snackbarRevision }]);
 	}, []);
 
 	const removeSnackbar = React.useCallback((id: string) => {
