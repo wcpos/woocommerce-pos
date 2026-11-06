@@ -55,7 +55,7 @@ class Ledger {
 	 *
 	 * @var string[]
 	 */
-	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'authorized_at_gmt', 'provider_refs', 'receipt' );
+	private const RECORD_INPUT_KEYS = array( 'id', 'method_id', 'capture_mode', 'amount', 'currency', 'status', 'tendered', 'register_id', 'session_id', 'recorded_offline', 'transport', 'created_at_gmt', 'captured_at_gmt', 'authorized_at_gmt', 'provider_refs', 'receipt' );
 	public const SCHEMA = 1;
 	public const LIVE_STATUSES = array( 'pending', 'authorized', 'captured' );
 	/** Only captured money pays a sale (ADR 0040 rule 1, D6): an authorization is money in motion. */
@@ -540,6 +540,29 @@ class Ledger {
 	}
 
 	/**
+	 * Select the till's allowed connection, defaulting to the primary for existing callers.
+	 *
+	 * @param array $descriptor Payment method descriptor.
+	 * @param array $input      Payment input.
+	 * @return array|WP_Error
+	 */
+	private function requested_capture( array $descriptor, array $input ) {
+		if ( ! array_key_exists( 'capture_mode', $input ) ) {
+			return $descriptor['capture'];
+		}
+		$mode = $input['capture_mode'];
+		$capture = is_string( $mode ) ? Descriptor_Builder::capture_entry( $descriptor, $mode ) : null;
+		if ( null === $capture ) {
+			return new WP_Error(
+				'wcpos_capture_mode_not_allowed',
+				__( 'This till asked for a reader connection the store does not allow for this payment method.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+		return $capture;
+	}
+
+	/**
 	 * Validate and record money already taken.
 	 *
 	 * @param WC_Order           $order   Order object.
@@ -561,6 +584,13 @@ class Ledger {
 		$rows   = $this->read( $order );
 		$stored = $this->find_in_rows( $rows, strtolower( $input['id'] ) );
 		if ( $stored ) {
+			if ( isset( $input['capture_mode'] ) && is_string( $input['capture_mode'] ) && $input['capture_mode'] !== $stored['capture_mode'] ) {
+				return new WP_Error(
+					'wcpos_capture_mode_conflict',
+					__( 'This payment was started on a different reader connection.', 'woocommerce-pos' ),
+					array( 'status' => 409 )
+				);
+			}
 			return $this->replay( $order, $stored, $input, $amount, $currency ); // A route replay heals in Command_Log::run().
 		}
 		// A closed sale takes no new tender (§4.2). A paid one keeps the refused-row record below
@@ -574,7 +604,12 @@ class Ledger {
 		if ( is_wp_error( $descriptor ) ) {
 			return $descriptor;
 		}
-		if ( ! $this->is_recordable( $descriptor ) ) {
+		$capture = $this->requested_capture( $descriptor, $input );
+		if ( is_wp_error( $capture ) ) {
+			return $capture;
+		}
+		// An omitted mode uses the primary capture block, whose capabilities live at the top level.
+		if ( ! $this->is_recordable( $capture + array( 'capabilities' => $descriptor['capabilities'] ) ) ) {
 			return new WP_Error(
 				'wcpos_method_not_recordable',
 				__( 'This payment method cannot be recorded; it has to run its own payment leg.', 'woocommerce-pos' ),
@@ -607,9 +642,9 @@ class Ledger {
 				'source'          => 'app',
 				'order_id'        => $order->get_id(),
 				'method_id'       => $descriptor['id'],
-				'provider'        => $descriptor['capture']['provider'],
+				'provider'        => $capture['provider'],
 				'kind'            => $descriptor['kind'],
-				'capture_mode'    => $descriptor['capture']['mode'],
+				'capture_mode'    => $capture['mode'],
 				'amount'          => $amount,
 				'currency'        => $currency,
 				'tendered'        => $tendered,
@@ -757,6 +792,13 @@ class Ledger {
 		$rows = $this->read( $order );
 		$row = $this->find_in_rows( $rows, strtolower( $id ) );
 		if ( $row ) {
+			if ( isset( $input['capture_mode'] ) && is_string( $input['capture_mode'] ) && $input['capture_mode'] !== $row['capture_mode'] ) {
+				return new WP_Error(
+					'wcpos_capture_mode_conflict',
+					__( 'This payment was started on a different reader connection.', 'woocommerce-pos' ),
+					array( 'status' => 409 )
+				);
+			}
 			$replayed = $this->replay( $order, $row, $input, $amount, $currency );
 			if ( is_wp_error( $replayed ) ) {
 				return $replayed;
@@ -810,6 +852,10 @@ class Ledger {
 				'handoff' => $handoff,
 			);
 		}
+		$capture = $this->requested_capture( $descriptor, $input );
+		if ( is_wp_error( $capture ) ) {
+			return $capture;
+		}
 		// Only a NEW leg needs the method enabled: a replay or resume above answers what already started.
 		if ( ! $descriptor['pos_enabled'] ) {
 			return new WP_Error( 'wcpos_payment_method_disabled', __( 'Payment method is disabled.', 'woocommerce-pos' ), array( 'status' => 403 ) );
@@ -851,9 +897,9 @@ class Ledger {
 				'commands' => $this->with_command( array(), $command )['commands'] ?? array(),
 				'source' => in_array( $input['source'] ?? '', self::SOURCES, true ) ? $input['source'] : 'app',
 				'method_id' => $descriptor['id'],
-				'provider' => $descriptor['capture']['provider'],
+				'provider' => $capture['provider'],
 				'kind' => $descriptor['kind'],
-				'capture_mode' => $descriptor['capture']['mode'],
+				'capture_mode' => $capture['mode'],
 				'amount' => $amount,
 				'currency' => $currency,
 				'status' => 'pending',
@@ -1042,7 +1088,8 @@ class Ledger {
 		$difference = $valid ? Money::minor( $confirmed ) - Money::minor( $row['amount'] ) : 0;
 		$currency   = ! array_key_exists( 'currency', $new ) || $new['currency'] === $row['currency'];
 		$descriptor = Descriptor_Builder::instance()->get( $row['method_id'] );
-		$tip        = $difference > 0 && 'on_reader' === ( $descriptor['capabilities']['tips'] ?? 'none' );
+		$capture    = $descriptor ? Descriptor_Builder::capture_entry( $descriptor, (string) $row['capture_mode'] ) : null;
+		$tip        = $difference > 0 && 'on_reader' === ( ( $capture['capabilities'] ?? $descriptor['capabilities'] )['tips'] ?? 'none' );
 		if ( ! $valid || ! $currency || ( 0 !== $difference && ! $tip ) ) {
 			$applied['status']         = 'failed';
 			$applied['failure_reason'] = 'amount_mismatch';
@@ -2308,8 +2355,10 @@ class Ledger {
 	 */
 	private function tipped( array $old, array $new ): bool {
 		$tip = Money::minor( $new['tip'] ?? 0 );
+		$descriptor = Descriptor_Builder::instance()->get( (string) $old['method_id'] );
+		$capture = $descriptor ? Descriptor_Builder::capture_entry( $descriptor, (string) $old['capture_mode'] ) : null;
 		return 'captured' === $new['status'] && null === ( $old['tip'] ?? null ) && $tip > 0 && Money::minor( $new['amount'] ) === Money::minor( $old['amount'] ) + $tip
-			&& 'on_reader' === ( Descriptor_Builder::instance()->get( (string) $old['method_id'] )['capabilities']['tips'] ?? 'none' );
+			&& 'on_reader' === ( ( $capture['capabilities'] ?? $descriptor['capabilities'] )['tips'] ?? 'none' );
 	}
 
 	/**
@@ -2916,7 +2965,7 @@ class Ledger {
 	}
 
 	/**
-	 * Whether a descriptor may be recorded through `POST orders/{id}/payments`.
+	 * Whether a capture entry may be recorded through `POST orders/{id}/payments`.
 	 *
 	 * Record asserts money that was already taken, so it is only for methods that take
 	 * it away from the server: `manual` methods handed over at the till, and `device`
@@ -2925,14 +2974,14 @@ class Ledger {
 	 * has to run its own leg through `intent`/`capture`, so a caller-asserted captured
 	 * row here would mark the order paid with no provider transaction behind it.
 	 *
-	 * @param array $descriptor Payment method descriptor.
+	 * @param array $capture Selected capture entry.
 	 */
-	private function is_recordable( array $descriptor ): bool {
-		if ( 'manual' === ( $descriptor['capture']['mode'] ?? '' ) ) {
+	private function is_recordable( array $capture ): bool {
+		if ( 'manual' === ( $capture['mode'] ?? '' ) ) {
 			return true;
 		}
 
-		return in_array( (string) ( $descriptor['capabilities']['offline'] ?? 'none' ), array( 'record', 'queue' ), true );
+		return in_array( (string) ( $capture['capabilities']['offline'] ?? 'none' ), array( 'record', 'queue' ), true );
 	}
 
 	/**

@@ -14,6 +14,211 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /** Payment method descriptor tests. */
 class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
+	/** The default modes list contains the primary connection and its capabilities. */
+	public function test_descriptor_default_modes_contains_primary_only(): void {
+		$capture = Descriptor_Builder::instance()->get( 'pos_cash' )['capture'];
+		$this->assertSame(
+			array(
+				array(
+					'mode' => 'manual',
+					'provider' => null,
+					'hardware' => null,
+					'capabilities' => array(
+						'amount' => array( 'partial' => true ),
+						'change' => true,
+						'refunds' => array(
+							'via' => 'manual',
+							'partial' => true,
+						),
+						'tips' => 'none',
+						'offline' => 'record',
+						'void' => true,
+					),
+					'provider_data' => array(),
+				),
+			),
+			$capture['modes']
+		);
+		$this->assertSame( array_intersect_key( $capture['modes'][0], array_flip( array( 'mode', 'provider', 'hardware' ) ) ), array_intersect_key( $capture, array_flip( array( 'mode', 'provider', 'hardware' ) ) ) );
+	}
+
+	/** Ordered entries keep their own normalized capabilities and provider data. */
+	public function test_descriptor_multiple_modes_preserves_order_hardware_and_primary(): void {
+		wcpos_register_capture_mode( 'server:cloud', Cloud_Server_Test_Handler::class );
+		wcpos_register_capture_mode( 'device:acme', Acme_Device_Test_Handler::class );
+		$filter = static fn() => array( 'server:cloud', 'device:acme', 'server:cloud' );
+		add_filter( 'wcpos_payment_method_capture_modes', $filter );
+		try {
+			$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+			$this->assertSame(
+				array(
+					array(
+						'mode' => 'server',
+						'provider' => 'cloud',
+						'hardware' => array( 'connection' => 'internet' ),
+						'capabilities' => array(
+							'amount' => array( 'partial' => false ),
+							'change' => false,
+							'refunds' => array(
+								'via' => 'none',
+								'partial' => false,
+							),
+							'tips' => 'none',
+							'offline' => 'none',
+							'void' => true,
+						),
+						'provider_data' => array( 'location' => 'shop' ),
+					),
+					array(
+						'mode' => 'device',
+						'provider' => 'acme',
+						'hardware' => array( 'connection' => 'bluetooth' ),
+						'capabilities' => array(
+							'amount' => array(
+								'partial' => true,
+								'min' => '1.20',
+								'max' => '99.00',
+							),
+							'change' => false,
+							'refunds' => array(
+								'via' => 'provider',
+								'partial' => true,
+							),
+							'tips' => 'on_reader',
+							'offline' => 'queue',
+							'void' => false,
+						),
+						'provider_data' => array( 'reader' => 'bluetooth-reader' ),
+					),
+				),
+				$descriptor['capture']['modes']
+			);
+			$this->assertSame( 'server', $descriptor['capture']['mode'] );
+			$this->assertSame( 'cloud', $descriptor['capture']['provider'] );
+			$this->assertSame( array( 'connection' => 'internet' ), $descriptor['capture']['hardware'] );
+			$this->assertTrue( $descriptor['capture']['webview_available'] );
+			$this->assertTrue( $descriptor['capabilities']['void'] );
+			$this->assertSame( $descriptor['capture']['modes'][0]['capabilities'], $descriptor['capabilities'] );
+			$this->assertSame( array( 'location' => 'shop' ), $descriptor['provider_data'] );
+			$this->assertArrayNotHasKey( 'secret', $descriptor['capture'] );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $filter );
+			$this->reset_capture_registry();
+		}
+	}
+
+	/** A filter that answers a bare string, the singular hook's shape, is read as one key instead of fataling. */
+	public function test_descriptor_string_filter_answer_keeps_primary(): void {
+		$filter = static fn() => 'manual';
+		add_filter( 'wcpos_payment_method_capture_modes', $filter );
+		try {
+			$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+			$this->assertSame( 'manual', $descriptor['capture']['mode'] );
+			$this->assertSame( array( 'manual' ), array_column( $descriptor['capture']['modes'], 'mode' ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $filter );
+		}
+	}
+
+	/** A bare key and a provider-scoped key for the same mode name one connection. */
+	public function test_descriptor_scoped_and_bare_keys_for_one_mode_make_one_entry(): void {
+		wcpos_register_capture_mode( 'device:acme', Acme_Device_Test_Handler::class );
+		wcpos_register_capture_mode( 'device', Acme_Device_Test_Handler::class );
+		$filter = static fn() => array( 'device', 'device:acme' );
+		add_filter( 'wcpos_payment_method_capture_modes', $filter );
+		try {
+			$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+			$this->assertSame( array( 'device' ), array_column( $descriptor['capture']['modes'], 'mode' ) );
+			$this->assertSame( 'device', $descriptor['capture']['mode'] );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $filter );
+			$this->reset_capture_registry();
+		}
+	}
+
+	/** Missing handlers cannot replace the first resolved handler or appear on the wire. */
+	public function test_descriptor_missing_mode_is_dropped_without_changing_primary(): void {
+		$filter = static fn() => array( 'missing_before', 'manual', 'missing_after' );
+		add_filter( 'wcpos_payment_method_capture_modes', $filter );
+		try {
+			$capture = Descriptor_Builder::instance()->get( 'pos_cash' )['capture'];
+			$this->assertSame( 'manual', $capture['mode'] );
+			$this->assertSame(
+				array(
+					array(
+						'mode' => 'manual',
+						'provider' => null,
+						'hardware' => null,
+						'capabilities' => array(
+							'amount' => array( 'partial' => true ),
+							'change' => true,
+							'refunds' => array(
+								'via' => 'manual',
+								'partial' => true,
+							),
+							'tips' => 'none',
+							'offline' => 'record',
+							'void' => true,
+						),
+						'provider_data' => array(),
+					),
+				),
+				$capture['modes']
+			);
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $filter );
+		}
+	}
+
+	/** An empty resolved set still advertises the webview fallback. */
+	public function test_descriptor_no_resolved_modes_falls_back_to_webview(): void {
+		$filter = static fn() => array( 'missing_fallback' );
+		add_filter( 'wcpos_payment_method_capture_modes', $filter );
+		try {
+			$capture = Descriptor_Builder::instance()->get( 'pos_cash' )['capture'];
+			$this->assertSame( 'webview', $capture['mode'] );
+			$this->assertSame(
+				array(
+					array(
+						'mode' => 'webview',
+						'provider' => null,
+						'hardware' => null,
+						'capabilities' => array(
+							'amount' => array( 'partial' => false ),
+							'change' => false,
+							'refunds' => array(
+								'via' => 'provider',
+								'partial' => true,
+							),
+							'tips' => 'none',
+							'offline' => 'none',
+							'void' => false,
+						),
+						'provider_data' => array(),
+					),
+				),
+				$capture['modes']
+			);
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $filter );
+		}
+	}
+
+	/** A lookup returns the complete matching entry or null for a disallowed mode. */
+	public function test_capture_entry_returns_matching_entry_or_null(): void {
+		$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+		$this->assertSame( $descriptor['capture']['modes'][0], Descriptor_Builder::capture_entry( $descriptor, 'manual' ) );
+		$this->assertNull( Descriptor_Builder::capture_entry( $descriptor, 'device' ) );
+	}
+
+	/** Restore the singleton after registering test providers. */
+	private function reset_capture_registry(): void {
+		$reflection = new \ReflectionClass( \WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::class );
+		$property = $reflection->getProperty( 'instance' );
+		$property->setAccessible( true );
+		$property->setValue( null, null );
+	}
+
 	/** Cash exposes the configured increment without losing decimal precision. */
 	public function test_descriptor_cash_with_rounding_returns_nearest_increment(): void {
 		update_option(
@@ -196,14 +401,56 @@ class Webview_Test_Gateway extends WC_Payment_Gateway {
 	}
 }
 
+/** Device fixture with independent capabilities and provider data. */
 class Acme_Device_Test_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler {
-	/** Describe a device-mode gateway for the Acme provider. */
+	/**
+	 * Describe a device-mode gateway for the Acme provider.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway.
+	 */
 	public function describe( \WC_Payment_Gateway $gateway ): array {
 		return array(
 			'capture' => array(
 				'mode'     => 'device',
 				'provider' => 'acme',
+				'hardware' => array( 'connection' => 'bluetooth' ),
 			),
+			'capabilities' => array(
+				'amount' => array(
+					'partial' => 1,
+					'min' => '1.2',
+					'max' => 99,
+				),
+				'refunds' => array(
+					'via' => 'provider',
+					'partial' => 1,
+				),
+				'tips' => 'on_reader',
+				'offline' => 'queue',
+			),
+			'provider_data' => array( 'reader' => 'bluetooth-reader' ),
+		);
+	}
+}
+
+/** Cloud reader fixture with a distinct descriptor and primary-only fields. */
+class Cloud_Server_Test_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler {
+	/**
+	 * Describe the cloud reader.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway.
+	 */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		return array(
+			'capture' => array(
+				'mode' => 'server',
+				'provider' => 'cloud',
+				'hardware' => array( 'connection' => 'internet' ),
+				'webview_available' => true,
+				'secret' => 'not-on-the-wire',
+			),
+			'capabilities' => array( 'void' => true ),
+			'provider_data' => array( 'location' => 'shop' ),
 		);
 	}
 }

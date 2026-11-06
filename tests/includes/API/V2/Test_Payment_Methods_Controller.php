@@ -47,6 +47,35 @@ class Test_Payment_Methods_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'provider' => 'test', 'handoff' => array( 'reader' => 'test-reader' ), 'expires_at' => null ), $response->get_data() );
 	}
 
+	/** Bootstrap selects the scoped device handler even when a server mode is primary. */
+	public function test_bootstrap_device_second_resolves_device_provider(): void {
+		$registry = \WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry::instance();
+		$registry->register( 'server:bootstrap', Bootstrap_Server_Handler::class );
+		$registry->register( 'device:bootstrap', Bootstrap_Device_Handler::class );
+		$filter = static fn() => array( 'server:bootstrap', 'device:bootstrap' );
+		add_filter( 'wcpos_payment_method_capture_modes', $filter );
+		try {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/payment-methods/pos_cash/bootstrap' );
+			$request->set_body_params( array( 'context' => array( 'reader' => 'bluetooth-reader' ) ) );
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame(
+				array(
+					'provider' => 'test',
+					'handoff' => array( 'reader' => 'bluetooth-reader' ),
+					'expires_at' => null,
+				),
+				$response->get_data()
+			);
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $filter );
+			$reflection = new \ReflectionClass( $registry );
+			$property = $reflection->getProperty( 'instance' );
+			$property->setAccessible( true );
+			$property->setValue( null, null );
+		}
+	}
+
 	public function test_bootstrap_unknown_method_returns_404(): void {
 		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/payment-methods/missing/bootstrap' ) );
 		$this->assertSame( 404, $response->get_status() );
@@ -97,5 +126,39 @@ class Bootstrap_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_H
 	}
 	public function bootstrap( \WC_Payment_Gateway $gateway, array $context ) {
 		return array( 'provider' => 'test', 'handoff' => $context, 'expires_at' => null );
+	}
+}
+
+/** Primary server handler cannot bootstrap. */
+class Bootstrap_Server_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_Handler {
+	/**
+	 * Describe for the fixture.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway.
+	 */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		return array(
+			'capture' => array(
+				'mode' => 'server',
+				'provider' => 'bootstrap',
+			),
+		);
+	}
+}
+
+/** Only this secondary provider-scoped handler can return bootstrap material. */
+class Bootstrap_Device_Handler extends Bootstrap_Handler {
+	/**
+	 * Describe for the fixture.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway.
+	 */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		return array(
+			'capture' => array(
+				'mode' => 'device',
+				'provider' => 'bootstrap',
+			),
+		);
 	}
 }
