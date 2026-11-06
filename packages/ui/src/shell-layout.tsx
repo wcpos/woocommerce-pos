@@ -3,10 +3,11 @@ import type { ReactNode } from 'react';
 export interface ShellLayoutProps {
 	/** A `<NavSidebar>`. */
 	sidebar: ReactNode;
-	/** Title-bar content left of the spacer (an h1 or a breadcrumb). */
+	/**
+	 * Title-bar content, rendered right after the hamburger in a wrapping flex
+	 * row. A consumer with more than a heading lays out its own bar in here.
+	 */
 	title: ReactNode;
-	/** Right side of the title bar (status, Create button). */
-	titleEnd?: ReactNode;
 	mobileNavOpen: boolean;
 	onToggleMobileNav: () => void;
 	footer?: ReactNode;
@@ -22,7 +23,6 @@ export interface ShellLayoutProps {
 export function ShellLayout({
 	sidebar,
 	title,
-	titleEnd,
 	mobileNavOpen,
 	onToggleMobileNav,
 	footer,
@@ -58,12 +58,6 @@ export function ShellLayout({
 						</svg>
 					</button>
 					{title}
-					{titleEnd && (
-						<>
-							<div className="wcpos:flex-1" />
-							{titleEnd}
-						</>
-					)}
 				</div>
 
 				<main className="wcpos:flex-1 wcpos:px-6 wcpos:py-6">{children}</main>

@@ -87,9 +87,10 @@ export function NavSidebar({
 		<>
 			{aside}
 			{isOpen && onClose && (
-				<button
-					type="button"
-					aria-label={closeLabel}
+				// Pointer-only: the × in the brand row is the accessible close control.
+				<div
+					aria-hidden="true"
+					data-testid="nav-backdrop"
 					onClick={onClose}
 					className="wcpos:fixed wcpos:inset-0 wcpos:z-[9991] wcpos:bg-black/40 wcpos:lg:hidden"
 				/>
