@@ -321,8 +321,7 @@ class Test_Dispatch_Short_Circuit extends WCPOS_REST_Unit_Test_Case {
 		$outer_ids = array_map( 'intval', wp_list_pluck( $outer->get_data(), 'id' ) );
 		$inner_ids = array_map( 'intval', wp_list_pluck( $inner->get_data(), 'id' ) );
 		$this->assertEqualsCanonicalizing( $created, $outer_ids );
-		$this->assertSame( array(), array_values( array_diff( $tags, $inner_ids ) ) );
-		$this->assertSame( array(), array_intersect( $created, $inner_ids ) );
+		$this->assertEqualsCanonicalizing( $tags, $inner_ids );
 		$this->assertSame( 0, $this->stored_count() );
 	}
 
