@@ -384,4 +384,105 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$this->assertTrue( $result_defaults );
 	}
 
+	/**
+	 * Symbol positions for the payment_fields() currency tests.
+	 *
+	 * @return array<string, array{0: string}>
+	 */
+	public function currency_position_provider(): array {
+		return array(
+			'left'        => array( 'left' ),
+			'left_space'  => array( 'left_space' ),
+			'right'       => array( 'right' ),
+			'right_space' => array( 'right_space' ),
+		);
+	}
+
+	/**
+	 * Test payment_fields shows the order currency symbol when it differs from the site's.
+	 *
+	 * @dataProvider currency_position_provider
+	 *
+	 * @param string $currency_pos Value of the woocommerce_currency_pos option.
+	 */
+	public function test_payment_fields_order_currency_differs_from_site_shows_order_symbol( string $currency_pos ): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_currency( 'EUR' );
+		$order->save();
+
+		// Act.
+		$output = $this->render_payment_fields( $order->get_id(), $currency_pos );
+
+		// Assert.
+		$this->assertStringContainsString( $this->addon( 'EUR' ), $output );
+		$this->assertStringNotContainsString( $this->addon( 'USD' ), $output );
+	}
+
+	/**
+	 * Test payment_fields shows the site currency symbol when there is no order.
+	 */
+	public function test_payment_fields_without_an_order_shows_site_symbol(): void {
+		// Arrange: no order-pay query var.
+
+		// Act.
+		$output = $this->render_payment_fields( null, 'left' );
+
+		// Assert.
+		$this->assertStringContainsString( $this->addon( 'USD' ), $output );
+	}
+
+	/**
+	 * Test payment_fields shows the site currency symbol when the order-pay id is not an order.
+	 */
+	public function test_payment_fields_with_an_id_that_is_not_an_order_shows_site_symbol(): void {
+		// Arrange.
+		$not_an_order_id = 999999;
+
+		// Act.
+		$output = $this->render_payment_fields( $not_an_order_id, 'left' );
+
+		// Assert.
+		$this->assertStringContainsString( $this->addon( 'USD' ), $output );
+	}
+
+	/**
+	 * Render payment_fields() on a USD site, restoring the query var and options afterwards.
+	 *
+	 * @param int|null $order_pay    Value for the order-pay query var, or null to leave it unset.
+	 * @param string   $currency_pos Value of the woocommerce_currency_pos option.
+	 *
+	 * @return string The rendered output.
+	 */
+	private function render_payment_fields( ?int $order_pay, string $currency_pos ): string {
+		$previous_currency     = get_option( 'woocommerce_currency' );
+		$previous_currency_pos = get_option( 'woocommerce_currency_pos' );
+		update_option( 'woocommerce_currency', 'USD' );
+		update_option( 'woocommerce_currency_pos', $currency_pos );
+		if ( null !== $order_pay ) {
+			$GLOBALS['wp']->query_vars['order-pay'] = $order_pay;
+		}
+
+		try {
+			ob_start();
+			$this->gateway->payment_fields();
+
+			return ob_get_clean();
+		} finally {
+			unset( $GLOBALS['wp']->query_vars['order-pay'] );
+			update_option( 'woocommerce_currency', $previous_currency );
+			update_option( 'woocommerce_currency_pos', $previous_currency_pos );
+		}
+	}
+
+	/**
+	 * The addon markup payment_fields() renders for a currency, built through wp_kses_post() like the gateway.
+	 *
+	 * @param string $currency Currency code.
+	 *
+	 * @return string The addon markup.
+	 */
+	private function addon( string $currency ): string {
+		return wp_kses_post( '<span class="input-group-addon">' . get_woocommerce_currency_symbol( $currency ) . '</span>' );
+	}
 }
