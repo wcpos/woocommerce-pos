@@ -303,7 +303,7 @@ if ( ! empty( $receipt_data['fiscal']['is_refund_document'] ) && ! empty( $recei
 
 		<div class="totals-row grand" style="display: flex; justify-content: space-between;">
 			<span class="label"><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce' ) ); ?></span>
-			<span class="amount"><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total'] ?? 0, $currency_args ) ); ?></span>
+			<span class="amount"><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total_incl'] ?? $receipt_data['totals']['total'] ?? 0, $currency_args ) ); ?></span>
 		</div>
 
 		<?php $refund_total = $receipt_data['totals']['refund_total'] ?? 0; ?>
