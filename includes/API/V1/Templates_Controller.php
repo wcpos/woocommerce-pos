@@ -436,8 +436,11 @@ class Templates_Controller extends WP_REST_Controller {
 				'post_status'    => $is_manager ? array( 'publish', 'draft' ) : 'publish',
 				'posts_per_page' => $per_page,
 				'paged'          => $page,
-				'orderby'        => 'menu_order',
-				'order'          => 'ASC',
+				// ID tie-break: equal menu_orders would otherwise page in an unstable order.
+				'orderby'        => array(
+					'menu_order' => 'ASC',
+					'ID'         => 'ASC',
+				),
 			);
 
 			$tax_query = array();
@@ -1436,8 +1439,11 @@ class Templates_Controller extends WP_REST_Controller {
 				'post_type'      => 'wcpos_template',
 				'post_status'    => array( 'publish', 'draft' ),
 				'posts_per_page' => -1,
-				'orderby'        => 'menu_order',
-				'order'          => 'ASC',
+				// Same order as TemplatesManager::get_enabled_templates(), ID tie-break included.
+				'orderby'        => array(
+					'menu_order' => 'ASC',
+					'ID'         => 'ASC',
+				),
 				'tax_query'      => array(
 					array(
 						'taxonomy' => 'wcpos_template_type',
