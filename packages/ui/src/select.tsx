@@ -45,9 +45,12 @@ export function Select({
 				if (selected) onChange(selected);
 			}}
 			disabled={disabled}
+			// pr-6 (24px): wp-admin's forms.css draws a 16px chevron at `right 8px`
+			// and pads native selects `0 24px 0 12px`; less right padding lets long
+			// option text run under the chevron.
 			className={classNames(
 				inline ? 'wcpos:inline-block' : 'wcpos:block wcpos:w-full',
-				'wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs',
+				'wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:pl-2.5 wcpos:pr-6 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs',
 				'wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:border-wp-admin-theme-color',
 				disabled && 'wcpos:bg-gray-50 wcpos:text-gray-500 wcpos:cursor-not-allowed',
 				className

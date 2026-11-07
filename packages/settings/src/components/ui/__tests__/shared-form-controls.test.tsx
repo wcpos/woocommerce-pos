@@ -96,6 +96,21 @@ describe('shared form controls from @wcpos/ui', () => {
 		expect(screen.getByRole('option', { name: 'Choose status' })).toBeDisabled();
 	});
 
+	it('reserves right padding for the wp-admin select chevron', () => {
+		render(
+			<Select
+				aria-label="Template"
+				value="a"
+				options={[{ value: 'a', label: 'A very long receipt template name' }]}
+				onChange={() => {}}
+			/>
+		);
+
+		const select = screen.getByRole('combobox', { name: 'Template' });
+		expect(select).toHaveClass('wcpos:pl-2.5', 'wcpos:pr-6');
+		expect(select).not.toHaveClass('wcpos:px-2.5');
+	});
+
 	it('renders modal content only when open', () => {
 		const { rerender } = render(
 			<Modal open={false} onClose={() => {}} title="Shared modal">
