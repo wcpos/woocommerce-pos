@@ -259,4 +259,15 @@ describe('SnackbarProvider', () => {
 		expect(screen.getByText('Hello.')).not.toBeNull();
 		vi.useRealTimers();
 	});
+
+	it('stacks the slot above the nav drawer and its backdrop', () => {
+		render(
+			<SnackbarProvider>
+				<Harness />
+			</SnackbarProvider>
+		);
+
+		// No snackbar is shown, so the only status region is the provider's slot.
+		expect(screen.getByRole('status')).toHaveClass('wcpos:z-[9993]');
+	});
 });
