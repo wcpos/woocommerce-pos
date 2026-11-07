@@ -20,6 +20,12 @@ use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
  * Late rows correct, never edit, the closure.
  */
 final class Session_Figures {
+	/**
+	 * The close holds the register lock here; it must never wait on an order, or a writer holding that
+	 * order and waiting on the register deadlocks with it. A busy order fails the close into the outbox retry.
+	 */
+	private const STAMP_LOCK_WAIT_SECONDS = 0;
+
 	/** Session row.
 	 *
 	 * @var array
@@ -498,7 +504,7 @@ final class Session_Figures {
 		$orders = $this->legs();
 		ksort( $orders, SORT_NUMERIC );
 		foreach ( $orders as $order_id => $legs ) {
-			if ( ! Order_Lock::instance()->acquire( $order_id ) ) {
+			if ( ! Order_Lock::instance()->acquire( $order_id, self::STAMP_LOCK_WAIT_SECONDS ) ) {
 				throw new \RuntimeException( 'Closure stamp lock failed.' );
 			}
 			$this->locked_orders[] = $order_id;

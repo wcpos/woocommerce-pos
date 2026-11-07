@@ -118,4 +118,42 @@ class Test_Order_Lock extends \WP_UnitTestCase {
 		}
 	}
 
+	public function test_acquire_wait_seconds_sent_to_get_lock_and_zero_fails_at_once(): void {
+		// Arrange.
+		$name     = sprintf( 'wcpos_order_%d_%d', 10000125, get_current_blog_id() );
+		$requests = array();
+		$trace    = static function ( $sql ) use ( &$requests ) {
+			if ( 0 === strpos( $sql, 'SELECT GET_LOCK(' ) ) {
+				$requests[] = $sql;
+			}
+			return $sql;
+		};
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$lock      = new Order_Lock();
+
+		try {
+			// Act: the default wait, then none.
+			add_filter( 'query', $trace );
+			try {
+				$this->assertTrue( $lock->acquire( 10000125 ) );
+				$lock->release( 10000125 );
+				$this->assertTrue( $lock->acquire( 10000125, 0 ) );
+				$lock->release( 10000125 );
+			} finally {
+				remove_filter( 'query', $trace );
+			}
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) );
+			$started = microtime( true );
+			$busy    = $lock->acquire( 10000125, 0 );
+			$elapsed = microtime( true ) - $started;
+
+			// Assert.
+			$this->assertSame( array( "SELECT GET_LOCK('" . $name . "', 5)", "SELECT GET_LOCK('" . $name . "', 0)" ), $requests );
+			$this->assertFalse( $busy );
+			$this->assertLessThan( 1.0, $elapsed );
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+			$contender->close();
+		}
+	}
 }
