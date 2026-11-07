@@ -116,6 +116,32 @@ describe('FormSection', () => {
 		expect(wrapper.className).not.toContain('wcpos:border-b');
 	});
 
+	it('gives divider and plain sections the same top and bottom spacing', () => {
+		const { getByTestId } = render(
+			<>
+				<div data-testid="divider">
+					<FormSection divider title="Logo and address">
+						<p>Content</p>
+					</FormSection>
+				</div>
+				<div data-testid="plain">
+					<FormSection title="Opening hours">
+						<p>Content</p>
+					</FormSection>
+				</div>
+			</>
+		);
+		const divider = getByTestId('divider').firstChild as HTMLElement;
+		const plain = getByTestId('plain').firstChild as HTMLElement;
+
+		for (const section of [divider, plain]) {
+			expect(section.classList).toContain('wcpos:pt-4');
+			expect(section.classList).toContain('wcpos:pb-6');
+		}
+		expect(divider.classList).toContain('wcpos:border-b');
+		expect(plain.classList).not.toContain('wcpos:border-b');
+	});
+
 	it('applies wcpos:m-0 to the title heading', () => {
 		render(
 			<FormSection title="Heading">
