@@ -112,7 +112,75 @@ class Form_Handler {
 			 * Priority 20 so it wins over WC_Session_Handler's filter (priority 10).
 			 */
 			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 20, 2 );
+
+			/*
+			 * A WCPOS guest has no email and the pay page collects no billing
+			 * details, so WooCommerce Stripe would refuse to create its customer
+			 * ("Missing required customer field: email"). Stripe accepts a customer
+			 * with no email, so lift the requirement for a request that has none.
+			 */
+			if ( '' === trim( (string) $order->get_billing_email() ) ) {
+				add_filter( 'wc_stripe_create_customer_required_fields', array( $this, 'stripe_guest_required_fields' ), 10, 2 );
+				add_filter( 'wc_stripe_create_customer_args', array( $this, 'stripe_guest_customer_args' ) );
+			}
 		}
+	}
+
+	/**
+	 * Lift Stripe's required customer fields for a request with no email.
+	 *
+	 * Returns no required fields rather than dropping only 'email': with no
+	 * Stripe context, 'name' and 'address' are required too, and a WCPOS guest
+	 * has neither.
+	 *
+	 * @param array $required_fields         The fields Stripe requires.
+	 * @param array $create_customer_request The Stripe customer request (Stripe 10.2.0+).
+	 *
+	 * @return array
+	 */
+	public function stripe_guest_required_fields( $required_fields, $create_customer_request = array() ) {
+		$email = \is_array( $create_customer_request ) && isset( $create_customer_request['email'] ) && \is_scalar( $create_customer_request['email'] ) ? (string) $create_customer_request['email'] : '';
+
+		if ( '' === trim( $email ) ) {
+			return array();
+		}
+
+		return $required_fields;
+	}
+
+	/**
+	 * Drop the blank email and blank address entries from a Stripe customer
+	 * request with no email.
+	 *
+	 * @param array $args The Stripe customer request.
+	 *
+	 * @return array
+	 */
+	public function stripe_guest_customer_args( $args ) {
+		if ( ! \is_array( $args ) ) {
+			return $args;
+		}
+
+		$email = isset( $args['email'] ) && \is_scalar( $args['email'] ) ? (string) $args['email'] : '';
+		if ( '' !== trim( $email ) ) {
+			return $args;
+		}
+
+		unset( $args['email'] );
+
+		if ( isset( $args['address'] ) && \is_array( $args['address'] ) ) {
+			foreach ( $args['address'] as $key => $value ) {
+				if ( null === $value || ( \is_scalar( $value ) && '' === trim( (string) $value ) ) ) {
+					unset( $args['address'][ $key ] );
+				}
+			}
+
+			if ( empty( $args['address'] ) ) {
+				unset( $args['address'] );
+			}
+		}
+
+		return $args;
 	}
 
 	/**
