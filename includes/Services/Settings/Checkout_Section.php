@@ -48,7 +48,6 @@ class Checkout_Section extends Abstract_Section {
 			'dequeue_script_handles' => array(
 				'admin-bar',
 				'wc-add-to-cart',
-				'wc-stripe-upe-classic',
 			),
 			'dequeue_style_handles' => array(
 				'admin-bar',
