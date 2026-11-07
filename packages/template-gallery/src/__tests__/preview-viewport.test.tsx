@@ -82,6 +82,70 @@ describe('PreviewViewport', () => {
 		expect(controls.parentElement).not.toBe(scrollArea);
 	});
 
+	it('lays the zoom controls out in a toolbar row instead of over the paper', () => {
+		const container = renderPreviewViewport('a4');
+		const controls = container.querySelector(
+			'[data-testid="preview-viewport-zoom-controls"]'
+		) as HTMLElement;
+		const scrollArea = container.querySelector(
+			'[data-testid="preview-viewport-scroll-area"]'
+		) as HTMLElement;
+
+		expect(controls.className).not.toContain('wcpos:absolute');
+		// The toolbar row sits directly above the scroll area, as its sibling.
+		expect(controls.parentElement?.nextElementSibling).toBe(scrollArea);
+	});
+
+	it('auto-fits against the scroll area, not the toolbar above it', () => {
+		// The viewport is tall enough for 80mm paper at 100%, but once the
+		// toolbar row is taken out the scroll area is not, so the fit is 90%.
+		const sizes: Record<string, { w: number; h: number }> = {
+			'preview-viewport': { w: 400, h: 552 },
+			'preview-viewport-scroll-area': { w: 400, h: 512 },
+		};
+		const size = (el: HTMLElement) => sizes[el.dataset.testid ?? ''] ?? { w: 0, h: 0 };
+		// jsdom defines these on Element.prototype; shadow them on HTMLElement and
+		// delete the shadows afterwards.
+		Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+			configurable: true,
+			get(this: HTMLElement) {
+				return size(this).w;
+			},
+		});
+		Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+			configurable: true,
+			get(this: HTMLElement) {
+				return size(this).h;
+			},
+		});
+
+		try {
+			const container = document.createElement('div');
+			const root = createRoot(container);
+			mountedRoots.push(root);
+			document.body.appendChild(container);
+			act(() => {
+				root.render(
+					<PreviewViewport
+						data-testid="preview-viewport"
+						paperWidth="80mm"
+						zoomInLabel="Zoom in"
+						zoomOutLabel="Zoom out"
+					>
+						<div />
+					</PreviewViewport>
+				);
+			});
+
+			expect(
+				container.querySelector('[data-testid="preview-viewport-zoom-value"]')?.textContent
+			).toBe('90%');
+		} finally {
+			delete (HTMLElement.prototype as Partial<HTMLElement>).clientWidth;
+			delete (HTMLElement.prototype as Partial<HTMLElement>).clientHeight;
+		}
+	});
+
 	it('does not label the zoom control wrapper as one of its child actions', () => {
 		const container = renderPreviewViewport('a4');
 		const controls = container.querySelector(
