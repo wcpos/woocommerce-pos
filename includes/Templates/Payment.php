@@ -342,12 +342,14 @@ class Payment {
 	public function get_cashier_details_html(): string {
 		$cashier = $this->order->get_meta( '_pos_user', true );
 		$cashier = get_user_by( 'id', $cashier );
+		// An order with no `_pos_user` (made outside the POS, or by a deleted cashier) has no user here.
+		$cashier_name = $cashier instanceof \WP_User ? $cashier->display_name : '';
 
 		ob_start();
 		?>
 		<div class="cashier">
 			<span><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Cashier', 'woocommerce-pos' ); ?>: </span>
-			<span class="cashier-name"><?php echo esc_html( $cashier->display_name ); ?></span>
+			<span class="cashier-name"><?php echo esc_html( $cashier_name ); ?></span>
 		</div>
 		<?php
 		return ob_get_clean();
