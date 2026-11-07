@@ -66,7 +66,7 @@ export function PreviewViewport({
 	contentClassName,
 	...props
 }: PreviewViewportProps) {
-	const containerRef = React.useRef<HTMLDivElement>(null);
+	const scrollAreaRef = React.useRef<HTMLDivElement>(null);
 	const canvasRef = React.useRef<HTMLDivElement>(null);
 	const fallback = PAPER_DIMENSIONS[paperWidth];
 	// A screen or phone preview is a device frame: the document inside fills it and may scroll,
@@ -175,11 +175,12 @@ export function PreviewViewport({
 
 	// Auto-fit the preview to the viewport until the user picks a zoom; re-runs
 	// when the measured content size changes so a freshly measured frame is
-	// fitted, and observes the container so a modal that lays out at 0×0 first
-	// is still fitted once it has real dimensions.
+	// fitted, and observes the scroll area so a modal that lays out at 0×0 first
+	// is still fitted once it has real dimensions. The scroll area, not the whole
+	// viewport, is measured so the zoom toolbar's row is not counted as space.
 	React.useLayoutEffect(() => {
 		if (userPicked) return;
-		const el = containerRef.current;
+		const el = scrollAreaRef.current;
 		if (!el) return;
 		const applyAutoFit = () => {
 			if (userPicked) return;
@@ -212,48 +213,51 @@ export function PreviewViewport({
 
 	return (
 		<div
-			ref={containerRef}
 			className={classNames(
 				'wcpos:relative wcpos:flex wcpos:min-h-0 wcpos:flex-1 wcpos:flex-col wcpos:rounded wcpos:border wcpos:border-gray-200 wcpos:bg-gray-100',
 				className
 			)}
 			{...props}
 		>
-			<div
-				data-testid="preview-viewport-zoom-controls"
-				className="wcpos:absolute wcpos:top-2 wcpos:right-2 wcpos:z-10 wcpos:inline-flex wcpos:items-stretch wcpos:overflow-hidden wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white/95 wcpos:shadow-sm"
-			>
-				<button
-					type="button"
-					aria-label={zoomOutLabel}
-					title={zoomOutLabel}
-					disabled={!canZoomOut}
-					onClick={() => stepZoom(-1)}
-					className={buttonClass}
+			{/* A row of its own, so the controls never sit over the paper's corner. */}
+			<div className="wcpos:flex wcpos:shrink-0 wcpos:justify-end wcpos:px-2 wcpos:pt-2">
+				<div
+					data-testid="preview-viewport-zoom-controls"
+					className="wcpos:inline-flex wcpos:items-stretch wcpos:overflow-hidden wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white/95 wcpos:shadow-sm"
 				>
-					&minus;
-				</button>
-				<span
-					data-testid="preview-viewport-zoom-value"
-					className="wcpos:inline-flex wcpos:min-w-[44px] wcpos:items-center wcpos:justify-center wcpos:border-l wcpos:border-r wcpos:border-gray-200 wcpos:px-2 wcpos:text-xs wcpos:tabular-nums wcpos:text-gray-700"
-					role="status"
-					aria-label={`Zoom ${zoom}%`}
-					aria-live="polite"
-				>
-					{zoom}%
-				</span>
-				<button
-					type="button"
-					aria-label={zoomInLabel}
-					title={zoomInLabel}
-					disabled={!canZoomIn}
-					onClick={() => stepZoom(1)}
-					className={buttonClass}
-				>
-					+
-				</button>
+					<button
+						type="button"
+						aria-label={zoomOutLabel}
+						title={zoomOutLabel}
+						disabled={!canZoomOut}
+						onClick={() => stepZoom(-1)}
+						className={buttonClass}
+					>
+						&minus;
+					</button>
+					<span
+						data-testid="preview-viewport-zoom-value"
+						className="wcpos:inline-flex wcpos:min-w-[44px] wcpos:items-center wcpos:justify-center wcpos:border-l wcpos:border-r wcpos:border-gray-200 wcpos:px-2 wcpos:text-xs wcpos:tabular-nums wcpos:text-gray-700"
+						role="status"
+						aria-label={`Zoom ${zoom}%`}
+						aria-live="polite"
+					>
+						{zoom}%
+					</span>
+					<button
+						type="button"
+						aria-label={zoomInLabel}
+						title={zoomInLabel}
+						disabled={!canZoomIn}
+						onClick={() => stepZoom(1)}
+						className={buttonClass}
+					>
+						+
+					</button>
+				</div>
 			</div>
 			<div
+				ref={scrollAreaRef}
 				data-testid="preview-viewport-scroll-area"
 				className="wcpos:min-h-0 wcpos:flex-1 wcpos:overflow-auto wcpos:p-4"
 			>
