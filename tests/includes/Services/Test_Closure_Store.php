@@ -964,4 +964,97 @@ class Test_Closure_Store extends WCPOS_REST_Unit_Test_Case {
 		$this->assertLessThan( strpos( $sql, 'START TRANSACTION' ), $lock );
 		$this->assertGreaterThan( strpos( $sql, 'COMMIT' ), $release );
 	}
+
+	/** Run a callable and return the most CAST terms any one of its queries carried.
+	 *
+	 * @param callable $run Code whose queries are recorded.
+	 */
+	private static function most_cast_terms( callable $run ): int {
+		$queries = array();
+		$record = static function ( $sql ) use ( &$queries ) {
+			$queries[] = $sql;
+			return $sql;
+		};
+		add_filter( 'query', $record );
+		try {
+			$run();
+		} finally {
+			remove_filter( 'query', $record );
+		}
+		return max( array_merge( array( 0 ), array_map( static fn ( $sql ) => substr_count( $sql, 'CAST(' ), $queries ) ) );
+	}
+
+	/** A session of 1,000 sales sums exactly in queries of at most 100 terms (#2590). */
+	public function test_sum_of_1000_sales_stays_exact_with_bounded_queries(): void {
+		$total = null;
+		$most = self::most_cast_terms(
+			static function () use ( &$total ) {
+				$total = Closure_Store::sum( array_fill( 0, 1000, '12.3456' ) );
+			}
+		);
+		$this->assertSame( '12345.6000', $total );
+		$this->assertLessThanOrEqual( 100, $most );
+		$this->assertSame( 100, $most );
+	}
+
+	/** Amounts either side of a chunk boundary are all counted.
+	 *
+	 * @dataProvider sum_chunk_boundaries
+	 * @param int    $count    Number of amounts.
+	 * @param string $expected Expected sum.
+	 */
+	public function test_sum_at_chunk_boundary_keeps_every_amount( int $count, string $expected ): void {
+		$total = null;
+		$most = self::most_cast_terms(
+			static function () use ( &$total, $count ) {
+				$total = Closure_Store::sum( array_fill( 0, $count, '0.0001' ) );
+			}
+		);
+		$this->assertSame( $expected, $total );
+		$this->assertLessThanOrEqual( 100, $most );
+	}
+
+	/** Amount counts at and just past each chunk boundary. */
+	public static function sum_chunk_boundaries(): array {
+		return array(
+			'one full chunk' => array( 100, '0.0100' ),
+			'one past a chunk' => array( 101, '0.0101' ),
+			'one past two chunks' => array( 201, '0.0201' ),
+		);
+	}
+
+	/** More than 100 partial sums are folded again within the limit. */
+	public function test_sum_of_more_than_ten_thousand_amounts_folds_partial_sums_within_the_limit(): void {
+		$total = null;
+		$most = self::most_cast_terms(
+			static function () use ( &$total ) {
+				$total = Closure_Store::sum( array_fill( 0, 10001, '1' ) );
+			}
+		);
+		$this->assertSame( '10001.0000', $total );
+		$this->assertLessThanOrEqual( 100, $most );
+	}
+
+	/** Signed amounts split across chunks still cancel exactly. */
+	public function test_sum_across_chunks_keeps_signs_and_order_independent_total(): void {
+		$amounts = array_merge( array_fill( 0, 150, '10.5000' ), array_fill( 0, 150, '-10.5000' ), array( '0.0001' ) );
+		$this->assertSame( '0.0001', Closure_Store::sum( $amounts ) );
+	}
+
+	/** No amounts sum to a four-place zero. */
+	public function test_sum_of_empty_array_is_zero(): void {
+		$this->assertSame( '0.0000', Closure_Store::sum( array() ) );
+	}
+
+	/** Keys are ignored; every value is summed. */
+	public function test_sum_of_associative_array_uses_values(): void {
+		$amounts = array(
+			'a' => '1',
+			'b' => '1',
+		);
+		for ( $i = 0; $i < 101; $i++ ) {
+			$amounts[ 1000 + 7 * $i ] = '1';
+		}
+		$this->assertSame( '103.0000', Closure_Store::sum( $amounts ) );
+	}
 }

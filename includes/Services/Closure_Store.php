@@ -27,6 +27,9 @@ final class Closure_Store {
 	 * toward the 18-digit limit. */
 	private const MAX_NUMBER_JUMP = 10000;
 
+	/** Most CAST terms in one query. Long `+` chains overrun MariaDB's thread stack and can kill the server (#2590). */
+	private const SUM_CHUNK_SIZE = 100;
+
 	/**
 	 * The closure row shape, in order: each key maps to the session column it is read
 	 * from, or null when it lives in the frozen `closure` document.
@@ -560,12 +563,15 @@ final class Closure_Store {
 		return $negative && '0.0000' !== $normalized ? '-' . $normalized : $normalized;
 	}
 
-	/** Exact decimal addition shared by totals and correction deltas.
+	/** Exact decimal addition shared by totals and correction deltas, split into bounded queries.
 	 *
 	 * @param array $amounts Signed decimal strings.
 	 * @throws \RuntimeException On calculation failure.
 	 */
 	public static function sum( array $amounts ): string {
+		if ( count( $amounts ) > self::SUM_CHUNK_SIZE ) {
+			return self::sum( array_map( array( self::class, 'sum' ), array_chunk( $amounts, self::SUM_CHUNK_SIZE ) ) );
+		}
 		global $wpdb;
 		$sql = 'SELECT ' . implode( ' + ', array_fill( 0, count( $amounts ? $amounts : array( '0' ) ), 'CAST(%s AS DECIMAL(65,4))' ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Decimal placeholders only.
