@@ -995,7 +995,7 @@ final class Fiscal_Record_Writers {
 		Logger::log( sprintf( 'Fiscal late check for refund #%d on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $refund_id, $order_id, $attempt ) );
 	}
 
-	/** The write behind handle_allocation(), under the close's locks: a succeeded, non-cash allocation after the closure shifts the drawer.
+	/** The write behind handle_allocation(), under the close's locks: a succeeded, non-cash allocation the closure did not count shifts the drawer.
 	 *
 	 * @param WC_Order        $order Parent order.
 	 * @param array           $row Allocated payment row.
@@ -1025,6 +1025,10 @@ final class Fiscal_Record_Writers {
 			if ( ! $this->store->find_by_source( 'late_refund', 'refund:' . $refund->get_id() ) ) {
 				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
 			}
+			return;
+		}
+		// The close reads live allocations, so one it counted is in the closure already, whichever ran first.
+		if ( Session_Figures::allocation_counted( $refund, (string) $row['id'] ) ) {
 			return;
 		}
 		$amount = Closure_Store::sum( array( $amount ) );

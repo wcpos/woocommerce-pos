@@ -26,6 +26,9 @@ final class Session_Figures {
 	 */
 	private const STAMP_LOCK_WAIT_SECONDS = 0;
 
+	/** The payment row ids whose allocation of this refund the stamping close counted. */
+	public const COUNTED_ALLOCATIONS_META = '_wcpos_closure_allocations';
+
 	/** Session row.
 	 *
 	 * @var array
@@ -517,6 +520,14 @@ final class Session_Figures {
 		// The refund writers ask this stamp, not the clock, whether a refund was inside the closure.
 		foreach ( $this->refunds() as $refund ) {
 			$refund['refund']->update_meta_data( '_wcpos_closure', $closure_id );
+			// The stamp says the refund was counted; this says which of its allocations were, read from the same ledger.
+			$counted = array();
+			foreach ( self::attributed_allocations( $refund['refund'], $this->refund_parent_rows( $refund['refund'] ) ) as $allocation ) {
+				$counted[] = (string) $allocation['row']['id'];
+			}
+			if ( $counted ) {
+				$refund['refund']->update_meta_data( self::COUNTED_ALLOCATIONS_META, array_values( array_unique( $counted ) ) );
+			}
 			$refund['refund']->save_meta_data();
 			// An unstamped counted refund would later read as a late arrival: fail the closure instead.
 			$stored = wc_get_order( $refund['refund']->get_id() );
@@ -587,6 +598,16 @@ final class Session_Figures {
 	 */
 	public static function counted( $stamp, array $closure ): bool {
 		return is_string( $stamp ) && '' !== $stamp && $stamp === (string) $closure['id'];
+	}
+
+	/** Whether the close that stamped this refund counted its allocation to the payment row.
+	 *
+	 * @param \WC_Order_Refund $refund Refund, read after the close.
+	 * @param string           $row_id Payment row id.
+	 */
+	public static function allocation_counted( \WC_Order_Refund $refund, string $row_id ): bool {
+		$counted = $refund->get_meta( self::COUNTED_ALLOCATIONS_META, true );
+		return is_array( $counted ) && in_array( $row_id, array_map( 'strval', $counted ), true );
 	}
 
 	/** Captured session legs that this closure did not count.
@@ -664,21 +685,14 @@ final class Session_Figures {
 		}
 		$rows = array();
 		$remaining = Money::minor( $refund->get_amount() );
-		// A succeeded allocation is a fact about the refund, kept even if its row was voided later.
-		foreach ( $ledger_rows as $row ) {
-			foreach ( $row['refunds'] ?? array() as $allocation ) {
-				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() && $remaining > 0 && Money::minor( $allocation['amount'] ) > 0 ) {
-					// Rows written before the handler-result checks may over- or mis-allocate: attribute at most the refund, never a negative.
-					$amount = min( Money::minor( $allocation['amount'] ), $remaining );
-					$remaining -= $amount;
-					$rows[] = array(
-						'method_id' => $row['method_id'],
-						'kind' => $row['kind'],
-						'amount' => Money::format( -$amount ),
-						'refund_id' => $refund->get_id(),
-					);
-				}
-			}
+		foreach ( self::attributed_allocations( $refund, $ledger_rows ) as $allocation ) {
+			$remaining -= $allocation['minor'];
+			$rows[] = array(
+				'method_id' => $allocation['row']['method_id'],
+				'kind' => $allocation['row']['kind'],
+				'amount' => Money::format( -$allocation['minor'] ),
+				'refund_id' => $refund->get_id(),
+			);
 		}
 		if ( $remaining > 0 ) {
 			$rows[] = array(
@@ -689,6 +703,32 @@ final class Session_Figures {
 			);
 		}
 		return $rows;
+	}
+
+	/** The succeeded allocations a refund is attributed to, in ledger order, together at most the refund.
+	 *
+	 * @param \WC_Order_Refund $refund Refund to attribute.
+	 * @param array            $ledger_rows Parent ledger rows.
+	 * @return array[] Each `row` (the ledger row) and `minor` (the attributed amount in minor units).
+	 */
+	private static function attributed_allocations( \WC_Order_Refund $refund, array $ledger_rows ): array {
+		$attributed = array();
+		$remaining  = Money::minor( $refund->get_amount() );
+		// A succeeded allocation is a fact about the refund, kept even if its row was voided later.
+		foreach ( $ledger_rows as $row ) {
+			foreach ( $row['refunds'] ?? array() as $allocation ) {
+				if ( 'succeeded' === $allocation['status'] && (int) $allocation['id'] === $refund->get_id() && $remaining > 0 && Money::minor( $allocation['amount'] ) > 0 ) {
+					// Rows written before the handler-result checks may over- or mis-allocate: attribute at most the refund, never a negative.
+					$amount       = min( Money::minor( $allocation['amount'] ), $remaining );
+					$remaining   -= $amount;
+					$attributed[] = array(
+						'row' => $row,
+						'minor' => $amount,
+					);
+				}
+			}
+		}
+		return $attributed;
 	}
 
 	/** Resolve tenders only for callers consuming financial figures.

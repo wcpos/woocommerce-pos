@@ -15,7 +15,9 @@ use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Register_Store;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 
 /** A sale, movement, refund or reallocation committing during a close lands in its figures or as a correction. */
@@ -28,6 +30,8 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 	/** The writers' retry hooks, named here so the file runs against code that lacks the constants. */
 	private const REFUND_RETRY = 'wcpos_fiscal_refund_retry';
 	private const ALLOCATION_RETRY = 'wcpos_fiscal_allocation_retry';
+	/** The close's record of the allocations it counted, named here for the same reason. */
+	private const COUNTED_ALLOCATIONS = '_wcpos_closure_allocations';
 
 	/**
 	 * Orders whose records need cleanup after a committed close.
@@ -370,13 +374,42 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 	 * @return array{0:\WC_Order,1:string} Order and payment id.
 	 */
 	private function sale( array $session, string $method = 'pos_cash' ): array {
+		list( $order, $ids ) = $this->split_sale( $session, 1, $method );
+		return array( $order, $ids[0] );
+	}
+
+	/**
+	 * A sale paid in equal captured payments of 50 through the payment route.
+	 *
+	 * @param array  $session  Session fixture.
+	 * @param int    $payments Number of payments.
+	 * @param string $method   Tender method.
+	 * @return array{0:\WC_Order,1:string[]} Order and payment ids, in payment order.
+	 */
+	private function split_sale( array $session, int $payments, string $method = 'pos_cash' ): array {
 		$order = wc_create_order();
 		$order->set_created_via( 'woocommerce-pos' );
-		$order->set_total( '50' );
+		$order->set_total( (string) ( 50 * $payments ) );
 		$order->update_meta_data( '_wcpos_session', $session['id'] );
 		$order->update_meta_data( '_wcpos_register', $session['register_id'] );
 		$order->save();
 		$this->order_ids[] = $order->get_id();
+		$ids = array();
+		for ( $i = 0; $i < $payments; $i++ ) {
+			$ids[] = $this->pay( wc_get_order( $order->get_id() ), $session, $method );
+		}
+		return array( wc_get_order( $order->get_id() ), $ids );
+	}
+
+	/**
+	 * Take one captured payment of 50 through the payment route.
+	 *
+	 * @param \WC_Order $order   Order.
+	 * @param array     $session Session fixture.
+	 * @param string    $method  Tender method.
+	 * @return string Payment id.
+	 */
+	private function pay( \WC_Order $order, array $session, string $method ): string {
 		$id      = wp_generate_uuid4();
 		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments' );
 		$request->set_body_params(
@@ -394,7 +427,7 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 		);
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		return array( wc_get_order( $order->get_id() ), $id );
+		return $id;
 	}
 
 	/**
@@ -402,8 +435,9 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 	 *
 	 * @param \WC_Order $order   Parent order.
 	 * @param array     $session Refund session.
+	 * @param string    $amount  Refund amount.
 	 */
-	private function refund( \WC_Order $order, array $session ): \WC_Order_Refund {
+	private function refund( \WC_Order $order, array $session, string $amount = '10' ): \WC_Order_Refund {
 		$stamp = static function ( $refund ) use ( $session ) {
 			$refund->update_meta_data( '_wcpos_session', strtoupper( $session['id'] ) );
 			$refund->update_meta_data( '_wcpos_register', strtoupper( $session['register_id'] ) );
@@ -413,7 +447,7 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 			$refund = wc_create_refund(
 				array(
 					'order_id' => $order->get_id(),
-					'amount' => '10',
+					'amount' => $amount,
 					'reason' => 'Damaged',
 				)
 			);
@@ -432,21 +466,72 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function allocated_card_refund( array $session ): array {
 		list( $order, $payment ) = $this->sale( $session, 'pos_card' );
-		$refund  = $this->refund( $order, $session );
-		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $payment . '/refund' );
-		$request->set_body_params(
-			$this->envelope(
-				$order,
-				array(
-					'refund_id' => $refund->get_id(),
-					'amount' => '10',
-				)
-			)
-		);
-		$response = $this->server->dispatch( $request );
-		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$refund = $this->refund( $order, $session );
+		$this->allocate( $order, $payment, $refund );
 		Fiscal_Record_Writers::instance()->handle_refund( $order->get_id(), $refund->get_id() );
 		return array( wc_get_order( $order->get_id() ), $payment, wc_get_order( $refund->get_id() ) );
+	}
+
+	/**
+	 * A card sale with a refund nothing is allocated to yet, its refund record written.
+	 *
+	 * @param array $session Open session.
+	 * @return array{0:\WC_Order,1:string,2:\WC_Order_Refund} Order, payment id, refund.
+	 */
+	private function card_refund( array $session ): array {
+		list( $order, $payment ) = $this->sale( $session, 'pos_card' );
+		$refund = $this->refund( $order, $session );
+		Fiscal_Record_Writers::instance()->handle_refund( $order->get_id(), $refund->get_id() );
+		return array( wc_get_order( $order->get_id() ), $payment, wc_get_order( $refund->get_id() ) );
+	}
+
+	/**
+	 * Allocate a refund to a payment through the refund route, without firing the reallocation writer.
+	 *
+	 * @param \WC_Order        $order   Order.
+	 * @param string           $payment Payment id.
+	 * @param \WC_Order_Refund $refund  Refund.
+	 * @param string           $amount  Allocation amount.
+	 */
+	private function allocate( \WC_Order $order, string $payment, \WC_Order_Refund $refund, string $amount = '10' ): void {
+		// The test calls the writer itself, at the moment it chooses.
+		$writer   = array( Fiscal_Record_Writers::instance(), 'handle_allocation' );
+		$priority = has_action( 'wcpos_refund_allocated', $writer );
+		if ( false !== $priority ) {
+			remove_action( 'wcpos_refund_allocated', $writer, $priority );
+		}
+		try {
+			$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $payment . '/refund' );
+			$request->set_body_params(
+				$this->envelope(
+					wc_get_order( $order->get_id() ),
+					array(
+						'refund_id' => $refund->get_id(),
+						'amount' => $amount,
+					)
+				)
+			);
+			$response = $this->server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		} finally {
+			if ( false !== $priority ) {
+				add_action( 'wcpos_refund_allocated', $writer, $priority, 4 );
+			}
+		}
+	}
+
+	/**
+	 * A refund's stored meta, read past every cache the close could leave behind.
+	 *
+	 * @param int    $refund_id Refund ID.
+	 * @param string $key       Meta key.
+	 * @return mixed
+	 */
+	private function refund_meta( int $refund_id, string $key ) {
+		$refund = wc_get_order( $refund_id );
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		$refund->read_meta_data( true );
+		return $refund->get_meta( $key, true );
 	}
 
 	/**
@@ -1070,10 +1155,11 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function reallocation_fixture(): array {
 		$session                          = $this->closure_session( null, 'open' );
-		list( $order, $payment, $refund ) = $this->allocated_card_refund( $session );
+		list( $order, $payment, $refund ) = $this->card_refund( $session );
 		$session                          = $this->counting( $session );
 		$closure                          = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
-		$refund                           = wc_get_order( $refund->get_id() );
+		$this->allocate( $order, $payment, $refund );
+		$refund = wc_get_order( $refund->get_id() );
 		$refund->read_meta_data( true );
 		$this->assertSame( $closure['id'], $refund->get_meta( '_wcpos_closure', true ) );
 		return array( $closure, wc_get_order( $order->get_id() ), $payment, $refund, $session );
@@ -1154,6 +1240,173 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( array(), $this->records( 'late_refund', $closure['id'] ) );
+	}
+
+	/** A close that counted an allocation, then that allocation's retry, writes no reallocation. */
+	public function test_allocation_counted_by_close_then_retry_writes_no_reallocation(): void {
+		// Arrange: the allocation committed before the close read the ledger, its writer turned away.
+		$session                          = $this->closure_session( null, 'open' );
+		list( $order, $payment, $refund ) = $this->allocated_card_refund( $session );
+		$session                          = $this->counting( $session );
+		$closure                          = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+
+		// Act.
+		do_action_ref_array( self::ALLOCATION_RETRY, array( $order->get_id(), $payment, $refund->get_id(), '10.00', 2 ) );
+
+		// Assert.
+		$this->assertSame( '40.0000', $closure['expected']['card'] );
+		$this->assertSame( array(), $this->records( 'late_refund', $closure['id'] ) );
+	}
+
+	/** A close that counted an allocation, then handle_allocation() for it, writes no reallocation. */
+	public function test_allocation_counted_by_close_replayed_through_handle_allocation_writes_no_reallocation(): void {
+		// Arrange.
+		$session                          = $this->closure_session( null, 'open' );
+		list( $order, $payment, $refund ) = $this->allocated_card_refund( $session );
+		$session                          = $this->counting( $session );
+		$closure                          = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->handle_allocation( wc_get_order( $order->get_id() ), $this->row( $order, $payment ), wc_get_order( $refund->get_id() ), '10.00' );
+
+		// Assert.
+		$this->assertSame( '40.0000', $closure['expected']['card'] );
+		$this->assertSame( array(), $this->records( 'late_refund', $closure['id'] ) );
+	}
+
+	/** An allocation made after a close that counted its refund all in cash writes one reallocation. */
+	public function test_allocation_made_after_close_writes_one_reallocation(): void {
+		// Arrange.
+		$session                          = $this->closure_session( null, 'open' );
+		list( $order, $payment, $refund ) = $this->card_refund( $session );
+		$session                          = $this->counting( $session );
+		$closure                          = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$this->allocate( $order, $payment, $refund );
+
+		// Act.
+		do_action_ref_array( self::ALLOCATION_RETRY, array( $order->get_id(), $payment, $refund->get_id(), '10.00', 2 ) );
+
+		// Assert.
+		$this->assertSame( '50.0000', $closure['expected']['card'] );
+		$late = $this->records( 'late_refund', $closure['id'] );
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'reallocation', $late[0]['payload']['kind'] );
+	}
+
+	/** An allocation committed between the close's ledger read and its stamp is not recorded as counted. */
+	public function test_allocation_committed_between_close_read_and_stamp_is_not_counted(): void {
+		// Arrange: the figures read the ledger with the refund all in cash, then the allocation commits.
+		$session                          = $this->closure_session( null, 'open' );
+		list( $order, $payment, $refund ) = $this->card_refund( $session );
+		$figures                          = Session_Figures::for_session( $this->counting( $session ) );
+		$expected                         = $figures->expected();
+		$this->assertSame( '90.0000', $expected['cash'] );
+		$this->assertSame( '50.0000', $expected['card'] );
+		$this->allocate( $order, $payment, $refund );
+		$closure_id = wp_generate_uuid4();
+
+		// Act.
+		try {
+			$figures->stamp( $closure_id );
+		} finally {
+			$figures->release();
+		}
+
+		// Assert.
+		$this->assertSame( $closure_id, $this->refund_meta( $refund->get_id(), '_wcpos_closure' ) );
+		$this->assertSame( '', $this->refund_meta( $refund->get_id(), self::COUNTED_ALLOCATIONS ) );
+	}
+
+	/** One refund on two payment rows: only the row the close read is skipped. */
+	public function test_refund_with_two_rows_counts_only_the_row_the_close_read(): void {
+		// Arrange: row A is allocated before the close, row B after it.
+		$session                    = $this->closure_session( null, 'open' );
+		list( $order, list( $a, $b ) ) = $this->split_sale( $session, 2, 'pos_card' );
+		$refund                     = $this->refund( $order, $session, '15' );
+		$this->allocate( $order, $a, $refund, '10' );
+		Fiscal_Record_Writers::instance()->handle_refund( $order->get_id(), $refund->get_id() );
+		$session = $this->counting( $session );
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$this->allocate( $order, $b, $refund, '5' );
+
+		// Act.
+		do_action_ref_array( self::ALLOCATION_RETRY, array( $order->get_id(), $a, $refund->get_id(), '10.00', 2 ) );
+		$after_a = $this->records( 'late_refund', $closure['id'] );
+		do_action_ref_array( self::ALLOCATION_RETRY, array( $order->get_id(), $b, $refund->get_id(), '5.00', 2 ) );
+
+		// Assert.
+		$this->assertSame( '90.0000', $closure['expected']['card'] );
+		$this->assertSame( array(), $after_a );
+		$late = $this->records( 'late_refund', $closure['id'] );
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'reallocation', $late[0]['payload']['kind'] );
+		$this->assertSame( Closure_Store::sum( array( '5' ) ), $late[0]['payload']['amount'] );
+		$this->assertSame( Fiscal_Record_Store::digest_source_id( 'refund:' . $refund->get_id() . ':' . $b ), $late[0]['source_id'] );
+	}
+
+	/** The close records each refund's succeeded allocation rows it counted, and nothing else. */
+	public function test_stamp_records_only_attributed_allocation_rows(): void {
+		// Arrange: rows A, B, C. Refund one: succeeded on A, pending on B. Refund two: succeeded on C. Refund three: none.
+		$session                          = $this->closure_session( null, 'open' );
+		list( $order, list( $a, $b, $c ) ) = $this->split_sale( $session, 3, 'pos_card' );
+		$one                              = $this->refund( $order, $session, '20' );
+		$two                              = $this->refund( $order, $session );
+		$three                            = $this->refund( $order, $session );
+		$this->allocate( $order, $a, $one );
+		$this->allocate( $order, $c, $two );
+		$pending              = $this->row( $order, $b );
+		$pending['refunds'][] = array(
+			'id' => $one->get_id(),
+			'amount' => '10.00',
+			'status' => 'pending',
+			'provider_ref' => null,
+		);
+		Ledger_Seed::rows( wc_get_order( $order->get_id() ), array( $pending ), false );
+		$session = $this->counting( $session );
+
+		// Act.
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+
+		// Assert.
+		$this->assertIsArray( $closure );
+		$this->assertSame( array( $a ), $this->refund_meta( $one->get_id(), self::COUNTED_ALLOCATIONS ) );
+		$this->assertSame( array( $c ), $this->refund_meta( $two->get_id(), self::COUNTED_ALLOCATIONS ) );
+		$this->assertSame( $closure['id'], $this->refund_meta( $three->get_id(), '_wcpos_closure' ) );
+		$this->assertSame( '', $this->refund_meta( $three->get_id(), self::COUNTED_ALLOCATIONS ) );
+	}
+
+	/** A close that stamps and then fails leaves no counted allocations; the repeat close writes them. */
+	public function test_close_rolled_back_leaves_no_counted_allocations(): void {
+		// Arrange: the receipt read after the stamp fails the first close.
+		global $wpdb;
+		$session                          = $this->closure_session( null, 'open' );
+		list( $order, $payment, $refund ) = $this->allocated_card_refund( $session );
+		$session                          = $this->counting( $session );
+		$fail                             = static function ( $sql ) {
+			return false !== strpos( $sql, 'AS first_receipt_id' ) ? 'INVALID RECEIPT READ' : $sql;
+		};
+		$previous = $wpdb->suppress_errors();
+		add_filter( 'query', $fail );
+		try {
+			( new Closure_Store() )->create( $this->closure_fields( $session ) );
+			$this->fail( 'Expected the receipt read to fail the close.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'Closure receipt read failed.', $error->getMessage() );
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $previous );
+		}
+		$stored = wc_get_order( $refund->get_id() );
+		$this->assertSame( '', $stored->get_meta( '_wcpos_closure', true ) );
+		$this->assertSame( '', $stored->get_meta( self::COUNTED_ALLOCATIONS, true ) );
+
+		// Act.
+		$closure = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+
+		// Assert.
+		$this->assertIsArray( $closure );
+		$this->assertSame( $closure['id'], $this->refund_meta( $refund->get_id(), '_wcpos_closure' ) );
+		$this->assertSame( array( $this->row( $order, $payment )['id'] ), $this->refund_meta( $refund->get_id(), self::COUNTED_ALLOCATIONS ) );
 	}
 
 	/** At the attempt cap a busy register schedules no further retry. */
@@ -1295,14 +1548,14 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 		$body      = $this->close_body( $session );
 		$contender = $this->contender();
 		$dbh       = $contender->dbh;
-		$this->assertInstanceOf( \mysqli::class, $dbh );
+		$this->assertInstanceOf( \mysqli::class, $dbh ); // phpcs:ignore WordPress.DB.RestrictedClasses -- the contender's own connection: $wpdb cannot send an asynchronous query.
 		$register  = $this->register_lock( $session );
 		$sent      = false;
 		$pending   = false;
 		$send      = static function ( $sql ) use ( $dbh, $register, &$sent, &$pending ) {
 			if ( ! $sent && 0 === stripos( ltrim( $sql ), 'START TRANSACTION' ) ) {
 				$sent    = true;
-				$pending = false !== mysqli_query( $dbh, "SELECT GET_LOCK( '" . $register . "', 10 )", MYSQLI_ASYNC );
+				$pending = false !== mysqli_query( $dbh, "SELECT GET_LOCK( '" . $register . "', 10 )", MYSQLI_ASYNC ); // phpcs:ignore WordPress.DB.RestrictedFunctions -- $wpdb cannot send an asynchronous query.
 			}
 			return $sql;
 		};
@@ -1323,7 +1576,7 @@ class Test_Closure_Write_Race extends WCPOS_REST_Unit_Test_Case {
 				$read   = array( $dbh );
 				$error  = array( $dbh );
 				$reject = array( $dbh );
-				if ( mysqli_poll( $read, $error, $reject, 1 ) > 0 ) {
+				if ( mysqli_poll( $read, $error, $reject, 1 ) > 0 ) { // phpcs:ignore WordPress.DB.RestrictedFunctions -- waits on the asynchronous query above.
 					$result  = $dbh->reap_async_query();
 					$pending = false;
 					$got     = $result instanceof \mysqli_result ? (string) $result->fetch_row()[0] : null;
