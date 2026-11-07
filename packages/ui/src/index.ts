@@ -39,6 +39,7 @@ export { NavGroup, type NavGroupProps } from './nav-group';
 export { NavItem, type NavItemProps } from './nav-item';
 export { NavSidebar, type NavSidebarProps } from './nav-sidebar';
 export { ShellLayout, type ShellLayoutProps } from './shell-layout';
+export { Footer, type FooterProps } from './footer';
 export {
 	Avatar,
 	getInitials,
