@@ -40,11 +40,19 @@ class Test_Admin_Asset_Versions extends WP_UnitTestCase {
 	private array $created = array();
 
 	/**
-	 * The DEVELOPMENT flag before the test, restored in tearDown.
+	 * Original mtimes of assets that already existed, restored in tearDown so the cache key a
+	 * build produced is not replaced by the fixture timestamp.
 	 *
-	 * @var mixed
+	 * @var array<string, int>
 	 */
-	private $development;
+	private array $original_mtimes = array();
+
+	/**
+	 * The DEVELOPMENT flag as the test found it, if set.
+	 *
+	 * @var string|null
+	 */
+	private ?string $development = null;
 
 	/**
 	 * Set up test fixtures.
@@ -60,7 +68,7 @@ class Test_Admin_Asset_Versions extends WP_UnitTestCase {
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos' );
 
 		// The enqueues read $_ENV['DEVELOPMENT'] to pick build/ over assets/; pin the release path.
-		$this->development = $_ENV['DEVELOPMENT'] ?? null;
+		$this->development = isset( $_ENV['DEVELOPMENT'] ) ? sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) : null;
 		unset( $_ENV['DEVELOPMENT'] );
 
 		// Fresh registries so earlier tests' registrations cannot satisfy the assertions.
@@ -75,7 +83,11 @@ class Test_Admin_Asset_Versions extends WP_UnitTestCase {
 		foreach ( $this->created as $path ) {
 			unlink( $path );
 		}
-		$this->created = array();
+		foreach ( $this->original_mtimes as $path => $mtime ) {
+			touch( $path, $mtime );
+		}
+		$this->created         = array();
+		$this->original_mtimes = array();
 		if ( null !== $this->development ) {
 			$_ENV['DEVELOPMENT'] = $this->development;
 		}
@@ -160,6 +172,8 @@ class Test_Admin_Asset_Versions extends WP_UnitTestCase {
 			wp_mkdir_p( \dirname( $path ) );
 			file_put_contents( $path, '' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- test fixture.
 			$this->created[] = $path;
+		} else {
+			$this->original_mtimes[ $path ] = (int) filemtime( $path );
 		}
 		touch( $path, self::MTIME );
 		clearstatcache( true, $path );
