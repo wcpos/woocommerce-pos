@@ -607,7 +607,7 @@ export function AddPrinterWizard({
 											data-testid="wizard-printnode-printer-select"
 											value={printerId}
 											onChange={(event) => setPrinterId(event.target.value)}
-											className="wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:px-2 wcpos:py-1 wcpos:text-sm"
+											className="wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:pl-2 wcpos:pr-6 wcpos:py-1 wcpos:text-sm"
 										>
 											<option value="">
 												{t('cloud_print.printnode_pick_placeholder', 'Select a printer…')}
@@ -697,7 +697,7 @@ export function AddPrinterWizard({
 											data-testid="wizard-star-device-select"
 											value={printerId}
 											onChange={(event) => setPrinterId(event.target.value)}
-											className="wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:px-2 wcpos:py-1 wcpos:text-sm"
+											className="wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:pl-2 wcpos:pr-6 wcpos:py-1 wcpos:text-sm"
 										>
 											<option value="">
 												{t('cloud_print.star_pick_placeholder', 'Select a device…')}

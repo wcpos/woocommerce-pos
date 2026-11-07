@@ -101,7 +101,7 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 						name="rounding_increment"
 						value={roundingIncrement}
 						onChange={(event) => setRoundingIncrement(event.target.value)}
-						className="wcpos:w-full wcpos:p-2 wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color"
+						className="wcpos:w-full wcpos:py-2 wcpos:pl-2 wcpos:pr-6 wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color"
 					>
 						<option value="">{t('checkout.no_rounding')}</option>
 						{['0.05', '0.10', '0.25', '0.50', '1', '5', '10'].map((increment) => (
