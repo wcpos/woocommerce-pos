@@ -261,3 +261,53 @@ describe('createI18nInstance localStorage cache lifetime', () => {
 		expect(cacheExpirationFor('next')).toBe(12 * 60 * 60 * 1000);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Source locale – en_US is served from the bundled strings, never the CDN export
+// ---------------------------------------------------------------------------
+describe('createI18nInstance source locale', () => {
+	// ChainedBackend fronts the localStorage and HTTP backends, so every language
+	// the HTTP loadPath could be asked for passes through its read() first.
+	const ChainedBackend = jest.requireMock('i18next-chained-backend').default;
+
+	function requestedLanguages(): string[] {
+		return ChainedBackend.read.mock.calls.map((call: unknown[]) => call[0] as string);
+	}
+
+	beforeEach(() => {
+		ChainedBackend.read.mockClear();
+	});
+
+	afterEach(() => {
+		document.documentElement.removeAttribute('lang');
+	});
+
+	it('serves en-US from the bundled source strings without asking the backend for en_US', async () => {
+		document.documentElement.setAttribute('lang', 'en-US');
+		const { i18n, i18nPromise, t } = createI18nInstance({
+			namespace: NS,
+			project: 'woocommerce-pos',
+			resources: { en: { [NS]: enTranslations } },
+		});
+
+		await i18nPromise;
+
+		expect(i18n.language).toBe('en');
+		expect(requestedLanguages()).not.toContain('en_US');
+		expect(t('common.hello')).toBe('Hello');
+	});
+
+	it('still asks the backend for en_GB, which can carry real localisation', async () => {
+		document.documentElement.setAttribute('lang', 'en-GB');
+		const { i18n, i18nPromise } = createI18nInstance({
+			namespace: NS,
+			project: 'woocommerce-pos',
+			resources: { en: { [NS]: enTranslations } },
+		});
+
+		await i18nPromise;
+
+		expect(i18n.language).toBe('en_GB');
+		expect(requestedLanguages()).toContain('en_GB');
+	});
+});

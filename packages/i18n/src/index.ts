@@ -12,6 +12,9 @@ import localesData from './locales.json';
 const ROLLING_TRANSLATION_REF = 'next';
 const PINNED_CACHE_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const ROLLING_CACHE_EXPIRATION_MS = 12 * 60 * 60 * 1000; // 12 hours
+// The locale the bundled `en` strings are written in. The translations export for it lags the
+// source, so it must never override the strings it was exported from.
+const SOURCE_LOCALE = 'en_US';
 
 export interface Locale {
 	name: string;
@@ -85,7 +88,9 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 			: PINNED_CACHE_EXPIRATION_MS;
 
 	const initOptions: Record<string, unknown> = {
-		lng: locale,
+		// en_US is served from the bundled source strings, so no backend request is made for it.
+		// Other English variants (en_GB, en_AU, …) still fetch: they can carry real localisation.
+		lng: locale === SOURCE_LOCALE ? 'en' : locale,
 		fallbackLng: 'en',
 		ns: [namespace],
 		defaultNS: namespace,
