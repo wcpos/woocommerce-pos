@@ -134,6 +134,7 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 - **PDF receipts cap images at 128 MB on every host.** The limit used to follow the host's memory_limit, so the same receipt image rendered on one host and showed a broken-image placeholder on another.
 - **Stripe's card form shows on the POS payment page with WooCommerce Stripe 11.1.1 or later.** On older Stripe versions the script stays off the page, because it blocks every other payment method there.
 - **A sale with two coupons on a line whose price includes tax now totals exactly as WooCommerce does.**
+- **The legacy PHP receipt's Total includes tax on stores that display prices excluding tax.** It used to print the pre-tax amount.
 - **Reloading the POS no longer raises an "unknown tax rate" warning before the store's tax rates have been read.**
 - **A sale with a miscellaneous product no longer crashes on stores running MyParcel 6.x.**
 - **A store that is slow to answer when connecting is no longer reported as blocking WCPOS.**
