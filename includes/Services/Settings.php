@@ -26,6 +26,23 @@ use const WCPOS\WooCommercePOS\VERSION;
  */
 class Settings {
 	/**
+	 * WooCommerce Stripe version whose card script stopped blocking other tenders on the pay page.
+	 * From 11.1.0 Stripe's `#order_review` submit handler blocked every non-Stripe submit; 11.1.1 fixed it,
+	 * so Stripe's card assets are removed from the POS pay page only below this version.
+	 */
+	private const STRIPE_PAY_PAGE_FIX_VERSION = '11.1.1';
+
+	/**
+	 * Stripe card scripts removed from the POS pay page below STRIPE_PAY_PAGE_FIX_VERSION.
+	 */
+	private const STRIPE_GATED_SCRIPT_HANDLES = array( 'wc-stripe-upe-classic' );
+
+	/**
+	 * Stripe card styles removed from the POS pay page below STRIPE_PAY_PAGE_FIX_VERSION.
+	 */
+	private const STRIPE_GATED_STYLE_HANDLES = array( 'wc-stripe-upe-classic', 'stripelink_styles' );
+
+	/**
 	 * Prefix for the $wpdb->options table.
 	 *
 	 * @var string
@@ -632,25 +649,71 @@ class Settings {
 	}
 
 	/**
-	 * Shipped defaults are a floor merchants can add to but cannot remove because they protect the pay form
-	 * from breaking assets (such as Stripe's classic checkout script since Stripe 11.1.0).
+	 * Scripts the POS pay page removes: the floor merchants can add to but cannot remove, then the saved list.
+	 * Below Stripe 11.1.1 the floor holds Stripe's card script; from 11.1.1 it is also stripped from the saved
+	 * list, where the old troubleshooting form stored it while it was locked.
+	 *
+	 * @param null|string $stripe_version WooCommerce Stripe version; null reads WC_STRIPE_VERSION.
 	 */
-	public function dequeue_script_handles(): array {
-		$section  = $this->sections()->get( 'checkout' );
-		$defaults = $section instanceof Settings_Section_Interface ? ( $section->defaults()['dequeue_script_handles'] ?? array() ) : array();
+	public function dequeue_script_handles( ?string $stripe_version = null ): array {
+		list( $floor, $saved ) = $this->dequeue_lists( 'dequeue_script_handles', self::STRIPE_GATED_SCRIPT_HANDLES, $stripe_version );
 
-		return array_values( array_unique( array_merge( $defaults, (array) $this->section_value( 'checkout', 'dequeue_script_handles' ) ) ) );
+		return array_values( array_unique( array_merge( $floor, $saved ) ) );
 	}
 
 	/**
-	 * Shipped defaults are a floor merchants can add to but cannot remove because they protect the pay form
-	 * from breaking assets (such as Stripe's classic checkout script since Stripe 11.1.0).
+	 * Styles the POS pay page removes: the floor merchants can add to but cannot remove, then the saved list.
+	 * Below Stripe 11.1.1 the floor holds Stripe's card styles; from 11.1.1 they are also stripped from the saved
+	 * list, where the old troubleshooting form stored them while they were locked.
+	 *
+	 * @param null|string $stripe_version WooCommerce Stripe version; null reads WC_STRIPE_VERSION.
 	 */
-	public function dequeue_style_handles(): array {
-		$section  = $this->sections()->get( 'checkout' );
-		$defaults = $section instanceof Settings_Section_Interface ? ( $section->defaults()['dequeue_style_handles'] ?? array() ) : array();
+	public function dequeue_style_handles( ?string $stripe_version = null ): array {
+		list( $floor, $saved ) = $this->dequeue_lists( 'dequeue_style_handles', self::STRIPE_GATED_STYLE_HANDLES, $stripe_version );
 
-		return array_values( array_unique( array_merge( $defaults, (array) $this->section_value( 'checkout', 'dequeue_style_handles' ) ) ) );
+		return array_values( array_unique( array_merge( $floor, $saved ) ) );
+	}
+
+	/**
+	 * Scripts always removed from the POS pay page, whatever the merchant saved.
+	 *
+	 * @param null|string $stripe_version WooCommerce Stripe version; null reads WC_STRIPE_VERSION.
+	 */
+	public function dequeue_script_floor( ?string $stripe_version = null ): array {
+		return $this->dequeue_lists( 'dequeue_script_handles', self::STRIPE_GATED_SCRIPT_HANDLES, $stripe_version )[0];
+	}
+
+	/**
+	 * Styles always removed from the POS pay page, whatever the merchant saved.
+	 *
+	 * @param null|string $stripe_version WooCommerce Stripe version; null reads WC_STRIPE_VERSION.
+	 */
+	public function dequeue_style_floor( ?string $stripe_version = null ): array {
+		return $this->dequeue_lists( 'dequeue_style_handles', self::STRIPE_GATED_STYLE_HANDLES, $stripe_version )[0];
+	}
+
+	/**
+	 * The floor (section defaults, plus the gated Stripe handles below the fix) and the saved list (less the
+	 * gated Stripe handles from the fix onwards). With Stripe absent both are left as they are.
+	 *
+	 * @param string      $key            Checkout section key.
+	 * @param string[]    $gated          Stripe handles behind the version gate.
+	 * @param null|string $stripe_version WooCommerce Stripe version; null reads WC_STRIPE_VERSION.
+	 *
+	 * @return array{0: string[], 1: array} Floor, saved list.
+	 */
+	private function dequeue_lists( string $key, array $gated, ?string $stripe_version ): array {
+		$section = $this->sections()->get( 'checkout' );
+		$floor   = $section instanceof Settings_Section_Interface ? ( $section->defaults()[ $key ] ?? array() ) : array();
+		$saved   = (array) $this->section_value( 'checkout', $key );
+		$version = $stripe_version ?? ( \defined( 'WC_STRIPE_VERSION' ) ? (string) WC_STRIPE_VERSION : null );
+		if ( null !== $version && version_compare( $version, self::STRIPE_PAY_PAGE_FIX_VERSION, '<' ) ) {
+			$floor = array_merge( $floor, $gated );
+		} elseif ( null !== $version ) {
+			$saved = array_diff( $saved, $gated );
+		}
+
+		return array( $floor, $saved );
 	}
 
 	/**
