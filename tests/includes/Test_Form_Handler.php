@@ -323,4 +323,183 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 			'the identity correction must only be registered on a POS pay POST'
 		);
 	}
+
+	/**
+	 * Create an order paid by the POS with the given billing email.
+	 *
+	 * @param string $billing_email The order's billing email.
+	 *
+	 * @return \WC_Order The saved order.
+	 */
+	private function create_pos_order_with_billing_email( string $billing_email ): \WC_Order {
+		$order = OrderHelper::create_order();
+		$order->set_customer_id( 0 );
+		$order->set_billing_email( $billing_email );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * A POS guest has no email and the pay page collects none, so Stripe's
+	 * customer requirements are lifted for a request with no email.
+	 */
+	public function test_pay_action_guest_without_email_lifts_stripe_customer_requirements(): void {
+		// Arrange.
+		$order = $this->create_pos_order_with_billing_email( '' );
+		$this->arrange_pos_pay_post( $order );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+		$stripe_required = array(
+			'email'   => true,
+			'name'    => true,
+			'address' => array( 'line1' => true ),
+		);
+		$required_fields = apply_filters( 'wc_stripe_create_customer_required_fields', $stripe_required, array( 'email' => '' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+
+		// Assert.
+		$this->assertSame( array(), $required_fields );
+	}
+
+	/**
+	 * Blank email and address entries are dropped from a guest's Stripe customer
+	 * request; everything else is kept.
+	 */
+	public function test_pay_action_guest_without_email_strips_blank_stripe_customer_args(): void {
+		// Arrange.
+		$order = $this->create_pos_order_with_billing_email( '' );
+		$this->arrange_pos_pay_post( $order );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+		$args = apply_filters(
+			'wc_stripe_create_customer_args', // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+			array(
+				'email'       => '',
+				'description' => 'Guest',
+				'address'     => array(
+					'line1'   => '',
+					'country' => 'GB',
+				),
+			)
+		);
+		$all_blank_args = apply_filters(
+			'wc_stripe_create_customer_args', // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+			array(
+				'email'       => '',
+				'description' => 'Guest',
+				'address'     => array(
+					'line1'   => '',
+					'country' => '',
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertArrayNotHasKey( 'email', $args );
+		$this->assertSame( 'Guest', $args['description'] );
+		$this->assertSame( array( 'country' => 'GB' ), $args['address'] );
+		$this->assertArrayNotHasKey( 'email', $all_blank_args );
+		$this->assertArrayNotHasKey( 'address', $all_blank_args );
+		$this->assertSame( 'Guest', $all_blank_args['description'] );
+	}
+
+	/**
+	 * An order with a billing email keeps Stripe's requirements and request.
+	 */
+	public function test_pay_action_order_with_email_keeps_stripe_customer_requirements(): void {
+		// Arrange.
+		$order = $this->create_pos_order_with_billing_email( 'buyer@example.com' );
+		$this->arrange_pos_pay_post( $order );
+		$required_fields = array( 'email' => true );
+		$request         = array(
+			'email'   => 'buyer@example.com',
+			'address' => array(
+				'line1'   => '',
+				'country' => 'GB',
+			),
+		);
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertFalse( has_filter( 'wc_stripe_create_customer_required_fields' ) );
+		$this->assertFalse( has_filter( 'wc_stripe_create_customer_args' ) );
+		$this->assertSame( $required_fields, apply_filters( 'wc_stripe_create_customer_required_fields', $required_fields, $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+		$this->assertSame( $request, apply_filters( 'wc_stripe_create_customer_args', $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+	}
+
+	/**
+	 * A blank order email with an email in Stripe's request (a registered
+	 * customer's user email) keeps Stripe's requirements and request.
+	 */
+	public function test_pay_action_blank_order_email_with_request_email_keeps_stripe_customer_requirements(): void {
+		// Arrange.
+		$order = $this->create_pos_order_with_billing_email( '' );
+		$this->arrange_pos_pay_post( $order );
+		$required_fields = array(
+			'email'   => true,
+			'name'    => true,
+			'address' => array( 'line1' => true ),
+		);
+		$request         = array(
+			'email'       => 'a@example.com',
+			'description' => 'Customer',
+			'address'     => array(
+				'line1'   => '',
+				'country' => '',
+			),
+		);
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertSame( $required_fields, apply_filters( 'wc_stripe_create_customer_required_fields', $required_fields, $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+		$this->assertSame( $request, apply_filters( 'wc_stripe_create_customer_args', $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+	}
+
+	/**
+	 * Outside a POS request (a store's own pay page) the Stripe filters are not
+	 * registered, even for an order with a blank billing email.
+	 */
+	public function test_pay_action_outside_pos_request_leaves_stripe_customer_filters_alone(): void {
+		global $wp;
+
+		// Arrange.
+		$order = $this->create_pos_order_with_billing_email( '' );
+		$this->arrange_pos_pay_post( $order );
+		unset( $wp->query_vars['wcpos'] );
+		$required_fields = array( 'email' => true );
+		$request         = array(
+			'email'   => '',
+			'address' => array( 'line1' => '' ),
+		);
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertFalse( has_filter( 'wc_stripe_create_customer_required_fields' ) );
+		$this->assertFalse( has_filter( 'wc_stripe_create_customer_args' ) );
+		$this->assertSame( $required_fields, apply_filters( 'wc_stripe_create_customer_required_fields', $required_fields, $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+		$this->assertSame( $request, apply_filters( 'wc_stripe_create_customer_args', $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+	}
+
+	/**
+	 * Stripe below 10.2.0 passes only the required fields; with no request to
+	 * read, the email counts as blank.
+	 */
+	public function test_stripe_guest_required_fields_accepts_one_argument(): void {
+		// Arrange.
+		$handler = new Form_Handler();
+
+		// Act.
+		$required_fields = $handler->stripe_guest_required_fields( array( 'email' => true ) );
+
+		// Assert.
+		$this->assertSame( array(), $required_fields );
+	}
 }
