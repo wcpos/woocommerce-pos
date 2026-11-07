@@ -109,7 +109,7 @@ class Admin {
 			self::API_FETCH_METHOD_PARAM_HANDLE,
 			PLUGIN_URL . 'assets/js/api-fetch-method-param.js',
 			array( 'wp-api-fetch' ),
-			VERSION,
+			Admin\Menu::asset_version( 'assets/js/api-fetch-method-param.js' ),
 			true
 		);
 	}
