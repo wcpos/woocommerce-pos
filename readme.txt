@@ -133,6 +133,7 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 - **A store running a plugin that returns nothing from WordPress's REST dispatch filter syncs its whole catalogue again.** WP Activity Log's Redirection sensor does this; the POS asked for every product id, got one page of ten, and silently never finished syncing.
 - **PDF receipts cap images at 128 MB on every host.** The limit used to follow the host's memory_limit, so the same receipt image rendered on one host and showed a broken-image placeholder on another.
 - **Stripe's card form shows on the POS payment page with WooCommerce Stripe 11.1.1 or later.** On older Stripe versions the script stays off the page, because it blocks every other payment method there.
+- **A guest sale can be paid by card through WooCommerce Stripe.** It used to fail with "Missing required customer field: email", so the cashier had to attach a customer first.
 - **A sale with two coupons on a line whose price includes tax now totals exactly as WooCommerce does.**
 - **Reloading the POS no longer raises an "unknown tax rate" warning before the store's tax rates have been read.**
 - **A sale with a miscellaneous product no longer crashes on stores running MyParcel 6.x.**
