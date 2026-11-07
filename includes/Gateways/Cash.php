@@ -68,7 +68,7 @@ class Cash extends Abstract_POS_Gateway {
 			echo '<p>' . wp_kses_post( $this->description ) . '</p>';
 		}
 
-		$currency_pos = get_option( 'woocommerce_currency_pos' );
+		$currency_pos = $this->pay_page_currency_position( $order );
 		$currency     = $order && $order->get_currency() ? $order->get_currency() : get_woocommerce_currency();
 		$symbol       = get_woocommerce_currency_symbol( $currency );
 

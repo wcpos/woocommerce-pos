@@ -485,4 +485,151 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	private function addon( string $currency ): string {
 		return wp_kses_post( '<span class="input-group-addon">' . get_woocommerce_currency_symbol( $currency ) . '</span>' );
 	}
+
+	/**
+	 * Test payment_fields places the symbol where the order's POS store says, not the site.
+	 */
+	public function test_payment_fields_store_position_overrides_the_site_position(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_currency( 'EUR' );
+		$order->save();
+		$store_filter = $this->add_store( 'right' );
+
+		try {
+			// Act.
+			$output = $this->render_payment_fields( $order->get_id(), 'left' );
+		} finally {
+			remove_filter( 'wcpos_get_store', $store_filter );
+		}
+
+		// Assert.
+		$this->assertGreaterThan( strpos( $output, '<input' ), strpos( $output, $this->addon( 'EUR' ) ) );
+	}
+
+	/**
+	 * Test payment_fields uses the site position when there is no order.
+	 */
+	public function test_payment_fields_without_an_order_uses_the_site_position(): void {
+		// Arrange.
+		$store_filter = $this->add_store( 'right' );
+
+		try {
+			// Act.
+			$output = $this->render_payment_fields( null, 'left' );
+		} finally {
+			remove_filter( 'wcpos_get_store', $store_filter );
+		}
+
+		// Assert.
+		$this->assertLessThan( strpos( $output, '<input' ), strpos( $output, $this->addon( 'USD' ) ) );
+	}
+
+	/**
+	 * Test payment_fields uses the site position when the store has none.
+	 */
+	public function test_payment_fields_store_with_no_position_uses_the_site_position(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_currency( 'EUR' );
+		$order->save();
+		$store_filter = $this->add_store( '' );
+
+		try {
+			// Act.
+			$output = $this->render_payment_fields( $order->get_id(), 'left' );
+		} finally {
+			remove_filter( 'wcpos_get_store', $store_filter );
+		}
+
+		// Assert.
+		$this->assertLessThan( strpos( $output, '<input' ), strpos( $output, $this->addon( 'EUR' ) ) );
+	}
+
+	/**
+	 * Test payment_fields uses the site position when the order's store no longer exists.
+	 */
+	public function test_payment_fields_order_store_gone_uses_the_site_position(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_currency( 'EUR' );
+		$order->update_meta_data( '_pos_store', 999999 );
+		$order->save();
+		$store_filter = static function () {
+			return null;
+		};
+		add_filter( 'wcpos_get_store', $store_filter );
+
+		try {
+			// Act.
+			$output = $this->render_payment_fields( $order->get_id(), 'left' );
+		} finally {
+			remove_filter( 'wcpos_get_store', $store_filter );
+		}
+
+		// Assert.
+		$this->assertLessThan( strpos( $output, '<input' ), strpos( $output, $this->addon( 'EUR' ) ) );
+	}
+
+	/**
+	 * Add a wcpos_get_store filter that returns a store stub with the given currency position.
+	 *
+	 * @param string $position Currency position.
+	 *
+	 * @return callable The filter, for the caller to remove.
+	 */
+	private function add_store( string $position ): callable {
+		$stub = new class( $position ) {
+			/**
+			 * Currency position.
+			 *
+			 * @var string
+			 */
+			private $position;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param string $position Currency position.
+			 */
+			public function __construct( string $position ) {
+				$this->position = $position;
+			}
+
+			/**
+			 * Currency position.
+			 */
+			public function get_currency_position(): string {
+				return $this->position;
+			}
+
+			/**
+			 * Decimal separator.
+			 */
+			public function get_price_decimal_separator(): string {
+				return '.';
+			}
+
+			/**
+			 * Thousand separator.
+			 */
+			public function get_price_thousand_separator(): string {
+				return ',';
+			}
+
+			/**
+			 * Number of decimals.
+			 */
+			public function get_price_number_of_decimals(): int {
+				return 2;
+			}
+		};
+
+		$filter = static function () use ( $stub ) {
+			return $stub;
+		};
+		add_filter( 'wcpos_get_store', $filter );
+
+		return $filter;
+	}
 }
