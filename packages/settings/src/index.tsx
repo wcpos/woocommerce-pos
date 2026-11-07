@@ -4,7 +4,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { createRoot } from 'react-dom/client';
 import { ErrorBoundary } from 'react-error-boundary';
 
-import { SnackbarProvider } from '@wcpos/ui';
+import { installAdminSkipLinks, SnackbarProvider } from '@wcpos/ui';
 
 import ErrorFallback from './components/error';
 import { NoticesProvider } from './hooks/use-notices';
@@ -51,5 +51,6 @@ router.subscribe('onResolved', ({ toLocation }) => {
 
 const el = document.getElementById('woocommerce-pos-settings');
 if (el) {
+	installAdminSkipLinks();
 	createRoot(el).render(<Root />);
 }

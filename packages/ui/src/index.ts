@@ -86,5 +86,6 @@ export {
 	type PreviewZoom,
 	type PreviewPaperWidth,
 } from './preview-viewport';
+export { installAdminSkipLinks } from './admin-skip-links';
 export { MoneyInput } from './money-input';
 export { TimeInput } from './time-input';
