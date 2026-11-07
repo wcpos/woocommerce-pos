@@ -91,8 +91,10 @@ export function SnackbarProvider({ children, boundsElement }: SnackbarProviderPr
 	return (
 		<SnackbarContext.Provider value={{ addSnackbar, removeSnackbar }}>
 			<div ref={containerRef} className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col">
+				{/* Stack: WP admin menu 9990 < NavSidebar backdrop 9991 < drawer 9992 <
+				    snackbar 9993 < WP admin bar 99999, so a save error shows over an open drawer. */}
 				<div
-					className="wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,32px)] wcpos:z-50 wcpos:overflow-hidden"
+					className="wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,32px)] wcpos:z-[9993] wcpos:overflow-hidden"
 					style={slotStyle}
 					role="status"
 					aria-live="polite"
