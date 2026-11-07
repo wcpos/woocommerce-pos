@@ -213,10 +213,15 @@ grep -q 'check-opfs-worker-drift.sh' "$WORKFLOW_FILE" \
   || fail "workflow does not run check-opfs-worker-drift.sh"
 grep -q 'test-check-opfs-worker-drift.sh' "$WORKFLOW_FILE" \
   || fail "workflow does not run this test script"
-# The next lane is checked on its own pushes/PRs and by the schedule, against the branch.
-grep -q 'BUNDLE_REF: next' "$WORKFLOW_FILE" \
-  || fail "workflow has no scheduled next-lane check against web-bundle@next"
-grep -qE "github\.base_ref == 'next'" "$WORKFLOW_FILE" \
-  || fail "workflow does not check next-lane PRs against web-bundle@next"
+# The drift comes from another repo's tags, so nothing here fires without the schedule.
+grep -qE '^  schedule:' "$WORKFLOW_FILE" \
+  || fail "workflow has no scheduled run"
+# main's ruleset requires this context by name.
+grep -q 'name: 🧵 OPFS worker matches the bundle' "$WORKFLOW_FILE" \
+  || fail "workflow lost the required job name"
+# A checkout of a branch that does not exist fails every scheduled run (#2556).
+if grep -qE '^ +ref: next$' "$WORKFLOW_FILE"; then
+  fail "workflow checks out next, which does not exist"
+fi
 
 echo "PASS: check-opfs-worker-drift.sh"
