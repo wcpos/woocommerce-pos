@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Admin;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
-use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Analytics class.
@@ -54,7 +53,7 @@ class Analytics {
 				'wp-hooks',
 				'wc-components',
 			),
-			VERSION,
+			Menu::asset_version( $dir . '/js/analytics.js' ),
 			true
 		);
 

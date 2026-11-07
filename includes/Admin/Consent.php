@@ -25,7 +25,6 @@ use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
-use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Class Consent.
@@ -232,14 +231,14 @@ class Consent {
 			PLUGIN_NAME . '-consent-styles',
 			PLUGIN_URL . $dir . '/css/consent.css',
 			array(),
-			VERSION
+			Menu::asset_version( $dir . '/css/consent.css' )
 		);
 
 		wp_enqueue_script(
 			PLUGIN_NAME . '-consent',
 			PLUGIN_URL . $dir . '/js/consent.js',
 			array( 'react', 'react-dom', 'wp-url' ),
-			VERSION,
+			Menu::asset_version( $dir . '/js/consent.js' ),
 			true
 		);
 

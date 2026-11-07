@@ -18,7 +18,6 @@ use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
-use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Class Settings.
@@ -102,7 +101,7 @@ class Settings {
 			PLUGIN_NAME . '-settings-styles',
 			PLUGIN_URL . $dir . '/css/settings.css',
 			array(),
-			VERSION
+			Menu::asset_version( $dir . '/css/settings.css' )
 		);
 
 		wp_enqueue_script(
@@ -116,7 +115,7 @@ class Settings {
 				'wp-url',
 				'lodash',
 			),
-			VERSION,
+			Menu::asset_version( $dir . '/js/settings.js' ),
 			true
 		);
 
