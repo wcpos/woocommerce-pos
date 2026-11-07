@@ -1122,17 +1122,21 @@ class Templates {
 			}
 		}
 
-		// Collect enabled database (custom) templates, oldest first. Without an
-		// explicit order get_posts() sorts by post_date DESC, and two templates
-		// saved in the same second tie — so "the first enabled template", which
-		// the admin display list pins as Live, could differ between requests.
+		// Collect enabled database (custom) templates by menu_order, then oldest
+		// first — the same order the admin template list uses, so templates the
+		// stored order does not name sort identically on both sides and "the first
+		// enabled template" (Live / site default) matches what the admin shows.
+		// The ID tie-break keeps that stable: without it, equal menu_orders (all 0
+		// by default) come back in whatever order MySQL picks.
 		$posts = get_posts(
 			array(
 				'post_type'      => 'wcpos_template',
 				'post_status'    => 'publish',
 				'posts_per_page' => -1,
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
+				'orderby'        => array(
+					'menu_order' => 'ASC',
+					'ID'         => 'ASC',
+				),
 				'tax_query'      => array(
 					array(
 						'taxonomy' => 'wcpos_template_type',
