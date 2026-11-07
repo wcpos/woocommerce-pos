@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-07T11:19:14+00:00\n"
+"POT-Creation-Date: 2026-11-07T15:18:44+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1750,17 +1750,17 @@ msgstr ""
 msgid "This movement id is already used by another session."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:636
+#: includes/Services/Closure_Store.php:642
 #: includes/Services/Session_Carry.php:28
 #: includes/Services/Session_Carry.php:155
 msgid "The session cannot be closed."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:698
+#: includes/Services/Closure_Store.php:704
 msgid "This session already has a closure; the count was recorded as a recount."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:715
+#: includes/Services/Closure_Store.php:721
 #: includes/Services/Register_Session_Store.php:341
 #: includes/Services/Register_Session_Store.php:507
 #: includes/Services/Session_Carry.php:31
@@ -1769,11 +1769,11 @@ msgstr ""
 msgid "The session state has changed."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:741
+#: includes/Services/Closure_Store.php:747
 msgid "The closure number is too far ahead of the register sequence."
 msgstr ""
 
-#: includes/Services/Closure_Store.php:752
+#: includes/Services/Closure_Store.php:758
 msgid "The closure number precedes the register sequence."
 msgstr ""
 
