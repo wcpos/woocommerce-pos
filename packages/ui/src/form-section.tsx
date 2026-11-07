@@ -15,8 +15,10 @@ export interface FormSectionProps {
 	 */
 	headerRight?: React.ReactNode;
 	/**
-	 * When true, renders a bottom border + larger bottom padding so stacked
-	 * sections get a visible separator without consumers adding it themselves.
+	 * When true, adds a bottom border so stacked sections get a visible separator
+	 * without consumers adding it themselves. Spacing is the same either way, so a
+	 * page's first heading sits at the same height and the section after a divider
+	 * starts clear of the line.
 	 */
 	divider?: boolean;
 	children: React.ReactNode;
@@ -40,9 +42,8 @@ export function FormSection({
 	return (
 		<div
 			className={classNames(
-				divider
-					? 'wcpos:border-b wcpos:border-gray-200 wcpos:pb-6 wcpos:pt-4'
-					: 'wcpos:pb-4 wcpos:mb-4',
+				'wcpos:pt-4 wcpos:pb-6',
+				divider && 'wcpos:border-b wcpos:border-gray-200',
 				className
 			)}
 		>
