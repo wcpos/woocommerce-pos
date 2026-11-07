@@ -703,7 +703,9 @@ final class Fiscal_Record_Writers {
 			);
 			if ( ! $locked ) {
 				$this->fail_quietly( 'late_refund', $order, $refund, new \RuntimeException( 'Refund late check could not take the order and register locks.' ) );
-				$this->schedule_retry( self::REFUND_RETRY_HOOK, array( $order_id, $refund_id ), $order_id, $refund_id, $attempt );
+				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::REFUND_RETRY_HOOK, array( $order_id, $refund_id, $attempt + 1 ) ) ) {
+					$this->log_retry_dropped( $order_id, $refund_id, $attempt );
+				}
 			}
 		} catch ( \Throwable $error ) {
 			// The refund is durable; fiscal bookkeeping must not fail its request, only signal.
@@ -950,7 +952,9 @@ final class Fiscal_Record_Writers {
 			);
 			if ( ! $locked ) {
 				$this->fail_quietly( 'late_refund', $order, $refund, new \RuntimeException( 'Reallocation could not take the order and register locks.' ) );
-				$this->schedule_retry( self::ALLOCATION_RETRY_HOOK, array( $order->get_id(), (string) $row['id'], $refund->get_id(), $amount ), $order->get_id(), $refund->get_id(), $attempt );
+				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::ALLOCATION_RETRY_HOOK, array( $order->get_id(), (string) $row['id'], $refund->get_id(), $amount, $attempt + 1 ) ) ) {
+					$this->log_retry_dropped( $order->get_id(), $refund->get_id(), $attempt );
+				}
 			}
 		} catch ( \Throwable $error ) {
 			// The allocation is already saved; fiscal bookkeeping must not fail the request.
@@ -980,18 +984,14 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * Schedule the next attempt of a late check a close's register lock turned away.
+	 * Log a late check a close's register lock turned away that will not be retried:
+	 * the attempt cap is reached or the retry could not be scheduled.
 	 *
-	 * @param string $hook      Retry hook.
-	 * @param array  $args      Hook arguments before the attempt.
-	 * @param int    $order_id  Parent order ID, for the log.
-	 * @param int    $refund_id Refund ID, for the log.
-	 * @param int    $attempt   The attempt that failed.
+	 * @param int $order_id  Parent order ID.
+	 * @param int $refund_id Refund ID.
+	 * @param int $attempt   The attempt that failed.
 	 */
-	private function schedule_retry( string $hook, array $args, int $order_id, int $refund_id, int $attempt ): void {
-		if ( $attempt < self::LATE_RETRY_MAX_ATTEMPTS && true === wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, $hook, array_merge( $args, array( $attempt + 1 ) ) ) ) {
-			return;
-		}
+	private function log_retry_dropped( int $order_id, int $refund_id, int $attempt ): void {
 		Logger::log( sprintf( 'Fiscal late check for refund #%d on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $refund_id, $order_id, $attempt ) );
 	}
 
