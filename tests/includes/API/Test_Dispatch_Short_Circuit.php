@@ -268,6 +268,29 @@ class Test_Dispatch_Short_Circuit extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A later rest_dispatch_request error-status response is never replaced by WCPOS data.
+	 *
+	 * @dataProvider lanes
+	 * @param string $route    Route.
+	 * @param string $kind     Record kind.
+	 * @param int    $per_page Page size, 0 for none.
+	 */
+	public function test_later_dispatch_listener_error_status_response_is_not_replaced( string $route, string $kind, int $per_page ): void {
+		$this->create_records( $kind );
+		$throttle = static function () {
+			return new WP_REST_Response( array( 'code' => 'throttled' ), 429 );
+		};
+		add_filter( 'rest_dispatch_request', $throttle, 20 );
+
+		$response = $this->server->dispatch( $this->all_ids_request( $route, $per_page ) );
+		remove_filter( 'rest_dispatch_request', $throttle, 20 );
+
+		$this->assertSame( 429, $response->get_status() );
+		$this->assertSame( array( 'code' => 'throttled' ), $response->get_data() );
+		$this->assertSame( 0, $this->stored_count() );
+	}
+
+	/**
 	 * A nested rest_do_request keeps each response with its own request.
 	 *
 	 * @dataProvider lanes
@@ -298,8 +321,7 @@ class Test_Dispatch_Short_Circuit extends WCPOS_REST_Unit_Test_Case {
 		$outer_ids = array_map( 'intval', wp_list_pluck( $outer->get_data(), 'id' ) );
 		$inner_ids = array_map( 'intval', wp_list_pluck( $inner->get_data(), 'id' ) );
 		$this->assertEqualsCanonicalizing( $created, $outer_ids );
-		$this->assertSame( array(), array_values( array_diff( $tags, $inner_ids ) ) );
-		$this->assertSame( array(), array_intersect( $created, $inner_ids ) );
+		$this->assertEqualsCanonicalizing( $tags, $inner_ids );
 		$this->assertSame( 0, $this->stored_count() );
 	}
 
