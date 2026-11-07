@@ -1784,4 +1784,40 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertSame( array(), Templates::get_store_template_ids( $store_id, 'display' ) );
 		$this->assertSame( array(), Templates::get_store_template_ids( 0, 'display' ) );
 	}
+
+	/**
+	 * Without a stored order, enabled database templates follow menu_order (then ID),
+	 * the same order the admin template list shows, so the first enabled template
+	 * the admin sees is the one POS resolves.
+	 */
+	public function test_get_enabled_templates_without_stored_order_follows_menu_order(): void {
+		// Arrange: two published receipt templates, menu_order reversed relative to ID.
+		$older_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'Older, second in menu order',
+				'menu_order'  => 2,
+			)
+		);
+		$newer_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'Newer, first in menu order',
+				'menu_order'  => 1,
+			)
+		);
+		wp_set_object_terms( $older_id, 'receipt', 'wcpos_template_type' );
+		wp_set_object_terms( $newer_id, 'receipt', 'wcpos_template_type' );
+		foreach ( Templates::detect_filesystem_templates( 'receipt' ) as $virtual ) {
+			Templates::set_virtual_template_disabled( (string) $virtual['id'], true, 'receipt' );
+		}
+
+		// Act.
+		$enabled = Templates::get_enabled_templates( 'receipt' );
+
+		// Assert.
+		$this->assertEquals( array( $newer_id, $older_id ), array_map( 'intval', array_column( $enabled, 'id' ) ) );
+	}
 }
