@@ -135,8 +135,10 @@ function Checkout() {
 			</FormSection>
 
 			<div className="wcpos:px-4 wcpos:pb-5">
-				<h2 className="wcpos:text-base">{t('checkout.gateways')}</h2>
-				<p>{t('checkout.gateways_description')}</p>
+				<h2 className="wcpos:mt-4 wcpos:mb-2 wcpos:text-base wcpos:font-semibold">
+					{t('checkout.gateways')}
+				</h2>
+				<p className="wcpos:mb-3">{t('checkout.gateways_description')}</p>
 				<ErrorBoundary FallbackComponent={Error}>
 					<React.Suspense fallback={<ListSkeleton rows={3} />}>
 						<Gateways />

@@ -1,4 +1,5 @@
 @import "tailwindcss" prefix(wcpos) important;
+@import "../../ui/src/wp-admin-reset.css";
 @source "../../ui/src";
 /* @config "../tailwind.config.js"; */
 
@@ -95,6 +96,13 @@
 	animation: 10s wcposError;
 	animation-fill-mode: forwards;
 	visibility: hidden;
+}
+
+/* The fallback is wp-admin markup (.wrap h1); give its heading back past the scoped reset. */
+#woocommerce-pos-js-error h1 {
+	padding: 9px 0 4px;
+	font-size: 23px;
+	line-height: 1.3;
 }
 
 @keyframes wcposError {
