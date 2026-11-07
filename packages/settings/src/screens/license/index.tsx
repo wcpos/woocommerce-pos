@@ -172,15 +172,17 @@ function License() {
 			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:sm:px-6 wcpos:items-center">
 				<div className="wcpos:sm:text-right wcpos:text-8xl">🎉</div>
 				<div className="wcpos:col-span-2">
-					<h3>{t('license.thank_you')}</h3>
-					<p>
+					<h3 className="wcpos:mb-2 wcpos:text-base wcpos:font-semibold">
+						{t('license.thank_you')}
+					</h3>
+					<p className="wcpos:mb-2">
 						<Trans
 							i18nKey="license.activated"
 							components={{ code: <code /> }}
 							values={{ number: truncate(isString(data?.key) ? data?.key : '') }}
 						/>
 					</p>
-					<p>{t('license.ongoing_support')}</p>
+					<p className="wcpos:mb-4">{t('license.ongoing_support')}</p>
 					<Button variant="primary" onClick={() => handleActivation(true)}>
 						{t('license.deactivate')}
 					</Button>
@@ -199,7 +201,7 @@ function License() {
 					type="text"
 					name="license-key"
 					id="license-key"
-					className="wcpos:mt-1 wcpos:focus:ring-indigo-500 wcpos:focus:border-wp-admin-theme-color wcpos:block wcpos:w-full wcpos:shadow-xs wcpos:sm:text-sm wcpos:border-gray-300 wcpos:rounded-md"
+					className="wcpos:mt-1 wcpos:px-2 wcpos:py-1.5 wcpos:focus:ring-indigo-500 wcpos:focus:border-wp-admin-theme-color wcpos:block wcpos:w-full wcpos:shadow-xs wcpos:sm:text-sm wcpos:border-gray-300 wcpos:rounded-md"
 					onChange={throttle(handleChange, 100)}
 				/>
 			</div>

@@ -152,4 +152,19 @@ class Test_Settings_InlineScript extends \WP_UnitTestCase {
 			OrderHelper::toggle_cot_feature_and_usage( $original );
 		}
 	}
+
+	/**
+	 * Test the settings page root carries the class the scoped wp-admin reset keys on.
+	 */
+	public function test_display_settings_page_root_carries_admin_app_class(): void {
+		// Arrange.
+		ob_start();
+
+		// Act.
+		\WCPOS\WooCommercePOS\Admin\Settings::display_settings_page();
+		$html = ob_get_clean();
+
+		// Assert.
+		$this->assertStringContainsString( '<div id="woocommerce-pos-settings" class="wcpos-admin-app">', $html );
+	}
 }

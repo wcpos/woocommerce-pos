@@ -51,7 +51,7 @@ class Settings {
 	 */
 	public static function display_settings_page(): void {
 		printf(
-			'<div id="woocommerce-pos-settings">
+			'<div id="woocommerce-pos-settings" class="wcpos-admin-app">
 			<div id="woocommerce-pos-js-error" class="wrap">
 				<h1>%s</h1>
 				<p>%s <a href="mailto:support@wcpos.com">support@wcpos.com</a></p>
