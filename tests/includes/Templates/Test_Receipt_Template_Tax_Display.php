@@ -142,6 +142,25 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Render the legacy PHP receipt template and return its grand total row as plain text.
+	 *
+	 * @param \WC_Order $order        Order object, read by the template.
+	 * @param array     $receipt_data Canonical receipt payload, read by the template.
+	 *
+	 * @return string
+	 */
+	private function render_legacy_grand_total( $order, array $receipt_data ): string {
+		ob_start();
+		include \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/receipt.php';
+		$output = (string) ob_get_clean();
+
+		$matched = preg_match( '/<div class="totals-row grand"[^>]*>(.*?)<\/div>/s', $output, $matches );
+		$this->assertSame( 1, $matched, 'Legacy receipt template must render a grand total row.' );
+
+		return wp_strip_all_tags( $matches[1] );
+	}
+
+	/**
 	 * Test adaptive HTML templates show tax-exclusive line items when the store displays prices excl tax.
 	 */
 	public function test_adaptive_html_templates_render_excl_line_items_when_store_displays_excl(): void {
@@ -420,5 +439,55 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 				sprintf( '%s must use totals.total_incl for the grand total, not the neutral (pre-tax for excl stores) totals.total.', basename( $path ) )
 			);
 		}
+	}
+
+	/**
+	 * Test the legacy PHP receipt's grand total includes tax when the store displays prices excl tax.
+	 */
+	public function test_legacy_template_grand_total_includes_tax_when_store_displays_excl(): void {
+		// Arrange.
+		$order        = $this->create_taxed_order( 'excl' );
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+
+		// Sanity: the neutral total is the pre-tax amount on an excl store.
+		$this->assertEquals( 11.0, $receipt_data['totals']['total'], 'Neutral totals.total must be pre-tax when the store displays prices excl tax.' );
+
+		// Act.
+		$grand_total = $this->render_legacy_grand_total( $order, $receipt_data );
+
+		// Assert.
+		$this->assertStringContainsString( '12.10', $grand_total, 'Legacy receipt Total must include tax.' );
+		$this->assertStringNotContainsString( '11.00', $grand_total, 'Legacy receipt Total must not print the pre-tax amount.' );
+	}
+
+	/**
+	 * Test the legacy PHP receipt's grand total is unchanged when the store displays prices incl tax.
+	 */
+	public function test_legacy_template_grand_total_unchanged_when_store_displays_incl(): void {
+		// Arrange.
+		$order        = $this->create_taxed_order( 'incl' );
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+
+		// Act.
+		$grand_total = $this->render_legacy_grand_total( $order, $receipt_data );
+
+		// Assert.
+		$this->assertStringContainsString( '12.10', $grand_total, 'Legacy receipt Total must include tax.' );
+	}
+
+	/**
+	 * Test the legacy PHP receipt's grand total falls back to totals.total when total_incl is absent.
+	 */
+	public function test_legacy_template_grand_total_falls_back_without_total_incl(): void {
+		// Arrange — a filtered or older payload without total_incl.
+		$order        = $this->create_taxed_order( 'incl' );
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		unset( $receipt_data['totals']['total_incl'] );
+
+		// Act.
+		$grand_total = $this->render_legacy_grand_total( $order, $receipt_data );
+
+		// Assert.
+		$this->assertStringContainsString( '12.10', $grand_total, 'Legacy receipt Total must fall back to totals.total.' );
 	}
 }
