@@ -121,7 +121,7 @@ export function DisplayPreview({
 					<p className="wcpos:p-3 wcpos:text-sm wcpos:text-gray-700">
 						{t('editor.display_needs_pro')}{' '}
 						<a
-							href="https://docs.wcpos.com/customer-display"
+							href="https://docs.wcpos.com/getting-started/free-vs-pro#customer-display"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="wcpos:text-wp-admin-theme-color wcpos:hover:underline"

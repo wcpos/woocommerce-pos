@@ -255,7 +255,9 @@ describe('GalleryGrid display templates', () => {
 			'https://example.test/wp-admin/post-new.php?post_type=wcpos_template&wcpos_type=display'
 		);
 		expect(
-			container.querySelector('a[href="https://docs.wcpos.com/customer-display"]')
+			container.querySelector(
+				'a[href="https://docs.wcpos.com/getting-started/free-vs-pro#customer-display"]'
+			)
 		).not.toBeNull();
 		expect(container.querySelector('input[name="filter-format"]')).toBeNull();
 		expect(container.querySelector('input[name="filter-direction"]')).toBeNull();

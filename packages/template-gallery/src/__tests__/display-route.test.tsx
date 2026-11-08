@@ -71,7 +71,9 @@ describe('gallery search routes', () => {
 				expect(container.querySelector('h1')?.textContent).toBe('layout.display_title');
 				expect(container.textContent).toContain('layout.display_description');
 				expect(
-					container.querySelector('a[href="https://docs.wcpos.com/customer-display"]')
+					container.querySelector(
+						'a[href="https://docs.wcpos.com/getting-started/free-vs-pro#customer-display"]'
+					)
 				).not.toBeNull();
 			} finally {
 				act(() => root.unmount());

@@ -155,7 +155,7 @@ describe('display preview', () => {
 			} else {
 				expect(container.textContent).toContain('Previewing display templates needs WCPOS Pro.');
 				expect(container.querySelector('a')?.getAttribute('href')).toBe(
-					'https://docs.wcpos.com/customer-display'
+					'https://docs.wcpos.com/getting-started/free-vs-pro#customer-display'
 				);
 			}
 			expect(usePreview).not.toHaveBeenCalled();
