@@ -46,7 +46,7 @@ final class Protocol_Gate {
 					'min_protocol'    => self::MIN_PROTOCOL,
 					'server_protocol' => self::SERVER_PROTOCOL,
 					'plugin_version'  => \WCPOS\WooCommercePOS\VERSION,
-					'docs'            => 'https://docs.wcpos.com/error-codes/wcpos_update_required',
+					'docs'            => 'https://docs.wcpos.com/error-codes/SYNC341',
 				),
 			),
 			426

@@ -276,6 +276,15 @@ describe('Access screen advanced disclosure', () => {
 });
 
 describe('Access screen defaults and mixed tasks', () => {
+	it('links the documentation notice to the Access docs page', () => {
+		seed(makeCapabilities());
+		const { container } = render(<Access />);
+
+		expect(
+			container.querySelector('a[href="https://docs.wcpos.com/settings/wp-admin/access"]')
+		).not.toBeNull();
+	});
+
 	it('shows the granted count and lets Review open advanced permissions', () => {
 		seed(makeCapabilities(PRODUCT_EDIT_CAPS.slice(0, 3)));
 		render(<Access />);

@@ -472,7 +472,7 @@ function PreviewModalContent({
 							<p className="wcpos:text-gray-500 wcpos:text-center">
 								{t('modal.display_needs_pro')}{' '}
 								<a
-									href="https://docs.wcpos.com/customer-display"
+									href="https://docs.wcpos.com/getting-started/free-vs-pro#customer-display"
 									target="_blank"
 									rel="noopener noreferrer"
 									className="wcpos:text-wp-admin-theme-color wcpos:hover:underline"

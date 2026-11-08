@@ -135,7 +135,7 @@ describe('DisplayPreview', () => {
 		await act(async () => root.render(<DisplayPreview {...props} isProActive={false} />));
 		expect(container.textContent).toContain('Display templates need WCPOS Pro to preview.');
 		expect(container.querySelector('a')?.getAttribute('href')).toBe(
-			'https://docs.wcpos.com/customer-display'
+			'https://docs.wcpos.com/getting-started/free-vs-pro#customer-display'
 		);
 		expect(container.querySelector('a')?.textContent).toBe('Learn more');
 		expect(container.querySelector('iframe, select, button')).toBeNull();

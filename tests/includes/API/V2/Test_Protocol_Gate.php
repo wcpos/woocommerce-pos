@@ -32,6 +32,7 @@ class Test_Protocol_Gate extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 3, $data['data']['min_protocol'] );
 		$this->assertSame( 3, $data['data']['server_protocol'] );
 		$this->assertSame( \WCPOS\WooCommercePOS\VERSION, $data['data']['plugin_version'] );
+		$this->assertSame( 'https://docs.wcpos.com/error-codes/SYNC341', $data['data']['docs'] );
 		$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] );
 	}
 
