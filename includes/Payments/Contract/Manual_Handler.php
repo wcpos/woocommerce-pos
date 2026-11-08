@@ -22,7 +22,9 @@ class Manual_Handler extends Abstract_Capture_Mode_Handler {
 				'mode'              => 'manual',
 				'provider'          => null,
 				'hardware'          => null,
-				'webview_available' => true,
+				// The built-in Cash gateway is taken at the till through the ledger, never on the
+				// order-pay page (free#382, ruled 2026-11-08). By id: COD also resolves to kind cash and stays.
+				'webview_available' => 'pos_cash' !== $gateway->id,
 			),
 			'capabilities' => array(
 				'amount'   => array( 'partial' => true ),

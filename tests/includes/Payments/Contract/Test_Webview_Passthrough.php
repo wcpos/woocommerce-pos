@@ -590,20 +590,33 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
-	/** The pay page's manual gateways compare against the order total too, so a partly paid sale refuses them. */
-	public function test_order_pay_on_a_partial_sale_refuses_the_pos_cash_gateway(): void {
-		// Arrange: pos_cash is offered on a POS sale's pay page, and the customer tenders the full total.
-		$order = $this->create_partial_sale();
-		$open = $this->create_order( true );
+	/** An open POS sale offers Card on the pay page, but Cash is taken at the till. */
+	public function test_order_pay_on_an_open_pos_order_offers_card_but_not_cash(): void {
+		// Arrange.
+		$order = $this->create_order( true );
+
 		$this->in_pos_request(
-			function () use ( $open ): void {
-				$this->assertArrayHasKey( 'pos_cash', $this->on_pay_page( $open, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_cash is offered' );
+			function () use ( $order ): void {
+				// Act.
+				$gateways = $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() );
+
+				// Assert.
+				$this->assertArrayNotHasKey( 'pos_cash', $gateways );
+				$this->assertArrayHasKey( 'pos_card', $gateways );
 			}
 		);
+	}
+
+	/** Posting Cash on an open POS sale cannot complete payment or record a tender. */
+	public function test_order_pay_on_an_open_pos_order_refuses_the_pos_cash_gateway(): void {
+		// Arrange: no tender has been recorded at the till.
+		$order                                = $this->create_order( true );
+		$status                               = $order->get_status();
+		$total                                = $order->get_total();
 		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
-		$_POST['pos-cash-tendered']            = '100.00';
-		$completed                             = did_action( 'woocommerce_payment_complete' );
-		$redirect                              = static function () {
+		$_POST['pos-cash-tendered']            = $order->get_total();
+		$completed                            = did_action( 'woocommerce_payment_complete' );
+		$redirect                             = static function () {
 			throw new \RuntimeException( 'redirected' ); // WooCommerce's success branch exits after the redirect.
 		};
 		add_filter( 'wp_redirect', $redirect );
@@ -616,6 +629,45 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( 'wp_redirect', $redirect );
 			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
+			wc_clear_notices();
+		}
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( $completed, did_action( 'woocommerce_payment_complete' ), 'The sale is not marked paid.' );
+		$this->assertSame( $status, $fresh->get_status() );
+		$this->assertSame( $total, $fresh->get_total() );
+		$this->assertSame( array(), $fresh->get_fees() );
+		$this->assertSame( array(), Ledger::instance()->read( $fresh ) );
+		$this->assertContains( 'This payment method is taken at the till.', $errors );
+	}
+
+	/** The pay page's manual gateways compare against the order total too, so a partly paid sale refuses them. */
+	public function test_order_pay_on_a_partial_sale_refuses_the_pos_card_gateway(): void {
+		// Arrange: pos_card is offered on a POS sale's pay page, and its form settles the full total.
+		$order = $this->create_partial_sale();
+		$open = $this->create_order( true );
+		$this->in_pos_request(
+			function () use ( $open ): void {
+				$this->assertArrayHasKey( 'pos_card', $this->on_pay_page( $open, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_card is offered' );
+			}
+		);
+		$_POST['pos_card_payment_nonce_field'] = wp_create_nonce( 'pos_card_payment_nonce' );
+		$completed                             = did_action( 'woocommerce_payment_complete' );
+		$redirect                              = static function () {
+			throw new \RuntimeException( 'redirected' ); // WooCommerce's success branch exits after the redirect.
+		};
+		add_filter( 'wp_redirect', $redirect );
+
+		// Act.
+		try {
+			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_card' ) );
+		} catch ( \RuntimeException $exception ) {
+			$this->assertSame( 'redirected', $exception->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $redirect );
+			unset( $_POST['pos_card_payment_nonce_field'] );
 			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
 			wc_clear_notices();
 		}
@@ -628,62 +680,16 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( 'This sale has a payment recorded at the till. Finish it at the till.', $errors );
 	}
 
-	/** The pay page's Cash form takes the full balance only: a short amount is refused and nothing is written. */
-	public function test_order_pay_short_cash_tender_is_refused_with_the_ruled_line_and_mints_nothing(): void {
-		// Arrange: a POS sale with no captured tender, and the customer tenders less than its total.
+	/** The pay page's Card form, the manual gateway it still offers, completes a sale and mints one row. */
+	public function test_order_pay_full_card_tender_completes_and_mints_one_row(): void {
+		// Arrange: a POS sale with no captured tender, paid in full by the card form.
 		$order = $this->create_order( true );
 		$this->in_pos_request(
 			function () use ( $order ): void {
-				$this->assertArrayHasKey( 'pos_cash', $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_cash is offered' );
+				$this->assertArrayHasKey( 'pos_card', $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_card is offered' );
 			}
 		);
-		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
-		$_POST['pos-cash-tendered']            = '60.00';
-		$completed                             = did_action( 'woocommerce_payment_complete' );
-		$total                                 = $order->get_total();
-		$status                                = $order->get_status();
-		$redirected                            = false;
-		// pay_action() catches any Exception into an error notice, so the flag, not the catch below, records the redirect.
-		$redirect = static function () use ( &$redirected ) {
-			$redirected = true;
-			throw new \RuntimeException( 'redirected' ); // WooCommerce's success branch exits after the redirect.
-		};
-		add_filter( 'wp_redirect', $redirect );
-
-		// Act.
-		try {
-			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_cash' ) );
-		} catch ( \RuntimeException $exception ) {
-			$this->fail( 'A short cash amount must not reach the success redirect.' );
-		} finally {
-			remove_filter( 'wp_redirect', $redirect );
-			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
-			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
-			wc_clear_notices();
-		}
-
-		// Assert.
-		$fresh = wc_get_order( $order->get_id() );
-		$this->assertFalse( $redirected, 'A short cash amount must not reach the success redirect.' );
-		$this->assertSame( $completed, did_action( 'woocommerce_payment_complete' ), 'The sale is not marked paid.' );
-		$this->assertCount( 0, Ledger::instance()->read( $fresh ) );
-		$this->assertSame( $total, $fresh->get_total() );
-		$this->assertSame( $status, $fresh->get_status() );
-		$this->assertSame( array(), $fresh->get_fees() );
-		$this->assertContains( 'Enter the full amount here, or use the Cash tile to take a part payment.', $errors );
-	}
-
-	/** The pay page's Cash form still completes a sale when the full balance is tendered. */
-	public function test_order_pay_full_cash_tender_still_completes_and_mints_one_row(): void {
-		// Arrange: a POS sale with no captured tender, and the customer tenders its total.
-		$order = $this->create_order( true );
-		$this->in_pos_request(
-			function () use ( $order ): void {
-				$this->assertArrayHasKey( 'pos_cash', $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_cash is offered' );
-			}
-		);
-		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
-		$_POST['pos-cash-tendered']            = $order->get_total();
+		$_POST['pos_card_payment_nonce_field'] = wp_create_nonce( 'pos_card_payment_nonce' );
 		$completed                             = did_action( 'woocommerce_payment_complete' );
 		$redirected                            = false;
 		// pay_action() catches any Exception into an error notice, so the flag, not the catch below, records the redirect.
@@ -695,19 +701,19 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		try {
-			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_cash' ) );
+			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_card' ) );
 		} catch ( \RuntimeException $exception ) {
 			$this->assertSame( 'redirected', $exception->getMessage() );
 		} finally {
 			remove_filter( 'wp_redirect', $redirect );
-			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+			unset( $_POST['pos_card_payment_nonce_field'] );
 			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
 			wc_clear_notices();
 		}
 
 		// Assert.
 		$fresh = wc_get_order( $order->get_id() );
-		$this->assertTrue( $redirected, 'A full cash amount reaches the success redirect.' );
+		$this->assertTrue( $redirected, 'A full card payment reaches the success redirect.' );
 		$this->assertSame( array( 'redirected' ), $errors, 'The only notice is pay_action() catching the redirect.' );
 		$this->assertSame( $completed + 1, did_action( 'woocommerce_payment_complete' ) );
 		$this->assertTrue( $fresh->is_paid() );
@@ -853,15 +859,16 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$registry->payment_gateways = array();
 		$registry->init();
 		if ( $handled && ! Capture_Mode_Registry::instance()->has( $mode ) ) {
-			// A handler that describes nothing, standing in for Pro's: the descriptor keeps the filtered mode.
+			// A handler that describes only the pay-page flag, as Pro's server and device handlers do: the
+			// descriptor keeps the filtered mode, and order-pay keeps the gateway.
 			$handler = new class() extends Abstract_Capture_Mode_Handler {
 				/**
-				 * Describe nothing.
+				 * Describe only the pay-page flag.
 				 *
 				 * @param \WC_Payment_Gateway $gateway Gateway instance.
 				 */
 				public function describe( \WC_Payment_Gateway $gateway ): array {
-					return array();
+					return array( 'capture' => array( 'webview_available' => true ) );
 				}
 			};
 			Capture_Mode_Registry::instance()->register( $mode, get_class( $handler ) );
