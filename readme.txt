@@ -130,6 +130,23 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 2.0.0-beta.3 - 2026/11/09 =
+
+Beta 3 of the WCPOS 2.0 public beta. Install it by hand over beta 2; it is never offered as an update. **New testers: sync every till before upgrading from 1.11**, and read the 2.0.0-beta.1 entry below for what 2.0 changes.
+
+Since beta 2:
+
+- **Registers and split payments are reworked in the app.** The register screens are redrawn, a split payment is taken part by part from a strip of Split tiles, and each part is recorded as it is taken. Card readers are listed as rows.
+- **Cash is taken at the till.** The built-in Cash gateway no longer appears on the POS order-pay page; cash goes through the Cash tile, so it lands in the register's count. Card and the other manual gateways keep the Legacy tab.
+- **A guest can pay by Stripe card on the POS pay page**, and from Stripe 11.1.1 the pay page keeps Stripe's own card form.
+- **The legacy PHP receipt prints the real total** on stores that show prices excluding tax, and receipt images render the same on every host.
+- **The POS syncs the whole catalogue on sites running WP Activity Log**, which had cut the sync to one page.
+- **MyParcel order exports no longer fail** on orders with a miscellaneous item.
+- **Templates.** The POS uses the same first enabled template as the admin list, active templates can be reordered from the keyboard, and gallery previews and receipt fonts load on 2.0 betas.
+- **The Checkout settings screen recommends HPOS** on stores still using legacy order storage.
+- **The settings screens keep their own styles**: wp-admin no longer restyles their headings, inputs and selects, and spacing is even across sections.
+- Developers: translations pinned to 2026.11.12; the payment method descriptor lists every capture mode a store allows (`wcpos_payment_method_capture_modes`); an error response from another plugin's REST listener keeps its status; the vendored SQLite worker matches web-bundle v2.0.9.
+
 = 2.0.0-beta.2 - 2026/11/03 =
 
 Beta 2 of the WCPOS 2.0 public beta. Install it by hand over beta 1; it is never offered as an update. **New testers: sync every till before upgrading from 1.11**, and read the 2.0.0-beta.1 entry below for what 2.0 changes.
