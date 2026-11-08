@@ -13,7 +13,7 @@ use WC_Order;
 use WC_Payment_Gateway;
 use WCPOS\WooCommercePOS\Logger;
 
-/** Mints the server-owned ledger row for legacy webview payments. */
+/** Gates POS order-pay gateways and mints the server-owned ledger row for legacy webview payments. */
 class Webview_Passthrough {
 	/**
 	 * Order whose order-pay form WooCommerce is currently running a gateway against.
@@ -67,6 +67,15 @@ class Webview_Passthrough {
 		return $counting && ! in_array( $mode, array( 'server', 'device' ), true );
 	}
 
+	/**
+	 * Whether the gateway's descriptor excludes it from the POS order-pay page.
+	 *
+	 * @param WC_Payment_Gateway|null $gateway Chosen gateway; null when unknown.
+	 */
+	private static function off_the_pay_page( ?WC_Payment_Gateway $gateway ): bool {
+		return $gateway && false === ( Descriptor_Builder::instance()->get( $gateway->id )['capture']['webview_available'] ?? null );
+	}
+
 	/** The order whose pay page this request renders, or null off the order-pay endpoint. */
 	private static function order_pay_order(): ?WC_Order {
 		$order = isset( $GLOBALS['wp'] ) && is_wc_endpoint_url( 'order-pay' ) ? wc_get_order( absint( $GLOBALS['wp']->query_vars['order-pay'] ) ) : null;
@@ -74,14 +83,14 @@ class Webview_Passthrough {
 	}
 
 	/**
-	 * Drop the gateways order-pay refuses for the order on the pay page.
+	 * Drop refused gateways and those unavailable on a POS order's pay page.
 	 *
 	 * @param mixed $gateways Available gateways; other plugins call this filter with anything.
 	 * @return mixed
 	 */
 	public static function drop_full_total_gateways( $gateways ) {
 		$order = is_array( $gateways ) ? self::order_pay_order() : null;
-		return $order ? array_filter( $gateways, static fn( $gateway ) => $gateway instanceof WC_Payment_Gateway && ! self::refuses( $order, $gateway ) ) : $gateways;
+		return $order ? array_filter( $gateways, static fn( $gateway ) => $gateway instanceof WC_Payment_Gateway && ! self::refuses( $order, $gateway ) && ! ( wcpos_is_pos_order( $order ) && self::off_the_pay_page( $gateway ) ) ) : $gateways;
 	}
 
 	/**
@@ -101,7 +110,7 @@ class Webview_Passthrough {
 	}
 
 	/**
-	 * Remember the order WooCommerce is about to hand to a gateway, or refuse a full-total one (D3).
+	 * Remember the paying order, or refuse a full-total gateway (D3) or one unavailable on POS order-pay.
 	 *
 	 * WC_Form_Handler::pay_action() fires this after verifying the pay nonce and the
 	 * order key and immediately before calling the gateway's process_payment(). It is
@@ -113,12 +122,16 @@ class Webview_Passthrough {
 	 */
 	public static function on_before_pay_action( $order ): void {
 		$method_id = isset( $_POST['payment_method'] ) ? sanitize_text_field( wp_unslash( $_POST['payment_method'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verified the pay nonce before this action.
-		$refused   = $order instanceof WC_Order && self::refuses( $order, Descriptor_Builder::instance()->gateway( (string) $method_id ) );
-		if ( $refused ) {
+		$gateway   = Descriptor_Builder::instance()->gateway( (string) $method_id );
+		$off_page  = $order instanceof WC_Order && wcpos_is_pos_order( $order ) && self::off_the_pay_page( $gateway );
+		$refused   = $order instanceof WC_Order && self::refuses( $order, $gateway );
+		if ( $off_page ) {
+			wc_add_notice( __( 'This payment method is taken at the till.', 'woocommerce-pos' ), 'error' );
+		} elseif ( $refused ) {
 			// An error notice is WooCommerce's own stop: pay_action() never calls process_payment() with one queued.
 			wc_add_notice( self::refusal(), 'error' );
 		}
-		self::$paying_order_id = $order instanceof WC_Order && ! $refused ? $order->get_id() : 0;
+		self::$paying_order_id = $order instanceof WC_Order && ! $refused && ! $off_page ? $order->get_id() : 0;
 	}
 
 	/**

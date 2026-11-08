@@ -12,7 +12,6 @@
 namespace WCPOS\WooCommercePOS\Gateways;
 
 use WC_Order;
-use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\Payments\Abstract_POS_Gateway;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WP_REST_Request;
@@ -140,11 +139,17 @@ class Cash extends Abstract_POS_Gateway {
 		$order = new WC_Order( $order_id );
 		$tendered = $order->get_total();
 
-		// get pos_cash data from $_POST.
-		if ( isset( $_POST['pos-cash-tendered'] ) && ! empty( $_POST['pos-cash-tendered'] ) ) {
-			$tendered = wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['pos-cash-tendered'] ) ) );
+		// A blank field means the full balance. Compare with '' rather than empty(), which would read a typed 0 as blank.
+		$posted = isset( $_POST['pos-cash-tendered'] ) ? sanitize_text_field( wp_unslash( $_POST['pos-cash-tendered'] ) ) : '';
+		if ( '' !== $posted ) {
+			$tendered = wc_format_decimal( $posted );
 		}
-		$result = $this->apply_tendered_payment( $order, $tendered, true );
+		$result = $this->apply_tendered_payment(
+			$order,
+			$tendered,
+			/* translators: Checkout error shown when the cash amount tendered is less than the order balance. */
+			__( 'Enter the full amount here, or use the Cash tile to take a part payment.', 'woocommerce-pos' )
+		);
 		if ( is_wp_error( $result ) ) {
 			wc_add_notice( $result->get_error_message(), 'error' );
 
@@ -240,7 +245,11 @@ class Cash extends Abstract_POS_Gateway {
 			? wc_format_decimal( $payment_data['amount_tendered'] )
 			: wc_format_decimal( $order->get_total() );
 
-		$result = $this->apply_tendered_payment( $order, $tendered, false );
+		$result = $this->apply_tendered_payment(
+			$order,
+			$tendered,
+			__( 'Partial cash payments are not supported by the POS API checkout flow.', 'woocommerce-pos' )
+		);
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -257,13 +266,17 @@ class Cash extends Abstract_POS_Gateway {
 	/**
 	 * Apply a tendered cash amount to an order.
 	 *
+	 * Takes the full balance only: an amount below the order total is refused before anything is
+	 * written to the order. The balance is the order total, so an order an older version left part
+	 * paid (with a lowered total) settles on that total.
+	 *
 	 * @param WC_Order $order         Order object.
 	 * @param string   $tendered      Tendered amount.
-	 * @param bool     $allow_partial Whether partial cash is allowed.
+	 * @param string   $short_message Error message when the tendered amount is below the order total.
 	 *
 	 * @return true|\WP_Error
 	 */
-	private function apply_tendered_payment( WC_Order $order, string $tendered, bool $allow_partial ) {
+	private function apply_tendered_payment( WC_Order $order, string $tendered, string $short_message ) {
 		$tendered = wc_format_decimal( $tendered );
 
 		if ( (float) $tendered < 0 ) {
@@ -275,44 +288,17 @@ class Cash extends Abstract_POS_Gateway {
 			);
 		}
 
+		if ( (float) $tendered < (float) $order->get_total() ) {
+			return new \WP_Error( 'wcpos_partial_cash_not_supported', $short_message, array( 'status' => 400 ) );
+		}
+
 		$change = $tendered > $order->get_total() ? wc_format_decimal( floatval( $tendered ) - floatval( $order->get_total() ) ) : '0';
 		$order->set_payment_method( $this->id );
 		$order->set_payment_method_title( $this->title );
 		$order->update_meta_data( '_pos_cash_amount_tendered', $tendered );
 		$order->update_meta_data( '_pos_cash_change', $change );
-
-		if ( $tendered >= $order->get_total() ) {
-			Order_Notes::add_cash_note( $order, $tendered, $change );
-			$order->payment_complete();
-			return true;
-		}
-
-		if ( ! $allow_partial ) {
-			return new \WP_Error(
-				'wcpos_partial_cash_not_supported',
-				__( 'Partial cash payments are not supported by the POS API checkout flow.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$fee = new WC_Order_Item_Fee();
-		$fee->set_props(
-			array(
-				'name'      => /* translators: Fee line-item name added when a cash payment is partial. */ __( 'Partial Payment', 'woocommerce-pos' ),
-				'tax_class' => 0,
-				'amount'    => '-' . $tendered,
-				'total'     => '-' . $tendered,
-				'total_tax' => 0,
-			)
-		);
-		$fee->add_meta_data( 'date_paid_gmt', gmdate( 'Y-m-d\TH:i:s' ), true );
-		$fee->set_order_id( $order->get_id() );
-		$fee->save();
-
-		$order->add_item( $fee );
-		$order->set_total( wc_format_decimal( floatval( $order->get_total() ) - floatval( $tendered ) ) );
 		Order_Notes::add_cash_note( $order, $tendered, $change );
-		$order->update_status( 'wc-pos-partial' );
+		$order->payment_complete();
 
 		return true;
 	}

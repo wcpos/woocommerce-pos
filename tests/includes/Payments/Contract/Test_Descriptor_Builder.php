@@ -250,6 +250,7 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 			array( 'gateways' => array( 'pos_card' => array( 'rounding_increment' => '0.05' ) ) )
 		);
 		$this->assertNull( Descriptor_Builder::instance()->get( 'pos_card' )['defaults']['rounding'] );
+		$this->assertTrue( Descriptor_Builder::instance()->get( 'pos_card' )['capture']['webview_available'] );
 	}
 
 	/** Cash uses the Free manual-mode defaults. */
@@ -262,7 +263,7 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'cash', $descriptor['kind'] );
 		$this->assertSame( 'manual', $descriptor['capture']['mode'] );
 		$this->assertNull( $descriptor['capture']['provider'] );
-		$this->assertTrue( $descriptor['capture']['webview_available'] );
+		$this->assertFalse( $descriptor['capture']['webview_available'] );
 		$this->assertTrue( $descriptor['capabilities']['change'] );
 		$this->assertSame( 'record', $descriptor['capabilities']['offline'] );
 		$this->assertSame( 'manual', $descriptor['capabilities']['refunds']['via'] );

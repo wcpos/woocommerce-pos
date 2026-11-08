@@ -143,7 +143,7 @@ function Access() {
 					<div className="wcpos:sm:col-span-2">
 						<div className="wcpos:flex wcpos:items-start wcpos:justify-between wcpos:gap-4 wcpos:mb-2">
 							<div>
-								<h2 className="wcpos:text-base">
+								<h2 className="wcpos:text-base wcpos:font-semibold">
 									{role?.name
 										? t('access.tasks_title_role', { role: role.name })
 										: t('access.tasks_title')}
