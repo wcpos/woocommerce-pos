@@ -197,7 +197,7 @@ jobs:
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: "8.1"
-          tools: composer, cs2pr:1.8.7
+          tools: composer
 
       - name: Get Composer cache directory
         id: composer-cache
@@ -214,7 +214,7 @@ jobs:
         run: composer install --prefer-dist --no-progress
 
       - name: Run PHPCS
-        run: composer run lint-report 2>/dev/null | sed -n '/<?xml/,/<\/checkstyle>/p' | cs2pr
+        run: composer run lint
 
   static-analysis:
     name: Static Analysis (PHPStan)
