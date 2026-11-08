@@ -62,6 +62,13 @@ describe('gallery search routes', () => {
 						true
 					);
 				}
+				expect(
+					container.querySelector('h1')?.parentElement?.querySelector('a')?.getAttribute('href')
+				).toBe(
+					type === 'display'
+						? 'https://docs.wcpos.com/getting-started/free-vs-pro#customer-display'
+						: 'https://docs.wcpos.com/receipts'
+				);
 				const display = Array.from(container.querySelectorAll('button')).find(
 					(button) => button.textContent === 'tabs.display'
 				);
@@ -71,10 +78,8 @@ describe('gallery search routes', () => {
 				expect(container.querySelector('h1')?.textContent).toBe('layout.display_title');
 				expect(container.textContent).toContain('layout.display_description');
 				expect(
-					container.querySelector(
-						'a[href="https://docs.wcpos.com/getting-started/free-vs-pro#customer-display"]'
-					)
-				).not.toBeNull();
+					container.querySelector('h1')?.parentElement?.querySelector('a')?.getAttribute('href')
+				).toBe('https://docs.wcpos.com/getting-started/free-vs-pro#customer-display');
 			} finally {
 				act(() => root.unmount());
 				queryClient.clear();
