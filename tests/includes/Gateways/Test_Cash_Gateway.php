@@ -6,7 +6,7 @@
  *
  * Tests the cash payment gateway functionality including:
  * - Gateway registration and properties
- * - Payment processing (full and partial)
+ * - Payment processing (full amount; a short amount is refused)
  * - Change calculation
  * - Payment details retrieval
  */
@@ -15,6 +15,8 @@ namespace WCPOS\WooCommercePOS\Tests\Gateways;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WC_Order;
+use WC_Order_Item_Fee;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Gateways\Cash;
 
@@ -327,38 +329,220 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test a partial cash payment records its tender audit note and flips the order status.
+	 * Data provider: tendered amounts below a 100.00 balance.
+	 *
+	 * @return array<string, array{0: string}>
 	 */
-	public function test_partial_cash_payment_adds_note_and_sets_partial_status(): void {
-		$order = OrderHelper::create_order();
-		$order->set_total( '100.00' );
-		$order->save();
-
-		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
-		$_POST['pos-cash-tendered']            = '60.00';
-
-		try {
-			$result = $this->gateway->process_payment( $order->get_id() );
-		} finally {
-			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
-		}
-
-		$notes = array_values(
-			array_filter(
-				wc_get_order_notes( array( 'order_id' => $order->get_id() ) ),
-				static fn( $note ) => 0 === strpos( $note->content, 'Cash payment received' )
-			)
+	public function short_amount_provider(): array {
+		return array(
+			'60.00'        => array( '60.00' ),
+			'99.99'        => array( '99.99' ),
+			'0.00'         => array( '0.00' ),
+			'typed 0'      => array( '0' ),
+			'not a number' => array( 'not a number' ),
 		);
-
-		$this->assertSame( 'success', $result['result'] );
-		$this->assertCount( 1, $notes, 'The partial-cash path should record exactly one tender audit note.' );
-
-		$note = wp_strip_all_tags( $notes[0]->content );
-		$this->assertStringContainsString( 'Cash payment received — amount tendered:', $note );
-		$this->assertStringContainsString( '60.00', $note );
-		$this->assertSame( 'pos-partial', wc_get_order( $order->get_id() )->get_status() );
 	}
 
+	/**
+	 * A short amount on the order-pay form is refused with one line and the order is left as it was.
+	 *
+	 * @dataProvider short_amount_provider
+	 *
+	 * @param string $tendered Posted tendered amount.
+	 */
+	public function test_process_payment_short_amount_is_refused_and_writes_nothing( string $tendered ): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_total( '100.00' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$payment_complete = did_action( 'woocommerce_payment_complete' );
+
+		// Act.
+		$paid = $this->pay_by_form( $order, $tendered );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+		$notes = array_filter(
+			wc_get_order_notes( array( 'order_id' => $order->get_id() ) ),
+			static fn( $note ) => 0 === strpos( $note->content, 'Cash payment received' )
+		);
+
+		$this->assertSame(
+			array(
+				'result'   => 'failure',
+				'redirect' => '',
+			),
+			$paid['result']
+		);
+		$this->assertSame( array( 'Enter the full amount here, or use the Cash tile to take a part payment.' ), $paid['errors'] );
+		$this->assertSame( '100.00', $fresh->get_total() );
+		$this->assertSame( array(), $fresh->get_fees() );
+		$this->assertSame( 'pos-open', $fresh->get_status() );
+		$this->assertNull( $fresh->get_date_paid() );
+		$this->assertSame( '', $fresh->get_meta( '_pos_cash_amount_tendered' ) );
+		$this->assertSame( '', $fresh->get_meta( '_pos_cash_change' ) );
+		$this->assertSame( array(), $notes );
+		$this->assertSame( $payment_complete, did_action( 'woocommerce_payment_complete' ) );
+	}
+
+	/**
+	 * The exact balance on the order-pay form completes the payment.
+	 */
+	public function test_process_payment_exact_amount_completes(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_total( '100.00' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+
+		// Act.
+		$paid = $this->pay_by_form( $order, '100.00' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+
+		$this->assertSame( 'success', $paid['result']['result'] );
+		$this->assertTrue( $fresh->is_paid() );
+		$this->assertSame( '100.00', $fresh->get_total() );
+		$this->assertSame( array(), $fresh->get_fees() );
+		$this->assertSame( '100.00', $fresh->get_meta( '_pos_cash_amount_tendered' ) );
+		$this->assertSame( '0', $fresh->get_meta( '_pos_cash_change' ) );
+		$this->assertSame( array(), $paid['errors'] );
+	}
+
+	/**
+	 * More than the balance on the order-pay form completes the payment and records the change.
+	 */
+	public function test_process_payment_over_amount_completes_with_change(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_total( '100.00' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+
+		// Act.
+		$paid = $this->pay_by_form( $order, '120.00' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+
+		$this->assertSame( 'success', $paid['result']['result'] );
+		$this->assertTrue( $fresh->is_paid() );
+		$this->assertSame( '120.00', $fresh->get_meta( '_pos_cash_amount_tendered' ) );
+		// The change is wc_format_decimal() of a float, which keeps no trailing zeros.
+		$this->assertSame( '20', $fresh->get_meta( '_pos_cash_change' ) );
+	}
+
+	/**
+	 * Data provider: a missing or blank tendered field.
+	 *
+	 * @return array<string, array{0: ?string}>
+	 */
+	public function blank_amount_provider(): array {
+		return array(
+			'missing' => array( null ),
+			'blank'   => array( '' ),
+		);
+	}
+
+	/**
+	 * A missing or blank tendered field on the order-pay form takes the full balance.
+	 *
+	 * @dataProvider blank_amount_provider
+	 *
+	 * @param string|null $tendered Posted tendered amount, or null to leave the field out.
+	 */
+	public function test_process_payment_blank_amount_takes_the_full_balance( ?string $tendered ): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_total( '100.00' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+
+		// Act.
+		$paid = $this->pay_by_form( $order, $tendered );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+
+		$this->assertSame( 'success', $paid['result']['result'] );
+		$this->assertTrue( $fresh->is_paid() );
+		$this->assertSame( '100.00', $fresh->get_meta( '_pos_cash_amount_tendered' ) );
+	}
+
+	/**
+	 * An order the old partial-cash path left behind settles on its lowered total, and only on that.
+	 */
+	public function test_process_payment_old_part_paid_order_settles_on_its_balance(): void {
+		// Arrange: as the old code left it, a -40 Partial Payment fee, total lowered to 60.00, status pos-partial.
+		$order = OrderHelper::create_order();
+		$fee   = new WC_Order_Item_Fee();
+		$fee->set_props(
+			array(
+				'name'      => 'Partial Payment',
+				'tax_class' => 0,
+				'amount'    => '-40',
+				'total'     => '-40',
+				'total_tax' => 0,
+			)
+		);
+		$fee->set_order_id( $order->get_id() );
+		$fee->save();
+		$order->add_item( $fee );
+		$order->set_total( '60.00' );
+		$order->set_status( 'pos-partial' );
+		$order->save();
+
+		// Act: one cent short.
+		$short = $this->pay_by_form( $order, '59.99' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+
+		$this->assertSame( 'failure', $short['result']['result'] );
+		$this->assertSame( '60.00', $fresh->get_total() );
+		$this->assertCount( 1, $fresh->get_fees() );
+		$this->assertSame( 'pos-partial', $fresh->get_status() );
+
+		// Act: the balance.
+		$settled = $this->pay_by_form( $order, '60.00' );
+
+		// Assert.
+		$fresh = wc_get_order( $order->get_id() );
+
+		$this->assertSame( 'success', $settled['result']['result'] );
+		$this->assertTrue( $fresh->is_paid() );
+		$this->assertSame( '60.00', $fresh->get_total() );
+		$this->assertCount( 1, $fresh->get_fees() );
+	}
+
+	/**
+	 * The POS API checkout refuses a short amount with its own message, before anything is written to the order.
+	 */
+	public function test_pos_checkout_action_short_amount_keeps_its_own_message_and_writes_nothing(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_total( '100.00' );
+		$order->set_status( 'pos-open' );
+		$order->save();
+
+		// Act.
+		$result = $this->gateway->process_pos_checkout_action(
+			array(),
+			'start',
+			array( 'amount_tendered' => '60.00' ),
+			$order
+		);
+
+		// Assert: on the same object, so a write made before the refusal would show.
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'wcpos_partial_cash_not_supported', $result->get_error_code() );
+		$this->assertSame( 'Partial cash payments are not supported by the POS API checkout flow.', $result->get_error_message() );
+		$this->assertNotSame( 'pos_cash', $order->get_payment_method() );
+		$this->assertSame( '', $order->get_meta( '_pos_cash_amount_tendered' ) );
+		$this->assertSame( '', $order->get_meta( '_pos_cash_change' ) );
+	}
 	/**
 	 * Direct test: gateway supports refunds.
 	 */
@@ -484,5 +668,34 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	 */
 	private function addon( string $currency ): string {
 		return wp_kses_post( '<span class="input-group-addon">' . get_woocommerce_currency_symbol( $currency ) . '</span>' );
+	}
+
+	/**
+	 * Pay an order through the order-pay form the way the browser posts it.
+	 *
+	 * @param WC_Order    $order    Order to pay.
+	 * @param string|null $tendered Posted tendered amount, or null to leave the field out.
+	 *
+	 * @return array{result: array, errors: string[]}
+	 */
+	private function pay_by_form( WC_Order $order, ?string $tendered ): array {
+		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
+		if ( null !== $tendered ) {
+			$_POST['pos-cash-tendered'] = $tendered;
+		}
+
+		try {
+			$result = $this->gateway->process_payment( $order->get_id() );
+		} finally {
+			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+		}
+
+		$errors = array_column( wc_get_notices( 'error' ), 'notice' );
+		wc_clear_notices();
+
+		return array(
+			'result' => $result,
+			'errors' => $errors,
+		);
 	}
 }

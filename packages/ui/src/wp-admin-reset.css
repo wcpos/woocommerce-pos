@@ -1,0 +1,69 @@
+/**
+ * Scoped wp-admin reset for the WCPOS admin apps.
+ *
+ * The apps build Tailwind with `important`, so every utility wins, but preflight sits in
+ * `@layer base` and wp-admin's stylesheets are unlayered: any property an element has no
+ * utility for falls through to wp-admin's element rules (h1 padding, p margin, the 30px
+ * input min-height and box-shadow, list margins) and to whatever other plugins add.
+ *
+ * - Unlayered on purpose: an unlayered rule beats wp-admin's unlayered rules by specificity
+ *   and order, which a layered rule never can. Import it outside any `@layer`.
+ * - `.wp-admin .wcpos-admin-app` puts 0,2,0 in front of the element, enough to beat
+ *   `.wp-core-ui select`, `input[type=text]` and `.wrap h1`. The class sits on each app root.
+ * - Never use `!important` here: it would out-rank the utilities, which must always win.
+ */
+
+.wp-admin .wcpos-admin-app h1,
+.wp-admin .wcpos-admin-app h2,
+.wp-admin .wcpos-admin-app h3,
+.wp-admin .wcpos-admin-app h4,
+.wp-admin .wcpos-admin-app h5,
+.wp-admin .wcpos-admin-app h6 {
+	margin: 0;
+	padding: 0;
+	font-size: inherit;
+	font-weight: inherit;
+	line-height: inherit;
+	color: inherit;
+}
+
+.wp-admin .wcpos-admin-app p {
+	margin: 0;
+	font-size: inherit;
+	line-height: inherit;
+}
+
+.wp-admin .wcpos-admin-app ul,
+.wp-admin .wcpos-admin-app ol {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.wp-admin .wcpos-admin-app li {
+	margin: 0;
+}
+
+/*
+ * Checkbox and radio are left out: the ui checkbox (checkbox.tsx) and the settings
+ * `:indeterminate` rules build on wp-admin's own checkbox drawing.
+ */
+.wp-admin .wcpos-admin-app input:not([type="checkbox"]):not([type="radio"]),
+.wp-admin .wcpos-admin-app select,
+.wp-admin .wcpos-admin-app textarea {
+	margin: 0;
+	padding: 0;
+	min-height: 0;
+	font: inherit;
+	line-height: inherit;
+	color: inherit;
+	background-color: transparent;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.wp-admin .wcpos-admin-app input:not([type="checkbox"]):not([type="radio"]):focus,
+.wp-admin .wcpos-admin-app select:focus,
+.wp-admin .wcpos-admin-app textarea:focus {
+	box-shadow: none;
+}
