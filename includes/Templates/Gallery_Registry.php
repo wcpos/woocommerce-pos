@@ -413,7 +413,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'gift-receipt',
 			),
 			'invoice' => array(
@@ -426,7 +426,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'invoice',
 			),
 			'minimal-receipt' => array(
@@ -439,7 +439,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'base-receipt',
 			),
 			'narrow-receipt' => array(
@@ -477,7 +477,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'quote',
 			),
 			'standard-receipt' => array(
@@ -490,7 +490,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'base-receipt',
 			),
 			'standard-receipt-rtl' => array(
@@ -504,7 +504,7 @@ class Gallery_Registry {
 				'engine'        => 'logicless',
 				'output_type'   => 'html',
 				'paper_width'   => null,
-				'version'       => 2,
+				'version'       => 3,
 				'preview_data'  => 'standard-receipt-rtl',
 			),
 			'thermal-detailed-58mm' => array(
