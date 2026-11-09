@@ -71,8 +71,6 @@ use WCPOS\Vendor\Sentry\Util\SentryUid;
  *     trace: array<int, ExcimerLogStackEntryTrace>,
  *     timestamp: float
  * }
- *
- * @internal
  */
 final class Profile
 {
@@ -123,18 +121,25 @@ final class Profile
         $this->startTimeStamp = $startTimeStamp;
     }
     /**
+     * Entry timestamps are offsets in seconds from the profile's start timestamp.
+     *
      * @param \ExcimerLog|array<int, ExcimerLogStackEntry> $excimerLog
      */
     public function setExcimerLog($excimerLog) : void
     {
         $this->excimerLog = $excimerLog;
     }
+    /**
+     * @internal
+     */
     public function setEventId(EventId $eventId) : void
     {
         $this->eventId = $eventId;
     }
     /**
      * @return SentryProfile|null
+     *
+     * @internal
      */
     public function getFormattedData(Event $event) : ?array
     {

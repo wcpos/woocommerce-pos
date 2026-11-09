@@ -4,6 +4,7 @@ declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Tracing;
 
 use WCPOS\Vendor\Sentry\SentrySdk;
+use WCPOS\Vendor\Sentry\State\HubInterface;
 use WCPOS\Vendor\Sentry\State\Scope;
 use WCPOS\Vendor\Sentry\Tracing\Traits\TraceHeaderParserTrait;
 final class PropagationContext
@@ -74,10 +75,10 @@ final class PropagationContext
     /**
      * Returns a string that can be used for the `baggage` header & meta tag.
      */
-    public function toBaggage() : string
+    public function toBaggage(?HubInterface $hub = null) : string
     {
         if ($this->dynamicSamplingContext === null) {
-            $hub = SentrySdk::getCurrentHub();
+            $hub = $hub ?? SentrySdk::getCurrentHub();
             $client = $hub->getClient();
             if ($client !== null) {
                 $options = $client->getOptions();

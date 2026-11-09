@@ -4,6 +4,7 @@ declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Tracing;
 
 use WCPOS\Vendor\GuzzleHttp\Exception\RequestException as GuzzleRequestException;
+use WCPOS\Vendor\GuzzleHttp\Promise\PromiseInterface;
 use WCPOS\Vendor\GuzzleHttp\Psr7\Uri;
 use WCPOS\Vendor\Psr\Http\Message\RequestInterface;
 use WCPOS\Vendor\Psr\Http\Message\ResponseInterface;
@@ -58,21 +59,20 @@ final class GuzzleTracingMiddleware
                     $hub->setSpan($childSpan);
                 }
                 if (self::shouldAttachTracingHeaders($sdkOptions, $request)) {
-                    $traceParent = getTraceparent();
+                    $traceParent = getTraceparent($hub);
                     if ($traceParent !== '') {
                         $request = $request->withHeader('sentry-trace', $traceParent);
                     }
-                    $baggage = getBaggage();
+                    $baggage = getBaggage($hub);
                     if ($baggage !== '') {
                         $request = $request->withHeader('baggage', $baggage);
                     }
                 }
-                $handlerPromiseCallback = static function ($responseOrException) use($hub, $spanAndBreadcrumbData, $childSpan, $parentSpan, $breadcrumbUrl, $policy) {
+                $handlerPromiseCallback = static function ($responseOrException) use($hub, $spanAndBreadcrumbData, $childSpan, $breadcrumbUrl, $policy) {
                     if ($childSpan !== null) {
                         // We finish the span (which means setting the span end timestamp) first to ensure the measured time
                         // the span spans is as close to only the HTTP request time and do the data collection afterwards
                         $childSpan->finish();
-                        $hub->setSpan($parentSpan);
                     }
                     $response = null;
                     if ($responseOrException instanceof ResponseInterface) {
@@ -106,7 +106,18 @@ final class GuzzleTracingMiddleware
                     }
                     return $responseOrException;
                 };
-                return $handler($request, $options)->then($handlerPromiseCallback, $handlerPromiseCallback);
+                try {
+                    /** @var PromiseInterface $promise */
+                    $promise = $handler($request, $options);
+                } finally {
+                    // The span is the current span only while the next handlers run, so that their spans
+                    // are its children. The promise can resolve after other requests started (e.g.
+                    // concurrent requests): those must not become children of this span
+                    if ($childSpan !== null) {
+                        $hub->setSpan($parentSpan);
+                    }
+                }
+                return $promise->then($handlerPromiseCallback, $handlerPromiseCallback);
             };
         };
     }

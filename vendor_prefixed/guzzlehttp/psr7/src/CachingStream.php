@@ -131,7 +131,7 @@ final class CachingStream implements StreamInterface
         // length.
         $overflow = Integers::add(\strlen($string), $this->tell()) - $this->remoteStream->tell();
         if ($overflow > 0) {
-            $this->skipReadBytes = Integers::add($this->skipReadBytes, $overflow);
+            $this->skipReadBytes = \max($this->skipReadBytes, $overflow);
         }
         return $this->stream->write($string);
     }

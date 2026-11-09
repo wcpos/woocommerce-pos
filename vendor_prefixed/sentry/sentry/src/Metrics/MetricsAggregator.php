@@ -4,6 +4,8 @@ declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Metrics;
 
 use WCPOS\Vendor\Sentry\Client;
+use WCPOS\Vendor\Sentry\ClientReport\ClientReportAggregator;
+use WCPOS\Vendor\Sentry\ClientReport\Reason;
 use WCPOS\Vendor\Sentry\Event;
 use WCPOS\Vendor\Sentry\EventId;
 use WCPOS\Vendor\Sentry\Metrics\Types\CounterMetric;
@@ -15,6 +17,7 @@ use WCPOS\Vendor\Sentry\State\HubInterface;
 use WCPOS\Vendor\Sentry\State\Scope;
 use WCPOS\Vendor\Sentry\Tracing\SpanId;
 use WCPOS\Vendor\Sentry\Tracing\TraceId;
+use WCPOS\Vendor\Sentry\Transport\DataCategory;
 use WCPOS\Vendor\Sentry\Unit;
 use WCPOS\Vendor\Sentry\Util\TelemetryStorage;
 /**
@@ -85,6 +88,7 @@ final class MetricsAggregator
                 $beforeSendMetric = $client->getOptions()->getBeforeSendMetricCallback();
                 $metric = $beforeSendMetric($metric);
                 if ($metric === null) {
+                    ClientReportAggregator::getInstance()->add(DataCategory::metric(), Reason::beforeSend(), 1);
                     return;
                 }
             } catch (\Throwable $exception) {
