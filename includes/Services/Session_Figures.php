@@ -203,12 +203,7 @@ final class Session_Figures {
 		if ( isset( $this->memo['tax_rates'] ) ) {
 			return $this->memo['tax_rates'];
 		}
-		$rates = array();
-		foreach ( $this->sale_orders() as $order ) {
-			if ( $order ) {
-				$this->add_order_tax_rates( $order, $rates );
-			}
-		}
+		$rates = $this->sale_facts()['tax_rates'];
 		foreach ( $this->refunds() as $refund ) {
 			$this->add_order_tax_rates( $refund['refund'], $rates );
 		}
@@ -248,18 +243,10 @@ final class Session_Figures {
 	/** Coupon-line count and gross order discounts, without subtracting refunds. */
 	public function discounts(): array {
 		if ( ! isset( $this->memo['discounts'] ) ) {
-			$count = 0;
-			$amounts = array();
-			foreach ( $this->sale_orders() as $order ) {
-				if ( $order ) {
-					$count += count( $order->get_items( 'coupon' ) );
-					$amounts[] = $order->get_discount_total();
-					$amounts[] = $order->get_discount_tax();
-				}
-			}
+			$facts = $this->sale_facts();
 			$this->memo['discounts'] = array(
-				'count' => $count,
-				'amount' => Closure_Store::sum( $amounts ),
+				'count' => $facts['discount_count'],
+				'amount' => Closure_Store::sum( $facts['discount_amounts'] ),
 			);
 		}
 		return $this->memo['discounts'];
@@ -268,13 +255,7 @@ final class Session_Figures {
 	/** Sale quantities, without subtracting refund quantities. */
 	public function items_sold(): string {
 		if ( ! isset( $this->memo['items_sold'] ) ) {
-			$quantities = array();
-			foreach ( $this->sale_orders() as $order ) {
-				foreach ( $order ? $order->get_items() : array() as $item ) {
-					$quantities[] = (string) $item->get_quantity();
-				}
-			}
-			$sum = Closure_Store::sum( $quantities );
+			$sum = Closure_Store::sum( $this->sale_facts()['quantities'] );
 			$quantity = rtrim( rtrim( $sum, '0' ), '.' );
 			$this->memo['items_sold'] = '' === $quantity ? '0' : $quantity;
 		}
@@ -307,49 +288,117 @@ final class Session_Figures {
 		return $result;
 	}
 
-	/** Share loaded orders between completion counting and the order-level breakdowns. */
-	private function orders(): array {
-		$this->memo['completion_ids'] = $this->memo['completion_ids'] ?? Completion_History::orders_in_session( (string) $this->session['id'] );
-		$ids = array_unique( array_merge( array_map( 'intval', array_keys( $this->legs() ) ), $this->memo['completion_ids'] ) );
-		foreach ( $ids as $id ) {
-			if ( ! array_key_exists( $id, $this->memo['orders'] ?? array() ) ) {
-				$this->memo['orders'][ $id ] = wc_get_order( $id );
-			}
+	/** The ledger facts of the session in one streaming pass: legs, the sales count and which
+	 * orders are this session's sales. Each order is loaded once, read for its meta only (no
+	 * items), and forgotten before the next; nothing here keeps an order alive. This is the pass
+	 * the polled sessions endpoint and every expected-balance read pay for.
+	 *
+	 * @throws \RuntimeException On read failure.
+	 */
+	private function facts(): array {
+		if ( isset( $this->memo['facts'] ) ) {
+			return $this->memo['facts'];
 		}
-		return array_intersect_key( $this->memo['orders'] ?? array(), array_flip( $ids ) );
-	}
-
-	/** Sale facts belong to the latest completion, or the last captured leg for legacy orders. */
-	private function sale_orders(): array {
-		if ( isset( $this->memo['sale_orders'] ) ) {
-			return $this->memo['sale_orders'];
+		$session = $this->session;
+		// Only this index supplies legs; completion-only candidates supply the sale membership.
+		$ids = Order_Meta_Store::order_ids(
+			Ledger::SESSION_META_KEY,
+			array(
+				'value' => strtolower( $session['id'] ),
+				'order' => 'newest',
+			)
+		);
+		if ( null === $ids ) {
+			throw new \RuntimeException( 'Session ledger read failed.' );
 		}
-		$orders = array();
-		foreach ( $this->orders() as $id => $order ) {
-			if ( ! $order instanceof \WC_Order ) {
-				continue;
-			}
-			$completion = Completion_History::of( $order )->latest();
-			$session_id = $completion['session'] ?? null;
-			if ( null === $completion ) {
+		$indexed = array_flip( $ids );
+		$completion_ids = Completion_History::orders_in_session( (string) $session['id'] );
+		$completions = array_flip( $completion_ids );
+		$facts = array(
+			'legs' => array(),
+			'sales_count' => 0,
+			'sale_ids' => array(),
+		);
+		foreach ( array_unique( array_merge( $ids, $completion_ids ) ) as $id ) {
+			$order = wc_get_order( $id );
+			try {
+				if ( ! $order && isset( $indexed[ $id ] ) ) {
+					throw new \RuntimeException( 'Session order could not be read.' );
+				}
+				if ( ! $order instanceof \WC_Order ) {
+					continue;
+				}
 				$last = null;
 				foreach ( Ledger::instance()->read( $order ) as $row ) {
 					if ( 'captured' !== ( $row['status'] ?? null ) ) {
 						continue;
+					}
+					if ( isset( $indexed[ $id ] ) && ( $row['session_id'] ?? null ) === $session['id'] ) {
+						$facts['legs'][ $id ][] = $row;
 					}
 					// Equal or absent timestamps retain the last row in ledger order.
 					if ( null === $last || strtotime( $row['created_at_gmt'] ?? '' ) >= strtotime( $last['created_at_gmt'] ?? '' ) ) {
 						$last = $row;
 					}
 				}
-				$session_id = $last['session_id'] ?? null;
-			}
-			if ( (string) $this->session['id'] === $session_id ) {
-				$orders[ $id ] = $order;
+				$has_legs = isset( $facts['legs'][ $id ] );
+				if ( ! $has_legs && ! isset( $completions[ $id ] ) ) {
+					continue;
+				}
+				$history = Completion_History::of( $order );
+				$facts['sales_count'] += $history->is_empty() ? ( $has_legs ? 1 : 0 ) : $history->in_session( (string) $session['id'] );
+				// Sale facts belong to the latest completion, or the last captured leg for legacy orders.
+				$completion = $history->latest();
+				$session_id = null === $completion ? ( $last['session_id'] ?? null ) : ( $completion['session'] ?? null );
+				if ( (string) $session['id'] === $session_id ) {
+					$facts['sale_ids'][] = $id;
+				}
+			} finally {
+				// Completion_History also holds the order; release it before loading the next one.
+				unset( $order, $history );
+				self::forget_order( $id );
 			}
 		}
-		$this->memo['sale_orders'] = $orders;
-		return $orders;
+		$this->memo['facts'] = $facts;
+		return $facts;
+	}
+
+	/** The order-level breakdowns of this session's sales (tax rates, discounts, quantities) in a
+	 * second streaming pass over the sale ids, loading each order's items once and forgetting the
+	 * order before the next. Only the X-report and closure documents pay for this pass.
+	 *
+	 * @throws \RuntimeException On read failure.
+	 */
+	private function sale_facts(): array {
+		if ( isset( $this->memo['sale_facts'] ) ) {
+			return $this->memo['sale_facts'];
+		}
+		$facts = array(
+			'tax_rates' => array(),
+			'discount_count' => 0,
+			'discount_amounts' => array(),
+			'quantities' => array(),
+		);
+		foreach ( $this->facts()['sale_ids'] as $id ) {
+			$order = wc_get_order( $id );
+			try {
+				if ( ! $order instanceof \WC_Order ) {
+					throw new \RuntimeException( 'Session order could not be read.' );
+				}
+				$this->add_order_tax_rates( $order, $facts['tax_rates'] );
+				$facts['discount_count'] += count( $order->get_items( 'coupon' ) );
+				$facts['discount_amounts'][] = $order->get_discount_total();
+				$facts['discount_amounts'][] = $order->get_discount_tax();
+				foreach ( $order->get_items() as $item ) {
+					$facts['quantities'][] = (string) $item->get_quantity();
+				}
+			} finally {
+				unset( $order, $item );
+				self::forget_order( $id );
+			}
+		}
+		$this->memo['sale_facts'] = $facts;
+		return $facts;
 	}
 
 	/** Flip a decimal string's sign without float arithmetic.
@@ -369,20 +418,7 @@ final class Session_Figures {
 	 * @throws \RuntimeException On read failure.
 	 */
 	public function sales_count(): int {
-		if ( isset( $this->memo['sales_count'] ) ) {
-			return $this->memo['sales_count'];
-		}
-		$count = 0;
-		foreach ( $this->orders() as $id => $order ) {
-			$history = $order instanceof \WC_Order ? Completion_History::of( $order ) : null;
-			if ( null === $history || $history->is_empty() ) {
-				$count += isset( $this->legs()[ $id ] ) ? 1 : 0;
-				continue;
-			}
-			$count += $history->in_session( (string) $this->session['id'] );
-		}
-		$this->memo['sales_count'] = $count;
-		return $count;
+		return $this->facts()['sales_count'];
 	}
 
 	/** Order membership of the same captured-leg snapshot used by the figures. */
@@ -557,6 +593,7 @@ final class Session_Figures {
 		// WC_Data caches raw metadata separately from posts and OrderCache, even on CPT.
 		wp_cache_delete( \WC_Order::generate_meta_cache_key( $id, 'orders' ), 'orders' );
 		clean_post_cache( $id );
+		wp_cache_delete( 'order-items-' . $id, 'orders' );
 		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Caches\OrderCache::class ) ) {
 			wc_get_container()->get( \Automattic\WooCommerce\Caches\OrderCache::class )->remove( $id );
 		}
@@ -758,35 +795,6 @@ final class Session_Figures {
 	 * @throws \RuntimeException On read failure.
 	 */
 	public function legs(): array {
-		if ( isset( $this->memo['legs'] ) ) {
-			return $this->memo['legs'];
-		}
-		$session = $this->session;
-		// The index narrows the candidates; the ledger rows below stay the truth.
-		$ids = Order_Meta_Store::order_ids(
-			Ledger::SESSION_META_KEY,
-			array(
-				'value' => strtolower( $session['id'] ),
-				'order' => 'newest',
-			)
-		);
-		if ( null === $ids ) {
-			throw new \RuntimeException( 'Session ledger read failed.' );
-		}
-		$result = array();
-		foreach ( $ids as $id ) {
-			$order = wc_get_order( $id );
-			if ( ! $order ) {
-				throw new \RuntimeException( 'Session order could not be read.' );
-			}
-			$this->memo['orders'][ $id ] = $order;
-			foreach ( Ledger::instance()->read( $order ) as $row ) {
-				if ( ( $row['session_id'] ?? null ) === $session['id'] && 'captured' === ( $row['status'] ?? null ) ) {
-					$result[ $id ][] = $row;
-				}
-			}
-		}
-		$this->memo['legs'] = $result;
-		return $this->memo['legs'];
+		return $this->facts()['legs'];
 	}
 }

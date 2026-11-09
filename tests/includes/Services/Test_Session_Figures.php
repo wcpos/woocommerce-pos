@@ -19,6 +19,38 @@ use WCPOS\WooCommercePOS\Tests\Helpers\Register_Sale;
 class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 	use Closure_Test_Fixture;
 
+	/** Computing every sale breakdown must not keep the loaded orders alive. */
+	public function test_figures_after_all_breakdowns_retain_no_sale_order_objects(): void {
+		// Arrange: a legacy ledger order and a completed register sale.
+		$session = $this->closure_session( null, 'open' );
+		$this->closure_ledger( $session );
+		$this->completed_in( $session );
+		$figures = Session_Figures::for_session( $session );
+
+		// Act.
+		$figures->expected();
+		$figures->tax_rates();
+		$figures->discounts();
+		$figures->items_sold();
+		$this->assertSame( 2, $figures->sales_count() );
+		$figures->payment_methods();
+		$figures->period_amounts();
+		$this->assertCount( 2, $figures->legs() );
+
+		// Assert: no sale object may hide inside any memoised array.
+		$memo = new \ReflectionProperty( Session_Figures::class, 'memo' );
+		$memo->setAccessible( true );
+		$assert_no_orders = function ( $value ) use ( &$assert_no_orders ): void {
+			$this->assertNotInstanceOf( \WC_Abstract_Order::class, $value );
+			if ( is_array( $value ) ) {
+				foreach ( $value as $entry ) {
+					$assert_no_orders( $entry );
+				}
+			}
+		};
+		$assert_no_orders( $memo->getValue( $figures ) );
+	}
+
 	/** Tender rows reconcile with expected balances, including both refund sources. */
 	public function test_payment_methods_sales_and_refunds_reconcile_with_expected(): void {
 		$session = $this->closure_session();
