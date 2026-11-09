@@ -47,7 +47,7 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 * **Coupons:** manage the coupon catalogue from the till (applying a coupon at the register is free)
 * **Refunds:** refund POS orders directly from the till
 * **Reports:** sales by period with margin by category and brand, and the closures history for every register
-* **Card readers at the till:** Stripe Terminal (smart readers, Bluetooth readers and Tap to Pay), SumUp and Mollie Terminal, driven from checkout
+* **Card readers at the till:** Stripe Terminal (smart readers and Bluetooth readers), SumUp and Mollie Terminal, driven from checkout; Tap to Pay on iPhone and Android follows in an app update
 * **Customer-facing display:** a second screen showing the customer their cart and total as it is rung up
 * **Stores:** Manage locations with unique tax settings, pricing and receipts
 * **Priority [Discord support](https://wcpos.com/discord):** one-on-one support via private chat
@@ -103,7 +103,7 @@ Yes. Products are stored locally for instant search, so you can keep browsing, b
 Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 80mm thermal receipt printers (network, Bluetooth or USB), and cash drawers — no proprietary equipment and no lock-in.
 
 = Can I take card payments? =
-Cash and manual card payments are built in, and a sale can be split between them. WCPOS Pro adds integrated card readers (Stripe Terminal, SumUp, Mollie Terminal) driven from the register, including Bluetooth readers and Tap to Pay on a phone or tablet.
+Cash and manual card payments are built in, and a sale can be split between them. WCPOS Pro adds integrated card readers (Stripe Terminal, SumUp, Mollie Terminal) driven from the register, including Bluetooth readers. Tap to Pay on iPhone and Android follows in an app update.
 
 = What's the difference between free and Pro? =
 Free is a full POS for taking orders, running a cash drawer and closing the day. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders, customers and coupons, refund at the till, use supported payment gateways and integrated card readers such as Stripe Terminal, SumUp and Mollie Terminal, show a customer-facing display, and read sales and closures reports. See [wcpos.com/pro](https://wcpos.com/pro).
@@ -129,6 +129,36 @@ Full details are in our [privacy policy](https://wcpos.com/privacy).
 1. WCPOS main screen
 
 == Changelog ==
+
+= 2.0.0 - 2026/11/09 =
+
+**Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales.** Rolling back to 1.11 also starts from an empty local database, so sync before you roll back too. The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
+
+WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers handled at the register itself, with a cash drawer that opens and closes with each shift. Every screen is redrawn, and the till keeps taking cash when the connection drops.
+
+- **A checkout that belongs to the POS.** Checkout opens in a tender pane beside the cart instead of sending every sale through WooCommerce's order-pay page. Cash is taken at the till, so it lands in the register's count; card and the other manual gateways keep the Legacy tab.
+- **Split payments.** Take one order in several payments, for example part cash and part card, each recorded as it is taken.
+- **Card readers connected straight to the POS (Pro).** Stripe Terminal and SumUp readers pair with the till over Bluetooth; Tap to Pay on iPhone and Android follows in an app update.
+- **Registers and cash drawer sessions.** Opening float, cash in and out, a count at close and the difference against what was expected; set up in POS > Settings > General > Register. Free includes one register; more registers need Pro.
+- **Closures are saved, numbered documents** you can reprint, recount and export as CSV from POS Settings.
+- **Cash sales keep going when the connection drops.**
+- **A new Reports screen** with a comparison period, a chart and cards for orders, products, taxes, refunds, payments, categories and cashiers.
+- **A customer-facing display (Pro).** Open the display page on any device's browser and pair it to a till with a code.
+- **A redesigned POS** with a Scale setting for compact, regular or spacious layouts, and a Fonts setting under Settings > Theme.
+- **POS Only products are hidden from your online shop.** Marking a product POS Only sets its catalog visibility to Hidden; existing POS Only products are updated once at upgrade.
+- **The POS loads from cdn.wcpos.com, with jsDelivr as the fallback.** The bundle is signed and checked before it runs.
+- **The template gallery has Receipts, Reports, Closures, Display and Email tabs**, and receipt fonts download on demand.
+- **The cashier who opened a session cannot approve its own variance**, and the Access screen can restore the default capabilities.
+- **The experimental magnetic card reader is removed.** Card terminal extensions (Stripe, SumUp and the others) need WCPOS Pro from 2.0.
+- Developers: sync protocol 3; every plugin hook is now named `wcpos_*` (the `woocommerce_pos_*` names still fire as deprecated aliases); the 1.x compatibility shims are removed; translations pinned to 2026.11.14; the vendored SQLite worker matches web-bundle v2.0.17.
+
+Since beta 3, for testers on the 2.0 beta:
+
+- **A sale, refund or payment change saved while a register is closing is never lost from the books.** It lands in the closure or in a correction to it; before, one that arrived mid-close could land in neither.
+- **Large register sessions no longer run out of memory.** A session with thousands of sales could fail its X-report and expected figures on PHP's memory limit; the session's orders are now read one at a time.
+- **The order-pay page shows the order's own currency symbol on the Cash and Card fields** and formats amounts with the POS store's money format.
+- **Refund receipts add up (Pro).** When part of a refund is not tied to a payment, the remainder now prints as cash, so the receipt total matches the amount refunded.
+- Beta 3's notes said translations were pinned to 2026.11.12; beta 3 shipped pinned to 2026.11.13.
 
 = 2.0.0-beta.3 - 2026/11/09 =
 
