@@ -138,7 +138,7 @@ WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers 
 
 - **A checkout that belongs to the POS.** Checkout opens in a tender pane beside the cart instead of sending every sale through WooCommerce's order-pay page. Cash is taken at the till, so it lands in the register's count; card and the other manual gateways keep the Legacy tab.
 - **Split payments.** Take one order in several payments, for example part cash and part card, each recorded as it is taken.
-- **Card readers connected straight to the POS (Pro).** Stripe Terminal and SumUp readers pair with the till over Bluetooth; Tap to Pay on iPhone and Android with Stripe.
+- **Card readers connected straight to the POS (Pro).** Stripe Terminal and SumUp readers pair with the till over Bluetooth; Tap to Pay on iPhone and Android follows in an app update.
 - **Registers and cash drawer sessions.** Opening float, cash in and out, a count at close and the difference against what was expected; set up in POS > Settings > General > Register. Free includes one register; more registers need Pro.
 - **Closures are saved, numbered documents** you can reprint, recount and export as CSV from POS Settings.
 - **Cash sales keep going when the connection drops.**
