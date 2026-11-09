@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Payments;
 
 use WC_Order;
 use WC_Payment_Gateway;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WP_REST_Request;
 
 /**
@@ -26,6 +27,18 @@ abstract class Abstract_POS_Gateway extends WC_Payment_Gateway implements Gatewa
 		add_filter( 'wcpos_payment_gateway_provider_data', array( $this, 'wcpos_provider_data' ), 10, 3 );
 		add_filter( 'wcpos_payment_gateway_bootstrap', array( $this, 'wcpos_bootstrap' ), 10, 4 );
 		add_filter( 'wcpos_process_checkout_action_' . $this->id, array( $this, 'wcpos_process_checkout_action' ), 10, 5 );
+	}
+
+	/**
+	 * Symbol position for the pay page fields: the order's POS store, else the site.
+	 *
+	 * @param WC_Order|false|null $order The order being paid, if any.
+	 */
+	protected function pay_page_currency_position( $order ): string {
+		$store    = $order ? Receipt_Data_Builder::resolve_pos_store( $order ) : null;
+		$position = $store && method_exists( $store, 'get_currency_position' ) ? (string) $store->get_currency_position() : '';
+
+		return '' !== $position ? $position : (string) get_option( 'woocommerce_currency_pos' );
 	}
 
 	/**

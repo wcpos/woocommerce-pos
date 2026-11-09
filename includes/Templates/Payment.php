@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
@@ -226,10 +227,53 @@ class Payment {
 
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', /* translators: Short WCPOS UI label; keep concise. */ __( 'Pay for order', 'woocommerce-pos' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 
-			include wcpos_locate_template( 'payment.php' );
+			add_filter( 'wc_price_args', array( $this, 'apply_store_price_format' ) );
+			try {
+				include wcpos_locate_template( 'payment.php' );
+			} finally {
+				remove_filter( 'wc_price_args', array( $this, 'apply_store_price_format' ) );
+			}
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Print prices on the pay page in the money format of the order's POS store.
+	 *
+	 * Hooked to `wc_price_args` only while the payment template renders. An empty store value,
+	 * or a store that is gone, keeps the site's format for that argument.
+	 *
+	 * @param array $args Arguments for wc_price().
+	 *
+	 * @return array
+	 */
+	public function apply_store_price_format( array $args ): array {
+		$store   = Receipt_Data_Builder::resolve_pos_store( $this->order );
+		$getters = array(
+			'decimal_separator'  => 'get_price_decimal_separator',
+			'thousand_separator' => 'get_price_thousand_separator',
+			'decimals'           => 'get_price_number_of_decimals',
+		);
+		foreach ( $getters as $key => $getter ) {
+			$value = method_exists( $store, $getter ) ? (string) $store->$getter() : '';
+			if ( '' !== $value ) {
+				$args[ $key ] = 'decimals' === $key ? (int) $value : $value;
+			}
+		}
+
+		$formats  = array(
+			'left'        => '%1$s%2$s',
+			'right'       => '%2$s%1$s',
+			'left_space'  => '%1$s&nbsp;%2$s',
+			'right_space' => '%2$s&nbsp;%1$s',
+		);
+		$position = method_exists( $store, 'get_currency_position' ) ? (string) $store->get_currency_position() : '';
+		if ( isset( $formats[ $position ] ) ) {
+			$args['price_format'] = $formats[ $position ];
+		}
+
+		return $args;
 	}
 
 	/**
