@@ -157,6 +157,7 @@ Since beta 3, for testers on the 2.0 beta:
 - **A sale, refund or payment change saved while a register is closing is never lost from the books.** It lands in the closure or in a correction to it; before, one that arrived mid-close could land in neither.
 - **Large register sessions no longer run out of memory.** A session with thousands of sales could fail its X-report and expected figures on PHP's memory limit; the session's orders are now read one at a time.
 - **The order-pay page shows the order's own currency symbol on the Cash and Card fields** and formats amounts with the POS store's money format.
+- **Refund receipts add up (Pro).** When part of a refund is not tied to a payment, the remainder now prints as cash, so the receipt total matches the amount refunded.
 - Beta 3's notes said translations were pinned to 2026.11.12; beta 3 shipped pinned to 2026.11.13.
 
 = 2.0.0-beta.3 - 2026/11/09 =
