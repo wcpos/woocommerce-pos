@@ -3,7 +3,7 @@
  * Plugin Name:       WCPOS – Point of Sale for WooCommerce
  * Plugin URI:        https://wordpress.org/plugins/woocommerce-pos/
  * Description:       A simple front-end for taking WooCommerce orders at the Point of Sale. Requires <a href="http://wordpress.org/plugins/woocommerce/">WooCommerce</a>.
- * Version:           2.0.0-beta.2
+ * Version:           2.0.0-beta.3
  * Author:            kilbot
  * Author URI:        http://wcpos.com
  * Text Domain:       woocommerce-pos
@@ -25,7 +25,7 @@ namespace WCPOS\WooCommercePOS;
 
 // Define plugin constants (use define() with checks to avoid conflicts when Pro plugin is active).
 if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
-	\define( __NAMESPACE__ . '\VERSION', '2.0.0-beta.2' );
+	\define( __NAMESPACE__ . '\VERSION', '2.0.0-beta.3' );
 }
 
 /*
@@ -45,7 +45,7 @@ API\V2\Ping::maybe_serve();
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
 	// On next, this is wcpos/translations' moving jsDelivr branch ref, refreshed by the CDN within about 12 hours.
 	// On main, the release workflow replaces it with a CalVer tag; resolve this one-line conflict in main's favour when merging next.
-	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.11.12' );
+	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.11.13' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
 	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );

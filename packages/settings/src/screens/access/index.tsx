@@ -106,7 +106,13 @@ function Access() {
 					<Trans
 						i18nKey="access.visit_documentation"
 						components={{
-							link: <a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer" />,
+							link: (
+								<a
+									href="https://docs.wcpos.com/settings/wp-admin/access"
+									target="_blank"
+									rel="noreferrer"
+								/>
+							),
 						}}
 					/>
 				</Notice>

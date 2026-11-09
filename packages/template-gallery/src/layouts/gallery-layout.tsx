@@ -63,8 +63,8 @@ export function GalleryLayout() {
 					<a
 						href={
 							type === 'display'
-								? 'https://docs.wcpos.com/customer-display'
-								: 'https://docs.wcpos.com/templates/receipt-templates'
+								? 'https://docs.wcpos.com/getting-started/free-vs-pro#customer-display'
+								: 'https://docs.wcpos.com/receipts'
 						}
 						target="_blank"
 						rel="noopener noreferrer"
