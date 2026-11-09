@@ -409,8 +409,18 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		$remove_all = woocommerce_pos_uninstall_remove_all_data();
 	}
 
+	// Pro bundles the free core, so artifacts shared with it (sync tables and
+	// their epoch, the print-job queue and its submit events, JWT secrets and
+	// tokens, translations, their cache transients, WooCommerce logs) stay while
+	// Pro is installed.
+	$pro_installed = woocommerce_pos_uninstall_pro_installed();
+
 	// 1. Clear scheduled events (all events per hook, regardless of args).
 	foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
+		// Queued print jobs kept for Pro are only ever submitted from these one-time events.
+		if ( $pro_installed && 'wcpos_cloud_print_submit' === $hook ) {
+			continue;
+		}
 		wp_unschedule_hook( $hook );
 	}
 	// The background font install is queued on Action Scheduler (WooCommerce is
@@ -421,11 +431,6 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		as_unschedule_all_actions( 'wcpos_install_font_packs' );
 		as_unschedule_all_actions( 'wcpos_receipt_snapshot_cleanup', array(), 'wcpos' );
 	}
-
-	// Pro bundles the free core, so artifacts shared with it (sync tables, the
-	// print-job queue, JWT secrets and tokens, translations, their cache
-	// transients, WooCommerce logs) stay while Pro is installed.
-	$pro_installed = woocommerce_pos_uninstall_pro_installed();
 
 	// 2. Drop plugin tables. All are derived from WooCommerce data and are
 	// rebuilt on reinstall; Pro's bundled core syncs from them while installed.
@@ -506,6 +511,8 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		// Pro's bundled core signs and verifies every cashier's tokens with these.
 		$preserved[] = $wpdb->esc_like( 'woocommerce_pos_secret_key' );
 		$preserved[] = $wpdb->esc_like( 'woocommerce_pos_refresh_secret_key' );
+		// The kept sync tables' generation id (Sync_Journal::EPOCH_OPTION); a new one makes every till resync from zero.
+		$preserved[] = $wpdb->esc_like( 'woocommerce_pos_sync_journal_epoch' );
 	}
 	if ( ! $remove_all ) {
 		$preserved = array_merge(

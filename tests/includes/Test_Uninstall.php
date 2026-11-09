@@ -753,6 +753,58 @@ PHP;
 	}
 
 	/**
+	 * The kept sync tables keep their generation id while Pro is installed;
+	 * a new epoch would make every till resync from zero anyway.
+	 */
+	public function test_uninstall_site_pro_installed_keeps_sync_journal_epoch(): void {
+		// Arrange.
+		update_option( \WCPOS\WooCommercePOS\Sync\Sync_Journal::EPOCH_OPTION, 'epoch-1' );
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_site( false );
+			wp_cache_flush();
+
+			// Assert.
+			$this->assertSame( 'epoch-1', get_option( \WCPOS\WooCommercePOS\Sync\Sync_Journal::EPOCH_OPTION ) );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
+	 * Kept print jobs are only submitted from their one-time cron events, so
+	 * those stay while Pro is installed; every other plugin hook is cleared.
+	 */
+	public function test_uninstall_site_pro_installed_keeps_cloud_print_submit_events_only(): void {
+		// Arrange.
+		foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
+			wp_schedule_single_event( time() + HOUR_IN_SECONDS, $hook, array( 42 ) );
+		}
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_site( false );
+
+			// Assert.
+			foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
+				if ( 'wcpos_cloud_print_submit' === $hook ) {
+					$this->assertNotFalse( wp_next_scheduled( $hook, array( 42 ) ), 'Print submit events stay while Pro is installed' );
+				} else {
+					$this->assertFalse( wp_next_scheduled( $hook, array( 42 ) ), "Scheduled event for {$hook} should be cleared" );
+				}
+			}
+		} finally {
+			wp_unschedule_hook( 'wcpos_cloud_print_submit' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
 	 * Default uninstall clears every scheduled event for every plugin hook.
 	 */
 	public function test_uninstall_default_clears_cron_events(): void {
@@ -762,7 +814,12 @@ PHP;
 		}
 
 		// Act.
-		$this->run_uninstall( false );
+		try {
+			$this->pin_pro_installed( false );
+			$this->run_uninstall( false );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
 
 		// Assert.
 		foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
@@ -786,6 +843,7 @@ PHP;
 		update_option( 'wcpos_sync_schema_version', '3' );
 		update_option( 'woocommerce_pos_secret_key', 'abc123' );
 		update_option( 'woocommerce_pos_refresh_secret_key', 'def456' );
+		update_option( 'woocommerce_pos_sync_journal_epoch', 'epoch-1' );
 		set_transient( 'wcpos_landing_profile', array( 'foo' => 'bar' ), HOUR_IN_SECONDS );
 
 		// Arrange: user-authored configuration, including a future settings
@@ -810,6 +868,7 @@ PHP;
 		$this->assertFalse( get_option( 'wcpos_sync_schema_version' ), 'sync schema latch should be deleted' );
 		$this->assertFalse( get_option( 'woocommerce_pos_secret_key' ), 'JWT secret should be deleted' );
 		$this->assertFalse( get_option( 'woocommerce_pos_refresh_secret_key' ), 'Refresh secret should be deleted' );
+		$this->assertFalse( get_option( 'woocommerce_pos_sync_journal_epoch' ), 'Sync journal epoch should be deleted' );
 		$this->assertFalse( get_transient( 'wcpos_landing_profile' ), 'wcpos transients should be deleted' );
 
 		// Assert: user-authored configuration preserved.
