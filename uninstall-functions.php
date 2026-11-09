@@ -513,6 +513,8 @@ function woocommerce_pos_uninstall_site( ?bool $remove_all = null ): void {
 		$preserved[] = $wpdb->esc_like( 'woocommerce_pos_refresh_secret_key' );
 		// The kept sync tables' generation id (Sync_Journal::EPOCH_OPTION); a new one makes every till resync from zero.
 		$preserved[] = $wpdb->esc_like( 'woocommerce_pos_sync_journal_epoch' );
+		// The kept journal's prune horizon per stream (Sync_Journal::PRUNE_WATERMARK_OPTION_PREFIX); without it a stale cursor misses pruned deletions.
+		$preserved[] = $wpdb->esc_like( 'wcpos_change_log_prune_watermark_' ) . '%';
 	}
 	if ( ! $remove_all ) {
 		$preserved = array_merge(

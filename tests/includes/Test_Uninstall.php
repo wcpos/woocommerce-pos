@@ -775,6 +775,29 @@ PHP;
 	}
 
 	/**
+	 * The kept journal keeps its prune watermarks while Pro is installed, so a
+	 * till reconnecting with an older cursor is still told history was pruned.
+	 */
+	public function test_uninstall_site_pro_installed_keeps_sync_prune_watermarks(): void {
+		// Arrange.
+		$option = \WCPOS\WooCommercePOS\Sync\Sync_Journal::prune_watermark_option( 'products' );
+		update_option( $option, 17 );
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_site( false );
+			wp_cache_flush();
+
+			// Assert.
+			$this->assertSame( 17, (int) get_option( $option ) );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
 	 * Kept print jobs are only submitted from their one-time cron events, so
 	 * those stay while Pro is installed; every other plugin hook is cleared.
 	 */
@@ -844,6 +867,7 @@ PHP;
 		update_option( 'woocommerce_pos_secret_key', 'abc123' );
 		update_option( 'woocommerce_pos_refresh_secret_key', 'def456' );
 		update_option( 'woocommerce_pos_sync_journal_epoch', 'epoch-1' );
+		update_option( 'wcpos_change_log_prune_watermark_products', 17 );
 		set_transient( 'wcpos_landing_profile', array( 'foo' => 'bar' ), HOUR_IN_SECONDS );
 
 		// Arrange: user-authored configuration, including a future settings
@@ -869,6 +893,7 @@ PHP;
 		$this->assertFalse( get_option( 'woocommerce_pos_secret_key' ), 'JWT secret should be deleted' );
 		$this->assertFalse( get_option( 'woocommerce_pos_refresh_secret_key' ), 'Refresh secret should be deleted' );
 		$this->assertFalse( get_option( 'woocommerce_pos_sync_journal_epoch' ), 'Sync journal epoch should be deleted' );
+		$this->assertFalse( get_option( 'wcpos_change_log_prune_watermark_products' ), 'Sync prune watermarks should be deleted' );
 		$this->assertFalse( get_transient( 'wcpos_landing_profile' ), 'wcpos transients should be deleted' );
 
 		// Assert: user-authored configuration preserved.
