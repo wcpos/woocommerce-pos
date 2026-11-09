@@ -1,10 +1,12 @@
 import * as React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import Access from './index';
 import { TASK_GROUPS, type CapabilityGroups } from './task-groups';
+import { i18n } from '../../translations';
+import en from '../../translations/locales/en/wp-admin-settings.json';
 
 const mutateMock = vi.fn();
 const settingsData: { current: Record<string, unknown> } = { current: {} };
@@ -72,6 +74,42 @@ function openAdvanced() {
 beforeEach(() => {
 	mutateMock.mockReset();
 	settingsData.current = {};
+});
+
+const swapped = new Map<string, string>();
+function swapMessage(key: keyof typeof en, value: string) {
+	swapped.set(key, en[key]);
+	i18n.addResource('en', 'wp-admin-settings', key, value);
+}
+
+afterEach(() => {
+	swapped.forEach((value, key) => i18n.addResource('en', 'wp-admin-settings', key, value));
+	swapped.clear();
+});
+
+describe('Access screen notice', () => {
+	it('links the documentation word to the access docs page', () => {
+		seed(makeCapabilities());
+		render(<Access />);
+
+		expect(screen.getByRole('link', { name: 'documentation' })).toHaveAttribute(
+			'href',
+			'https://docs.wcpos.com/settings/wp-admin/access'
+		);
+	});
+
+	it('a translation still using <link> shows no raw tag', () => {
+		swapMessage(
+			'access.visit_documentation',
+			'For more information please visit the <link>documentation</link>.'
+		);
+		seed(makeCapabilities());
+		render(<Access />);
+
+		expect(document.body.textContent).toContain('documentation');
+		expect(document.body.textContent).not.toContain('<link>');
+		expect(document.body.textContent).not.toContain('</link>');
+	});
 });
 
 describe('Access screen task groups', () => {

@@ -1,9 +1,11 @@
 import * as React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import GatewayModal from './gateway-modal';
+import { i18n } from '../../translations';
+import en from '../../translations/locales/en/wp-admin-settings.json';
 
 import type { GatewayProps } from './gateways';
 
@@ -19,6 +21,40 @@ const gateway: GatewayProps = {
 	allowed_readers: [],
 	lock_to_default: false,
 };
+
+const swapped = new Map<string, string>();
+function swapMessage(key: keyof typeof en, value: string) {
+	swapped.set(key, en[key]);
+	i18n.addResource('en', 'wp-admin-settings', key, value);
+}
+
+afterEach(() => {
+	swapped.forEach((value, key) => i18n.addResource('en', 'wp-admin-settings', key, value));
+	swapped.clear();
+});
+
+describe('GatewayModal notice', () => {
+	it('links the WooCommerce Settings words to the gateway settings page', () => {
+		render(<GatewayModal gateway={gateway} mutate={vi.fn()} closeModal={vi.fn()} />);
+
+		expect(screen.getByRole('link', { name: 'WooCommerce Settings' })).toHaveAttribute(
+			'href',
+			'admin.php?page=wc-settings&tab=checkout'
+		);
+	});
+
+	it('a translation still using <link> shows no raw tag', () => {
+		swapMessage(
+			'checkout.gateway_settings_pos_only',
+			'This will change the settings for the POS only. If you would like to change gateway settings for online and POS, please visit the <link>WooCommerce Settings</link>.'
+		);
+		render(<GatewayModal gateway={gateway} mutate={vi.fn()} closeModal={vi.fn()} />);
+
+		expect(document.body.textContent).toContain('WooCommerce Settings');
+		expect(document.body.textContent).not.toContain('<link>');
+		expect(document.body.textContent).not.toContain('</link>');
+	});
+});
 
 describe('GatewayModal rounding', () => {
 	it('offers the supported increments with no rounding selected by default', () => {
