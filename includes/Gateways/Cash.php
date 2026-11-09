@@ -68,13 +68,15 @@ class Cash extends Abstract_POS_Gateway {
 		}
 
 		$currency_pos = get_option( 'woocommerce_currency_pos' );
+		$currency     = $order && $order->get_currency() ? $order->get_currency() : get_woocommerce_currency();
+		$symbol       = get_woocommerce_currency_symbol( $currency );
 
 		if ( 'left' == $currency_pos || 'left_space' == $currency_pos ) {
-			$left_addon  = '<span class="input-group-addon">' . get_woocommerce_currency_symbol( get_woocommerce_currency() ) . '</span>';
+			$left_addon  = '<span class="input-group-addon">' . $symbol . '</span>';
 			$right_addon = '';
 		} else {
 			$left_addon  = '';
-			$right_addon = '<span class="input-group-addon">' . get_woocommerce_currency_symbol( get_woocommerce_currency() ) . '</span>';
+			$right_addon = '<span class="input-group-addon">' . $symbol . '</span>';
 		}
 
 		echo '

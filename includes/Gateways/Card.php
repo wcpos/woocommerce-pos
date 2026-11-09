@@ -41,18 +41,25 @@ class Card extends Abstract_POS_Gateway {
 	 * Display the payment fields in the checkout.
 	 */
 	public function payment_fields(): void {
+		global $wp;
+
+		$order_id = isset( $wp->query_vars['order-pay'] ) ? $wp->query_vars['order-pay'] : null;
+		$order = $order_id ? wc_get_order( $order_id ) : null;
+
 		if ( $this->description ) {
 			echo '<p>' . wp_kses_post( $this->description ) . '</p>';
 		}
 
 		$currency_pos = get_option( 'woocommerce_currency_pos' );
+		$currency     = $order && $order->get_currency() ? $order->get_currency() : get_woocommerce_currency();
+		$symbol       = get_woocommerce_currency_symbol( $currency );
 
 		if ( 'left' == $currency_pos || 'left_space' == $currency_pos ) {
-			$left_addon  = '<span class="input-group-addon">' . get_woocommerce_currency_symbol( get_woocommerce_currency() ) . '</span>';
+			$left_addon  = '<span class="input-group-addon">' . $symbol . '</span>';
 			$right_addon = '';
 		} else {
 			$left_addon  = '';
-			$right_addon = '<span class="input-group-addon">' . get_woocommerce_currency_symbol( get_woocommerce_currency() ) . '</span>';
+			$right_addon = '<span class="input-group-addon">' . $symbol . '</span>';
 		}
 
 		echo '
