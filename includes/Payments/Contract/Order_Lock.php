@@ -14,6 +14,9 @@ use WP_Error;
 
 /** MySQL mutual exclusion, with a best-effort 300-second option lease fallback. */
 final class Order_Lock {
+	/** How long acquire() waits for another connection's lock unless the caller names a wait. */
+	private const DEFAULT_WAIT_SECONDS = 5;
+
 	/**
 	 * Shared instance.
 	 *
@@ -48,11 +51,12 @@ final class Order_Lock {
 	}
 
 	/**
-	 * Acquire a lock, waiting five seconds for MySQL contention.
+	 * Acquire a lock, waiting for MySQL contention: five seconds unless the caller names its own wait.
 	 *
-	 * @param int $order_id Order ID.
+	 * @param int $order_id     Order ID.
+	 * @param int $wait_seconds Seconds GET_LOCK waits on another connection; 0 fails at once.
 	 */
-	public function acquire( int $order_id ): bool {
+	public function acquire( int $order_id, int $wait_seconds = self::DEFAULT_WAIT_SECONDS ): bool {
 		global $wpdb;
 		$name = $this->name( $order_id );
 		if ( isset( $this->held[ $name ] ) ) {
@@ -69,7 +73,7 @@ final class Order_Lock {
 		// and a nested lease on the same name would not contend with each other at all.
 		$lease_only = ! self::supports_multiple_locks();
 		try {
-			$result = $lease_only ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 5 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Advisory locks cannot use the object cache.
+			$result = $lease_only ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, $wait_seconds ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Advisory locks cannot use the object cache.
 		} catch ( \Throwable $exception ) {
 			$result = null;
 		}

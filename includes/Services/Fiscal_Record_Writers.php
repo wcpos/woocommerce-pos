@@ -45,6 +45,21 @@ final class Fiscal_Record_Writers {
 	 */
 	private const ATTEMPTED_AT = 'attempted_at';
 
+	/** WP-Cron hook that retries a refund's late check after its register was held by a close. */
+	public const REFUND_RETRY_HOOK = 'wcpos_fiscal_refund_retry';
+
+	/** WP-Cron hook that retries a reallocation after its register was held by a close. */
+	public const ALLOCATION_RETRY_HOOK = 'wcpos_fiscal_allocation_retry';
+
+	/** A close holds its register for seconds, so a minute later it has committed or failed. */
+	private const LATE_RETRY_DELAY_SECONDS = 60;
+
+	/**
+	 * Attempts at a refund's or reallocation's late check before giving up: five minutes of closes is
+	 * a stuck register. Every attempt is signalled through fail_quietly(); after the cap nothing retries.
+	 */
+	private const LATE_RETRY_MAX_ATTEMPTS = 5;
+
 	/**
 	 * Singleton keeps the order-service listeners armed once.
 	 *
@@ -66,6 +81,8 @@ final class Fiscal_Record_Writers {
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'handle_cancellation' ), 10, 2 );
 		add_action( 'wcpos_refund_allocated', array( $this, 'handle_allocation' ), 10, 4 );
 		add_action( 'woocommerce_order_refunded', array( $this, 'handle_refund' ), 10, 2 );
+		add_action( self::REFUND_RETRY_HOOK, array( $this, 'handle_refund' ), 10, 3 );
+		add_action( self::ALLOCATION_RETRY_HOOK, array( $this, 'retry_allocation' ), 10, 5 );
 	}
 
 	/** Construct once from the order-services-ready hook. */
@@ -149,17 +166,23 @@ final class Fiscal_Record_Writers {
 			$fresh->read_meta_data( true );
 			$history = Completion_History::of( $fresh );
 			foreach ( self::parked( $fresh ) as $completion_id => $document ) {
+				$completion_id = (string) $completion_id;
+				$entry         = $history->by_id( $completion_id );
+				$session       = $this->sale_session( $fresh, $entry ?? array( 'session' => (string) ( $document['session_id'] ?? '' ) ) );
 				try {
-					if ( null === $this->store->record( self::fields_of( $order, (array) $document ) ) ) {
-						Logger::log( sprintf( 'Fiscal sale recovery for completion %s on order #%d failed again.', $completion_id, $order->get_id() ) );
-						self::attempted( $fresh, (string) $completion_id );
+					// The insert and its late correction run together under the close's locks, so a close
+					// cannot land between them and leave a recovered row without its correction.
+					$locked = $this->under_close_locks(
+						$order->get_id(),
+						$session,
+						function () use ( $order, $fresh, $completion_id, $document, $entry ): void {
+							$this->recover_document( $order, $fresh, $completion_id, (array) $document, $entry );
+						}
+					);
+					if ( ! $locked ) {
+						Logger::log( sprintf( 'Fiscal sale recovery for completion %s on order #%d skipped: its register is held by a close; the sweep retries.', $completion_id, $order->get_id() ) );
+						self::attempted( $fresh, $completion_id );
 						continue;
-					}
-					self::unpark( $fresh, (string) $completion_id );
-					$fresh->add_order_note( __( 'POS fiscal sale record recovered.', 'woocommerce-pos' ) );
-					$entry = $history->by_id( (string) $completion_id );
-					if ( null !== $entry ) {
-						$this->record_sale_safely( $fresh, $entry ); // The row exists now: only its late correction runs.
 					}
 				} catch ( \Throwable $error ) {
 					Logger::log( 'Fiscal sale recovery failed: ' . $error->getMessage() );
@@ -169,6 +192,74 @@ final class Fiscal_Record_Writers {
 		} finally {
 			$lock->release( $order->get_id() );
 		}
+	}
+
+	/**
+	 * Insert one parked document, unpark it, and let its completion's late correction follow.
+	 *
+	 * @param WC_Order   $order         Order the caller passed; its id builds the fields.
+	 * @param WC_Order   $fresh         Fresh copy holding the parked map.
+	 * @param string     $completion_id Completion entry id.
+	 * @param array      $document      The parked document.
+	 * @param array|null $entry         The completion entry, when the history still has it.
+	 */
+	private function recover_document( WC_Order $order, WC_Order $fresh, string $completion_id, array $document, ?array $entry ): void {
+		if ( null === $this->store->record( self::fields_of( $order, $document ) ) ) {
+			Logger::log( sprintf( 'Fiscal sale recovery for completion %s on order #%d failed again.', $completion_id, $order->get_id() ) );
+			self::attempted( $fresh, $completion_id );
+			return;
+		}
+		self::unpark( $fresh, $completion_id );
+		$fresh->add_order_note( __( 'POS fiscal sale record recovered.', 'woocommerce-pos' ) );
+		if ( null !== $entry ) {
+			$this->record_sale_safely( $fresh, $entry ); // The row exists now: only its late correction runs.
+		}
+	}
+
+	/**
+	 * Run a closure writer under the close's locks, in the one order (order, then register, then the
+	 * fiscal sequence inside the store), so a close either counted this money or committed before the
+	 * writer's closure check reads it. A session the server does not know has no closure: no lock.
+	 *
+	 * @param int      $order_id   Order ID.
+	 * @param string   $session_id Session the money was taken in.
+	 * @param callable $work       The closure check and its late correction.
+	 * @return bool False, with $work not run, when either lock is held elsewhere.
+	 */
+	private function under_close_locks( int $order_id, string $session_id, callable $work ): bool {
+		$session     = '' !== $session_id ? ( new Register_Session_Store() )->get( $session_id ) : null;
+		$register_id = (string) ( $session['register_id'] ?? '' );
+		if ( '' === $register_id ) {
+			$work();
+			return true;
+		}
+		$order_lock = Order_Lock::instance();
+		if ( ! $order_lock->acquire( $order_id ) ) {
+			return false;
+		}
+		$registers = new Register_Store();
+		if ( ! $registers->lock( $register_id ) ) {
+			$order_lock->release( $order_id );
+			return false;
+		}
+		try {
+			$work();
+		} finally {
+			$registers->unlock( $register_id );
+			$order_lock->release( $order_id );
+		}
+		return true;
+	}
+
+	/**
+	 * The session a completion took its money in: its own, else the order's.
+	 *
+	 * @param WC_Order $order      Order.
+	 * @param array    $completion Completion entry.
+	 */
+	private function sale_session( WC_Order $order, array $completion ): string {
+		$session = (string) ( $completion['session'] ?? '' );
+		return '' !== $session ? $session : (string) $order->get_meta( '_wcpos_session', true );
 	}
 
 	/**
@@ -272,7 +363,9 @@ final class Fiscal_Record_Writers {
 	 *
 	 * @param WC_Order   $order      Source order.
 	 * @param array|null $completion Completion entry; null for the latest one.
-	 * @throws \Throwable Re-thrown after the built document is parked, when the insert throws.
+	 * @throws \RuntimeException When the order or its register is held elsewhere: no row is written, and the
+	 *                           standing completion's document is parked for recover() when it can be; or
+	 *                           as record_sale_locked() re-throws an insert error after parking its document.
 	 */
 	public function record_sale( WC_Order $order, ?array $completion = null ): void {
 		$history    = Completion_History::of( $order );
@@ -281,6 +374,61 @@ final class Fiscal_Record_Writers {
 		if ( ! is_array( $completion ) || ! empty( $completion['legacy'] ) || ! is_string( $completion['id'] ?? null ) ) {
 			return;
 		}
+		$locked = $this->under_close_locks(
+			$order->get_id(),
+			$this->sale_session( $order, $completion ),
+			function () use ( $order, $completion, $history ): void {
+				$this->record_sale_locked( $order, $completion, $history );
+			}
+		);
+		if ( ! $locked ) {
+			// No row: the document is parked when it can be, record_sale_safely() signals, and the sweep's
+			// recover() inserts it under the locks with its late correction (retry() builds it when nothing was parked).
+			$this->park_turned_away( $order, $completion, $history );
+			throw new \RuntimeException( 'Fiscal sale register lock failed.' );
+		}
+	}
+
+	/**
+	 * Park the document of a sale the close's locks turned away, built now while its completion stands.
+	 *
+	 * A completion can stop standing (the sale is reopened) before the sweep runs, and retry() builds a
+	 * sale only from the standing completion: only a parked document survives that. Parks nothing when
+	 * another request holds the order (parking would save order meta under it; retry() still covers the
+	 * order), when the row exists, when this completion is already parked, or when it no longer stands.
+	 *
+	 * @param WC_Order           $order      Source order.
+	 * @param array              $completion Completion entry.
+	 * @param Completion_History $history    The order's history.
+	 */
+	private function park_turned_away( WC_Order $order, array $completion, Completion_History $history ): void {
+		$lock = Order_Lock::instance();
+		if ( ! $lock->acquire( $order->get_id(), 0 ) ) {
+			return;
+		}
+		try {
+			$standing = $history->standing();
+			if ( null !== $this->store->find_sale( $order->get_id(), $completion['id'] )
+				|| isset( self::parked( $order )[ strtolower( $completion['id'] ) ] )
+				|| null === $standing
+				|| $standing['id'] !== $completion['id'] ) {
+				return;
+			}
+			self::park( $order, $completion['id'], $this->sale_document( $order, $completion, $history ) );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+	}
+
+	/**
+	 * The body of record_sale(), under the close's locks.
+	 *
+	 * @param WC_Order           $order      Source order.
+	 * @param array              $completion Completion entry.
+	 * @param Completion_History $history    The order's history.
+	 * @throws \Throwable Re-thrown after the built document is parked, when the insert throws.
+	 */
+	private function record_sale_locked( WC_Order $order, array $completion, Completion_History $history ): void {
 		$n       = (int) $completion['n'];
 		$missing = null === $this->store->find_sale( $order->get_id(), $completion['id'] );
 		$parked  = self::parked( $order );
@@ -297,35 +445,7 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		if ( $missing ) {
-			$previous   = $history->by_n( $n - 1 );
-			$prior      = $previous ? $this->store->find_sale( $order->get_id(), (string) $previous['id'] ) : null;
-			$supersedes = $previous ? array(
-				'record_id'     => $prior['id'] ?? null,
-				'completion_id' => $previous['id'],
-				'total'         => $previous['total'],
-			) : null;
-			$adjustment = $previous ? Money::format( Money::minor( $completion['total'] ) - Money::minor( $previous['total'] ) ) : null;
-			// The builder reads the standing completion's till tuple: this one (checked above).
-			$snapshot   = ( new Receipt_Data_Builder() )->build( $order, 'fiscal' );
-			$provenance = $this->store->provenance_from_order( $order );
-			unset( $snapshot['i18n'] );
-			$document = array(
-				'type'               => 'sale',
-				'order_id'           => $order->get_id(),
-				'source_id'          => strtolower( $completion['id'] ),
-				'corrects_record_id' => $prior['id'] ?? null,
-				'register_id'        => $completion['register'] ?? null,
-				'session_id'         => $completion['session'] ?? null,
-				'device_time'        => $completion['sale_time'] ?? null,
-				'device_tz'          => $completion['sale_tz'] ?? null,
-				'store_id'           => $provenance['store_id'],
-				// A later completion names its own cashier when its entry carries one; the sale's `_pos_user` otherwise.
-				'cashier_id'         => $n >= 2 && ! empty( $completion['cashier'] ) ? (int) $completion['cashier'] : $provenance['cashier_id'],
-				'n'                  => $n,
-				'supersedes'         => $supersedes,
-				'adjustment'         => $adjustment,
-				'snapshot'           => $snapshot,
-			);
+			$document = $this->sale_document( $order, $completion, $history );
 			try {
 				$written = $this->write( $order, self::fields_of( $order, $document ) );
 			} catch ( \Throwable $error ) {
@@ -338,8 +458,7 @@ final class Fiscal_Record_Writers {
 			}
 		}
 		// Late against the closure of the session this completion took its money in.
-		$session = (string) ( $completion['session'] ?? '' );
-		$closure = ( new Closure_Store() )->for_session( '' !== $session ? $session : (string) $order->get_meta( '_wcpos_session', true ) );
+		$closure = ( new Closure_Store() )->for_session( $this->sale_session( $order, $completion ) );
 		// The late correction belongs to this completion's own sale record: while that row is missing
 		// it waits (recovery's later record_sale() writes it once the row exists).
 		$sale = $this->store->find_sale( $order->get_id(), (string) $completion['id'] );
@@ -392,6 +511,47 @@ final class Fiscal_Record_Writers {
 				);
 			}
 		}
+	}
+
+	/**
+	 * The sale document of one completion, built from the order while that completion stands: what
+	 * the insert writes, or what is parked when it cannot be inserted.
+	 *
+	 * @param WC_Order           $order      Source order.
+	 * @param array              $completion The standing completion entry.
+	 * @param Completion_History $history    The order's history.
+	 */
+	private function sale_document( WC_Order $order, array $completion, Completion_History $history ): array {
+		$n          = (int) $completion['n'];
+		$previous   = $history->by_n( $n - 1 );
+		$prior      = $previous ? $this->store->find_sale( $order->get_id(), (string) $previous['id'] ) : null;
+		$supersedes = $previous ? array(
+			'record_id'     => $prior['id'] ?? null,
+			'completion_id' => $previous['id'],
+			'total'         => $previous['total'],
+		) : null;
+		$adjustment = $previous ? Money::format( Money::minor( $completion['total'] ) - Money::minor( $previous['total'] ) ) : null;
+		// The builder reads the standing completion's till tuple: this one (every caller checks it stands).
+		$snapshot   = ( new Receipt_Data_Builder() )->build( $order, 'fiscal' );
+		$provenance = $this->store->provenance_from_order( $order );
+		unset( $snapshot['i18n'] );
+		return array(
+			'type'               => 'sale',
+			'order_id'           => $order->get_id(),
+			'source_id'          => strtolower( $completion['id'] ),
+			'corrects_record_id' => $prior['id'] ?? null,
+			'register_id'        => $completion['register'] ?? null,
+			'session_id'         => $completion['session'] ?? null,
+			'device_time'        => $completion['sale_time'] ?? null,
+			'device_tz'          => $completion['sale_tz'] ?? null,
+			'store_id'           => $provenance['store_id'],
+			// A later completion names its own cashier when its entry carries one; the sale's `_pos_user` otherwise.
+			'cashier_id'         => $n >= 2 && ! empty( $completion['cashier'] ) ? (int) $completion['cashier'] : $provenance['cashier_id'],
+			'n'                  => $n,
+			'supersedes'         => $supersedes,
+			'adjustment'         => $adjustment,
+			'snapshot'           => $snapshot,
+		);
 	}
 
 	/**
@@ -489,10 +649,14 @@ final class Fiscal_Record_Writers {
 	/**
 	 * Capture refunds from every lane, including wp-admin.
 	 *
-	 * @param int $order_id Parent order ID.
+	 * The refund record is written first and never waits on a close; its late check runs under the
+	 * close's locks and is retried through REFUND_RETRY_HOOK while a close holds the register.
+	 *
+	 * @param int $order_id  Parent order ID.
 	 * @param int $refund_id Refund ID.
+	 * @param int $attempt   Late check attempt, counted by the retry hook.
 	 */
-	public function handle_refund( int $order_id, int $refund_id ): void {
+	public function handle_refund( int $order_id, int $refund_id, int $attempt = 1 ): void {
 		$order = wc_get_order( $order_id );
 		$refund = wc_get_order( $refund_id );
 		if ( ! $order instanceof WC_Order || ! $this->is_register_sale( $order ) || ! $refund instanceof WC_Order_Refund ) {
@@ -519,11 +683,29 @@ final class Fiscal_Record_Writers {
 					)
 				)
 			);
-			$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
-			$record = $this->store->find_refund( $order_id, $refund_id );
-			// A refund the closure counted (or a replay of one) is not late.
-			if ( $closure && $record && ! Session_Figures::counted( $refund->get_meta( '_wcpos_closure', true ), $closure ) ) {
-				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
+			$locked = $this->under_close_locks(
+				$order_id,
+				(string) $provenance['session_id'],
+				function () use ( $order, $refund_id, $provenance ): void {
+					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					$fresh = wc_get_order( $refund_id );
+					if ( ! $fresh instanceof WC_Order_Refund ) {
+						return;
+					}
+					$fresh->read_meta_data( true );
+					$closure = $provenance['session_id'] ? ( new Closure_Store() )->for_session( $provenance['session_id'] ) : null;
+					$record  = $this->store->find_refund( $order->get_id(), $refund_id );
+					// A refund the closure counted (or a replay of one) is not late.
+					if ( $closure && $record && ! Session_Figures::counted( $fresh->get_meta( '_wcpos_closure', true ), $closure ) ) {
+						$this->record_late_arrival( $order, $fresh, $provenance, $record, $closure );
+					}
+				}
+			);
+			if ( ! $locked ) {
+				$this->fail_quietly( 'late_refund', $order, $refund, new \RuntimeException( 'Refund late check could not take the order and register locks.' ) );
+				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::REFUND_RETRY_HOOK, array( $order_id, $refund_id, $attempt + 1 ) ) ) {
+					$this->log_retry_dropped( $order_id, $refund_id, $attempt );
+				}
 			}
 		} catch ( \Throwable $error ) {
 			// The refund is durable; fiscal bookkeeping must not fail its request, only signal.
@@ -740,36 +922,89 @@ final class Fiscal_Record_Writers {
 	 * @param array           $row Allocated payment row.
 	 * @param WC_Order_Refund $refund Refund object.
 	 * @param string          $amount Normalized allocation amount.
+	 * @param int             $attempt Attempt, counted by the retry hook.
 	 */
-	public function handle_allocation( WC_Order $order, array $row, WC_Order_Refund $refund, string $amount ): void {
+	public function handle_allocation( WC_Order $order, array $row, WC_Order_Refund $refund, string $amount, int $attempt = 1 ): void {
 		try {
-			$this->record_reallocation( $order, $row, $refund, $amount );
+			$succeeded = false;
+			foreach ( $row['refunds'] ?? array() as $allocation ) {
+				if ( (int) $allocation['id'] === $refund->get_id() && 'succeeded' === ( $allocation['status'] ?? null ) ) {
+					$succeeded = true;
+				}
+			}
+			$session_id = $refund->get_meta( '_wcpos_session', true );
+			// A pending allocation has moved no money yet; cash to cash is no shift at all; no session, no closure.
+			if ( ! $succeeded || 'cash' === ( $row['kind'] ?? '' ) || ! Pos_Uuid::is_uuid( $session_id ) ) {
+				return;
+			}
+			$session_id = strtolower( $session_id );
+			$locked     = $this->under_close_locks(
+				$order->get_id(),
+				$session_id,
+				function () use ( $order, $row, $refund, $amount, $session_id ): void {
+					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					$fresh = wc_get_order( $refund->get_id() );
+					if ( $fresh instanceof WC_Order_Refund ) {
+						$fresh->read_meta_data( true );
+						$this->record_reallocation( $order, $row, $fresh, $amount, $session_id );
+					}
+				}
+			);
+			if ( ! $locked ) {
+				$this->fail_quietly( 'late_refund', $order, $refund, new \RuntimeException( 'Reallocation could not take the order and register locks.' ) );
+				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::ALLOCATION_RETRY_HOOK, array( $order->get_id(), (string) $row['id'], $refund->get_id(), $amount, $attempt + 1 ) ) ) {
+					$this->log_retry_dropped( $order->get_id(), $refund->get_id(), $attempt );
+				}
+			}
 		} catch ( \Throwable $error ) {
 			// The allocation is already saved; fiscal bookkeeping must not fail the request.
 			$this->fail_quietly( 'late_refund', $order, $refund, $error );
 		}
 	}
 
-	/** The write behind handle_allocation(): only a succeeded, non-cash allocation after the closure shifts the drawer.
+	/**
+	 * The allocation retry hook: reload what handle_allocation() needs and run it again. The
+	 * reallocation's source id is a digest of the allocation, so a replay writes nothing twice.
+	 *
+	 * @param int    $order_id   Parent order ID.
+	 * @param string $payment_id Allocated payment row id.
+	 * @param int    $refund_id  Refund ID.
+	 * @param string $amount     Normalized allocation amount.
+	 * @param int    $attempt    Attempt.
+	 */
+	public function retry_allocation( int $order_id, string $payment_id, int $refund_id, string $amount, int $attempt ): void {
+		$order  = wc_get_order( $order_id );
+		$refund = wc_get_order( $refund_id );
+		$row    = $order instanceof WC_Order ? Ledger::instance()->find( $order, $payment_id ) : null;
+		if ( ! $order instanceof WC_Order || ! $refund instanceof WC_Order_Refund || ! is_array( $row ) ) {
+			Logger::log( sprintf( 'Fiscal reallocation retry for refund #%d on order #%d dropped: the order, the refund or payment %s is gone.', $refund_id, $order_id, $payment_id ) );
+			return;
+		}
+		$this->handle_allocation( $order, $row, $refund, $amount, $attempt );
+	}
+
+	/**
+	 * Log a late check a close's register lock turned away that will not be retried:
+	 * the attempt cap is reached or the retry could not be scheduled.
+	 *
+	 * @param int $order_id  Parent order ID.
+	 * @param int $refund_id Refund ID.
+	 * @param int $attempt   The attempt that failed.
+	 */
+	private function log_retry_dropped( int $order_id, int $refund_id, int $attempt ): void {
+		Logger::log( sprintf( 'Fiscal late check for refund #%d on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $refund_id, $order_id, $attempt ) );
+	}
+
+	/** The write behind handle_allocation(), under the close's locks: a succeeded, non-cash allocation the closure did not count shifts the drawer.
 	 *
 	 * @param WC_Order        $order Parent order.
 	 * @param array           $row Allocated payment row.
-	 * @param WC_Order_Refund $refund Refund object.
+	 * @param WC_Order_Refund $refund Refund object, read under the locks.
 	 * @param string          $amount Normalized allocation amount.
+	 * @param string          $session_id The refund's session, lowercased.
 	 */
-	private function record_reallocation( WC_Order $order, array $row, WC_Order_Refund $refund, string $amount ): void {
-		$succeeded = false;
-		foreach ( $row['refunds'] ?? array() as $allocation ) {
-			if ( (int) $allocation['id'] === $refund->get_id() && 'succeeded' === ( $allocation['status'] ?? null ) ) {
-				$succeeded = true;
-			}
-		}
-		// A pending allocation has moved no money yet; cash to cash is no shift at all.
-		if ( ! $succeeded || 'cash' === ( $row['kind'] ?? '' ) ) {
-			return;
-		}
-		$session_id = $refund->get_meta( '_wcpos_session', true );
-		$closure = Pos_Uuid::is_uuid( $session_id ) ? ( new Closure_Store() )->for_session( strtolower( $session_id ) ) : null;
+	private function record_reallocation( WC_Order $order, array $row, WC_Order_Refund $refund, string $amount, string $session_id ): void {
+		$closure = ( new Closure_Store() )->for_session( $session_id );
 		if ( ! $this->is_register_sale( $order ) || ! $closure ) {
 			return;
 		}
@@ -790,6 +1025,10 @@ final class Fiscal_Record_Writers {
 			if ( ! $this->store->find_by_source( 'late_refund', 'refund:' . $refund->get_id() ) ) {
 				$this->record_late_arrival( $order, $refund, $provenance, $record, $closure );
 			}
+			return;
+		}
+		// The close reads live allocations, so one it counted is in the closure already, whichever ran first.
+		if ( Session_Figures::allocation_counted( $refund, (string) $row['id'] ) ) {
 			return;
 		}
 		$amount = Closure_Store::sum( array( $amount ) );
