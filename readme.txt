@@ -47,7 +47,7 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 * **Coupons:** manage the coupon catalogue from the till (applying a coupon at the register is free)
 * **Refunds:** refund POS orders directly from the till
 * **Reports:** sales by period with margin by category and brand, and the closures history for every register
-* **Card readers at the till:** Stripe Terminal (smart readers, Bluetooth readers and Tap to Pay), SumUp and Mollie Terminal, driven from checkout
+* **Card readers at the till:** Stripe Terminal (smart readers and Bluetooth readers), SumUp and Mollie Terminal, driven from checkout; Tap to Pay on iPhone and Android follows in an app update
 * **Customer-facing display:** a second screen showing the customer their cart and total as it is rung up
 * **Stores:** Manage locations with unique tax settings, pricing and receipts
 * **Priority [Discord support](https://wcpos.com/discord):** one-on-one support via private chat
@@ -103,7 +103,7 @@ Yes. Products are stored locally for instant search, so you can keep browsing, b
 Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 80mm thermal receipt printers (network, Bluetooth or USB), and cash drawers — no proprietary equipment and no lock-in.
 
 = Can I take card payments? =
-Cash and manual card payments are built in, and a sale can be split between them. WCPOS Pro adds integrated card readers (Stripe Terminal, SumUp, Mollie Terminal) driven from the register, including Bluetooth readers and Tap to Pay on a phone or tablet.
+Cash and manual card payments are built in, and a sale can be split between them. WCPOS Pro adds integrated card readers (Stripe Terminal, SumUp, Mollie Terminal) driven from the register, including Bluetooth readers. Tap to Pay on iPhone and Android follows in an app update.
 
 = What's the difference between free and Pro? =
 Free is a full POS for taking orders, running a cash drawer and closing the day. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders, customers and coupons, refund at the till, use supported payment gateways and integrated card readers such as Stripe Terminal, SumUp and Mollie Terminal, show a customer-facing display, and read sales and closures reports. See [wcpos.com/pro](https://wcpos.com/pro).
