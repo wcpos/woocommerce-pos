@@ -46,15 +46,19 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 		[]
 	);
 
+	const settingsLink = (
+		<a href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" />
+	);
+
 	return (
 		<Modal open onClose={() => closeModal()} title={gateway.title} className="wcpos:max-w-md">
 			<Notice status="info" isDismissible={false}>
 				<Trans
 					i18nKey="checkout.gateway_settings_pos_only"
 					components={{
-						link: (
-							<a href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" />
-						),
+						a: settingsLink,
+						// Translations made before 2.0.1 still use <link>; drop once wcpos/translations has none.
+						link: settingsLink,
 					}}
 				/>
 			</Notice>

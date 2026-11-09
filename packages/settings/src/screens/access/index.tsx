@@ -97,6 +97,14 @@ function Access() {
 		[mutate, selected]
 	);
 
+	const documentationLink = (
+		<a
+			href="https://docs.wcpos.com/settings/wp-admin/access"
+			target="_blank"
+			rel="noreferrer"
+		/>
+	);
+
 	return (
 		<>
 			<div className="wcpos:p-4">
@@ -106,13 +114,9 @@ function Access() {
 					<Trans
 						i18nKey="access.visit_documentation"
 						components={{
-							link: (
-								<a
-									href="https://docs.wcpos.com/settings/wp-admin/access"
-									target="_blank"
-									rel="noreferrer"
-								/>
-							),
+							a: documentationLink,
+							// Translations made before 2.0.1 still use <link>; drop once wcpos/translations has none.
+							link: documentationLink,
 						}}
 					/>
 				</Notice>
