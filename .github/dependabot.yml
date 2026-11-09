@@ -19,12 +19,36 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: "development"
+        update-types: ["minor", "patch"]
         patterns:
           - "*"
       prod-dependencies:
         dependency-type: "production"
+        update-types: ["minor", "patch"]
         patterns:
           - "*"
+    ignore:
+      # WordPress ships 18.3.1; jsx-runtime is not externalized (#2460).
+      - dependency-name: "react"
+        versions: [">=19"]
+      # WordPress ships 18.3.1; jsx-runtime is not externalized (#2460).
+      - dependency-name: "react-dom"
+        versions: [">=19"]
+      # WordPress ships 18.3.1; jsx-runtime is not externalized (#2460).
+      - dependency-name: "@types/react"
+        versions: [">=19"]
+      # WordPress ships 18.3.1; jsx-runtime is not externalized (#2460).
+      - dependency-name: "@types/react-dom"
+        versions: [">=19"]
+      # Upgrades React to 19.
+      - dependency-name: "@wordpress/element"
+        versions: [">=9"]
+      # Prebuilt dependencies keep v7 helper paths (2ef5609e).
+      - dependency-name: "@babel/runtime"
+        versions: [">=8"]
+      # ts-loader needs the compiler API until 7.1.
+      - dependency-name: "typescript"
+        versions: [">=7"]
 
   # Maintain dependencies for Composer
   - package-ecosystem: "composer"
@@ -36,6 +60,10 @@ updates:
         dependency-type: "development"
         patterns:
           - "*"
+    ignore:
+      # wpcs requires ^3.13.
+      - dependency-name: "squizlabs/php_codesniffer"
+        versions: [">=4"]
 
   # Maintain the php-scoper build's dependencies. These are the libraries that
   # get prefixed into vendor_prefixed/ and shipped, so they need security

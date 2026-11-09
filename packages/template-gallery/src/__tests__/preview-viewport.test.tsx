@@ -56,7 +56,8 @@ describe('PreviewViewport', () => {
 
 		expect(canvas.style.width).toBe('794px');
 		expect(canvas.style.height).toBe('1123px');
-		expect(canvas.style.transformOrigin).toBe('top left');
+		// jsdom 31 normalises the keyword order to "left top"; the source still sets "top left".
+		expect(canvas.style.transformOrigin).toBe('left top');
 
 		// In jsdom the container has zero size, so auto-fit yields 100% and the
 		// frame dimensions equal the paper.
