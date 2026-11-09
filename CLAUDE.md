@@ -112,7 +112,7 @@ If wp-env fails because of port conflicts or environment initialization, diagnos
 
 Two live trunks during the 2.0 beta period (from the 2.0 promotion of 2026-11-02 until 2.0 GA), and one deleted until GA:
 
-- **`main`** — WCPOS 2.0, this branch: `2.0.0-beta.3` now, GA later. dev-free runs it; the web lane is `@2.0`. Fixes for 2.0 branch from `origin/main` and target `main`. `release.yml` on a push here creates a draft prerelease while the header version carries `-beta`.
+- **`main`** — WCPOS 2.0, this branch: `2.0.0` now. dev-free runs it; the web lane is `@2.0`. Fixes for 2.0 branch from `origin/main` and target `main`. `release.yml` on a push here creates a draft prerelease while the header version carries `-beta`.
 - **`1.11.x`** — the stable patch line for merchants still on 1.11. A 1.11 fix branches from `origin/1.11.x` and targets `1.11.x`; it has no dev site (Paul, 2026-11-01). A fix 2.0 also needs is re-applied to `main` through a PR of its own.
 - **`next`** — deleted on 2026-11-03 (Paul: *"you can delete next branches as you recommend"*); its rulesets stay. At GA it is re-cut from `main`.
 
