@@ -77,12 +77,16 @@ class Plugins {
 			$this->show_major_update_notice();
 		}
 
-		// Show any additional upgrade notice from readme.txt.
-		if ( isset( $r->upgrade_notice ) && \strlen( trim( $r->upgrade_notice ) ) > 0 ) {
-			echo '<p style="background-color: #d54e21; padding: 10px; color: #f9f9f9; margin-top: 10px"><strong>' .
+		// Show any additional upgrade notice from readme.txt. WordPress.org sends it as
+		// Markdown-rendered HTML (`<p>…</p>`), so render it through wp_kses_post() rather
+		// than escaping it, inside a <div>: a <p> nested in a <p> would close the box early.
+		$notice = isset( $r->upgrade_notice ) && \is_string( $r->upgrade_notice ) ? trim( $r->upgrade_notice ) : '';
+
+		if ( '' !== trim( wp_strip_all_tags( $notice ) ) ) {
+			echo '<div style="background-color: #d54e21; padding: 10px; color: #f9f9f9; margin-top: 10px"><strong>' .
 				 // translators: Prefix for an important plugin update notice in the WordPress plugins screen.
 				 esc_html__( 'Important:', 'woocommerce-pos' ) . '</strong> ';
-			echo esc_html( $r->upgrade_notice ), '</p>';
+			echo wp_kses_post( $notice ), '</div>';
 		}
 	}
 
