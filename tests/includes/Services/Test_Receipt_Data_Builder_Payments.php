@@ -8,7 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 use WC_REST_Unit_Test_Case;
 
 /**
@@ -19,6 +21,112 @@ use WC_REST_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Receipt_Data_Builder_Payments extends WC_REST_Unit_Test_Case {
+	/**
+	 * Refund allocations retain their rows and attribute any remainder to cash.
+	 *
+	 * @dataProvider refund_allocation_cases
+	 * @param string $amount Allocated amount.
+	 * @param string $status Expected allocation status.
+	 * @param string $remainder Expected remainder.
+	 */
+	public function test_refund_allocations_include_cash_remainder( string $amount, string $status, string $remainder ): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( 12 );
+		$allocations = array(
+			array(
+				'payment_id' => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount' => $amount,
+			),
+		);
+		$refund->update_meta_data( '_wcpos_refund_allocations', $allocations );
+		$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+		$expected = array(
+			array(
+				'payment_id' => $allocations[0]['payment_id'],
+				'method_id' => 'pos_cash',
+				'method_title' => $descriptor['title'] ?? 'pos_cash',
+				'amount' => (float) $amount,
+				'transaction_id' => '',
+				'tendered' => 0.0,
+				'change' => 0.0,
+			),
+		);
+		if ( 'partial' === $status ) {
+			$expected[] = array_merge( $expected[0], array( 'payment_id' => null, 'amount' => 6.0 ) );
+		}
+
+		// Act.
+		$data = ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, 1, null );
+
+		// Assert.
+		$this->assertSame( $expected, $data['payments'] );
+		$this->assertEqualsWithDelta( 12.0, $data['totals']['paid_total'], 0.000001 );
+		$this->assertSame( $allocations, $data['fiscal']['extra_fields']['allocations'] );
+		$this->assertSame( $status, $data['fiscal']['extra_fields']['allocation'] );
+		$this->assertSame( $remainder, $data['fiscal']['extra_fields']['remainder'] );
+	}
+
+	/** Allocation coverage and sub-minor-unit rounding cases. */
+	public function refund_allocation_cases(): array {
+		return array(
+			'full' => array( '12.00', 'allocated', '0.00' ),
+			'partial' => array( '6.00', 'partial', '6.00' ),
+			'sub-minor-unit' => array( '11.9999999', 'allocated', '0.00' ),
+		);
+	}
+
+	/**
+	 * Missing allocation meta keeps the single-row guess or unallocated result.
+	 *
+	 * @dataProvider refund_without_allocations_cases
+	 * @param int $count Number of counting ledger rows.
+	 */
+	public function test_refund_without_allocations_keeps_existing_payments( int $count ): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$rows = array();
+		for ( $i = 0; $i < $count; ++$i ) {
+			$rows[] = array(
+				'id' => wp_generate_uuid4(),
+				'method_id' => 'pos_cash',
+				'amount' => '6.00',
+				'status' => 'captured',
+			);
+		}
+		Ledger_Seed::rows( $order, $rows, false );
+		$refund = new \WC_Order_Refund();
+		$refund->set_parent_id( $order->get_id() );
+		$refund->set_amount( 12 );
+
+		// Act.
+		$data = ( new Receipt_Data_Builder() )->build_refund_document( $order, $refund, 1, null );
+
+		// Assert.
+		$this->assertSame( '0.00', $data['fiscal']['extra_fields']['remainder'] );
+		if ( 1 === $count ) {
+			$this->assertCount( 1, $data['payments'] );
+			$this->assertSame( $rows[0]['id'], $data['payments'][0]['payment_id'] );
+			$this->assertSame( 'pos_cash', $data['payments'][0]['method_id'] );
+			$this->assertSame( 12.0, $data['payments'][0]['amount'] );
+			$this->assertSame( 12.0, $data['totals']['paid_total'] );
+			$this->assertSame( 'allocated', $data['fiscal']['extra_fields']['allocation'] );
+		} else {
+			$this->assertSame( array(), $data['payments'] );
+			$this->assertSame( array(), $data['fiscal']['extra_fields']['allocations'] );
+			$this->assertSame( 0, $data['totals']['paid_total'] );
+			$this->assertSame( 'unallocated', $data['fiscal']['extra_fields']['allocation'] );
+		}
+	}
+
+	/** Ledger counts exercising the legacy attribution choices. */
+	public function refund_without_allocations_cases(): array {
+		return array( array( 0 ), array( 1 ), array( 2 ) );
+	}
+
 	/**
 	 * Test pending orders do not report an unpaid total as a payment.
 	 */
