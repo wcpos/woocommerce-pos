@@ -65,6 +65,7 @@ Each device keeps its own copy of the catalogue, customers and open orders. When
 * **Known sales.** A sale with an order number still takes cash or a card on your own terminal.
 * **New sales.** A sale started offline waits for the connection before it is paid.
 * **Offline badge.** Shown beside the store name, with each payment method marked as available or not.
+* **Needs attention.** A payment the store refuses once it is back lands under Needs attention in Orders.
 
 = Your data, your WooCommerce =
 
@@ -142,7 +143,7 @@ Pro installs over the free plugin, so you do not remove anything first.
 4. Copy your licence key from the [Licenses](https://wcpos.com/account/licenses) page.
 5. In WP Admin, go to POS > Settings. Under Account, open License, paste the key and press Activate.
 
-Pro is a standalone plugin, so once it is active you can deactivate and delete the free plugin.
+Pro is a standalone plugin, so once it is active you can deactivate the free plugin.
 
 = Manual installation =
 1. Download the WCPOS plugin zip file.
@@ -194,6 +195,7 @@ The till keeps working from what is on the device.
 * **Known sales.** Pay any sale with an order number in cash or on your own card terminal.
 * **New sales.** A sale you start offline waits for the connection, then you take its payment.
 * **Sending.** Sales and receipt emails send themselves when the store is back.
+* **Refused sales.** If the store refuses a payment taken offline, the sale shows under Needs attention in Orders.
 * **Offline badge.** Beside the store name, it tells you which state you are in.
 * **Readers and gateways.** Connected card readers and online gateways need the connection.
 
@@ -443,4 +445,4 @@ Earlier releases (1.10 and older) are listed at https://github.com/wcpos/woocomm
 == Upgrade Notice ==
 
 = 2.0.0 =
-Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales. WCPOS 2.0 needs WooCommerce 9.0 or later, and the app and the plugin must both be on 2.0.
+Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales. WCPOS 2.0 needs WooCommerce 9.0 or later, and the app and the plugin must both be on 2.0. Read https://docs.wcpos.com/getting-started/upgrading-to-2 before you update.
