@@ -297,6 +297,8 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 
 = 2.0.0 - 2026/11/09 =
 
+**WCPOS 2.0 is a major update: an entirely new interface and many new features, and cashiers will need time to get used to it.** Update when you have time to learn the new interface, not during a busy shift. What's new: https://docs.wcpos.com/getting-started/whats-new
+
 **Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales.** Rolling back to 1.11 also starts from an empty local database, so sync before you roll back too. The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
 
 WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers handled at the register itself, with a cash drawer that opens and closes with each shift. Every screen is redrawn, and the till keeps taking cash when the connection drops.
@@ -445,4 +447,4 @@ Earlier releases (1.10 and older) are listed at https://github.com/wcpos/woocomm
 == Upgrade Notice ==
 
 = 2.0.0 =
-Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales. WCPOS 2.0 needs WooCommerce 9.0 or later, and the app and the plugin must both be on 2.0. Read https://docs.wcpos.com/getting-started/upgrading-to-2 before you update.
+WCPOS 2.0 is a major update: an entirely new interface and many new features. Cashiers will need time to learn it: update when you have time, not during a busy shift. Sync every till first: unsent 1.11 sales do not carry over. Needs WooCommerce 9.0+. https://docs.wcpos.com/getting-started/whats-new
