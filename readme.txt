@@ -150,7 +150,7 @@ WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers 
 - **The template gallery has Receipts, Reports, Closures, Display and Email tabs**, and receipt fonts download on demand.
 - **The cashier who opened a session cannot approve its own variance**, and the Access screen can restore the default capabilities.
 - **The experimental magnetic card reader is removed.** Card terminal extensions (Stripe, SumUp and the others) need WCPOS Pro from 2.0.
-- Developers: sync protocol 3; every plugin hook is now named `wcpos_*` (the `woocommerce_pos_*` names still fire as deprecated aliases); the 1.x compatibility shims are removed; translations pinned to 2026.11.13; the vendored SQLite worker matches web-bundle v2.0.17.
+- Developers: sync protocol 3; every plugin hook is now named `wcpos_*` (the `woocommerce_pos_*` names still fire as deprecated aliases); the 1.x compatibility shims are removed; translations pinned to 2026.11.14; the vendored SQLite worker matches web-bundle v2.0.17.
 
 Since beta 3, for testers on the 2.0 beta:
 
