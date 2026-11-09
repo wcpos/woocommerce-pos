@@ -3,7 +3,7 @@
 declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Monolog;
 
-use WCPOS\Vendor\Monolog\Handler\AbstractHandler;
+use WCPOS\Vendor\Monolog\Handler\AbstractProcessingHandler;
 use WCPOS\Vendor\Monolog\Level;
 use WCPOS\Vendor\Monolog\Logger;
 use WCPOS\Vendor\Monolog\LogRecord;
@@ -13,8 +13,9 @@ use WCPOS\Vendor\Sentry\State\Scope;
 /**
  * This Monolog handler will collect monolog events and send them to sentry.
  */
-class ExceptionToSentryIssueHandler extends AbstractHandler
+class ExceptionToSentryIssueHandler extends AbstractProcessingHandler
 {
+    use CompatibilityProcessingHandlerTrait;
     /**
      * @var HubInterface
      */
@@ -37,6 +38,19 @@ class ExceptionToSentryIssueHandler extends AbstractHandler
         if ($exception === null || !$this->isHandling($record)) {
             return \false;
         }
+        /** @phpstan-ignore argument.type */
+        return parent::handle($record);
+    }
+    /**
+     * @param array<string, mixed>|LogRecord $record
+     */
+    protected function doWrite($record) : void
+    {
+        // A processor may have removed the exception from the context
+        $exception = $this->getExceptionFromRecord($record);
+        if ($exception === null) {
+            return;
+        }
         $this->hub->withScope(function (Scope $scope) use($record, $exception) : void {
             $scope->setExtra('monolog.channel', $record['channel']);
             $scope->setExtra('monolog.level', $record['level_name']);
@@ -51,7 +65,6 @@ class ExceptionToSentryIssueHandler extends AbstractHandler
             }
             $this->hub->captureException($exception);
         });
-        return $this->bubble === \false;
     }
     /**
      * @param array<string, mixed>|LogRecord $record

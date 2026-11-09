@@ -89,6 +89,10 @@ final class StreamWrapper
             return -1;
         }
     }
+    public function stream_flush() : bool
+    {
+        return \true;
+    }
     /**
      * @return int|false
      */

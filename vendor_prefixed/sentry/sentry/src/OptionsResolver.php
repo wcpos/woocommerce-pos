@@ -87,7 +87,8 @@ class OptionsResolver
         $this->allowedTypes[$name] = $typeSpecs;
     }
     /**
-     * @param mixed[]|callable|bool|float|int|string|null $values
+     * @param mixed[]|\Closure|bool|float|int|string|null $values A closure validating the value, a list of
+     *                                                            allowed values, or a single allowed value
      */
     public function setAllowedValues(string $path, $values) : void
     {
@@ -302,7 +303,9 @@ class OptionsResolver
         if ($allowedValue === null) {
             return \true;
         }
-        if (\is_callable($allowedValue)) {
+        // We only consider \Closure objects to be callables, otherwise 2 element lists
+        // are considered callables which can lead to errors
+        if ($allowedValue instanceof \Closure) {
             return $allowedValue($value) === \true;
         }
         if (!\is_array($allowedValue)) {

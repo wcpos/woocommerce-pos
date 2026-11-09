@@ -5,6 +5,8 @@ namespace WCPOS\Vendor\Sentry\Transport;
 
 use WCPOS\Vendor\Psr\Log\LoggerInterface;
 use WCPOS\Vendor\Psr\Log\NullLogger;
+use WCPOS\Vendor\Sentry\ClientReport\ClientReportAggregator;
+use WCPOS\Vendor\Sentry\ClientReport\Reason;
 use WCPOS\Vendor\Sentry\Event;
 use WCPOS\Vendor\Sentry\HttpClient\HttpClientInterface;
 use WCPOS\Vendor\Sentry\HttpClient\Request;
@@ -67,6 +69,7 @@ class HttpTransport implements TransportInterface
         if ($eventType->requiresRateLimiting()) {
             if ($this->rateLimiter->isRateLimited((string) $eventType)) {
                 $this->logger->warning(\sprintf('Rate limit exceeded for sending requests of type "%s".', (string) $eventType), ['event' => $event]);
+                ClientReportAggregator::getInstance()->addEvent($event, Reason::ratelimitBackoff());
                 return new Result(ResultStatus::rateLimit());
             }
             // Since profiles are attached to transaction we have to check separately if they are rate limited.

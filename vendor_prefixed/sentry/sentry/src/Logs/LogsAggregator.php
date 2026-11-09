@@ -5,11 +5,14 @@ namespace WCPOS\Vendor\Sentry\Logs;
 
 use WCPOS\Vendor\Sentry\Attributes\Attribute;
 use WCPOS\Vendor\Sentry\Client;
+use WCPOS\Vendor\Sentry\ClientReport\ClientReportAggregator;
+use WCPOS\Vendor\Sentry\ClientReport\Reason;
 use WCPOS\Vendor\Sentry\Event;
 use WCPOS\Vendor\Sentry\EventId;
 use WCPOS\Vendor\Sentry\SentrySdk;
 use WCPOS\Vendor\Sentry\State\HubInterface;
 use WCPOS\Vendor\Sentry\State\Scope;
+use WCPOS\Vendor\Sentry\Transport\DataCategory;
 use WCPOS\Vendor\Sentry\Util\Arr;
 use WCPOS\Vendor\Sentry\Util\Str;
 use WCPOS\Vendor\Sentry\Util\TelemetryStorage;
@@ -96,12 +99,14 @@ final class LogsAggregator
             $log = $options->getBeforeSendLogCallback()($log);
         } catch (\Throwable $exception) {
             $options->getLoggerOrNullLogger()->error(\sprintf('The "before_send_log" callback failed with exception: "%s".', $exception->getMessage()));
+            ClientReportAggregator::getInstance()->add(DataCategory::logItem(), Reason::beforeSend(), 1);
             return;
         }
         if ($log === null) {
             if ($sdkLogger !== null) {
                 $sdkLogger->info('Log will be discarded because the "before_send_log" callback returned "null".', ['log' => $log]);
             }
+            ClientReportAggregator::getInstance()->add(DataCategory::logItem(), Reason::beforeSend(), 1);
             return;
         }
         if ($sdkLogger !== null) {
