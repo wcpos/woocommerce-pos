@@ -14,7 +14,7 @@ WCPOS is a point of sale (POS) for WooCommerce. Same stock online and at the til
 
 **WCPOS is a point of sale (POS) for WooCommerce.**
 
-It runs in a web browser or as a Windows, macOS or Linux desktop app, with iOS and Android apps in beta. It sells from the same catalogue, stock and prices as your online store and records every sale as a WooCommerce order.
+One catalogue, one stock count, one set of prices, online and at the till, and every sale a WooCommerce order. Ring them up in a browser, in the desktop app for Windows, macOS or Linux, or in the iOS and Android apps now in beta.
 
 **Free:** ring up sales, take cash and cards on your own terminal, split a payment, run one register with its cash drawer, print receipts.
 
@@ -156,7 +156,9 @@ Pro is a standalone plugin, so once it is active you can deactivate the free plu
 
 = Is WCPOS really free? =
 
-Yes. The free plugin is a complete till, with no transaction fees and no charge per register or per device. You can browse the extension directory, but installing from it needs Pro.
+Yes. The free plugin is a complete till, with no transaction fees and no charge per register or per device.
+
+The extension directory is open to browse. Installing from it needs Pro.
 
 You never need Pro to start selling.
 
@@ -168,13 +170,13 @@ Yearly includes one year of updates and priority support, and it does not renew 
 
 Prices as of November 2026, at [wcpos.com/pro](https://wcpos.com/pro).
 
-= Is there a free trial of Pro? =
+= Is there a Pro trial? =
 
 No. The free plugin is the trial, and every Pro screen in it has a View Demo button.
 
 To try the POS before installing anything, open the demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) and sign in with `demo` / `demo`.
 
-= Do I need a separate catalogue or a second stock count? =
+= Do I need a second catalogue? =
 
 No. The POS sells from your WooCommerce products, stock and prices, and every sale is recorded as a WooCommerce order.
 
@@ -188,7 +190,7 @@ Any modern web browser, plus desktop and mobile apps. One login works on all of 
 * **iPhone and iPad** on iOS 16.4 or later, in beta through TestFlight.
 * **Android** 10 or later, in beta through Google Play.
 
-= What happens when the internet goes down? =
+= What if the internet goes down? =
 
 The till keeps working from what is on the device.
 
@@ -218,15 +220,15 @@ Pro also lets you turn on your store's other WooCommerce gateways for the POS. Y
 
 = What does WCPOS not do? =
 
-It does not run without WooCommerce, and it is not fiscally certified anywhere today.
+WCPOS needs a WooCommerce store, and it has no fiscal certification in any country today.
 
-* **WooCommerce only.** It needs a WooCommerce store.
+* **WooCommerce only.** WCPOS sells from a WooCommerce store.
 * **No fiscal certification** in any country today. Fiscal compliance is the focus of WCPOS 2.1.
 * **No kiosk mode** for customers to serve themselves.
 * **No WCPOS hardware** to buy.
 * **No offline-only sales.** A sale cannot start and finish entirely offline.
 
-= I am on WCPOS 1.11. What do I do before upgrading? =
+= Upgrading from WCPOS 1.11? =
 
 Sync every till first. 2.0 starts a new local database on each device and does not carry over 1.11 sales that have not been sent.
 
