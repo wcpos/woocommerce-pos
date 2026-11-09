@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -24,7 +25,10 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		// Arrange: a legacy ledger order and a completed register sale.
 		$session = $this->closure_session( null, 'open' );
 		$this->closure_ledger( $session );
-		$this->completed_in( $session );
+		$sale = $this->completed_in( $session );
+		// A line item, so the items pass has something to load and to forget.
+		$sale->add_product( ProductHelper::create_simple_product(), 2 );
+		$sale->save();
 		$figures = Session_Figures::for_session( $session );
 
 		// Act.
@@ -49,6 +53,16 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 			}
 		};
 		$assert_no_orders( $memo->getValue( $figures ) );
+
+		// Assert: WooCommerce's in-request caches hold neither order nor its items after both passes.
+		$this->assertContains( $sale->get_id(), $figures->order_ids() );
+		foreach ( $figures->order_ids() as $id ) {
+			$this->assertFalse( wp_cache_get( 'order-items-' . $id, 'orders' ), "items of order $id are cached" );
+			$this->assertFalse( wp_cache_get( \WC_Order::generate_meta_cache_key( $id, 'orders' ), 'orders' ), "meta of order $id is cached" );
+			if ( class_exists( \Automattic\WooCommerce\Caches\OrderCache::class ) ) {
+				$this->assertNull( wc_get_container()->get( \Automattic\WooCommerce\Caches\OrderCache::class )->get( $id ), "order $id is cached" );
+			}
+		}
 	}
 
 	/** Tender rows reconcile with expected balances, including both refund sources. */
