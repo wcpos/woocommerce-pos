@@ -3,130 +3,293 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
+Requires PHP: 7.4
 Stable tag: 2.0.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-Turn any device into a register for your WooCommerce store — same catalog, stock and prices, online or off.
+WCPOS is a point of sale (POS) for WooCommerce. Same stock online and at the till. Free, no transaction fees. Keep selling when the connection drops.
 
 == Description ==
 
-**WCPOS turns any device into a point of sale for your [WooCommerce](https://www.woocommerce.com/) store.** Same catalog, same stock, same prices — at the counter, on the road, or over the phone. Run it in a browser or as a native desktop, iOS or Android app, with offline product browsing and cart building during connection drops. _(WCPOS was formerly known as WooCommerce POS.)_
+**WCPOS is a point of sale (POS) for WooCommerce.**
 
-> 🕒 Install and start taking orders in less than 2 minutes.
+It runs in a web browser or as a Windows, macOS or Linux desktop app, with iOS and Android apps in beta. It sells from the same catalogue, stock and prices as your online store and records every sale as a WooCommerce order.
 
-= 🎥 DEMO =
-You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
+**Free:** ring up sales, take cash and cards on your own terminal, split a payment, run one register with its cash drawer, print receipts.
 
-**Desktop Apps:**
-⬇️ [Windows](https://updates.wcpos.com/electron/download/win32-x64)
-⬇️ [Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64)
-⬇️ [Mac (Apple Silicon)](https://updates.wcpos.com/electron/download/darwin-arm64)
+**Pro:** connected card readers, refunds, editing stock and prices, re-opening older orders, a customer display, more registers and stores.
 
-**Mobile Apps (Beta):**
-📱 [iOS (TestFlight)](https://testflight.apple.com/join/JGBdVRrW)
-📱 [Android (Google Play)](https://play.google.com/apps/testing/com.wcpos.main)
+WCPOS was called WooCommerce POS until November 2025.
 
-= ✨ FEATURES =
-* **Cross-platform:** Accessible via browser, desktop, iOS & Android _(mobile apps in beta)_
-* **Offline Storage:** Fast product search and order processing
-* **Flexible Cart:** Add products not listed in WooCommerce
-* **Barcode Support:** Scan products directly into the cart
-* **Receipt Templates:** Pick from a built-in gallery — receipts, invoices, quotes, packing slips, gift receipts, kitchen tickets — or design your own
-* **Thermal Printing:** Print directly to 58mm and 80mm thermal printers over network, Bluetooth, or USB
-* **Customer Tax IDs:** Built-in field for VAT, ABN, GST, and other regional tax numbers
-* **Multilingual:** Available in most major languages
-* **Built-in Support:** Access live chat for instant help
+Try it first at [demo.wcpos.com/pos](https://demo.wcpos.com/pos), login `demo` / `demo`.
 
-= 🔓 PRO FEATURES =
-* **Stock Management:** quickly adjust stock levels, pricing and more
-* **Order Management:** re-open and print receipts for older orders
-* **Customer Management:** create new customers and edit customer details
-* **Payment Terminals:** take in-person card payments with Stripe Terminal and SumUp readers
-* **Payment Gateways:** check out with any WooCommerce gateway — Stripe, PayPal, Square, Mollie and more
-* **Coupons:** manage the coupon catalogue from the till (applying a coupon at the register is free)
-* **Refunds:** refund POS orders directly from the till
-* **Reports:** sales by period with margin by category and brand, and the closures history for every register
-* **Card readers at the till:** Stripe Terminal (smart readers and Bluetooth readers), SumUp and Mollie Terminal, driven from checkout; Tap to Pay on iPhone and Android follows in an app update
-* **Customer-facing display:** a second screen showing the customer their cart and total as it is rung up
-* **Stores:** Manage locations with unique tax settings, pricing and receipts
-* **Priority [Discord support](https://wcpos.com/discord):** one-on-one support via private chat
+**Desktop app** (Windows 10 or later, macOS 12 or later, Linux x64): [Windows](https://updates.wcpos.com/electron/download/win32-x64) · [Mac (Apple silicon)](https://updates.wcpos.com/electron/download/darwin-arm64) · [Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64) · [Linux (.deb)](https://updates.wcpos.com/electron/download/linux-x64) · [Linux (.rpm)](https://updates.wcpos.com/electron/download/linux-x64-rpm)
 
-*Discover all PRO features at [wcpos.com/pro](https://wcpos.com/pro)*
+**Mobile apps, in beta** (iOS and iPadOS 16.4 or later, Android 10 or later): [iPhone and iPad (TestFlight beta)](https://testflight.apple.com/join/JGBdVRrW) · [Android (Google Play beta)](https://play.google.com/apps/testing/com.wcpos.main)
 
-= 📋 REQUIREMENTS =
-* WordPress >= 5.6
-* WooCommerce >= 9.0
-* PHP >= 7.4
+= Free: a complete till =
+
+**Ring up the sale**
+
+* **Search or scan.** Find products by name or barcode, or tap a quick filter button.
+* **Edit the cart.** Change quantities and prices, and discount a line or the whole order.
+* **Coupons.** Apply your existing WooCommerce coupons in the cart.
+* **Extras.** Add an unlisted product, a fee or shipping.
+* **Customers.** Choose an existing customer, with their tax ID on the order and receipt.
+* **Park a sale.** Set it aside and come back to it.
+
+**Take the money**
+
+* **Cash.** Use the keypad beside the cart and see the change as you type.
+* **Card.** Record a card payment taken on your own terminal.
+* **Split payments.** Split evenly, by amount, by percent or by item.
+
+**Close the day**
+
+* **One register.** Shared by every device on the counter, with a float and cash in and out.
+* **Drawer count.** Count the drawer at close and file a numbered closing report.
+* **Closing reports.** Reprint, recount or export them as CSV.
+* **Today's report.** Sales and closures for today on this register, to print or export as CSV.
+
+**Print and get help**
+
+* **Receipts.** Print or email receipts, gift receipts, invoices, purchase orders and kitchen tickets.
+* **Printers.** Thermal and cloud printers. See the hardware list below.
+* **Help.** Press Support and the WCPOS Discord opens inside the POS.
+
+= Works offline, on every device =
+
+Each device keeps its own copy of the catalogue, customers and open orders. When the connection drops you keep searching and building carts, and sales and receipt emails send once the store is back.
+
+* **Known sales.** A sale with an order number still takes cash or a card on your own terminal.
+* **New sales.** A sale started offline waits for the connection before it is paid.
+* **Offline badge.** Shown beside the store name, with each payment method marked as available or not.
+
+= Your data, your WooCommerce =
+
+Products, orders and customers stay in your own WooCommerce database. There is no second catalogue to keep in step.
+
+* **No transaction fees.** WCPOS takes no cut of your sales.
+* **No device charges.** The free plugin has no per-register or per-device charges.
+* **Open source.** GPL-3.0, with the code on [GitHub](https://github.com/wcpos).
+
+= Your hardware, your gateways =
+
+* **Scanners.** The device camera, or a USB or Bluetooth barcode scanner.
+* **Thermal printers.** 58 mm and 80 mm, over the network, Bluetooth or USB.
+* **Cloud printers.** PrintNode, Star Online, Star CloudPRNT or Epson Server Direct Print.
+* **Cash drawer.** Wire it to the receipt printer, turn on Auto-open, and it opens with each receipt.
+* **Card terminal.** Take cards on the terminal you already have, and record them at the till.
+* **With Pro.** Connect a card reader (listed under What Pro adds), or turn on your own WooCommerce gateways.
+
+The POS comes in over 40 languages and ten themes, and the cart sits on the left or the right.
+
+= What Pro adds =
+
+[WCPOS Pro](https://wcpos.com/pro) adds the screens for running the store from the POS, and more ways to pay.
+
+**Run the store from the POS**
+
+* **Stock and prices.** Change them in the product list.
+* **Customers.** Add new customers and edit existing ones.
+* **Coupons screen.** Look up coupons and create new ones.
+* **Older orders.** Find, re-open and edit them, and reprint their receipts.
+* **Refunds.** Full or partial, back to the original method when the gateway supports it, or as cash.
+* **Full reports.** Earlier days, every register and every store, and the closures history.
+
+**Take more payments**
+
+* **Card readers.** Stripe Terminal (smart and Bluetooth readers), SumUp, Mollie Terminal, Square Terminal, PayArc, Mercado Pago Point, PayPal Reader (Zettle).
+* **Reader extensions.** Each reader is its own extension, installed from the POS.
+* **Vipps MobilePay.** Customers pay by QR code or push payment.
+* **Email Invoice.** Send a link the customer pays online.
+* **Web Checkout.** The customer pays on your online store.
+* **Your gateways.** Turn on your store's other WooCommerce gateways for the POS, on their own payment page.
+* **Recorded payments.** Cash on delivery, bank transfer and cheque, recorded at the till.
+
+**More registers, stores and extras**
+
+* **More registers.** One per cash drawer, each with its own float, count and closing report.
+* **More stores.** Several stores on one site, each with its own address, logo, tax IDs and cashiers.
+* **Store templates.** Give each store its own list of receipt templates.
+* **Stock per location.** Through ATUM Multi-Inventory.
+* **Customer display.** A second screen in any browser, paired to the till with a code.
+* **Extensions.** Install, activate and update them from the directory inside the POS.
+* **Priority support.** On the WCPOS Discord, with your licence.
+
+= Requirements =
+
+* **WordPress** 5.6 or later (5.8 with Pro)
+* **WooCommerce** 9.0 or later
+* **PHP** 7.4 or later, PHP 8 recommended
+* **Upgrading from 1.11?** Sync every till first. See the FAQ.
 
 == Installation ==
 
 = Automatic installation =
-1. Go to Plugins screen and select Add New.
-2. Search for "WCPOS" in the WordPress Plugin Directory.
-3. Install the plugin
-4. Click Activate Plugin to activate it.
+1. In WP Admin, go to Plugins > Add New Plugin.
+2. Search for "WCPOS".
+3. Click Install Now.
+4. Click Activate.
 
-= Pro installation =
-If you have purchased a license for [WCPOS Pro](https://wcpos.com/pro) please follow the steps below to install and activate the plugin:
+= Installing WCPOS Pro =
+Pro installs over the free plugin, so you do not remove anything first.
 
-1. Go to: https://wcpos.com/my-account/
-2. Under My Downloads, click the download link and save the plugin to your desktop.
-3. Then go to your site, login and go to the Add New Plugin page, eg: http://<yourstore.com>/wp-admin/plugin-install.php?tab=upload
-4. Upload the plugin zip file from your desktop and activate.
-5. Next, go to the POS Settings page and enter your License Key and License Email to complete the activation.
+1. Sign in at wcpos.com and open [Downloads](https://wcpos.com/account/downloads).
+2. Download the WCPOS Pro zip file.
+3. In WP Admin, go to Plugins > Add New Plugin > Upload Plugin, upload the zip and click Activate.
+4. Copy your licence key from the [Licenses](https://wcpos.com/account/licenses) page.
+5. In WP Admin, go to POS > Settings. Under Account, open License, paste the key and press Activate.
+
+Pro is a standalone plugin, so once it is active you can deactivate and delete the free plugin.
 
 = Manual installation =
-To install a WordPress Plugin manually:
-
-1. Download the WCPOS plugin to your desktop.
-2. If downloaded as a zip archive, extract the Plugin folder to your desktop.
-3. With your FTP program, upload the Plugin folder to the wp-content/plugins folder in your WordPress directory online.
-4. Go to Plugins screen and find the newly uploaded Plugin in the list.
-5. Click Activate Plugin to activate it.
+1. Download the WCPOS plugin zip file.
+2. Unzip it to get the plugin folder.
+3. Upload the folder to `wp-content/plugins` on your server, by FTP or your host's file manager.
+4. In WP Admin, go to Plugins and find WCPOS in the list.
+5. Click Activate.
 
 == Frequently Asked Questions ==
 
 = Is WCPOS really free? =
-Yes. The free plugin is a complete point of sale — unlimited products, orders and customers, named registers with a cash drawer, split payments and coupons at the till, with no transaction fees and no per-register charges. Pro adds advanced tools (see below), but you never need it to start selling.
 
-= Do I need anything besides WooCommerce? =
-No. If you have a WooCommerce store, install WCPOS and you're taking orders in under two minutes — same catalog, same stock, same prices, at the counter.
+Yes. The free plugin is a complete till, with no transaction fees and no charge per register or per device. You can browse the extension directory, but installing from it needs Pro.
+
+You never need Pro to start selling.
+
+= What does Pro cost? =
+
+$129 a year, or $399 once for Lifetime. Each licence covers two sites.
+
+Yearly includes one year of updates and priority support, and it does not renew by itself. When it ends, Pro keeps working and only new updates and priority support stop.
+
+Prices as of November 2026, at [wcpos.com/pro](https://wcpos.com/pro).
+
+= Is there a free trial of Pro? =
+
+No. The free plugin is the trial, and every Pro screen in it has a View Demo button.
+
+To try the POS before installing anything, open the demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) and sign in with `demo` / `demo`.
+
+= Do I need a separate catalogue or a second stock count? =
+
+No. The POS sells from your WooCommerce products, stock and prices, and every sale is recorded as a WooCommerce order.
 
 = Which devices does it run on? =
-Any modern browser, plus native desktop apps (Windows, macOS) and iOS & Android apps (mobile in beta). One login, everything stays in sync.
 
-= Does it work offline? =
-Yes. Products are stored locally for instant search, so you can keep browsing, building carts and saving orders during a connection drop, and your changes sync automatically when you reconnect. A cash sale completes at the till even when the store can't be reached and syncs when it can; card payments through an integrated reader still need a connection.
+Any modern web browser, plus desktop and mobile apps. One login works on all of them.
+
+* **Windows** 10 or later, 64-bit.
+* **Mac** on macOS 12 or later, Apple silicon or Intel.
+* **Linux**, 64-bit, as a .deb or .rpm package.
+* **iPhone and iPad** on iOS 16.4 or later, in beta through TestFlight.
+* **Android** 10 or later, in beta through Google Play.
+
+= What happens when the internet goes down? =
+
+The till keeps working from what is on the device.
+
+* **Known sales.** Pay any sale with an order number in cash or on your own card terminal.
+* **New sales.** A sale you start offline waits for the connection, then you take its payment.
+* **Sending.** Sales and receipt emails send themselves when the store is back.
+* **Offline badge.** Beside the store name, it tells you which state you are in.
+* **Readers and gateways.** Connected card readers and online gateways need the connection.
 
 = What hardware do I need? =
-Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 80mm thermal receipt printers (network, Bluetooth or USB), and cash drawers — no proprietary equipment and no lock-in.
 
-= Can I take card payments? =
-Cash and manual card payments are built in, and a sale can be split between them. WCPOS Pro adds integrated card readers (Stripe Terminal, SumUp, Mollie Terminal) driven from the register, including Bluetooth readers. Tap to Pay on iPhone and Android follows in an app update.
+None to start. A device with a browser is enough.
 
-= What's the difference between free and Pro? =
-Free is a full POS for taking orders, running a cash drawer and closing the day. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders, customers and coupons, refund at the till, use supported payment gateways and integrated card readers such as Stripe Terminal, SumUp and Mollie Terminal, show a customer-facing display, and read sales and closures reports. See [wcpos.com/pro](https://wcpos.com/pro).
+For a counter, use the scanner, printer, cash drawer and card terminal you already have. There is no WCPOS hardware to buy.
 
-= Can I try it before installing? =
-Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) (login `demo` / `demo`).
+* **Office printer.** HTML templates print through the system print dialog.
+* **Cash drawer setup.** Turn on Auto-open cash drawer for its printer in Settings > Printing.
+
+= How do I take card payments? =
+
+On your own terminal with the free plugin, or on a connected reader with Pro.
+
+On the free plugin, take the card on your terminal and press Card to record it. With Pro, each reader is its own extension, installed from the POS.
+
+Pro also lets you turn on your store's other WooCommerce gateways for the POS. You are not tied to one card company.
+
+= What does WCPOS not do? =
+
+It does not run without WooCommerce, and it is not fiscally certified anywhere today.
+
+* **WooCommerce only.** It needs a WooCommerce store.
+* **No fiscal certification** in any country today. Fiscal compliance is the focus of WCPOS 2.1.
+* **No kiosk mode** for customers to serve themselves.
+* **No WCPOS hardware** to buy.
+* **No offline-only sales.** A sale cannot start and finish entirely offline.
+
+= I am on WCPOS 1.11. What do I do before upgrading? =
+
+Sync every till first. 2.0 starts a new local database on each device and does not carry over 1.11 sales that have not been sent.
+
+Update the app and the plugin together, because both must be on 2.0. WCPOS 2.0 needs WooCommerce 9.0 or later.
 
 = Where do I get help? =
-Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
-= What data does WCPOS send outside my site? =
-Your products, orders and customers stay in your own WooCommerce database. WCPOS only talks to outside services for a few specific reasons:
+Inside the POS. Press Support at the foot of the menu and the WCPOS Discord opens.
 
-* **To load the app.** The POS interface, its assets and translations are served from a CDN (jsDelivr), like any web app.
-* **To find and fix bugs — only if you opt in.** With your permission, WCPOS sends us anonymous usage data (which features are used, on what kind of setup) and anonymous error reports from the POS and from the WCPOS plugin on your server (what went wrong, on which version and platform). This is how we spot problems before you have to write in, fix them faster, and decide what to build next. It never includes customer details, order contents, prices or your site address, and you can change your mind any time in POS > Settings > General.
-* **To activate Pro.** Your license key, site identifier (`site_uuid`) and anonymous identifier (`anon_id`) are validated with wcpos.com.
-* **To print through the WCPOS Cloud Print relay — only if you use cloud printing.** Your site registers with the relay at cloudprint.wcpos.com when you open the Cloud Print settings, and print jobs for relay-addressed printers are passed through it to your printer, so those receipt contents (which include order details) leave your site. Developers can opt out with the `woocommerce_pos_cloud_print_relay_enabled` filter.
+You can also join at [wcpos.com/discord](https://wcpos.com/discord), and the documentation is at [docs.wcpos.com](https://docs.wcpos.com). Pro licences include priority support on Discord.
 
-Full details are in our [privacy policy](https://wcpos.com/privacy).
+Licence questions and private matters go by email.
+
+= Is WCPOS open source? =
+
+Yes, under GPL-3.0, with the code on [GitHub](https://github.com/wcpos).
+
+Developers get a REST API under `/wcpos/v1/` and `/wcpos/v2/`, and hooks and filters named `wcpos_*`.
+
+= What leaves my site? =
+
+WCPOS contacts outside services to load the app, send optional anonymous reports, check a Pro licence and relay cloud printing. Your products, orders and customers stay in your own WooCommerce database.
+
+Besides a cloud print service you set up yourself, and the WCPOS Discord when you press Support, WCPOS sends data outside your site for four reasons.
+
+**To load the app**
+
+* **CDN.** The POS app loads from cdn.wcpos.com, with jsDelivr as the fallback.
+* **Signed.** The bundle is signed and checked before it runs.
+
+**Usage and error reports, only if you opt in**
+
+* **Consent.** A pop-up asks after you activate the plugin.
+* **Your choice.** Turn them on or off under POS > Settings > General > Privacy.
+* **Setup.** PHP and WooCommerce versions, country and currency.
+* **Store size.** Approximate counts of products, orders and POS users.
+* **Usage.** Which screens and features are used.
+* **Errors.** Error reports, with file paths redacted.
+* **Hostnames.** The bare hostname of the store and of wp-admin, never a page address.
+* **Never sent.** Customer details, order contents or prices.
+* **Not opted in?** Then the store sends none of it.
+
+**To activate Pro**
+
+* **Licence check.** Your licence key, site identifier (`site_uuid`) and anonymous identifier (`anon_id`) are checked with wcpos.com.
+
+**The WCPOS Cloud Print relay, only if you use it**
+
+* **Registration.** The store registers with cloudprint.wcpos.com the first time someone opens the Cloud Print settings.
+* **Print jobs.** Jobs for relay printers pass through it, receipt contents included.
+* **Never opened?** A store that never opens Cloud Print never contacts the relay.
+* **Opt out.** Developers can turn the relay off with the `wcpos_cloud_print_relay_enabled` filter.
+
+Full details are in the [privacy policy](https://wcpos.com/privacy).
 
 == Screenshots ==
 
-1. WCPOS main screen
+1. The register: search or scan, quick filter buttons, and a cart with a discounted line.
+2. Checkout at the till: the cash keypad beside the cart, with the change shown as you type.
+3. Split payments: one sale taken in several payments, each recorded as it is taken.
+4. Closing the register: the numbered closure, with the drawer count against the expected amount.
+5. Reports (Pro view): a day's sales with a chart by hour, cards for orders and payments, and the register's float and expected cash. Free shows today on this register.
+6. The template gallery in WP Admin: receipts, gift receipts, invoices, purchase orders and kitchen tickets.
+7. Settings > Theme: ten themes and a Scale setting for compact, regular or spacious layouts.
+8. Offline: the Offline badge beside the store name while the till keeps working.
 
 == Changelog ==
 
@@ -159,58 +322,6 @@ Since beta 3, for testers on the 2.0 beta:
 - **The order-pay page shows the order's own currency symbol on the Cash and Card fields** and formats amounts with the POS store's money format.
 - **Refund receipts add up (Pro).** When part of a refund is not tied to a payment, the remainder now prints as cash, so the receipt total matches the amount refunded.
 - Beta 3's notes said translations were pinned to 2026.11.12; beta 3 shipped pinned to 2026.11.13.
-
-= 2.0.0-beta.3 - 2026/11/09 =
-
-Beta 3 of the WCPOS 2.0 public beta. Install it by hand over beta 2; it is never offered as an update. **New testers: sync every till before upgrading from 1.11**, and read the 2.0.0-beta.1 entry below for what 2.0 changes.
-
-Since beta 2:
-
-- **Registers and split payments are reworked in the app.** The register screens are redrawn, a split payment is taken part by part from a strip of Split tiles, and each part is recorded as it is taken. Card readers are listed as rows.
-- **Cash is taken at the till.** The built-in Cash gateway no longer appears on the POS order-pay page; cash goes through the Cash tile, so it lands in the register's count. Card and the other manual gateways keep the Legacy tab.
-- **A guest can pay by Stripe card on the POS pay page**, and from Stripe 11.1.1 the pay page keeps Stripe's own card form.
-- **The legacy PHP receipt prints the real total** on stores that show prices excluding tax, and receipt images render the same on every host.
-- **The POS syncs the whole catalogue on sites running WP Activity Log**, which had cut the sync to one page.
-- **MyParcel order exports no longer fail** on orders with a miscellaneous item.
-- **Templates.** The POS uses the same first enabled template as the admin list, active templates can be reordered from the keyboard, and gallery previews and receipt fonts load on 2.0 betas.
-- **The Checkout settings screen recommends HPOS** on stores still using legacy order storage.
-- **The settings screens keep their own styles**: wp-admin no longer restyles their headings, inputs and selects, and spacing is even across sections.
-- Developers: translations pinned to 2026.11.12; the payment method descriptor lists every capture mode a store allows (`wcpos_payment_method_capture_modes`); an error response from another plugin's REST listener keeps its status; the vendored SQLite worker matches web-bundle v2.0.9.
-
-= 2.0.0-beta.2 - 2026/11/03 =
-
-Beta 2 of the WCPOS 2.0 public beta. Install it by hand over beta 1; it is never offered as an update. **New testers: sync every till before upgrading from 1.11**, and read the 2.0.0-beta.1 entry below for what 2.0 changes.
-
-Since beta 1:
-
-- **Fonts.** A Fonts setting under Settings > Theme: match the theme, or pick one of five type sets.
-- **The Free upgrade strip is the topmost row on every page**, in the warning colour on every theme.
-- **Theme fixes.** The cards under a stacked product tile take the theme's tile radius, and the Market stall theme's primary colour is the coral from its design.
-- **The POS mark is redrawn**: a slate wall behind a crimson and off-white awning, with a shadow under the awning.
-- **The POS page's splash matches the app's splash**: the same light colour, and a light browser bar on phones instead of a black one.
-- Developers: translations pinned to 2026.11.4.
-
-= 2.0.0-beta.1 - 2026/11/02 =
-
-**Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales.** Rolling back to 1.11 also starts from an empty local database, so sync before you roll back too. The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
-
-WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers handled at the register itself, with a cash drawer that opens and closes with each shift. Every screen is redrawn, and the till keeps taking cash when the connection drops.
-
-- **A checkout that belongs to the POS.** Checkout opens in a tender pane beside the cart instead of sending every sale through WooCommerce's order-pay page.
-- **Split payments.** Take one order in several payments, for example part cash and part card.
-- **Card readers connected straight to the POS (Pro).** Stripe Terminal and SumUp readers pair with the till over Bluetooth; Tap to Pay on iPhone and Android with Stripe.
-- **Registers and cash drawer sessions.** Opening float, cash in and out, a count at close and the difference against what was expected; set up in POS > Settings > General > Register. Free includes one register; more registers need Pro.
-- **Closures are saved, numbered documents** you can reprint, recount and export as CSV from POS Settings.
-- **Cash sales keep going when the connection drops.**
-- **A new Reports screen** with a comparison period, a chart and cards for orders, products, taxes, refunds, payments, categories and cashiers.
-- **A customer-facing display (Pro).** Open the display page on any device's browser and pair it to a till with a code.
-- **A redesigned POS** with a Scale setting for compact, regular or spacious layouts.
-- **POS Only products are hidden from your online shop.** Marking a product POS Only sets its catalog visibility to Hidden; existing POS Only products are updated once at upgrade.
-- **The POS loads from cdn.wcpos.com, with jsDelivr as the fallback.** The bundle is signed and checked before it runs.
-- **The template gallery has Receipts, Reports, Closures, Display and Email tabs**, and receipt fonts download on demand.
-- **The cashier who opened a session cannot approve its own variance**, and the Access screen can restore the default capabilities.
-- **The experimental magnetic card reader is removed.** Card terminal extensions (Stripe, SumUp and the others) need WCPOS Pro from 2.0.
-- Developers: sync protocol 3; every plugin hook is now named `wcpos_*` (the `woocommerce_pos_*` names still fire as deprecated aliases); the 1.x compatibility shims are removed; translations pinned to 2026.11.2. Full notes: https://github.com/wcpos/roadmap/blob/main/docs/releases/notes/2.0.0-plugin.md
 
 = 1.11.9 - 2026/11/01 =
 
@@ -327,72 +438,9 @@ WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers 
 - **Order paid dates follow one rule** for all three payment-complete answers.
 - Developers: storage engine updated to RxDB 17.6.0; clearer error reports for failed pushes and checkout timeouts; Guest (customer id 0) never enters the sync journal; the order-meta receipt snapshot is no longer written and existing rows are cleaned up; a query-string token signs in REST requests only; the scheduled integrity digest rebuild retries on database contention; updated translations template.
 
-= 1.10.27 - 2026/10/12 =
-
-- **The pay window closes a sale on the stored Order Status of whichever gateway the cashier picks on the pay page, not only the gateway the sale opened with.** A bank transfer chosen inside the pay page on a store whose default gateway is something else no longer leaves the till waiting on a checkmark.
-- **A gateway that lands a POS order on its stored unpaid status never marks the order as paid.** 1.10.26 fixed this for bank transfer, cheque and cash on delivery; it now holds for every gateway, including third-party ones, and for a save made by another plugin between the status filter and the gateway's own write.
-- **POS Only products show in WooCommerce Analytics and WP-CLI again.** They stay hidden from the storefront only; a category report over POS Only products no longer reads "No data".
-- Developers: a new filter, `woocommerce_pos_hide_pos_only_products`, switches the storefront exclusion off for a context of your own.
-
-= 1.10.26 - 2026/10/12 =
-
-- **A sale through a gateway set to land on Pending payment or On hold now closes at the till.** The pay window no longer hangs on a checkmark with the order left in the cart; once the order reaches the status you stored for that gateway, the sale is done. Failed, cancelled and parked orders never close this way.
-- **A bank-transfer, cheque or cash-on-delivery sale set to land on an unpaid status is no longer marked as paid.** Such an order was stamped with a paid date and counted as revenue in Analytics while nothing had been paid; it now stays unpaid until payment is recorded.
-- **A server error quoted on the Logs screen keeps its comparison operators.** Only real HTML tags are stripped from the quoted text now.
-- Updates the bundled Sentry PHP SDK to 4.33.2.
-
-= 1.10.25 - 2026/10/08 =
-
-- **Saving or checking out a sale no longer fails with "Allowed memory size exhausted" on a store with a few thousand orders.** Since 1.9.0 every order save loaded the 200 most recent orders to guess which field holds VAT numbers; it now asks the database one small question instead.
-- **A damaged row in the till's own bookkeeping no longer blocks the local database.** The till discards the row on the spot instead of refusing the read on every launch; sales, products and customers are never discarded this way.
-
-= 1.10.24 - 2026/10/08 =
-
-- **Removing a coupon from a cart that had already been saved no longer makes Checkout fail.** Until now the next Checkout or Save was refused with "Coupon code is required" and the sale could not be completed until the coupon was put back or the cart rebuilt. This has been the case since coupons arrived in 1.9.0.
-
-= 1.10.23 - 2026/10/07 =
-
-- **Paying with a hosted gateway such as Dintero, Mollie, PayPal or Klarna no longer jumps the till to the receipt before the payment.** The order is left open and settles from the gateway's callback, as before 1.10.20; merchants on 1.10.20–1.10.22 with such a gateway should update.
-- **"Checkout failed" no longer appears for a sale the store did accept** on a slow connection. The till now waits up to 45 seconds for the store's answer.
-- **Sales waiting behind an expired login are now announced.** A banner in the header shows how many sales are waiting, with a Log in button.
-- **A delete at the till is only dropped from the queue once the store confirms it.**
-- **Opening an order's refunds while offline, or after the app was in the background, shows an offline card instead of "Couldn't load refunds"**.
-- **A corrupt entry in the diagnostic log no longer crashes the Logs screen on iPhone, iPad and Android.**
-- Developers: a failed POS session revoke now returns its intended HTTP status (400, 404 or 500) instead of 200. Details on GitHub.
-
-= 1.10.22 - 2026/10/06 =
-
-- **Cashiers can no longer change a customer's role.** Only the Customer role can be assigned from a cashier account; staff roles are reserved for store managers and administrators.
-
-= 1.10.21 - 2026/10/06 =
-
-- **Till totals now match your store to the cent** on stores that round tax at subtotal level.
-- **Adding a Bluetooth printer no longer crashes the app** on iPad and iPhone.
-- **Cashiers can only edit customer accounts**, never staff accounts.
-- **Changing a user's password signs them out of the POS on every device.**
-- **Cashiers can edit and delete their own sales again** when their role lacks "edit others' orders".
-- **Payment gateways with no customer-facing title now show a name** in POS settings and at the till.
-- **Fixes for stores using High-Performance Order Storage:** cash tendered and change, tax-ID suggestions and fiscal submission status now read correctly.
-- **Connecting the app to a store with no REST link on its front page works again.**
-- **A staging copy of your store no longer overwrites the live store in the app's site list.** A store moved to a new domain appears as a new site and needs connecting once more.
-- Developers: a faster product-ID listing on `wcpos/v2`, advertised as a capability on `GET /wcpos/v2/status`. Details on GitHub.
-
-= 1.10.20 - 2026/09/23 =
-
-- **Checkout no longer reports "Checkout failed" for a sale that reached the store.** If the till was busy sending another change, or an earlier attempt had failed, the checkout screen could give up waiting even though the order had been saved. It now hears back as soon as the order is saved, and pressing Checkout again after a failure tries straight away.
-- **Search repairs a damaged search index instead of failing at every launch.** When the saved search index could not be read, search stayed broken with "Failed to initialize search". The index is now discarded and rebuilt from the till's records.
-- **Gateways that take no payment at the till — quotes, invoices, purchase orders — now close the order with the Order Status you set for them.** The checkout used to succeed but leave the order at POS - Open. Only gateways with an Order Status saved in POS > Settings > Checkout are affected, and the order is not marked paid.
-- **Refunds that arrive from a payment gateway now respect your POS customer-email settings.** A refund recorded by a gateway's webhook could email the customer even with POS customer emails switched off; refunds made in wp-admin or at the till were not affected.
-
-Earlier releases (1.10.0 – 1.10.19 and the 1.9 series) are listed at https://github.com/wcpos/woocommerce-pos/releases
+Earlier releases (1.10 and older) are listed at https://github.com/wcpos/woocommerce-pos/releases
 
 == Upgrade Notice ==
 
 = 2.0.0 =
-2.0 is a major update: a new register and checkout. It needs WooCommerce 9.0 or later; on an older store the POS stops at a notice until WooCommerce is updated. Update when the store is quiet, and read "Upgrading to 2.0" at docs.wcpos.com first.
-
-= 1.10.1 =
-Fixes variations: readable names on products with three or more attributes, variation images on orders and receipts, and disabled variations no longer for sale at the till. Recommended for anyone selling variable products.
-
-= 1.10.0 =
-This is a major update. Please don't update while your store is busy -- pick a time when you have some free time to check everything over, and be ready to roll back if you run into a problem. Don't update lightly.
+Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales. WCPOS 2.0 needs WooCommerce 9.0 or later, and the app and the plugin must both be on 2.0.
