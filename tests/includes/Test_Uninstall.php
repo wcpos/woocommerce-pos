@@ -218,11 +218,45 @@ class Test_Uninstall extends WP_UnitTestCase {
 		add_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', array( 'token' ) );
 		update_site_option( 'woocommerce_pos_file_integrity', array( 'x' ) );
 
-		woocommerce_pos_uninstall_network();
-		wp_cache_flush();
+		try {
+			$this->pin_pro_installed( false );
+			woocommerce_pos_uninstall_network();
+			wp_cache_flush();
 
-		$this->assertSame( '', get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true ) );
-		$this->assertFalse( get_site_option( 'woocommerce_pos_file_integrity' ) );
+			$this->assertSame( '', get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true ) );
+			$this->assertFalse( get_site_option( 'woocommerce_pos_file_integrity' ) );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
+	 * Pro's bundled core signs cashiers in with the refresh tokens, so they stay
+	 * while Pro is installed; every other POS user meta key still goes.
+	 */
+	public function test_uninstall_network_pro_installed_keeps_refresh_tokens(): void {
+		// Arrange.
+		$user_id = $this->factory()->user->create();
+		add_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', array( 'token' ) );
+		add_user_meta( $user_id, '_woocommerce_pos_last_access', '2026-08-14' );
+		add_user_meta( $user_id, '_wcpos_logs_last_viewed', '2026-08-14' );
+		add_user_meta( $user_id, 'wcpos_last_store_id', 123 );
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_network();
+			wp_cache_flush();
+
+			// Assert.
+			$this->assertSame( array( 'token' ), get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true ), 'Refresh tokens stay while Pro is installed' );
+			foreach ( array( '_woocommerce_pos_last_access', '_wcpos_logs_last_viewed', 'wcpos_last_store_id' ) as $key ) {
+				$this->assertSame( '', get_user_meta( $user_id, $key, true ), "{$key} should still be deleted" );
+			}
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
 	}
 
 	/**
@@ -636,19 +670,62 @@ PHP;
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}wcpos_sync_change_log ( id BIGINT )" );
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}wcpos_sync_order_index ( id BIGINT )" );
 
-		// Act.
-		$this->run_uninstall( false );
+		try {
+			$this->pin_pro_installed( false );
 
-		// Assert.
-		$this->assertCount( 3, Health::missing_tables(), 'All three sync tables should be dropped' );
-		$this->assertFalse(
-			Health::table_exists( $wpdb->prefix . 'wcpos_sync_change_log' ),
-			'Legacy change-log table should be dropped'
+			// Act.
+			$this->run_uninstall( false );
+
+			// Assert.
+			$this->assertCount( 3, Health::missing_tables(), 'All three sync tables should be dropped' );
+			$this->assertFalse(
+				Health::table_exists( $wpdb->prefix . 'wcpos_sync_change_log' ),
+				'Legacy change-log table should be dropped'
+			);
+			$this->assertFalse(
+				Health::table_exists( $wpdb->prefix . 'wcpos_sync_order_index' ),
+				'Legacy order-index table should be dropped'
+			);
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
+	 * Pro's bundled core syncs from the same tables, prints from the same queue
+	 * and signs tokens with the same secrets, so a free uninstall keeps all three
+	 * while Pro is installed.
+	 */
+	public function test_uninstall_site_pro_installed_keeps_sync_tables_print_jobs_and_secrets(): void {
+		// Arrange.
+		$this->assertTrue( Health::is_healthy(), 'Precondition: sync tables installed' );
+		update_option( 'woocommerce_pos_secret_key', 'abc123' );
+		update_option( 'woocommerce_pos_refresh_secret_key', 'def456' );
+		$job_id = wp_insert_post(
+			array(
+				'post_type'   => 'wcpos_print_job',
+				'post_status' => 'publish',
+				'post_title'  => 'Job',
+			)
 		);
-		$this->assertFalse(
-			Health::table_exists( $wpdb->prefix . 'wcpos_sync_order_index' ),
-			'Legacy order-index table should be dropped'
-		);
+		add_post_meta( $job_id, '_wcpos_print_job_state', 'queued' );
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_site( false );
+			wp_cache_flush();
+
+			// Assert.
+			$this->assertSame( array(), Health::missing_tables(), 'Sync tables stay while Pro is installed' );
+			$this->assertNotNull( get_post( $job_id ), 'Queued print jobs stay while Pro is installed' );
+			$this->assertSame( 'queued', get_post_meta( $job_id, '_wcpos_print_job_state', true ) );
+			$this->assertSame( 'abc123', get_option( 'woocommerce_pos_secret_key' ), 'JWT secret stays while Pro is installed' );
+			$this->assertSame( 'def456', get_option( 'woocommerce_pos_refresh_secret_key' ), 'Refresh secret stays while Pro is installed' );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
 	}
 
 	/**
@@ -676,6 +753,81 @@ PHP;
 	}
 
 	/**
+	 * The kept sync tables keep their generation id while Pro is installed;
+	 * a new epoch would make every till resync from zero anyway.
+	 */
+	public function test_uninstall_site_pro_installed_keeps_sync_journal_epoch(): void {
+		// Arrange.
+		update_option( \WCPOS\WooCommercePOS\Sync\Sync_Journal::EPOCH_OPTION, 'epoch-1' );
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_site( false );
+			wp_cache_flush();
+
+			// Assert.
+			$this->assertSame( 'epoch-1', get_option( \WCPOS\WooCommercePOS\Sync\Sync_Journal::EPOCH_OPTION ) );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
+	 * The kept journal keeps its prune watermarks while Pro is installed, so a
+	 * till reconnecting with an older cursor is still told history was pruned.
+	 */
+	public function test_uninstall_site_pro_installed_keeps_sync_prune_watermarks(): void {
+		// Arrange.
+		$option = \WCPOS\WooCommercePOS\Sync\Sync_Journal::prune_watermark_option( 'products' );
+		update_option( $option, 17 );
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_site( false );
+			wp_cache_flush();
+
+			// Assert.
+			$this->assertSame( 17, (int) get_option( $option ) );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
+	 * Kept print jobs are only submitted from their one-time cron events, so
+	 * those stay while Pro is installed; every other plugin hook is cleared.
+	 */
+	public function test_uninstall_site_pro_installed_keeps_cloud_print_submit_events_only(): void {
+		// Arrange.
+		foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
+			wp_schedule_single_event( time() + HOUR_IN_SECONDS, $hook, array( 42 ) );
+		}
+
+		try {
+			$this->pin_pro_installed( true );
+
+			// Act.
+			woocommerce_pos_uninstall_site( false );
+
+			// Assert.
+			foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
+				if ( 'wcpos_cloud_print_submit' === $hook ) {
+					$this->assertNotFalse( wp_next_scheduled( $hook, array( 42 ) ), 'Print submit events stay while Pro is installed' );
+				} else {
+					$this->assertFalse( wp_next_scheduled( $hook, array( 42 ) ), "Scheduled event for {$hook} should be cleared" );
+				}
+			}
+		} finally {
+			wp_unschedule_hook( 'wcpos_cloud_print_submit' );
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
+	}
+
+	/**
 	 * Default uninstall clears every scheduled event for every plugin hook.
 	 */
 	public function test_uninstall_default_clears_cron_events(): void {
@@ -685,7 +837,12 @@ PHP;
 		}
 
 		// Act.
-		$this->run_uninstall( false );
+		try {
+			$this->pin_pro_installed( false );
+			$this->run_uninstall( false );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
 
 		// Assert.
 		foreach ( woocommerce_pos_uninstall_cron_hooks() as $hook ) {
@@ -708,6 +865,9 @@ PHP;
 		update_option( 'woocommerce_pos_db_version', '1.10.0' );
 		update_option( 'wcpos_sync_schema_version', '3' );
 		update_option( 'woocommerce_pos_secret_key', 'abc123' );
+		update_option( 'woocommerce_pos_refresh_secret_key', 'def456' );
+		update_option( 'woocommerce_pos_sync_journal_epoch', 'epoch-1' );
+		update_option( 'wcpos_change_log_prune_watermark_products', 17 );
 		set_transient( 'wcpos_landing_profile', array( 'foo' => 'bar' ), HOUR_IN_SECONDS );
 
 		// Arrange: user-authored configuration, including a future settings
@@ -718,7 +878,12 @@ PHP;
 		update_option( 'wcpos_receipt_sequence_counter', 1234 );
 
 		// Act.
-		$this->run_uninstall( false );
+		try {
+			$this->pin_pro_installed( false );
+			$this->run_uninstall( false );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
 
 		// Assert: operational state gone.
 		$this->assertFalse( get_option( 'woocommerce_pos_uuid' ), 'site UUID should be deleted' );
@@ -726,6 +891,9 @@ PHP;
 		$this->assertFalse( get_option( 'woocommerce_pos_db_version' ), 'db_version should be deleted' );
 		$this->assertFalse( get_option( 'wcpos_sync_schema_version' ), 'sync schema latch should be deleted' );
 		$this->assertFalse( get_option( 'woocommerce_pos_secret_key' ), 'JWT secret should be deleted' );
+		$this->assertFalse( get_option( 'woocommerce_pos_refresh_secret_key' ), 'Refresh secret should be deleted' );
+		$this->assertFalse( get_option( 'woocommerce_pos_sync_journal_epoch' ), 'Sync journal epoch should be deleted' );
+		$this->assertFalse( get_option( 'wcpos_change_log_prune_watermark_products' ), 'Sync prune watermarks should be deleted' );
 		$this->assertFalse( get_transient( 'wcpos_landing_profile' ), 'wcpos transients should be deleted' );
 
 		// Assert: user-authored configuration preserved.
@@ -1004,7 +1172,12 @@ PHP;
 		);
 
 		// Act.
-		$this->run_uninstall( false );
+		try {
+			$this->pin_pro_installed( false );
+			$this->run_uninstall( false );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
 
 		// Assert.
 		$this->assertNull( get_post( $job_id ), 'Print-job posts should be deleted' );
@@ -1029,7 +1202,12 @@ PHP;
 		add_user_meta( $user_id, 'wcpos_last_store_id', 123 );
 
 		// Act.
-		$this->run_uninstall( false );
+		try {
+			$this->pin_pro_installed( false );
+			$this->run_uninstall( false );
+		} finally {
+			remove_all_filters( 'wcpos_uninstall_pro_installed' );
+		}
 
 		// Assert.
 		foreach ( array( '_woocommerce_pos_refresh_tokens', '_woocommerce_pos_last_access', '_woocommerce_pos_uuid', '_wcpos_logs_last_viewed', '_wcpos_consent_callout_hidden_until', '_wcpos_tax_ids', 'wcpos_last_store_id' ) as $key ) {
