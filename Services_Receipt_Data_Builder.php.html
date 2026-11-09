@@ -46,6 +46,7 @@ use WCPOS\WooCommercePOS\Abstracts\Store;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WC_Abstract_Order;
 
 /**
@@ -1141,7 +1142,9 @@ class Receipt_Data_Builder {
 			) : array();
 		}
 		$data['payments'] = array();
+		$allocated = 0;
 		foreach ( $allocations as $allocation ) {
+			$allocated += Money::minor( $allocation['amount'] );
 			$method = (string) ( $allocation['method_id'] ?? '' );
 			$descriptor = Descriptor_Builder::instance()->get( $method );
 			$data['payments'][] = array(
@@ -1149,6 +1152,19 @@ class Receipt_Data_Builder {
 				'method_id' => $method,
 				'method_title' => $descriptor['title'] ?? $method,
 				'amount' => (float) $allocation['amount'],
+				'transaction_id' => '',
+				'tendered' => 0.0,
+				'change' => 0.0,
+			);
+		}
+		$remainder = $allocations ? max( 0, Money::minor( $refund->get_amount() ) - $allocated ) : 0;
+		if ( $remainder > 0 ) {
+			$descriptor = Descriptor_Builder::instance()->get( 'pos_cash' );
+			$data['payments'][] = array(
+				'payment_id' => null,
+				'method_id' => 'pos_cash',
+				'method_title' => $descriptor['title'] ?? 'pos_cash',
+				'amount' => (float) Money::format( $remainder ),
 				'transaction_id' => '',
 				'tendered' => 0.0,
 				'change' => 0.0,
@@ -1183,7 +1199,8 @@ class Receipt_Data_Builder {
 					'extra_fields' => array(
 						'refund_id' => $refund->get_id(),
 						'allocations' => $allocations,
-						'allocation' => $allocations ? 'allocated' : 'unallocated',
+						'remainder' => Money::format( $remainder ),
+						'allocation' => $remainder > 0 ? 'partial' : ( $allocations ? 'allocated' : 'unallocated' ),
 					),
 				)
 			)
