@@ -119,6 +119,25 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'pos_cash', $data['order']['payment_method'] );
 	}
 
+	/** PAYMENT999: a gateway list cached before the WCPOS filter still records card. */
+	public function test_record_card_payment_singleton_built_before_filter_returns_captured(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_card', '92.95' );
+		// Build the list early only after the order exists: creating the order reads the gateway settings, which rebuild the list and would hide the bug.
+		$this->build_gateway_singleton_before_wcpos_filter();
+
+		// Act.
+		$response = $this->record( $order, $payment );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertNotSame( 'wcpos_payment_method_not_found', $data['code'] ?? null );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'captured', $data['payment']['status'] );
+		$this->assertSame( 'pos_card', $data['order']['payment_method'] );
+	}
+
 	/** Forget WooCommerce's gateway singleton so the next accessor call rebuilds it. */
 	private function reset_gateway_singleton(): void {
 		$property = new ReflectionProperty( WC_Payment_Gateways::class, '_instance' );
