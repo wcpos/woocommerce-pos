@@ -15,11 +15,45 @@ namespace WCPOS\WooCommercePOS;
  */
 class Gateways {
 	/**
+	 * The gateway registry this class has already rebuilt, compared by identity.
+	 *
+	 * @var object|null
+	 */
+	private static $rebuilt_registry = null;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_filter( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
+		self::register_pos_gateways();
 		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways' ), 99 );
+	}
+
+	/** Add the POS gateways to WooCommerce's gateway list. Idempotent; called from Activator's constructor, which both this plugin's file and Pro's run at plugin load, and again from this class's constructor. */
+	public static function register_pos_gateways(): void {
+		if ( false === has_filter( 'woocommerce_payment_gateways', array( self::class, 'payment_gateways' ) ) ) {
+			add_filter( 'woocommerce_payment_gateways', array( self::class, 'payment_gateways' ) );
+		}
+	}
+
+	/**
+	 * WooCommerce's registered gateways keyed by id, rebuilt once when the cached list predates the POS filter.
+	 *
+	 * @return array
+	 */
+	public static function registered(): array {
+		$registry = WC()->payment_gateways();
+		$gateways = $registry->payment_gateways();
+
+		if ( ( ! isset( $gateways['pos_cash'] ) || ! isset( $gateways['pos_card'] ) )
+			&& ! self::should_suppress_pos_gateways( is_admin(), $GLOBALS['plugin_page'] ?? null )
+			&& self::$rebuilt_registry !== $registry ) {
+			self::$rebuilt_registry = $registry;
+			$registry->init();
+			$gateways = $registry->payment_gateways();
+		}
+
+		return $gateways;
 	}
 
 	/**
@@ -31,7 +65,7 @@ class Gateways {
 	 *
 	 * @return array
 	 */
-	public function payment_gateways( array $gateways ) {
+	public static function payment_gateways( array $gateways ): array {
 		global $plugin_page;
 
 		// Early exit for WooCommerce settings, ie: don't show POS gateways.
