@@ -43,6 +43,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -131,7 +132,7 @@ class Receipt_Data_Builder {
 			$row['breakdowns'][ $section ] = array_filter( is_array( $values ) ? $values : array(), 'is_array' );
 			$row[ 'has_' . $section ] = ! empty( $row['breakdowns'][ $section ] );
 		}
-		$gateways = WC()->payment_gateways()->payment_gateways();
+		$gateways = Gateways::registered();
 		foreach ( $row['breakdowns']['payment_methods'] as $key => &amp;$method ) {
 			$method['method'] = $method['method'] ?? (string) $key;
 			if ( empty( $method['name'] ) ) {
@@ -1829,7 +1830,7 @@ class Receipt_Data_Builder {
 				// WC_Payment_Gateways::instance() lazily) instead of the
 				// WC()->payment_gateways property — the property can legitimately
 				// be null mid-bootstrap or in some test environments.
-				$gateways = WC()->payment_gateways()->payment_gateways();
+				$gateways = Gateways::registered();
 				if ( isset( $gateways[ $pos_gateway_id ] ) &amp;&amp; method_exists( $gateways[ $pos_gateway_id ], 'get_title' ) ) {
 					$pos_gateway_title = (string) $gateways[ $pos_gateway_id ]->get_title();
 				}
