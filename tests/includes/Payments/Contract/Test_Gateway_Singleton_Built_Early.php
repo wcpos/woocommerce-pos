@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use ReflectionProperty;
 use WC_Payment_Gateways;
+use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -140,28 +141,81 @@ class Test_Gateway_Singleton_Built_Early extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_pos_gateways_filter_registered_once_at_plugin_load(): void {
-		global $wp_filter;
-
 		// Assert: the plugin file registered the static callback at the default priority.
 		$this->assertSame( 10, has_filter( 'woocommerce_payment_gateways', array( Gateways::class, 'payment_gateways' ) ) );
 
 		// Act: building the service must not add a second callback.
 		$instance = new Gateways();
 		try {
-			$count = 0;
-			foreach ( $wp_filter['woocommerce_payment_gateways']->callbacks as $callbacks ) {
-				foreach ( $callbacks as $callback ) {
-					$function = $callback['function'];
-					if ( \is_array( $function ) && ( Gateways::class === $function[0] || $function[0] instanceof Gateways ) ) {
-						++$count;
-					}
-				}
-			}
-
 			// Assert.
-			$this->assertSame( 1, $count );
+			$this->assertSame( 1, $this->count_pos_gateways_callbacks() );
 		} finally {
 			remove_filter( 'woocommerce_available_payment_gateways', array( $instance, 'available_payment_gateways' ), 99 );
 		}
+	}
+
+	public function test_activator_registers_pos_gateways_filter_for_the_pro_load_path(): void {
+		// Arrange: Pro's bootstrap never loads woocommerce-pos.php; it only constructs Activator.
+		$callback = array( Gateways::class, 'payment_gateways' );
+		$priority = has_filter( 'woocommerce_payment_gateways', $callback );
+		remove_filter( 'woocommerce_payment_gateways', $callback, $priority );
+		$activator = null;
+
+		try {
+			// Act.
+			$activator = new Activator();
+
+			// Assert.
+			$this->assertNotFalse( has_filter( 'woocommerce_payment_gateways', $callback ) );
+			$this->assertSame( 1, $this->count_pos_gateways_callbacks() );
+		} finally {
+			if ( $activator ) {
+				remove_action( 'activate_' . plugin_basename( \WCPOS\WooCommercePOS\PLUGIN_FILE ), array( $activator, 'activate' ) );
+				remove_action( 'wpmu_new_blog', array( $activator, 'activate_new_site' ) );
+				remove_action( 'plugins_loaded', array( $activator, 'init' ) );
+			}
+			if ( false === has_filter( 'woocommerce_payment_gateways', $callback ) ) {
+				add_filter( 'woocommerce_payment_gateways', $callback, $priority );
+			}
+		}
+	}
+
+	public function test_gateways_constructor_registers_pos_gateways_filter_once(): void {
+		$callback  = array( Gateways::class, 'payment_gateways' );
+		$priority  = has_filter( 'woocommerce_payment_gateways', $callback );
+		$instances = array();
+
+		try {
+			// Filter present: the constructor leaves it registered once.
+			$instances[] = new Gateways();
+			$this->assertSame( 1, $this->count_pos_gateways_callbacks() );
+
+			// Filter removed: the constructor registers it once.
+			remove_filter( 'woocommerce_payment_gateways', $callback, $priority );
+			$instances[] = new Gateways();
+			$this->assertSame( 1, $this->count_pos_gateways_callbacks() );
+		} finally {
+			foreach ( $instances as $instance ) {
+				remove_filter( 'woocommerce_available_payment_gateways', array( $instance, 'available_payment_gateways' ), 99 );
+			}
+			if ( false === has_filter( 'woocommerce_payment_gateways', $callback ) ) {
+				add_filter( 'woocommerce_payment_gateways', $callback, $priority );
+			}
+		}
+	}
+
+	/** Count the Gateways callbacks on `woocommerce_payment_gateways`, by class name or instance. */
+	private function count_pos_gateways_callbacks(): int {
+		global $wp_filter;
+		$count = 0;
+		foreach ( $wp_filter['woocommerce_payment_gateways']->callbacks ?? array() as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				$function = $callback['function'];
+				if ( \is_array( $function ) && ( Gateways::class === $function[0] || $function[0] instanceof Gateways ) ) {
+					++$count;
+				}
+			}
+		}
+		return $count;
 	}
 }
