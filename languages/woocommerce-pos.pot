@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 2.0.0-beta.3\n"
+"Project-Id-Version: WCPOS 2.0.1\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-09T09:34:58+00:00\n"
+"POT-Creation-Date: 2026-11-10T18:44:23+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -35,24 +35,24 @@ msgid "http://wcpos.com"
 msgstr ""
 
 #. translators: 1: Minimum PHP version, 2: Update URL.
-#: includes/Activator.php:1049
+#: includes/Activator.php:1051
 #, php-format
 msgid "<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
 msgstr ""
 
 #. translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
-#: includes/Activator.php:1073
+#: includes/Activator.php:1075
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:1095
+#: includes/Activator.php:1097
 msgid "<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly"
 msgstr ""
 
 #. translators: Plugin activation notice label.
-#: includes/Activator.php:1096
+#: includes/Activator.php:1098
 msgid "Enable permalinks"
 msgstr ""
 
@@ -60,7 +60,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Receipt label for the POS cashier/operator who served the customer.
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Activator.php:1347
+#: includes/Activator.php:1349
 #: includes/Services/Receipt_Data_Schema.php:327
 #: includes/Services/Receipt_I18n_Labels.php:113
 #: includes/Services/Reports_Registry.php:188
@@ -70,7 +70,7 @@ msgid "Cashier"
 msgstr ""
 
 #. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-#: includes/Activator.php:1574
+#: includes/Activator.php:1576
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -480,31 +480,31 @@ msgstr ""
 msgid "Store not found or not accessible by this cashier."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:103
+#: includes/API/V1/Checkout_Controller.php:104
 msgid "Sorry, you cannot view checkout state."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:114
+#: includes/API/V1/Checkout_Controller.php:115
 msgid "Sorry, you cannot process checkout."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:142
+#: includes/API/V1/Checkout_Controller.php:143
 msgid "Missing X-WCPOS-Idempotency-Key header."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:153
-#: includes/API/V1/Gateway_Bootstrap_Controller.php:98
+#: includes/API/V1/Checkout_Controller.php:154
+#: includes/API/V1/Gateway_Bootstrap_Controller.php:99
 msgid "Payment gateway not found."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:161
+#: includes/API/V1/Checkout_Controller.php:162
 msgid "Payment gateway is not available for POS checkout."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:282
+#: includes/API/V1/Checkout_Controller.php:283
 #: includes/API/V1/Receipts_Controller.php:283
 #: includes/API/V2/Payments_Controller.php:433
 #: includes/Payments/Contract/Settlement.php:92
@@ -567,7 +567,7 @@ msgstr ""
 msgid "You do not have permission to view extensions."
 msgstr ""
 
-#: includes/API/V1/Gateway_Bootstrap_Controller.php:82
+#: includes/API/V1/Gateway_Bootstrap_Controller.php:83
 msgid "Sorry, you cannot bootstrap payment gateways."
 msgstr ""
 
@@ -1893,7 +1893,7 @@ msgstr ""
 #. translators: Customer name shown in an order note for a guest checkout.
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Services/Order_Notes.php:42
-#: includes/Services/Receipt_Data_Builder.php:630
+#: includes/Services/Receipt_Data_Builder.php:631
 #: includes/Templates/Payment.php:413
 #: tests/includes/Templates/Test_Receipt_Renderers.php:267
 msgid "Guest"
@@ -1903,8 +1903,8 @@ msgstr ""
 #. translators: %d: Historical POS store ID that no longer exists.
 #. translators: %d: store ID.
 #: includes/Services/Order_Notes.php:61
-#: includes/Services/Receipt_Data_Builder.php:610
-#: includes/Services/Receipt_Data_Builder.php:1038
+#: includes/Services/Receipt_Data_Builder.php:611
+#: includes/Services/Receipt_Data_Builder.php:1039
 #: tests/includes/Services/Test_Receipt_Data_Builder.php:2004
 #, php-format
 msgid "Store #%d"
@@ -2117,19 +2117,19 @@ msgid "Quick discount code \"%s\" belongs to a store coupon. Use another code."
 msgstr ""
 
 #. translators: %s: closed session number.
-#: includes/Services/Receipt_Data_Builder.php:304
+#: includes/Services/Receipt_Data_Builder.php:305
 #, php-format
 msgid "Session %s"
 msgstr ""
 
 #. translators: Receipt label for discount amount or discount line.
-#: includes/Services/Receipt_Data_Builder.php:771
+#: includes/Services/Receipt_Data_Builder.php:772
 #: includes/Services/Receipt_I18n_Labels.php:209
 msgid "Discount"
 msgstr ""
 
 #. translators: %s: Discount percentage.
-#: includes/Services/Receipt_Data_Builder.php:773
+#: includes/Services/Receipt_Data_Builder.php:774
 #, php-format
 msgid "Discount (%s%%)"
 msgstr ""
