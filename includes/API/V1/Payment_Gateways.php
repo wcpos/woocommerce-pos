@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\API\V1;
 
 use WC_Payment_Gateway;
 use WC_REST_Controller;
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -99,8 +100,7 @@ class Payment_Gateways extends WC_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_items( $request ) {
-		WC()->payment_gateways();
-		$gateways = WC()->payment_gateways->payment_gateways();
+		$gateways = Gateways::registered();
 		$data     = array();
 
 		foreach ( $gateways as $gateway ) {

@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\API\V1;
 
 use WC_Payment_Gateway;
 use WC_REST_Controller;
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_Error;
 use WP_REST_Request;
@@ -132,8 +133,7 @@ class Gateway_Bootstrap_Controller extends WC_REST_Controller {
 	 * @param string $gateway_id Gateway ID.
 	 */
 	private function get_gateway( string $gateway_id ): ?WC_Payment_Gateway {
-		WC()->payment_gateways();
-		$gateways = WC()->payment_gateways->payment_gateways();
+		$gateways = Gateways::registered();
 
 		return $gateways[ $gateway_id ] ?? null;
 	}

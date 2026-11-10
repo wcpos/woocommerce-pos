@@ -493,15 +493,8 @@ class Test_Gateways extends WC_Unit_Test_Case {
 	 * The hook callback appends the POS gateways outside the WooCommerce settings screen.
 	 */
 	public function test_payment_gateways_front_end_request_appends_pos_gateways(): void {
-		// Arrange. The constructor registers hooks (Pro subclasses rely on that),
-		// so unregister them again to keep this instance from leaking into the
-		// rest of the suite.
-		$instance = new Gateways();
-		remove_filter( 'woocommerce_payment_gateways', array( $instance, 'payment_gateways' ) );
-		remove_filter( 'woocommerce_available_payment_gateways', array( $instance, 'available_payment_gateways' ), 99 );
-
-		// Act.
-		$result = $instance->payment_gateways( array( 'WC_Gateway_BACS' ) );
+		// Act. The callback is static and registered when the plugin file loads.
+		$result = Gateways::payment_gateways( array( 'WC_Gateway_BACS' ) );
 
 		// Assert.
 		$this->assertEquals(
@@ -554,7 +547,6 @@ class Test_Gateways extends WC_Unit_Test_Case {
 		} finally {
 			$_SERVER                    = $original_server;
 			$registry->payment_gateways = $original_gateways;
-			remove_filter( 'woocommerce_payment_gateways', array( $instance, 'payment_gateways' ) );
 			remove_filter( 'woocommerce_available_payment_gateways', array( $instance, 'available_payment_gateways' ), 99 );
 		}
 	}
@@ -599,7 +591,6 @@ class Test_Gateways extends WC_Unit_Test_Case {
 		} finally {
 			$_SERVER                    = $original_server;
 			$registry->payment_gateways = $original_gateways;
-			remove_filter( 'woocommerce_payment_gateways', array( $instance, 'payment_gateways' ) );
 			remove_filter( 'woocommerce_available_payment_gateways', array( $instance, 'available_payment_gateways' ), 99 );
 			Payment_Gateways_Section::register_free_tier_rule();
 		}

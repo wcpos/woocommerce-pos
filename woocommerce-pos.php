@@ -175,6 +175,9 @@ new Activator();
 // Deactivate plugin.
 new Deactivator();
 
+// Before any plugin or theme can build WooCommerce's gateway list (PAYMENT999).
+Gateways::register_pos_gateways();
+
 // Declare WooCommerce feature compatibility.
 add_action(
 	'before_woocommerce_init',
