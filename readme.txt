@@ -4,7 +4,7 @@ Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.0
+Stable tag: 2.0.1
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -296,6 +296,10 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 8. Offline: the Offline badge beside the store name while the till keeps working.
 
 == Changelog ==
+
+= 2.0.1 - 2026/11/10 =
+
+- **POS Cash and Card take payments again on stores where another plugin loads WooCommerce's payment gateways early (PAYMENT999 "Payment method not found").**
 
 = 2.0.0 - 2026/11/09 =
 
