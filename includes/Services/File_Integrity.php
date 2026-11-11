@@ -123,8 +123,26 @@ class File_Integrity {
 	 * @return array The result.
 	 */
 	public static function run( string $context = 'daily', ?array $target = null ): array {
+		$seam   = $target;
+		$target = $target ?? self::target();
+
+		// The files on disk are another version than the code in memory: an update
+		// landed during this request (auto-updates run inside cron) or opcache is
+		// serving old code. Comparing would flag every file the update changed;
+		// the post-update check runs in a fresh process.
+		$on_disk = self::disk_version( $target );
+		if ( null !== $on_disk && $on_disk !== (string) $target['version'] ) {
+			return array(
+				'status'   => 'unknown',
+				'missing'  => array(),
+				'modified' => array(),
+				'version'  => (string) $target['version'],
+				'checked'  => time(),
+			);
+		}
+
 		$previous = self::stored( $target );
-		if ( 'daily' === $context && null === $target && null !== $previous && ( $previous['checked'] ?? 0 ) > time() - self::REUSE_WITHIN ) {
+		if ( 'daily' === $context && null === $seam && null !== $previous && ( $previous['checked'] ?? 0 ) > time() - self::REUSE_WITHIN ) {
 			return $previous;
 		}
 		$result = self::check( $target );
@@ -321,7 +339,7 @@ class File_Integrity {
 	 * The installed plugin: Pro's root when Pro is running (its manifest covers the
 	 * bundled copy), else this plugin, whose checksums live on WordPress.org.
 	 *
-	 * @return array{root:string, version:string, slug:string|null}
+	 * @return array{root:string, version:string, slug:string|null, file:string|null}
 	 */
 	private static function target(): array {
 		if ( \defined( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ) && \defined( 'WCPOS\WooCommercePOSPro\VERSION' ) ) {
@@ -329,6 +347,7 @@ class File_Integrity {
 				'root'    => (string) \constant( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ),
 				'version' => (string) \constant( 'WCPOS\WooCommercePOSPro\VERSION' ),
 				'slug'    => null,
+				'file'    => \defined( 'WCPOS\WooCommercePOSPro\PLUGIN_FILE' ) ? \constant( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ) . basename( (string) \constant( 'WCPOS\WooCommercePOSPro\PLUGIN_FILE' ) ) : null,
 			);
 		}
 
@@ -336,7 +355,24 @@ class File_Integrity {
 			'root'    => PLUGIN_PATH,
 			'version' => VERSION,
 			'slug'    => PLUGIN_NAME,
+			'file'    => PLUGIN_PATH . basename( PLUGIN_FILE ),
 		);
+	}
+
+	/**
+	 * The Version header of the plugin's main file as it is on disk now.
+	 *
+	 * @param array $target Root, version, slug and, optionally, file.
+	 *
+	 * @return string|null The version, or null when the file is unknown, unreadable or has no header.
+	 */
+	private static function disk_version( array $target ): ?string {
+		if ( empty( $target['file'] ) || ! is_readable( $target['file'] ) ) {
+			return null;
+		}
+		$version = (string) get_file_data( $target['file'], array( 'Version' => 'Version' ) )['Version'];
+
+		return '' === $version ? null : $version;
 	}
 
 	/**
