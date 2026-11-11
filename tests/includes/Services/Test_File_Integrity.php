@@ -440,6 +440,29 @@ class Test_File_Integrity extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A daily run for the running install reuses a result stored within REUSE_WITHIN.
+	 */
+	public function test_daily_run_reuses_a_fresh_stored_result_for_the_running_install(): void {
+		// Arrange.
+		$this->stub_http( 404, array() );
+		$stored = array(
+			'status'   => 'ok',
+			'missing'  => array(),
+			'modified' => array(),
+			'version'  => \WCPOS\WooCommercePOS\VERSION,
+			'checked'  => time() - HOUR_IN_SECONDS,
+		);
+		File_Integrity::store( $stored );
+
+		// Act.
+		$result = File_Integrity::run( 'daily' );
+
+		// Assert.
+		$this->assertSame( $stored, $result );
+		$this->assertSame( array(), $this->requests );
+	}
+
+	/**
 	 * Manifest for the fake root.
 	 *
 	 * @return array
