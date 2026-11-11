@@ -139,6 +139,14 @@ class Init {
 			),
 			array(
 				'hook'     => null,
+				'callback' => array( Services\Settings\Visibility_Section::class, 'register_read_cache_hooks' ),
+				'priority' => 10,
+				'args'     => 0,
+				'reason'   => 'Priority 0 drops the visibility read memo before the observer and Catalog_Visibility read the option at 10.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => null,
 				'callback' => static function (): void {
 					( new Catalog_Visibility() )->register_hooks();
 				},
