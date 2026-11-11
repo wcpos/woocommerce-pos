@@ -233,3 +233,27 @@ Report:
 - BEHAVIOUR CHANGES
 
 If the spec is ambiguous or wrong, stop and ask under QUESTIONS.
+
+## Addendum (reviewer, after the first commit): one more test
+
+Reviewer mutation M4 passes the whole suite. M4 changes
+`null === $seam` to `null === $target` in `run()`. Nothing tests the daily
+REUSE_WITHIN shortcut, and this change edits that line. Add one test to the
+same test file. Do not change `File_Integrity.php`.
+
+4. `test_daily_run_reuses_a_fresh_stored_result_for_the_running_install`
+   - Arrange:
+     - `stub_http( 404, array() )`, so a real check, if one ran, could only
+       give `unknown`.
+     - With no target argument, store this result for the running install:
+       `array( 'status' => 'ok', 'missing' => array(), 'modified' => array(),
+       'version' => \WCPOS\WooCommercePOS\VERSION, 'checked' => time() - HOUR_IN_SECONDS )`.
+   - Act: `File_Integrity::run( 'daily' )`.
+   - Assert: `assertSame( $stored, $result )` and `assertSame( array(), $this->requests )`.
+   - The test must pass on the current commit and fail under M4. Apply M4
+     yourself, run the file, record the failing output, and restore the file
+     before committing.
+
+Do not amend the first commit. Add a second commit with the message
+`test(integrity): the daily run reuses a fresh stored result` and the same
+two trailer lines. The test-line budget grows by 30.
