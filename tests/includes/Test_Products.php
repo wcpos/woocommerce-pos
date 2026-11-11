@@ -293,6 +293,199 @@ class Test_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The post__not_in clause WordPress writes already holds the POS Only ids; posts_where must not repeat them.
+	 */
+	public function test_pos_only_products_storefront_query_sql_lists_excluded_ids_once(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		$sql = '';
+		add_filter(
+			'posts_request',
+			function ( $request ) use ( &$sql ) {
+				$sql = $request;
+
+				return $request;
+			}
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'product',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 1, substr_count( $sql, '.ID NOT IN (' ) );
+		$this->assertSame( array( $visible->get_id() ), $query->posts );
+	}
+
+	/**
+	 * A caller's own post__not_in is merged with the POS Only ids into one clause.
+	 */
+	public function test_pos_only_products_caller_post_not_in_sql_lists_excluded_ids_once(): void {
+		// Arrange.
+		$visible_a = ProductHelper::create_simple_product();
+		$visible_b = ProductHelper::create_simple_product();
+		$hidden    = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+		$sql = '';
+		add_filter(
+			'posts_request',
+			function ( $request ) use ( &$sql ) {
+				$sql = $request;
+
+				return $request;
+			}
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'product',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+				'post__not_in'   => array( $visible_b->get_id() ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 1, substr_count( $sql, '.ID NOT IN (' ) );
+		$this->assertSame( array( $visible_a->get_id() ), $query->posts );
+	}
+
+	/**
+	 * A post__in set by a later pre_get_posts callback skips post__not_in; posts_where must still exclude.
+	 */
+	public function test_pos_only_products_post_in_set_after_exclusion_hook_still_excludes(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+		add_action(
+			'pre_get_posts',
+			function ( $query ) use ( $visible, $hidden ) {
+				if ( 'product' === $query->get( 'post_type' ) ) {
+					$query->set( 'post__in', array( $visible->get_id(), $hidden->get_id() ) );
+				}
+			},
+			20
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type' => 'product',
+				'fields'    => 'ids',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array( $visible->get_id() ), $query->posts );
+	}
+
+	/**
+	 * A post__not_in emptied or replaced by a later pre_get_posts callback must not leak POS Only ids.
+	 *
+	 * @dataProvider post_not_in_replacements
+	 *
+	 * @param bool $replace Whether the callback replaces post__not_in with another id rather than emptying it.
+	 */
+	public function test_pos_only_products_post_not_in_replaced_after_exclusion_hook_still_excludes( bool $replace ): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$other   = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $hidden->get_id() ) );
+		add_action(
+			'pre_get_posts',
+			function ( $query ) use ( $replace, $other ) {
+				if ( 'product' === $query->get( 'post_type' ) ) {
+					$query->set( 'post__not_in', $replace ? array( $other->get_id() ) : array() );
+				}
+			},
+			20
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'product',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( $hidden->get_id(), $query->posts );
+		$this->assertContains( $visible->get_id(), $query->posts );
+	}
+
+	/**
+	 * Data provider: how a later pre_get_posts callback overrides post__not_in.
+	 *
+	 * @return array<string, array{bool}>
+	 */
+	public function post_not_in_replacements(): array {
+		return array(
+			'emptied'  => array( false ),
+			'replaced' => array( true ),
+		);
+	}
+
+	/**
+	 * A visibility settings write between two queries in one request applies to the second query.
+	 */
+	public function test_pos_only_products_visibility_change_mid_request_applies_to_next_query(): void {
+		// Arrange.
+		$product_a = ProductHelper::create_simple_product();
+		$product_b = ProductHelper::create_simple_product();
+		$this->configure_storefront_visibility( array( $product_a->get_id() ) );
+		$args = array(
+			'post_type'      => 'product',
+			'fields'         => 'ids',
+			'posts_per_page' => -1,
+		);
+
+		// Act.
+		$first = new WP_Query( $args );
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products'   => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array( $product_b->get_id() ) ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array() ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+			)
+		);
+		$second = new WP_Query( $args );
+
+		// Assert.
+		$this->assertNotContains( $product_a->get_id(), $first->posts );
+		$this->assertContains( $product_b->get_id(), $first->posts );
+		$this->assertContains( $product_a->get_id(), $second->posts );
+		$this->assertNotContains( $product_b->get_id(), $second->posts );
+	}
+
+	/**
 	 * Enable the registered storefront hooks and store visibility settings for these fixtures.
 	 */
 	private function configure_storefront_visibility( array $product_ids, array $variation_ids = array() ): void {
