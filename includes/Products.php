@@ -210,7 +210,8 @@ class Products {
 	 * `ID NOT IN (post__not_in)`; hide_pos_only_products() has normally put
 	 * every POS Only id into one of the lists, so this is usually empty. It is
 	 * not for a single-id query, nor when a later pre_get_posts callback set
-	 * post__in or replaced post__not_in.
+	 * post__in or replaced post__not_in. Ids are normalised with absint, as
+	 * WordPress does when it writes the clause, so -12 and '12' are 12.
 	 *
 	 * @param int[]     $exclude_ids POS Only ids for the query's post types.
 	 * @param \WP_Query $query       The query whose SQL is being built.
@@ -231,7 +232,7 @@ class Products {
 
 		$post__in = $query->get( 'post__in' );
 		if ( ! empty( $post__in ) ) {
-			return array_keys( array_intersect_key( array_flip( $exclude_ids ), array_flip( array_map( 'intval', (array) $post__in ) ) ) );
+			return array_keys( array_intersect_key( array_flip( $exclude_ids ), array_flip( array_map( 'absint', (array) $post__in ) ) ) );
 		}
 
 		$post__not_in = $query->get( 'post__not_in' );
@@ -242,7 +243,7 @@ class Products {
 			return $exclude_ids;
 		}
 
-		return array_keys( array_diff_key( array_flip( $exclude_ids ), array_flip( array_map( 'intval', (array) $post__not_in ) ) ) );
+		return array_keys( array_diff_key( array_flip( $exclude_ids ), array_flip( array_map( 'absint', (array) $post__not_in ) ) ) );
 	}
 
 	/**

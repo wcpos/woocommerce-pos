@@ -498,6 +498,52 @@ class Test_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A later post__not_in of negative id strings is read as WordPress reads it, so each POS Only id is written once.
+	 */
+	public function test_pos_only_products_third_party_negative_post__not_in_sql_lists_each_pos_only_id_once(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		add_action(
+			'pre_get_posts',
+			function ( $query ) use ( $hidden ) {
+				if ( 'product' === $query->get( 'post_type' ) ) {
+					$query->set(
+						'post__not_in',
+						array_map(
+							static function ( $id ) {
+								return '-' . $id;
+							},
+							$hidden
+						)
+					);
+				}
+			},
+			20
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'product',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+
+		// Assert.
+		foreach ( $hidden as $id ) {
+			$this->assertSame( 1, preg_match_all( '/\b' . $id . '\b/', $query->request ), 'POS Only id ' . $id );
+		}
+		$this->assertSame( array( $visible->get_id() ), $query->posts );
+	}
+
+	/**
 	 * A visibility settings write between two queries in one request applies to the second query.
 	 */
 	public function test_pos_only_products_visibility_change_mid_request_applies_to_next_query(): void {

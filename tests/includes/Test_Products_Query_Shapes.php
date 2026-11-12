@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Products;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Reference_2_0_1\Products as Products_2_0_1;
 use WP_Query;
 use WP_REST_Request;
 
@@ -23,6 +24,18 @@ use WP_REST_Request;
  * @covers \WCPOS\WooCommercePOS\Products
  */
 class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
+	/**
+	 * The sha1 of `git show v2.0.1:includes/Products.php` (tag v2.0.1, 82bf7d65), the reference every row is run against.
+	 */
+	const REFERENCE_2_0_1_SHA1 = '507aa31d2cbedc025fc15eb88e416d5ff6cbde1a';
+
+	/**
+	 * The Products class whose hooks are registered: the tree's or the 2.0.1 reference.
+	 *
+	 * @var string
+	 */
+	private $products_class = Products::class;
+
 	/**
 	 * Fixture ids by subject name.
 	 *
@@ -84,23 +97,52 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A storefront query shape finds the subject exactly when 2.0.1 did.
+	 * A storefront query shape finds the subject on the tree exactly when it does on 2.0.1's Products.
 	 *
 	 * @dataProvider query_shapes
 	 *
-	 * @param string $shape          The query shape.
-	 * @param string $subject        The fixture the shape targets.
-	 * @param bool   $expected_found Whether the subject comes back.
+	 * @param string $shape             The query shape.
+	 * @param string $subject           The fixture the shape targets.
+	 * @param bool   $expected_on_2_0_1 Whether 2.0.1 returns the subject.
 	 */
-	public function test_query_shape_storefront_result_matches_2_0_1( string $shape, string $subject, bool $expected_found ): void {
+	public function test_query_shape_storefront_result_matches_2_0_1_reference( string $shape, string $subject, bool $expected_on_2_0_1 ): void {
 		// Arrange.
 		$id = $this->ids[ $subject ];
 
 		// Act.
-		$found = $this->found( $shape, $id );
+		$this->use_products( self::load_reference_2_0_1() );
+		$on_2_0_1 = $this->found( $shape, $id );
+		wp_set_current_user( 0 );
+		$this->go_to( wc_get_page_id( 'shop' ) );
+		$this->use_products( Products::class );
+		$on_tree = $this->found( $shape, $id );
 
 		// Assert.
-		$this->assertSame( $expected_found, $found );
+		$this->assertSame( $expected_on_2_0_1, $on_2_0_1, '2.0.1 reference' );
+		$this->assertSame( $on_2_0_1, $on_tree, 'tree differs from 2.0.1' );
+	}
+
+	/**
+	 * The reference really is 2.0.1's code: it writes the POS Only list into the SQL twice, the tree once.
+	 */
+	public function test_reference_2_0_1_writes_the_pos_only_list_twice_and_the_tree_once(): void {
+		// Arrange.
+		$pos_only = '/\b' . $this->ids['pos_only_product'] . '\b/';
+		$args     = array(
+			'post_type'   => 'product',
+			'post_status' => 'publish',
+			'fields'      => 'ids',
+		);
+
+		// Act.
+		$this->use_products( self::load_reference_2_0_1() );
+		$on_2_0_1 = ( new WP_Query( $args ) )->request;
+		$this->use_products( Products::class );
+		$on_tree = ( new WP_Query( $args ) )->request;
+
+		// Assert.
+		$this->assertSame( 2, preg_match_all( $pos_only, $on_2_0_1 ) );
+		$this->assertSame( 1, preg_match_all( $pos_only, $on_tree ) );
 	}
 
 	/**
@@ -208,6 +250,88 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 			array( 'children_built_on_storefront', 'visible_variation', true ),
 			array( 'children_built_outside_storefront', 'pos_only_variation', true ), // #2652: the cached children list is reused.
 			array( 'children_built_outside_storefront', 'visible_variation', true ),
+			array( 'post__in_negative', 'pos_only_product', false ),
+			array( 'post__in_negative', 'visible_product', true ),
+			array( 'post__in_negative', 'pos_only_variation', false ),
+			array( 'post__in_negative', 'visible_variation', true ),
+			array( 'post__in_negative_string', 'pos_only_product', false ),
+			array( 'post__in_negative_string', 'visible_product', true ),
+			array( 'post__in_negative_string', 'pos_only_variation', false ),
+			array( 'post__in_negative_string', 'visible_variation', true ),
+			array( 'post__in_numeric_string', 'pos_only_product', false ),
+			array( 'post__in_numeric_string', 'visible_product', true ),
+			array( 'post__in_numeric_string', 'pos_only_variation', false ),
+			array( 'post__in_numeric_string', 'visible_variation', true ),
+			array( 'post__in_duplicate', 'pos_only_product', false ),
+			array( 'post__in_duplicate', 'visible_product', true ),
+			array( 'post__in_duplicate', 'pos_only_variation', false ),
+			array( 'post__in_duplicate', 'visible_variation', true ),
+			array( 'post__in_zero_and_id', 'pos_only_product', false ),
+			array( 'post__in_zero_and_id', 'visible_product', true ),
+			array( 'post__in_zero_and_id', 'pos_only_variation', false ),
+			array( 'post__in_zero_and_id', 'visible_variation', true ),
+			array( 'post__in_non_numeric_and_id', 'pos_only_product', false ),
+			array( 'post__in_non_numeric_and_id', 'visible_product', true ),
+			array( 'post__in_non_numeric_and_id', 'pos_only_variation', false ),
+			array( 'post__in_non_numeric_and_id', 'visible_variation', true ),
+			array( 'third_party_post__in_negative_after_us', 'pos_only_product', false ),
+			array( 'third_party_post__in_negative_after_us', 'visible_product', true ),
+			array( 'third_party_post__in_negative_after_us', 'pos_only_variation', false ),
+			array( 'third_party_post__in_negative_after_us', 'visible_variation', true ),
+			array( 'third_party_post__not_in_negative_after_us', 'pos_only_product', false ),
+			array( 'third_party_post__not_in_negative_after_us', 'visible_product', true ),
+			array( 'third_party_post__not_in_negative_after_us', 'pos_only_variation', false ),
+			array( 'third_party_post__not_in_negative_after_us', 'visible_variation', true ),
+			array( 'third_party_p_after_us', 'pos_only_product', false ),
+			array( 'third_party_p_after_us', 'visible_product', true ),
+			array( 'third_party_p_after_us', 'pos_only_variation', false ),
+			array( 'third_party_p_after_us', 'visible_variation', true ),
+			array( 'third_party_post_type_after_us', 'pos_only_product', false ),
+			array( 'third_party_post_type_after_us', 'visible_product', true ),
+			array( 'third_party_post_type_after_us', 'pos_only_variation', false ),
+			array( 'third_party_post_type_after_us', 'visible_variation', true ),
+			array( 'third_party_post_type_any_after_us', 'pos_only_product', true ), // #2651: post_type any, so no exclusion.
+			array( 'third_party_post_type_any_after_us', 'visible_product', true ),
+			array( 'post_type_product_and_variation', 'pos_only_product', false ),
+			array( 'post_type_product_and_variation', 'visible_product', true ),
+			array( 'post_type_product_and_variation', 'pos_only_variation', false ),
+			array( 'post_type_product_and_variation', 'visible_variation', true ),
+			array( 'post_type_with_post', 'pos_only_product', false ),
+			array( 'post_type_with_post', 'visible_product', true ),
+			array( 'post_type_with_post', 'pos_only_variation', false ),
+			array( 'post_type_with_post', 'visible_variation', true ),
+			array( 'page_id_is_page_for_posts', 'pos_only_product', false ),
+			array( 'page_id_is_page_for_posts', 'visible_product', true ),
+			array( 'page_id_is_page_for_posts', 'pos_only_variation', false ),
+			array( 'page_id_is_page_for_posts', 'visible_variation', true ),
+			array( 'title', 'pos_only_product', false ),
+			array( 'title', 'visible_product', true ),
+			array( 'title', 'pos_only_variation', false ),
+			array( 'title', 'visible_variation', true ),
+			array( 'sitemap_products', 'pos_only_product', false ),
+			array( 'sitemap_products', 'visible_product', true ),
+			array( 'store_api_list_include', 'pos_only_product', false ),
+			array( 'store_api_list_include', 'visible_product', true ),
+			array( 'store_api_list_include', 'pos_only_variation', false ),
+			array( 'store_api_list_include', 'visible_variation', true ),
+			array( 'store_api_list_exclude_control', 'pos_only_product', false ),
+			array( 'store_api_list_exclude_control', 'visible_product', true ),
+			array( 'store_api_list_exclude_control', 'pos_only_variation', false ),
+			array( 'store_api_list_exclude_control', 'visible_variation', true ),
+			array( 'shortcode_products_ids', 'pos_only_product', false ),
+			array( 'shortcode_products_ids', 'visible_product', true ),
+			array( 'shortcode_products_ids_negative', 'pos_only_product', false ),
+			array( 'shortcode_products_ids_negative', 'visible_product', true ),
+			array( 'block_product_query', 'pos_only_product', false ),
+			array( 'block_product_query', 'visible_product', true ),
+			array( 'flag_off_on_next_request', 'pos_only_product', true ), // By design: the merchant turned POS Only off.
+			array( 'flag_off_on_next_request', 'visible_product', true ),
+			array( 'flag_off_on_next_request', 'pos_only_variation', true ), // By design: the merchant turned POS Only off.
+			array( 'flag_off_on_next_request', 'visible_variation', true ),
+			array( 'flag_on_again_on_next_request', 'pos_only_product', false ),
+			array( 'flag_on_again_on_next_request', 'visible_product', true ),
+			array( 'flag_on_again_on_next_request', 'pos_only_variation', false ),
+			array( 'flag_on_again_on_next_request', 'visible_variation', true ),
 		);
 
 		$data = array();
@@ -300,10 +424,79 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 				$args['post_type'] = 'any';
 				$args['p']         = $id;
 				break;
+			case 'post__in_negative':
+				$args['post__in'] = array( -$id );
+				break;
+			case 'post__in_negative_string':
+				$args['post__in'] = array( '-' . $id );
+				break;
+			case 'post__in_numeric_string':
+				$args['post__in'] = array( (string) $id );
+				break;
+			case 'post__in_duplicate':
+				$args['post__in'] = array( $id, $id );
+				break;
+			case 'post__in_zero_and_id':
+				$args['post__in'] = array( 0, $id );
+				break;
+			case 'post__in_non_numeric_and_id':
+				$args['post__in'] = array( 'abc', $id );
+				break;
+			case 'post_type_product_and_variation':
+				$args['post_type'] = array( 'product', 'product_variation' );
+				$args['post__in']  = array( $id, $fixture['control'] );
+				break;
+			case 'post_type_with_post':
+				$args['post_type'] = array( 'post', $fixture['type'] );
+				$args['post__in']  = array( $id, $fixture['control'] );
+				break;
+			case 'page_id_is_page_for_posts':
+				// WordPress copies page_id into p unless it is the posts page of a static front page.
+				update_option( 'show_on_front', 'page' );
+				update_option( 'page_on_front', self::factory()->post->create( array( 'post_type' => 'page' ) ) );
+				update_option( 'page_for_posts', $id );
+				$args['page_id'] = $id;
+				break;
+			case 'title':
+				$args['title'] = $fixture['title'];
+				break;
 			case 'third_party_post__not_in_after_us':
-				return \in_array( $id, $this->ids_with_late_callback( $args, 'post__not_in', array( PHP_INT_MAX ) ), true );
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post__not_in' => array( PHP_INT_MAX ) ) ), true );
 			case 'third_party_post__in_after_us':
-				return \in_array( $id, $this->ids_with_late_callback( $args, 'post__in', array( $id, $fixture['control'] ) ), true );
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post__in' => array( $id, $fixture['control'] ) ) ), true );
+			case 'third_party_post__in_negative_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post__in' => array( -$id ) ) ), true );
+			case 'third_party_post__not_in_negative_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post__not_in' => array( '-' . $fixture['control'] ) ) ), true );
+			case 'third_party_p_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'p' => $id ) ), true );
+			case 'third_party_post_type_after_us':
+				$args['post_type'] = 'post';
+
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post_type' => $fixture['type'] ) ), true );
+			case 'third_party_post_type_any_after_us':
+				return \in_array(
+					$id,
+					$this->ids_with_late_callback(
+						$args,
+						array(
+							'post_type' => 'any',
+							'p'         => $id,
+						)
+					),
+					true
+				);
+			case 'flag_off_on_next_request':
+			case 'flag_on_again_on_next_request':
+				$this->set_pos_only_flag_on_next_request( true );
+				$this->found( 'post__in_only', $id );
+				$this->set_pos_only_flag_on_next_request( false );
+				if ( 'flag_on_again_on_next_request' === $shape ) {
+					$this->found( 'post__in_only', $id );
+					$this->set_pos_only_flag_on_next_request( true );
+				}
+
+				return $this->found( 'post__in_only', $id );
 			default:
 				return $this->found_outside_wp_query( $shape, $id );
 		}
@@ -378,25 +571,67 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 				remove_filter( 'wcpos_hide_pos_only_products', '__return_false' );
 
 				return \in_array( $id, $this->post_ids( wc_get_product( $fixture['parent'] )->get_children() ), true );
+			case 'sitemap_products':
+				$urls = wp_sitemaps_get_server()->registry->get_provider( 'posts' )->get_url_list( 1, 'product' );
+
+				return \in_array( get_permalink( $id ), wp_list_pluck( $urls, 'loc' ), true );
+			case 'store_api_list_include':
+			case 'store_api_list_exclude_control':
+				$params = 'store_api_list_include' === $shape
+					? array( 'include' => (string) $id )
+					: array(
+						'exclude'  => (string) $fixture['control'],
+						'per_page' => '100',
+					);
+				if ( ! $is_product ) {
+					$params['type'] = 'variation';
+				}
+				$request = new WP_REST_Request( 'GET', '/wc/store/v1/products' );
+				$request->set_query_params( $params );
+				$response = rest_do_request( $request );
+				$this->assertSame( 200, $response->get_status() );
+
+				return \in_array( $id, $this->post_ids( wp_list_pluck( $response->get_data(), 'id' ) ), true );
+			case 'shortcode_products_ids':
+			case 'shortcode_products_ids_negative':
+				// The shortcode caches its result by query args, which would hand the tree run the reference run's result.
+				$no_cache = static function ( $atts ) {
+					$atts['cache'] = false;
+
+					return $atts;
+				};
+				add_filter( 'shortcode_atts_products', $no_cache );
+				$html = do_shortcode( '[products ids="' . ( 'shortcode_products_ids' === $shape ? '' : '-' ) . $id . '"]' );
+				remove_filter( 'shortcode_atts_products', $no_cache );
+
+				return 1 === preg_match( '/\bpost-' . $id . '\b/', $html );
+			case 'block_product_query':
+				// The block caches its result by query args, which would hand the tree run the reference run's result.
+				add_filter( 'woocommerce_blocks_product_grid_is_cacheable', '__return_false' );
+				$html = do_blocks( '<!-- wp:woocommerce/handpicked-products {"products":[' . $id . ']} /-->' );
+				remove_filter( 'woocommerce_blocks_product_grid_is_cacheable', '__return_false' );
+
+				return false !== strpos( $html, $fixture['title'] );
 		}
 
 		$this->fail( 'Unknown shape ' . $shape );
 	}
 
 	/**
-	 * Run a query whose var is overwritten by a pre_get_posts callback after ours.
+	 * Run a query whose vars are overwritten by a pre_get_posts callback after ours.
 	 *
-	 * @param array  $args  Query args.
-	 * @param string $query_var   The query var the callback sets.
-	 * @param array  $value The value it sets.
+	 * @param array $args Query args.
+	 * @param array $vars The query vars the callback sets, by name.
 	 *
 	 * @return int[]
 	 */
-	private function ids_with_late_callback( array $args, string $query_var, array $value ): array {
+	private function ids_with_late_callback( array $args, array $vars ): array {
 		$query    = new WP_Query();
-		$callback = static function ( $candidate ) use ( $query, $query_var, $value ) {
+		$callback = static function ( $candidate ) use ( $query, $vars ) {
 			if ( $candidate === $query ) {
-				$candidate->set( $query_var, $value );
+				foreach ( $vars as $query_var => $value ) {
+					$candidate->set( $query_var, $value );
+				}
 			}
 		};
 		add_action( 'pre_get_posts', $callback, 20 );
@@ -404,6 +639,65 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 		remove_action( 'pre_get_posts', $callback, 20 );
 
 		return $this->post_ids( $query->posts );
+	}
+
+	/**
+	 * Load 2.0.1's Products.php, byte-identical, as a class in its own namespace.
+	 *
+	 * @return string The reference class name.
+	 */
+	private static function load_reference_2_0_1(): string {
+		$contents = file_get_contents( dirname( __DIR__ ) . '/fixtures/products-2.0.1.php.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a local fixture.
+		if ( sha1( (string) $contents ) !== self::REFERENCE_2_0_1_SHA1 ) {
+			self::fail( 'tests/fixtures/products-2.0.1.php.txt is not v2.0.1:includes/Products.php' );
+		}
+
+		if ( ! class_exists( Products_2_0_1::class, false ) ) {
+			$replacements = 0;
+			$source       = str_replace( 'namespace WCPOS\WooCommercePOS;', 'namespace WCPOS\WooCommercePOS\Tests\Reference_2_0_1;', $contents, $replacements );
+			if ( 1 !== $replacements ) {
+				self::fail( 'Expected one namespace line in the 2.0.1 reference, found ' . $replacements );
+			}
+			$file = get_temp_dir() . 'wcpos-products-2.0.1-' . getmypid() . '.php';
+			file_put_contents( $file, $source ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- a temp file for require_once.
+			require_once $file;
+			wp_delete_file( $file );
+		}
+
+		return Products_2_0_1::class;
+	}
+
+	/**
+	 * Hook one Products class, as a new request would, and unhook every other instance.
+	 *
+	 * @param string $class The tree's Products or the 2.0.1 reference.
+	 */
+	private function use_products( string $class ): void {
+		foreach ( $GLOBALS['wp_filter'] as $hook_name => $hook ) {
+			foreach ( $hook->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $callback ) {
+					$function = $callback['function'];
+					if ( \is_array( $function ) && ( $function[0] instanceof Products || $function[0] instanceof Products_2_0_1 ) ) {
+						remove_filter( $hook_name, $function, $priority );
+					}
+				}
+			}
+		}
+		Settings::instance()->reset_sections_for_testing();
+		$this->products_class = $class;
+		new $class();
+	}
+
+	/**
+	 * Turn POS Only products on or off, then start a new request with the class under test.
+	 *
+	 * The object cache is not flushed: it lives for the whole PHP process, as a persistent cache lives across requests.
+	 *
+	 * @param bool $enabled Whether POS Only products are on.
+	 */
+	private function set_pos_only_flag_on_next_request( bool $enabled ): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => $enabled ) );
+		$this->use_products( $this->products_class );
 	}
 
 	/**
