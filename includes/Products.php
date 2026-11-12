@@ -210,8 +210,11 @@ class Products {
 	 * `ID NOT IN (post__not_in)`; hide_pos_only_products() has normally put
 	 * every POS Only id into one of the lists, so this is usually empty. It is
 	 * not for a single-id query, nor when a later pre_get_posts callback set
-	 * post__in or replaced post__not_in. Ids are normalised with absint, as
-	 * WordPress does when it writes the clause, so -12 and '12' are 12.
+	 * post__in or replaced post__not_in. Ids are skipped only when WordPress
+	 * provably reads the value as this method does: p must be an int or a
+	 * digit-only string, and each list must be an array, whose elements both
+	 * sides normalise with absint. Anything else returns the full list, as
+	 * 2.0.1 did.
 	 *
 	 * @param int[]     $exclude_ids POS Only ids for the query's post types.
 	 * @param \WP_Query $query       The query whose SQL is being built.
@@ -224,26 +227,37 @@ class Products {
 		}
 
 		// WordPress ignores post__in and post__not_in when a single post is requested
-		// (p, or page_id / attachment_id, which it copies into p before this filter).
-		$single_id = absint( $query->get( 'p' ) );
-		if ( $single_id > 0 ) {
-			return \in_array( $single_id, $exclude_ids, true ) ? array( $single_id ) : array();
+		// (p, or page_id / attachment_id, which it copies into p before this filter),
+		// and writes p into the SQL as it is. Only an int or a digit-only string is
+		// provably the id MySQL reads; anything else ('0x0C', '0b1100', ' 12', 12.0)
+		// keeps the full list, as 2.0.1 did.
+		$single_id = $query->get( 'p' );
+		if ( $single_id ) {
+			if ( ! \is_int( $single_id ) && ! ( \is_string( $single_id ) && ctype_digit( $single_id ) ) ) {
+				return $exclude_ids;
+			}
+
+			return \in_array( (int) $single_id, $exclude_ids, true ) ? array( (int) $single_id ) : array();
 		}
 
 		$post__in = $query->get( 'post__in' );
 		if ( ! empty( $post__in ) ) {
-			return array_keys( array_intersect_key( array_flip( $exclude_ids ), array_flip( array_map( 'absint', (array) $post__in ) ) ) );
+			if ( ! \is_array( $post__in ) ) {
+				return $exclude_ids;
+			}
+
+			return array_keys( array_intersect_key( array_flip( $exclude_ids ), array_flip( array_map( 'absint', $post__in ) ) ) );
 		}
 
 		$post__not_in = $query->get( 'post__not_in' );
 		if ( $post__not_in === $exclude_ids ) {
 			return array();
 		}
-		if ( empty( $post__not_in ) ) {
+		if ( empty( $post__not_in ) || ! \is_array( $post__not_in ) ) {
 			return $exclude_ids;
 		}
 
-		return array_keys( array_diff_key( array_flip( $exclude_ids ), array_flip( array_map( 'absint', (array) $post__not_in ) ) ) );
+		return array_keys( array_diff_key( array_flip( $exclude_ids ), array_flip( array_map( 'absint', $post__not_in ) ) ) );
 	}
 
 	/**

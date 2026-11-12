@@ -6,6 +6,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Install;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Products;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Query;
 use WP_UnitTestCase;
 
@@ -541,6 +542,69 @@ class Test_Products extends WP_UnitTestCase {
 			$this->assertSame( 1, preg_match_all( '/\b' . $id . '\b/', $query->request ), 'POS Only id ' . $id );
 		}
 		$this->assertSame( array( $visible->get_id() ), $query->posts );
+	}
+
+	/**
+	 * WordPress sorts post__not_in, so an unsorted POS Only list misses the shortcut; each id is still written once.
+	 */
+	public function test_pos_only_products_unsorted_list_sql_lists_each_pos_only_id_once(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$created = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$hidden  = array( $created[2], $created[0], $created[1] );
+		$this->configure_storefront_visibility( $hidden );
+		Settings::instance()->reset_sections_for_testing();
+		$this->assertSame( $hidden, array_map( 'intval', Settings::instance()->get_pos_only_product_visibility_settings()['ids'] ), 'precondition: stored out of ascending order' );
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'product',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+
+		// Assert.
+		foreach ( $hidden as $id ) {
+			$this->assertSame( 1, preg_match_all( '/\b' . $id . '\b/', $query->request ), 'POS Only id ' . $id );
+		}
+		$this->assertSame( array( $visible->get_id() ), $query->posts );
+	}
+
+	/**
+	 * MySQL reads a hex p as an id while absint reads it as 0, so the full POS Only list stays in the SQL.
+	 */
+	public function test_pos_only_products_third_party_hex_p_keeps_the_full_list(): void {
+		// Arrange.
+		$hidden = ProductHelper::create_simple_product()->get_id();
+		$this->configure_storefront_visibility( array( $hidden ) );
+		$query = new WP_Query();
+		add_action(
+			'pre_get_posts',
+			function ( $candidate ) use ( $query, $hidden ) {
+				if ( $candidate === $query ) {
+					$candidate->set( 'p', sprintf( '0x%X', $hidden ) );
+				}
+			},
+			20
+		);
+
+		// Act.
+		$posts = $query->query(
+			array(
+				'post_type' => 'product',
+				'fields'    => 'ids',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array(), $posts );
+		$this->assertMatchesRegularExpression( '/NOT IN \(' . $hidden . '\)/', $query->request );
 	}
 
 	/**

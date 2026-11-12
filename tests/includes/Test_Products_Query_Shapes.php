@@ -108,6 +108,9 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	public function test_query_shape_storefront_result_matches_2_0_1_reference( string $shape, string $subject, bool $expected_on_2_0_1 ): void {
 		// Arrange.
 		$id = $this->ids[ $subject ];
+		if ( 0 === strpos( $shape, 'unsorted_list_' ) ) {
+			$this->store_pos_only_list_unsorted( $id );
+		}
 
 		// Act.
 		$this->use_products( self::load_reference_2_0_1() );
@@ -332,6 +335,52 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 			array( 'flag_on_again_on_next_request', 'visible_product', true ),
 			array( 'flag_on_again_on_next_request', 'pos_only_variation', false ),
 			array( 'flag_on_again_on_next_request', 'visible_variation', true ),
+			array( 'third_party_p_hex_after_us', 'pos_only_product', false ),
+			array( 'third_party_p_hex_after_us', 'visible_product', true ),
+			array( 'third_party_p_hex_after_us', 'pos_only_variation', false ),
+			array( 'third_party_p_hex_after_us', 'visible_variation', true ),
+			array( 'third_party_p_binary_after_us', 'pos_only_product', false ),
+			array( 'third_party_p_binary_after_us', 'visible_product', true ),
+			array( 'third_party_p_binary_after_us', 'pos_only_variation', false ),
+			array( 'third_party_p_binary_after_us', 'visible_variation', true ),
+			array( 'third_party_page_id_hex_after_us', 'pos_only_product', false ),
+			array( 'third_party_page_id_hex_after_us', 'visible_product', true ),
+			array( 'third_party_page_id_hex_after_us', 'pos_only_variation', false ),
+			array( 'third_party_page_id_hex_after_us', 'visible_variation', true ),
+			array( 'third_party_page_id_binary_after_us', 'pos_only_product', false ),
+			array( 'third_party_page_id_binary_after_us', 'visible_product', true ),
+			array( 'third_party_page_id_binary_after_us', 'pos_only_variation', false ),
+			array( 'third_party_page_id_binary_after_us', 'visible_variation', true ),
+			array( 'third_party_page_id_after_us', 'pos_only_product', false ),
+			array( 'third_party_page_id_after_us', 'visible_product', true ),
+			array( 'third_party_page_id_after_us', 'pos_only_variation', false ),
+			array( 'third_party_page_id_after_us', 'visible_variation', true ),
+			array( 'unsorted_list_default', 'pos_only_product', false ),
+			array( 'unsorted_list_default', 'visible_product', true ),
+			array( 'unsorted_list_default', 'pos_only_variation', false ),
+			array( 'unsorted_list_default', 'visible_variation', true ),
+			array( 'unsorted_list_post__in', 'pos_only_product', false ),
+			array( 'unsorted_list_post__in', 'visible_product', true ),
+			array( 'unsorted_list_post__in', 'pos_only_variation', false ),
+			array( 'unsorted_list_post__in', 'visible_variation', true ),
+			array( 'unsorted_list_post__not_in_other', 'pos_only_product', false ),
+			array( 'unsorted_list_post__not_in_other', 'visible_product', true ),
+			array( 'unsorted_list_post__not_in_other', 'pos_only_variation', false ),
+			array( 'unsorted_list_post__not_in_other', 'visible_variation', true ),
+			array( 'unsorted_list_late_post__not_in', 'pos_only_product', false ),
+			array( 'unsorted_list_late_post__not_in', 'visible_product', true ),
+			array( 'unsorted_list_late_post__not_in', 'pos_only_variation', false ),
+			array( 'unsorted_list_late_post__not_in', 'visible_variation', true ),
+			array( 'query_run_twice', 'pos_only_product', false ),
+			array( 'query_run_twice', 'visible_product', true ),
+			array( 'query_run_twice', 'pos_only_variation', false ),
+			array( 'query_run_twice', 'visible_variation', true ),
+			array( 'unsorted_list_query_run_twice', 'pos_only_product', false ),
+			array( 'unsorted_list_query_run_twice', 'visible_product', true ),
+			array( 'unsorted_list_query_run_twice', 'pos_only_variation', false ),
+			array( 'unsorted_list_query_run_twice', 'visible_variation', true ),
+			array( 'sticky_posts', 'pos_only_product', false ),
+			array( 'sticky_posts', 'visible_product', true ),
 		);
 
 		$data = array();
@@ -375,8 +424,26 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 				$args['post_name__in'] = array( $fixture['slug'] );
 				break;
 			case 'post__in_with_others':
+			case 'unsorted_list_post__in':
 				$args['post__in'] = array( $id, $fixture['control'] );
 				break;
+			case 'unsorted_list_default':
+				break;
+			case 'unsorted_list_post__not_in_other':
+				$args['post__not_in'] = array( PHP_INT_MAX );
+				break;
+			case 'query_run_twice':
+			case 'unsorted_list_query_run_twice':
+				return \in_array( $id, $this->post_ids( ( new WP_Query( $args ) )->get_posts() ), true );
+			case 'sticky_posts':
+				// WordPress adds sticky posts to a home query only, and only when its posts are objects.
+				update_option( 'sticky_posts', array( $id ) );
+				$args['post_type'] = array( 'post', $fixture['type'] );
+				$args['fields']    = '';
+				$query             = new WP_Query( $args );
+				$this->assertTrue( $query->is_home(), 'precondition: a home query' );
+
+				return \in_array( $id, $this->post_ids( $query->posts ), true );
 			case 'post__in_only':
 				$args['post__in'] = array( $id );
 				break;
@@ -461,6 +528,7 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 				$args['title'] = $fixture['title'];
 				break;
 			case 'third_party_post__not_in_after_us':
+			case 'unsorted_list_late_post__not_in':
 				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post__not_in' => array( PHP_INT_MAX ) ) ), true );
 			case 'third_party_post__in_after_us':
 				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post__in' => array( $id, $fixture['control'] ) ) ), true );
@@ -470,6 +538,16 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'post__not_in' => array( '-' . $fixture['control'] ) ) ), true );
 			case 'third_party_p_after_us':
 				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'p' => $id ) ), true );
+			case 'third_party_p_hex_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'p' => sprintf( '0x%X', $id ) ) ), true );
+			case 'third_party_p_binary_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'p' => '0b' . decbin( $id ) ) ), true );
+			case 'third_party_page_id_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'page_id' => $id ) ), true );
+			case 'third_party_page_id_hex_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'page_id' => sprintf( '0x%X', $id ) ) ), true );
+			case 'third_party_page_id_binary_after_us':
+				return \in_array( $id, $this->ids_with_late_callback( $args, array( 'page_id' => '0b' . decbin( $id ) ) ), true );
 			case 'third_party_post_type_after_us':
 				$args['post_type'] = 'post';
 
@@ -770,5 +848,40 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 				'scope'      => 'default',
 			)
 		);
+	}
+
+	/**
+	 * Store the subject type's POS Only list out of ascending order: the fixture's item between two extra ones.
+	 *
+	 * WordPress sorts post__not_in before writing it, so the list no longer equals the POS Only ids it was built from.
+	 *
+	 * @param int $id The subject id.
+	 */
+	private function store_pos_only_list_unsorted( int $id ): void {
+		$is_product = 'product' === $this->fixtures[ $id ]['type'];
+		$post_type  = $is_product ? 'products' : 'variations';
+		$pos_only   = $this->ids[ $is_product ? 'pos_only_product' : 'pos_only_variation' ];
+		$extras     = $is_product
+			? array( $this->create_simple( 'Query Shape POS Only Charlie', 'QS-POS-ONLY-CHARLIE' ), $this->create_simple( 'Query Shape POS Only Delta', 'QS-POS-ONLY-DELTA' ) )
+			: array_slice( array_map( 'intval', ProductHelper::create_variation_product()->get_children() ), 0, 2 );
+		Settings::instance()->update_visibility_settings(
+			array(
+				'post_type'  => $post_type,
+				'visibility' => '',
+				'ids'        => array( $pos_only ),
+				'scope'      => 'default',
+			)
+		);
+		foreach ( array( $extras[1], $pos_only, $extras[0] ) as $pos_only_id ) {
+			$this->mark_pos_only( $post_type, $pos_only_id );
+		}
+
+		Settings::instance()->reset_sections_for_testing();
+		$settings = $is_product ? Settings::instance()->get_pos_only_product_visibility_settings() : Settings::instance()->get_pos_only_variations_visibility_settings();
+		$stored   = array_map( 'intval', $settings['ids'] );
+		$sorted   = $stored;
+		sort( $sorted );
+		$this->assertSame( array( $extras[1], $pos_only, $extras[0] ), $stored, 'precondition: stored POS Only list' );
+		$this->assertNotSame( $sorted, $stored, 'precondition: the stored POS Only list is not ascending' );
 	}
 }
