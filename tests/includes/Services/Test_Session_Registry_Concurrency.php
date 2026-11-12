@@ -48,10 +48,22 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The overlap hook on `query`, while one is armed.
+	 *
+	 * @var callable|null
+	 */
+	private $overlap_hook;
+
+	/**
 	 * Remove the overlap hook if a test failed before it fired.
+	 *
+	 * Only this closure: the test case keeps its own `query` filters for temporary tables.
 	 */
 	public function tearDown(): void {
-		remove_all_filters( 'update_user_metadata' );
+		if ( $this->overlap_hook ) {
+			remove_filter( 'query', $this->overlap_hook );
+			$this->overlap_hook = null;
+		}
 		parent::tearDown();
 	}
 
@@ -83,7 +95,8 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 	public function test_session_row_refresh_overlapping_a_login_keeps_the_new_session(): void {
 		// Arrange.
 		$existing = $this->login();
-		$inner    = null;
+		$this->age_session( $existing['refresh_token'] );
+		$inner = null;
 		$this->run_inside_next_row_write(
 			function () use ( &$inner ) {
 				$inner = $this->login();
@@ -143,27 +156,45 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Move a session's activity and access expiry an hour back, as for a device that signed in earlier.
+	 *
+	 * A refresh in the same second as the sign-in would write an identical row, which WordPress skips.
+	 *
+	 * @param string $refresh_token The session's refresh token.
+	 */
+	private function age_session( string $refresh_token ): void {
+		$jti  = $this->refresh_jti( $refresh_token );
+		$rows = get_user_meta( $this->user->ID, Session_Registry::META_KEY, true );
+		$this->assertArrayHasKey( $jti, $rows );
+		$rows[ $jti ]['last_active']    = time() - HOUR_IN_SECONDS;
+		$rows[ $jti ]['access_expires'] = time() - MINUTE_IN_SECONDS;
+		$this->assertTrue( update_user_meta( $this->user->ID, Session_Registry::META_KEY, $rows ) );
+	}
+
+	/**
 	 * Run another request to completion between the next session-row read and its save.
 	 *
-	 * The hook fires once, at the start of the next save of the session row, after the saving
-	 * request has built the value it is about to write from its own earlier read.
+	 * The hook fires once, just before the database receives the next UPDATE or INSERT of the
+	 * session row, after the saving request has built the value it is about to write from its own
+	 * earlier read. It sits on `query` rather than a meta filter so it sees the write whichever
+	 * API the registry uses to make it; the overlapping request's own writes pass through.
 	 *
 	 * @param callable $other_request The overlapping request.
 	 */
 	private function run_inside_next_row_write( callable $other_request ): void {
-		$fired = false;
-		add_filter(
-			'update_user_metadata',
-			static function ( $check, $object_id, $meta_key ) use ( &$fired, $other_request ) {
-				if ( ! $fired && Session_Registry::META_KEY === $meta_key ) {
-					$fired = true;
-					$other_request();
-				}
+		global $wpdb;
 
-				return $check;
-			},
-			10,
-			3
-		);
+		$fired   = false;
+		$pattern = '/^\s*(UPDATE|INSERT\s+INTO)\s+`?' . preg_quote( $wpdb->usermeta, '/' ) . '`?\s/i';
+
+		$this->overlap_hook = static function ( $query ) use ( &$fired, $other_request, $pattern ) {
+			if ( ! $fired && preg_match( $pattern, $query ) && false !== strpos( $query, Session_Registry::META_KEY ) ) {
+				$fired = true;
+				$other_request();
+			}
+
+			return $query;
+		};
+		add_filter( 'query', $this->overlap_hook );
 	}
 }
