@@ -4,7 +4,7 @@ Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.1
+Stable tag: 2.0.2
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -296,6 +296,11 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 8. Offline: the Offline badge beside the store name while the till keeps working.
 
 == Changelog ==
+
+= 2.0.2 - 2026/11/12 =
+
+- **Shops with many POS Only products load faster: the POS Only lists are read once per page, not once for every product shown.**
+- **The daily file check no longer reports a healthy install as modified when an update lands while the old code is still running.**
 
 = 2.0.1 - 2026/11/10 =
 
