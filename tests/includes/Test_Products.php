@@ -363,6 +363,60 @@ class Test_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * WordPress ignores post__not_in when p is set, so posts_where excludes that one POS Only id, and only it.
+	 */
+	public function test_pos_only_products_single_id_query_for_pos_only_product_sql_excludes_only_that_id(): void {
+		// Arrange.
+		ProductHelper::create_simple_product();
+		$hidden = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type' => 'product',
+				'p'         => $hidden[1],
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array(), $query->posts );
+		$this->assertSame( 1, substr_count( $query->request, 'NOT IN (' ) );
+		$this->assertStringContainsString( '.ID NOT IN (' . $hidden[1] . ')', $query->request );
+		$this->assertDoesNotMatchRegularExpression( '/\b(' . $hidden[0] . '|' . $hidden[2] . ')\b/', $query->request );
+	}
+
+	/**
+	 * A single-id query for a visible product needs no NOT IN clause at all.
+	 */
+	public function test_pos_only_products_single_id_query_for_visible_product_sql_has_no_not_in(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type' => 'product',
+				'p'         => $visible->get_id(),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( array( $visible->get_id() ), wp_list_pluck( $query->posts, 'ID' ) );
+		$this->assertStringNotContainsString( 'NOT IN', $query->request );
+	}
+
+	/**
 	 * A post__in set by a later pre_get_posts callback skips post__not_in; posts_where must still exclude.
 	 */
 	public function test_pos_only_products_post_in_set_after_exclusion_hook_still_excludes(): void {

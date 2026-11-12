@@ -204,11 +204,13 @@ class Products {
 	/**
 	 * The POS Only ids the query's own id clause does not already exclude.
 	 *
-	 * WordPress writes `ID IN (post__in)` when post__in is set and
-	 * `ID NOT IN (post__not_in)` otherwise; hide_pos_only_products() has
-	 * normally put every POS Only id into one of them, so this is usually
-	 * empty. It is not when a later pre_get_posts callback set post__in or
-	 * replaced post__not_in.
+	 * WordPress prefers `p` over both id lists: it writes `ID = p` when p is
+	 * set (page_id and attachment_id are copied into p first), else
+	 * `ID IN (post__in)` when post__in is set, else
+	 * `ID NOT IN (post__not_in)`; hide_pos_only_products() has normally put
+	 * every POS Only id into one of the lists, so this is usually empty. It is
+	 * not for a single-id query, nor when a later pre_get_posts callback set
+	 * post__in or replaced post__not_in.
 	 *
 	 * @param int[]     $exclude_ids POS Only ids for the query's post types.
 	 * @param \WP_Query $query       The query whose SQL is being built.
@@ -218,6 +220,13 @@ class Products {
 	private function ids_not_excluded_by_query_vars( array $exclude_ids, \WP_Query $query ): array {
 		if ( empty( $exclude_ids ) ) {
 			return array();
+		}
+
+		// WordPress ignores post__in and post__not_in when a single post is requested
+		// (p, or page_id / attachment_id, which it copies into p before this filter).
+		$single_id = absint( $query->get( 'p' ) );
+		if ( $single_id > 0 ) {
+			return \in_array( $single_id, $exclude_ids, true ) ? array( $single_id ) : array();
 		}
 
 		$post__in = $query->get( 'post__in' );
