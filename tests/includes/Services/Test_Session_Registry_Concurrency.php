@@ -271,6 +271,46 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A write to the session row removes duplicate rows for the key and keeps the lowest one.
+	 */
+	public function test_session_row_write_removes_duplicate_rows(): void {
+		global $wpdb;
+
+		// Arrange.
+		$first     = $this->login();
+		$first_jti = $this->refresh_jti( $first['refresh_token'] );
+		$lower_id  = (int) $this->stored_row()->umeta_id;
+		$wpdb->insert(
+			$wpdb->usermeta,
+			array(
+				'user_id'    => $this->user->ID,
+				'meta_key'   => Session_Registry::META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value' => maybe_serialize( array( 'duplicate-jti' => array( 'expires' => time() + HOUR_IN_SECONDS ) ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		$this->assertGreaterThan( $lower_id, (int) $wpdb->insert_id );
+		wp_cache_delete( $this->user->ID, 'user_meta' );
+
+		// Act.
+		$second = $this->login();
+
+		// Assert.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT umeta_id, meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s",
+				$this->user->ID,
+				Session_Registry::META_KEY
+			)
+		);
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $lower_id, (int) $rows[0]->umeta_id );
+		$stored = maybe_unserialize( $rows[0]->meta_value );
+		$this->assertArrayHasKey( $first_jti, $stored );
+		$this->assertArrayHasKey( $this->refresh_jti( $second['refresh_token'] ), $stored );
+		$this->assertArrayNotHasKey( 'duplicate-jti', $stored );
+	}
+
+	/**
 	 * Keeping only the current session when it is already the only one succeeds without writing.
 	 */
 	public function test_session_row_unchanged_write_returns_true_without_an_update(): void {
