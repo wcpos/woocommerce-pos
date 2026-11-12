@@ -608,6 +608,361 @@ class Test_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An earlier posts_where callback that zeroes p leaves WordPress's ID = p clause, so the full POS Only list stays.
+	 */
+	public function test_pos_only_products_earlier_posts_where_zeroing_p_keeps_the_full_list(): void {
+		// Arrange.
+		ProductHelper::create_simple_product();
+		$hidden = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		add_filter(
+			'posts_where',
+			function ( $where, $query ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$query->set( 'p', 0 );
+				}
+
+				return $where;
+			},
+			5,
+			2
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'         => 'product',
+				'fields'            => 'ids',
+				'posts_per_page'    => -1,
+				'p'                 => $hidden[1],
+				'wcpos_test_tamper' => true,
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( $hidden[1], $query->posts );
+		$this->assert_sql_appends_every_pos_only_id( $hidden, $query->request );
+	}
+
+	/**
+	 * An earlier posts_where callback that points p at a visible id leaves ID = p in the SQL, so the full list stays.
+	 */
+	public function test_pos_only_products_earlier_posts_where_changing_p_keeps_the_full_list(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product()->get_id();
+		$hidden  = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		add_filter(
+			'posts_where',
+			function ( $where, $query ) use ( $visible ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$query->set( 'p', $visible );
+				}
+
+				return $where;
+			},
+			5,
+			2
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'         => 'product',
+				'fields'            => 'ids',
+				'posts_per_page'    => -1,
+				'p'                 => $hidden[1],
+				'wcpos_test_tamper' => true,
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( $hidden[1], $query->posts );
+		$this->assert_sql_appends_every_pos_only_id( $hidden, $query->request );
+	}
+
+	/**
+	 * A p changed to the digit prefix of WordPress's id must not match inside its ID = p clause, so the full list stays.
+	 */
+	public function test_pos_only_products_earlier_posts_where_changing_p_to_its_digit_prefix_keeps_the_full_list(): void {
+		// Arrange.
+		ProductHelper::create_simple_product();
+		$hidden = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$prefix = intdiv( $hidden[1], 10 );
+		$this->assertGreaterThanOrEqual( 10, $hidden[1], 'precondition: the id has a digit prefix' );
+		$this->assertNotContains( $prefix, $hidden, 'precondition: the prefix is not a POS Only id' );
+		$this->configure_storefront_visibility( $hidden );
+		add_filter(
+			'posts_where',
+			function ( $where, $query ) use ( $prefix ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$query->set( 'p', $prefix );
+				}
+
+				return $where;
+			},
+			5,
+			2
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'         => 'product',
+				'fields'            => 'ids',
+				'posts_per_page'    => -1,
+				'p'                 => $hidden[1],
+				'wcpos_test_tamper' => true,
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( $hidden[1], $query->posts );
+		$this->assert_sql_appends_every_pos_only_id( $hidden, $query->request );
+	}
+
+	/**
+	 * An earlier posts_where callback that clears post__in leaves WordPress's ID IN clause, so the full list stays.
+	 */
+	public function test_pos_only_products_earlier_posts_where_clearing_post__in_keeps_the_full_list(): void {
+		// Arrange.
+		ProductHelper::create_simple_product();
+		$hidden = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		add_filter(
+			'posts_where',
+			function ( $where, $query ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$query->set( 'post__in', array() );
+				}
+
+				return $where;
+			},
+			5,
+			2
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'         => 'product',
+				'fields'            => 'ids',
+				'posts_per_page'    => -1,
+				'post__in'          => array( '-' . $hidden[1] ),
+				'wcpos_test_tamper' => true,
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( $hidden[1], $query->posts );
+		$this->assert_sql_appends_every_pos_only_id( $hidden, $query->request );
+	}
+
+	/**
+	 * An earlier posts_where callback that replaces post__in leaves WordPress's ID IN clause, so the full list stays.
+	 */
+	public function test_pos_only_products_earlier_posts_where_replacing_post__in_keeps_the_full_list(): void {
+		// Arrange.
+		$visible = ProductHelper::create_simple_product()->get_id();
+		$hidden  = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		add_filter(
+			'posts_where',
+			function ( $where, $query ) use ( $visible ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$query->set( 'post__in', array( $visible ) );
+				}
+
+				return $where;
+			},
+			5,
+			2
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'         => 'product',
+				'fields'            => 'ids',
+				'posts_per_page'    => -1,
+				'post__in'          => array( '-' . $hidden[1] ),
+				'wcpos_test_tamper' => true,
+			)
+		);
+
+		// Assert.
+		$this->assertNotContains( $hidden[1], $query->posts );
+		$this->assert_sql_appends_every_pos_only_id( $hidden, $query->request );
+	}
+
+	/**
+	 * An earlier posts_where callback that strips WordPress's ID NOT IN clause leaves post__not_in set; the full list stays.
+	 */
+	public function test_pos_only_products_earlier_posts_where_removing_the_not_in_clause_keeps_the_full_list(): void {
+		global $wpdb;
+
+		// Arrange.
+		ProductHelper::create_simple_product();
+		$hidden = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		$removed = 0;
+		add_filter(
+			'posts_where',
+			function ( $where, $query ) use ( $wpdb, &$removed ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$where = preg_replace( '/ AND ' . preg_quote( $wpdb->posts, '/' ) . '\.ID NOT IN \([0-9,]+\)/', '', $where, 1, $removed );
+				}
+
+				return $where;
+			},
+			5,
+			2
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'         => 'product',
+				'fields'            => 'ids',
+				'posts_per_page'    => -1,
+				'wcpos_test_tamper' => true,
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 1, $removed, 'precondition: WordPress wrote one ID NOT IN clause' );
+		foreach ( $hidden as $id ) {
+			$this->assertNotContains( $id, $query->posts );
+		}
+		$this->assert_sql_appends_every_pos_only_id( $hidden, $query->request );
+	}
+
+	/**
+	 * An earlier posts_where callback that rewrites post__not_in no longer matches WordPress's clause; the full list stays.
+	 *
+	 * @dataProvider post_not_in_tamper_values
+	 *
+	 * @param string $tamper Which value the callback writes into post__not_in.
+	 */
+	public function test_pos_only_products_earlier_posts_where_replacing_post__not_in_keeps_the_full_list( string $tamper ): void {
+		// Arrange.
+		ProductHelper::create_simple_product();
+		$other  = ProductHelper::create_simple_product()->get_id();
+		$hidden = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->configure_storefront_visibility( $hidden );
+		$value = 'stored' === $tamper ? $hidden : array_merge( array_reverse( $hidden ), array( $other ) );
+		add_action(
+			'pre_get_posts',
+			function ( $query ) use ( $other ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$query->set( 'post__not_in', array( $other ) );
+				}
+			},
+			20
+		);
+		add_filter(
+			'posts_where',
+			function ( $where, $query ) use ( $value ) {
+				if ( $query->get( 'wcpos_test_tamper' ) ) {
+					$query->set( 'post__not_in', $value );
+				}
+
+				return $where;
+			},
+			5,
+			2
+		);
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'         => 'product',
+				'fields'            => 'ids',
+				'posts_per_page'    => -1,
+				'wcpos_test_tamper' => true,
+			)
+		);
+
+		// Assert.
+		foreach ( $hidden as $id ) {
+			$this->assertNotContains( $id, $query->posts );
+		}
+		$this->assert_sql_appends_every_pos_only_id( $hidden, $query->request );
+	}
+
+	/**
+	 * Data provider: what an earlier posts_where callback writes into post__not_in.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function post_not_in_tamper_values(): array {
+		return array(
+			'the stored POS Only list'                  => array( 'stored' ),
+			'the stored list reversed, plus another id' => array( 'reversed_plus_other' ),
+		);
+	}
+
+	/**
+	 * WordPress writes post__in de-duplicated and sorted, so an unsorted duplicate list still finds its clause.
+	 */
+	public function test_pos_only_products_unsorted_duplicate_post__in_sql_has_no_not_in(): void {
+		// Arrange.
+		$v1     = ProductHelper::create_simple_product()->get_id();
+		$v2     = ProductHelper::create_simple_product()->get_id();
+		$hidden = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$this->assertGreaterThan( $v1, $v2, 'precondition: v2 sorts after v1' );
+		$this->configure_storefront_visibility( $hidden );
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'product',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+				'post__in'       => array( $v2, $v1, $v2 ),
+			)
+		);
+
+		// Assert.
+		$posts = $query->posts;
+		sort( $posts );
+		$this->assertSame( array( $v1, $v2 ), $posts );
+		$this->assertStringNotContainsString( 'NOT IN', $query->request );
+	}
+
+	/**
 	 * A visibility settings write between two queries in one request applies to the second query.
 	 */
 	public function test_pos_only_products_visibility_change_mid_request_applies_to_next_query(): void {
@@ -647,6 +1002,20 @@ class Test_Products extends WP_UnitTestCase {
 		$this->assertContains( $product_b->get_id(), $first->posts );
 		$this->assertContains( $product_a->get_id(), $second->posts );
 		$this->assertNotContains( $product_b->get_id(), $second->posts );
+	}
+
+	/**
+	 * Assert the last ID NOT IN clause in the SQL (the one posts_where appends) lists every POS Only id.
+	 *
+	 * @param int[]  $pos_only_ids The stored POS Only ids.
+	 * @param string $sql          The query's SQL.
+	 */
+	private function assert_sql_appends_every_pos_only_id( array $pos_only_ids, string $sql ): void {
+		$this->assertGreaterThanOrEqual( 1, preg_match_all( '/\.ID NOT IN \(([0-9,]+)\)/', $sql, $matches ), 'no ID NOT IN clause in the SQL' );
+		$appended = array_map( 'intval', explode( ',', end( $matches[1] ) ) );
+		sort( $appended );
+		sort( $pos_only_ids );
+		$this->assertSame( $pos_only_ids, $appended );
 	}
 
 	/**

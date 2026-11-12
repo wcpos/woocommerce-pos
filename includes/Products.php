@@ -211,17 +211,22 @@ class Products {
 	 * every POS Only id into one of the lists, so this is usually empty. It is
 	 * not for a single-id query, nor when a later pre_get_posts callback set
 	 * post__in or replaced post__not_in. Ids are skipped only when WordPress
-	 * provably reads the value as this method does: p must be an int or a
-	 * digit-only string, and each list must be an array, whose elements both
-	 * sides normalise with absint. Anything else returns the full list, as
-	 * 2.0.1 did.
+	 * provably reads the value as this method does (p must be an int or a
+	 * digit-only string, each list an array, normalised with absint on both
+	 * sides), and only when $where still holds the exact clause WordPress
+	 * built from that value: a posts_where callback that runs before this one
+	 * can change the query vars or the clause after WordPress wrote it.
+	 * Anything else returns the full list, as 2.0.1 did.
 	 *
 	 * @param int[]     $exclude_ids POS Only ids for the query's post types.
 	 * @param \WP_Query $query       The query whose SQL is being built.
+	 * @param string    $where       The WHERE clause as this filter receives it.
 	 *
 	 * @return int[]
 	 */
-	private function ids_not_excluded_by_query_vars( array $exclude_ids, \WP_Query $query ): array {
+	private function ids_not_excluded_by_query_vars( array $exclude_ids, \WP_Query $query, string $where ): array {
+		global $wpdb;
+
 		if ( empty( $exclude_ids ) ) {
 			return array();
 		}
@@ -236,6 +241,10 @@ class Products {
 			if ( ! \is_int( $single_id ) && ! ( \is_string( $single_id ) && ctype_digit( $single_id ) ) ) {
 				return $exclude_ids;
 			}
+			// Nothing follows p in WordPress's clause; the lookahead stops "= 1" matching inside "= 12".
+			if ( ! preg_match( '/' . preg_quote( " AND {$wpdb->posts}.ID = " . $single_id, '/' ) . '(?![0-9A-Za-z_.])/', $where ) ) {
+				return $exclude_ids;
+			}
 
 			return \in_array( (int) $single_id, $exclude_ids, true ) ? array( (int) $single_id ) : array();
 		}
@@ -245,15 +254,22 @@ class Products {
 			if ( ! \is_array( $post__in ) ) {
 				return $exclude_ids;
 			}
+			// WordPress writes a de-duplicated, sorted absint copy of post__in.
+			$in_ids = array_unique( array_map( 'absint', $post__in ) );
+			sort( $in_ids );
+			if ( false === strpos( $where, " AND {$wpdb->posts}.ID IN (" . implode( ',', $in_ids ) . ')' ) ) {
+				return $exclude_ids;
+			}
 
-			return array_keys( array_intersect_key( array_flip( $exclude_ids ), array_flip( array_map( 'absint', $post__in ) ) ) );
+			return array_keys( array_intersect_key( array_flip( $exclude_ids ), array_flip( $in_ids ) ) );
 		}
 
+		// WordPress sorts post__not_in in place before writing it, so the var holds the clause's order.
 		$post__not_in = $query->get( 'post__not_in' );
-		if ( $post__not_in === $exclude_ids ) {
-			return array();
-		}
 		if ( empty( $post__not_in ) || ! \is_array( $post__not_in ) ) {
+			return $exclude_ids;
+		}
+		if ( false === strpos( $where, " AND {$wpdb->posts}.ID NOT IN (" . implode( ',', array_map( 'absint', $post__not_in ) ) . ')' ) ) {
 			return $exclude_ids;
 		}
 
@@ -275,7 +291,7 @@ class Products {
 
 		$exclude_ids = $this->should_hide_pos_only_products( $query ) ? $this->get_pos_only_excluded_ids( $query ) : array();
 		if ( $query instanceof \WP_Query ) {
-			$exclude_ids = $this->ids_not_excluded_by_query_vars( $exclude_ids, $query );
+			$exclude_ids = $this->ids_not_excluded_by_query_vars( $exclude_ids, $query, (string) $where );
 		}
 		if ( ! empty( $exclude_ids ) ) {
 			$ids_format = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
