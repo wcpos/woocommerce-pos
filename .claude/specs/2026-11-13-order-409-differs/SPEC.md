@@ -71,23 +71,44 @@ The 409 path must not throw: a malformed payload yields an empty or partial list
 
 Returns `string[]`, de-duplicated and sorted with `sort( $paths, SORT_STRING )`.
 
-**Setup**
-- `$a = self::canonical_form( $client )` and `$b = self::canonical_form( $server )`.
-- Values are equal when `wp_json_encode( $x ) === wp_json_encode( $y )`.
-- Walk only the top-level keys present in `$a`: a field the client did not send is not a difference.
+**Structure (follow it; it fits the budget).** Three methods, about 45 lines of code plus docblocks of at most 6 lines each:
 
-**Paths it emits**
-- **`meta_data`:** emit `meta_data.<key>` for every key whose rows differ.
-  - Group each side's rows by `key` into a list of encoded values.
-  - Compare the union of both sides' keys, so a key on one side only is listed.
-- **`line_items`, `shipping_lines`, `fee_lines`, `coupon_lines`:**
-  - Index each side's items by `(int) id`. A client item without a positive id is keyed `new<index>` (its list index).
-  - An item on one side only: emit `<field>.<id>`.
-  - A matched item: walk the union of its keys.
-    - `meta_data` → the same per-key rule, with prefix `<field>.<id>.meta_data`.
-    - Any other differing key → `<field>.<id>.<key>`.
-- **Any other differing top-level key:** emit `<field>`.
-- **Malformed input:** when a top-level field's value is not an array on either side where the rules above expect a list (meta_data or an item list), or an item is not an array, compare it as a whole value and emit the field (or `<field>.<id>`) path if it differs; do not descend. `canonical_form()` already turns every meta row into a `{key, value}` pair, so rows need no extra checks: read `$row['key']` and `$row['value']` directly. Never throw.
+```text
+public static canonical_diff( array $client, array $server ): array
+    $a = self::canonical_form( $client ); $b = self::canonical_form( $server ); $paths = array();
+    foreach $a as $field => $value:
+        $other = $b[ $field ] ?? null
+        skip when wp_json_encode( $value ) === wp_json_encode( $other )
+        if $field is 'meta_data' or one of line_items/shipping_lines/fee_lines/coupon_lines:
+            $paths = array_merge( $paths, self::list_diff( (string) $field, $value, $other ) )
+        else $paths[] = (string) $field
+    $paths = array_values( array_unique( $paths ) ); sort( $paths, SORT_STRING ); return $paths
+
+private static list_diff( string $path, $a, $b ): array          // string[]
+    if ! is_array( $a ) || ! is_array( $b ): return array( $path )
+    $a = self::keyed( $a ); $b = self::keyed( $b ); $out = array()
+    foreach array_keys( $a + $b ) as $k:
+        $x = $a[ $k ] ?? null; $y = $b[ $k ] ?? null
+        skip when wp_json_encode( $x ) === wp_json_encode( $y )
+        if is_array( $x ) && is_array( $y ) && ! isset( $x[0] ):   // two matched items (a grouped meta value list has [0])
+            foreach array_keys( $x + $y ) as $key:
+                skip when wp_json_encode( $x[ $key ] ?? null ) === wp_json_encode( $y[ $key ] ?? null )
+                'meta_data' === $key ? merge self::list_diff( "$path.$k.meta_data", $x[ $key ] ?? null, $y[ $key ] ?? null )
+                                     : $out[] = "$path.$k.$key"
+        else $out[] = "$path.$k"
+    return $out
+
+private static keyed( array $list ): array
+    // A canonical meta row is array{key, value}: group values by key -> key => list of values.
+    // An item: key it by (int) id when positive, else 'new' . its list index.
+    // Anything else (not an array): keep it under its list index.
+```
+
+Notes:
+- The plugin supports PHP 7.4: no `array_is_list()`, no `str_contains()`, no match expressions, no arrow-function-only features beyond 7.4.
+- A meta key on one side only: `keyed()` gives it on one side, so `list_diff` emits `meta_data.<key>`. The values are lists, so they are never treated as items.
+- An item on one side only emits `<field>.<id>`.
+- Malformed input (a non-array list) emits the field path. Never throw.
 
 **Docblock:** diagnostics only; names only, never values; the client's own edits appear alongside another writer's moves.
 
@@ -118,7 +139,7 @@ Returns `string[]`, de-duplicated and sorted with `sort( $paths, SORT_STRING )`.
    - `assertSame( array( 'customer_note', 'line_items.' . $line_id . '.meta_data.x_line_audit', 'meta_data.x_audit' ), $stale->get_data()['differs'] ?? null, wp_json_encode( $stale->get_data() ) )`.
    - The hidden key must NOT appear: that proves the diff uses the same allow-list form as the hash.
 
-**Order of work** (a first run already added this test to the file, uncommitted, exactly as specified; keep it, do not rewrite it, and start at step 2)
+**Order of work** (earlier runs already added this test, uncommitted, and saved `red.txt`, trimmed to its failure lines. Keep both as they are and start at step 3.)
 1. Write the test.
 2. Run it and confirm it fails (no `differs` key). Save the PHPUnit output to `.claude/specs/2026-11-13-order-409-differs/red.txt`.
 3. Implement.
