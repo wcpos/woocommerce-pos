@@ -13,7 +13,7 @@ Order push lane and checkout (High tier, money and sync). The failure mode is a 
 ## In scope (the only files you may edit)
 
 - `includes/Sync/Order_Serializer.php`
-- `tests/includes/Sync/Test_Order_Revision_Excluded_Meta.php` (new)
+- `tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php` (add three tests and two small private helpers; edit nothing else in it)
 
 ## Out of scope (do not edit)
 
@@ -22,7 +22,6 @@ Order push lane and checkout (High tier, money and sync). The failure mode is a 
 - `includes/API/V2/Writers/Order_Writer.php`
 - `includes/Sync/Pos_Uuid.php`
 - `tests/includes/Sync/Test_Order_Revision_Recipe.php`
-- `tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php`
 - The changelog, readme, `package.json`, `composer.json`, lockfiles, plugin header version, docs, CI config
 
 ## Context
@@ -36,11 +35,8 @@ Order push lane and checkout (High tier, money and sync). The failure mode is a 
 - The new exclusion goes in those same two places. Keys are read with `Meta_Entry::key( $entry )`, as the existing code does.
 - `tax_lines` are not in that item loop. Do not add them: tax lines are readonly and WooCommerce derives them.
 - The existing filter `wcpos_sync_order_revision_fields` (at about line 353) shows the house docblock style for a filter: a description, `@since`, `@param`. Copy that style.
-- For a push through the real v2 route with unique mutation ids, copy `push_order()` and its envelope from `tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php:89-101`, and copy `setUp`/`tearDown` from the same file (`HTTP_X_WCPOS`, `woocommerce_calc_taxes` = `no`).
-  - For the payload, use one simple product line item: `ProductHelper::create_simple_product` with `regular_price` 10, `price` 10 and `tax_status` `none`; quantity 1; subtotal and total `'10'`.
-  - Do not add `_woocommerce_pos_data` meta.
-  - Each update push sends a `customer_note` edit, so that the payload is a real edit.
-- Test base class: `Sync_REST_Store_Test_Case`, the same as that file.
+- Pushes go through that file's existing `push_order( $operation, $payload, $base_revision )` (real v2 route, unique mutation ids). The create payload is the file's existing `create_payload()`.
+  - Each update push sends the previous response's `document` with `customer_note` set to a new string, so that the payload is a real edit.
 - Repro probe (for reference only, do not copy its structure): `.claude/specs/2026-11-13-order-revision-stale-ack/repro/Probe_Pos2vt.php.txt`, scenario S2.
 
 ## Interfaces and constraints
@@ -66,7 +62,14 @@ Order push lane and checkout (High tier, money and sync). The failure mode is a 
 - When the filter returns an empty array, the output of `canonical_form()` must be byte-identical to today's.
 - There is no deprecated `woocommerce_pos_*` twin; this is a new hook (ADR 0041).
 
-## Tests — `tests/includes/Sync/Test_Order_Revision_Excluded_Meta.php` (new)
+## Tests — added to `tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php`
+
+AMENDMENT (2026-11-13, after the first run stopped on the budget): the tests do NOT get a file of
+their own. Add them to the existing repush file and REUSE its `push_order()`, `create_payload()`
+(no coupon), `setUp`/`tearDown` and `RECORD_UUID`; do not copy any of them. That file's lines,
+fee and shipping lines all count as lines for the line-meta writer. No teardown is needed:
+`WP_UnitTestCase` backs up and restores hooks per test, so do not add removal code. Keep every
+docblock phpcs requires; the budget below fits them.
 
 The file defines a "third-party writer": a plugin that writes order meta at the end of every push request.
 - Register it on `rest_request_after_callbacks`, with three arguments: `$response, $handler, $request`.
@@ -74,7 +77,7 @@ The file defines a "third-party writer": a plugin that writes order meta at the 
   - Order variant: `$order = wc_get_order( $id ); $order->update_meta_data( '_x_third_party_stamp', (string) $n ); $order->save_meta_data();`.
   - Line variant: `wc_update_order_item_meta( $item_id, '_x_third_party_line_stamp', (string) $n )` for each `$order->get_items()`.
 - Return `$response` unchanged.
-- Unregister the writer, and the exclusion filter, in `tearDown`. Alternatively use `remove_all_filters` on those two hook names, if the parent class does not reset hooks.
+- Register the writers through one private helper, e.g. `add_third_party_writer( bool $lines )`; no unregistration (see the amendment above).
 
 Exactly three tests:
 
@@ -101,7 +104,7 @@ Exactly three tests:
 
 Order of work (failing first, as the repo requires):
 1. Write the test file.
-2. Run it. Test 1 must pass, test 2 must fail (an update returns 409), and test 3 must pass. Save that output to `.claude/specs/2026-11-13-order-revision-stale-ack/repro/red.txt`.
+2. Run it. Test 1 must pass, test 2 must fail (an update returns 409), and test 3 must pass. Save that output to `.claude/specs/2026-11-13-order-revision-stale-ack/repro/red.txt` (overwrite the earlier red run, which came from the withdrawn standalone file).
 3. Implement.
 4. Run again; all three must pass.
 
@@ -138,10 +141,9 @@ Run every acceptance command in the foreground and wait for its exit code.
 Use a Bash timeout of 700000 ms for each phpunit command.
 
 ```sh
-~/.claude/bin/test-slot-run --wait 600 pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Sync/Test_Order_Revision_Excluded_Meta.php
-~/.claude/bin/test-slot-run --wait 600 pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Sync/Test_Order_Revision_Recipe.php
 ~/.claude/bin/test-slot-run --wait 600 pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php
-pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' cli -- vendor/bin/phpcs --standard=./.phpcs.xml.dist includes/Sync/Order_Serializer.php tests/includes/Sync/Test_Order_Revision_Excluded_Meta.php
+~/.claude/bin/test-slot-run --wait 600 pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Sync/Test_Order_Revision_Recipe.php
+pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' cli -- vendor/bin/phpcs --standard=./.phpcs.xml.dist includes/Sync/Order_Serializer.php tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php
 ```
 
 phpcs: report any errors on lines you added. Errors already on `main` stay.

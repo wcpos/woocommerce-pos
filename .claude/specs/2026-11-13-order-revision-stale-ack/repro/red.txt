@@ -1,0 +1,31 @@
+test-slot-run: slot claimed after 0 s
+ℹ Starting 'vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Sync/Test_Order_Revision_Excluded_Meta.php' on the tests-cli container. 
+
+Installing...
+Running as single site... To run multisite, use -c tests/phpunit/multisite.xml
+Not running ajax tests. To execute these, use --group ajax.
+Not running ms-files tests. To execute these, use --group ms-files.
+Not running external-http tests. To execute these, use --group external-http.
+PHPUnit 9.6.39 by Sebastian Bergmann and contributors.
+
+Warning:       No code coverage driver available
+Warning:       Your XML configuration validates against a deprecated schema.
+Suggestion:    Migrate your XML configuration using "--migrate-configuration"!
+
+.F.                                                                 3 / 3 (100%)
+
+Time: 00:00.351, Memory: 129.00 MB
+
+There was 1 failure:
+
+1) WCPOS\WooCommercePOS\Tests\Sync\Test_Order_Revision_Excluded_Meta::test_excluded_order_and_line_meta_keys_written_after_every_push_no_longer_409
+409 {"code":"woo_rxdb_sync_conflict","message":"baseRevision is stale.","current":{"id":13,"parent_id":0,"status":"pending","currency":"USD","version":"11.3.0","prices_include_tax":false,"date_created":"2026-11-13T15:16:38","date_modified":"2026-11-13T15:16:38","discount_total":"0.000000","discount_tax":"0.000000","shipping_total":"0.000000","shipping_tax":"0.000000","cart_tax":"0.000000","total":"10.000000","total_tax":"0.000000","customer_id":0,"order_key":"wc_order_RvPPK0dinTrkH","billing":{"first_name":"","last_name":"","company":"","address_1":"","address_2":"","city":"","state":"","postcode":"","country":"","email":"","phone":""},"shipping":{"first_name":"","last_name":"","company":"","address_1":"","address_2":"","city":"","state":"","postcode":"","country":"","phone":""},"payment_method":"","payment_method_title":"","transaction_id":"","customer_ip_address":"","customer_user_agent":"","created_via":"woocommerce-pos","customer_note":"","date_completed":null,"date_paid":null,"cart_hash":"","number":"13","meta_data":[{"id":88,"key":"_pos_user","value":"3"},{"id":89,"key":"_pos_user_created","value":"3"},{"id":90,"key":"_woocommerce_pos_uuid","value":"57000000-0000-4000-8000-0000000000b1"},{"id":91,"key":"_woocommerce_pos_version","value":"2.0.2"},{"id":92,"key":"_x_third_party_stamp","value":"1"}],"line_items":[{"id":14,"name":"Dummy Product","product_id":12,"variation_id":0,"quantity":1,"tax_class":"","subtotal":"10.000000","subtotal_tax":"0.000000","total":"10.000000","total_tax":"0.000000","taxes":[],"meta_data":[{"id":144,"key":"_woocommerce_pos_uuid","value":"fb77410c-b203-4133-8ced-08d3eda5ec10","display_key":"_woocommerce_pos_uuid","display_value":"fb77410c-b203-4133-8ced-08d3eda5ec10"},{"id":145,"key":"_x_third_party_line_stamp","value":"2","display_key":"_x_third_party_line_stamp","display_value":"2"}],"sku":"DUMMY SKU6af729d68edce","global_unique_id":"","price":10,"image":{"id":"","src":""},"parent_name":null}],"tax_lines":[],"shipping_lines":[],"fee_lines":[],"coupon_lines":[],"refunds":[],"payment_url":"http:\/\/localhost:8889?order-pay=13&pay_for_order=true&key=wc_order_RvPPK0dinTrkH","is_editable":true,"needs_payment":true,"needs_processing":true,"date_created_gmt":"2026-11-13T15:16:38","date_modified_gmt":"2026-11-13T15:16:38","date_completed_gmt":null,"date_paid_gmt":null,"currency_symbol":"$","links":{"payment":[{"href":"https:\/\/localhost:8889\/wcpos-checkout\/order-pay\/13?pay_for_order=1&key=wc_order_RvPPK0dinTrkH"}],"receipt":[{"href":"https:\/\/localhost:8889\/wcpos-checkout\/wcpos-receipt\/13?key=wc_order_RvPPK0dinTrkH"}]}},"currentRevision":"sha256:4dcd59875964bfffe001f76a2a202bf34aeac02a52327faccae1ada7412802dd"}
+Failed asserting that 409 is identical to 200.
+
+/var/www/html/wp-content/plugins/woocommerce-pos/tests/includes/Sync/Test_Order_Revision_Excluded_Meta.php:110
+/var/www/html/wp-content/plugins/woocommerce-pos/tests/includes/Sync/Test_Order_Revision_Excluded_Meta.php:139
+
+FAILURES!
+Tests: 3, Assertions: 10, Failures: 1.
+✖ Command failed with exit code 1
+Command failed with exit code 1
