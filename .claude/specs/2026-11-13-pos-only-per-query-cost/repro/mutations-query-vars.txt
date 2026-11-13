@@ -1,27 +1,35 @@
 Q1 filtered queries skip post__not_in again (the #2662 regression):
-    1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_filtered_product_query_carries_pos_only_ids_in_query_vars
-    2) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_variation_query_carries_pos_only_ids_in_query_vars
+    1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_late_post_in_callback_excludes_pos_only_ids
+    2) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_filtered_product_query_carries_pos_only_ids_in_query_vars
+    3) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_variation_query_carries_pos_only_ids_in_query_vars
     FAILURES!
-    Tests: 48, Assertions: 73, Failures: 2.
+    Tests: 48, Assertions: 74, Failures: 3.
 Q2 posts_where trusts core NOT IN even when p or post__in is set:
-    OK (48 tests, 76 assertions)
+    OK (48 tests, 77 assertions)
 Q3 posts_where ignores p only:
-    OK (48 tests, 76 assertions)
+    OK (48 tests, 77 assertions)
 Q4 posts_where ignores post__in only:
-    OK (48 tests, 76 assertions)
+    OK (48 tests, 77 assertions)
 Q5 posts_where trusts a stripped WHERE (no strpos check):
     1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_late_posts_where_callback_cannot_strip_exclusion
     FAILURES!
-    Tests: 48, Assertions: 76, Failures: 1.
+    Tests: 48, Assertions: 77, Failures: 1.
 Q6 posts_where always appends (list written twice):
     1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_query_product_writes_one_not_in
     2) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_query_products_and_variations_writes_one_not_in
     FAILURES!
-    Tests: 48, Assertions: 76, Failures: 2.
-Q7 suppressed query post__in no longer trimmed:
+    Tests: 48, Assertions: 77, Failures: 2.
+Q7 post__in never trimmed:
     1) WCPOS\WooCommercePOS\Tests\Test_Products::test_pos_only_products_get_posts_include_returns_only_visible_id
     2) WCPOS\WooCommercePOS\Tests\Test_Products::test_pos_only_products_get_posts_include_all_hidden_returns_nothing
+    3) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_late_post_in_callback_excludes_pos_only_ids
     FAILURES!
-    Tests: 48, Assertions: 76, Failures: 2.
+    Tests: 48, Assertions: 77, Failures: 3.
+Q7b post__in trimmed only on suppressed queries (the first query-vars shape):
+    1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_late_post_in_callback_excludes_pos_only_ids
+    FAILURES!
+    Tests: 48, Assertions: 77, Failures: 1.
 Q8 pre_get_posts back at priority 10:
-    OK (48 tests, 76 assertions)
+    1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_late_post_in_callback_excludes_pos_only_ids
+    FAILURES!
+    Tests: 48, Assertions: 77, Failures: 1.

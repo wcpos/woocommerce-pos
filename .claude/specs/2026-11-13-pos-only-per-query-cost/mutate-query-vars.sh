@@ -30,7 +30,9 @@ mutate "Q5 posts_where trusts a stripped WHERE (no strpos check)" \
   's/ \|\| false === strpos\( \$where, [^)]*\) \)/ )/'
 mutate "Q6 posts_where always appends (list written twice)" \
   's/if \( \$query->get\( .p. \) \|\| [^\n]*\{\n/if ( true ) {\n/'
-mutate "Q7 suppressed query post__in no longer trimmed" \
-  's/\$post__in = \$query->get\( .suppress_filters. \) \? \(array\) \$query->get\( .post__in. \) : array\(\);/\$post__in = array();/'
+mutate "Q7 post__in never trimmed" \
+  's/\$post__in = \(array\) \$query->get\( .post__in. \);/\$post__in = array();/'
+mutate "Q7b post__in trimmed only on suppressed queries (the first query-vars shape)" \
+  's/\$post__in = \(array\) \$query->get\( .post__in. \);/\$post__in = \$query->get( "suppress_filters" ) ? (array) \$query->get( "post__in" ) : array();/'
 mutate "Q8 pre_get_posts back at priority 10" \
   's/(hide_pos_only_products. \)), PHP_INT_MAX \)/$1 )/'

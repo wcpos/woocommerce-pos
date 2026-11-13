@@ -163,8 +163,8 @@ class Products {
 	 *
 	 * Code that answers from the query vars (`posts_pre_query` integrations such as
 	 * ElasticPress, Relevanssi, SearchWP, Algolia) honours them, and WordPress
-	 * builds the `NOT IN` itself. A query that suppresses filters also has its
-	 * `post__in` trimmed, because posts_where never runs for it.
+	 * builds the `NOT IN` itself. Its `post__in` is trimmed too, because WordPress
+	 * then ignores `post__not_in`.
 	 *
 	 * @param \WP_Query $query The query being filtered.
 	 */
@@ -181,8 +181,7 @@ class Products {
 		// get_posts() caller suppresses the posts_where clause below as well, so
 		// an id list is trimmed here. An emptied list keeps an impossible id:
 		// an empty post__in would turn the query into an unrestricted one.
-		// A filtered query is left to posts_where, which covers post__in itself.
-		$post__in = $query->get( 'suppress_filters' ) ? (array) $query->get( 'post__in' ) : array();
+		$post__in = (array) $query->get( 'post__in' );
 		if ( ! empty( $post__in ) ) {
 			$post__in = array_values( array_diff( array_map( 'intval', $post__in ), $exclude_ids ) );
 			$query->set( 'post__in', empty( $post__in ) ? array( 0 ) : $post__in );

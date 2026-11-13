@@ -187,6 +187,7 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( array( $visible ), array_map( 'intval', $query->posts ) );
+		$this->assertSame( array( $visible ), array_map( 'intval', (array) $query->get( 'post__in' ) ) );
 	}
 
 	/**

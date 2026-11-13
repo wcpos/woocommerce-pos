@@ -1,0 +1,37 @@
+test-slot-run: slot claimed after 0 s
+ℹ Starting 'vendor/bin/phpunit -c .phpunit.xml.dist --filter Test_Products(_Direct|_Query_Exclusion)?::' on the tests-cli container. 
+
+Installing...
+Running as single site... To run multisite, use -c tests/phpunit/multisite.xml
+Not running ajax tests. To execute these, use --group ajax.
+Not running ms-files tests. To execute these, use --group ms-files.
+Not running external-http tests. To execute these, use --group external-http.
+PHPUnit 9.6.39 by Sebastian Bergmann and contributors.
+
+Warning:       No code coverage driver available
+Warning:       Your XML configuration validates against a deprecated schema.
+Suggestion:    Migrate your XML configuration using "--migrate-configuration"!
+
+.......................................F........                  48 / 48 (100%)
+
+Time: 00:01.164, Memory: 189.00 MB
+
+There was 1 failure:
+
+1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_late_post_in_callback_excludes_pos_only_ids
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 (
+-    0 => 111
++    0 => 110
++    1 => 111
+ )
+
+/var/www/html/wp-content/plugins/woocommerce-pos/tests/includes/Test_Products_Query_Exclusion.php:190
+
+FAILURES!
+Tests: 48, Assertions: 77, Failures: 1.
+✖ Command failed with exit code 1
+Command failed with exit code 1
