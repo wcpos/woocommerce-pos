@@ -442,7 +442,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	 */
 	public function test_meta_key_not_excluded_still_409s_a_stale_push(): void {
 		// Arrange.
-		add_filter( 'wcpos_sync_order_revision_excluded_meta_keys', static fn() => array( '_x_third_party_stamp' ) );
+		add_filter( 'wcpos_sync_order_revision_excluded_meta_keys', static fn() => array( '_x_third_party_stamp', '_x_third_party_line_stamp' ) );
 		$created = $this->push_order( 'create', $this->create_payload() );
 		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
 		$first = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
@@ -454,5 +454,10 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$stale = $this->push_order( 'update', $this->edited_document( $first, 'second edit' ), $first->get_data()['currentRevision'] );
 		// Assert.
 		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+		// Line meta the filter does not name stays in the hash too.
+		$current = $stale->get_data()['current'];
+		wc_update_order_item_meta( (int) $current['line_items'][0]['id'], '_x_other_plugin_line_key', 'moved' );
+		$line_stale = $this->push_order( 'update', array_merge( $current, array( 'customer_note' => 'third edit' ) ), $stale->get_data()['currentRevision'] );
+		$this->assertSame( 409, $line_stale->get_status(), wp_json_encode( $line_stale->get_data() ) );
 	}
 }
