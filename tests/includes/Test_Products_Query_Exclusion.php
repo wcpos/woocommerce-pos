@@ -331,7 +331,9 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 		$pos_only = ProductHelper::create_simple_product()->get_id();
 		$this->set_pos_only_ids( array( $pos_only ) );
 		$products = new Products();
-		$products->record_rest_route( null, rest_get_server(), new WP_REST_Request( 'GET', '/wc-analytics/reports/products' ) );
+		$request  = new WP_REST_Request( 'GET' );
+		$request->set_route( '/wc-analytics/reports/products' );
+		$products->record_rest_route( null, rest_get_server(), $request );
 
 		// Act.
 		$query = new WP_Query( $this->product_query_args() );
