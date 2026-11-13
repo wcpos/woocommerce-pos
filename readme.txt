@@ -4,7 +4,7 @@ Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.2
+Stable tag: 2.0.3
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -296,6 +296,12 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 8. Offline: the Offline badge beside the store name while the till keeps working.
 
 == Changelog ==
+
+= 2.0.3 - 2026/11/13 =
+
+- **Sales no longer fail with "Checkout failed" when another plugin keeps updating its own hidden data on an order, and a till no longer writes an older copy of that data back.**
+- **Online shop pages on stores with tens of thousands of POS Only products load about twice as fast: each product list carries the POS Only list once, not twice.**
+- Developers: two new filters for the order revision: `wcpos_sync_order_revision_excluded_meta_keys` leaves keys out of it, and `wcpos_sync_order_revision_meta_keys` lists the hidden keys kept in it.
 
 = 2.0.2 - 2026/11/12 =
 
