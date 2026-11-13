@@ -349,4 +349,110 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 			remove_filter( 'woocommerce_order_class', $order_class_filter );
 		}
 	}
+
+	/**
+	 * Register a third-party plugin that writes order (or line) meta at the end of every push request.
+	 *
+	 * @param bool $lines Write `_x_third_party_line_stamp` on every line instead of order meta.
+	 *
+	 * @return void
+	 */
+	private function add_third_party_writer( bool $lines ): void {
+		$n = 0;
+		add_filter(
+			'rest_request_after_callbacks',
+			static function ( $response, $handler, $request ) use ( $lines, &$n ) {
+				$data = $response instanceof WP_REST_Response && '/wcpos/v2/push/orders' === $request->get_route() ? $response->get_data() : array();
+				$id   = (int) ( $data['document']['id'] ?? $data['current']['id'] ?? 0 );
+				if ( 0 !== $id ) {
+					$order = wc_get_order( $id );
+					++$n;
+					if ( $lines ) {
+						foreach ( array_keys( $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) ) as $item_id ) {
+							wc_update_order_item_meta( $item_id, '_x_third_party_line_stamp', (string) $n );
+						}
+					} else {
+						$order->update_meta_data( '_x_third_party_stamp', (string) $n );
+						$order->save_meta_data();
+					}
+				}
+				return $response;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * The acknowledged document with a new customer note, so the update is a real edit.
+	 *
+	 * @param WP_REST_Response $response Previous acknowledgement.
+	 * @param string           $note     Customer note to send.
+	 *
+	 * @return array
+	 */
+	private function edited_document( WP_REST_Response $response, string $note ): array {
+		return array_merge( $response->get_data()['document'], array( 'customer_note' => $note ) );
+	}
+
+	/**
+	 * POS-2VT: order meta written after every push makes the re-anchored re-push 409 again.
+	 *
+	 * @return void
+	 */
+	public function test_meta_written_after_every_push_409s_the_reanchored_repush_again(): void {
+		// Arrange.
+		$this->add_third_party_writer( false );
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$document = $this->edited_document( $created, 'first edit' );
+		// Act.
+		$first  = $this->push_order( 'update', $document, $created->get_data()['currentRevision'] );
+		$repush = $this->push_order( 'update', $document, $first->get_data()['currentRevision'] ?? null );
+		// Assert.
+		$this->assertSame( 409, $first->get_status(), wp_json_encode( $first->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $first->get_data()['code'] ?? null );
+		$this->assertSame( 409, $repush->get_status(), wp_json_encode( $repush->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $repush->get_data()['code'] ?? null );
+	}
+
+	/**
+	 * Excluded order and line meta keys written after every push no longer 409 the next push.
+	 *
+	 * @return void
+	 */
+	public function test_excluded_order_and_line_meta_keys_written_after_every_push_no_longer_409(): void {
+		// Arrange.
+		$this->add_third_party_writer( false );
+		$this->add_third_party_writer( true );
+		add_filter( 'wcpos_sync_order_revision_excluded_meta_keys', static fn() => array( '_x_third_party_stamp', '_x_third_party_line_stamp' ) );
+		$previous = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $previous->get_status(), wp_json_encode( $previous->get_data() ) );
+		// Act and assert: each update anchors on the previous acknowledgement.
+		foreach ( array( 'first edit', 'second edit', 'third edit' ) as $note ) {
+			$previous = $this->push_order( 'update', $this->edited_document( $previous, $note ), $previous->get_data()['currentRevision'] );
+			$this->assertSame( 200, $previous->get_status(), wp_json_encode( $previous->get_data() ) );
+		}
+	}
+
+	/**
+	 * A meta key the filter does not name still 409s a stale push.
+	 *
+	 * @return void
+	 */
+	public function test_meta_key_not_excluded_still_409s_a_stale_push(): void {
+		// Arrange.
+		add_filter( 'wcpos_sync_order_revision_excluded_meta_keys', static fn() => array( '_x_third_party_stamp' ) );
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$first = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
+		$this->assertSame( 200, $first->get_status(), wp_json_encode( $first->get_data() ) );
+		$order = wc_get_order( (int) $first->get_data()['document']['id'] );
+		$order->update_meta_data( '_x_other_plugin_key', 'moved' );
+		$order->save_meta_data();
+		// Act.
+		$stale = $this->push_order( 'update', $this->edited_document( $first, 'second edit' ), $first->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+	}
 }

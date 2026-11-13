@@ -358,6 +358,19 @@ final class Order_Serializer {
 		// drops them. The unset keeps them out of a site that names either above.
 		unset( $payload['tax_ids'], $payload['_rxdb_digest'] );
 
+		/**
+		 * Filters the meta keys the canonical order revision leaves out, on the order and on every line.
+		 *
+		 * For bookkeeping keys another plugin writes outside the till's edits. An
+		 * excluded key no longer 409s a stale push, so a full-document push from a
+		 * till can overwrite that key's value: last writer wins.
+		 *
+		 * @since 2.0.3
+		 *
+		 * @param string[] $keys Meta keys left out of the hash. Default empty.
+		 */
+		$excluded_meta = array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_excluded_meta_keys', array() ) );
+
 		// HPOS removes these internal fields only after the restored order's save
 		// hooks run. The exclusion predates compute-at-pull (ADR 0033) and is frozen
 		// with the 1.10.x recipe: legacy journal rows stored hashes computed with it,
@@ -367,15 +380,16 @@ final class Order_Serializer {
 			$payload['meta_data'] = array_values(
 				array_filter(
 					$payload['meta_data'],
-					static function ( $entry ): bool {
+					static function ( $entry ) use ( $excluded_meta ): bool {
 						$key = Meta_Entry::key( $entry );
-						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true );
+						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true )
+							&& ! in_array( $key, $excluded_meta, true );
 					}
 				)
 			);
 		}
 
-		$payload = self::strip_item_identity_meta( self::strip_identity_meta( $payload ) );
+		$payload = self::strip_item_identity_meta( self::strip_identity_meta( $payload ), $excluded_meta );
 
 		return Revision::canonicalize( array_intersect_key( $payload, array_flip( $fields ) ) );
 	}
@@ -391,8 +405,9 @@ final class Order_Serializer {
 	 *   would make the first post-stamp edit a false 409.
 	 * - Normalize line_items[].image.id to an int — the augmented read lanes
 	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
+	 * - Drop item meta whose key is in `$excluded_meta` (the revision's excluded-meta filter).
 	 */
-	private static function strip_item_identity_meta( array $payload ): array {
+	private static function strip_item_identity_meta( array $payload, array $excluded_meta ): array {
 		// coupon_lines joined the uuid-stamped set with the rest (the client pairs
 		// coupons by uuid too); their identity meta must be hash-invisible for the
 		// same reason as every other line type — the augmented document and a bare
@@ -415,9 +430,9 @@ final class Order_Serializer {
 				$payload[ $items_key ][ $index ]['meta_data'] = array_values(
 					array_filter(
 						$item['meta_data'],
-						static function ( $entry ): bool {
+						static function ( $entry ) use ( $excluded_meta ): bool {
 							$key = Meta_Entry::key( $entry );
-							return '_woocommerce_pos_uuid' !== $key;
+							return '_woocommerce_pos_uuid' !== $key && ! in_array( $key, $excluded_meta, true );
 						}
 					)
 				);
