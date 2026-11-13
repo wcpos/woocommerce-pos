@@ -765,6 +765,8 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$id      = (int) $created->get_data()['document']['id'];
 		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
 		$this->set_order_meta( $id, '_x_site_key', 'before' );
+		$this->set_order_meta( $id, 'gift_message', 'before' );
+		wc_update_order_item_meta( $line_id, 'x_engraving', 'before' );
 		$anchor   = Order_Serializer::current_state( $id )['revision'];
 		$pos_data = array(
 			'price'         => '10',
@@ -778,7 +780,11 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 				$document['line_items'][0]['meta_data'][ $i ]['value'] = wp_json_encode( $pos_data );
 			}
 		}
-		$document['meta_data'][] = array(
+		$document['line_items'][0]['meta_data'][] = array(
+			'key'   => 'x_engraving',
+			'value' => 'after',
+		);
+		$document['meta_data'][]                  = array(
 			'key'   => 'gift_message',
 			'value' => 'hello',
 		);
@@ -792,8 +798,59 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
 		$stored = wc_get_order_item_meta( $line_id, '_woocommerce_pos_data', true );
 		$this->assertSame( $pos_data, is_array( $stored ) ? $stored : json_decode( (string) $stored, true ) );
+		$this->assertSame( array( 'after' ), wc_get_order_item_meta( $line_id, 'x_engraving', false ) );
 		$this->assertSame( 'hello', wc_get_order( $id )->get_meta( 'gift_message' ) );
 		$this->assertSame( 'after', wc_get_order( $id )->get_meta( '_x_site_key' ) );
+	}
+
+	/**
+	 * A pushed entry cannot rewrite a hidden third-party row through its meta id, on the order or on a line.
+	 *
+	 * @return void
+	 */
+	public function test_a_push_cannot_rewrite_a_hidden_third_party_row_by_its_meta_id(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$id      = (int) $created->get_data()['document']['id'];
+		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$this->set_order_meta( $id, '_tracking_number', 'NEW' );
+		wc_update_order_item_meta( $line_id, '_tracking_number', 'NEW' );
+		$row_id = static function ( array $meta_data ): int {
+			foreach ( $meta_data as $meta ) {
+				if ( '_tracking_number' === $meta->key ) {
+					return (int) $meta->id;
+				}
+			}
+			return 0;
+		};
+		$order_row = $row_id( wc_get_order( $id )->get_meta_data() );
+		$line_row  = $row_id( wc_get_order( $id )->get_item( $line_id )->get_meta_data() );
+		$this->assertGreaterThan( 0, $order_row );
+		$this->assertGreaterThan( 0, $line_row );
+		$document                                 = $this->edited_document( $created, 'hijack by id' );
+		$document['meta_data'][]                  = array(
+			'id'    => $order_row,
+			'key'   => '_x_other',
+			'value' => 'hijack',
+		);
+		$document['line_items'][0]['meta_data'][] = array(
+			'id'    => $line_row,
+			'key'   => '_x_other',
+			'value' => 'hijack',
+		);
+		// Act.
+		$push = $this->push_order( 'update', $document, Order_Serializer::current_state( $id )['revision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( array( 'NEW' ), array_values( array_map( static fn( $meta ) => $meta->value, wc_get_order( $id )->get_meta( '_tracking_number', false ) ) ) );
+		$this->assertSame( array( 'NEW' ), wc_get_order_item_meta( $line_id, '_tracking_number', false ) );
+		foreach ( wc_get_order( $id )->get_meta_data() as $meta ) {
+			$this->assertFalse( $order_row === (int) $meta->id && 'hijack' === $meta->value, 'Order meta row ' . $order_row . ' was rewritten.' );
+		}
+		foreach ( wc_get_order( $id )->get_item( $line_id )->get_meta_data() as $meta ) {
+			$this->assertFalse( $line_row === (int) $meta->id && 'hijack' === $meta->value, 'Line meta row ' . $line_row . ' was rewritten.' );
+		}
 	}
 
 	/**
