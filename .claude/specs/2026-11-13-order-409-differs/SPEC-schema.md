@@ -19,7 +19,7 @@ This is test documentation only: no runtime code reads this file. A JSON syntax 
 
 ## Context
 
-`$defs.conflictResponse` (around lines 115-144) has:
+`$defs.conflictResponse` starts at line 115 (`"conflictResponse": {`). Its `currentRevision` property is at lines 136-141 and closes with `        }` on line 141; `properties` closes on line 142. Insert the new property there: change line 141's `}` to `},` and add the new key after it. Do NOT edit the `currentRevision` block at lines 101-106, which belongs to a different definition (a first attempt edited that one by mistake). The definition has:
 - `required`: `code`, `message`, `current`, `currentRevision`;
 - `properties` for those four;
 - `additionalProperties: false`.
