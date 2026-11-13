@@ -1,0 +1,210 @@
+# Codex job spec — the order push 409 names what differs (POS-2VT diagnosis)
+
+## Goal
+
+On stores hit by Sentry POS-2VT, the till's order push 409s again and again. #2663 and #2664 cover the known cause: another plugin moving its own meta. When a 409 still repeats, nobody can see WHICH field moved, because the 409 carries only `current` (the whole order) and `currentRevision` (a hash).
+
+This job adds one field, `differs`, to the push lane's order-update 409. It lists the paths where the pushed order and the server copy disagree, inside exactly what the order revision hashes (the allow-list canonical form, `Order_Serializer::canonical_form()`). It holds names only, never values.
+
+The server keeps no copy of the client's base document, only its hash. So the diff compares the pushed document with the server copy, and the client's own edits show up too. The docblock says so.
+
+The job also fixes some comments: the legacy recipe is 2.0.2's, not 2.0.3's (see In scope).
+
+## Stakes
+
+This touches the order push lane (High tier, sync). The response shape gains a field on the 409 only:
+- the hash, the compare and the 200/201 path are untouched;
+- `current` and `currentRevision` are unchanged;
+- a 2.0.0 app that ignores unknown keys is unaffected.
+
+The 409 path must not throw: a malformed payload yields an empty or partial list, never an error.
+
+## In scope (the only files you may edit)
+
+- `includes/Sync/Order_Serializer.php`:
+  - Add ONE public static method, `canonical_diff()`, and at most two private static helpers for it (one for the per-key meta rule, one for the item lists).
+  - Comments only: the legacy recipe hashes every meta row, which is how 2.0.2 hashed; the allow-list ships in 2.0.3. Change "2.0.3 recipe" to "2.0.2 recipe" and "2.0.3 form" to "2.0.2 form" in the comments at lines 387, 427, 433 and 520.
+  - Leave the two `@since 2.0.3` tags (lines 420 and 476) as they are: they are correct.
+- `includes/API/V2/Write_Controller.php`:
+  - Pass the diff into `stale_conflict()` on the update path.
+  - Comment at line 838: change "2.0.3-recipe" to "2.0.2-recipe".
+- `tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php`:
+  - Add ONE test (below).
+  - Comments only: in the comments at lines 526, 528, 544 and 554, change "2.0.3" (the legacy recipe) to "2.0.2". Change the docblock "A till's 2.0.3 ack" to "A till's 2.0.2 ack". Do NOT rename any test method.
+- `tests/includes/Payments/Contract/Test_Command_Log.php`:
+  - Comment at line 237 only: change "2.0.3-recipe" to "2.0.2-recipe". Do NOT rename the test method. Nothing else in this file.
+
+- `.claude/specs/2026-11-13-order-409-differs/red.txt` (new)
+
+## Out of scope (do not edit)
+
+- `includes/Sync/Revision.php`
+- `includes/Sync/Order_Writer.php`
+- `includes/Sync/Order_Write_Payload.php`
+- the bodies of `canonical_form()`, `form()`, `canonical_revision()`, `stale()` and `legacy_revision()` in `includes/Sync/Order_Serializer.php`
+- `tests/includes/Sync/Test_Order_Revision_Recipe.php`
+- Other surfaces: the proxy (wc/v3) lane's 412/409, product/variation/coupon 409s, the delete lane's `stale_conflict()` call (Write_Controller ~line 566).
+- Changelog, `readme.txt`, version, docs, CI.
+
+## Context
+
+- `Order_Serializer::canonical_form( array $payload ): array` (line 380) is exactly the array the revision hashes. It:
+  - scopes to WooCommerce's order schema keys;
+  - drops hidden (`_`-prefixed) meta outside `revision_meta_keys()`, on the order and on lines;
+  - drops `wcpos_sync_order_revision_excluded_meta_keys` keys;
+  - strips `_woocommerce_pos_uuid`;
+  - recursively sorts keys with `Revision::canonicalize()`.
+
+  In that form, `meta_data` (at both depths) is a sorted list of `{key, value}` arrays, and line items keep their `id`.
+- `canonical_revision()` hashes `wp_json_encode( canonical_form( ... ) )`.
+- `Write_Controller::apply_update()` (line 452): inside the locked closure, `$current_bare` is the server document and `$m['payload']` is the pushed document. `stale_for()` returns null or the facts array, and then `return $this->stale_conflict( $stale );` (line 494).
+- `Write_Controller::stale_conflict( array $facts )` is at line 812.
+- Test helpers already in `Test_Rest_Dispatch_Repush_Idempotency.php`:
+  - `push_order( $operation, $payload, $base_revision )` (line 92)
+  - `create_payload()` (line 114)
+  - `edited_document( $response, $note )` (line 397)
+  - `set_order_meta( $id, $key, $value )` (line 598)
+
+## Interfaces and constraints
+
+### `Order_Serializer::canonical_diff( array $client, array $server ): array`
+
+Returns `string[]`, de-duplicated and sorted with `sort( $paths, SORT_STRING )`.
+
+**Structure (follow it; it fits the budget).** Three methods, about 45 lines of code plus docblocks of at most 6 lines each:
+
+```text
+public static canonical_diff( array $client, array $server ): array
+    $a = self::canonical_form( $client ); $b = self::canonical_form( $server ); $paths = array();
+    foreach $a as $field => $value:
+        $other = $b[ $field ] ?? null
+        skip when wp_json_encode( $value ) === wp_json_encode( $other )
+        if $field is 'meta_data' or one of line_items/shipping_lines/fee_lines/coupon_lines:
+            $paths = array_merge( $paths, self::list_diff( (string) $field, $value, $other ) )
+        else $paths[] = (string) $field
+    $paths = array_values( array_unique( $paths ) ); sort( $paths, SORT_STRING ); return $paths
+
+private static list_diff( string $path, $a, $b ): array          // string[]
+    if ! is_array( $a ) || ! is_array( $b ): return array( $path )
+    $a = self::keyed( $a ); $b = self::keyed( $b ); $out = array()
+    foreach array_keys( $a + $b ) as $k:
+        $x = $a[ $k ] ?? null; $y = $b[ $k ] ?? null
+        skip when wp_json_encode( $x ) === wp_json_encode( $y )
+        if is_array( $x ) && is_array( $y ) && ! isset( $x[0] ):   // two matched items (a grouped meta value list has [0])
+            foreach array_keys( $x + $y ) as $key:
+                skip when wp_json_encode( $x[ $key ] ?? null ) === wp_json_encode( $y[ $key ] ?? null )
+                'meta_data' === $key ? merge self::list_diff( "$path.$k.meta_data", $x[ $key ] ?? null, $y[ $key ] ?? null )
+                                     : $out[] = "$path.$k.$key"
+        else $out[] = "$path.$k"
+    return $out
+
+private static keyed( array $list ): array
+    // A canonical meta row is array{key, value}: group values by key -> key => list of values.
+    // An item: key it by (int) id when positive, else 'new' . its list index.
+    // Anything else (not an array): keep it under its list index.
+```
+
+Notes:
+- The plugin supports PHP 7.4: no `array_is_list()`, no `str_contains()`, no match expressions, no arrow-function-only features beyond 7.4.
+- A meta key on one side only: `keyed()` gives it on one side, so `list_diff` emits `meta_data.<key>`. The values are lists, so they are never treated as items.
+- An item on one side only emits `<field>.<id>`.
+- Malformed input (a non-array list) emits the field path. Never throw.
+
+**Docblock:** diagnostics only; names only, never values; the client's own edits appear alongside another writer's moves.
+
+### `Write_Controller`
+
+- **`stale_conflict( array $facts, ?array $differs = null ): WP_REST_Response`:**
+  - When `$differs` is not null, add `'differs' => $differs` AFTER `currentRevision` in the wire key order.
+  - Add one docblock `@param` line: path names where the pushed order and the server copy differ in the revision's canonical form; order updates only.
+- **Update path (line 494):**
+  - For an order (`'order' === ( $meta['id_type'] ?? '' )`), call `$this->stale_conflict( $stale, Order_Serializer::canonical_diff( (array) $m['payload'], $current_bare ) )`.
+  - Otherwise make the existing call.
+  - `$m` is already in the closure's `use` list.
+
+## Test (one, added after `test_pos_owned_change_still_409s_a_stale_push`)
+
+`test_stale_order_push_409_names_what_moved_inside_the_revision`
+
+1. **Arrange:**
+   - Create the order with `push_order( 'create', $this->create_payload() )` and assert 201.
+   - Read `$id` from the response's `document.id`, and `$line_id` from its `document.line_items[0].id`.
+   - Out of band, as another plugin would:
+     - `$this->set_order_meta( $id, 'x_audit', 'moved' )` (visible order meta);
+     - `wc_update_order_item_meta( $line_id, 'x_line_audit', 'moved' )` (visible line meta);
+     - `$this->set_order_meta( $id, '_x_hidden_stamp', 'moved' )` (hidden, not allow-listed, outside the hash).
+2. **Act:** `push_order( 'update', $this->edited_document( $created, 'first edit' ), <create's currentRevision> )`.
+3. **Assert:**
+   - Status 409, code `woo_rxdb_sync_conflict`.
+   - `assertSame( array( 'customer_note', 'line_items.' . $line_id . '.meta_data.x_line_audit', 'meta_data.x_audit' ), $stale->get_data()['differs'] ?? null, wp_json_encode( $stale->get_data() ) )`.
+   - The hidden key must NOT appear: that proves the diff uses the same allow-list form as the hash.
+
+**Order of work** (earlier runs already added this test, uncommitted, and saved `red.txt`, trimmed to its failure lines. Keep both as they are and start at step 3.)
+1. Write the test.
+2. Run it and confirm it fails (no `differs` key). Save the PHPUnit output to `.claude/specs/2026-11-13-order-409-differs/red.txt`.
+3. Implement.
+4. Run it again; it must pass.
+
+If the expected list is wrong only because another hashed field also differs (for example a total WooCommerce recomputes), STOP and report it. Do not widen the test.
+
+## Do not
+
+- Include values, meta row ids, or anything but names in `differs`.
+- Add a filter, an option, a log line, storage of base documents, or a cache.
+- Change the hash, `canonical_form()`, `stale()`, or the other lanes' refusals.
+- Refactor or reformat code outside the change.
+- Create plan or notes files beyond `red.txt`.
+- Commit or push.
+- Read a GitHub issue, PR or comment.
+
+## Pre-authorised actions
+
+- Edit the in-scope files and write `red.txt`.
+- Run the acceptance commands. The setup is done for you:
+  - wp-env is running for this worktree;
+  - node_modules and vendor are installed.
+
+  Do not install anything, and do not start or stop wp-env.
+
+## Budget
+
+- Max non-test lines changed: 85
+- Max total lines changed: 125
+
+Counts are insertions plus deletions, so each comment fix counts twice. Estimate from the code you write, not from the rules list: the method and its two helpers come to about 50 lines with the docblock. Only STOP when the actual diff would exceed a limit; report why instead of continuing.
+The budget is a stop rule, not a target. Never strip tests, comments or formatting to fit.
+Run every acceptance command in the foreground and wait for its exit code.
+
+## Acceptance criteria (runnable)
+
+```sh
+pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php
+pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Sync/Test_Order_Revision_Recipe.php
+pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist tests/includes/Payments/Contract/Test_Command_Log.php
+pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' cli -- vendor/bin/phpcs --standard=./.phpcs.xml.dist includes/Sync/Order_Serializer.php includes/API/V2/Write_Controller.php tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php tests/includes/Payments/Contract/Test_Command_Log.php
+```
+
+phpcs:
+- Errors on lines you added or changed must be fixed.
+- Errors already on main stay.
+
+## Environment
+
+- Network: yes, to reach the local wp-env containers (Docker).
+- Writable outside the worktree: `~/.wp-env/wp-env-order-revision-allow-list-3526dcd1` (wp-env's cache; granted with --writable).
+- wp-env is running for this worktree, with dependencies installed.
+- Wall-clock limit: three hours. At the limit, stop and report partial state.
+
+## Output expected
+
+End with the report format from ~/.codex/AGENTS.md:
+- STATUS
+- CHANGED
+- ACCEPTANCE: each command, its exit code and its last lines
+- the red run
+- NOT DONE
+- QUESTIONS
+- BEHAVIOUR CHANGES
+- one paragraph on why you made these changes
+
+If the spec is ambiguous or wrong, stop and put the question under QUESTIONS. Do not guess.

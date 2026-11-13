@@ -491,6 +491,9 @@ class Write_Controller extends WP_REST_Controller {
 				$current_bare = is_array( $current->get_data() ) ? $current->get_data() : array();
 				$stale        = $this->stale_for( $meta, $id, $m['baseRevision'], $current_bare );
 				if ( null !== $stale ) {
+					if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
+						return $this->stale_conflict( $stale, Order_Serializer::canonical_diff( (array) $m['payload'], $current_bare ) );
+					}
 					return $this->stale_conflict( $stale );
 				}
 				if ( isset( $prepared['context_factory'] ) && is_callable( $prepared['context_factory'] ) ) {
@@ -808,15 +811,16 @@ class Write_Controller extends WP_REST_Controller {
 	 * The push lane's 409 for a stale baseRevision, in its wire key order.
 	 *
 	 * @param array{currentRevision: string, current: array} $facts From Revision::stale().
+	 * @param array|null $differs Path names where the pushed order and server copy differ in the revision's canonical form; order updates only.
 	 */
-	private function stale_conflict( array $facts ): WP_REST_Response {
+	private function stale_conflict( array $facts, ?array $differs = null ): WP_REST_Response {
 		return new WP_REST_Response(
 			array(
 				'code'            => 'woo_rxdb_sync_conflict',
 				'message'         => 'baseRevision is stale.',
 				'current'         => $facts['current'],
 				'currentRevision' => $facts['currentRevision'],
-			),
+			) + ( null !== $differs ? array( 'differs' => $differs ) : array() ),
 			409
 		);
 	}
@@ -835,7 +839,7 @@ class Write_Controller extends WP_REST_Controller {
 		return Revision::compute( $bare );
 	}
 
-	/** The stale-write facts for a record; orders accept a 2.0.3-recipe base too ({@see Order_Serializer::stale()}). */
+	/** The stale-write facts for a record; orders accept a 2.0.2-recipe base too ({@see Order_Serializer::stale()}). */
 	private function stale_for( array $meta, int $id, string $claimed, array $bare ): ?array {
 		$current = $this->revision_for( $meta, $id, $bare );
 		if ( 'product_variation' !== ( $meta['post_type'] ?? '' ) && 'order' === ( $meta['id_type'] ?? '' ) && $id > 0 ) {

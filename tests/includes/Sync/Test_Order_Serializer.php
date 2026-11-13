@@ -145,4 +145,16 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 		}
 		$this->assertTrue( Pos_Uuid::is_uuid( $uuid ), 'served coupon line must carry a valid POS uuid, got: ' . wp_json_encode( $uuid ) );
 	}
+
+	/** A field only one side carries is still named. */
+	public function test_canonical_diff_names_a_field_only_the_server_carries(): void {
+		$server = array(
+			'status'        => 'processing',
+			'customer_note' => 'same',
+		);
+		$client = array( 'customer_note' => 'same' );
+
+		$this->assertSame( array( 'status' ), Order_Serializer::canonical_diff( $client, $server ) );
+		$this->assertSame( array( 'status' ), Order_Serializer::canonical_diff( $server, $client ) );
+	}
 }

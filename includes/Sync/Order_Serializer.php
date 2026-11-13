@@ -382,9 +382,69 @@ final class Order_Serializer {
 	}
 
 	/**
+	 * Diagnostics only: names, never values, inside the revision's canonical form.
+	 * The client's own edits appear alongside another writer's moves.
+	 */
+	public static function canonical_diff( array $client, array $server ): array {
+		$a     = self::canonical_form( $client );
+		$b     = self::canonical_form( $server );
+		$paths = array();
+		foreach ( array_keys( $a + $b ) as $field ) {
+			$value = $a[ $field ] ?? null;
+			$other = $b[ $field ] ?? null;
+			if ( wp_json_encode( $value ) !== wp_json_encode( $other ) ) {
+				$paths = array_merge( $paths, in_array( $field, array( 'meta_data', 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines' ), true ) ? self::list_diff( (string) $field, $value, $other ) : array( (string) $field ) );
+			}
+		}
+		$paths = array_values( array_unique( $paths ) );
+		sort( $paths, SORT_STRING );
+		return $paths;
+	}
+
+	/** Compare canonical meta groups or items, returning path names only. */
+	private static function list_diff( string $path, $a, $b ): array {
+		if ( ! is_array( $a ) || ! is_array( $b ) ) {
+			return array( $path );
+		}
+		$a   = self::keyed( $a );
+		$b   = self::keyed( $b );
+		$out = array();
+		foreach ( array_keys( $a + $b ) as $k ) {
+			$x = $a[ $k ] ?? null;
+			$y = $b[ $k ] ?? null;
+			if ( wp_json_encode( $x ) === wp_json_encode( $y ) ) {
+				continue;
+			}
+			if ( is_array( $x ) && is_array( $y ) && ! isset( $x[0] ) ) {
+				foreach ( array_keys( $x + $y ) as $key ) {
+					if ( wp_json_encode( $x[ $key ] ?? null ) !== wp_json_encode( $y[ $key ] ?? null ) ) {
+						$out = array_merge( $out, 'meta_data' === $key ? self::list_diff( "$path.$k.meta_data", $x[ $key ] ?? null, $y[ $key ] ?? null ) : array( "$path.$k.$key" ) );
+					}
+				}
+			} else {
+				$out[] = "$path.$k";
+			}
+		}
+		return $out;
+	}
+
+	/** Group meta values by key, items by positive id or new index, and non-arrays by index. */
+	private static function keyed( array $list ): array {
+		$out = array();
+		foreach ( $list as $index => $entry ) {
+			if ( is_array( $entry ) && isset( $entry['key'] ) ) {
+				$out[ (string) $entry['key'] ][] = $entry['value'] ?? null;
+			} else {
+				$out[ is_array( $entry ) ? ( (int) ( $entry['id'] ?? 0 ) > 0 ? (int) $entry['id'] : 'new' . $index ) : $index ] = $entry;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * The stale-write facts for an order, or null when the claimed revision is current.
 	 *
-	 * A claimed revision is also current when it equals the 2.0.3 recipe (every meta row
+	 * A claimed revision is also current when it equals the 2.0.2 recipe (every meta row
 	 * hashed) of the same document: a till that acked an order before the allow-list
 	 * shipped then gets no 409 for the recipe change alone. The old form is the new form
 	 * plus meta rows, so an equal old hash implies an equal new one; this never accepts a
@@ -424,13 +484,13 @@ final class Order_Serializer {
 		return array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_meta_keys', self::REVISION_META_KEYS ) );
 	}
 
-	/** The 2.0.3 recipe: every meta row hashed, #2663 exclusions included. */
+	/** The 2.0.2 recipe: every meta row hashed, #2663 exclusions included. */
 	private static function legacy_revision( array $payload ): string {
 		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::form( $payload, false ) ) );
 	}
 
 	/**
-	 * The canonical form; with `$allow_list` false, the 2.0.3 form byte for byte.
+	 * The canonical form; with `$allow_list` false, the 2.0.2 form byte for byte.
 	 *
 	 * @param array $payload    Serialized order payload.
 	 * @param bool  $allow_list Hash only allow-listed order meta and hidden line meta.
@@ -517,7 +577,7 @@ final class Order_Serializer {
 	 * - Normalize line_items[].image.id to an int — the augmented read lanes
 	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
 	 * - Drop item meta whose key is in `$excluded_meta` (the revision's excluded-meta filter).
-	 * - Drop `_`-prefixed item meta `$allowed` does not name; null (the 2.0.3 form) keeps it.
+	 * - Drop `_`-prefixed item meta `$allowed` does not name; null (the 2.0.2 form) keeps it.
 	 */
 	private static function strip_item_identity_meta( array $payload, array $excluded_meta, ?array $allowed ): array {
 		// coupon_lines joined the uuid-stamped set with the rest (the client pairs

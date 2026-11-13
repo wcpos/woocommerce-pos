@@ -486,6 +486,28 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A stale push names only differences inside the revision, including the till's own edit.
+	 *
+	 * @return void
+	 */
+	public function test_stale_order_push_409_names_what_moved_inside_the_revision(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$id      = (int) $created->get_data()['document']['id'];
+		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$this->set_order_meta( $id, 'x_audit', 'moved' );
+		wc_update_order_item_meta( $line_id, 'x_line_audit', 'moved' );
+		$this->set_order_meta( $id, '_x_hidden_stamp', 'moved' );
+		// Act.
+		$stale = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null );
+		$this->assertSame( array( 'customer_note', 'line_items.' . $line_id . '.meta_data.x_line_audit', 'meta_data.x_audit' ), $stale->get_data()['differs'] ?? null, wp_json_encode( $stale->get_data() ) );
+	}
+
+	/**
 	 * A key the allow-list filter adds 409s a push once another plugin moves it.
 	 *
 	 * @return void
@@ -523,9 +545,9 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * The till's ack under the 2.0.3 recipe for an order with non-allow-listed order and hidden line meta.
+	 * The till's ack under the 2.0.2 recipe for an order with non-allow-listed order and hidden line meta.
 	 *
-	 * The new recipe plus `$old` hashes exactly what 2.0.3 hashed for this order; removing `$old` is the upgrade.
+	 * The new recipe plus `$old` hashes exactly what 2.0.2 hashed for this order; removing `$old` is the upgrade.
 	 *
 	 * @param WP_REST_Response $created The create's acknowledgement.
 	 *
@@ -541,7 +563,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 			break;
 		}
 		$order->save();
-		// The create itself also writes `_pos_user_created` and `_woocommerce_pos_version`, which 2.0.3 hashed too.
+		// The create itself also writes `_pos_user_created` and `_woocommerce_pos_version`, which 2.0.2 hashed too.
 		$old = static fn( array $keys ): array => array_merge( $keys, array( '_wc_order_attribution_source_type', '_x_hidden_line', '_pos_user_created', '_woocommerce_pos_version' ) );
 		add_filter( 'wcpos_sync_order_revision_meta_keys', $old );
 		$legacy = Order_Serializer::current_state( $id )['revision'];
@@ -551,7 +573,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A till's ack from before the upgrade (the 2.0.3 recipe) is accepted after it.
+	 * A till's ack from before the upgrade (the 2.0.2 recipe) is accepted after it.
 	 *
 	 * @return void
 	 */
@@ -567,7 +589,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A till's 2.0.3 ack still 409s once a POS-owned key moved after it.
+	 * A till's 2.0.2 ack still 409s once a POS-owned key moved after it.
 	 *
 	 * @return void
 	 */
