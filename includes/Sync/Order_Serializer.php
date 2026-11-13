@@ -389,7 +389,8 @@ final class Order_Serializer {
 		$a     = self::canonical_form( $client );
 		$b     = self::canonical_form( $server );
 		$paths = array();
-		foreach ( $a as $field => $value ) {
+		foreach ( array_keys( $a + $b ) as $field ) {
+			$value = $a[ $field ] ?? null;
 			$other = $b[ $field ] ?? null;
 			if ( wp_json_encode( $value ) !== wp_json_encode( $other ) ) {
 				$paths = array_merge( $paths, in_array( $field, array( 'meta_data', 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines' ), true ) ? self::list_diff( (string) $field, $value, $other ) : array( (string) $field ) );
