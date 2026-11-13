@@ -1,0 +1,10 @@
+1
+M1 array_diff condition removed; remaining matches:
+0
+1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_late_pre_get_posts_callback_replacing_post_not_in_excludes_pos_only_ids
+Failed asserting that two arrays are identical.
+2) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_foreign_not_in_clause_with_cleared_post_not_in_excludes_pos_only_ids
+Failed asserting that two arrays are identical.
+FAILURES!
+Tests: 2, Assertions: 2, Failures: 2.
+restored
