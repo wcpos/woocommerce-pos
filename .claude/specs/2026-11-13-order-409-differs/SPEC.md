@@ -34,6 +34,8 @@ The 409 path must not throw: a malformed payload yields an empty or partial list
 - `tests/includes/Payments/Contract/Test_Command_Log.php`:
   - Comment at line 237 only: change "2.0.3-recipe" to "2.0.2-recipe". Do NOT rename the test method. Nothing else in this file.
 
+- `.claude/specs/2026-11-13-order-409-differs/red.txt` (new)
+
 ## Out of scope (do not edit)
 
 - `includes/Sync/Revision.php`
@@ -116,7 +118,7 @@ Returns `string[]`, de-duplicated and sorted with `sort( $paths, SORT_STRING )`.
    - `assertSame( array( 'customer_note', 'line_items.' . $line_id . '.meta_data.x_line_audit', 'meta_data.x_audit' ), $stale->get_data()['differs'] ?? null, wp_json_encode( $stale->get_data() ) )`.
    - The hidden key must NOT appear: that proves the diff uses the same allow-list form as the hash.
 
-**Order of work**
+**Order of work** (a first run already added this test to the file, uncommitted, exactly as specified; keep it, do not rewrite it, and start at step 2)
 1. Write the test.
 2. Run it and confirm it fails (no `differs` key). Save the PHPUnit output to `.claude/specs/2026-11-13-order-409-differs/red.txt`.
 3. Implement.
@@ -168,7 +170,7 @@ phpcs:
 ## Environment
 
 - Network: yes, to reach the local wp-env containers (Docker).
-- Writable outside the worktree: none.
+- Writable outside the worktree: `~/.wp-env/wp-env-order-revision-allow-list-3526dcd1` (wp-env's cache; granted with --writable).
 - wp-env is running for this worktree, with dependencies installed.
 - Wall-clock limit: three hours. At the limit, stop and report partial state.
 
