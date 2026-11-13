@@ -22,7 +22,7 @@ The 409 path must not throw: a malformed payload yields an empty or partial list
 ## In scope (the only files you may edit)
 
 - `includes/Sync/Order_Serializer.php`:
-  - Add ONE public static method, `canonical_diff()`, and at most one private helper for it.
+  - Add ONE public static method, `canonical_diff()`, and at most two private static helpers for it (one for the per-key meta rule, one for the item lists).
   - Comments only: the legacy recipe hashes every meta row, which is how 2.0.2 hashed; the allow-list ships in 2.0.3. Change "2.0.3 recipe" to "2.0.2 recipe" and "2.0.3 form" to "2.0.2 form" in the comments at lines 387, 427, 433 and 520.
   - Leave the two `@since 2.0.3` tags (lines 420 and 476) as they are: they are correct.
 - `includes/API/V2/Write_Controller.php`:
@@ -30,14 +30,9 @@ The 409 path must not throw: a malformed payload yields an empty or partial list
   - Comment at line 838: change "2.0.3-recipe" to "2.0.2-recipe".
 - `tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php`:
   - Add ONE test (below).
-  - In the comments at lines 526, 528, 544 and 554, change "2.0.3" (the legacy recipe) to "2.0.2".
-  - Change the docblock "A till's 2.0.3 ack" to "A till's 2.0.2 ack".
-  - Rename `test_a_2_0_3_ack_is_accepted_after_the_upgrade` to `test_a_2_0_2_ack_is_accepted_after_the_upgrade`.
-  - Rename `test_a_2_0_3_ack_after_a_pos_owned_change_still_409s` to `test_a_2_0_2_ack_after_a_pos_owned_change_still_409s`.
+  - Comments only: in the comments at lines 526, 528, 544 and 554, change "2.0.3" (the legacy recipe) to "2.0.2". Change the docblock "A till's 2.0.3 ack" to "A till's 2.0.2 ack". Do NOT rename any test method.
 - `tests/includes/Payments/Contract/Test_Command_Log.php`:
-  - Comment at line 237: change "2.0.3-recipe" to "2.0.2-recipe".
-  - Rename `test_run_built_on_a_2_0_3_revision_is_not_stale` to `test_run_built_on_a_2_0_2_revision_is_not_stale`.
-  - Nothing else in this file.
+  - Comment at line 237 only: change "2.0.3-recipe" to "2.0.2-recipe". Do NOT rename the test method. Nothing else in this file.
 
 ## Out of scope (do not edit)
 
@@ -90,7 +85,7 @@ Returns `string[]`, de-duplicated and sorted with `sort( $paths, SORT_STRING )`.
     - `meta_data` → the same per-key rule, with prefix `<field>.<id>.meta_data`.
     - Any other differing key → `<field>.<id>.<key>`.
 - **Any other differing top-level key:** emit `<field>`.
-- **Malformed input:** where a list, item or meta row is not an array, or a row has no `key`, emit the parent path and do not descend. Never throw.
+- **Malformed input:** when a top-level field's value is not an array on either side where the rules above expect a list (meta_data or an item list), or an item is not an array, compare it as a whole value and emit the field (or `<field>.<id>`) path if it differs; do not descend. `canonical_form()` already turns every meta row into a `{key, value}` pair, so rows need no extra checks: read `$row['key']` and `$row['value']` directly. Never throw.
 
 **Docblock:** diagnostics only; names only, never values; the client's own edits appear alongside another writer's moves.
 
@@ -150,10 +145,10 @@ If the expected list is wrong only because another hashed field also differs (fo
 
 ## Budget
 
-- Max non-test lines changed: 75
-- Max total lines changed: 118
+- Max non-test lines changed: 85
+- Max total lines changed: 125
 
-If you are about to exceed either, STOP and report why instead of continuing.
+Counts are insertions plus deletions, so each comment fix counts twice. Estimate from the code you write, not from the rules list: the method and its two helpers come to about 50 lines with the docblock. Only STOP when the actual diff would exceed a limit; report why instead of continuing.
 The budget is a stop rule, not a target. Never strip tests, comments or formatting to fit.
 Run every acceptance command in the foreground and wait for its exit code.
 
