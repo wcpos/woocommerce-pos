@@ -30,10 +30,10 @@ final class Order_Serializer {
 	public const PULL_AUGMENTATIONS = array( 'tax_ids', 'image_cast', 'item_uuids', 'links', 'serialized_filter' );
 
 	/**
-	 * The order meta keys the canonical revision hashes: the keys the till asserts or
-	 * the server's money contract owns. Every other order meta key sits outside CAS.
-	 * The list applies to `_`-prefixed line meta too: line keys without a leading `_`
-	 * (attributes and other displayed line meta) are always hashed.
+	 * The hidden (`_`-prefixed) meta keys the canonical revision hashes: the keys the till
+	 * asserts or the server's money contract owns. The revision also hashes every visible
+	 * meta key, on the order and on lines. Another plugin's hidden meta sits outside CAS,
+	 * and the push never overwrites it once it exists (see `Order_Write_Payload`).
 	 */
 	private const REVISION_META_KEYS = array(
 		// Till-asserted.
@@ -370,9 +370,9 @@ final class Order_Serializer {
 	 * writer for nothing. `date_paid*` and `date_completed*` stay — those move with
 	 * status content.
 	 *
-	 * Order meta is hashed from the allow-list only (`wcpos_sync_order_revision_meta_keys`),
-	 * so another plugin's order meta never 409s a till. Line meta is hashed except the
-	 * hidden (`_`-prefixed) keys outside that list.
+	 * Order and line meta are hashed except the hidden (`_`-prefixed) keys outside the
+	 * allow-list ({@see self::revision_meta_keys()}), so another plugin's hidden meta never
+	 * 409s a till.
 	 *
 	 * @param array $payload Serialized order payload (transport stamps are ignored).
 	 * @return array Schema-scoped, identity-stripped, canonicalized order.
@@ -388,7 +388,7 @@ final class Order_Serializer {
 	 * hashed) of the same document: a till that acked an order before the allow-list
 	 * shipped then gets no 409 for the recipe change alone. The old form is the new form
 	 * plus meta rows, so an equal old hash implies an equal new one; this never accepts a
-	 * write the old compare refused. Transition only: remove in 2.2 at the earliest.
+	 * write the old compare refused. Transition only: remove in 2.2 at the earliest (#2665).
 	 *
 	 * @param string $claimed          The revision the caller built its write against.
 	 * @param string $current_revision The order's current revision, from canonical_revision().
@@ -401,6 +401,27 @@ final class Order_Serializer {
 			return $facts;
 		}
 		return null;
+	}
+
+	/**
+	 * The hidden meta keys the canonical revision hashes, on the order and on lines.
+	 *
+	 * @return string[]
+	 */
+	public static function revision_meta_keys(): array {
+		/**
+		 * Filters the hidden meta keys the canonical order revision hashes.
+		 *
+		 * The revision hashes every visible (non-`_`) meta key, on the order and on every
+		 * line, plus these `_`-prefixed keys. Another plugin's hidden meta sits outside CAS,
+		 * and the push never overwrites it once it exists (see `Order_Write_Payload`).
+		 * Add a key to bring site-local meta into CAS. Read the coherence contract above first.
+		 *
+		 * @since 2.0.3
+		 *
+		 * @param string[] $keys Hidden meta keys inside the hash.
+		 */
+		return array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_meta_keys', self::REVISION_META_KEYS ) );
 	}
 
 	/** The 2.0.3 recipe: every meta row hashed, #2663 exclusions included. */
@@ -458,22 +479,7 @@ final class Order_Serializer {
 		 */
 		$excluded_meta = array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_excluded_meta_keys', array() ) );
 
-		$allowed = null;
-		if ( $allow_list ) {
-			/**
-			 * Filters the meta keys the canonical order revision hashes.
-			 *
-			 * The revision hashes these order meta keys and nothing else, so another plugin's
-			 * order meta never 409s a till. On every line it hashes these `_`-prefixed keys
-			 * plus every key without a leading `_` (attributes and other displayed line meta).
-			 * Add a key to bring site-local meta into CAS. Read the coherence contract above first.
-			 *
-			 * @since 2.0.3
-			 *
-			 * @param string[] $keys Meta keys inside the hash.
-			 */
-			$allowed = array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_meta_keys', self::REVISION_META_KEYS ) );
-		}
+		$allowed = $allow_list ? self::revision_meta_keys() : null;
 
 		// HPOS removes these internal fields only after the restored order's save
 		// hooks run. The exclusion predates compute-at-pull (ADR 0033) and is frozen
@@ -488,7 +494,7 @@ final class Order_Serializer {
 						$key = Meta_Entry::key( $entry );
 						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true )
 							&& ! in_array( $key, $excluded_meta, true )
-							&& ( null === $allowed || in_array( $key, $allowed, true ) );
+							&& ( null === $allowed || 0 !== strpos( (string) $key, '_' ) || in_array( $key, $allowed, true ) );
 					}
 				)
 			);

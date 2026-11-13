@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Order;
+use WCPOS\WooCommercePOS\Sync\Meta_Entry;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WP_REST_Response;
 
@@ -84,12 +85,13 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	 * @param string      $operation     Mutation operation.
 	 * @param array       $payload       Full order document.
 	 * @param string|null $base_revision Current server revision for an update.
+	 * @param string|null $mutation_id   Mutation ID to replay; a fresh one when null.
 	 *
 	 * @return WP_REST_Response
 	 */
-	private function push_order( string $operation, array $payload, ?string $base_revision = null ): WP_REST_Response {
+	private function push_order( string $operation, array $payload, ?string $base_revision = null, ?string $mutation_id = null ): WP_REST_Response {
 		$envelope = array(
-			'mutationId'   => sprintf( '58000000-0000-4000-8000-%012d', ++$this->sequence ),
+			'mutationId'   => $mutation_id ?? sprintf( '58000000-0000-4000-8000-%012d', ++$this->sequence ),
 			'operation'    => $operation,
 			'collection'   => 'orders',
 			'recordId'     => self::RECORD_UUID,
@@ -582,5 +584,289 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		// Assert.
 		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
 		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null );
+	}
+
+	/**
+	 * Write one order meta value out of band, as another plugin would.
+	 *
+	 * @param int    $id    Order ID.
+	 * @param string $key   Meta key.
+	 * @param string $value Meta value.
+	 *
+	 * @return void
+	 */
+	private function set_order_meta( int $id, string $key, string $value ): void {
+		$order = wc_get_order( $id );
+		$order->update_meta_data( $key, $value );
+		$order->save_meta_data();
+	}
+
+	/**
+	 * The value of the first meta entry with this key in a serialized meta_data list, or null.
+	 *
+	 * @param array  $meta_data Serialized meta entries.
+	 * @param string $key       Meta key.
+	 *
+	 * @return mixed
+	 */
+	private function meta_value( array $meta_data, string $key ) {
+		foreach ( $meta_data as $entry ) {
+			if ( $key === Meta_Entry::key( $entry ) ) {
+				return Meta_Entry::value( $entry );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The common arrange: create, write `OLD` out of band, push a first edit; its ack is the document the till holds.
+	 *
+	 * The first edit anchors on the order as it stands after the write, the revision a pull hands the
+	 * till: a visible key moves the revision, and a hidden one leaves it equal to the create's ack.
+	 *
+	 * @param callable $write Writes one value out of band: fn( int $order_id, int $line_id, string $value ).
+	 *
+	 * @return array{0: WP_REST_Response, 1: int, 2: int} The held ack, the order ID and the first line ID.
+	 */
+	private function held_after_first_edit( callable $write ): array {
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$id      = (int) $created->get_data()['document']['id'];
+		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$write( $id, $line_id, 'OLD' );
+		$first = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), Order_Serializer::current_state( $id )['revision'] );
+		$this->assertSame( 200, $first->get_status(), wp_json_encode( $first->get_data() ) );
+		return array( $first, $id, $line_id );
+	}
+
+	/**
+	 * A stale echo of hidden third-party order meta does not revert another plugin's newer value.
+	 *
+	 * @return void
+	 */
+	public function test_a_stale_echo_does_not_revert_hidden_third_party_order_meta(): void {
+		// Arrange.
+		$write                    = fn( int $id, int $line_id, string $value ) => $this->set_order_meta( $id, '_tracking_number', $value );
+		list( $held, $id, $line ) = $this->held_after_first_edit( $write );
+		$this->assertSame( 'OLD', $this->meta_value( $held->get_data()['document']['meta_data'], '_tracking_number' ) );
+		$write( $id, $line, 'NEW' );
+		// Act.
+		$push = $this->push_order( 'update', $this->edited_document( $held, 'second edit' ), $held->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( 'NEW', wc_get_order( $id )->get_meta( '_tracking_number' ) );
+		$this->assertCount( 1, wc_get_order( $id )->get_meta( '_tracking_number', false ) );
+	}
+
+	/**
+	 * A stale echo of hidden third-party line meta does not revert another plugin's newer value.
+	 *
+	 * @return void
+	 */
+	public function test_a_stale_echo_does_not_revert_hidden_third_party_line_meta(): void {
+		// Arrange.
+		$write                       = static fn( int $id, int $line_id, string $value ) => wc_update_order_item_meta( $line_id, '_tracking_number', $value );
+		list( $held, $id, $line_id ) = $this->held_after_first_edit( $write );
+		$this->assertSame( 'OLD', $this->meta_value( $held->get_data()['document']['line_items'][0]['meta_data'], '_tracking_number' ) );
+		$write( $id, $line_id, 'NEW' );
+		// Act.
+		$push = $this->push_order( 'update', $this->edited_document( $held, 'second edit' ), $held->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( 'NEW', wc_get_order_item_meta( $line_id, '_tracking_number', true ) );
+		$this->assertCount( 1, wc_get_order_item_meta( $line_id, '_tracking_number', false ) );
+	}
+
+	/**
+	 * A new line pushed with a hidden third-party key keeps it.
+	 *
+	 * @return void
+	 */
+	public function test_a_new_line_pushed_with_a_hidden_third_party_key_keeps_it(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$document                 = $this->edited_document( $created, 'add a line' );
+		$old_line_id              = (int) $document['line_items'][0]['id'];
+		$document['line_items'][] = array(
+			'product_id' => (int) $document['line_items'][0]['product_id'],
+			'quantity'   => 1,
+			'subtotal'   => '10',
+			'total'      => '10',
+			'meta_data'  => array(
+				array(
+					'key'   => '_x_addon',
+					'value' => 'gift-wrap',
+				),
+			),
+		);
+		// Act.
+		$push = $this->push_order( 'update', $document, $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$items = wc_get_order( (int) $document['id'] )->get_items( 'line_item' );
+		unset( $items[ $old_line_id ] );
+		$this->assertCount( 1, $items );
+		$this->assertSame( 'gift-wrap', reset( $items )->get_meta( '_x_addon' ) );
+	}
+
+	/**
+	 * A hidden third-party order meta key the order does not have yet is written.
+	 *
+	 * @return void
+	 */
+	public function test_a_hidden_third_party_key_new_to_the_order_is_written(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$document                = $this->edited_document( $created, 'add a key' );
+		$document['meta_data'][] = array(
+			'key'   => '_x_new_key',
+			'value' => 'v1',
+		);
+		// Act.
+		$push = $this->push_order( 'update', $document, $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( 'v1', wc_get_order( (int) $document['id'] )->get_meta( '_x_new_key' ) );
+	}
+
+	/**
+	 * A push that omits a hidden third-party order or line key does not delete it.
+	 *
+	 * @return void
+	 */
+	public function test_a_push_that_omits_a_hidden_third_party_key_does_not_delete_it(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$id      = (int) $created->get_data()['document']['id'];
+		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$this->set_order_meta( $id, '_tracking_number', 'KEEP' );
+		wc_update_order_item_meta( $line_id, '_tracking_number', 'KEEP' );
+		// Act.
+		$push = $this->push_order( 'update', $this->edited_document( $created, 'edit' ), $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( 'KEEP', wc_get_order( $id )->get_meta( '_tracking_number' ) );
+		$this->assertSame( 'KEEP', wc_get_order_item_meta( $line_id, '_tracking_number', true ) );
+	}
+
+	/**
+	 * Pushed allow-listed hidden meta, on the order and on a line, and visible order meta are still written.
+	 *
+	 * @return void
+	 */
+	public function test_pushed_allow_listed_and_visible_meta_is_still_written(): void {
+		// Arrange.
+		add_filter( 'wcpos_sync_order_revision_meta_keys', static fn( array $keys ): array => array_merge( $keys, array( '_x_site_key' ) ) );
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$id      = (int) $created->get_data()['document']['id'];
+		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$this->set_order_meta( $id, '_x_site_key', 'before' );
+		$anchor   = Order_Serializer::current_state( $id )['revision'];
+		$pos_data = array(
+			'price'         => '10',
+			'regular_price' => '10',
+			'tax_status'    => 'none',
+			'note'          => 'edited',
+		);
+		$document = $this->edited_document( $created, 'edit meta' );
+		foreach ( $document['line_items'][0]['meta_data'] as $i => $entry ) {
+			if ( '_woocommerce_pos_data' === $entry['key'] ) {
+				$document['line_items'][0]['meta_data'][ $i ]['value'] = wp_json_encode( $pos_data );
+			}
+		}
+		$document['meta_data'][] = array(
+			'key'   => 'gift_message',
+			'value' => 'hello',
+		);
+		$document['meta_data'][] = array(
+			'key'   => '_x_site_key',
+			'value' => 'after',
+		);
+		// Act.
+		$push = $this->push_order( 'update', $document, $anchor );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$stored = wc_get_order_item_meta( $line_id, '_woocommerce_pos_data', true );
+		$this->assertSame( $pos_data, is_array( $stored ) ? $stored : json_decode( (string) $stored, true ) );
+		$this->assertSame( 'hello', wc_get_order( $id )->get_meta( 'gift_message' ) );
+		$this->assertSame( 'after', wc_get_order( $id )->get_meta( '_x_site_key' ) );
+	}
+
+	/**
+	 * A third party's change to visible order meta still 409s a stale push, as on 2.0.2.
+	 *
+	 * @return void
+	 */
+	public function test_a_visible_third_party_order_meta_change_still_409s(): void {
+		// Arrange.
+		$write                    = fn( int $id, int $line_id, string $value ) => $this->set_order_meta( $id, 'gift_message', $value );
+		list( $held, $id, $line ) = $this->held_after_first_edit( $write );
+		$this->assertSame( 'OLD', $this->meta_value( $held->get_data()['document']['meta_data'], 'gift_message' ) );
+		$write( $id, $line, 'NEW' );
+		// Act.
+		$stale = $this->push_order( 'update', $this->edited_document( $held, 'second edit' ), $held->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null );
+	}
+
+	/**
+	 * Assert the order and every uuid-bearing line keep exactly one, unchanged, `_woocommerce_pos_uuid` row.
+	 *
+	 * @param int      $id         Order ID.
+	 * @param string[] $line_uuids Uuid sent on create, by line ID.
+	 * @param string   $step       Step label for failure messages.
+	 *
+	 * @return void
+	 */
+	private function assert_pos_uuids( int $id, array $line_uuids, string $step ): void {
+		$rows = array_map( static fn( $meta ) => $meta->value, wc_get_order( $id )->get_meta( '_woocommerce_pos_uuid', false ) );
+		$this->assertSame( array( self::RECORD_UUID ), array_values( $rows ), $step );
+		foreach ( $line_uuids as $line_id => $uuid ) {
+			$this->assertSame( array( $uuid ), wc_get_order_item_meta( $line_id, '_woocommerce_pos_uuid', false ), $step . ' line ' . $line_id );
+		}
+	}
+
+	/**
+	 * The order and line `_woocommerce_pos_uuid` rows survive a create, its replay and an update unchanged.
+	 *
+	 * @return void
+	 */
+	public function test_pos_uuid_round_trips_on_create_replay_and_update(): void {
+		// Arrange.
+		$payload = $this->create_payload();
+		$uuids   = array(
+			'line_items'     => '57000000-0000-4000-8000-000000000011',
+			'fee_lines'      => '57000000-0000-4000-8000-000000000012',
+			'shipping_lines' => '57000000-0000-4000-8000-000000000013',
+		);
+		foreach ( $uuids as $type => $uuid ) {
+			$payload[ $type ][0]['meta_data']   = $payload[ $type ][0]['meta_data'] ?? array();
+			$payload[ $type ][0]['meta_data'][] = array(
+				'key'   => '_woocommerce_pos_uuid',
+				'value' => $uuid,
+			);
+		}
+		$mutation_id = '58000000-0000-4000-8000-000000999999';
+		// Act and assert.
+		$created = $this->push_order( 'create', $payload, null, $mutation_id );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$id         = (int) $created->get_data()['document']['id'];
+		$line_uuids = array();
+		foreach ( $uuids as $type => $uuid ) {
+			$line_uuids[ (int) $created->get_data()['document'][ $type ][0]['id'] ] = $uuid;
+		}
+		$this->assert_pos_uuids( $id, $line_uuids, 'create' );
+		$replay = $this->push_order( 'create', $payload, null, $mutation_id );
+		$this->assertSame( 201, $replay->get_status(), wp_json_encode( $replay->get_data() ) );
+		$this->assertSame( $id, (int) $replay->get_data()['document']['id'] );
+		$this->assert_pos_uuids( $id, $line_uuids, 'replay' );
+		$update = $this->push_order( 'update', $this->edited_document( $created, 'edit' ), $created->get_data()['currentRevision'] );
+		$this->assertSame( 200, $update->get_status(), wp_json_encode( $update->get_data() ) );
+		$this->assert_pos_uuids( $id, $line_uuids, 'update' );
 	}
 }
