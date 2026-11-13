@@ -1,0 +1,14 @@
+F                                                                   1 / 1 (100%)
+Time: 00:00.215, Memory: 125.00 MB
+There was 1 failure:
+1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_stale_order_push_409_names_what_moved_inside_the_revision
+Failed asserting that null is identical to Array &0 (
+    0 => 'customer_note'
+    1 => 'line_items.19781.meta_data.x_line_audit'
+    2 => 'meta_data.x_audit'
+).
+/var/www/html/wp-content/plugins/woocommerce-pos/tests/includes/Sync/Test_Rest_Dispatch_Repush_Idempotency.php:507
+FAILURES!
+Tests: 1, Assertions: 4, Failures: 1.
+✖ Command failed with exit code 1
+Command failed with exit code 1
