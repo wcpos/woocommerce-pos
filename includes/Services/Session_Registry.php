@@ -95,6 +95,15 @@ final class Session_Registry {
 	private const APP_BROWSER_LABEL = 'WCPOS';
 
 	/**
+	 * How many times a session-row write re-reads and retries before it gives up.
+	 *
+	 * A retry only follows a competing write that succeeded, so five means five other writes
+	 * landed for one user within one request. That is far beyond what real devices produce, and
+	 * it bounds the work a request can be made to do.
+	 */
+	private const MAX_ROW_WRITE_ATTEMPTS = 5;
+
+	/**
 	 * Read the stored session map without guarding or modifying it.
 	 *
 	 * @param int $user_id The user ID.
@@ -131,16 +140,6 @@ final class Session_Registry {
 		// BEFORE the read: a pre-cap row can be too large to load, and this is the first
 		// point in the login flow where WCPOS knows the user id.
 		$this->discard_oversized_row( $user_id );
-
-		$refresh_tokens = $this->read_row( $user_id );
-
-		// Clean up expired tokens.
-		$refresh_tokens = array_filter(
-			$refresh_tokens,
-			function ( $token ) {
-				return $token['expires'] > time();
-			}
-		);
 
 		// Capture session metadata.
 		$current_time = time();
@@ -180,8 +179,7 @@ final class Session_Registry {
 			}
 		}
 
-		// Add new token with metadata.
-		$refresh_tokens[ $jti ] = array(
+		$entry = array(
 			'expires'     => $expires,
 			'created'     => $current_time,
 			'last_active' => $current_time,
@@ -190,12 +188,30 @@ final class Session_Registry {
 			'device_info' => $device_info,
 		);
 
-		// Cap the number of stored sessions so programmatic clients cannot grow the row without bound.
-		$evicted = $this->evict_oldest_sessions( $refresh_tokens, $jti );
+		$evicted = array();
+		$written = $this->mutate_row(
+			$user_id,
+			function ( $stored ) use ( $jti, $entry, &$evicted ) {
+				// Clean up expired tokens.
+				$refresh_tokens = array_filter(
+					$this->valid_entries( $stored ),
+					function ( $token ) {
+						return $token['expires'] > time();
+					}
+				);
 
-		update_user_meta( $user_id, self::META_KEY, $refresh_tokens );
+				// Add new token with metadata.
+				$refresh_tokens[ $jti ] = $entry;
 
-		return $evicted;
+				// Cap the number of stored sessions so programmatic clients cannot grow the row without bound.
+				$evicted = $this->evict_oldest_sessions( $refresh_tokens, $jti );
+
+				return $refresh_tokens;
+			}
+		);
+
+		// Nothing was evicted unless the write landed; the caller blacklists what is returned.
+		return $written ? $evicted : array();
 	}
 
 	/**
@@ -299,14 +315,23 @@ final class Session_Registry {
 		// Public surface: any caller reaching the row goes through the size guard first.
 		$this->discard_oversized_row( $user_id );
 
-		$refresh_tokens = $this->read_row( $user_id );
-		if ( ! isset( $refresh_tokens[ $jti ] ) ) {
-			return false;
-		}
+		$found   = false;
+		$written = $this->mutate_row(
+			$user_id,
+			function ( $stored ) use ( $jti, &$found ) {
+				$refresh_tokens = $this->valid_entries( $stored );
+				$found          = isset( $refresh_tokens[ $jti ] );
+				if ( ! $found ) {
+					return null;
+				}
 
-		$refresh_tokens[ $jti ]['last_active'] = time();
+				$refresh_tokens[ $jti ]['last_active'] = time();
 
-		return update_user_meta( $user_id, self::META_KEY, $refresh_tokens );
+				return $refresh_tokens;
+			}
+		);
+
+		return $found && $written;
 	}
 
 	/**
@@ -323,19 +348,28 @@ final class Session_Registry {
 			return false;
 		}
 
-		$refresh_tokens = $this->read_row( $user_id );
-		if ( ! isset( $refresh_tokens[ $refresh_jti ] ) ) {
-			return false;
-		}
+		$found   = false;
+		$written = $this->mutate_row(
+			$user_id,
+			function ( $stored ) use ( $refresh_jti, $access_expires, &$found ) {
+				$refresh_tokens = $this->valid_entries( $stored );
+				$found          = isset( $refresh_tokens[ $refresh_jti ] );
+				if ( ! $found ) {
+					return null;
+				}
 
-		$current_access_expires = isset( $refresh_tokens[ $refresh_jti ]['access_expires'] ) ? (int) $refresh_tokens[ $refresh_jti ]['access_expires'] : 0;
-		if ( $access_expires <= $current_access_expires ) {
-			return true;
-		}
+				$current_access_expires = isset( $refresh_tokens[ $refresh_jti ]['access_expires'] ) ? (int) $refresh_tokens[ $refresh_jti ]['access_expires'] : 0;
+				if ( $access_expires <= $current_access_expires ) {
+					return null;
+				}
 
-		$refresh_tokens[ $refresh_jti ]['access_expires'] = $access_expires;
+				$refresh_tokens[ $refresh_jti ]['access_expires'] = $access_expires;
 
-		return update_user_meta( $user_id, self::META_KEY, $refresh_tokens );
+				return $refresh_tokens;
+			}
+		);
+
+		return $found && $written;
 	}
 
 	/**
@@ -347,20 +381,28 @@ final class Session_Registry {
 	 * @return bool
 	 */
 	public function revoke( int $user_id, string $jti ): bool {
-		$refresh_tokens = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! \is_array( $refresh_tokens ) ) {
+		$found   = false;
+		$written = $this->mutate_row(
+			$user_id,
+			function ( $refresh_tokens ) use ( $jti, &$found ) {
+				$found = \is_array( $refresh_tokens ) && isset( $refresh_tokens[ $jti ] );
+				if ( ! $found ) {
+					return null;
+				}
+
+				unset( $refresh_tokens[ $jti ] );
+
+				return $refresh_tokens;
+			}
+		);
+
+		if ( ! $found || ! $written ) {
 			return false;
 		}
 
-		if ( isset( $refresh_tokens[ $jti ] ) ) {
-			unset( $refresh_tokens[ $jti ] );
-			update_user_meta( $user_id, self::META_KEY, $refresh_tokens );
-			$this->forget_session_activity( $jti );
+		$this->forget_session_activity( $jti );
 
-			return true;
-		}
-
-		return false;
+		return true;
 	}
 
 	/**
@@ -386,6 +428,130 @@ final class Session_Registry {
 				return \is_array( $entry ) && isset( $entry['expires'] );
 			}
 		);
+	}
+
+	/**
+	 * The valid session entries of a stored value, filtered as `read_row()` filters the cached one.
+	 *
+	 * @param mixed $row The stored value, or null when there is no row.
+	 *
+	 * @return array Valid session entries keyed by refresh token JTI.
+	 */
+	private function valid_entries( $row ): array {
+		if ( ! \is_array( $row ) ) {
+			return array();
+		}
+
+		return array_filter(
+			$row,
+			function ( $entry ) {
+				return \is_array( $entry ) && isset( $entry['expires'] );
+			}
+		);
+	}
+
+	/**
+	 * Change the session row with a bounded compare-and-swap, so overlapping requests cannot lose each other's write.
+	 *
+	 * Each attempt reads the row from the database, not the object cache, and saves only if the
+	 * row still holds, byte for byte, what that attempt read; otherwise it re-reads and applies
+	 * `$change` again. `$change` may therefore run more than once and must have no side effects
+	 * beyond its return value and the variables it captures by reference, which each attempt
+	 * overwrites. The writes bypass the user-meta API, so the `update_user_metadata` and
+	 * `add_user_metadata` filters and the `update_user_meta`, `updated_user_meta` and
+	 * `added_user_meta` actions do not fire for this internal key, which nothing in Free or Pro hooks.
+	 *
+	 * @param int      $user_id The user ID.
+	 * @param callable $change  Receives the stored value (null when there is no row) and returns the
+	 *                          full new value, or null for no write.
+	 *
+	 * @return bool True when the row reflects `$change`'s last answer; false when the write gave up.
+	 */
+	private function mutate_row( int $user_id, callable $change ): bool {
+		global $wpdb;
+
+		$select = $wpdb->prepare(
+			"SELECT umeta_id, meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s AND CAST(meta_key AS BINARY) = %s ORDER BY umeta_id ASC",
+			$user_id,
+			self::META_KEY,
+			self::META_KEY
+		);
+
+		for ( $attempt = 1; $attempt <= self::MAX_ROW_WRITE_ATTEMPTS; $attempt++ ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+			$rows = $wpdb->get_results( $select );
+			if ( '' !== $wpdb->last_error ) {
+				break;
+			}
+
+			$stored_value = empty( $rows ) ? null : $rows[0]->meta_value;
+			$new_value    = $change( null === $stored_value ? null : maybe_unserialize( $stored_value ) );
+			$serialized   = null === $new_value ? null : maybe_serialize( sanitize_meta( self::META_KEY, wp_unslash( $new_value ), 'user' ) );
+
+			if ( null === $new_value || $serialized === $stored_value ) {
+				return true;
+			}
+
+			if ( null === $stored_value ) {
+				$inserted = $wpdb->insert(
+					$wpdb->usermeta,
+					array(
+						'user_id'    => $user_id,
+						'meta_key'   => self::META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+						'meta_value' => $serialized, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					)
+				);
+				if ( false === $inserted ) {
+					break;
+				}
+
+				$inserted_id = (int) $wpdb->insert_id;
+				wp_cache_delete( $user_id, 'user_meta' );
+
+				// Another request may have inserted first; the lowest row is the one every reader sees.
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+				$rows = $wpdb->get_results( $select );
+				if ( ! empty( $rows ) && (int) $rows[0]->umeta_id === $inserted_id ) {
+					return true;
+				}
+
+				$wpdb->delete( $wpdb->usermeta, array( 'umeta_id' => $inserted_id ), array( '%d' ) );
+				wp_cache_delete( $user_id, 'user_meta' );
+				continue;
+			}
+
+			$updated = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$wpdb->usermeta} SET meta_value = %s WHERE umeta_id = %d AND meta_key = %s AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)",
+					$serialized,
+					(int) $rows[0]->umeta_id,
+					self::META_KEY,
+					$stored_value
+				)
+			);
+			if ( false === $updated ) {
+				break;
+			}
+
+			if ( 1 === $updated ) {
+				foreach ( \array_slice( $rows, 1 ) as $duplicate ) {
+					$wpdb->delete( $wpdb->usermeta, array( 'umeta_id' => (int) $duplicate->umeta_id ), array( '%d' ) );
+				}
+				wp_cache_delete( $user_id, 'user_meta' );
+
+				return true;
+			}
+		}
+
+		Logger::warning(
+			sprintf(
+				'Gave up writing the WCPOS session row for user %d after %d attempt(s); the change was not saved.',
+				$user_id,
+				min( $attempt, self::MAX_ROW_WRITE_ATTEMPTS )
+			)
+		);
+
+		return false;
 	}
 
 	/**
@@ -722,27 +888,43 @@ final class Session_Registry {
 	 * @return bool
 	 */
 	public function keep_only( int $user_id, string $current_jti ): bool {
-		$refresh_tokens = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! \is_array( $refresh_tokens ) ) {
+		$found   = false;
+		$dropped = array();
+		$written = $this->mutate_row(
+			$user_id,
+			function ( $refresh_tokens ) use ( $current_jti, &$found, &$dropped ) {
+				$found   = \is_array( $refresh_tokens );
+				$dropped = array();
+				if ( ! $found ) {
+					return null;
+				}
+
+				foreach ( $refresh_tokens as $jti => $token_data ) {
+					if ( $jti !== $current_jti ) {
+						$dropped[] = (string) $jti;
+					}
+				}
+
+				// Keep only the current session in user meta.
+				return array_filter(
+					$refresh_tokens,
+					function ( $_token, $jti ) use ( $current_jti ) {
+						return $jti === $current_jti;
+					},
+					ARRAY_FILTER_USE_BOTH
+				);
+			}
+		);
+
+		if ( ! $found || ! $written ) {
 			return false;
 		}
 
-		foreach ( $refresh_tokens as $jti => $token_data ) {
-			if ( $jti !== $current_jti ) {
-				$this->forget_session_activity( (string) $jti );
-			}
+		foreach ( $dropped as $jti ) {
+			$this->forget_session_activity( $jti );
 		}
 
-		// Keep only the current session in user meta.
-		$refresh_tokens = array_filter(
-			$refresh_tokens,
-			function ( $_token, $jti ) use ( $current_jti ) {
-				return $jti === $current_jti;
-			},
-			ARRAY_FILTER_USE_BOTH
-		);
-
-		return update_user_meta( $user_id, self::META_KEY, $refresh_tokens );
+		return true;
 	}
 
 	/**
