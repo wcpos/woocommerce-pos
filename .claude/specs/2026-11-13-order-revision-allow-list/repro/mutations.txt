@@ -1,0 +1,26 @@
+M1_no_legacy_accept: applied
+    1) WCPOS\WooCommercePOS\Tests\Payments\Contract\Test_Command_Log::test_run_built_on_a_2_0_3_revision_is_not_stale
+    2) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_2_0_3_ack_is_accepted_after_the_upgrade
+    Tests: 51, Assertions: 247, Failures: 2.
+M2_order_meta_all_hashed: applied
+    1) WCPOS\WooCommercePOS\Tests\Payments\Contract\Test_Command_Log::test_run_built_on_a_2_0_3_revision_is_not_stale
+    2) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_meta_written_after_every_push_no_longer_409s_the_next_push
+    Tests: 51, Assertions: 244, Failures: 2.
+M3_line_meta_all_hashed: applied
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_meta_written_after_every_push_no_longer_409s_the_next_push
+    Tests: 51, Assertions: 246, Failures: 1.
+M4_visible_line_meta_dropped: applied
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_pos_owned_change_still_409s_a_stale_push
+    Tests: 51, Assertions: 243, Failures: 1.
+M5_excluded_does_not_win: applied
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_excluded_meta_key_wins_over_the_allow_list
+    Tests: 51, Assertions: 248, Failures: 1.
+M6_always_accept: applied
+    1) WCPOS\WooCommercePOS\Tests\Payments\Contract\Test_Command_Log::test_run_with_a_fresh_id_and_stale_revision_is_409_and_runs_nothing
+    2) WCPOS\WooCommercePOS\Tests\Sync\Test_Order_Revision_Recipe::test_order_revision_fields_filter_adding_a_site_local_key_moves_the_revision_and_409s_a_stale_push
+    3) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Omitted_Line_Removal::test_omitted_lines_stale_base_revision_returns_conflict_and_removes_nothing
+    4) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_pos_owned_change_still_409s_a_stale_push
+    5) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_allow_list_filter_brings_a_meta_key_into_the_revision
+    6) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_2_0_3_ack_after_a_pos_owned_change_still_409s
+    Tests: 51, Assertions: 230, Failures: 6.
+restored

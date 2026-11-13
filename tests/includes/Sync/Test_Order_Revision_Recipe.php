@@ -371,7 +371,7 @@ class Test_Order_Revision_Recipe extends Sync_REST_Store_Test_Case {
 	public function test_order_revision_ignores_a_meta_row_resave_on_the_order_and_on_a_line_item(): void {
 		// Arrange.
 		$order = $this->fixture_order();
-		$order->add_meta_data( 'wcpos_probe', 'stable', true );
+		$order->add_meta_data( '_pos_store', 'stable', true );
 		$item_id = 0;
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			$item->add_meta_data( 'wcpos_item_probe', 'stable', true );
@@ -384,9 +384,9 @@ class Test_Order_Revision_Recipe extends Sync_REST_Store_Test_Case {
 
 		// Act: same key, same value, new meta rows.
 		$order = wc_get_order( $order->get_id() );
-		$order->delete_meta_data( 'wcpos_probe' );
+		$order->delete_meta_data( '_pos_store' );
 		$order->save();
-		$order->add_meta_data( 'wcpos_probe', 'stable', true );
+		$order->add_meta_data( '_pos_store', 'stable', true );
 		$order->save();
 
 		$item = $order->get_item( $item_id );

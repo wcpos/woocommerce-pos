@@ -273,7 +273,7 @@ class Test_Rest_Dispatch_Omitted_Line_Removal extends Sync_REST_Store_Test_Case 
 		$payload               = $created['document'];
 		$payload['line_items'] = array( $payload['line_items'][0] );
 		$order                 = wc_get_order( $created['order_id'] );
-		$order->update_meta_data( '_server_edit', 'newer-state' );
+		$order->update_meta_data( '_pos_store', 'newer-state' );
 		$order->save();
 
 		// Act.

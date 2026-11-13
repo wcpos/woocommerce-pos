@@ -30,6 +30,52 @@ final class Order_Serializer {
 	public const PULL_AUGMENTATIONS = array( 'tax_ids', 'image_cast', 'item_uuids', 'links', 'serialized_filter' );
 
 	/**
+	 * The hidden (`_`-prefixed) meta keys the canonical revision hashes: the keys the till
+	 * asserts or the server's money contract owns. The revision also hashes every visible
+	 * meta key, on the order and on lines. Another plugin's hidden meta sits outside CAS,
+	 * and the push never overwrites it once it exists (see `Order_Write_Payload`).
+	 */
+	private const REVISION_META_KEYS = array(
+		// Till-asserted.
+		'_pos_user',
+		'_pos_store',
+		'_wcpos_register',
+		'_wcpos_till',
+		'_wcpos_sale_time',
+		'_wcpos_sale_tz',
+		'_wcpos_sale_counter',
+		'_wcpos_session',
+		'_wcpos_app_version',
+		'_wcpos_app_build',
+		'_pos_cash_amount_tendered',
+		'_pos_cash_change',
+		'_pos_card_cashback',
+		'_wcpos_split',
+		'_wcpos_paid_units',
+		'_wcpos_quick_discount',
+		'_woocommerce_pos_tax_based_on',
+		'_wcpos_money_owner_hint',
+		'is_vat_exempt',
+		'_wcpos_tax_ids',
+		'_wcpos_tax_ids_owned_keys',
+		'_wcpos_tax_ids_verified',
+		// Server money.
+		'_wcpos_payments',
+		'_wcpos_commands',
+		'_wcpos_completions',
+		'_wcpos_completed_at',
+		'_wcpos_payment_live',
+		'_wcpos_gateway_attempts',
+		'_wcpos_awaiting_customer',
+		'_wcpos_checkout_state',
+		// POS line meta.
+		'_woocommerce_pos_data',
+		'_woocommerce_pos_tax_status',
+		'coupon_info',
+		'_wcpos_tip_payment_id',
+	);
+
+	/**
 	 * THE order-document assembly for the v2 surface: one recipe, one order of
 	 * operations, with the augmentation set stated explicitly by each caller.
 	 *
@@ -324,10 +370,72 @@ final class Order_Serializer {
 	 * writer for nothing. `date_paid*` and `date_completed*` stay — those move with
 	 * status content.
 	 *
+	 * Order and line meta are hashed except the hidden (`_`-prefixed) keys outside the
+	 * allow-list ({@see self::revision_meta_keys()}), so another plugin's hidden meta never
+	 * 409s a till.
+	 *
 	 * @param array $payload Serialized order payload (transport stamps are ignored).
 	 * @return array Schema-scoped, identity-stripped, canonicalized order.
 	 */
 	public static function canonical_form( array $payload ): array {
+		return self::form( $payload, true );
+	}
+
+	/**
+	 * The stale-write facts for an order, or null when the claimed revision is current.
+	 *
+	 * A claimed revision is also current when it equals the 2.0.3 recipe (every meta row
+	 * hashed) of the same document: a till that acked an order before the allow-list
+	 * shipped then gets no 409 for the recipe change alone. The old form is the new form
+	 * plus meta rows, so an equal old hash implies an equal new one; this never accepts a
+	 * write the old compare refused. Transition only: remove in 2.2 at the earliest (#2665).
+	 *
+	 * @param string $claimed          The revision the caller built its write against.
+	 * @param string $current_revision The order's current revision, from canonical_revision().
+	 * @param array  $document         The document $current_revision was hashed from.
+	 * @return null|array{currentRevision: string, current: array}
+	 */
+	public static function stale( string $claimed, string $current_revision, array $document ): ?array {
+		$facts = Revision::stale( $claimed, $current_revision, $document );
+		if ( null === $facts || ! hash_equals( self::legacy_revision( $document ), $claimed ) ) {
+			return $facts;
+		}
+		return null;
+	}
+
+	/**
+	 * The hidden meta keys the canonical revision hashes, on the order and on lines.
+	 *
+	 * @return string[]
+	 */
+	public static function revision_meta_keys(): array {
+		/**
+		 * Filters the hidden meta keys the canonical order revision hashes.
+		 *
+		 * The revision hashes every visible (non-`_`) meta key, on the order and on every
+		 * line, plus these `_`-prefixed keys. Another plugin's hidden meta sits outside CAS,
+		 * and the push never overwrites it once it exists (see `Order_Write_Payload`).
+		 * Add a key to bring site-local meta into CAS. Read the coherence contract above first.
+		 *
+		 * @since 2.0.3
+		 *
+		 * @param string[] $keys Hidden meta keys inside the hash.
+		 */
+		return array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_meta_keys', self::REVISION_META_KEYS ) );
+	}
+
+	/** The 2.0.3 recipe: every meta row hashed, #2663 exclusions included. */
+	private static function legacy_revision( array $payload ): string {
+		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::form( $payload, false ) ) );
+	}
+
+	/**
+	 * The canonical form; with `$allow_list` false, the 2.0.3 form byte for byte.
+	 *
+	 * @param array $payload    Serialized order payload.
+	 * @param bool  $allow_list Hash only allow-listed order meta and hidden line meta.
+	 */
+	private static function form( array $payload, bool $allow_list ): array {
 		// WooCommerce merges register_rest_field additions inside get_item_schema().
 		$controller = new class() extends WC_REST_Orders_Controller {
 			/** Keep the core schema; extensions opt in through the revision-fields filter. */
@@ -371,6 +479,8 @@ final class Order_Serializer {
 		 */
 		$excluded_meta = array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_excluded_meta_keys', array() ) );
 
+		$allowed = $allow_list ? self::revision_meta_keys() : null;
+
 		// HPOS removes these internal fields only after the restored order's save
 		// hooks run. The exclusion predates compute-at-pull (ADR 0033) and is frozen
 		// with the 1.10.x recipe: legacy journal rows stored hashes computed with it,
@@ -380,16 +490,17 @@ final class Order_Serializer {
 			$payload['meta_data'] = array_values(
 				array_filter(
 					$payload['meta_data'],
-					static function ( $entry ) use ( $excluded_meta ): bool {
+					static function ( $entry ) use ( $excluded_meta, $allowed ): bool {
 						$key = Meta_Entry::key( $entry );
 						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true )
-							&& ! in_array( $key, $excluded_meta, true );
+							&& ! in_array( $key, $excluded_meta, true )
+							&& ( null === $allowed || 0 !== strpos( (string) $key, '_' ) || in_array( $key, $allowed, true ) );
 					}
 				)
 			);
 		}
 
-		$payload = self::strip_item_identity_meta( self::strip_identity_meta( $payload ), $excluded_meta );
+		$payload = self::strip_item_identity_meta( self::strip_identity_meta( $payload ), $excluded_meta, $allowed );
 
 		return Revision::canonicalize( array_intersect_key( $payload, array_flip( $fields ) ) );
 	}
@@ -406,8 +517,9 @@ final class Order_Serializer {
 	 * - Normalize line_items[].image.id to an int — the augmented read lanes
 	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
 	 * - Drop item meta whose key is in `$excluded_meta` (the revision's excluded-meta filter).
+	 * - Drop `_`-prefixed item meta `$allowed` does not name; null (the 2.0.3 form) keeps it.
 	 */
-	private static function strip_item_identity_meta( array $payload, array $excluded_meta ): array {
+	private static function strip_item_identity_meta( array $payload, array $excluded_meta, ?array $allowed ): array {
 		// coupon_lines joined the uuid-stamped set with the rest (the client pairs
 		// coupons by uuid too); their identity meta must be hash-invisible for the
 		// same reason as every other line type — the augmented document and a bare
@@ -430,9 +542,10 @@ final class Order_Serializer {
 				$payload[ $items_key ][ $index ]['meta_data'] = array_values(
 					array_filter(
 						$item['meta_data'],
-						static function ( $entry ) use ( $excluded_meta ): bool {
+						static function ( $entry ) use ( $excluded_meta, $allowed ): bool {
 							$key = Meta_Entry::key( $entry );
-							return '_woocommerce_pos_uuid' !== $key && ! in_array( $key, $excluded_meta, true );
+							return '_woocommerce_pos_uuid' !== $key && ! in_array( $key, $excluded_meta, true )
+								&& ( null === $allowed || 0 !== strpos( (string) $key, '_' ) || in_array( $key, $allowed, true ) );
 						}
 					)
 				);

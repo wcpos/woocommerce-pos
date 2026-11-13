@@ -1,0 +1,73 @@
+== N1_guard_off
+N1_guard_off: applied to includes/Sync/Order_Write_Payload.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_stale_echo_does_not_revert_hidden_third_party_order_meta
+    2) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_stale_echo_does_not_revert_hidden_third_party_line_meta
+    Tests: 90, Assertions: 346, Failures: 2.
+== N2_drop_even_when_absent
+N2_drop_even_when_absent: applied to includes/Sync/Order_Write_Payload.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_hidden_third_party_key_new_to_the_order_is_written
+    Tests: 90, Assertions: 348, Failures: 1.
+== N3_uuid_not_exempt
+N3_uuid_not_exempt: applied to includes/Sync/Order_Write_Payload.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Order_Write_Payload::test_for_update_with_an_omitted_line_restores_ids_and_marks_the_omission_for_removal
+    Tests: 90, Assertions: 348, Failures: 1.
+== N4_guard_visible_keys_too
+N4_guard_visible_keys_too: applied to includes/Sync/Order_Write_Payload.php
+    OK (90 tests, 348 assertions)
+== N5_allow_list_ignored_in_guard
+N5_allow_list_ignored_in_guard: applied to includes/Sync/Order_Write_Payload.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_pushed_allow_listed_and_visible_meta_is_still_written
+    Tests: 90, Assertions: 346, Failures: 1.
+== N7_no_id_match
+N7_no_id_match: pattern matched 2 times
+== N8_lines_unguarded
+N8_lines_unguarded: applied to includes/Sync/Order_Write_Payload.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_stale_echo_does_not_revert_hidden_third_party_line_meta
+    Tests: 90, Assertions: 347, Failures: 1.
+== N6_visible_order_meta_unhashed
+N6_visible_order_meta_unhashed: applied to includes/Sync/Order_Serializer.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_visible_third_party_order_meta_change_still_409s
+    Tests: 90, Assertions: 347, Failures: 1.
+== M3_line_meta_all_hashed
+M3_line_meta_all_hashed: applied to includes/Sync/Order_Serializer.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_meta_written_after_every_push_no_longer_409s_the_next_push
+    2) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_stale_echo_does_not_revert_hidden_third_party_line_meta
+    3) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_push_that_omits_a_hidden_third_party_key_does_not_delete_it
+    Tests: 90, Assertions: 342, Failures: 3.
+== M4_visible_line_meta_dropped
+M4_visible_line_meta_dropped: applied to includes/Sync/Order_Serializer.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_pos_owned_change_still_409s_a_stale_push
+    Tests: 90, Assertions: 343, Failures: 1.
+== M1_no_legacy_accept
+M1_no_legacy_accept: applied to includes/Sync/Order_Serializer.php
+    1) WCPOS\WooCommercePOS\Tests\Payments\Contract\Test_Command_Log::test_run_built_on_a_2_0_3_revision_is_not_stale
+    2) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_2_0_3_ack_is_accepted_after_the_upgrade
+    Tests: 90, Assertions: 347, Failures: 2.
+== M5_excluded_does_not_win
+M5_excluded_does_not_win: applied to includes/Sync/Order_Serializer.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_excluded_meta_key_wins_over_the_allow_list
+    Tests: 90, Assertions: 348, Failures: 1.
+== M6_always_accept
+M6_always_accept: applied to includes/Sync/Order_Serializer.php
+    1) WCPOS\WooCommercePOS\Tests\Payments\Contract\Test_Command_Log::test_run_with_a_fresh_id_and_stale_revision_is_409_and_runs_nothing
+    2) WCPOS\WooCommercePOS\Tests\Sync\Test_Order_Revision_Recipe::test_order_revision_fields_filter_adding_a_site_local_key_moves_the_revision_and_409s_a_stale_push
+    3) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Omitted_Line_Removal::test_omitted_lines_stale_base_revision_returns_conflict_and_removes_nothing
+    4) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_pos_owned_change_still_409s_a_stale_push
+    5) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_allow_list_filter_brings_a_meta_key_into_the_revision
+    6) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_2_0_3_ack_after_a_pos_owned_change_still_409s
+    7) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_visible_third_party_order_meta_change_still_409s
+    Tests: 90, Assertions: 329, Failures: 7.
+restored
+== N7_no_id_match
+N7_no_id_match: applied to includes/Sync/Order_Write_Payload.php
+    OK (90 tests, 348 assertions)
+restored
+== N4_guard_visible_keys_too
+N4_guard_visible_keys_too: applied to includes/Sync/Order_Write_Payload.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_pushed_allow_listed_and_visible_meta_is_still_written
+    Tests: 91, Assertions: 361, Failures: 1.
+== N7_no_id_match
+N7_no_id_match: applied to includes/Sync/Order_Write_Payload.php
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_a_push_cannot_rewrite_a_hidden_third_party_row_by_its_meta_id
+    Tests: 91, Assertions: 354, Failures: 1.
+restored

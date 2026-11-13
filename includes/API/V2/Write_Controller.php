@@ -489,7 +489,7 @@ class Write_Controller extends WP_REST_Controller {
 					return $current;
 				}
 				$current_bare = is_array( $current->get_data() ) ? $current->get_data() : array();
-				$stale        = Revision::stale( $m['baseRevision'], $this->revision_for( $meta, $id, $current_bare ), $current_bare );
+				$stale        = $this->stale_for( $meta, $id, $m['baseRevision'], $current_bare );
 				if ( null !== $stale ) {
 					return $this->stale_conflict( $stale );
 				}
@@ -561,7 +561,7 @@ class Write_Controller extends WP_REST_Controller {
 					return $current;
 				}
 				$current_bare = is_array( $current->get_data() ) ? $current->get_data() : array();
-				$stale        = Revision::stale( $m['baseRevision'], $this->revision_for( $meta, $id, $current_bare ), $current_bare );
+				$stale        = $this->stale_for( $meta, $id, $m['baseRevision'], $current_bare );
 				if ( null !== $stale ) {
 					return $this->stale_conflict( $stale );
 				}
@@ -833,5 +833,14 @@ class Write_Controller extends WP_REST_Controller {
 			return Order_Serializer::canonical_revision( $bare );
 		}
 		return Revision::compute( $bare );
+	}
+
+	/** The stale-write facts for a record; orders accept a 2.0.3-recipe base too ({@see Order_Serializer::stale()}). */
+	private function stale_for( array $meta, int $id, string $claimed, array $bare ): ?array {
+		$current = $this->revision_for( $meta, $id, $bare );
+		if ( 'product_variation' !== ( $meta['post_type'] ?? '' ) && 'order' === ( $meta['id_type'] ?? '' ) && $id > 0 ) {
+			return Order_Serializer::stale( $claimed, $current, $bare );
+		}
+		return Revision::stale( $claimed, $current, $bare );
 	}
 }
