@@ -18,7 +18,8 @@ use WP_REST_Request;
  * Test_Products_Query_Exclusion class.
  *
  * Each test runs real product queries, so it pins what WordPress writes into the
- * SQL and which ids come back, not what the callbacks leave in the query vars.
+ * SQL, which ids come back and, for integrations that answer from them, the
+ * query vars.
  *
  * @internal
  *
@@ -341,6 +342,55 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( array( $pos_only ), array_map( 'intval', $query->posts ) );
 		$this->assertSame( 0, substr_count( $query->request, 'NOT IN (' ), $query->request );
+	}
+
+	/**
+	 * A filtered storefront product query carries the POS Only ids in its query vars.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
+	 */
+	public function test_storefront_filtered_product_query_carries_pos_only_ids_in_query_vars(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = array(
+			ProductHelper::create_simple_product()->get_id(),
+			ProductHelper::create_simple_product()->get_id(),
+		);
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( $pos_only );
+		new Products();
+
+		// Act.
+		$query        = new WP_Query( $this->product_query_args() );
+		$post__not_in = array_map( 'intval', (array) $query->get( 'post__not_in' ) );
+
+		// Assert.
+		foreach ( $pos_only as $id ) {
+			$this->assertContains( $id, $post__not_in );
+		}
+		$this->assertSame( array( $visible ), array_map( 'intval', $query->posts ) );
+	}
+
+	/**
+	 * A storefront variation query carries the POS Only variation ids in its query vars.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
+	 */
+	public function test_storefront_variation_query_carries_pos_only_ids_in_query_vars(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$variable_product = ProductHelper::create_variation_product();
+		$variation_ids    = $variable_product->get_children();
+		$variation        = (int) $variation_ids[0];
+		$this->set_pos_only_ids( array(), array( $variation ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args( array( 'post_type' => 'product_variation' ) ) );
+
+		// Assert.
+		$this->assertContains( $variation, array_map( 'intval', (array) $query->get( 'post__not_in' ) ) );
+		$this->assertNotContains( $variation, array_map( 'intval', $query->posts ) );
 	}
 
 	/**

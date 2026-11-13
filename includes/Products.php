@@ -159,16 +159,16 @@ class Products {
 	}
 
 	/**
-	 * Hide POS Only ids from a query that suppresses SQL filters (get_posts() and other callers that set suppress_filters).
+	 * Write the POS Only ids into `post__not_in` on every storefront product query.
 	 *
-	 * A filtered query is left alone: posts_where writes the exclusion for it once.
+	 * Code that answers from the query vars (`posts_pre_query` integrations such as
+	 * ElasticPress, Relevanssi, SearchWP, Algolia) honours them, and WordPress
+	 * builds the `NOT IN` itself. A query that suppresses filters also has its
+	 * `post__in` trimmed, because posts_where never runs for it.
 	 *
 	 * @param \WP_Query $query The query being filtered.
 	 */
 	public function hide_pos_only_products( \WP_Query $query ): void {
-		if ( ! $query->get( 'suppress_filters' ) ) {
-			return;
-		}
 		if ( ! $this->should_hide_pos_only_products( $query ) ) {
 			return;
 		}
@@ -181,7 +181,8 @@ class Products {
 		// get_posts() caller suppresses the posts_where clause below as well, so
 		// an id list is trimmed here. An emptied list keeps an impossible id:
 		// an empty post__in would turn the query into an unrestricted one.
-		$post__in = (array) $query->get( 'post__in' );
+		// A filtered query is left to posts_where, which covers post__in itself.
+		$post__in = $query->get( 'suppress_filters' ) ? (array) $query->get( 'post__in' ) : array();
 		if ( ! empty( $post__in ) ) {
 			$post__in = array_values( array_diff( array_map( 'intval', $post__in ), $exclude_ids ) );
 			$query->set( 'post__in', empty( $post__in ) ? array( 0 ) : $post__in );
@@ -195,17 +196,22 @@ class Products {
 	}
 
 	/**
-	 * Write the POS Only exclusion into a filtered query's WHERE clause, its only copy.
+	 * Write the POS Only exclusion into a filtered query's WHERE clause where WordPress left it out.
 	 *
-	 * The clause stands on its own, so it holds whatever `p`, `post__in` or
-	 * `post__not_in` say.
+	 * The clause is written only where WordPress left `post__not_in` out of the
+	 * WHERE (`p` or `post__in` set) or a later callback stripped it, so a query
+	 * carries the list once.
 	 *
 	 * @param string    $where The SQL WHERE clause.
 	 * @param \WP_Query $query The query being filtered.
 	 */
 	public function exclude_pos_only_products_from_where( $where, $query ) {
+		global $wpdb;
+
 		if ( $this->should_hide_pos_only_products( $query ) ) {
-			$where .= $this->get_pos_only_excluded_ids( $query )['sql'];
+			if ( $query->get( 'p' ) || ! empty( $query->get( 'post__in' ) ) || false === strpos( $where, " AND {$wpdb->posts}.ID NOT IN (" ) ) {
+				$where .= $this->get_pos_only_excluded_ids( $query )['sql'];
+			}
 		}
 
 		return $where;
