@@ -38,7 +38,7 @@ High tier for correctness: a POS Only product leaking onto the storefront is a m
 - `WP_Query::get_posts()` (wp-includes/class-wp-query.php):
   - It fires `pre_get_posts`.
   - It writes `ID = p`, or `ID IN (post__in)`, or else `ID NOT IN (post__not_in)`, as an if / elseif chain.
-  - It applies `posts_where` only `if ( ! $query_vars['suppress_filters'] )`. `get_posts()` and `wc_get_products()`' data store pass `suppress_filters => true`; a plain `new WP_Query( $args )` does not.
+  - It applies `posts_where` only `if ( ! $query_vars['suppress_filters'] )`. `get_posts()` passes `suppress_filters => true`. A plain `new WP_Query( $args )` does not, and neither does `wc_get_products()`: the repro bench sees `posts_request` fire for it. (Corrected after dispatch; the implementer flagged it.)
 - Each settings getter applies its public filter (`wcpos_pos_only_product_visibility_settings`, `wcpos_pos_only_variations_visibility_settings`). It costs about 0.04 ms, and returns the same PHP array (refcounted) on each call while nothing changes, so `===` between two reads is a pointer check. `Visibility_Section::list_has_id()` (`includes/Services/Settings/Visibility_Section.php:422`) uses exactly this memo pattern: copy that pattern, do not call it.
 - Test bases: `Test_Products_Direct` extends `WC_Unit_Test_Case` and has helpers `enable_pos_only_products()` and `set_pos_only_product_ids( array )`. Copy what the new file needs. Products come from `ProductHelper::create_simple_product()` / `ProductHelper::create_variation_product()` (see `tests/includes/Test_Products.php` for use). WordPress' test case restores hooks after each test, so instantiating `new Products()` in a test registers one fresh set of hooks.
 
