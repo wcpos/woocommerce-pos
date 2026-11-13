@@ -245,6 +245,68 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A later pre_get_posts callback that replaces post__not_in cannot drop the POS Only ids.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_late_pre_get_posts_callback_replacing_post_not_in_excludes_pos_only_ids(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		add_action(
+			'pre_get_posts',
+			function ( WP_Query $query ) {
+				$query->set( 'post__not_in', array( 999999 ) );
+			},
+			PHP_INT_MAX
+		);
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args() );
+
+		// Assert.
+		$this->assertSame( array( $visible ), array_map( 'intval', $query->posts ) );
+	}
+
+	/**
+	 * A foreign NOT IN clause with post__not_in cleared cannot drop the POS Only ids.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_foreign_not_in_clause_with_cleared_post_not_in_excludes_pos_only_ids(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		add_action(
+			'pre_get_posts',
+			function ( WP_Query $query ) {
+				$query->set( 'post__not_in', array() );
+			},
+			PHP_INT_MAX
+		);
+		add_filter(
+			'posts_where',
+			function ( $where ) {
+				global $wpdb;
+				return $where . " AND {$wpdb->posts}.ID NOT IN (999999)";
+			},
+			10
+		);
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args() );
+
+		// Assert.
+		$this->assertSame( array( $visible ), array_map( 'intval', $query->posts ) );
+	}
+
+	/**
 	 * A query for one POS Only id by `p` returns nothing.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where

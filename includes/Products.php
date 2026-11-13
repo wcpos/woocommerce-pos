@@ -199,7 +199,8 @@ class Products {
 	 *
 	 * The clause is written only where WordPress left `post__not_in` out of the
 	 * WHERE (`p` or `post__in` set) or a later callback stripped it, so a query
-	 * carries the list once.
+	 * carries the list once. It is also written when `post__not_in` no longer
+	 * holds every POS Only id (a later callback replaced or cleared it).
 	 *
 	 * @param string    $where The SQL WHERE clause.
 	 * @param \WP_Query $query The query being filtered.
@@ -208,8 +209,11 @@ class Products {
 		global $wpdb;
 
 		if ( $this->should_hide_pos_only_products( $query ) ) {
-			if ( $query->get( 'p' ) || ! empty( $query->get( 'post__in' ) ) || false === strpos( $where, " AND {$wpdb->posts}.ID NOT IN (" ) ) {
-				$where .= $this->get_pos_only_excluded_ids( $query )['sql'];
+			$exclusion = $this->get_pos_only_excluded_ids( $query );
+			if ( $query->get( 'p' ) || ! empty( $query->get( 'post__in' ) )
+				|| array_diff( $exclusion['ids'], array_map( 'absint', (array) $query->get( 'post__not_in' ) ) )
+				|| false === strpos( $where, " AND {$wpdb->posts}.ID NOT IN (" ) ) {
+				$where .= $exclusion['sql'];
 			}
 		}
 
