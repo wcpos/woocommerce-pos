@@ -1,0 +1,12 @@
+== M1 line meta ignores the filter
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_excluded_order_and_line_meta_keys_written_after_every_push_no_longer_409
+    Tests: 6, Assertions: 60, Failures: 1.
+== M2 order meta ignores the filter
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_excluded_order_and_line_meta_keys_written_after_every_push_no_longer_409
+    Tests: 6, Assertions: 60, Failures: 1.
+== M3 a non-empty filter drops every order meta row
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_meta_key_not_excluded_still_409s_a_stale_push
+    Tests: 6, Assertions: 61, Failures: 1.
+== M4 a non-empty filter drops every line meta row
+    1) WCPOS\WooCommercePOS\Tests\Sync\Test_Rest_Dispatch_Repush_Idempotency::test_meta_key_not_excluded_still_409s_a_stale_push
+    Tests: 6, Assertions: 62, Failures: 1.
