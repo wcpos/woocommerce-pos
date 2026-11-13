@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Order;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WP_REST_Response;
 
 /**
@@ -396,24 +397,21 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * POS-2VT: order meta written after every push makes the re-anchored re-push 409 again.
+	 * POS-2VT: order and hidden line meta written after every push no longer 409 the next push.
 	 *
 	 * @return void
 	 */
-	public function test_meta_written_after_every_push_409s_the_reanchored_repush_again(): void {
+	public function test_meta_written_after_every_push_no_longer_409s_the_next_push(): void {
 		// Arrange.
 		$this->add_third_party_writer( false );
-		$created = $this->push_order( 'create', $this->create_payload() );
-		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
-		$document = $this->edited_document( $created, 'first edit' );
-		// Act.
-		$first  = $this->push_order( 'update', $document, $created->get_data()['currentRevision'] );
-		$repush = $this->push_order( 'update', $document, $first->get_data()['currentRevision'] ?? null );
-		// Assert.
-		$this->assertSame( 409, $first->get_status(), wp_json_encode( $first->get_data() ) );
-		$this->assertSame( 'woo_rxdb_sync_conflict', $first->get_data()['code'] ?? null );
-		$this->assertSame( 409, $repush->get_status(), wp_json_encode( $repush->get_data() ) );
-		$this->assertSame( 'woo_rxdb_sync_conflict', $repush->get_data()['code'] ?? null );
+		$this->add_third_party_writer( true );
+		$previous = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $previous->get_status(), wp_json_encode( $previous->get_data() ) );
+		// Act and assert: each update anchors on the previous acknowledgement.
+		foreach ( array( 'first edit', 'second edit', 'third edit' ) as $note ) {
+			$previous = $this->push_order( 'update', $this->edited_document( $previous, $note ), $previous->get_data()['currentRevision'] );
+			$this->assertSame( 200, $previous->get_status(), wp_json_encode( $previous->get_data() ) );
+		}
 	}
 
 	/**
@@ -435,29 +433,154 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		}
 	}
 
+
 	/**
-	 * A meta key the filter does not name still 409s a stale push.
+	 * A POS-owned change made out of band still 409s a push anchored on the last good acknowledgement.
 	 *
 	 * @return void
 	 */
-	public function test_meta_key_not_excluded_still_409s_a_stale_push(): void {
+	public function test_pos_owned_change_still_409s_a_stale_push(): void {
 		// Arrange.
-		add_filter( 'wcpos_sync_order_revision_excluded_meta_keys', static fn() => array( '_x_third_party_stamp', '_x_third_party_line_stamp' ) );
 		$created = $this->push_order( 'create', $this->create_payload() );
 		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
 		$first = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
 		$this->assertSame( 200, $first->get_status(), wp_json_encode( $first->get_data() ) );
-		$order = wc_get_order( (int) $first->get_data()['document']['id'] );
-		$order->update_meta_data( '_x_other_plugin_key', 'moved' );
-		$order->save_meta_data();
+		$anchor   = $first->get_data()['currentRevision'];
+		$document = $first->get_data()['document'];
+		$id       = (int) $document['id'];
+		$line_id  = (int) $document['line_items'][0]['id'];
+		$changes  = array(
+			'order meta _pos_store'           => static function () use ( $id ): void {
+				$order = wc_get_order( $id );
+				$order->update_meta_data( '_pos_store', 'moved' );
+				$order->save_meta_data();
+			},
+			'line meta _woocommerce_pos_data' => static function () use ( $line_id ): void {
+				wc_update_order_item_meta( $line_id, '_woocommerce_pos_data', wp_json_encode( array( 'price' => '11' ) ) );
+			},
+			'visible line meta Size'          => static function () use ( $line_id ): void {
+				wc_update_order_item_meta( $line_id, 'Size', 'L' );
+			},
+			'core field customer_note'        => static function () use ( $id ): void {
+				$order = wc_get_order( $id );
+				$order->set_customer_note( 'moved' );
+				$order->save();
+			},
+			'line item quantity'              => static function () use ( $id, $line_id ): void {
+				$item = wc_get_order( $id )->get_item( $line_id );
+				$item->set_quantity( $item->get_quantity() + 1 );
+				$item->save();
+			},
+		);
+		// Act and assert: each change 409s, and the next case re-anchors on that 409.
+		foreach ( $changes as $label => $change ) {
+			$change();
+			$stale = $this->push_order( 'update', array_merge( $document, array( 'customer_note' => $label ) ), $anchor );
+			$this->assertSame( 409, $stale->get_status(), $label . ': ' . wp_json_encode( $stale->get_data() ) );
+			$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null, $label );
+			$anchor   = $stale->get_data()['currentRevision'];
+			$document = $stale->get_data()['current'];
+		}
+	}
+
+	/**
+	 * A key the allow-list filter adds 409s a push once another plugin moves it.
+	 *
+	 * @return void
+	 */
+	public function test_allow_list_filter_brings_a_meta_key_into_the_revision(): void {
+		// Arrange.
+		add_filter( 'wcpos_sync_order_revision_meta_keys', static fn( array $keys ): array => array_merge( $keys, array( '_x_third_party_stamp' ) ) );
+		$this->add_third_party_writer( false );
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
 		// Act.
-		$stale = $this->push_order( 'update', $this->edited_document( $first, 'second edit' ), $first->get_data()['currentRevision'] );
+		$stale = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
 		// Assert.
 		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
-		// Line meta the filter does not name stays in the hash too.
-		$current = $stale->get_data()['current'];
-		wc_update_order_item_meta( (int) $current['line_items'][0]['id'], '_x_other_plugin_line_key', 'moved' );
-		$line_stale = $this->push_order( 'update', array_merge( $current, array( 'customer_note' => 'third edit' ) ), $stale->get_data()['currentRevision'] );
-		$this->assertSame( 409, $line_stale->get_status(), wp_json_encode( $line_stale->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null );
+	}
+
+	/**
+	 * A key both the allow-list and the excluded filter name stays out of the hash.
+	 *
+	 * @return void
+	 */
+	public function test_excluded_meta_key_wins_over_the_allow_list(): void {
+		// Arrange.
+		add_filter( 'wcpos_sync_order_revision_excluded_meta_keys', static fn() => array( '_pos_store' ) );
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$order = wc_get_order( (int) $created->get_data()['document']['id'] );
+		$order->update_meta_data( '_pos_store', 'moved' );
+		$order->save_meta_data();
+		// Act.
+		$update = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $update->get_status(), wp_json_encode( $update->get_data() ) );
+	}
+
+	/**
+	 * The till's ack under the 2.0.3 recipe for an order with non-allow-listed order and hidden line meta.
+	 *
+	 * The new recipe plus `$old` hashes exactly what 2.0.3 hashed for this order; removing `$old` is the upgrade.
+	 *
+	 * @param WP_REST_Response $created The create's acknowledgement.
+	 *
+	 * @return string
+	 */
+	private function legacy_ack( WP_REST_Response $created ): string {
+		$id    = (int) $created->get_data()['document']['id'];
+		$order = wc_get_order( $id );
+		$order->update_meta_data( '_wc_order_attribution_source_type', 'typein' );
+		foreach ( $order->get_items() as $item ) {
+			$item->update_meta_data( '_x_hidden_line', '1' );
+			$item->save();
+			break;
+		}
+		$order->save();
+		// The create itself also writes `_pos_user_created` and `_woocommerce_pos_version`, which 2.0.3 hashed too.
+		$old = static fn( array $keys ): array => array_merge( $keys, array( '_wc_order_attribution_source_type', '_x_hidden_line', '_pos_user_created', '_woocommerce_pos_version' ) );
+		add_filter( 'wcpos_sync_order_revision_meta_keys', $old );
+		$legacy = Order_Serializer::current_state( $id )['revision'];
+		remove_filter( 'wcpos_sync_order_revision_meta_keys', $old );
+		$this->assertNotSame( $legacy, Order_Serializer::current_state( $id )['revision'], 'The recipes hash the same bytes: the test would be vacuous.' );
+		return $legacy;
+	}
+
+	/**
+	 * A till's ack from before the upgrade (the 2.0.3 recipe) is accepted after it.
+	 *
+	 * @return void
+	 */
+	public function test_a_2_0_3_ack_is_accepted_after_the_upgrade(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$legacy = $this->legacy_ack( $created );
+		// Act.
+		$update = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $legacy );
+		// Assert.
+		$this->assertSame( 200, $update->get_status(), wp_json_encode( $update->get_data() ) );
+	}
+
+	/**
+	 * A till's 2.0.3 ack still 409s once a POS-owned key moved after it.
+	 *
+	 * @return void
+	 */
+	public function test_a_2_0_3_ack_after_a_pos_owned_change_still_409s(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$legacy = $this->legacy_ack( $created );
+		$order  = wc_get_order( (int) $created->get_data()['document']['id'] );
+		$order->update_meta_data( '_pos_store', 'moved' );
+		$order->save_meta_data();
+		// Act.
+		$stale = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $legacy );
+		// Assert.
+		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null );
 	}
 }

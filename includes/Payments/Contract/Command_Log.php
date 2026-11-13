@@ -258,7 +258,7 @@ final class Command_Log {
 		if ( is_wp_error( $current ) ) {
 			return $current;
 		}
-		$facts = Revision::stale( $revision, $current['revision'], $current['document'] );
+		$facts = Order_Serializer::stale( $revision, $current['revision'], $current['document'] );
 		if ( null === $facts ) {
 			return null;
 		}

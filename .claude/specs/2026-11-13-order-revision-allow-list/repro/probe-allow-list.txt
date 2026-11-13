@@ -1,0 +1,11 @@
+POS-2VT probe on fix/order-revision-allow-list (base ce7e031a + the allow-list change), wp-env tests-cli.
+Source: ../../2026-11-13-order-revision-stale-ack/repro/Probe_Pos2vt.php.txt, copied in for the run and removed.
+Compare with ../../2026-11-13-order-revision-stale-ack/repro/probe-2.0.2.txt (S2, S3 and S4 answered 409 there).
+
+[S0 no third party] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+[S1 order meta written in woocommerce_update_order] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+[S2 order meta written after every push response (async/shutdown job)] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+[S3 line meta written whenever any line meta is added] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+[S4 order meta written on every wc/v3 order read] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+[S5 line meta written in woocommerce_update_order] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+OK (6 tests, 6 assertions)
