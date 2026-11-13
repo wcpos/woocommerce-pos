@@ -1,0 +1,34 @@
+test-slot-run: slot claimed after 0 s
+ℹ Starting 'vendor/bin/phpunit -c .phpunit.xml.dist --filter Test_Products_Query_Exclusion::' on the tests-cli container. 
+
+Installing...
+Running as single site... To run multisite, use -c tests/phpunit/multisite.xml
+Not running ajax tests. To execute these, use --group ajax.
+Not running ms-files tests. To execute these, use --group ms-files.
+Not running external-http tests. To execute these, use --group external-http.
+PHPUnit 9.6.39 by Sebastian Bergmann and contributors.
+
+Warning:       No code coverage driver available
+Warning:       Your XML configuration validates against a deprecated schema.
+Suggestion:    Migrate your XML configuration using "--migrate-configuration"!
+
+...........FF                                                     13 / 13 (100%)
+
+Time: 00:00.538, Memory: 189.00 MB
+
+There were 2 failures:
+
+1) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_filtered_product_query_carries_pos_only_ids_in_query_vars
+Failed asserting that an array contains 35.
+
+/var/www/html/wp-content/plugins/woocommerce-pos/tests/includes/Test_Products_Query_Exclusion.php:369
+
+2) WCPOS\WooCommercePOS\Tests\Test_Products_Query_Exclusion::test_storefront_variation_query_carries_pos_only_ids_in_query_vars
+Failed asserting that an array contains 39.
+
+/var/www/html/wp-content/plugins/woocommerce-pos/tests/includes/Test_Products_Query_Exclusion.php:392
+
+FAILURES!
+Tests: 13, Assertions: 20, Failures: 2.
+✖ Command failed with exit code 1
+Command failed with exit code 1

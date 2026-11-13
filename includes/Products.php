@@ -41,6 +41,13 @@ class Products {
 	private $rest_route = '';
 
 	/**
+	 * POS Only exclusions built this request, keyed by the post-type selection.
+	 *
+	 * @var array<string, array{source: array, ids: int[], sql: string}>
+	 */
+	private $pos_only_exclusions = array();
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -48,8 +55,10 @@ class Products {
 
 		if ( $pos_only_products ) {
 			add_filter( 'rest_pre_dispatch', array( $this, 'record_rest_route' ), 10, 3 );
-			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ) );
-			add_filter( 'posts_where', array( $this, 'exclude_pos_only_products_from_where' ), 10, 2 );
+			// Last, so a later callback that sets suppress_filters or post__in, or edits
+			// the WHERE clause, has already run when the exclusion is decided.
+			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ), PHP_INT_MAX );
+			add_filter( 'posts_where', array( $this, 'exclude_pos_only_products_from_where' ), PHP_INT_MAX, 2 );
 			add_filter( 'woocommerce_product_is_visible', array( $this, 'filter_pos_only_product_visibility' ), 10, 2 );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
 			add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_prevent_pos_only_add_to_cart' ) );
@@ -101,43 +110,61 @@ class Products {
 	 * {@see Catalog_Visibility}, so surfaces that never run this query filter
 	 * (blocks, Store API, related products, wc/v3) hide it too.
 	 *
+	 * The list and its SQL are built once per post-type selection and rebuilt only
+	 * when the filtered settings values differ (`===` on an unchanged array is a
+	 * pointer check), so a settings write or filter change mid-request still shows.
+	 *
 	 * @param \WP_Query $query The WP_Query instance (passed by reference).
 	 *
-	 * @return int[]
+	 * @return array{ids: int[], sql: string} The ids, and the WHERE fragment that excludes them ('' when none).
 	 */
 	private function get_pos_only_excluded_ids( \WP_Query $query ): array {
+		global $wpdb;
+
 		// WP_Query post_type can be string or array.
-		$post_types        = (array) $query->get( 'post_type' );
-		$settings_instance = Settings::instance();
-		$exclude_ids       = array();
-
-		// Handle product queries.
+		$post_types = (array) $query->get( 'post_type' );
+		$settings   = Settings::instance();
+		$lists      = array();
 		if ( \in_array( 'product', $post_types, true ) ) {
-			$settings = $settings_instance->get_pos_only_product_visibility_settings();
-			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
-				$exclude_ids = array_merge(
-					$exclude_ids,
-					array_map( 'intval', (array) $settings['ids'] )
-				);
-			}
+			$lists['product'] = $settings->get_pos_only_product_visibility_settings()['ids'] ?? null;
 		}
-
-		// Handle product_variation queries.
 		if ( \in_array( 'product_variation', $post_types, true ) ) {
-			$settings = $settings_instance->get_pos_only_variations_visibility_settings();
-			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
-				$exclude_ids = array_merge(
-					$exclude_ids,
-					array_map( 'intval', (array) $settings['ids'] )
-				);
-			}
+			$lists['product_variation'] = $settings->get_pos_only_variations_visibility_settings()['ids'] ?? null;
+		}
+		if ( empty( $lists ) ) {
+			return array(
+				'ids' => array(),
+				'sql' => '',
+			);
 		}
 
-		return $exclude_ids;
+		$key    = implode( ',', array_keys( $lists ) );
+		$source = array( $wpdb->posts, $lists );
+		if ( ! isset( $this->pos_only_exclusions[ $key ] ) || $this->pos_only_exclusions[ $key ]['source'] !== $source ) {
+			$ids = array();
+			foreach ( $lists as $list ) {
+				if ( ! empty( $list ) ) {
+					$ids = array_merge( $ids, array_map( 'intval', (array) $list ) );
+				}
+			}
+			// The ids are int-cast, so the fragment is safe without one placeholder per id.
+			$this->pos_only_exclusions[ $key ] = array(
+				'source' => $source,
+				'ids'    => $ids,
+				'sql'    => empty( $ids ) ? '' : " AND {$wpdb->posts}.ID NOT IN (" . implode( ',', $ids ) . ')',
+			);
+		}
+
+		return $this->pos_only_exclusions[ $key ];
 	}
 
 	/**
-	 * Hide POS Only ids, including for callers that suppress SQL filters.
+	 * Write the POS Only ids into `post__not_in` on every storefront product query.
+	 *
+	 * Code that answers from the query vars (`posts_pre_query` integrations such as
+	 * ElasticPress, Relevanssi, SearchWP, Algolia) honours them, and WordPress
+	 * builds the `NOT IN` itself. Its `post__in` is trimmed too, because WordPress
+	 * then ignores `post__not_in`.
 	 *
 	 * @param \WP_Query $query The query being filtered.
 	 */
@@ -145,7 +172,7 @@ class Products {
 		if ( ! $this->should_hide_pos_only_products( $query ) ) {
 			return;
 		}
-		$exclude_ids = $this->get_pos_only_excluded_ids( $query );
+		$exclude_ids = $this->get_pos_only_excluded_ids( $query )['ids'];
 		if ( empty( $exclude_ids ) ) {
 			return;
 		}
@@ -168,7 +195,12 @@ class Products {
 	}
 
 	/**
-	 * Exclude POS Only ids even when WordPress gives post__in precedence.
+	 * Write the POS Only exclusion into a filtered query's WHERE clause where WordPress left it out.
+	 *
+	 * The clause is written only where WordPress left `post__not_in` out of the
+	 * WHERE (`p` or `post__in` set) or a later callback stripped it, so a query
+	 * carries the list once. It is also written when `post__not_in` no longer
+	 * holds every POS Only id (a later callback replaced or cleared it).
 	 *
 	 * @param string    $where The SQL WHERE clause.
 	 * @param \WP_Query $query The query being filtered.
@@ -176,10 +208,13 @@ class Products {
 	public function exclude_pos_only_products_from_where( $where, $query ) {
 		global $wpdb;
 
-		$exclude_ids = $this->should_hide_pos_only_products( $query ) ? $this->get_pos_only_excluded_ids( $query ) : array();
-		if ( ! empty( $exclude_ids ) ) {
-			$ids_format = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$where     .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
+		if ( $this->should_hide_pos_only_products( $query ) ) {
+			$exclusion = $this->get_pos_only_excluded_ids( $query );
+			if ( $query->get( 'p' ) || ! empty( $query->get( 'post__in' ) )
+				|| array_diff( $exclusion['ids'], array_map( 'absint', (array) $query->get( 'post__not_in' ) ) )
+				|| false === strpos( $where, " AND {$wpdb->posts}.ID NOT IN (" ) ) {
+				$where .= $exclusion['sql'];
+			}
 		}
 
 		return $where;

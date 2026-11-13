@@ -1,0 +1,34 @@
+enabled=0 prod=0 var=0 option_bytes=247
+2.0.2 off wpq k=200 total=666ms queries=200 per_query=3.33ms hooks=0ms (0.00ms/q) sql_avg=219B peak_mem=81MB
+2.0.2 off wcgp k=200 total=2208ms queries=200 per_query=11.04ms hooks=0ms (0.00ms/q) sql_avg=365B peak_mem=123MB
+2.0.2 off children k=200 total=142ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=85MB
+2.0.2 off visible k=200 total=60ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=83MB
+enabled=1 prod=0 var=0 option_bytes=247
+2.0.2 0:0 wpq k=200 total=666ms queries=200 per_query=3.33ms hooks=2ms (0.01ms/q) sql_avg=219B peak_mem=81MB
+2.0.2 0:0 wcgp k=200 total=2147ms queries=200 per_query=10.74ms hooks=2ms (0.01ms/q) sql_avg=365B peak_mem=123MB
+2.0.2 0:0 children k=200 total=71ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=83MB
+2.0.2 0:0 visible k=200 total=61ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=83MB
+enabled=1 prod=5000 var=5000 option_bytes=141953
+2.0.2 5000:5000 wpq k=200 total=1913ms queries=200 per_query=9.57ms hooks=128ms (0.64ms/q) sql_avg=48109B peak_mem=85MB
+2.0.2 5000:5000 wcgp k=200 total=3792ms queries=200 per_query=18.96ms hooks=142ms (0.71ms/q) sql_avg=48255B peak_mem=125MB
+2.0.2 5000:5000 children k=200 total=74ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=83MB
+2.0.2 5000:5000 visible k=200 total=60ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=85MB
+enabled=1 prod=20000 var=20000 option_bytes=606965
+2.0.2 20000:20000 wpq k=200 total=3807ms queries=200 per_query=19.04ms hooks=588ms (2.94ms/q) sql_avg=218129B peak_mem=93MB
+2.0.2 20000:20000 wcgp k=200 total=3893ms queries=200 per_query=19.46ms hooks=611ms (3.05ms/q) sql_avg=218275B peak_mem=99MB
+2.0.2 20000:20000 children k=200 total=77ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=83MB
+2.0.2 20000:20000 visible k=200 total=62ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=91MB
+enabled=1 prod=50000 var=50000 option_bytes=1686965
+2.0.2 50000:50000 wpq k=200 total=9561ms queries=200 per_query=47.81ms hooks=1556ms (7.78ms/q) sql_avg=698129B peak_mem=108MB
+2.0.2 50000:50000 wcgp k=200 total=9765ms queries=200 per_query=48.83ms hooks=1639ms (8.20ms/q) sql_avg=698275B peak_mem=112MB
+2.0.2 50000:50000 children k=200 total=71ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=83MB
+2.0.2 50000:50000 visible k=200 total=64ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=101MB
+enabled=0 prod=0 var=0 option_bytes=247
+2.0.2 off both k=200 total=956ms queries=200 per_query=4.78ms hooks=0ms (0.00ms/q) sql_avg=243B peak_mem=81MB
+2.0.2 off gp k=200 total=77ms queries=0 per_query=0.00ms hooks=0ms (0.00ms/q) sql_avg=0B peak_mem=81MB
+enabled=1 prod=20000 var=20000 option_bytes=606965
+2.0.2 20000:20000 both k=200 total=7576ms queries=200 per_query=37.88ms hooks=1262ms (6.31ms/q) sql_avg=458153B peak_mem=98MB
+2.0.2 20000:20000 gp k=200 total=2325ms queries=0 per_query=0.00ms hooks=127ms (0.00ms/q) sql_avg=0B peak_mem=91MB
+enabled=1 prod=50000 var=50000 option_bytes=1686965
+2.0.2 50000:50000 both k=200 total=19861ms queries=200 per_query=99.31ms hooks=3277ms (16.38ms/q) sql_avg=1418153B peak_mem=123MB
+2.0.2 50000:50000 gp k=200 total=4804ms queries=0 per_query=0.00ms hooks=279ms (0.00ms/q) sql_avg=0B peak_mem=101MB
