@@ -6,7 +6,7 @@
   "types": "src/index.ts",
   "dependencies": {
     "@babel/runtime": "^7.29.2",
-    "i18next": "^26.0.10",
+    "i18next": "^27.1.1",
     "i18next-chained-backend": "^5.0.3",
     "i18next-http-backend": "^4.0.0",
     "i18next-localstorage-backend": "^4.3.1",
