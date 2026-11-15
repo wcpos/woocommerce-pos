@@ -39,34 +39,53 @@ Core plugin, receipt rendering. No money moves and nothing is written: the bug i
 
 ## Interfaces and constraints
 
-- Add one private method to `Receipt_Data_Builder`:
+The non-test budget is fixed at 40 lines (the front desk set it). Use this shape, which comes to about 30 changed non-test lines. Adjust the formatting only as phpcs requires.
+
+- Add one private method to `Receipt_Data_Builder`, directly after `get_item_taxes()`. `WC_Abstract_Order` is already imported (line 18).
 
   ```php
   /**
-   * Stored tax items by rate id for the order an item belongs to.
-   * A refund's parent order wins, because a refund's own tax items are
-   * re-read from the current rate table when the refund is created.
+   * Stored tax items by rate id. A refund's parent order wins: a refund's own
+   * tax items are re-read from the current rate table when it is created.
    *
    * @param object $item Order item.
    *
    * @return array<int, \WC_Order_Item_Tax>
    */
-  private function get_charged_tax_items( $item ): array
+  private function get_charged_tax_items( $item ): array {
+  	$order  = method_exists( $item, 'get_order' ) ? $item->get_order() : false;
+  	$orders = $order instanceof WC_Abstract_Order ? array( $order ) : array();
+  	if ( $order instanceof \WC_Order_Refund ) {
+  		$orders[] = wc_get_order( $order->get_parent_id() );
+  	}
+  	$charged = array();
+  	foreach ( $orders as $source ) {
+  		foreach ( $source instanceof WC_Abstract_Order ? $source->get_items( 'tax' ) : array() as $tax_item ) {
+  			$charged[ (int) $tax_item->get_rate_id() ] = $tax_item;
+  		}
+  	}
+  	return $charged;
+  }
   ```
 
-  Behaviour:
-  - If `$item` has no `get_order` method, or `get_order()` does not return a `\WC_Abstract_Order`, return `array()`.
-  - Start with the order's own `get_items( 'tax' )`, keyed by `(int) get_rate_id()`.
-  - If that order is a `\WC_Order_Refund` and `wc_get_order( $order->get_parent_id() )` returns a `\WC_Abstract_Order`, put the parent's tax items over the refund's, keyed the same way, so the parent wins for a rate ID both have.
-  - Skip any item that is not a `\WC_Order_Item_Tax`.
+  The parent is iterated after the refund, so its entries overwrite the refund's for the same rate ID.
+
 - In `get_item_taxes()`:
-  - Call `get_charged_tax_items( $item )` once, before the loop.
-  - For each rate ID, if a stored tax item exists for `(int) $tax_rate_id`:
-    - `label` is its `get_label( 'edit' )` when that is a non-empty string;
-    - `rate` is `(float) get_rate_percent( 'edit' )` when that is not `null`.
-  - Any field still unset falls back to today's rate-row lookup, then to today's fallback values (`(string) $tax_rate_id` and `null`). The result is per field: a stored label with a `null` stored percent takes the percent from the rate row.
-  - Keep the output keys, their order and their types unchanged (`code`, `rate`, `label`, `amount`).
-  - Update the docblock of `get_item_taxes()` to say that stored tax items come first, then `WC_Tax`, then the fallback.
+  - Add `$charged = $this->get_charged_tax_items( $item );` once, just before the `foreach`.
+  - Leave the existing rate-row lookup (the `if ( class_exists( '\WC_Tax' ) ) { try … catch … }` block) exactly as it is.
+  - Directly after that block and before `$taxes[] = …`, add the stored-value override:
+
+    ```php
+    if ( isset( $charged[ (int) $tax_rate_id ] ) ) {
+    	$stored = $charged[ (int) $tax_rate_id ];
+    	$label  = '' !== (string) $stored->get_label( 'edit' ) ? (string) $stored->get_label( 'edit' ) : $label;
+    	$rate   = null !== $stored->get_rate_percent( 'edit' ) ? (float) $stored->get_rate_percent( 'edit' ) : $rate;
+    }
+    ```
+
+    This is the per-field result: a stored value wins, and a missing stored value keeps what the rate row or the fallback produced.
+  - In its docblock, replace the sentence "Resolves human-readable label and percent rate via WC_Tax when possible, falling back to the rate id string and null rate." with "Takes the label and percent rate from the order's stored tax items (what was charged), then from WC_Tax, then falls back to the rate id string and null rate."
+- Keep the output keys, their order and their types unchanged (`code`, `rate`, `label`, `amount`).
 - Keep the signatures of `get_item_taxes()` and `get_line_taxes()` unchanged.
 
 ## Do not
