@@ -251,4 +251,139 @@ class Test_Visibility_Section extends WP_UnitTestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'woocommerce_pos_settings_error', $result->get_error_code() );
 	}
+
+	/**
+	 * Repeated lookups unserialize the option once per request, not once per call.
+	 */
+	public function test_is_variation_pos_only_repeated_lookups_read_the_option_once(): void {
+		// Arrange.
+		$this->seed_visibility( array(), array(), array( 11, 12 ), array() );
+		$reads = 0;
+		add_filter(
+			'option_woocommerce_pos_settings_visibility',
+			static function ( $value ) use ( &$reads ) {
+				++$reads;
+				return $value;
+			}
+		);
+		$settings = Settings::instance();
+
+		// Act.
+		$results = array();
+		for ( $i = 0; $i < 20; $i++ ) {
+			$results[] = $settings->is_variation_pos_only( array( 11, '12', 13, 11 )[ $i % 4 ] );
+		}
+
+		// Assert.
+		$this->assertSame( array_merge( ...array_fill( 0, 5, array( true, true, false, true ) ) ), $results );
+		$this->assertSame( 1, $reads );
+	}
+
+	/**
+	 * An update_option between two lookups is seen by the second lookup.
+	 */
+	public function test_is_variation_pos_only_sees_update_option_between_lookups(): void {
+		// Arrange.
+		$this->seed_visibility( array(), array(), array( 11 ), array() );
+		$settings = Settings::instance();
+		$this->assertFalse( $settings->is_variation_pos_only( 13 ) );
+
+		// Act.
+		$this->seed_visibility( array(), array(), array( 11, 13 ), array() );
+
+		// Assert.
+		$this->assertTrue( $settings->is_variation_pos_only( 13 ) );
+	}
+
+	/**
+	 * A delete_option and an add_option between lookups are both seen.
+	 */
+	public function test_is_product_pos_only_sees_delete_and_add_option_between_lookups(): void {
+		// Arrange.
+		$this->seed_visibility( array( 21 ), array(), array(), array() );
+		$settings = Settings::instance();
+		$this->assertTrue( $settings->is_product_pos_only( 21 ) );
+
+		// Act / Assert.
+		delete_option( 'woocommerce_pos_settings_visibility' );
+		$this->assertFalse( $settings->is_product_pos_only( 21 ) );
+
+		add_option( 'woocommerce_pos_settings_visibility', $this->visibility_settings( array( 21 ), array(), array(), array() ), '', false );
+		$this->assertTrue( $settings->is_product_pos_only( 21 ) );
+	}
+
+	/**
+	 * A filter added after the first lookup applies, and stops applying once removed.
+	 */
+	public function test_is_variation_pos_only_filter_added_after_first_lookup_applies(): void {
+		// Arrange.
+		$this->seed_visibility( array(), array(), array( 11 ), array() );
+		$settings = Settings::instance();
+		$this->assertFalse( $settings->is_variation_pos_only( 31 ) );
+		$append = static function ( $visibility ) {
+			$visibility['ids'][] = 31;
+			return $visibility;
+		};
+
+		// Act / Assert.
+		add_filter( 'wcpos_pos_only_variations_visibility_settings', $append );
+		$this->assertTrue( $settings->is_variation_pos_only( 31 ) );
+
+		remove_filter( 'wcpos_pos_only_variations_visibility_settings', $append );
+		$this->assertFalse( $settings->is_variation_pos_only( 31 ) );
+	}
+
+	/**
+	 * Repeated online-only lookups give the same answers as the old in_array check.
+	 */
+	public function test_is_product_online_only_repeated_lookups_match_in_array(): void {
+		// Arrange.
+		$this->seed_visibility( array(), array( '41', 42 ), array(), array() );
+		$settings = Settings::instance();
+
+		// Act / Assert.
+		for ( $i = 0; $i < 2; $i++ ) {
+			$this->assertTrue( $settings->is_product_online_only( 41 ) );
+			$this->assertTrue( $settings->is_product_online_only( '42' ) );
+			$this->assertFalse( $settings->is_product_online_only( 43 ) );
+			$this->assertFalse( $settings->is_product_online_only( 0 ) );
+		}
+	}
+
+	/**
+	 * Seed the full visibility settings option.
+	 *
+	 * @param array $product_pos      Product POS only ids.
+	 * @param array $product_online   Product online only ids.
+	 * @param array $variation_pos    Variation POS only ids.
+	 * @param array $variation_online Variation online only ids.
+	 */
+	private function seed_visibility( array $product_pos, array $product_online, array $variation_pos, array $variation_online ): void {
+		update_option( 'woocommerce_pos_settings_visibility', $this->visibility_settings( $product_pos, $product_online, $variation_pos, $variation_online ), false );
+	}
+
+	/**
+	 * Build a full visibility settings array.
+	 *
+	 * @param array $product_pos      Product POS only ids.
+	 * @param array $product_online   Product online only ids.
+	 * @param array $variation_pos    Variation POS only ids.
+	 * @param array $variation_online Variation online only ids.
+	 */
+	private function visibility_settings( array $product_pos, array $product_online, array $variation_pos, array $variation_online ): array {
+		return array(
+			'products'   => array(
+				'default' => array(
+					'pos_only'    => array( 'ids' => $product_pos ),
+					'online_only' => array( 'ids' => $product_online ),
+				),
+			),
+			'variations' => array(
+				'default' => array(
+					'pos_only'    => array( 'ids' => $variation_pos ),
+					'online_only' => array( 'ids' => $variation_online ),
+				),
+			),
+		);
+	}
 }

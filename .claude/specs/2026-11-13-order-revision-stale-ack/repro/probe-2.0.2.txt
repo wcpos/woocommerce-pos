@@ -1,0 +1,24 @@
+POS-2VT probe on main 06d1883d (2.0.2), WooCommerce 11.3.0, PHP 8.4, wp-env tests-cli.
+Source: Probe_Pos2vt.php.txt (throwaway, not committed as a test).
+Flow per scenario: create -> update with the create's ack revision -> on 409,
+re-push with the 409's own currentRevision (the app's one re-anchor) -> again.
+"ackFresh" = the ack's currentRevision equals a fresh compared read right after.
+
+[S0 no third party] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+[S1 order meta written in woocommerce_update_order] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+[S2 order meta written after every push response (async/shutdown job)] create=201 ackFreshAfterCreate=NO update=409 repush=409 (order saves during repush: 0) repush2=409
+[S3 line meta written whenever any line meta is added] create=201 ackFreshAfterCreate=NO update=409 repush=200 (order saves during repush: 6)
+[S4 order meta written on every wc/v3 order read] create=201 ackFreshAfterCreate=NO update=409 repush=409 (order saves during repush: 0) repush2=409
+[S5 line meta written in woocommerce_update_order] create=201 ackFreshAfterCreate=yes update=200 ackFreshAfterUpdate=yes nextPush=200
+
+Reading:
+- A writer inside the save (S1, S5) is harmless: the ack is hashed after it.
+- S3: our own post-hash line-uuid stamp (Order_Serializer::stamp_item_uuids via
+  Write_Controller::respond) fired a line-meta hook after the ack was hashed:
+  one 409, then the re-anchor succeeds (the 201 -> 409 -> 200 breadcrumb).
+  The probe payload had no line uuids; POS lines always carry one
+  (monorepo graft-server-line-identity.ts), so in POS traffic this stamp is a no-op.
+- S2/S4: a writer that writes a hashed meta row on every request, or on every
+  order read, makes every revision stale by the time the client uses it: the
+  re-anchored re-push 409s again, forever. This is the POS-2VT signature
+  (409, then 409 one second after a re-push carrying the 409's own revision).

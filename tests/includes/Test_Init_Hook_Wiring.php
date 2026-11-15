@@ -225,10 +225,10 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// observer. Visibility_Observer adds its own callbacks on the same
 			// option hooks once the latch is set.
 			'add_option_woocommerce_pos_settings_general'           => array( 10 ),
-			'add_option_woocommerce_pos_settings_visibility'        => array( 10 ),
+			'add_option_woocommerce_pos_settings_visibility'        => array( 0, 10 ),
 			'delete_option'                                         => array( 10 ),
 			'delete_option_woocommerce_pos_settings_general'        => array( 10 ),
-			'delete_option_woocommerce_pos_settings_visibility'     => array( 10 ),
+			'delete_option_woocommerce_pos_settings_visibility'     => array( 0, 10 ),
 			'determine_current_user'                                => array( 20 ),
 			'init'                                                  => array( 10 ),
 			'password_reset'                                        => array( 10 ),
@@ -253,7 +253,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// own callbacks on the same two hooks once the latch is set.
 			'untrashed_post'                                        => array( 10 ),
 			'update_option_woocommerce_pos_settings_general'        => array( 10 ),
-			'update_option_woocommerce_pos_settings_visibility'     => array( 10 ),
+			'update_option_woocommerce_pos_settings_visibility'     => array( 0, 10 ),
 			'upgrader_process_complete'                             => array( 10 ),
 			'wcpos_analytics_group_refresh'                         => array( 10 ),
 			'wcpos_file_integrity_check'                            => array( 10 ),
@@ -413,7 +413,7 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 				if ( 'determine_current_user' === $row['hook'] ) {
 					$this->assertSame( 20, $row['priority'] );
 					// JWT row index after three next-only rows; seven sync-latched rows are omitted when unlatched.
-					$this->assertSame( $latched ? 22 : 15, array_search( $row, $rows, true ) );
+					$this->assertSame( $latched ? 23 : 16, array_search( $row, $rows, true ) );
 					$auth_rows[] = self::label_for( $row['callback'] );
 				}
 			}

@@ -355,6 +355,114 @@ class Test_File_Integrity extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An update that landed while old code is running (POS-31H) is not checked,
+	 * stored or reported: the post-update check runs in a fresh process.
+	 */
+	public function test_run_skips_when_the_files_on_disk_are_another_version(): void {
+		// Arrange.
+		$transport = new Stub_Transport();
+		Error_Reporter::reset_instance();
+		Error_Reporter::set_transport_factory_for_testing(
+			static function () use ( $transport ): Stub_Transport {
+				return $transport;
+			}
+		);
+		Error_Reporter::set_dev_override_for_testing( false );
+		$settings                     = (array) wcpos_get_settings( 'general' );
+		$settings['tracking_consent'] = 'allowed';
+		SettingsService::instance()->save_settings( 'general', $settings );
+		$old                  = "<?php\n/**\n * Plugin Name: Fake\n * Version: 1.2.3\n */\n";
+		$manifest             = $this->manifest();
+		$manifest['main.php'] = array(
+			'md5'    => md5( $old ),
+			'sha256' => hash( 'sha256', $old ),
+		);
+		$this->stub_http( 200, array( 'files' => $manifest ) );
+		file_put_contents( $this->root . 'main.php', "<?php\n/**\n * Plugin Name: Fake\n * Version: 1.2.4\n */\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
+		file_put_contents( $this->root . 'includes/A.php', 'tampered' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
+		$target = $this->target( 'woocommerce-pos', $this->root . 'main.php' );
+
+		// Act.
+		$result                       = File_Integrity::run( 'daily', $target );
+		$settings['tracking_consent'] = 'undecided';
+		SettingsService::instance()->save_settings( 'general', $settings );
+
+		// Assert.
+		$this->assertSame( 'unknown', $result['status'] );
+		$this->assertNull( File_Integrity::stored( $target ) );
+		$this->assertSame( array(), $transport->events );
+		$this->assertSame( array(), $this->requests );
+	}
+
+	/**
+	 * When the header on disk matches the running version, the check runs as before.
+	 */
+	public function test_run_checks_when_the_header_matches_the_running_version(): void {
+		// Arrange.
+		$content              = "<?php\n/**\n * Plugin Name: Fake\n * Version: 1.2.3\n */\n";
+		$manifest             = $this->manifest();
+		$manifest['main.php'] = array(
+			'md5'    => md5( $content ),
+			'sha256' => hash( 'sha256', $content ),
+		);
+		$this->stub_http( 200, array( 'files' => $manifest ) );
+		file_put_contents( $this->root . 'main.php', $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
+		file_put_contents( $this->root . 'includes/A.php', 'tampered' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Test fixture.
+		$target = $this->target( 'woocommerce-pos', $this->root . 'main.php' );
+
+		// Act.
+		$result = File_Integrity::run( 'daily', $target );
+
+		// Assert.
+		$this->assertSame( 'files_modified', $result['status'] );
+		$this->assertSame( array( 'includes/A.php' ), $result['modified'] );
+		$this->assertSame( $result, File_Integrity::stored( $target ) );
+	}
+
+	/**
+	 * The running install's target names its main plugin file, whose header is the running version.
+	 */
+	public function test_target_names_the_running_plugin_main_file(): void {
+		if ( \defined( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ) ) {
+			$this->markTestSkipped( 'Pro is running; the target is Pro.' );
+		}
+		// Arrange.
+		$method = new \ReflectionMethod( File_Integrity::class, 'target' );
+		$method->setAccessible( true );
+
+		// Act.
+		$target = $method->invoke( null );
+
+		// Assert.
+		$this->assertArrayHasKey( 'file', $target );
+		$this->assertSame( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'woocommerce-pos.php', $target['file'] );
+		$this->assertSame( \WCPOS\WooCommercePOS\VERSION, get_file_data( $target['file'], array( 'Version' => 'Version' ) )['Version'] );
+	}
+
+	/**
+	 * A daily run for the running install reuses a result stored within REUSE_WITHIN.
+	 */
+	public function test_daily_run_reuses_a_fresh_stored_result_for_the_running_install(): void {
+		// Arrange.
+		$this->stub_http( 404, array() );
+		$stored = array(
+			'status'   => 'ok',
+			'missing'  => array(),
+			'modified' => array(),
+			'version'  => \WCPOS\WooCommercePOS\VERSION,
+			'checked'  => time() - HOUR_IN_SECONDS,
+		);
+		File_Integrity::store( $stored );
+
+		// Act.
+		$result = File_Integrity::run( 'daily' );
+
+		// Assert.
+		$this->assertSame( $stored, $result );
+		$this->assertSame( array(), $this->requests );
+	}
+
+	/**
 	 * Manifest for the fake root.
 	 *
 	 * @return array
@@ -376,15 +484,21 @@ class Test_File_Integrity extends WP_UnitTestCase {
 	 * A check target for the fake root.
 	 *
 	 * @param string|null $slug WordPress.org slug, or null for a non-WordPress.org build.
+	 * @param string|null $file Main plugin file, or null to leave it out.
 	 *
 	 * @return array
 	 */
-	private function target( ?string $slug ): array {
-		return array(
+	private function target( ?string $slug, ?string $file = null ): array {
+		$target = array(
 			'root'    => $this->root,
 			'version' => '1.2.3',
 			'slug'    => $slug,
 		);
+		if ( null !== $file ) {
+			$target['file'] = $file;
+		}
+
+		return $target;
 	}
 
 	/**
