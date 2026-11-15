@@ -4,7 +4,7 @@ Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.3
+Stable tag: 2.0.4
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -296,6 +296,12 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 8. Offline: the Offline badge beside the store name while the till keeps working.
 
 == Changelog ==
+
+= 2.0.4 - 2026/11/15 =
+
+- **Receipts print each item's tax with the name and rate the order was charged, so reprinting an older order after a tax rate was renamed (WooCommerce Tax does this) no longer shows the new name and percent against the old amount.**
+- **The orange "Important" upgrade notice on the Plugins screen shows as formatted text instead of raw HTML tags.**
+- Developers: an order push refused as a conflict (409) now lists in `differs` the fields that differ (names only, never values); sync digest failures are logged under one fixed message, so they group as one error report; translations pinned to 2026.11.18.
 
 = 2.0.3 - 2026/11/13 =
 
