@@ -2561,6 +2561,97 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test line tax rows keep the label and rate charged before a rate rename.
+	 */
+	public function test_build_line_taxes_keep_charged_label_after_rate_renamed(): void {
+		// Arrange.
+		$order   = $this->create_taxed_order();
+		$rate_id = array_values( $order->get_items( 'tax' ) )[0]->get_rate_id();
+		\WC_Tax::_update_tax_rate(
+			$rate_id,
+			array(
+				'tax_rate_name' => 'City Tax',
+				'tax_rate'      => '0.0000',
+			)
+		);
+
+		// Act.
+		$payload = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+
+		// Assert.
+		$this->assertSame( 'US Tax', $payload['lines'][0]['taxes'][0]['label'] );
+		$this->assertEqualsWithDelta( 10.0, $payload['lines'][0]['taxes'][0]['rate'], 0.001 );
+		\WC_Tax::_delete_tax_rate( $rate_id );
+	}
+
+	/**
+	 * Test refund line tax rows keep the parent's charged label and rate after a rate rename.
+	 */
+	public function test_build_refund_line_taxes_keep_charged_label_after_rate_renamed(): void {
+		// Arrange.
+		$order   = $this->create_taxed_order();
+		$rate_id = array_values( $order->get_items( 'tax' ) )[0]->get_rate_id();
+		\WC_Tax::_update_tax_rate(
+			$rate_id,
+			array(
+				'tax_rate_name' => 'City Tax',
+				'tax_rate'      => '0.0000',
+			)
+		);
+		$line_item    = array_values( $order->get_items() )[0];
+		$line_item_id = $line_item->get_id();
+		$line_taxes   = $line_item->get_taxes();
+		wc_create_refund(
+			array(
+				'amount'     => '12.10',
+				'reason'     => 'Customer changed mind',
+				'order_id'   => $order->get_id(),
+				'line_items' => array(
+					$line_item_id => array(
+						'qty'          => 1,
+						'refund_total' => 11.00,
+						'refund_tax'   => $line_taxes['total'],
+					),
+				),
+			)
+		);
+
+		// Act.
+		$payload = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+
+		// Assert.
+		$this->assertSame( 'US Tax', $payload['refunds'][0]['lines'][0]['taxes'][0]['label'] );
+		$this->assertEqualsWithDelta( 10.0, $payload['refunds'][0]['lines'][0]['taxes'][0]['rate'], 0.001 );
+		\WC_Tax::_delete_tax_rate( $rate_id );
+	}
+
+	/**
+	 * Test line tax rows use the current rate when the order has no stored tax item.
+	 */
+	public function test_build_line_taxes_fall_back_to_rate_row_without_stored_tax_item(): void {
+		// Arrange.
+		$order   = $this->create_taxed_order();
+		$rate_id = array_values( $order->get_items( 'tax' ) )[0]->get_rate_id();
+		$order->remove_order_items( 'tax' );
+		$order->save();
+		\WC_Tax::_update_tax_rate(
+			$rate_id,
+			array(
+				'tax_rate_name' => 'City Tax',
+				'tax_rate'      => '0.0000',
+			)
+		);
+
+		// Act.
+		$payload = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+
+		// Assert.
+		$this->assertSame( 'City Tax', $payload['lines'][0]['taxes'][0]['label'] );
+		$this->assertEqualsWithDelta( 0.0, $payload['lines'][0]['taxes'][0]['rate'], 0.001 );
+		\WC_Tax::_delete_tax_rate( $rate_id );
+	}
+
+	/**
 	 * Test discounts emit one row per coupon code instead of a single synthetic row.
 	 */
 	public function test_build_emits_per_coupon_discount_rows(): void {
