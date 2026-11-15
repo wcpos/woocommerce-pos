@@ -454,7 +454,9 @@ final class Session_Registry {
 	 * Change the session row with a bounded compare-and-swap, so overlapping requests cannot lose each other's write.
 	 *
 	 * Each attempt reads the row from the database, not the object cache, and saves only if the
-	 * row still holds, byte for byte, what that attempt read; otherwise it re-reads and applies
+	 * database's SHA-1 of the stored value still equals the SHA-1 that attempt read. The database computes
+	 * both hashes over the column's own bytes, regardless of the table's and connection's character sets.
+	 * The UPDATE carries the row once. If the hashes differ, it re-reads and applies
 	 * `$change` again. `$change` may therefore run more than once and must have no side effects
 	 * beyond its return value and the variables it captures by reference, which each attempt
 	 * overwrites. The writes bypass the user-meta API, so the `update_user_metadata` and
@@ -471,7 +473,7 @@ final class Session_Registry {
 		global $wpdb;
 
 		$select = $wpdb->prepare(
-			"SELECT umeta_id, meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s AND CAST(meta_key AS BINARY) = %s ORDER BY umeta_id ASC",
+			"SELECT umeta_id, meta_value, SHA1(meta_value) AS meta_hash FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s AND CAST(meta_key AS BINARY) = %s ORDER BY umeta_id ASC",
 			$user_id,
 			self::META_KEY,
 			self::META_KEY
@@ -522,11 +524,11 @@ final class Session_Registry {
 
 			$updated = $wpdb->query(
 				$wpdb->prepare(
-					"UPDATE {$wpdb->usermeta} SET meta_value = %s WHERE umeta_id = %d AND meta_key = %s AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)",
+					"UPDATE {$wpdb->usermeta} SET meta_value = %s WHERE umeta_id = %d AND meta_key = %s AND SHA1(meta_value) = %s",
 					$serialized,
 					(int) $rows[0]->umeta_id,
 					self::META_KEY,
-					$stored_value
+					$rows[0]->meta_hash
 				)
 			);
 			if ( false === $updated ) {

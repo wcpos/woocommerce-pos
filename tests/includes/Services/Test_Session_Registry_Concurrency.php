@@ -63,6 +63,13 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 	private $overlap_hook;
 
 	/**
+	 * Whether the connection has a temporary latin1 usermeta table.
+	 *
+	 * @var bool
+	 */
+	private $latin1_usermeta_values = false;
+
+	/**
 	 * Remove the overlap hook if a test failed before it fired.
 	 *
 	 * Only this closure: the test case keeps its own `query` filters for temporary tables.
@@ -76,6 +83,20 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 			unset( $_SERVER['HTTP_USER_AGENT'] );
 		} else {
 			$_SERVER['HTTP_USER_AGENT'] = $this->user_agent_before;
+		}
+		if ( $this->latin1_usermeta_values ) {
+			global $wpdb;
+
+			$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->usermeta}" );
+			\Closure::bind(
+				function () {
+					$this->col_meta      = array();
+					$this->table_charset = array();
+				},
+				$wpdb,
+				\wpdb::class
+			)();
+			$this->latin1_usermeta_values = false;
 		}
 		parent::tearDown();
 	}
@@ -325,6 +346,88 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 		// Assert.
 		$this->assertTrue( $kept );
 		$this->assertSame( 0, $updates->count );
+	}
+
+	/**
+	 * Overlapping sign-ins on a latin1 table keep every session and allow revocation.
+	 */
+	public function test_session_row_writes_on_a_latin1_table_with_a_non_ascii_user_agent_keep_every_session(): void {
+		// Arrange.
+		$this->use_latin1_usermeta_values();
+		$_SERVER['HTTP_USER_AGENT'] = "Caf\xC3\xA9-Till/1.0";
+		$first                      = $this->login();
+		$inner                      = null;
+		$this->run_inside_next_row_write(
+			function () use ( &$inner ) {
+				$inner = $this->login();
+			}
+		);
+
+		// Act.
+		$outer = $this->login();
+
+		// Assert.
+		$this->assertNotWPError( $this->auth->validate_token( $first['access_token'], 'access' ) );
+		$this->assertNotWPError( $this->auth->validate_token( $outer['access_token'], 'access' ) );
+		$this->assertNotWPError( $this->auth->validate_token( $inner['access_token'], 'access' ) );
+		$this->assertTrue( $this->auth->revoke_refresh_token( $this->user->ID, $this->refresh_jti( $first['refresh_token'] ) ) );
+		$this->assertWPError( $this->auth->refresh_access_token( $first['refresh_token'] ) );
+	}
+
+	/**
+	 * Overlapping sign-ins preserve a four-byte user agent exactly and allow revocation.
+	 */
+	public function test_session_row_writes_keep_a_four_byte_user_agent_exactly(): void {
+		// Arrange.
+		$user_agent                 = "Caf\xC3\xA9-Till \xF0\x9F\x8D\x95/1.0";
+		$_SERVER['HTTP_USER_AGENT'] = $user_agent;
+		$first                      = $this->login();
+		$inner                      = null;
+		$this->run_inside_next_row_write(
+			function () use ( &$inner ) {
+				$inner = $this->login();
+			}
+		);
+
+		// Act.
+		$outer = $this->login();
+
+		// Assert.
+		$this->assertNotWPError( $this->auth->validate_token( $first['access_token'], 'access' ) );
+		$this->assertNotWPError( $this->auth->validate_token( $outer['access_token'], 'access' ) );
+		$this->assertNotWPError( $this->auth->validate_token( $inner['access_token'], 'access' ) );
+		$this->assertTrue( $this->auth->revoke_refresh_token( $this->user->ID, $this->refresh_jti( $first['refresh_token'] ) ) );
+		$this->assertWPError( $this->auth->refresh_access_token( $first['refresh_token'] ) );
+		$entries = $this->auth->sessions()->entries( $this->user->ID );
+		$this->assertSame( $user_agent, $entries[ $this->refresh_jti( $outer['refresh_token'] ) ]['user_agent'] );
+	}
+
+	/**
+	 * Shadow usermeta with a latin1 value column for this connection.
+	 */
+	private function use_latin1_usermeta_values(): void {
+		global $wpdb;
+
+		$wpdb->query(
+			"CREATE TEMPORARY TABLE {$wpdb->usermeta} (
+				umeta_id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				meta_key varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci DEFAULT NULL,
+				meta_value longtext CHARACTER SET latin1 COLLATE latin1_swedish_ci,
+				PRIMARY KEY (umeta_id), KEY user_id (user_id), KEY meta_key (meta_key(191)))"
+		);
+		$this->assertSame( '', $wpdb->last_error );
+		\Closure::bind(
+			function () {
+				$this->col_meta      = array();
+				$this->table_charset = array();
+			},
+			$wpdb,
+			\wpdb::class
+		)();
+		$this->assertSame( 'latin1', $wpdb->get_col_charset( $wpdb->usermeta, 'meta_value' ) );
+		wp_cache_delete( $this->user->ID, 'user_meta' );
+		$this->latin1_usermeta_values = true;
 	}
 
 	/**
