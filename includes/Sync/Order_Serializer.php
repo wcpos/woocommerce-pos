@@ -425,7 +425,7 @@ final class Order_Serializer {
 				$out[] = "$path.$k";
 			}
 		}
-		return $out;
+		return $out ? $out : array( $path );
 	}
 
 	/** Group meta values by key, items by positive id or new index, and non-arrays by index. */
