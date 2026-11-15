@@ -8,6 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use ReflectionProperty;
+use WC_Payment_Gateways;
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
@@ -38,6 +41,13 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private $log_filter;
 
+	/**
+	 * Whether this test reset WooCommerce's gateway singleton, restored in tearDown.
+	 *
+	 * @var bool
+	 */
+	private bool $gateway_singleton_reset = false;
+
 	/** Capture log attempts without writing to disk. */
 	public function setUp(): void {
 		parent::setUp();
@@ -59,6 +69,10 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		remove_filter( 'wcpos_logging', $this->log_filter, 10 );
 		Logger::reset_dedup_state();
+		if ( $this->gateway_singleton_reset ) {
+			$this->reset_gateway_singleton();
+			WC()->payment_gateways();
+		}
 		parent::tearDown();
 	}
 
@@ -84,6 +98,65 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '0.00', $data['order']['balance'] );
 		$this->assertSame( 'completed', $data['order']['status'] );
 		$this->assertSame( 'pos_cash', $data['order']['payment_method'] );
+	}
+
+	/** PAYMENT999: a gateway list cached before the WCPOS filter still records cash. */
+	public function test_record_cash_payment_singleton_built_before_filter_returns_captured(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_cash', '92.95', array( 'tendered' => '100.00' ) );
+		// Build the list early only after the order exists: creating the order reads the gateway settings, which rebuild the list and would hide the bug.
+		$this->build_gateway_singleton_before_wcpos_filter();
+
+		// Act.
+		$response = $this->record( $order, $payment );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertNotSame( 'wcpos_payment_method_not_found', $data['code'] ?? null );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'captured', $data['payment']['status'] );
+		$this->assertSame( 'pos_cash', $data['order']['payment_method'] );
+	}
+
+	/** PAYMENT999: a gateway list cached before the WCPOS filter still records card. */
+	public function test_record_card_payment_singleton_built_before_filter_returns_captured(): void {
+		// Arrange.
+		$order   = $this->create_pos_order();
+		$payment = $this->payment( 'pos_card', '92.95' );
+		// Build the list early only after the order exists: creating the order reads the gateway settings, which rebuild the list and would hide the bug.
+		$this->build_gateway_singleton_before_wcpos_filter();
+
+		// Act.
+		$response = $this->record( $order, $payment );
+		$data     = $response->get_data();
+
+		// Assert.
+		$this->assertNotSame( 'wcpos_payment_method_not_found', $data['code'] ?? null );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'captured', $data['payment']['status'] );
+		$this->assertSame( 'pos_card', $data['order']['payment_method'] );
+	}
+
+	/** Forget WooCommerce's gateway singleton so the next accessor call rebuilds it. */
+	private function reset_gateway_singleton(): void {
+		$property = new ReflectionProperty( WC_Payment_Gateways::class, '_instance' );
+		$property->setAccessible( true );
+		$property->setValue( null, null );
+	}
+
+	/** Build the singleton the way a plugin calling it at plugins_loaded would: before the WCPOS filter exists. */
+	private function build_gateway_singleton_before_wcpos_filter(): void {
+		$callback = array( Gateways::class, 'payment_gateways' );
+		$priority = has_filter( 'woocommerce_payment_gateways', $callback );
+		$this->assertNotFalse( $priority, 'The WCPOS gateway filter was expected to be registered.' );
+		remove_filter( 'woocommerce_payment_gateways', $callback, $priority );
+
+		$this->gateway_singleton_reset = true;
+		$this->reset_gateway_singleton();
+		WC()->payment_gateways();
+
+		add_filter( 'woocommerce_payment_gateways', $callback, $priority );
 	}
 
 	/** A swallowed Woo save failure must not be acknowledged as a recorded payment. */

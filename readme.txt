@@ -4,7 +4,7 @@ Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.0
+Stable tag: 2.0.3
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -14,7 +14,7 @@ WCPOS is a point of sale (POS) for WooCommerce. Same stock online and at the til
 
 **WCPOS is a point of sale (POS) for WooCommerce.**
 
-It runs in a web browser or as a Windows, macOS or Linux desktop app, with iOS and Android apps in beta. It sells from the same catalogue, stock and prices as your online store and records every sale as a WooCommerce order.
+One catalogue, one stock count, one set of prices, online and at the till, and every sale a WooCommerce order. Ring them up in a browser, in the desktop app for Windows, macOS or Linux, or in the iOS and Android apps now in beta.
 
 **Free:** ring up sales, take cash and cards on your own terminal, split a payment, run one register with its cash drawer, print receipts.
 
@@ -156,7 +156,9 @@ Pro is a standalone plugin, so once it is active you can deactivate the free plu
 
 = Is WCPOS really free? =
 
-Yes. The free plugin is a complete till, with no transaction fees and no charge per register or per device. You can browse the extension directory, but installing from it needs Pro.
+Yes. The free plugin is a complete till, with no transaction fees and no charge per register or per device.
+
+The extension directory is open to browse. Installing from it needs Pro.
 
 You never need Pro to start selling.
 
@@ -168,13 +170,13 @@ Yearly includes one year of updates and priority support, and it does not renew 
 
 Prices as of November 2026, at [wcpos.com/pro](https://wcpos.com/pro).
 
-= Is there a free trial of Pro? =
+= Is there a Pro trial? =
 
 No. The free plugin is the trial, and every Pro screen in it has a View Demo button.
 
 To try the POS before installing anything, open the demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) and sign in with `demo` / `demo`.
 
-= Do I need a separate catalogue or a second stock count? =
+= Do I need a second catalogue? =
 
 No. The POS sells from your WooCommerce products, stock and prices, and every sale is recorded as a WooCommerce order.
 
@@ -188,7 +190,7 @@ Any modern web browser, plus desktop and mobile apps. One login works on all of 
 * **iPhone and iPad** on iOS 16.4 or later, in beta through TestFlight.
 * **Android** 10 or later, in beta through Google Play.
 
-= What happens when the internet goes down? =
+= What if the internet goes down? =
 
 The till keeps working from what is on the device.
 
@@ -218,15 +220,15 @@ Pro also lets you turn on your store's other WooCommerce gateways for the POS. Y
 
 = What does WCPOS not do? =
 
-It does not run without WooCommerce, and it is not fiscally certified anywhere today.
+WCPOS needs a WooCommerce store, and it has no fiscal certification in any country today.
 
-* **WooCommerce only.** It needs a WooCommerce store.
+* **WooCommerce only.** WCPOS sells from a WooCommerce store.
 * **No fiscal certification** in any country today. Fiscal compliance is the focus of WCPOS 2.1.
 * **No kiosk mode** for customers to serve themselves.
 * **No WCPOS hardware** to buy.
 * **No offline-only sales.** A sale cannot start and finish entirely offline.
 
-= I am on WCPOS 1.11. What do I do before upgrading? =
+= Upgrading from WCPOS 1.11? =
 
 Sync every till first. 2.0 starts a new local database on each device and does not carry over 1.11 sales that have not been sent.
 
@@ -295,7 +297,24 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+= 2.0.3 - 2026/11/13 =
+
+- **Sales no longer fail with "Checkout failed" when another plugin keeps updating its own hidden data on an order, and a till no longer writes an older copy of that data back.**
+- **Online shop pages on stores with tens of thousands of POS Only products load about twice as fast: each product list carries the POS Only list once, not twice.**
+- Developers: two new filters for the order revision: `wcpos_sync_order_revision_excluded_meta_keys` leaves keys out of it, and `wcpos_sync_order_revision_meta_keys` lists the hidden keys kept in it.
+
+= 2.0.2 - 2026/11/12 =
+
+- **Shops with many POS Only products load faster: the POS Only lists are read once per page, not once for every product shown.**
+- **The daily file check no longer reports a healthy install as modified when an update lands while the old code is still running.**
+
+= 2.0.1 - 2026/11/10 =
+
+- **POS Cash and Card take payments again on stores where another plugin loads WooCommerce's payment gateways early (PAYMENT999 "Payment method not found").**
+
 = 2.0.0 - 2026/11/09 =
+
+**WCPOS 2.0 is a major update: an entirely new interface and many new features, and cashiers will need time to get used to it.** Update when you have time to learn the new interface, not during a busy shift. What's new: https://docs.wcpos.com/getting-started/whats-new
 
 **Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales.** Rolling back to 1.11 also starts from an empty local database, so sync before you roll back too. The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
 
@@ -445,4 +464,4 @@ Earlier releases (1.10 and older) are listed at https://github.com/wcpos/woocomm
 == Upgrade Notice ==
 
 = 2.0.0 =
-Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales. WCPOS 2.0 needs WooCommerce 9.0 or later, and the app and the plugin must both be on 2.0. Read https://docs.wcpos.com/getting-started/upgrading-to-2 before you update.
+WCPOS 2.0 is a major update: an entirely new interface and many new features. Cashiers will need time to learn it: update when you have time, not during a busy shift. Sync every till first: unsent 1.11 sales do not carry over. Needs WooCommerce 9.0+. https://docs.wcpos.com/getting-started/whats-new

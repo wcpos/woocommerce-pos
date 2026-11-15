@@ -45,6 +45,8 @@ class Activator {
 	 * Constructor.
 	 */
 	public function __construct() {
+		// Both bootstraps (this plugin's file and Pro's) construct Activator at plugin load, before WooCommerce, so the POS gateways are registered before anything can build WooCommerce's gateway list (PAYMENT999).
+		Gateways::register_pos_gateways();
 		register_activation_hook( PLUGIN_FILE, array( $this, 'activate' ) );
 		add_action( 'wpmu_new_blog', array( $this, 'activate_new_site' ) );
 		// The staff-account rule (#1918, #2104) must hold even when WooCommerce is

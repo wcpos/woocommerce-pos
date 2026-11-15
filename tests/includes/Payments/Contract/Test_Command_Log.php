@@ -234,6 +234,28 @@ class Test_Command_Log extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $this->current_revision( $id ), $answer->get_error_data()['currentRevision'] );
 	}
 
+	/** A fresh command built on the order's 2.0.3-recipe revision (every meta row hashed) is not stale after the upgrade. */
+	public function test_run_built_on_a_2_0_3_revision_is_not_stale(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$order->update_meta_data( '_wc_order_attribution_source_type', 'typein' );
+		$order->save();
+		$old = static fn( array $keys ): array => array_merge( $keys, array( '_wc_order_attribution_source_type' ) );
+		add_filter( 'wcpos_sync_order_revision_meta_keys', $old );
+		$legacy = $this->current_revision( $id );
+		remove_filter( 'wcpos_sync_order_revision_meta_keys', $old );
+		$this->assertNotSame( $legacy, $this->current_revision( $id ), 'The recipes hash the same bytes: the test would be vacuous.' );
+		$row = $this->row( '10.00' );
+
+		// Act.
+		$answer = Command_Log::run( wc_get_order( $id ), new Money_Command( $row['id'], 'sha256:record', 'record', '', null, $legacy ), $this->record_work( $id, $row ) );
+
+		// Assert.
+		$this->assertNotSame( 'wcpos_revision_stale', is_wp_error( $answer ) ? $answer->get_error_code() : null );
+		$this->assertSame( 1, $this->runs );
+	}
+
 	/** A 2xx that changed nothing (an already-allocated refund under a new id) gets its entry in one save. */
 	public function test_run_whose_work_answers_without_writing_keeps_the_entry_in_one_write(): void {
 		// Arrange.

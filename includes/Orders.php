@@ -724,7 +724,7 @@ class Orders {
 			return false;
 		}
 
-		$gateways = WC()->payment_gateways()->payment_gateways();
+		$gateways = Gateways::registered();
 		$gateway  = $gateways[ $gateway_id ] ?? null;
 
 		return $gateway instanceof WC_Payment_Gateway && $gateway->supports( 'refunds' );

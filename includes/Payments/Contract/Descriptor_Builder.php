@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Payments\Contract;
 \defined( 'ABSPATH' ) || die;
 
 use WC_Payment_Gateway;
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 
@@ -40,10 +41,9 @@ class Descriptor_Builder {
 
 	/** Build the descriptor envelope for every real gateway. */
 	public function all(): array {
-		WC()->payment_gateways();
 		$settings = (array) wcpos_get_settings( 'payment_gateways' );
 		$methods  = array();
-		foreach ( WC()->payment_gateways->payment_gateways() as $id => $gateway ) {
+		foreach ( Gateways::registered() as $id => $gateway ) {
 			if ( ! $gateway instanceof WC_Payment_Gateway || 'pre_install_woocommerce_payments_promotion' === $id ) {
 				continue;
 			}
@@ -79,8 +79,7 @@ class Descriptor_Builder {
 	 * @param string $id Gateway ID.
 	 */
 	public function gateway( string $id ): ?WC_Payment_Gateway {
-		WC()->payment_gateways();
-		$gateways = WC()->payment_gateways->payment_gateways();
+		$gateways = Gateways::registered();
 		return isset( $gateways[ $id ] ) && $gateways[ $id ] instanceof WC_Payment_Gateway ? $gateways[ $id ] : null;
 	}
 

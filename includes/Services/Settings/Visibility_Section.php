@@ -15,6 +15,9 @@ use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
  * products and variations, per scope.
  */
 class Visibility_Section extends Abstract_Section {
+	/** Object-cache group for the per-request memo of the raw option. Non-persistent. */
+	const READ_CACHE_GROUP = 'wcpos_visibility_read';
+
 	/**
 	 * Registered section providing the visibility storage surface.
 	 *
@@ -23,12 +26,48 @@ class Visibility_Section extends Abstract_Section {
 	private $storage;
 
 	/**
+	 * Flipped id set per list, with the filtered ids array it was built from.
+	 *
+	 * @var array<string, array{ids: array, set: array<int, int>}>
+	 */
+	private $id_sets = array();
+
+	/**
 	 * Constructor.
 	 *
 	 * @param null|Settings_Section_Interface $storage Registered visibility section override.
 	 */
 	public function __construct( ?Settings_Section_Interface $storage = null ) {
 		$this->storage = $storage;
+	}
+
+	/**
+	 * Register the hooks that drop the memo when the option changes. Called once from Init.
+	 */
+	public static function register_read_cache_hooks(): void {
+		$option = Abstract_Section::DB_PREFIX . 'visibility';
+		wp_cache_add_non_persistent_groups( self::READ_CACHE_GROUP );
+		add_action( "add_option_{$option}", array( self::class, 'flush_read_cache' ), 0, 0 );
+		add_action( "update_option_{$option}", array( self::class, 'flush_read_cache' ), 0, 0 );
+		add_action( "delete_option_{$option}", array( self::class, 'flush_read_cache' ), 0, 0 );
+	}
+
+	/** Drop the memo. Hook callback; also usable by tests. */
+	public static function flush_read_cache(): void {
+		wp_cache_delete( Abstract_Section::DB_PREFIX . 'visibility', self::READ_CACHE_GROUP );
+	}
+
+	/** {@inheritDoc} Memoized in the object cache until the option changes. */
+	protected function read_raw(): array {
+		$found  = false;
+		$cached = wp_cache_get( $this->option_name(), self::READ_CACHE_GROUP, false, $found );
+		if ( $found && \is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$raw = parent::read_raw();
+		wp_cache_set( $this->option_name(), $raw, self::READ_CACHE_GROUP );
+		return $raw;
 	}
 
 	/** {@inheritDoc} */
@@ -329,11 +368,9 @@ class Visibility_Section extends Abstract_Section {
 	 * @return bool
 	 */
 	public function is_product_pos_only( $product_id ) {
-		$product_id   = (int) $product_id;
-		$settings     = $this->get_pos_only_product_visibility_settings();
-		$pos_only_ids = array_map( 'intval', (array) $settings['ids'] );
+		$settings = $this->get_pos_only_product_visibility_settings();
 
-		return \in_array( $product_id, $pos_only_ids, true );
+		return $this->list_has_id( 'product_pos_only', $settings['ids'], (int) $product_id );
 	}
 
 	/**
@@ -344,11 +381,9 @@ class Visibility_Section extends Abstract_Section {
 	 * @return bool
 	 */
 	public function is_product_online_only( $product_id ) {
-		$product_id      = (int) $product_id;
-		$settings        = $this->get_online_only_product_visibility_settings();
-		$online_only_ids = array_map( 'intval', (array) $settings['ids'] );
+		$settings = $this->get_online_only_product_visibility_settings();
 
-		return \in_array( $product_id, $online_only_ids, true );
+		return $this->list_has_id( 'product_online_only', $settings['ids'], (int) $product_id );
 	}
 
 	/**
@@ -359,11 +394,9 @@ class Visibility_Section extends Abstract_Section {
 	 * @return bool
 	 */
 	public function is_variation_pos_only( $variation_id ) {
-		$variation_id = (int) $variation_id;
-		$settings     = $this->get_pos_only_variations_visibility_settings();
-		$pos_only_ids = array_map( 'intval', (array) $settings['ids'] );
+		$settings = $this->get_pos_only_variations_visibility_settings();
 
-		return \in_array( $variation_id, $pos_only_ids, true );
+		return $this->list_has_id( 'variation_pos_only', $settings['ids'], (int) $variation_id );
 	}
 
 	/**
@@ -374,11 +407,28 @@ class Visibility_Section extends Abstract_Section {
 	 * @return bool
 	 */
 	public function is_variation_online_only( $variation_id ) {
-		$variation_id    = (int) $variation_id;
-		$settings        = $this->get_online_only_variations_visibility_settings();
-		$online_only_ids = array_map( 'intval', (array) $settings['ids'] );
+		$settings = $this->get_online_only_variations_visibility_settings();
 
-		return \in_array( $variation_id, $online_only_ids, true );
+		return $this->list_has_id( 'variation_online_only', $settings['ids'], (int) $variation_id );
+	}
+
+	/**
+	 * Whether a filtered id list holds an id; `===` on an unchanged array is a pointer check, so a hit costs O(1).
+	 *
+	 * @param string $list Fixed per-method key for the list.
+	 * @param mixed  $ids  The filtered ids value.
+	 * @param int    $id   The id to look up.
+	 */
+	private function list_has_id( string $list, $ids, int $id ): bool {
+		$ids = (array) $ids;
+		if ( ! isset( $this->id_sets[ $list ] ) || $this->id_sets[ $list ]['ids'] !== $ids ) {
+			$this->id_sets[ $list ] = array(
+				'ids' => $ids,
+				'set' => array_flip( array_map( 'intval', $ids ) ),
+			);
+		}
+
+		return isset( $this->id_sets[ $list ]['set'][ $id ] );
 	}
 
 	/**

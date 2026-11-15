@@ -7,7 +7,9 @@
  * - Derived/operational state — sync tables (rebuildable from WooCommerce
  *   data on reinstall), cron events, transients, the print-job queue, JWT
  *   secrets/tokens, sync watermarks and version latches, plugin-owned upload
- *   directories and log files. Always removed.
+ *   directories and log files. Always removed, except that while WCPOS Pro
+ *   is installed the JWT secrets and refresh tokens, the sync tables and the
+ *   print-job queue stay, because Pro's bundled core is using them.
  *
  * - User-authored configuration — POS settings, receipt templates (and their
  *   revisions, taxonomies, and options), the receipt sequence counter, the

@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
@@ -188,7 +189,7 @@ final class Session_Figures {
 			$rows = array_merge( $rows, $refund['rows'] );
 		}
 		$methods = array();
-		$gateways = WC()->payment_gateways()->payment_gateways();
+		$gateways = Gateways::registered();
 		foreach ( $rows as $row ) {
 			$key = self::tender_key( $row );
 			$methods[ $key ] = $methods[ $key ] ?? array(
