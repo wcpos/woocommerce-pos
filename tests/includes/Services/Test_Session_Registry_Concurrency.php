@@ -403,6 +403,58 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A NULL session row is updated in place and keeps new sessions that can be revoked.
+	 */
+	public function test_session_row_write_over_a_null_row_keeps_the_new_sessions(): void {
+		global $wpdb;
+
+		// Arrange.
+		$wpdb->insert(
+			$wpdb->usermeta,
+			array(
+				'user_id'    => $this->user->ID,
+				'meta_key'   => Session_Registry::META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value' => null, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		$null_id = (int) $wpdb->insert_id;
+		$this->assertSame(
+			'1',
+			$wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s AND meta_value IS NULL",
+					$this->user->ID,
+					Session_Registry::META_KEY
+				)
+			)
+		);
+		wp_cache_delete( $this->user->ID, 'user_meta' );
+
+		// Act.
+		$first  = $this->login();
+		$second = $this->login();
+
+		// Assert.
+		$this->assertNotWPError( $this->auth->validate_token( $first['access_token'], 'access' ) );
+		$this->assertNotWPError( $this->auth->validate_token( $second['access_token'], 'access' ) );
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT umeta_id, meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s",
+				$this->user->ID,
+				Session_Registry::META_KEY
+			)
+		);
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $null_id, (int) $rows[0]->umeta_id );
+		$stored    = maybe_unserialize( $rows[0]->meta_value );
+		$first_jti = $this->refresh_jti( $first['refresh_token'] );
+		$this->assertArrayHasKey( $first_jti, $stored );
+		$this->assertArrayHasKey( $this->refresh_jti( $second['refresh_token'] ), $stored );
+		$this->assertTrue( $this->auth->revoke_refresh_token( $this->user->ID, $first_jti ) );
+		$this->assertWPError( $this->auth->refresh_access_token( $first['refresh_token'] ) );
+	}
+
+	/**
 	 * Shadow usermeta with a latin1 value column for this connection.
 	 */
 	private function use_latin1_usermeta_values(): void {
