@@ -2601,7 +2601,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$line_item    = array_values( $order->get_items() )[0];
 		$line_item_id = $line_item->get_id();
 		$line_taxes   = $line_item->get_taxes();
-		wc_create_refund(
+		$refund       = wc_create_refund(
 			array(
 				'amount'     => '12.10',
 				'reason'     => 'Customer changed mind',
@@ -2614,6 +2614,19 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 					),
 				),
 			)
+		);
+		// WooCommerce caches rate rows for the request, so this refund's tax item still has the old label.
+		// In production, the refund is made in a later request and stores the renamed row.
+		// Write that renamed row into the fixture.
+		foreach ( $refund->get_items( 'tax' ) as $tax_item ) {
+			$tax_item->set_label( 'City Tax' );
+			$tax_item->set_rate_percent( 0.0 );
+			$tax_item->save();
+		}
+
+		$this->assertSame(
+			'City Tax',
+			array_values( wc_get_order( $refund->get_id() )->get_items( 'tax' ) )[0]->get_label()
 		);
 
 		// Act.
