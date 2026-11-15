@@ -1704,7 +1704,9 @@ class Receipt_Data_Builder {
 		$charged = array();
 		foreach ( $orders as $source ) {
 			foreach ( $source instanceof WC_Abstract_Order ? $source->get_items( 'tax' ) : array() as $tax_item ) {
-				$charged[ (int) $tax_item->get_rate_id() ] = $tax_item;
+				if ( $tax_item instanceof \WC_Order_Item_Tax ) {
+					$charged[ (int) $tax_item->get_rate_id() ] = $tax_item;
+				}
 			}
 		}
 		return $charged;
