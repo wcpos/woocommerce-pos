@@ -136,6 +136,7 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$products = new Products();
 		$query    = new WP_Query();
 		$query->set( 'post_type', 'product' );
+		$query->set( 'suppress_filters', true );
 
 		// Act.
 		$products->hide_pos_only_products( $query );
@@ -187,6 +188,7 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$products->record_rest_route( null, rest_get_server(), new WP_REST_Request( 'GET', $route ) );
 		$query = new WP_Query();
 		$query->set( 'post_type', 'product' );
+		$query->set( 'suppress_filters', true );
 
 		// Act.
 		$products->hide_pos_only_products( $query );
@@ -243,6 +245,7 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$products = new Products();
 		$query    = new WP_Query();
 		$query->set( 'post_type', 'product' );
+		$query->set( 'suppress_filters', true );
 		$seen = array();
 		add_filter(
 			'wcpos_hide_pos_only_products',

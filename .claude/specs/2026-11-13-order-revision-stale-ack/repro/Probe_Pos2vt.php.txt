@@ -1,0 +1,144 @@
+<?php
+/**
+ * THROWAWAY probe for POS-2VT (not committed).
+ *
+ * @package WCPOS\WooCommercePOS\Tests\Sync
+ */
+
+namespace WCPOS\WooCommercePOS\Tests\Sync;
+
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WP_REST_Response;
+
+/**
+ * @internal
+ * @coversNothing
+ */
+class Test_Probe_Pos2vt extends Sync_REST_Store_Test_Case {
+	private const RECORD_UUID = '57000000-0000-4000-8000-0000000000aa';
+	private $sequence = 0;
+	private static $n = 0;
+
+	public function setUp(): void {
+		parent::setUp();
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		update_option( 'woocommerce_calc_taxes', 'no' );
+	}
+
+	public function tearDown(): void {
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		parent::tearDown();
+	}
+
+	private function push_order( string $operation, array $payload, ?string $base_revision = null ): WP_REST_Response {
+		$envelope = array(
+			'mutationId'   => sprintf( '58000000-0000-4000-8000-%012d', ++$this->sequence ),
+			'operation'    => $operation,
+			'collection'   => 'orders',
+			'recordId'     => self::RECORD_UUID,
+			'baseRevision' => $base_revision,
+			'payload'      => $payload,
+		);
+		$request  = $this->wp_rest_post_request( '/wcpos/v2/push/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( (string) wp_json_encode( $envelope ) );
+		return $this->server->dispatch( $request );
+	}
+
+	private function payload(): array {
+		$product = ProductHelper::create_simple_product( array( 'regular_price' => 10, 'price' => 10, 'tax_status' => 'none' ) );
+		return array(
+			'status'     => 'pending',
+			'line_items' => array( array( 'product_id' => $product->get_id(), 'quantity' => 1, 'subtotal' => '10', 'total' => '10' ) ),
+		);
+	}
+
+	private function run_flow( string $label ): void {
+		$log     = array();
+		$created = $this->push_order( 'create', $this->payload() );
+		$log[]   = 'create=' . $created->get_status();
+		$id      = (int) $created->get_data()['document']['id'];
+		$fresh   = Order_Serializer::current_state( $id )['revision'];
+		$log[]   = 'ackFreshAfterCreate=' . ( $fresh === $created->get_data()['currentRevision'] ? 'yes' : 'NO' );
+		$doc     = $created->get_data()['document'];
+		$doc['customer_note'] = 'first edit';
+		$first   = $this->push_order( 'update', $doc, $created->get_data()['currentRevision'] );
+		$log[]   = 'update=' . $first->get_status() . ( 422 === $first->get_status() ? wp_json_encode( $first->get_data() ) : '' );
+		$rev     = $first->get_data()['currentRevision'] ?? '';
+		$doc2    = $first->get_data()['document'] ?? $first->get_data()['current'] ?? $doc;
+		if ( 409 === $first->get_status() ) {
+			$saves = did_action( 'woocommerce_update_order' );
+			$re    = $this->push_order( 'update', $doc, $rev );
+			$log[] = 'repush=' . $re->get_status() . ' (order saves during repush: ' . ( did_action( 'woocommerce_update_order' ) - $saves ) . ')';
+			if ( 409 === $re->get_status() ) {
+				$re2   = $this->push_order( 'update', $doc, $re->get_data()['currentRevision'] );
+				$log[] = 'repush2=' . $re2->get_status();
+			}
+		} else {
+			$fresh = Order_Serializer::current_state( $id )['revision'];
+			$log[] = 'ackFreshAfterUpdate=' . ( $fresh === $rev ? 'yes' : 'NO' );
+			$doc2['customer_note'] = 'next edit';
+			$next  = $this->push_order( 'update', $doc2, $rev );
+			$log[] = 'nextPush=' . $next->get_status();
+			if ( 409 === $next->get_status() ) {
+				$re    = $this->push_order( 'update', $doc2, $next->get_data()['currentRevision'] );
+				$log[] = 'repush=' . $re->get_status();
+			}
+		}
+		fwrite( STDERR, "\n[$label] " . implode( ' ', $log ) . "\n" );
+		$this->assertTrue( true );
+	}
+
+	public function test_s0_baseline(): void {
+		$this->run_flow( 'S0 no third party' );
+	}
+
+	public function test_s1_save_hook_writer(): void {
+		add_action( 'woocommerce_update_order', static function ( $id ) {
+			update_post_meta( $id, '_tp_save_counter', ++self::$n );
+		} );
+		$this->run_flow( 'S1 order meta written in woocommerce_update_order' );
+	}
+
+	public function test_s2_after_response_writer(): void {
+		add_filter( 'rest_post_dispatch', static function ( $response, $server, $request ) {
+			if ( '/wcpos/v2/push/orders' === $request->get_route() && $response instanceof WP_REST_Response ) {
+				$data = $response->get_data();
+				$id   = (int) ( $data['document']['id'] ?? $data['current']['id'] ?? 0 );
+				if ( $id ) {
+					update_post_meta( $id, '_tp_async_stamp', ++self::$n );
+				}
+			}
+			return $response;
+		}, 10, 3 );
+		$this->run_flow( 'S2 order meta written after every push response (async/shutdown job)' );
+	}
+
+	public function test_s3_item_meta_hook_writer(): void {
+		add_action( 'added_order_item_meta', static function ( $mid, $item_id, $key ) {
+			if ( '_tp_line_stamp' !== $key ) {
+				wc_update_order_item_meta( $item_id, '_tp_line_stamp', ++self::$n );
+			}
+		}, 10, 3 );
+		$this->run_flow( 'S3 line meta written whenever any line meta is added' );
+	}
+
+	public function test_s4_read_hook_writer(): void {
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', static function ( $response, $order ) {
+			update_post_meta( $order->get_id(), '_tp_last_read', ++self::$n );
+			return $response;
+		}, 10, 2 );
+		$this->run_flow( 'S4 order meta written on every wc/v3 order read' );
+	}
+
+	public function test_s5_save_hook_line_writer(): void {
+		add_action( 'woocommerce_update_order', static function ( $id ) {
+			$order = wc_get_order( $id );
+			foreach ( $order->get_items() as $item_id => $item ) {
+				wc_update_order_item_meta( $item_id, '_tp_line_counter', ++self::$n );
+			}
+		} );
+		$this->run_flow( 'S5 line meta written in woocommerce_update_order' );
+	}
+}
