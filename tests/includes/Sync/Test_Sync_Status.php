@@ -367,4 +367,50 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array_values( $capabilities ), $capabilities );
 		$this->assertContains( 'products_id_fast_path', $capabilities );
 	}
+
+	/**
+	 * A plugin appends the features it serves after the core names.
+	 */
+	public function test_sync_status_appends_filtered_capabilities_after_the_core_names(): void {
+		// Arrange.
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+		$append = static function ( $capabilities ) {
+			$capabilities[] = 'order_complete';
+			return $capabilities;
+		};
+		add_filter( 'wcpos_status_capabilities', $append );
+
+		// Act.
+		$data = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) )->get_data();
+
+		// Assert.
+		remove_filter( 'wcpos_status_capabilities', $append );
+		$this->assertSame( array( 'products_id_fast_path', 'order_complete' ), $data['capabilities'] );
+	}
+
+	/**
+	 * A filter cannot drop a core name; only non-empty strings it returns are kept, once each.
+	 */
+	public function test_sync_status_keeps_core_capabilities_when_a_filter_drops_them(): void {
+		// Arrange.
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+		$replace  = static function () {
+			return array( 'x', '', 7, 'x' );
+		};
+		$nonsense = static function () {
+			return 'nonsense';
+		};
+
+		// Act.
+		add_filter( 'wcpos_status_capabilities', $replace );
+		$replaced = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) )->get_data();
+		remove_filter( 'wcpos_status_capabilities', $replace );
+		add_filter( 'wcpos_status_capabilities', $nonsense );
+		$scalar = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) )->get_data();
+		remove_filter( 'wcpos_status_capabilities', $nonsense );
+
+		// Assert.
+		$this->assertSame( array( 'products_id_fast_path', 'x' ), $replaced['capabilities'] );
+		$this->assertSame( array( 'products_id_fast_path' ), $scalar['capabilities'] );
+	}
 }

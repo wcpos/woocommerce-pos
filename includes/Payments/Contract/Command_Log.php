@@ -18,15 +18,16 @@ use WP_Error;
  * ADR 0040 rule 5: every money command is idempotent by a till-minted command id for as long as
  * the row it touched exists. A command that acts on a row (`intent`, `capture`, `void`, `refund`)
  * keeps `{ fp, kind, ref, at_gmt }` in that row's `commands` map; one with no row of its own
- * (`submit`, `cancel`, `close`) keeps `{ fp, kind, ref, outcome, at_gmt }` in the order's
+ * (`submit`, `cancel`, `close`, `complete`) keeps `{ fp, kind, ref, outcome, at_gmt }` in the order's
  * `_wcpos_commands` map. Neither is ever evicted: an evicted id would run its command again.
+ * `complete` is the Pro command that marks a paid order completed (monorepo#3648).
  * No table and no option (`.ai/rules/db-tables.mdc`); both maps are server-owned order meta.
  */
 final class Command_Log {
 	/** Commands kept on the row they act on. */
 	public const ROW_KINDS = array( 'intent', 'capture', 'void', 'refund' );
 	/** Commands kept on the order, because they may complete with no row. */
-	public const ORDER_KINDS = array( 'submit', 'cancel', 'close' );
+	public const ORDER_KINDS = array( 'submit', 'cancel', 'close', 'complete' );
 	/** The order-level map, in `Pos_Order_Audit::SERVER_MONEY_META_KEYS` so a push cannot write it. */
 	public const META_KEY = '_wcpos_commands';
 	/**
@@ -220,6 +221,7 @@ final class Command_Log {
 			case 'refund':
 				return array( 'payment' => $payment );
 			case 'cancel':
+			case 'complete':
 				return array( 'order' => $summary );
 			case 'close':
 				$history   = Completion_History::of( $order );
