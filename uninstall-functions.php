@@ -67,6 +67,7 @@ function woocommerce_pos_uninstall_cron_hooks(): array {
 		// Fiscal late-check retries (Fiscal_Record_Writers::*_RETRY_HOOK).
 		'wcpos_fiscal_refund_retry',
 		'wcpos_fiscal_allocation_retry',
+		'wcpos_fiscal_correction_retry',
 		// WP-Cron fallback for the receipt font install (Action Scheduler is the
 		// primary queue; its pending actions are cancelled in the sweep below).
 		'wcpos_install_font_packs',
