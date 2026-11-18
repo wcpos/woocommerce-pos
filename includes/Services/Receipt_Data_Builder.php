@@ -816,6 +816,23 @@ class Receipt_Data_Builder {
 			),
 			$display_incl
 		);
+		// Never a negative You saved.
+		foreach ( array( 'total_saved', 'total_saved_incl', 'total_saved_excl', 'sale_savings_total', 'sale_savings_total_incl', 'sale_savings_total_excl' ) as $key ) {
+			if ( null !== $totals[ $key ] ) {
+				$totals[ $key ] = max( 0.0, $totals[ $key ] );
+			}
+		}
+		// A return shows no Savings row; the sale's saved total nets returns before this point.
+		foreach ( $lines as &$line ) {
+			if ( (float) $line['qty'] < 0.0 ) {
+				foreach ( array( 'line_savings', 'line_savings_incl', 'line_savings_excl', 'line_regular_total', 'line_regular_total_incl', 'line_regular_total_excl', 'line_selling_total', 'line_selling_total_incl', 'line_selling_total_excl' ) as $key ) {
+					if ( null !== $line[ $key ] ) {
+						$line[ $key ] = 0.0;
+					}
+				}
+			}
+		}
+		unset( $line );
 
 		// A payable order has taken no payment yet: an empty list, so templates skip their PAID block
 		// ({{#payments.0}}) instead of printing the total as if it had been received. Ledger rows,
