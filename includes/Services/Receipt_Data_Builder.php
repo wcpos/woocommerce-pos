@@ -658,15 +658,13 @@ class Receipt_Data_Builder {
 			$line_subtotal_tax  = (float) $item->get_subtotal_tax();
 			$line_subtotal_incl = $line_subtotal_excl + $line_subtotal_tax;
 
-			$qty = (float) $item->get_quantity();
-			if ( $qty <= 0 ) {
-				$qty = 0.0;
-			}
+			// Signed: a returned line keeps its negative qty; only zero is guarded, against division by zero.
+			$qty                = (float) $item->get_quantity();
 			$calc_dp            = wc_get_price_decimals();
-			$unit_price_incl    = $qty > 0 ? round( $line_total_incl / $qty, $calc_dp ) : 0.0;
-			$unit_price_excl    = $qty > 0 ? round( $line_total_excl / $qty, $calc_dp ) : 0.0;
-			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $calc_dp ) : 0.0;
-			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $calc_dp ) : 0.0;
+			$unit_price_incl    = 0.0 !== $qty ? round( $line_total_incl / $qty, $calc_dp ) : 0.0;
+			$unit_price_excl    = 0.0 !== $qty ? round( $line_total_excl / $qty, $calc_dp ) : 0.0;
+			$unit_subtotal_incl = 0.0 !== $qty ? round( $line_subtotal_incl / $qty, $calc_dp ) : 0.0;
+			$unit_subtotal_excl = 0.0 !== $qty ? round( $line_subtotal_excl / $qty, $calc_dp ) : 0.0;
 
 			$discounts_incl = max( 0, $line_subtotal_incl - $line_total_incl );
 			$discounts_excl = max( 0, $line_subtotal_excl - $line_total_excl );

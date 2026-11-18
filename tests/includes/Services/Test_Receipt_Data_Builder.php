@@ -1957,6 +1957,44 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test a returned (negative) line keeps its signed quantity and a positive unit price.
+	 */
+	public function test_build_negative_line_keeps_signed_quantity_and_unit_price(): void {
+		// Arrange: 2 sold at 10.00 and 1 returned at 10.00, taxes off.
+		update_option( 'woocommerce_calc_taxes', 'no' );
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Sold Product' );
+		$product->set_regular_price( '10.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 2 );
+		$returned = new \WC_Order_Item_Product();
+		$returned->set_name( 'Returned Product' );
+		$returned->set_quantity( -1 );
+		$returned->set_subtotal( -10 );
+		$returned->set_total( -10 );
+		$order->add_item( $returned );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$sold_line     = $payload['lines'][0];
+		$returned_line = $payload['lines'][1];
+		$this->assertSame( -1.0, $returned_line['qty'] );
+		$this->assertEqualsWithDelta( 10.0, $returned_line['unit_price_incl'], 0.001 );
+		$this->assertEqualsWithDelta( 10.0, $returned_line['unit_price_excl'], 0.001 );
+		$this->assertEqualsWithDelta( 10.0, $returned_line['unit_subtotal_incl'], 0.001 );
+		$this->assertEqualsWithDelta( -10.0, $returned_line['line_total_incl'], 0.001 );
+		$this->assertSame( 2.0, $sold_line['qty'] );
+		$this->assertEqualsWithDelta( 10.0, $sold_line['unit_price_incl'], 0.001 );
+		$this->assertSame( 1.0, $payload['totals']['total_qty'] );
+	}
+
+	/**
 	 * Test build includes new store fields.
 	 */
 	public function test_build_includes_new_store_fields(): void {

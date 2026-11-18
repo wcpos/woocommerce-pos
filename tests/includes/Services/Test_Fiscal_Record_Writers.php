@@ -1811,4 +1811,33 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 	}
+
+	/** A returned line in a net-positive sale keeps its signed quantity and unit price in the sale snapshot. */
+	public function test_sale_record_snapshot_keeps_returned_line_signed_quantity(): void {
+		// Arrange: 2 sold at 10.00 and 1 returned at 10.00, order total 10.00.
+		$order = $this->order();
+		$sold = new \WC_Order_Item_Product();
+		$sold->set_name( 'Sold item' );
+		$sold->set_quantity( 2 );
+		$sold->set_subtotal( 20 );
+		$sold->set_total( 20 );
+		$order->add_item( $sold );
+		$returned = new \WC_Order_Item_Product();
+		$returned->set_name( 'Returned item' );
+		$returned->set_quantity( -1 );
+		$returned->set_subtotal( -10 );
+		$returned->set_total( -10 );
+		$order->add_item( $returned );
+		$order->calculate_totals( false );
+		$order->save();
+
+		// Act.
+		$this->pay( $order );
+
+		// Assert.
+		$lines = $this->sales( $order->get_id() )[0]['payload']['lines'];
+		$this->assertEqualsWithDelta( 2.0, $lines[0]['qty'], 0.001 );
+		$this->assertEqualsWithDelta( -1.0, $lines[1]['qty'], 0.001 );
+		$this->assertEqualsWithDelta( 10.0, $lines[1]['unit_price_incl'], 0.001 );
+	}
 }
