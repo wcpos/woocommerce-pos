@@ -1545,6 +1545,14 @@ class Receipt_Data_Schema {
 					);
 				}
 			}
+			$tree['closure.breakdowns.payment_methods']['fields']['has_corrections'] = array(
+				'type'  => 'boolean',
+				'label' => __( 'Non-zero Corrections', 'woocommerce-pos' ),
+			);
+			$tree['closure']['fields']['has_corrections_line'] = array(
+				'type'  => 'boolean',
+				'label' => __( 'Any Tender Corrected', 'woocommerce-pos' ),
+			);
 			$tree['closure.breakdowns.cashiers'] = array(
 				'label'    => __( 'Cashiers', 'woocommerce-pos' ),
 				'is_array' => true,

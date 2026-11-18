@@ -37,6 +37,7 @@
   {{#closure.breakdowns.payment_methods}}<bold><text>{{#name}}{{name}}{{/name}}{{^name}}{{method}}{{/name}}</text></bold>
   <row><col width="*">{{i18n.sales}}</col><col width="*" align="right">{{sales_display}}</col></row>
   <row><col width="*">{{i18n.refunds}}</col><col width="*" align="right">{{refunds_display}}</col></row>
+  {{#has_corrections}}<row><col width="*">{{i18n.corrections}}</col><col width="*" align="right">{{corrections_display}}</col></row>{{/has_corrections}}
   {{/closure.breakdowns.payment_methods}}
   {{/closure.has_payment_methods}}
   <text>{{i18n.counted}}</text>

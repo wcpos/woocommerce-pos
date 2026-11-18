@@ -759,6 +759,37 @@ final class Closure_Store {
 			}
 			$figures = Session_Figures::for_session( $session );
 			$fields['expected'] = $figures->expected();
+			// A corrected tender (#3647) stores the session terms' gross sales, refunds and corrections in place
+			// of the app's net row, so the printed tender lines add up to expected. The server owns corrections.
+			$tenders = array_filter( $figures->payment_methods(), static fn( $tender ) => '0.0000' !== $tender['corrections'] );
+			$gross   = array_flip( array( 'sales', 'refunds', 'corrections' ) );
+			$methods = $fields['breakdowns']['payment_methods'] ?? null;
+			if ( $tenders || is_array( $methods ) ) {
+				$methods = is_array( $methods ) ? $methods : array();
+				// A list stays a list; the app's map keys a card row by gateway id (pos_card), matched by tender key.
+				$is_list = $methods && array_keys( $methods ) === range( 0, count( $methods ) - 1 );
+				foreach ( $methods as $key => $method ) {
+					if ( ! is_array( $method ) ) {
+						continue;
+					}
+					unset( $methods[ $key ]['corrections'] );
+					if ( isset( $method['method'] ) && ! is_scalar( $method['method'] ) ) {
+						continue;
+					}
+					$tender = Session_Figures::tender_key( array( 'method' => (string) ( $method['method'] ?? $key ) ) );
+					if ( isset( $tenders[ $tender ] ) ) {
+						$methods[ $key ] = array_replace( $methods[ $key ], array_intersect_key( $tenders[ $tender ], $gross ) );
+						unset( $tenders[ $tender ] );
+					}
+				}
+				foreach ( $tenders as $tender => $figure ) {
+					$methods[ $is_list ? count( $methods ) : $tender ] = array(
+						'method' => (string) $tender,
+						'name'   => $figure['name'],
+					) + array_intersect_key( $figure, $gross );
+				}
+				$fields['breakdowns']['payment_methods'] = $methods;
+			}
 			// A carry counts the drawer at the snapshot's own expected: no count is taken outside it.
 			$fields['counted'] = $fields['counted'] ?? $fields['expected'];
 			$fields['till_expected'] = $fields['till_expected'] ?? $fields['expected'];
