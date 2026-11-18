@@ -2962,10 +2962,11 @@ class Ledger {
 	private function reindex( WC_Order $order, array $rows ): void {
 		$order->delete_meta_data( self::INDEX_META_KEY );
 		$indexed = array();
+		$reversed = self::reversed_ids( $rows ); // A tender correction's R- and the row it reverses are not where the money is.
 		foreach ( $rows as $row ) {
 			// A pushed row is client input: no method id, no index row — never a notice on the save hook.
 			$method = is_array( $row ) ? ( $row['method_id'] ?? null ) : null;
-			if ( ! is_string( $method ) || '' === $method || ! in_array( $row['status'] ?? '', self::LIVE_STATUSES, true ) ) {
+			if ( ! is_string( $method ) || '' === $method || ! in_array( $row['status'] ?? '', self::LIVE_STATUSES, true ) || ! empty( $row['reverses'] ) || in_array( (string) ( $row['id'] ?? '' ), $reversed, true ) ) {
 				continue;
 			}
 			if ( ! in_array( $method, $indexed, true ) ) {
