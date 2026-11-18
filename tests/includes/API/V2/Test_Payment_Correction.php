@@ -9,20 +9,29 @@ namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Projection;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
+use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 
 /** POST /orders/{id}/payments/{uuid}/correct. */
 class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
+	use Closure_Test_Fixture;
 	use Money_Route_Envelope;
 
-	/** Arm the fiscal sale trigger, as the payments controller tests do. */
+	/** Arm the fiscal sale and correction triggers, as the payments controller tests do. */
 	public function setUp(): void {
 		parent::setUp();
 		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
+		add_action( 'wcpos_payment_corrected', array( Fiscal_Record_Writers::instance(), 'handle_correction' ), 10, 4 );
 	}
 
 	/** Card 10.00 corrected to cash appends R- and R+ and moves nothing else. */
@@ -412,12 +421,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A row without its command map, which a correction's entry rides.
+	 * A row without its command map, which a correction's entry rides, or the
+	 * settle stamp that entry moves when the clock ticks between sale and correction.
 	 *
 	 * @param array $row Row.
 	 */
 	private function without_commands( array $row ): array {
-		unset( $row['commands'] );
+		unset( $row['commands'], $row['updated_at_gmt'] );
 		return $row;
 	}
 
@@ -513,5 +523,244 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function payment_path( \WC_Order $order, string $id ): string {
 		return '/wcpos/v2/orders/' . $order->get_id() . '/payments/' . $id;
+	}
+
+	/** The customer's case end to end: a reopened card sale corrected to cash closes again as a cash sale. */
+	public function test_correct_reopened_card_sale_then_close_records_a_cash_sale_and_cash_figures(): void {
+		// Arrange.
+		$session              = $this->closure_session( null, 'open' );
+		list( $order, $card ) = $this->completed_sale_in( $session );
+		$order                = $this->reopen( $order );
+		$before               = Session_Figures::for_session( $session );
+		$refund_count         = $before->refund_count();
+		$cash_refunds         = $before->terms()['cash_refunds'];
+
+		// Act.
+		$response = $this->correct( $order, $card['id'], 'pos_cash' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertCount( 1, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
+		$close = $this->close_in( $order, $session );
+
+		// Assert.
+		$this->assertSame( 200, $close->get_status(), wp_json_encode( $close->get_data() ) );
+		$order   = wc_get_order( $order->get_id() );
+		$history = Completion_History::of( $order );
+		$this->assertCount( 2, $history->entries() );
+		$sales = $this->fiscal_records( $order->get_id(), 'sale' );
+		$this->assertCount( 2, $sales );
+		$this->assertSame( $sales[1]['id'], $sales[0]['corrects_record_id'] );
+		$payments = $sales[0]['payload']['payments'];
+		$this->assertCount( 1, $payments );
+		$this->assertSame( 'pos_cash', $payments[0]['method_id'] );
+		$this->assertSame( 10.0, (float) $payments[0]['amount'] ); // The stored snapshot is JSON: 10.0 reads back as 10.
+		$this->assertSame( 'pos_cash', $order->get_payment_method() );
+		$figures = Session_Figures::for_session( $session );
+		$this->assertSame( '0.0000', $figures->expected()['card'] );
+		$this->assertSame( Closure_Store::sum( array( $figures->terms()['float'], '10' ) ), $figures->expected()['cash'] );
+		$this->assertSame( $refund_count, $figures->refund_count() );
+		$this->assertSame( $cash_refunds, $figures->terms()['cash_refunds'] );
+	}
+
+	/** In a closed session the correction is the late record, and the recompletion carries its legs no second time. */
+	public function test_correct_reopened_card_sale_in_closed_session_writes_one_tender_correction_late_sale(): void {
+		// Arrange.
+		$session              = $this->closure_session();
+		list( $order, $card ) = $this->completed_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$order = $this->reopen( $order );
+
+		// Act.
+		$plus  = $this->correct( $order, $card['id'], 'pos_cash' )->get_data()['payment'];
+		$minus = $this->reversal_of( Ledger::instance()->read( wc_get_order( $order->get_id() ) ), $card['id'] );
+		$late  = $this->fiscal_records( $order->get_id(), 'late_sale' );
+		$close = $this->close_in( $order, $session );
+
+		// Assert.
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		$this->assertSame( 200, $close->get_status(), wp_json_encode( $close->get_data() ) );
+		$this->assertCount( 2, Completion_History::of( wc_get_order( $order->get_id() ) )->entries() );
+		$corrections = 0;
+		foreach ( $this->fiscal_records( $order->get_id(), 'late_sale' ) as $record ) {
+			if ( 'tender_correction' === ( $record['payload']['kind'] ?? null ) ) {
+				++$corrections;
+				continue;
+			}
+			$this->assertSame( array(), array_intersect( array( $minus['id'], $plus['id'] ), array_column( $record['payload']['tender_rows'], 'id' ) ) );
+		}
+		$this->assertSame( 1, $corrections );
+	}
+
+	/** A reprint shows where the money is: the corrected tender only. */
+	public function test_correct_card_to_cash_reprint_shows_one_cash_payment(): void {
+		// Arrange.
+		list( $order, $card ) = $this->completed_sale( 'pos_card', '10.00' );
+		$this->assertSame( 200, $this->correct( $order, $card['id'], 'pos_cash' )->get_status() );
+
+		// Act.
+		$data = ( new Receipt_Data_Builder() )->build( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( array( 'pos_cash' ), array_column( $data['payments'], 'method_id' ) );
+		$this->assertSame( 10.0, $data['payments'][0]['amount'] );
+		$this->assertSame( 10.0, $data['totals']['paid_total'] );
+	}
+
+	/** A1: the order's payment method and title follow a single leg's correction. */
+	public function test_correct_single_cash_leg_to_card_projects_card_payment_method_and_title(): void {
+		// Arrange.
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+
+		// Act.
+		$this->assertSame( 200, $this->correct( $order, $cash['id'], 'pos_card' )->get_status() );
+
+		// Assert.
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos_card', $order->get_payment_method() );
+		$this->assertSame( Descriptor_Builder::instance()->get( 'pos_card' )['title'], $order->get_payment_method_title() );
+	}
+
+	/** A2: a split sale's corrected leg projects as if it had been taken on the target method. */
+	public function test_correct_split_card_leg_to_cash_projects_as_two_cash_legs(): void {
+		// Arrange.
+		$order = $this->create_pos_order( '10.00' );
+		$card  = $this->record( $order, $this->payment( 'pos_card', '6.00' ) )->get_data()['payment'];
+		$this->assertSame( 200, $this->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '4.00' ) )->get_status() );
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		$title    = static fn( string $method_id ): string => Descriptor_Builder::instance()->get( $method_id )['title'] ?? $method_id;
+		$cash_leg = static fn( string $amount, string $at ): array => array(
+			'id'              => wp_generate_uuid4(),
+			'status'          => 'captured',
+			'method_id'       => 'pos_cash',
+			'kind'            => 'cash',
+			'amount'          => $amount,
+			'captured_at_gmt' => $at,
+		);
+		$expected = Projection::of( array( $cash_leg( '6.00', '2026-11-18 10:00:00' ), $cash_leg( '4.00', '2026-11-18 10:00:01' ) ), '10.00', 'completed', false, Ledger::MODE_AUTO, false, $title );
+
+		// Act.
+		$this->assertSame( 200, $this->correct( wc_get_order( $order->get_id() ), $card['id'], 'pos_cash' )->get_status() );
+
+		// Assert.
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( $expected['method'], $order->get_payment_method() );
+		$this->assertSame( $expected['title'], $order->get_payment_method_title() );
+	}
+
+	/** A3: replaying the correction command changes nothing on the order. */
+	public function test_correct_replay_leaves_method_title_modified_date_and_ledger_unchanged(): void {
+		// Arrange.
+		list( $order, $card ) = $this->completed_sale( 'pos_card', '10.00' );
+		$body                 = $this->envelope( $order, array( 'method_id' => 'pos_cash' ) );
+		$this->assertSame( 200, $this->command( $this->payment_path( $order, $card['id'] ) . '/correct', $body )->get_status() );
+		$before = wc_get_order( $order->get_id() );
+		$state  = static fn( \WC_Order $o ): array => array( $o->get_payment_method(), $o->get_payment_method_title(), (string) $o->get_date_modified(), Ledger::instance()->read( $o ) );
+
+		// Act.
+		$replay = $this->command( $this->payment_path( $order, $card['id'] ) . '/correct', $body );
+
+		// Assert.
+		$this->assertSame( 200, $replay->get_status() );
+		$this->assertSame( $state( $before ), $state( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/** B1: a sale refunded in full without a ledger allocation is not corrected. */
+	public function test_correct_on_fully_refunded_order_without_allocation_returns_refunded(): void {
+		$this->assert_refund_refuses_correction( '10.00' );
+	}
+
+	/** B2: a sale refunded in part without a ledger allocation is not corrected. */
+	public function test_correct_on_partly_refunded_order_without_allocation_returns_refunded(): void {
+		$this->assert_refund_refuses_correction( '3.00' );
+	}
+
+	/**
+	 * Refund a completed card 10.00 sale by the amount, unallocated, and assert the correction is refused.
+	 *
+	 * @param string $amount Refund amount.
+	 */
+	private function assert_refund_refuses_correction( string $amount ): void {
+		// Arrange.
+		list( $order, $card ) = $this->completed_sale( 'pos_card', '10.00' );
+		$refund               = wc_create_refund(
+			array(
+				'order_id'       => $order->get_id(),
+				'amount'         => $amount,
+				'refund_payment' => false,
+			)
+		);
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$this->assertSame( array(), $this->row( $order, $card['id'] )['refunds'] ?? array() );
+
+		// Act.
+		$response = $this->correct( wc_get_order( $order->get_id() ), $card['id'], 'pos_cash' );
+
+		// Assert.
+		$this->assert_refused( 'refunded', $response );
+		$this->assertSame( $rows, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+	}
+
+	/**
+	 * A 10.00 card sale completed through the route in a session.
+	 *
+	 * @param array $session Session row.
+	 * @return array{0: \WC_Order, 1: array} The completed order and the payment answer.
+	 */
+	private function completed_sale_in( array $session ): array {
+		$order   = $this->create_pos_order( '10.00' );
+		$payment = $this->payment( 'pos_card', '10.00' ) + array(
+			'register_id' => $session['register_id'],
+			'session_id'  => $session['id'],
+		);
+		$body    = $this->envelope(
+			$order,
+			array(
+				'payment'    => $payment,
+				'provenance' => $this->provenance_of( $session ),
+			)
+		);
+		$response = $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/payments', $body );
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		return array( wc_get_order( $order->get_id() ), $response->get_data()['payment'] );
+	}
+
+	/**
+	 * Close the sale through the route at the session's register.
+	 *
+	 * @param \WC_Order $order   Order.
+	 * @param array     $session Session row.
+	 */
+	private function close_in( \WC_Order $order, array $session ): \WP_REST_Response {
+		return $this->command( '/wcpos/v2/orders/' . $order->get_id() . '/close', $this->envelope( $order, array( 'provenance' => $this->provenance_of( $session ) ) ) );
+	}
+
+	/**
+	 * A body's provenance at the session's register.
+	 *
+	 * @param array $session Session row.
+	 */
+	private function provenance_of( array $session ): array {
+		return array(
+			'register_id' => $session['register_id'],
+			'session_id'  => $session['id'],
+		);
+	}
+
+	/**
+	 * The order's fiscal records of a type, newest first.
+	 *
+	 * @param int    $order_id Order ID.
+	 * @param string $type     Record type.
+	 */
+	private function fiscal_records( int $order_id, string $type ): array {
+		return ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order_id,
+				'type'     => $type,
+			)
+		);
 	}
 }

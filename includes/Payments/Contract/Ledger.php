@@ -2041,7 +2041,8 @@ class Ledger {
 			'voidable'               => fn() => $this->is_voidable( $row, $order ),
 			'is_reversal'            => fn() => ! empty( $row['reverses'] ),
 			'already_corrected'      => fn() => in_array( $row['id'], self::reversed_ids( $rows ), true ),
-			'refunded'               => fn() => ! empty( $row['refunds'] ),
+			// Any refund on the order, allocated to a row or not: the app's refunds route never allocates.
+			'refunded'               => fn() => ! empty( $row['refunds'] ) || $order->get_refunds(),
 			'provider_row'           => fn() => 'manual' !== ( $row['capture_mode'] ?? '' ) || 'app' !== ( $row['source'] ?? '' ) || ! empty( $row['provider'] ),
 			'method_invalid'         => fn() => null === $target || ! $target['pos_enabled'] || null !== $target['capture']['provider']
 				|| ! in_array( 'manual', array_column( $target['capture']['modes'], 'mode' ), true ),
@@ -2121,6 +2122,18 @@ class Ledger {
 			sprintf( __( 'WCPOS payment %1$s corrected: %2$s to %3$s (%4$s)', 'woocommerce-pos' ), $row['id'], $old ? $old['title'] : $row['method_id'], $target['title'], $row['amount'] )
 		);
 		Logger::log( sprintf( 'WCPOS payment %s on order #%d corrected from %s to %s (%s %s) by cashier #%d', $row['id'], $order->get_id(), $row['method_id'], $target['id'], $row['amount'], $row['currency'], get_current_user_id() ) );
+		/**
+		 * Fires after a captured payment's tender was corrected (#3647).
+		 *
+		 * @since 2.0.5
+		 * @hook wcpos_payment_corrected
+		 *
+		 * @param WC_Order $order The order.
+		 * @param array    $row   The corrected row.
+		 * @param array    $minus R-, the row's money out of its method.
+		 * @param array    $plus  R+, the same money on the target method.
+		 */
+		do_action( 'wcpos_payment_corrected', $order, $row, $minus, $plus );
 		return (array) $this->find( $order, $plus['id'] );
 	}
 
