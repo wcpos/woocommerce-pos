@@ -78,9 +78,8 @@ class Payments_Controller extends WC_REST_Controller {
 				'correct_item',
 				array(
 					'method_id' => array(
-						'type'              => 'string',
-						'required'          => true,
-						'sanitize_callback' => 'sanitize_key',
+						'type'     => 'string',
+						'required' => true,
 					),
 				),
 			),

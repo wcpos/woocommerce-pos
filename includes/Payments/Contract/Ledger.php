@@ -2045,7 +2045,7 @@ class Ledger {
 			'refunded'               => fn() => ! empty( $row['refunds'] ) || $order->get_refunds(),
 			'provider_row'           => fn() => 'manual' !== ( $row['capture_mode'] ?? '' ) || 'app' !== ( $row['source'] ?? '' ) || ! empty( $row['provider'] ),
 			'method_invalid'         => fn() => null === $target || ! $target['pos_enabled'] || null !== $target['capture']['provider']
-				|| ! in_array( 'manual', array_column( $target['capture']['modes'], 'mode' ), true ),
+				|| ! in_array( 'manual', array_column( $target['capture']['modes'], 'mode' ), true ) || 'stored_value' === $target['kind'],
 			'same_method'            => fn() => $target['id'] === $row['method_id'],
 			// Never re-rounded: the money taken is the money moved.
 			'off_rounding_increment' => fn() => null !== $increment && 0 !== Money::minor( $row['amount'] ) % Money::minor( $increment ),

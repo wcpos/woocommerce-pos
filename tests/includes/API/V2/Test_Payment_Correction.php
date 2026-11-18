@@ -184,6 +184,33 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assert_refused( 'method_invalid', $this->correct( $order, $cash['id'], 'pos_card' ) );
 	}
 
+	/** The target id is looked up exactly as sent, as record() looks it up: WooCommerce gateway ids may carry uppercase. */
+	public function test_correct_method_id_is_matched_exactly_as_record_matches_it(): void {
+		// Arrange.
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+
+		// Act.
+		$response = $this->correct( $order, $cash['id'], 'POS_CARD' );
+
+		// Assert.
+		$this->assert_refused( 'method_invalid', $response );
+	}
+
+	/** Stored value is never a correction's target. */
+	public function test_correct_to_stored_value_target_returns_method_invalid(): void {
+		// Arrange.
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$stored_value         = static fn( $kind, $gateway ) => 'pos_card' === $gateway->id ? 'stored_value' : $kind;
+		add_filter( 'wcpos_payment_method_kind', $stored_value, 10, 2 );
+
+		try {
+			// Act / Assert.
+			$this->assert_refused( 'method_invalid', $this->correct( $order, $cash['id'], 'pos_card' ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_kind', $stored_value, 10 );
+		}
+	}
+
 	/** A correction to the row's own method is refused. */
 	public function test_correct_to_same_method_returns_same_method(): void {
 		list( $order, $card ) = $this->completed_sale( 'pos_card', '10.00' );
