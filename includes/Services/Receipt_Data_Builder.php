@@ -192,6 +192,7 @@ class Receipt_Data_Builder {
 		if ( ! empty( $row['breakdowns']['opening_float'] ) ) {
 			$row['breakdowns']['opening_float'] = $with_money( $row['breakdowns']['opening_float'], array( 'expected', 'counted', 'variance' ) );
 		}
+		$row['has_corrections_line'] = false;
 		foreach ( array(
 			'payment_methods' => array( 'sales', 'refunds' ),
 			'tax_rates' => array( 'net', 'tax', 'gross' ),
@@ -200,6 +201,10 @@ class Receipt_Data_Builder {
 			foreach ( $row['breakdowns'][ $section ] ?? array() as $key => $values ) {
 				if ( 'payment_methods' === $section ) {
 					$values['method'] = $values['method'] ?? (string) $key;
+					// A tender correction (#3647) prints its own signed line under the method.
+					$values['has_corrections'] = '' !== trim( (string) ( $values['corrections'] ?? '0' ), '-+0.' );
+					$values = $values['has_corrections'] ? $with_money( $values, array( 'corrections' ) ) : $values;
+					$row['has_corrections_line'] = $row['has_corrections_line'] || $values['has_corrections'];
 				}
 				$values['name'] = $values['name'] ?? $values['method'] ?? $values['rate'] ?? (string) $key;
 				$rows[] = $with_money( $values, $fields );

@@ -82,6 +82,7 @@ class Receipt_I18n_Labels {
 			'period_refunds' => __( 'Period refunds', 'woocommerce-pos' ),
 			'transactions' => __( 'Transactions', 'woocommerce-pos' ),
 			'refunds' => __( 'Refunds', 'woocommerce-pos' ),
+			'corrections' => __( 'Corrections', 'woocommerce-pos' ),
 			'payment_method' => __( 'Payment method', 'woocommerce-pos' ),
 			'cashiers' => __( 'Cashiers', 'woocommerce-pos' ),
 			'tax_rates' => __( 'Tax rates', 'woocommerce-pos' ),
