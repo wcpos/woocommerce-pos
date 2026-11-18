@@ -2182,25 +2182,37 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
-	/** A sweep whose late_sale insert fails keeps the correction parked; the next sweep writes it once. */
+	/** A sweep whose late_sale insert fails keeps the correction parked, quietly; the next sweep writes it once. */
 	public function test_correction_sweep_when_the_late_sale_insert_fails_keeps_the_entry_parked(): void {
 		// Arrange.
 		list( $order, $plus ) = $this->correction_turned_away();
 		$writers              = Fiscal_Record_Writers::instance();
 		$stuck                = static fn( $value, $old ) => $old;
+		$failed_notes         = fn() => count( array_filter( wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ), static fn( $note ) => false !== strpos( $note, 'could not be written' ) ) );
+		$notes_before         = $failed_notes();
+		$signals              = 0;
+		$observe              = static function () use ( &$signals ): void {
+			++$signals;
+		};
 
-		// Act: one sweep while the late_sale sequence cannot advance.
+		// Act: two sweeps while the late_sale sequence cannot advance.
 		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10, 2 );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
 		try {
+			$writers->retry( wc_get_order( $order->get_id() ) );
 			$writers->retry( wc_get_order( $order->get_id() ) );
 		} finally {
 			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10 );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
 		}
+		$notes_after = $failed_notes();
 		$parked = $this->parked_correction( $order->get_id(), $plus );
 		$failed = $this->late_sales( $order->get_id() );
 		$writers->retry( wc_get_order( $order->get_id() ) );
 
-		// Assert.
+		// Assert: the failing sweeps neither noted the order nor signalled a failure.
+		$this->assertSame( $notes_before, $notes_after );
+		$this->assertSame( 0, $signals );
 		$this->assertArrayHasKey( 'attempted_at', (array) $parked );
 		$this->assertSame( array(), $failed );
 		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );

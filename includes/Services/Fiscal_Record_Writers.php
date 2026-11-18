@@ -111,12 +111,17 @@ final class Fiscal_Record_Writers {
 	 *
 	 * @param WC_Order $order  Order the record describes.
 	 * @param array    $fields Record fields.
+	 * @param bool     $notify False from the sweep, which repeats: a failure is logged, with no note or action.
 	 */
-	private function write( WC_Order $order, array $fields ): bool {
+	private function write( WC_Order $order, array $fields, bool $notify = true ): bool {
 		if ( null !== $this->store->record( $fields ) ) {
 			return true;
 		}
 		$type = (string) ( $fields['type'] ?? '' );
+		if ( ! $notify ) {
+			Logger::log( sprintf( 'Fiscal %s record for order #%d (source %s) could not be written; the sweep retries.', $type, $order->get_id(), (string) ( $fields['source_id'] ?? '' ) ) );
+			return false;
+		}
 		/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
 		$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
 		/**
@@ -1057,6 +1062,13 @@ final class Fiscal_Record_Writers {
 					$context = array( 'source_id' => Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] ) );
 					do_action( 'wcpos_fiscal_record_failed', 'late_sale', $order, $context );
 					do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( 'late_sale', $order, $context ), '2.0.0', 'wcpos_fiscal_record_failed' );
+					$fresh = wc_get_order( $order->get_id() );
+					if ( $fresh instanceof WC_Order ) {
+						$fresh->read_meta_data( true );
+					}
+					if ( ! $fresh instanceof WC_Order || ! isset( self::parked( $fresh )[ strtolower( self::CORRECTION_PARK_PREFIX . $plus['id'] ) ] ) ) {
+						Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d could not be parked: the sweep will not find it.', $plus['id'], $order->get_id() ) );
+					}
 				}
 			}
 		} catch ( \Throwable $error ) {
@@ -1109,11 +1121,12 @@ final class Fiscal_Record_Writers {
 	 * @param array    $minus      R-.
 	 * @param array    $plus       R+.
 	 * @param string   $session_id Lowercase session id.
+	 * @param bool     $notify     Whether a failed write notes the order; see write().
 	 */
-	private function correct_under_locks( WC_Order $order, array $minus, array $plus, string $session_id ): bool {
+	private function correct_under_locks( WC_Order $order, array $minus, array $plus, string $session_id, bool $notify = true ): bool {
 		$done = false;
-		$work = function () use ( $order, $minus, $plus, $session_id, &$done ): void {
-			$done = $this->record_correction( $order, $minus, $plus, $session_id );
+		$work = function () use ( $order, $minus, $plus, $session_id, $notify, &$done ): void {
+			$done = $this->record_correction( $order, $minus, $plus, $session_id, $notify );
 		};
 		try {
 			$locked = $this->under_close_locks( $order->get_id(), $session_id, $work );
@@ -1137,6 +1150,9 @@ final class Fiscal_Record_Writers {
 		}
 		try {
 			$fresh = wc_get_order( $order_id );
+			if ( ! $fresh instanceof WC_Order ) {
+				return; // The finally releases the lock.
+			}
 			$fresh->read_meta_data( true );
 			$key    = strtolower( self::CORRECTION_PARK_PREFIX . $plus_id );
 			$parked = isset( self::parked( $fresh )[ $key ] );
@@ -1163,6 +1179,9 @@ final class Fiscal_Record_Writers {
 	 */
 	private function recover_corrections( WC_Order $order ): void {
 		$fresh = wc_get_order( $order->get_id() );
+		if ( ! $fresh instanceof WC_Order ) {
+			return;
+		}
 		$fresh->read_meta_data( true );
 		$ids = array_column( array_diff_key( self::parked( $fresh ), self::parked_sales( $fresh ) ), 'plus_id' );
 		foreach ( Ledger::instance()->read( $fresh ) as $row ) {
@@ -1175,7 +1194,7 @@ final class Fiscal_Record_Writers {
 				Logger::log( sprintf( 'Fiscal correction recovery for payment %s on order #%d found no correction to record.', $plus_id, $fresh->get_id() ) );
 			}
 			if ( is_array( $rows ) ) {
-				$this->correct_under_locks( $fresh, $rows[1], $rows[2], strtolower( (string) ( $rows[2]['session_id'] ?? '' ) ) );
+				$this->correct_under_locks( $fresh, $rows[1], $rows[2], strtolower( (string) ( $rows[2]['session_id'] ?? '' ) ), false );
 			} else {
 				$this->park_correction( $fresh->get_id(), $plus_id, null );
 			}
@@ -1188,8 +1207,9 @@ final class Fiscal_Record_Writers {
 	 * @param array    $minus      R-.
 	 * @param array    $plus       R+.
 	 * @param string   $session_id Lowercase session id.
+	 * @param bool     $notify     Whether a failed write notes the order; see write().
 	 */
-	private function record_correction( WC_Order $order, array $minus, array $plus, string $session_id ): bool {
+	private function record_correction( WC_Order $order, array $minus, array $plus, string $session_id, bool $notify = true ): bool {
 		$closure = ( new Closure_Store() )->for_session( $session_id );
 		if ( null === $closure ) {
 			return true; // The session is open: its close counts both legs as corrections.
@@ -1224,7 +1244,8 @@ final class Fiscal_Record_Writers {
 						'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
 					),
 				)
-			)
+			),
+			$notify
 		);
 	}
 
