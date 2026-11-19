@@ -618,7 +618,7 @@ class Error_Reporter {
 	 * @return string Masked path, or '' when there are no segments.
 	 */
 	private static function mask_path( string $path, bool $is_uri ): string {
-		$segments = array_values( array_filter( explode( '/', $path ), static function ( string $segment ): bool { return '' !== $segment; } ) );
+		$segments = array_values( array_diff( explode( '/', $path ), array( '' ) ) );
 		$masked   = array();
 		foreach ( $segments as $index => $segment ) {
 			$after_author = $is_uri && $index > 0 && 'author' === $segments[ $index - 1 ];
