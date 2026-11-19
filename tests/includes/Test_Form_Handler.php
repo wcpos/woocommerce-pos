@@ -643,6 +643,8 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	public function test_pay_action_guest_past_grace_period_reaches_woocommerce_before_pay_action(): void {
 		// Arrange.
 		$order = $this->create_pos_guest_order_past_grace_period();
+		$order->set_total( 50 ); // The helper order has a 0.00 total, so it would not need payment.
+		$order->save();
 		$this->arrange_pos_pay_post( $order );
 		wp_set_current_user( 0 );
 		$nonce                             = $this->mint_template_pay_nonce();
