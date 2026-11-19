@@ -881,7 +881,7 @@ PHP;
 		$this->enable_consent();
 		$had_route = isset( $GLOBALS['wp']->query_vars['rest_route'] );
 		$original  = $had_route ? $GLOBALS['wp']->query_vars['rest_route'] : null;
-		$GLOBALS['wp']->query_vars['rest_route'] = '/wcpos/v1/orders/123';
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wcpos/v2/orders/123';
 
 		// Act.
 		try {
@@ -896,7 +896,7 @@ PHP;
 
 		// Assert.
 		$this->assertCount( 1, $this->transport->events );
-		$this->assertSame( '/wcpos/v1/orders/{n}', $this->transport->events[0]->getTags()['rest_route'] ?? null );
+		$this->assertSame( '/wcpos/v2/orders/{n}', $this->transport->events[0]->getTags()['rest_route'] ?? null );
 	}
 
 	/**
