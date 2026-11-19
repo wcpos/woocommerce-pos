@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Logger;
 
 /**
@@ -26,6 +27,10 @@ final class Closure_Store {
 	 * real run of offline closes, narrow enough that a cashier cannot push the sequence
 	 * toward the 18-digit limit. */
 	private const MAX_NUMBER_JUMP = 10000;
+
+	/** The app's key for a tender key: tender_key() folds only pos_card into card, and the app
+	 * keys non-cash rows by gateway id (monorepo session-store.ts), so an appended row uses it. */
+	private const APP_TENDER_KEYS = array( 'card' => 'pos_card' );
 
 	/** Most CAST terms in one query. Long `+` chains overrun MariaDB's thread stack and can kill the server (#2590). */
 	private const SUM_CHUNK_SIZE = 100;
@@ -782,10 +787,13 @@ final class Closure_Store {
 						unset( $tenders[ $tender ] );
 					}
 				}
+				$gateways = $tenders ? Gateways::registered() : array();
 				foreach ( $tenders as $tender => $figure ) {
-					$methods[ $is_list ? count( $methods ) : $tender ] = array(
-						'method' => (string) $tender,
-						'name'   => $figure['name'],
+					$app_key = self::APP_TENDER_KEYS[ $tender ] ?? (string) $tender;
+					$name    = '' !== $figure['name'] ? $figure['name'] : ( isset( $gateways[ $app_key ] ) ? $gateways[ $app_key ]->get_title() : '' );
+					$methods[ $is_list ? count( $methods ) : $app_key ] = array(
+						'method' => $app_key,
+						'name'   => $name,
 					) + array_intersect_key( $figure, $gross );
 				}
 				$fields['breakdowns']['payment_methods'] = $methods;

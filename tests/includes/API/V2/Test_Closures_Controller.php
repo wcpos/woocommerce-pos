@@ -548,7 +548,7 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$data = array_combine( $csv[0], $csv[1] );
 		$this->assertSame( '-12.0000', $data['tender_cash_corrections'] );
-		$this->assertSame( '12.0000', $data['tender_card_corrections'] );
+		$this->assertSame( '12.0000', $data['tender_pos_card_corrections'] );
 	}
 
 	/** A reporting cashier does not own Settings. */

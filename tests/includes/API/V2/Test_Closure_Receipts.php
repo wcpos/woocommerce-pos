@@ -7,11 +7,13 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
@@ -1050,16 +1052,19 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 	 * @param array $data Closure document.
 	 */
 	private function methods( array $data ): array {
-		return array_column( $data['closure']['breakdowns']['payment_methods'], null, 'method' );
+		$rows = $data['closure']['breakdowns']['payment_methods'];
+		// A stored row the server appended carries the app's key (pos_card); the X-report's carries the tender key.
+		return array_combine( array_map( array( Session_Figures::class, 'tender_key' ), $rows ), $rows );
 	}
 
-	/** Render the shipped gallery closure.
+	/** Render a shipped gallery closure.
 	 *
-	 * @param array $data Closure document.
+	 * @param array  $data Closure document.
+	 * @param string $file Gallery template file name.
 	 */
-	private function gallery_html( array $data ): string {
+	private function gallery_html( array $data, string $file = 'closure-default.html' ): string {
 		ob_start();
-		( new Logicless_Renderer() )->render( array( 'content' => file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/closure-default.html' ) ), null, $data );
+		( new Logicless_Renderer() )->render( array( 'content' => file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ) ), null, $data );
 		return ob_get_clean();
 	}
 
@@ -1080,6 +1085,17 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 						'method' => 'pos_card',
 						'name' => 'Card',
 						'sales' => '12.0000',
+						'refunds' => '0.0000',
+					),
+				),
+			),
+			'cash to card, app sent no card row' => array(
+				'pos_cash',
+				'pos_card',
+				array(
+					'cash' => array(
+						'method' => 'cash',
+						'sales' => '0.0000',
 						'refunds' => '0.0000',
 					),
 				),
@@ -1130,9 +1146,10 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$methods = $store->get( $store->create( $fields )['id'] )['breakdowns']['payment_methods'];
 
 		// Assert.
+		// The app keys a card row by its gateway id, so a card row the server appends does too.
 		$keys = array(
 			'cash' => 'cash',
-			'card' => isset( $sent['pos_card'] ) ? 'pos_card' : 'card',
+			'card' => 'pos_card',
 		);
 		foreach ( $keys as $key => $stored ) {
 			foreach ( array( 'sales', 'refunds', 'corrections' ) as $field ) {
@@ -1144,10 +1161,14 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( '12.0000', '-12.0000' ), array( $methods[ $keys[ $from_key ] ]['sales'], $methods[ $keys[ $from_key ] ]['corrections'] ) );
 		$this->assertSame( array( '0.0000', '12.0000' ), array( $methods[ $keys[ $to_key ] ]['sales'], $methods[ $keys[ $to_key ] ]['corrections'] ) );
 		$this->assertSame( $cash_corrections, $methods['cash']['corrections'] );
-		$this->assertSame( $sent[ $keys[ $to_key ] ]['name'], $methods[ $keys[ $to_key ] ]['name'] );
-		if ( 'pos_card' === $keys['card'] ) {
-			$this->assertSame( 'pos_card', $methods['pos_card']['method'] );
-			$this->assertArrayNotHasKey( 'card', $methods );
+		$this->assertSame( 'pos_card', $methods['pos_card']['method'] );
+		$this->assertArrayNotHasKey( 'card', $methods );
+		// The app's name when it sent the row; else the registered pos_card gateway's title.
+		$card_name = $sent['pos_card']['name'] ?? Gateways::registered()['pos_card']->get_title();
+		$this->assertNotSame( '', $card_name );
+		$this->assertSame( $card_name, $methods['pos_card']['name'] );
+		if ( isset( $sent['cash']['name'] ) ) {
+			$this->assertSame( $sent['cash']['name'], $methods['cash']['name'] );
 		}
 		$this->assertArrayNotHasKey( 'corrections', $methods['pos_cheque'] );
 	}
@@ -1173,7 +1194,28 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( array( 0, 1 ), array_keys( $methods ) );
 		$this->assertSame( array( 'cash', '12.0000', '-12.0000' ), array( $methods[0]['method'], $methods[0]['sales'], $methods[0]['corrections'] ) );
-		$this->assertSame( array( 'card', '0.0000', '12.0000' ), array( $methods[1]['method'], $methods[1]['sales'], $methods[1]['corrections'] ) );
+		$this->assertSame( array( 'pos_card', '0.0000', '12.0000' ), array( $methods[1]['method'], $methods[1]['sales'], $methods[1]['corrections'] ) );
+	}
+
+	/** A list that already holds the app's pos_card row has it stamped in place, never a second card row. */
+	public function test_closure_create_with_list_payment_methods_stamps_the_app_card_row_in_place(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$this->corrected_sale( $session, 'pos_cash', 'pos_card' );
+		$fields = $this->closure_fields( $session );
+		$fields['breakdowns']['payment_methods'] = array(
+			array_combine( array( 'method', 'sales', 'refunds' ), array( 'cash', '0.0000', '0.0000' ) ),
+			array_combine( array( 'method', 'name', 'sales', 'refunds' ), array( 'pos_card', 'Card (app)', '12.0000', '0.0000' ) ),
+		);
+		$store = new Closure_Store();
+
+		// Act.
+		$methods = $store->get( $store->create( $fields )['id'] )['breakdowns']['payment_methods'];
+
+		// Assert.
+		$this->assertSame( array( 0, 1 ), array_keys( $methods ) );
+		$this->assertSame( array( 'pos_card', 'Card (app)', '0.0000', '12.0000' ), array( $methods[1]['method'], $methods[1]['name'], $methods[1]['sales'], $methods[1]['corrections'] ) );
+		$this->assertSame( array( 'cash', '12.0000', '-12.0000' ), array( $methods[0]['method'], $methods[0]['sales'], $methods[0]['corrections'] ) );
 	}
 
 	/** A session without a correction stores the client's payment methods as sent. */
@@ -1281,18 +1323,20 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringContainsString( '-', $display );
 		$this->assertSame( '0.0000', $this->methods( $plain_xreport )['cash']['corrections'] );
 		$this->assertFalse( $plain_xreport['closure']['has_corrections_line'] );
-		foreach ( array( $this->gallery_html( $plain_xreport ), $this->html( $plain_xreport ) ) as $html ) {
-			$this->assertStringNotContainsString( 'Corrections', $html );
-		}
-		$this->assertStringContainsString( 'Corrections', $this->gallery_html( $data ) );
-		$this->assertStringContainsString( esc_html( $display ), $this->gallery_html( $data ) );
+		$this->assertFalse( $plain_data['closure']['has_corrections_line'] );
 		$this->assertStringContainsString( 'Corrections', $this->html( $data ) );
 		$this->assertStringContainsString( '-12.0000', $this->html( $data ) );
-		$this->assertFalse( $plain_data['closure']['has_corrections_line'] );
-		foreach ( array( $this->gallery_html( $plain_data ), $this->html( $plain_data ) ) as $html ) {
+		foreach ( array( $this->html( $plain_xreport ), $this->html( $plain_data ) ) as $html ) {
 			$this->assertStringNotContainsString( 'Corrections', $html );
-			$this->assertStringNotContainsString( esc_html( $display ), $html );
 			$this->assertStringNotContainsString( '-12.0000', $html );
+		}
+		foreach ( array( 'closure-default.html', 'closure-detailed.html', 'thermal-closure-80mm.xml', 'thermal-closure-58mm.xml', 'thermal-closure-80mm-rtl.xml' ) as $file ) {
+			$this->assertStringContainsString( 'Corrections', $this->gallery_html( $data, $file ), $file );
+			$this->assertStringContainsString( esc_html( $display ), $this->gallery_html( $data, $file ), $file );
+			foreach ( array( $this->gallery_html( $plain_xreport, $file ), $this->gallery_html( $plain_data, $file ) ) as $html ) {
+				$this->assertStringNotContainsString( 'Corrections', $html, $file );
+				$this->assertStringNotContainsString( esc_html( $display ), $html, $file );
+			}
 		}
 	}
 }
