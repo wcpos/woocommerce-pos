@@ -2102,6 +2102,38 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
 	}
 
+	/** A last retry after the sweep already wrote the correction's late_sale adds no note and signals no failure. */
+	public function test_correction_final_retry_after_the_sweep_wrote_it_adds_no_note_and_no_signal(): void {
+		// Arrange: the sweep writes the turned-away correction.
+		list( $order, $plus, $session ) = $this->correction_turned_away();
+		Fiscal_Record_Writers::instance()->retry( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );
+		$max     = ( new \ReflectionClassConstant( Fiscal_Record_Writers::class, 'LATE_RETRY_MAX_ATTEMPTS' ) )->getValue();
+		$signals = 0;
+		$observe = static function () use ( &$signals ): void {
+			++$signals;
+		};
+		add_action( 'wcpos_fiscal_record_failed', $observe );
+
+		// Act: the last cron retry runs while a close holds the register.
+		try {
+			$this->with_register_held(
+				$session,
+				static function () use ( $order, $plus, $max ): void {
+					Fiscal_Record_Writers::instance()->retry_correction( $order->get_id(), $plus['id'], $max );
+				}
+			);
+		} finally {
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
+		}
+
+		// Assert.
+		$notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$this->assertSame( array(), array_values( array_filter( $notes, static fn( $note ) => false !== strpos( $note, 'could not be written' ) ) ) );
+		$this->assertSame( 0, $signals );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );
+	}
+
 	/** The sweep writes a parked correction's late_sale once and drops the entry. */
 	public function test_correction_sweep_writes_a_parked_correction_once_and_unparks_it(): void {
 		// Arrange.
@@ -2120,7 +2152,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 
 	/** A closed-session correction whose late_sale never ran, with nothing parked, is written once by the sweep. */
 	public function test_correction_sweep_without_a_park_writes_the_missing_late_sale_once(): void {
-		// Arrange: the writer is not listening, as when the request dies before the action.
+		// Arrange: the writer is not listening. The sweep is called directly here; a correction that was never
+		// parked is reached only when the sweep visits the order for another reason.
 		$session              = $this->closure_session();
 		list( $order, $card ) = $this->card_sale_in( $session );
 		( new Closure_Store() )->create( $this->closure_fields( $session ) );
@@ -2217,5 +2250,71 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $failed );
 		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** A correction whose sweep write throws stays parked and does not starve the order's next correction. */
+	public function test_correction_sweep_when_one_correction_throws_still_writes_the_next(): void {
+		// Arrange: two corrections on one order, both turned away by a held register.
+		list( $order, $first, $session ) = $this->correction_turned_away();
+		$second                          = null;
+		$this->with_register_held(
+			$session,
+			function () use ( $order, $first, &$second ): void {
+				$second = Ledger::instance()->correct( wc_get_order( $order->get_id() ), $first['id'], 'pos_card' );
+			}
+		);
+		$this->assertIsArray( $second );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', array( $order->get_id(), $second['id'], 2 ) );
+		$this->assertNotNull( $this->parked_correction( $order->get_id(), $second ) );
+		$writers = Fiscal_Record_Writers::instance();
+		$thrown  = false;
+		$once    = static function ( $value ) use ( &$thrown ) {
+			if ( ! $thrown ) {
+				$thrown = true;
+				throw new \LogicException( 'The first late_sale insert throws.' );
+			}
+			return $value;
+		};
+
+		// Act: one sweep whose first late_sale insert throws, then a clean one.
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $once );
+		try {
+			$writers->retry( wc_get_order( $order->get_id() ) );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $once );
+		}
+		$written = array( count( $this->correction_late_sales( $order->get_id(), $first ) ), count( $this->correction_late_sales( $order->get_id(), $second ) ) );
+		$stamped = $this->parked_correction( $order->get_id(), $written[0] ? $second : $first );
+		$writers->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert: the first sweep wrote one and kept the other parked; the second wrote the rest.
+		$this->assertTrue( $thrown );
+		$this->assertSame( 1, array_sum( $written ) );
+		$this->assertArrayHasKey( 'attempted_at', (array) $stamped );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $first ) );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $second ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** The sweep drops a parked entry whose correction is no longer in the ledger, and writes nothing. */
+	public function test_correction_sweep_unparks_an_entry_whose_correction_is_gone(): void {
+		// Arrange: an entry in park_correction()'s shape for an R+ the ledger never held.
+		$order   = $this->order();
+		$plus_id = wp_generate_uuid4();
+		$entry   = array(
+			'kind'       => 'tender_correction',
+			'plus_id'    => $plus_id,
+			'session_id' => strtolower( (string) $order->get_meta( '_wcpos_session', true ) ),
+		);
+		$order->update_meta_data( Fiscal_Record_Writers::PENDING_META_KEY, wp_json_encode( array( 'tender_correction:' . $plus_id => $entry ) ) );
+		$order->save();
+		$this->assertCount( 1, $this->parked( $order->get_id() ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
 	}
 }

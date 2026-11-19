@@ -277,7 +277,7 @@ final class Fiscal_Record_Writers {
 
 	/**
 	 * The orders the payments sweep retries, at most $limit, the batch shared by two passes
-	 * (SWEEP_PARKED_SHARE_PERCENT): orders holding a parked sale document, never-tried first, then by
+	 * (SWEEP_PARKED_SHARE_PERCENT): orders holding a parked entry (a sale document or a tender correction), never-tried first, then by
 	 * their last attempt, skipping any tried within $grace; and orders whose standing completion has no
 	 * sale record and nothing parked. A parked document that keeps failing so moves to the back.
 	 *
@@ -320,7 +320,8 @@ final class Fiscal_Record_Writers {
 	 * build the standing completion's sale record when it never landed (the request died between the
 	 * entry's save and `wcpos_sale_completed`, or the build threw), as record_sale() would have then.
 	 * The store is read first and record() replays by the completion id, so one completion never gets
-	 * two records; a reopened or legacy completion is never built.
+	 * two records; a reopened or legacy completion is never built. It ends by writing the order's owed
+	 * tender-correction late_sale records (recover_corrections()).
 	 *
 	 * @param WC_Order $order Order.
 	 */
@@ -1057,9 +1058,13 @@ final class Fiscal_Record_Writers {
 				Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d could not take the order and register locks.', $plus['id'], $order->get_id() ) );
 				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::CORRECTION_RETRY_HOOK, array( $order->get_id(), (string) $plus['id'], $attempt + 1 ) ) ) {
 					Logger::log( sprintf( 'Fiscal late check for payment correction %s on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $plus['id'], $order->get_id(), $attempt ) );
+					$context = array( 'source_id' => Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] ) );
+					if ( $this->store->find_by_source( 'late_sale', $context['source_id'] ) ) {
+						Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d was already written by the sweep.', $plus['id'], $order->get_id() ) );
+						return;
+					}
 					// Only the sweep retries it now (the parked entry selects the order): tell a human once.
 					$order->add_order_note( __( 'POS fiscal tender correction record could not be written; it will need recovery.', 'woocommerce-pos' ) );
-					$context = array( 'source_id' => Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] ) );
 					do_action( 'wcpos_fiscal_record_failed', 'late_sale', $order, $context );
 					do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( 'late_sale', $order, $context ), '2.0.0', 'wcpos_fiscal_record_failed' );
 					$fresh = wc_get_order( $order->get_id() );
@@ -1188,15 +1193,20 @@ final class Fiscal_Record_Writers {
 			$ids[] = 'captured' === ( $row['status'] ?? null ) && ! empty( $row['corrects'] ) ? (string) $row['id'] : null;
 		}
 		foreach ( array_filter( array_unique( $ids ) ) as $plus_id ) {
-			// False: recorded already. Null: R- is gone, and nothing is owed.
-			$rows = $this->store->find_by_source( 'late_sale', Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus_id ) ) ? false : self::correction_rows( $fresh, $plus_id );
-			if ( null === $rows ) {
-				Logger::log( sprintf( 'Fiscal correction recovery for payment %s on order #%d found no correction to record.', $plus_id, $fresh->get_id() ) );
-			}
-			if ( is_array( $rows ) ) {
-				$this->correct_under_locks( $fresh, $rows[1], $rows[2], strtolower( (string) ( $rows[2]['session_id'] ?? '' ) ), false );
-			} else {
-				$this->park_correction( $fresh->get_id(), $plus_id, null );
+			try {
+				// False: recorded already. Null: R- is gone, and nothing is owed.
+				$rows = $this->store->find_by_source( 'late_sale', Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus_id ) ) ? false : self::correction_rows( $fresh, $plus_id );
+				if ( null === $rows ) {
+					Logger::log( sprintf( 'Fiscal correction recovery for payment %s on order #%d found no correction to record.', $plus_id, $fresh->get_id() ) );
+				}
+				if ( is_array( $rows ) ) {
+					$this->correct_under_locks( $fresh, $rows[1], $rows[2], strtolower( (string) ( $rows[2]['session_id'] ?? '' ) ), false );
+				} else {
+					$this->park_correction( $fresh->get_id(), $plus_id, null );
+				}
+			} catch ( \Throwable $error ) {
+				// One failing correction must not starve the rest; correct_under_locks() kept it parked.
+				Logger::log( sprintf( 'Fiscal correction recovery for payment %s on order #%d failed: %s', $plus_id, $fresh->get_id(), $error->getMessage() ) );
 			}
 		}
 	}
