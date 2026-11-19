@@ -590,10 +590,9 @@ class Error_Reporter {
 			}
 			$tags['wp_queries'] = (string) did_action( 'pre_get_posts' );
 
-			foreach ( array( 'products' => 'get_pos_only_product_visibility_settings', 'variations' => 'get_pos_only_variations_visibility_settings' ) as $key => $getter ) {
-				$visibility                 = Settings::instance()->$getter();
-				$tags[ 'pos_only_' . $key ] = (string) \count( (array) ( $visibility['ids'] ?? array() ) );
-			}
+			$settings                    = Settings::instance();
+			$tags['pos_only_products']   = (string) \count( (array) ( $settings->get_pos_only_product_visibility_settings()['ids'] ?? array() ) );
+			$tags['pos_only_variations'] = (string) \count( (array) ( $settings->get_pos_only_variations_visibility_settings()['ids'] ?? array() ) );
 		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Keep what was collected; context must never cost the fatal report.
 		}
