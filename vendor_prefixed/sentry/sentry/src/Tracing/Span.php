@@ -4,6 +4,8 @@ declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Tracing;
 
 use WCPOS\Vendor\Sentry\EventId;
+use WCPOS\Vendor\Sentry\Profiling\ProfileChunk;
+use WCPOS\Vendor\Sentry\Profiling\Profiles;
 use WCPOS\Vendor\Sentry\SentrySdk;
 use WCPOS\Vendor\Sentry\State\Scope;
 use WCPOS\Vendor\Sentry\Unit;
@@ -97,6 +99,10 @@ class Span
      */
     public function __construct(?SpanContext $context = null)
     {
+        $profilerId = Profiles::getInstance()->continuousProfiler()->getProfilerId();
+        if ($profilerId !== null) {
+            $this->data = ['thread.id' => ProfileChunk::THREAD_ID, 'thread.name' => ProfileChunk::THREAD_NAME, 'profiler_id' => $profilerId];
+        }
         if ($context === null) {
             $this->traceId = TraceId::generate();
             $this->spanId = SpanId::generate();
@@ -112,7 +118,7 @@ class Span
         $this->status = $context->getStatus();
         $this->sampled = $context->getSampled();
         $this->tags = $context->getTags();
-        $this->data = $context->getData();
+        $this->data = $context->getData() + $this->data;
         $this->endTimestamp = $context->getEndTimestamp();
         $this->origin = $context->getOrigin();
     }
