@@ -541,6 +541,39 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A POS Only id added after pre_get_posts but before our posts_where is still excluded.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_pos_only_id_added_between_pre_get_posts_and_posts_where_is_excluded(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$new_id   = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		$changed = false;
+		add_filter(
+			'posts_where',
+			function ( $where ) use ( &$changed, $pos_only, $new_id ) {
+				if ( ! $changed ) {
+					$changed = true;
+					$this->set_pos_only_ids( array( $pos_only, $new_id ) );
+				}
+				return $where;
+			},
+			10
+		);
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args() );
+
+		// Assert.
+		$this->assertSame( array( $visible ), array_map( 'intval', $query->posts ) );
+	}
+
+	/**
 	 * Arguments for a storefront product id query.
 	 *
 	 * @param array $args Arguments that override the defaults.

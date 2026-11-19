@@ -48,9 +48,9 @@ class Products {
 	private $pos_only_exclusions = array();
 
 	/**
-	 * The last query hide_pos_only_products() wrote, with what it wrote.
+	 * The last post__not_in hide_pos_only_products() wrote, and the ids it merged in.
 	 *
-	 * @var array{query: \WP_Query, not_in: int[], ids: int[]}|null
+	 * @var array{not_in: int[], ids: int[]}|null
 	 */
 	private $last_applied = null;
 
@@ -203,7 +203,6 @@ class Products {
 		}
 		$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
 		$this->last_applied = array(
-			'query'  => $query,
 			'not_in' => $query->get( 'post__not_in' ),
 			'ids'    => $exclude_ids,
 		);
@@ -228,9 +227,9 @@ class Products {
 		}
 		if ( $this->should_hide_pos_only_products( $query ) ) {
 			$exclusion = $this->get_pos_only_excluded_ids( $query );
-			// hide_pos_only_products() wrote every one of these ids into this query's
-			// post__not_in, and nothing has changed it since, so no re-check is needed.
-			$applied = null !== $this->last_applied && $this->last_applied['query'] === $query
+			// The last post__not_in hide_pos_only_products() wrote holds every one of the ids it wrote; when
+			// this query still carries that array and the ids are unchanged, the re-check would find nothing.
+			$applied = null !== $this->last_applied
 				&& $this->last_applied['not_in'] === $query->get( 'post__not_in' )
 				&& $this->last_applied['ids'] === $exclusion['ids'];
 			if ( $query->get( 'p' ) || ! empty( $query->get( 'post__in' ) )
