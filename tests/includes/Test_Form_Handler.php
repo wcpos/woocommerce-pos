@@ -565,9 +565,9 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 				break;
 			case 'expired_token':
 				$expire = static fn( $expire, $issued_at ) => $issued_at - 1;
-				add_filter( 'wcpos_jwt_access_token_expire', $expire, 10, 2 );
+				add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire, 10, 2 );
 				$_GET['token'] = Auth::instance()->generate_access_token( get_user_by( 'id', $this->cashier ) );
-				remove_filter( 'wcpos_jwt_access_token_expire', $expire, 10 );
+				remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire, 10 );
 				break;
 			case 'wrong_order_key':
 				$_GET['key'] = 'wc_order_wrong';
