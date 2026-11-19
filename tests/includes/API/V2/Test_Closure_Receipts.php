@@ -1218,7 +1218,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array( 'cash', '12.0000', '-12.0000' ), array( $methods[0]['method'], $methods[0]['sales'], $methods[0]['corrections'] ) );
 	}
 
-	/** A session without a correction stores the client's payment methods as sent. */
+	/** A session without a correction stores the client's payment methods as sent, minus any client corrections. */
 	public function test_closure_create_without_tender_correction_keeps_payment_methods_as_sent(): void {
 		// Arrange.
 		$session = $this->closure_session();
@@ -1233,6 +1233,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 				'name' => 'Card',
 				'sales' => '30.0000',
 				'refunds' => '0.0000',
+				'corrections' => '5.0000',
 			),
 		);
 		$fields['breakdowns']['payment_methods'] = $sent;
@@ -1242,6 +1243,8 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$row = $store->get( $store->create( $fields )['id'] );
 
 		// Assert.
+		$this->assertArrayNotHasKey( 'corrections', $row['breakdowns']['payment_methods']['card'] );
+		unset( $sent['card']['corrections'] );
 		$this->assertSame( $sent, $row['breakdowns']['payment_methods'] );
 	}
 

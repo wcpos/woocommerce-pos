@@ -765,13 +765,14 @@ final class Closure_Store {
 			$figures = Session_Figures::for_session( $session );
 			$fields['expected'] = $figures->expected();
 			// A corrected tender (#3647) stores the session terms' gross sales, refunds and corrections in place
-			// of the app's net row, so the printed tender lines add up to expected. The server owns corrections.
+			// of the app's net row: each corrected tender's sales - refunds + corrections equals its expected
+			// (for cash, add the opening float and paid in/out). The server owns corrections.
 			$tenders = array_filter( $figures->payment_methods(), static fn( $tender ) => '0.0000' !== $tender['corrections'] );
 			$gross   = array_flip( array( 'sales', 'refunds', 'corrections' ) );
 			$methods = $fields['breakdowns']['payment_methods'] ?? null;
 			if ( $tenders || is_array( $methods ) ) {
 				$methods = is_array( $methods ) ? $methods : array();
-				// A list stays a list; the app's map keys a card row by gateway id (pos_card), matched by tender key.
+				// A non-empty list stays a list; the app's map keys a card row by gateway id (pos_card), matched by tender key.
 				$is_list = $methods && array_keys( $methods ) === range( 0, count( $methods ) - 1 );
 				foreach ( $methods as $key => $method ) {
 					if ( ! is_array( $method ) ) {
