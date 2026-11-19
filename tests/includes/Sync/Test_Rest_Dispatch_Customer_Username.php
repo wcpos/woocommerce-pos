@@ -3,12 +3,12 @@
  * Route-dispatch pins for the v2 customer-create username/password contract.
  *
  * The till never collects a username or password. WooCommerce ≥ 4.7 generates
- * both unconditionally in wc_create_new_customer() when they are empty —
- * neither woocommerce_registration_generate_username nor
- * woocommerce_registration_generate_password gates it anymore (the v1
- * controller's pre_option filters for these predate that and are vestigial).
- * These tests pin that contract on the v2 push lane so a WooCommerce behavior
- * change or a forward regression fails loudly instead of breaking tills.
+ * both in wc_create_new_customer() when they are empty, but the store options
+ * woocommerce_registration_generate_username / _password still mark the
+ * wc/v3 route's args as required, and WordPress refuses a missing required
+ * arg before the controller runs (POS-2QW). Customer_Writer lifts those flags
+ * for the till's own forward only. These tests pin that contract on the v2
+ * push lane, with the route re-registered after the options change.
  *
  * @package WCPOS\WooCommercePOS\Tests\Sync
  */
@@ -197,7 +197,7 @@ class Test_Rest_Dispatch_Customer_Username extends Sync_REST_Store_Test_Case {
 		$user = get_user_by( 'email', 'pos2qw.username@example.com' );
 		$this->assertNotFalse( $user );
 		$this->assertStringStartsWith( 'pos2qw', $user->user_login );
-		$this->assertNotSame( '', $user->user_pass );
+		$this->assertSame( '1', get_user_option( 'default_password_nag', $user->ID ), 'WooCommerce generated the password' );
 	}
 
 	/**
@@ -229,7 +229,7 @@ class Test_Rest_Dispatch_Customer_Username extends Sync_REST_Store_Test_Case {
 		$user = get_user_by( 'email', 'pos2qw.password@example.com' );
 		$this->assertNotFalse( $user );
 		$this->assertNotSame( '', $user->user_login );
-		$this->assertNotSame( '', $user->user_pass );
+		$this->assertSame( '1', get_user_option( 'default_password_nag', $user->ID ), 'WooCommerce generated the password' );
 	}
 
 	/**
