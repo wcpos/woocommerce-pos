@@ -56,6 +56,7 @@ class Test_Error_Reporter extends WP_UnitTestCase {
 		Error_Reporter::set_dev_override_for_testing( null );
 		Error_Reporter::reset_instance();
 		delete_transient( Error_Reporter::BACKOFF_TRANSIENT );
+		delete_option( 'woocommerce_pos_settings_visibility' );
 
 		$settings                     = (array) wcpos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'undecided';
@@ -780,6 +781,268 @@ PHP;
 
 		// Assert.
 		$this->assertSame( array(), $this->transport->events );
+	}
+
+	/**
+	 * A fatal event names the kind of request, its query counts and the POS Only list sizes.
+	 */
+	public function test_fatal_event_carries_request_context_tags(): void {
+		// Arrange.
+		$this->enable_consent();
+		$this->set_pos_only_ids( array( 11, 12, 13 ), array( 21, 22 ) );
+
+		// Act.
+		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+		$tags = $this->transport->events[0]->getTags();
+		$this->assertSame( 'frontend', $tags['request_kind'] ?? null );
+		$this->assertMatchesRegularExpression( '/^\d+$/', $tags['db_queries'] ?? '' );
+		$this->assertMatchesRegularExpression( '/^\d+$/', $tags['wp_queries'] ?? '' );
+		$this->assertSame( '3', $tags['pos_only_products'] ?? null );
+		$this->assertSame( '2', $tags['pos_only_variations'] ?? null );
+	}
+
+	/**
+	 * A fatal during WP-Cron is tagged as a cron request.
+	 */
+	public function test_fatal_event_request_kind_is_cron_while_doing_cron(): void {
+		// Arrange.
+		$this->enable_consent();
+		add_filter( 'wp_doing_cron', '__return_true' );
+
+		// Act.
+		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+
+		// Assert.
+		remove_filter( 'wp_doing_cron', '__return_true' );
+		$this->assertCount( 1, $this->transport->events );
+		$this->assertSame( 'cron', $this->transport->events[0]->getTags()['request_kind'] ?? null );
+	}
+
+	/**
+	 * The URI tag keeps the path only, with ids masked; the query string never leaves.
+	 */
+	public function test_fatal_event_uri_path_drops_query_string_and_masks_ids(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		$tags = $this->fatal_tags_for_uri( '/my-account/view-order/1234/?key=wc_order_abc&email=a%40b.test' );
+
+		// Assert.
+		$this->assertSame( '/my-account/view-order/{n}', $tags['uri_path'] ?? null );
+		foreach ( $tags as $key => $value ) {
+			foreach ( array( 'key=', 'wc_order_', '@', '%40', '1234' ) as $needle ) {
+				// The two counters are cast integers that cannot carry the URL, and
+				// across a long suite run they can contain the digits 1234 by chance.
+				if ( '1234' === $needle && \in_array( $key, array( 'db_queries', 'wp_queries' ), true ) ) {
+					continue;
+				}
+				$this->assertStringNotContainsString( $needle, (string) $value, $key );
+			}
+		}
+	}
+
+	/**
+	 * An author slug is masked and a long path is cut to four segments.
+	 */
+	public function test_fatal_event_uri_path_masks_author_and_caps_segments(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		$tags = $this->fatal_tags_for_uri( '/author/jane-doe/page/2/a/b' );
+
+		// Assert.
+		$this->assertSame( '/author/{s}/page/{n}/…', $tags['uri_path'] ?? null );
+	}
+
+	/**
+	 * The REST route tag masks resource ids.
+	 */
+	public function test_fatal_event_rest_route_is_masked(): void {
+		// Arrange.
+		$this->enable_consent();
+		$had_route = isset( $GLOBALS['wp']->query_vars['rest_route'] );
+		$original  = $had_route ? $GLOBALS['wp']->query_vars['rest_route'] : null;
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wcpos/v1/orders/123';
+
+		// Act.
+		try {
+			Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+		} finally {
+			if ( $had_route ) {
+				$GLOBALS['wp']->query_vars['rest_route'] = $original;
+			} else {
+				unset( $GLOBALS['wp']->query_vars['rest_route'] );
+			}
+		}
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+		$this->assertSame( '/wcpos/v1/orders/{n}', $this->transport->events[0]->getTags()['rest_route'] ?? null );
+	}
+
+	/**
+	 * The hook stack lists the running hooks, outermost first.
+	 */
+	public function test_fatal_event_hook_stack_names_the_running_hooks(): void {
+		// Arrange.
+		$this->enable_consent();
+		$report = function (): void {
+			Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+		};
+		$nest   = static function (): void {
+			do_action( 'wcpos_test_inner_7' );
+		};
+		$long_hook = 'woocommerce_rest_prepare_shop_order_object';
+		$wrap      = static function (): void {
+			do_action( 'wcpos_test_outer' );
+		};
+		// Its real listeners expect a REST response; WP restores them at tearDown.
+		remove_all_filters( $long_hook );
+		add_action( 'wcpos_test_inner_7', $report );
+		add_action( 'wcpos_test_outer', $nest );
+		add_action( $long_hook, $wrap );
+
+		// Act.
+		do_action( $long_hook ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- A long core hook name under test.
+
+		// Assert.
+		remove_action( 'wcpos_test_inner_7', $report );
+		remove_action( 'wcpos_test_outer', $nest );
+		remove_action( $long_hook, $wrap );
+		$this->assertCount( 1, $this->transport->events );
+		$hook_stack = $this->transport->events[0]->getTags()['hook_stack'] ?? '';
+		$this->assertStringEndsWith( 'wcpos_test_outer>wcpos_test_inner_{n}', $hook_stack );
+		$this->assertStringContainsString( $long_hook . '>', $hook_stack );
+	}
+
+	/**
+	 * A fatal inside an Action Scheduler action names that action's hook, and only while it runs.
+	 */
+	public function test_fatal_event_names_the_executing_action_scheduler_action(): void {
+		// Arrange.
+		$this->enable_consent();
+		$report = function (): void {
+			Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+		};
+		add_action( 'wcpos_test_as_hook', $report );
+
+		// Act: an action begins and finishes, then the same reporter sees a fatal
+		// under the same hook name. One reporter sends one fatal, so this runs first.
+		do_action( 'action_scheduler_begin_execute', 1, 'test' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Action Scheduler hook under test.
+		do_action( 'action_scheduler_after_execute', 1, null, 'test' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Action Scheduler hook under test.
+		do_action( 'wcpos_test_as_hook' );
+
+		// Act: a fresh reporter sees a fatal while the action runs.
+		Error_Reporter::reset_instance();
+		do_action( 'action_scheduler_begin_execute', 1, 'test' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Action Scheduler hook under test.
+		do_action( 'wcpos_test_as_hook' );
+
+		// Assert.
+		remove_action( 'wcpos_test_as_hook', $report );
+		$this->assertCount( 2, $this->transport->events );
+		$this->assertArrayNotHasKey( 'as_action', $this->transport->events[0]->getTags() );
+		$this->assertSame( 'wcpos_test_as_hook', $this->transport->events[1]->getTags()['as_action'] ?? null );
+	}
+
+	/**
+	 * The host can switch request context off; the fatal is still reported.
+	 */
+	public function test_request_context_filter_false_omits_context_tags(): void {
+		// Arrange.
+		$this->enable_consent();
+		add_filter( 'wcpos_error_reporting_request_context', '__return_false' );
+
+		// Act.
+		Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+
+		// Assert.
+		remove_filter( 'wcpos_error_reporting_request_context', '__return_false' );
+		$this->assertCount( 1, $this->transport->events );
+		$tags = $this->transport->events[0]->getTags();
+		$this->assertSame( array(), array_intersect( $this->request_context_keys(), array_keys( $tags ) ) );
+		$this->assertArrayHasKey( 'fatal_file', $tags );
+	}
+
+	/**
+	 * A non-fatal event carries no request context.
+	 */
+	public function test_non_fatal_event_carries_no_request_context_tags(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		Logger::error( 'boom' );
+
+		// Assert.
+		$this->assertCount( 1, $this->transport->events );
+		$tags = $this->transport->events[0]->getTags();
+		$this->assertSame( array(), array_intersect( $this->request_context_keys(), array_keys( $tags ) ) );
+	}
+
+	/**
+	 * The nine request context tag keys.
+	 *
+	 * @return string[]
+	 */
+	private function request_context_keys(): array {
+		return array( 'request_kind', 'rest_route', 'uri_path', 'hook_stack', 'as_action', 'db_queries', 'wp_queries', 'pos_only_products', 'pos_only_variations' );
+	}
+
+	/**
+	 * Report a fatal under a given REQUEST_URI and return the event's tags.
+	 *
+	 * @param string $uri Request URI to report under.
+	 *
+	 * @return array<string, string> Event tags.
+	 */
+	private function fatal_tags_for_uri( string $uri ): array {
+		$had_uri  = isset( $_SERVER['REQUEST_URI'] );
+		$original = $had_uri ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Restored verbatim below.
+		$_SERVER['REQUEST_URI'] = $uri;
+		try {
+			Error_Reporter::instance()->report_fatal( $this->fatal_error() );
+		} finally {
+			if ( $had_uri ) {
+				$_SERVER['REQUEST_URI'] = $original;
+			} else {
+				unset( $_SERVER['REQUEST_URI'] );
+			}
+		}
+
+		$this->assertCount( 1, $this->transport->events );
+
+		return $this->transport->events[0]->getTags();
+	}
+
+	/**
+	 * Store POS Only product and variation ids, as Test_Products_Query_Exclusion does.
+	 *
+	 * @param int[] $product_ids   POS Only product ids.
+	 * @param int[] $variation_ids POS Only variation ids.
+	 */
+	private function set_pos_only_ids( array $product_ids, array $variation_ids = array() ): void {
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products'   => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => $product_ids ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => $variation_ids ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+			)
+		);
 	}
 
 	/**
