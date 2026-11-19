@@ -457,6 +457,90 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A query for posts never asks whether to hide POS Only products.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_non_product_query_skips_pos_only_visibility_decision(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		$calls = 0;
+		add_filter(
+			'wcpos_hide_pos_only_products',
+			function ( $hide ) use ( &$calls ) {
+				++$calls;
+				return $hide;
+			}
+		);
+
+		// Act.
+		$query = new WP_Query( array( 'post_type' => 'post' ) );
+
+		// Assert.
+		$this->assertSame( 0, $calls );
+		$this->assertSame( 0, substr_count( $query->request, 'NOT IN (' ), $query->request );
+
+		// Act.
+		new WP_Query( $this->product_query_args() );
+
+		// Assert.
+		$this->assertGreaterThan( 0, $calls );
+	}
+
+	/**
+	 * A storefront product query carries the POS Only ids once and hides them.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_product_query_where_carries_pos_only_ids_once(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args() );
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$this->assertSame( 1, substr_count( $query->request, 'NOT IN (' ), $query->request );
+		$this->assertNotContains( $pos_only, $ids );
+		$this->assertContains( $visible, $ids );
+	}
+
+	/**
+	 * A POS Only id added between two queries is excluded from the second.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_skip_recheck_still_excludes_when_ids_change_between_queries(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$new_id   = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		$first = new WP_Query( $this->product_query_args() );
+
+		// Act.
+		$this->set_pos_only_ids( array( $pos_only, $new_id ) );
+		$second = new WP_Query( $this->product_query_args() );
+		$ids    = array_map( 'intval', $second->posts );
+
+		// Assert.
+		$this->assertContains( $new_id, array_map( 'intval', $first->posts ) );
+		$this->assertNotContains( $new_id, $ids );
+		$this->assertSame( array( $visible ), $ids );
+	}
+
+	/**
 	 * Arguments for a storefront product id query.
 	 *
 	 * @param array $args Arguments that override the defaults.
