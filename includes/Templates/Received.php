@@ -11,7 +11,13 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Payments\Contract\Declared_Fields;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_REST_Request;
 
@@ -121,10 +127,57 @@ class Received {
 				$order_complete = false;
 			}
 
+			// A send-declaring gateway run through the Legacy pay window leaves the order unpaid
+			// and redirects here. Write the awaiting-customer stamp the native Send path writes
+			// (descriptor spec §3.2 / §4.2), then post wcpos-payment-sent with the order JSON
+			// fetched after it. The check and both stages are one locked write, so reloads cannot
+			// double-stamp; the cashier is the order's _pos_user, not this request's user. Older
+			// apps ignore the action, which is what they did before.
+			$order_sent = false;
+			try {
+				if ( false !== $order_json && ! $order_complete && $this->is_legacy_send( $order ) ) {
+					$attempt_id = wp_generate_uuid4();
+					$written    = Ledger::instance()->write(
+						$order,
+						static function ( Ledger_Draft $draft ) use ( $attempt_id ): bool {
+							$sale = $draft->order();
+							if ( null !== Attempts::of( $sale )->awaiting() ) {
+								return false;
+							}
+							Attempts::open( $draft, $attempt_id, $sale->get_payment_method() );
+							$draft->attempt( $attempt_id, 'sent', array( 'cashier_id' => max( 0, (int) $sale->get_meta( '_pos_user' ) ) ) );
+							Attempts::await( $draft, $attempt_id, '' !== $sale->get_billing_email() ? $sale->get_billing_email() : null );
+							return true;
+						},
+						Ledger::MODE_HOLD
+					);
+					if ( true === $written->answer ) {
+						$order_json = $this->get_order_json( $order->get_id() );
+					}
+					$order_sent = false !== $order_json;
+				}
+			} catch ( \Throwable $e ) {
+				Logger::log( sprintf( 'Received order %d could not record the Legacy send: %s', $order->get_id(), $e->getMessage() ) );
+			}
+
 			include wcpos_locate_template( 'received.php' );
 			exit;
 		} catch ( Exception $e ) {
 			\wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Whether an unpaid POS order ran a gateway that declares a send verb.
+	 *
+	 * @param WC_Order $order The order.
+	 */
+	private function is_legacy_send( WC_Order $order ): bool {
+		if ( ! wcpos_is_pos_order( $order ) || $order->is_paid() || ! $order->has_status( array( 'pending', 'on-hold' ) ) ) {
+			return false;
+		}
+		$gateway = Descriptor_Builder::instance()->gateway( $order->get_payment_method() );
+		$fields  = null === $gateway ? null : Declared_Fields::for_gateway( $gateway );
+		return 'send' === ( $fields['verb']['kind'] ?? null );
 	}
 }

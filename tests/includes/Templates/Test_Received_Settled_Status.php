@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Templates\Received;
 use WC_Order;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -251,6 +252,59 @@ class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertStringContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
+	 * A send-declaring gateway run through the Legacy pay window leaves the order
+	 * pending: the page writes the awaiting-customer stamp once and posts it.
+	 */
+	public function test_send_declaring_gateway_pending_order_writes_awaiting_stamp_and_renders_sent_script(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+		$order = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+
+		try {
+			// Act: the second render is a reload.
+			$first  = $this->render_received( $order );
+			$second = $this->render_received( $order );
+		} finally {
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		foreach ( array( $first, $second ) as $output ) {
+			$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
+			$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+		}
+		$this->assertSame( 1, preg_match( '/var order = (.+);/', $first, $matches ) );
+		$payload = json_decode( $matches[1], true );
+		$this->assertSame( $order->get_id(), $payload['id'] );
+		$this->assertContains( Attempts::META_KEY, array_column( $payload['meta_data'], 'key' ) );
+		$fresh    = wc_get_order( $order->get_id() );
+		$awaiting = Attempts::of( $fresh )->awaiting();
+		$this->assertSame( 'bacs', $awaiting['method_id'] );
+		$this->assertSame( 'customer@example.com', $awaiting['destination'] );
+		$this->assertSame( $cashier_id, $awaiting['cashier_id'] );
+		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
+		$this->assertSame( 'pending', $fresh->get_status() );
 	}
 
 	/**
