@@ -891,11 +891,11 @@ final class Order_Write_Payload {
 			)
 		);
 
-		// POS-2RT: a re-pushed line naming a stored quick discount's code with no intent of
-		// its own (the keyed meta entry dropped or sent keyless) inherits the stored intent,
-		// so an unchanged set still matches and a changed one forwards a line the writer can
-		// register. A line carrying its own intent, valid or not, is never touched; a stored
-		// item without intent (a real store coupon) lends nothing.
+		// POS-2RT: a re-pushed line naming a stored quick discount's code without its keyed
+		// intent inherits the stored one, so an unchanged set matches and a changed one can be
+		// registered. A line with its own intent, or showing another one (type fields or a
+		// keyless value that differ: an edit, not a drop), is left to fail as before; a real
+		// store coupon lends nothing.
 		$stored_intents = array();
 		foreach ( $order->get_coupons() as $coupon ) {
 			$intent = Quick_Discount::intent_from_item( $coupon );
@@ -904,17 +904,25 @@ final class Order_Write_Payload {
 			}
 		}
 		foreach ( $payload['coupon_lines'] as $i => $line ) {
-			$code = is_array( $line ) ? ( $line['code'] ?? null ) : null;
-			if ( ! is_string( $code ) || ! is_array( $line['meta_data'] ?? array() ) || null !== Quick_Discount::intent_from_line( $line ) ) {
+			$code   = is_array( $line ) ? ( $line['code'] ?? null ) : null;
+			$intent = is_string( $code ) ? ( $stored_intents[ Quick_Discount::set_key( $code, null ) ] ?? null ) : null;
+			if ( null === $intent || ! is_array( $line['meta_data'] ?? array() ) || null !== Quick_Discount::intent_from_line( $line )
+				|| ( isset( $line['discount_type'] ) && $intent['discount_type'] !== $line['discount_type'] )
+				|| ( isset( $line['nominal_amount'] ) && (float) $intent['amount'] !== (float) $line['nominal_amount'] ) ) {
 				continue;
 			}
-			$key = Quick_Discount::set_key( $code, null );
-			if ( array_key_exists( $key, $stored_intents ) ) {
-				$payload['coupon_lines'][ $i ]['meta_data'][] = array(
-					'key'   => Quick_Discount::META_KEY,
-					'value' => $stored_intents[ $key ],
-				);
+			foreach ( $line['meta_data'] ?? array() as $entry ) {
+				$value = Meta_Entry::value( $entry );
+				$value = is_string( $value ) ? json_decode( $value, true ) : $value;
+				if ( is_array( $value ) && isset( $value['discount_type'] )
+					&& ( $intent['discount_type'] !== $value['discount_type'] || (float) ( $value['amount'] ?? 0 ) !== (float) $intent['amount'] ) ) {
+					continue 2;
+				}
 			}
+			$payload['coupon_lines'][ $i ]['meta_data'][] = array(
+				'key'   => Quick_Discount::META_KEY,
+				'value' => $intent,
+			);
 		}
 
 		$requested_codes = array();
