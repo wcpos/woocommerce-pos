@@ -633,6 +633,119 @@ class Test_Rest_Dispatch_Quick_Discount extends Sync_REST_Store_Test_Case {
 		$this->assert_repush_keeps_quick_discount( $order, $line );
 	}
 
+	/** POS-2RT: a posted line with its own intent wins over the stored one. */
+	public function test_v2_repush_with_own_different_intent_updates_discount(): void {
+		// Arrange
+		$order = $this->created_order( 'v2', $this->payload( array( $this->quick_line() ) ) );
+		$line = $this->quick_line( 'fixed_cart', '5' );
+		$line['id'] = $this->single_coupon( $order )->get_id();
+
+		// Act
+		$response = $this->write_order( 'v2', array( 'coupon_lines' => array( $line ) ), $order->get_id() );
+
+		// Assert
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( $order->get_id() );
+		$this->assert_money( $order, '115.00', '19.17', '4.17' );
+		$this->assert_saved_intent( $order, 'fixed_cart', '5' );
+		$this->assert_unscoped();
+	}
+
+	/** POS-2RT: inheriting the stored intent never changes it, the line id or the amount. */
+	public function test_v2_repeated_inherited_repush_keeps_stored_intent_exactly(): void {
+		// Arrange
+		$order = $this->created_order( 'v2', $this->payload( array( $this->quick_line() ) ) );
+		$id = $this->single_coupon( $order )->get_id();
+		$line = array(
+			'id' => $id,
+			'code' => 'pos-discount',
+		);
+
+		foreach ( array( 'first', 'second' ) as $note ) {
+			// Act
+			$response = $this->write_order(
+				'v2',
+				array(
+					'customer_note' => $note,
+					'coupon_lines' => array( $line ),
+				),
+				$order->get_id()
+			);
+
+			// Assert
+			$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			$order = wc_get_order( $order->get_id() );
+			$this->assertSame( $id, $this->single_coupon( $order )->get_id() );
+			$this->assertCount( 1, $this->single_coupon( $order )->get_meta( '_wcpos_quick_discount', false ) );
+			$this->assert_money( $order, '110.00', '18.33', '8.33' );
+			$this->assert_saved_intent( $order, 'fixed_cart', '10' );
+		}
+		$this->assert_unscoped();
+	}
+
+	/** POS-2RT: only the stored code inherits; another unknown code fails exactly as before. */
+	public function test_v2_repush_other_code_without_intent_does_not_inherit(): void {
+		// Arrange
+		$order = $this->created_order( 'v2', $this->payload( array( $this->quick_line() ) ) );
+		$line = $this->quick_line();
+		$line['id'] = $this->single_coupon( $order )->get_id();
+		$coupon_lines = array( $line, array( 'code' => 'other-code' ) );
+
+		// Act
+		$response = $this->write_order( 'v2', array( 'coupon_lines' => $coupon_lines ), $order->get_id() );
+
+		// Assert
+		$this->assertSame( 400, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'woocommerce_rest_invalid_coupon', $response->get_data()['code'] );
+		$this->assertStringContainsString( 'other-code', $response->get_data()['message'] );
+		$this->assertFalse( ( new WC_Coupon( 'other-code' ) )->get_virtual() );
+		$this->assert_unscoped();
+	}
+
+	/** POS-2RT: a real store coupon beside the quick discount lends no intent and keeps its totals. */
+	public function test_v2_repush_with_real_coupon_and_dropped_intent_keeps_both(): void {
+		// Arrange
+		update_option( 'woocommerce_prices_include_tax', 'no' );
+		$real = new WC_Coupon();
+		$real->set_code( 'real-percent' );
+		$real->set_discount_type( 'percent' );
+		$real->set_amount( '10' );
+		$real->save();
+		$order = $this->created_order( 'v2', $this->payload( array( array( 'code' => 'real-percent' ), $this->quick_line() ), '100' ) );
+		$coupon_lines = array();
+		foreach ( $order->get_coupons() as $item ) {
+			$coupon_lines[] = array(
+				'id' => $item->get_id(),
+				'code' => $item->get_code(),
+			);
+		}
+
+		// Act
+		$response = $this->write_order( 'v2', array( 'coupon_lines' => $coupon_lines ), $order->get_id() );
+
+		// Assert
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( '96.00', $order->get_total() );
+		$this->assertSame( '16.00', wc_format_decimal( $order->get_total_tax(), 2 ) );
+		$items = array();
+		foreach ( $order->get_coupons() as $item ) {
+			$items[ $item->get_code() ] = $item;
+		}
+		$this->assertCount( 2, $items );
+		$this->assertSame( '10.00', wc_format_decimal( $items['real-percent']->get_discount(), 2 ) );
+		$this->assertSame( '', $items['real-percent']->get_meta( '_wcpos_quick_discount', true ) );
+		$this->assertSame( '10.00', wc_format_decimal( $items['pos-discount']->get_discount(), 2 ) );
+		$this->assertSame(
+			array(
+				'discount_type' => 'fixed_cart',
+				'amount' => '10',
+			),
+			$items['pos-discount']->get_meta( '_wcpos_quick_discount', true )
+		);
+		$this->assert_unscoped();
+	}
+
 	public function test_registry_is_code_scoped_unrestricted_and_clear_is_idempotent(): void {
 		$qd = new Quick_Discount();
 		try {

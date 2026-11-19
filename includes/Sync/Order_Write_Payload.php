@@ -891,6 +891,32 @@ final class Order_Write_Payload {
 			)
 		);
 
+		// POS-2RT: a re-pushed line naming a stored quick discount's code with no intent of
+		// its own (the keyed meta entry dropped or sent keyless) inherits the stored intent,
+		// so an unchanged set still matches and a changed one forwards a line the writer can
+		// register. A line carrying its own intent, valid or not, is never touched; a stored
+		// item without intent (a real store coupon) lends nothing.
+		$stored_intents = array();
+		foreach ( $order->get_coupons() as $coupon ) {
+			$intent = Quick_Discount::intent_from_item( $coupon );
+			if ( null !== $intent ) {
+				$stored_intents[ Quick_Discount::set_key( $coupon->get_code(), null ) ] = $intent;
+			}
+		}
+		foreach ( $payload['coupon_lines'] as $i => $line ) {
+			$code = is_array( $line ) ? ( $line['code'] ?? null ) : null;
+			if ( ! is_string( $code ) || ! is_array( $line['meta_data'] ?? array() ) || null !== Quick_Discount::intent_from_line( $line ) ) {
+				continue;
+			}
+			$key = Quick_Discount::set_key( $code, null );
+			if ( array_key_exists( $key, $stored_intents ) ) {
+				$payload['coupon_lines'][ $i ]['meta_data'][] = array(
+					'key'   => Quick_Discount::META_KEY,
+					'value' => $stored_intents[ $key ],
+				);
+			}
+		}
+
 		$requested_codes = array();
 		$all_lines_valid = true;
 		foreach ( $payload['coupon_lines'] as $line ) {
