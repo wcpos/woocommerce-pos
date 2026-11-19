@@ -860,6 +860,20 @@ PHP;
 	}
 
 	/**
+	 * A token-like segment (16+ characters with a digit) is masked whole, letters included.
+	 */
+	public function test_fatal_event_uri_path_masks_token_like_segment(): void {
+		// Arrange.
+		$this->enable_consent();
+
+		// Act.
+		$tags = $this->fatal_tags_for_uri( '/checkout/order-pay/abc123def456ghi7/' );
+
+		// Assert.
+		$this->assertSame( '/checkout/order-pay/{s}', $tags['uri_path'] ?? null );
+	}
+
+	/**
 	 * The REST route tag masks resource ids.
 	 */
 	public function test_fatal_event_rest_route_is_masked(): void {

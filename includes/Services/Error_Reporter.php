@@ -634,9 +634,9 @@ class Error_Reporter {
 	/**
 	 * Mask one path segment or hook name so no id, email or token leaves the site.
 	 *
-	 * A segment with `@` or `%`, or longer than `$max_length` characters, becomes
-	 * `{s}`. Every digit run becomes `{n}`, except an API version segment such
-	 * as `v1`. Hook names pass 64: they are code identifiers, not URL text.
+	 * `{s}` for `@`, `%`, over-length, or 16+ characters with a digit (URL
+	 * segments only; hook names pass 64 as code identifiers). Every digit run
+	 * becomes `{n}`, except an API version segment such as `v1`.
 	 *
 	 * @param string $segment    Raw segment.
 	 * @param int    $max_length Longest segment kept, in bytes.
@@ -644,7 +644,7 @@ class Error_Reporter {
 	 * @return string Masked segment.
 	 */
 	private static function mask_segment( string $segment, int $max_length = 32 ): string {
-		if ( preg_match( '/[@%]/', $segment ) || \strlen( $segment ) > $max_length ) {
+		if ( preg_match( '/[@%]/', $segment ) || \strlen( $segment ) > $max_length || ( $max_length <= 32 && \strlen( $segment ) >= 16 && preg_match( '/\d/', $segment ) ) ) {
 			return '{s}';
 		}
 		if ( preg_match( '/^v\d{1,2}$/', $segment ) ) {
