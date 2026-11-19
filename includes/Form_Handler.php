@@ -223,13 +223,13 @@ class Form_Handler {
 	 * Lift WooCommerce's order-pay email verification (WC 11.3.1+) for the one
 	 * order an authenticated POS pay POST is paying; see pay_action().
 	 *
-	 * @param bool      $required Whether WooCommerce requires email verification.
-	 * @param \WC_Order $order    The order being checked.
-	 * @param string    $context  The verification context.
+	 * @param bool           $required Whether WooCommerce requires email verification.
+	 * @param \WC_Order|null $order    The order being checked, or null when a caller passes none.
+	 * @param string         $context  The verification context, or '' when a caller passes none.
 	 *
 	 * @return bool
 	 */
-	public function lift_order_pay_email_verification( $required, $order, $context ) {
+	public function lift_order_pay_email_verification( $required, $order = null, $context = '' ) {
 		if ( 'order-pay' === $context && $order instanceof \WC_Order && $this->pay_order_id === $order->get_id() ) {
 			return false;
 		}
