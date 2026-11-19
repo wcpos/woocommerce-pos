@@ -61,6 +61,9 @@ foreach ( array(
 			foreach ( array_slice( $columns, 1, null, true ) as $field => $label ) :
 				?>
 			<td><?php echo esc_html( $row[ $field ] ?? '' ); ?></td><?php endforeach; ?></tr>
+			<?php if ( ! empty( $row['has_corrections'] ) ) : ?>
+		<tr><td><?php esc_html_e( 'Corrections', 'woocommerce-pos' ); ?></td><td><?php echo esc_html( $row['corrections'] ); ?></td><td></td></tr>
+			<?php endif; ?>
 		<?php endforeach; ?>
 	</tbody></table>
 	<?php endif; ?>

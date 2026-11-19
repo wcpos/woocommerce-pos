@@ -7,13 +7,17 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+use WCPOS\WooCommercePOS\Gateways;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
+use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
@@ -1010,6 +1014,331 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 				}
 			} finally {
 				remove_filter( Store_Reach::FILTER, $filter );
+			}
+		}
+	}
+
+	/** A 12.00 POS sale in the session, its tender then corrected (#3647).
+	 *
+	 * @param array  $session Session row.
+	 * @param string $from Method the sale was taken on.
+	 * @param string $to Method it is corrected to.
+	 */
+	private function corrected_sale( array $session, string $from, string $to ): void {
+		$order = new \WC_Order();
+		$order->set_created_via( 'woocommerce-pos' );
+		// Not in progress, so correctable; not completed, so no fiscal sale outlives Closure_Store's transaction.
+		$order->set_status( 'on-hold' );
+		$order->set_total( '12' );
+		$order->save();
+		$id = wp_generate_uuid4();
+		$row = array(
+			'id' => $id,
+			'method_id' => $from,
+			'kind' => 'pos_cash' === $from ? 'cash' : 'card',
+			'capture_mode' => 'manual',
+			'source' => 'app',
+			'amount' => '12.00',
+			'currency' => 'USD',
+			'status' => 'captured',
+			'session_id' => $session['id'],
+		);
+		Ledger_Seed::rows( $order, array( $row ), false );
+		$this->assertIsArray( Ledger::instance()->correct( wc_get_order( $order->get_id() ), $id, $to ) );
+	}
+
+	/** Index the document's payment-method rows by tender key.
+	 *
+	 * @param array $data Closure document.
+	 */
+	private function methods( array $data ): array {
+		$rows = $data['closure']['breakdowns']['payment_methods'];
+		// A stored row the server appended carries the app's key (pos_card); the X-report's carries the tender key.
+		return array_combine( array_map( array( Session_Figures::class, 'tender_key' ), $rows ), $rows );
+	}
+
+	/** Render a shipped gallery closure.
+	 *
+	 * @param array  $data Closure document.
+	 * @param string $file Gallery template file name.
+	 */
+	private function gallery_html( array $data, string $file = 'closure-default.html' ): string {
+		ob_start();
+		( new Logicless_Renderer() )->render( array( 'content' => file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ) ), null, $data );
+		return ob_get_clean();
+	}
+
+	/** Tender corrections in both directions, with the app's net-form rows. */
+	public function tender_correction_provider(): array {
+		return array(
+			'cash to card' => array(
+				'pos_cash',
+				'pos_card',
+				array(
+					'cash' => array(
+						'method' => 'cash',
+						'sales' => '0.0000',
+						'refunds' => '0.0000',
+					),
+					// The app keys a card row by its gateway id, not the tender key.
+					'pos_card' => array(
+						'method' => 'pos_card',
+						'name' => 'Card',
+						'sales' => '12.0000',
+						'refunds' => '0.0000',
+					),
+				),
+			),
+			'cash to card, app sent no card row' => array(
+				'pos_cash',
+				'pos_card',
+				array(
+					'cash' => array(
+						'method' => 'cash',
+						'sales' => '0.0000',
+						'refunds' => '0.0000',
+					),
+				),
+			),
+			'card to cash' => array(
+				'pos_card',
+				'pos_cash',
+				array(
+					'cash' => array(
+						'method' => 'cash',
+						'name' => 'Cash',
+						'sales' => '12.0000',
+						'refunds' => '0.0000',
+					),
+				),
+			),
+		);
+	}
+
+	/**
+	 * The stored closure's tender rows agree with the session terms (gross form), and the server owns corrections.
+	 *
+	 * @dataProvider tender_correction_provider
+	 *
+	 * @param string $from Method the sale was taken on.
+	 * @param string $to Method it is corrected to.
+	 * @param array  $sent The app's net-form payment methods.
+	 */
+	public function test_closure_create_with_tender_correction_stores_session_terms_per_method( string $from, string $to, array $sent ): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$this->corrected_sale( $session, $from, $to );
+		$figures = \WCPOS\WooCommercePOS\Services\Session_Figures::for_session( $session );
+		$terms = $figures->payment_methods();
+		$cash_corrections = $figures->terms()['cash_corrections'];
+		$fields = $this->closure_fields( $session );
+		$fields['breakdowns']['payment_methods'] = $sent + array(
+			'pos_cheque' => array(
+				'method' => 'pos_cheque',
+				'sales' => '0.0000',
+				'refunds' => '0.0000',
+				'corrections' => '5.0000',
+			),
+		);
+		$store = new Closure_Store();
+
+		// Act.
+		$methods = $store->get( $store->create( $fields )['id'] )['breakdowns']['payment_methods'];
+
+		// Assert.
+		// The app keys a card row by its gateway id, so a card row the server appends does too.
+		$keys = array(
+			'cash' => 'cash',
+			'card' => 'pos_card',
+		);
+		foreach ( $keys as $key => $stored ) {
+			foreach ( array( 'sales', 'refunds', 'corrections' ) as $field ) {
+				$this->assertSame( $terms[ $key ][ $field ], $methods[ $stored ][ $field ], $key . ' ' . $field );
+			}
+		}
+		$from_key = 'pos_cash' === $from ? 'cash' : 'card';
+		$to_key = 'cash' === $from_key ? 'card' : 'cash';
+		$this->assertSame( array( '12.0000', '-12.0000' ), array( $methods[ $keys[ $from_key ] ]['sales'], $methods[ $keys[ $from_key ] ]['corrections'] ) );
+		$this->assertSame( array( '0.0000', '12.0000' ), array( $methods[ $keys[ $to_key ] ]['sales'], $methods[ $keys[ $to_key ] ]['corrections'] ) );
+		$this->assertSame( $cash_corrections, $methods['cash']['corrections'] );
+		$this->assertSame( 'pos_card', $methods['pos_card']['method'] );
+		$this->assertArrayNotHasKey( 'card', $methods );
+		// The app's name when it sent the row; else the registered pos_card gateway's title.
+		$card_name = $sent['pos_card']['name'] ?? Gateways::registered()['pos_card']->get_title();
+		$this->assertNotSame( '', $card_name );
+		$this->assertSame( $card_name, $methods['pos_card']['name'] );
+		if ( isset( $sent['cash']['name'] ) ) {
+			$this->assertSame( $sent['cash']['name'], $methods['cash']['name'] );
+		}
+		$this->assertArrayNotHasKey( 'corrections', $methods['pos_cheque'] );
+	}
+
+	/** A list-shaped payment_methods stays a list: the corrected tender the app did not send is appended. */
+	public function test_closure_create_with_list_payment_methods_appends_corrected_tender(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$this->corrected_sale( $session, 'pos_cash', 'pos_card' );
+		$fields = $this->closure_fields( $session );
+		$fields['breakdowns']['payment_methods'] = array(
+			array(
+				'method' => 'cash',
+				'sales' => '0.0000',
+				'refunds' => '0.0000',
+			),
+		);
+		$store = new Closure_Store();
+
+		// Act.
+		$methods = $store->get( $store->create( $fields )['id'] )['breakdowns']['payment_methods'];
+
+		// Assert.
+		$this->assertSame( array( 0, 1 ), array_keys( $methods ) );
+		$this->assertSame( array( 'cash', '12.0000', '-12.0000' ), array( $methods[0]['method'], $methods[0]['sales'], $methods[0]['corrections'] ) );
+		$this->assertSame( array( 'pos_card', '0.0000', '12.0000' ), array( $methods[1]['method'], $methods[1]['sales'], $methods[1]['corrections'] ) );
+	}
+
+	/** A list that already holds the app's pos_card row has it stamped in place, never a second card row. */
+	public function test_closure_create_with_list_payment_methods_stamps_the_app_card_row_in_place(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$this->corrected_sale( $session, 'pos_cash', 'pos_card' );
+		$fields = $this->closure_fields( $session );
+		$fields['breakdowns']['payment_methods'] = array(
+			array_combine( array( 'method', 'sales', 'refunds' ), array( 'cash', '0.0000', '0.0000' ) ),
+			array_combine( array( 'method', 'name', 'sales', 'refunds' ), array( 'pos_card', 'Card (app)', '12.0000', '0.0000' ) ),
+		);
+		$store = new Closure_Store();
+
+		// Act.
+		$methods = $store->get( $store->create( $fields )['id'] )['breakdowns']['payment_methods'];
+
+		// Assert.
+		$this->assertSame( array( 0, 1 ), array_keys( $methods ) );
+		$this->assertSame( array( 'pos_card', 'Card (app)', '0.0000', '12.0000' ), array( $methods[1]['method'], $methods[1]['name'], $methods[1]['sales'], $methods[1]['corrections'] ) );
+		$this->assertSame( array( 'cash', '12.0000', '-12.0000' ), array( $methods[0]['method'], $methods[0]['sales'], $methods[0]['corrections'] ) );
+	}
+
+	/** A session without a correction stores the client's payment methods as sent, minus any client corrections. */
+	public function test_closure_create_without_tender_correction_keeps_payment_methods_as_sent(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$this->closure_ledger( $session );
+		$fields = $this->closure_fields( $session );
+		$sent = array(
+			'cash' => array(
+				'sales' => '50.0000',
+				'refunds' => '10.0000',
+			),
+			'card' => array(
+				'name' => 'Card',
+				'sales' => '30.0000',
+				'refunds' => '0.0000',
+				'corrections' => '5.0000',
+			),
+		);
+		$fields['breakdowns']['payment_methods'] = $sent;
+		$store = new Closure_Store();
+
+		// Act.
+		$row = $store->get( $store->create( $fields )['id'] );
+
+		// Assert.
+		$this->assertArrayNotHasKey( 'corrections', $row['breakdowns']['payment_methods']['card'] );
+		unset( $sent['card']['corrections'] );
+		$this->assertSame( $sent, $row['breakdowns']['payment_methods'] );
+	}
+
+	/** Each tender's printed lines add up to its expected figure, live and stored. */
+	public function test_closure_document_with_tender_correction_adds_up_to_expected(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$this->corrected_sale( $session, 'pos_card', 'pos_cash' );
+		$fields = $this->closure_fields( $session );
+		$fields['breakdowns']['opening_float'] = array(
+			'expected' => '100.0000',
+			'counted' => '100.0000',
+			'variance' => '0.0000',
+		);
+		// The app's net form: the corrected sale shows under cash only.
+		$fields['breakdowns']['payment_methods'] = array(
+			'cash' => array(
+				'sales' => '12.0000',
+				'refunds' => '0.0000',
+			),
+		);
+		$store = new Closure_Store();
+		$builder = new Receipt_Data_Builder();
+
+		// Act.
+		$documents = array(
+			'xreport' => $builder->build_closure_document( $session, true ),
+			'closure' => $builder->build_closure_document( $store->get( $store->create( $fields )['id'] ) ),
+		);
+
+		// Assert.
+		foreach ( $documents as $label => $data ) {
+			$methods = $this->methods( $data );
+			$cash = array( $data['closure']['breakdowns']['opening_float']['counted'], $methods['cash']['sales'], '-' . $methods['cash']['refunds'], $methods['cash']['corrections'] );
+			foreach ( $data['closure']['breakdowns']['movements'] as $movement ) {
+				if ( empty( $movement['voided_by'] ) && in_array( $movement['type'], array( 'paid_in', 'paid_out' ), true ) ) {
+					$cash[] = ( 'paid_out' === $movement['type'] ? '-' : '' ) . $movement['amount'];
+				}
+			}
+			$this->assertSame( '112.0000', $data['closure']['expected']['cash'], $label );
+			$this->assertSame( $data['closure']['expected']['cash'], Closure_Store::sum( $cash ), $label );
+			$this->assertSame( $data['closure']['expected']['card'], Closure_Store::sum( array( $methods['card']['sales'], '-' . $methods['card']['refunds'], $methods['card']['corrections'] ) ), $label );
+			$this->assertTrue( $methods['cash']['has_corrections'], $label );
+			$this->assertTrue( $methods['card']['has_corrections'], $label );
+			$this->assertTrue( $data['closure']['has_corrections_line'], $label );
+		}
+	}
+
+	/** The gallery and legacy closures print a Corrections line only under a corrected tender. */
+	public function test_closure_templates_print_corrections_line_only_for_corrected_tenders(): void {
+		// Arrange.
+		$store = new Closure_Store();
+		$builder = new Receipt_Data_Builder();
+		$corrected = $this->closure_session();
+		$this->corrected_sale( $corrected, 'pos_cash', 'pos_card' );
+		$plain = $this->closure_session();
+		$this->closure_ledger( $plain );
+		$plain_fields = $this->closure_fields( $plain );
+		$plain_fields['breakdowns']['payment_methods'] = array(
+			'cash' => array(
+				'sales' => '50.0000',
+				'refunds' => '10.0000',
+			),
+			'card' => array(
+				'sales' => '30.0000',
+				'refunds' => '0.0000',
+			),
+		);
+
+		// Act.
+		$data = $builder->build_closure_document( $store->get( $store->create( $this->closure_fields( $corrected ) )['id'] ) );
+		// The X-report's rows carry corrections '0.0000', which must print no line.
+		$plain_xreport = $builder->build_closure_document( $plain, true );
+		$plain_data = $builder->build_closure_document( $store->get( $store->create( $plain_fields )['id'] ) );
+
+		// Assert.
+		$display = $this->methods( $data )['cash']['corrections_display'];
+		$this->assertStringContainsString( '12', $display );
+		$this->assertStringContainsString( '-', $display );
+		$this->assertSame( '0.0000', $this->methods( $plain_xreport )['cash']['corrections'] );
+		$this->assertFalse( $plain_xreport['closure']['has_corrections_line'] );
+		$this->assertFalse( $plain_data['closure']['has_corrections_line'] );
+		$this->assertStringContainsString( 'Corrections', $this->html( $data ) );
+		$this->assertStringContainsString( '-12.0000', $this->html( $data ) );
+		foreach ( array( $this->html( $plain_xreport ), $this->html( $plain_data ) ) as $html ) {
+			$this->assertStringNotContainsString( 'Corrections', $html );
+			$this->assertStringNotContainsString( '-12.0000', $html );
+		}
+		foreach ( array( 'closure-default.html', 'closure-detailed.html', 'thermal-closure-80mm.xml', 'thermal-closure-58mm.xml', 'thermal-closure-80mm-rtl.xml' ) as $file ) {
+			$this->assertStringContainsString( 'Corrections', $this->gallery_html( $data, $file ), $file );
+			$this->assertStringContainsString( esc_html( $display ), $this->gallery_html( $data, $file ), $file );
+			foreach ( array( $this->gallery_html( $plain_xreport, $file ), $this->gallery_html( $plain_data, $file ) ) as $html ) {
+				$this->assertStringNotContainsString( 'Corrections', $html, $file );
+				$this->assertStringNotContainsString( esc_html( $display ), $html, $file );
 			}
 		}
 	}

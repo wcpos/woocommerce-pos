@@ -516,6 +516,41 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '-2.0000', $data['variance_cash'] );
 	}
 
+	/** Each tender's stamped correction exports in its own column. */
+	public function test_export_tender_correction_adds_signed_corrections_column(): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$order = new \WC_Order();
+		$order->set_created_via( 'woocommerce-pos' );
+		// Not in progress, so correctable; not completed, so no fiscal sale outlives Closure_Store's transaction.
+		$order->set_status( 'on-hold' );
+		$order->set_total( '12' );
+		$order->save();
+		$id = wp_generate_uuid4();
+		$row = array(
+			'id' => $id,
+			'method_id' => 'pos_cash',
+			'kind' => 'cash',
+			'capture_mode' => 'manual',
+			'source' => 'app',
+			'amount' => '12.00',
+			'currency' => 'USD',
+			'status' => 'captured',
+			'session_id' => $session['id'],
+		);
+		\WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed::rows( $order, array( $row ), false );
+		$this->assertIsArray( \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->correct( wc_get_order( $order->get_id() ), $id, 'pos_card' ) );
+		$this->assertIsArray( ( new Closure_Store() )->create( $this->closure_fields( $session ) ) );
+
+		// Act.
+		$csv = $this->export_csv( $this->get( 'closures/export' ) );
+
+		// Assert.
+		$data = array_combine( $csv[0], $csv[1] );
+		$this->assertSame( '-12.0000', $data['tender_cash_corrections'] );
+		$this->assertSame( '12.0000', $data['tender_pos_card_corrections'] );
+	}
+
 	/** A reporting cashier does not own Settings. */
 	public function test_export_without_manage_capability_returns_403(): void {
 		// Arrange.
@@ -935,8 +970,8 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( '3.0000', $last['tax_vat_a_2_2_net'] );
 		$this->assertSame( count( $csv[0] ), count( array_unique( $csv[0] ) ) );
 		$this->assertSame(
-			array( 'counted_cash', 'counted_voucher', 'expected_cash', 'expected_voucher', 'variance_cash', 'variance_voucher', 'tender_a_cash_sales', 'tender_a_cash_refunds', 'tender_z_card_sales', 'tender_z_card_refunds', 'tax_vat_a_net', 'tax_vat_a_tax', 'tax_vat_a_gross', 'tax_vat_a_2_net', 'tax_vat_a_2_tax', 'tax_vat_a_2_gross', 'tax_vat_a_2_2_net', 'tax_vat_a_2_2_tax', 'tax_vat_a_2_2_gross' ),
-			array_slice( $csv[0], 15, 19 )
+			array( 'counted_cash', 'counted_voucher', 'expected_cash', 'expected_voucher', 'variance_cash', 'variance_voucher', 'tender_a_cash_sales', 'tender_a_cash_refunds', 'tender_a_cash_corrections', 'tender_z_card_sales', 'tender_z_card_refunds', 'tender_z_card_corrections', 'tax_vat_a_net', 'tax_vat_a_tax', 'tax_vat_a_gross', 'tax_vat_a_2_net', 'tax_vat_a_2_tax', 'tax_vat_a_2_gross', 'tax_vat_a_2_2_net', 'tax_vat_a_2_2_tax', 'tax_vat_a_2_2_gross' ),
+			array_slice( $csv[0], 15, 21 )
 		);
 	}
 
