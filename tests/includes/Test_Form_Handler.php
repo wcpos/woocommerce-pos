@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
+use Automattic\WooCommerce\Internal\Utilities\Users;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Form_Handler;
@@ -486,6 +487,53 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 		$this->assertFalse( has_filter( 'wc_stripe_create_customer_args' ) );
 		$this->assertSame( $required_fields, apply_filters( 'wc_stripe_create_customer_required_fields', $required_fields, $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
 		$this->assertSame( $request, apply_filters( 'wc_stripe_create_customer_args', $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+	}
+
+	/**
+	 * Create a POS guest order with an email, past WooCommerce's 10-minute grace period.
+	 *
+	 * @return \WC_Order The saved order.
+	 */
+	private function create_pos_guest_order_past_grace_period(): \WC_Order {
+		$order = $this->create_pos_order_with_billing_email( 'guest@example.test' );
+		$order->set_date_created( time() - HOUR_IN_SECONDS );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * An authenticated POS pay POST lifts WC 11.3.1's order-pay email verification.
+	 */
+	public function test_pay_action_guest_with_email_after_grace_period_lifts_order_pay_email_verification(): void {
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+		wp_set_current_user( 0 );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ), 'precondition: verification required' );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertFalse( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+	}
+
+	/**
+	 * The lift covers only the order being paid, in the 'order-pay' context.
+	 */
+	public function test_order_pay_email_verification_lift_is_scoped_to_the_paid_order(): void {
+		// Arrange.
+		$order       = $this->create_pos_guest_order_past_grace_period();
+		$other_order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertTrue( Users::should_user_verify_order_email( $other_order->get_id(), null, 'order-pay' ) );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-received' ) );
 	}
 
 	/**
