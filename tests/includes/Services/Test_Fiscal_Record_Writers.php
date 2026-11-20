@@ -166,6 +166,43 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** Recovering an earlier sale last does not make it the completion a correction names. */
+	public function test_reattribution_after_out_of_order_recovery_corrects_latest_completion_sale(): void {
+		// Arrange: completion 1's sale is parked, then completion 2's sale lands first.
+		$order = $this->order();
+		$enrich = static function () {
+			throw new \Error( 'boom' );
+		};
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$this->pay( $order );
+		} finally {
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		}
+		$this->pay( $this->reopen( $order ) );
+		$order = wc_get_order( $order->get_id() );
+		$writers = Fiscal_Record_Writers::instance();
+		$writers->recover( $order );
+		$sales = $this->sales( $order->get_id() );
+		$history = Completion_History::of( $order )->entries();
+		$this->assertCount( 2, $sales );
+		$this->assertSame( $history[1]['id'], $sales[0]['source_id'] );
+		$this->assertSame( $history[0]['id'], $sales[1]['source_id'] );
+
+		// Act.
+		$this->assertTrue( $writers->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' ) );
+
+		// Assert.
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sales[0]['id'], $records[0]['corrects_record_id'] );
+	}
+
 	/** Orders without a sale may be reassigned without a fiscal correction. */
 	public function test_reattribution_without_sale_returns_true(): void {
 		$order = $this->order();

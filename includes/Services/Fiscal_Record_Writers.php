@@ -136,7 +136,9 @@ final class Fiscal_Record_Writers {
 	 * @param string   $new_store   Current store.
 	 */
 	public function record_reattribution( WC_Order $order, int $actor_id, int $old_cashier, int $new_cashier, string $old_store, string $new_store ): bool {
-		$sale = $this->store->find_sale( $order->get_id() );
+		$latest = Completion_History::of( $order )->latest();
+		$sale   = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : null;
+		$sale   = $sale ?? $this->store->find_sale( $order->get_id() );
 		if ( null === $sale ) {
 			return true;
 		}
