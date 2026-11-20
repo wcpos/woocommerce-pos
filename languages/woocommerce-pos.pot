@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-20T16:24:02+00:00\n"
+"POT-Creation-Date: 2026-11-20T16:35:18+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -5148,11 +5148,11 @@ msgstr ""
 msgid "The WCPOS sync store is not installed yet (initialising or a schema install failed). Retry shortly."
 msgstr ""
 
-#: includes/Sync/Order_Write_Payload.php:429
+#: includes/Sync/Order_Write_Payload.php:435
 msgid "date_created_gmt cannot be more than 24 hours in the future."
 msgstr ""
 
-#: includes/Sync/Order_Write_Payload.php:435
+#: includes/Sync/Order_Write_Payload.php:441
 msgid "date_created_gmt must be a valid ISO 8601 UTC date."
 msgstr ""
 
