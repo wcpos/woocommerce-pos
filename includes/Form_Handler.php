@@ -114,6 +114,23 @@ class Form_Handler {
 			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 20, 2 );
 
 			/*
+			 * Since WooCommerce 11.3.1, WC_Form_Handler::pay_action() drops the POST
+			 * silently when Users::should_user_verify_order_email() asks the shopper to
+			 * verify the billing email. A POS guest is never signed in, so every guest
+			 * sale with an email paid after the 10-minute grace period would be refused.
+			 * The cashier token and order key above are the proof of access here, for
+			 * this order only.
+			 */
+			add_filter(
+				'woocommerce_order_email_verification_required',
+				static function ( $required, $verified_order, $context ) use ( $order_id ) {
+					return 'order-pay' === $context && $verified_order instanceof \WC_Order && $verified_order->get_id() === $order_id ? false : $required;
+				},
+				10,
+				3
+			);
+
+			/*
 			 * A WCPOS guest has no email and the pay page collects no billing
 			 * details, so WooCommerce Stripe would refuse to create its customer
 			 * ("Missing required customer field: email"). Stripe accepts a customer
