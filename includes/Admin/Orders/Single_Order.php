@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Admin\Orders;
 
 use WC_Abstract_Order;
 use WC_Order;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 
 /**
@@ -104,16 +105,15 @@ class Single_Order {
 				$order->update_meta_data( '_pos_user', (string) $new_pos_cashier );
 				$order->save();
 
-				// Add an order note indicating the change.
-				$current_cashier    = get_userdata( $current_pos_cashier );
-				$new_cashier        = get_userdata( $new_pos_cashier );
-				$note               = sprintf(
-					// translators: 1: old POS cashier, 2: new POS cashier.
-					__( 'POS cashier changed from %1$s to %2$s.', 'woocommerce-pos' ),
-					$current_cashier ? $current_cashier->display_name : /* translators: Fallback cashier name shown when the POS cashier user cannot be found. */ __( 'Unknown', 'woocommerce-pos' ),
-					$new_cashier ? $new_cashier->display_name : /* translators: Fallback cashier name shown when the POS cashier user cannot be found. */ __( 'Unknown', 'woocommerce-pos' )
+				Order_Notes::add_cashier_change_note( $order, $current_pos_cashier, $new_pos_cashier );
+				Fiscal_Record_Writers::instance()->record_reattribution(
+					$order,
+					get_current_user_id(),
+					$current_pos_cashier,
+					$new_pos_cashier,
+					(int) $order->get_meta( '_pos_store' ),
+					(int) $order->get_meta( '_pos_store' )
 				);
-				$order->add_order_note( $note );
 			}
 		}
 	}

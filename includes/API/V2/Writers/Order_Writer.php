@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
@@ -815,11 +816,16 @@ class Order_Writer extends Null_Writer {
 		$change       = $context['reassignment'];
 		$old_user     = $order->get_meta( '_pos_user' );
 		$old_store    = null !== $context['pre_store'] ? $context['pre_store'] : $order->get_meta( '_pos_store' );
-		$cashier_changed = isset( $change['_pos_user'] ) && is_numeric( $change['_pos_user'] )
-			&& (int) $change['_pos_user'] === $current_user && (string) $old_user !== (string) $current_user;
+		$new_user = isset( $change['_pos_user'] ) && is_numeric( $change['_pos_user'] ) ? (int) $change['_pos_user'] : null;
+		$cashier_allowed = $new_user === $current_user;
+		if ( null !== $new_user && ! $cashier_allowed && current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
+			$target_user = get_userdata( $new_user );
+			$cashier_allowed = $target_user && $target_user->has_cap( 'access_woocommerce_pos' );
+		}
+		$cashier_changed = null !== $new_user && $cashier_allowed && (string) $old_user !== (string) $new_user;
 		$store_changed = $context['store_authorized'] && (string) $old_store !== (string) $change['_pos_store'];
 		if ( $cashier_changed ) {
-			$order->update_meta_data( '_pos_user', (string) $current_user );
+			$order->update_meta_data( '_pos_user', (string) $new_user );
 		}
 		if ( $store_changed ) {
 			$order->update_meta_data( '_pos_store', (string) $change['_pos_store'] );
@@ -831,10 +837,20 @@ class Order_Writer extends Null_Writer {
 			Order_Notes::add_reopen_note( $order, $current_user, $order->get_meta( '_pos_store' ) );
 		} else {
 			if ( $cashier_changed ) {
-				Order_Notes::add_cashier_change_note( $order, $old_user, $current_user );
+				Order_Notes::add_cashier_change_note( $order, $old_user, $new_user );
 			}
 			if ( $store_changed ) {
 				Order_Notes::add_store_change_note( $order, $old_store, $change['_pos_store'] );
+			}
+			if ( $cashier_changed || $store_changed ) {
+				Fiscal_Record_Writers::instance()->record_reattribution(
+					$order,
+					$current_user,
+					(int) $old_user,
+					(int) $order->get_meta( '_pos_user' ),
+					(int) $old_store,
+					(int) $order->get_meta( '_pos_store' )
+				);
 			}
 		}
 		if ( array_key_exists( 'customer_id', $current ) && array_key_exists( 'customer_id', $data ) && (int) $current['customer_id'] !== (int) $data['customer_id'] ) {

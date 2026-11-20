@@ -124,6 +124,53 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
+	 * Append an attribution correction to the latest sale, outside all session and closure figures.
+	 *
+	 * @param WC_Order $order       Order whose attribution changed.
+	 * @param int      $actor_id    Acting user.
+	 * @param int      $old_cashier Previous cashier.
+	 * @param int      $new_cashier Current cashier.
+	 * @param int      $old_store   Previous store.
+	 * @param int      $new_store   Current store.
+	 */
+	public function record_reattribution( WC_Order $order, int $actor_id, int $old_cashier, int $new_cashier, int $old_store, int $new_store ): void {
+		$sale = $this->store->find_sale( $order->get_id() );
+		if ( null === $sale ) {
+			return;
+		}
+		$changes = array();
+		foreach ( array(
+			'cashier' => array( $old_cashier, $new_cashier ),
+			'store' => array( $old_store, $new_store ),
+		) as $field => $values ) {
+			if ( $values[0] !== $values[1] ) {
+				$changes[] = array(
+					'field' => $field,
+					'from' => $values[0],
+					'to' => $values[1],
+				);
+			}
+		}
+		$this->write(
+			$order,
+			array(
+				'type' => 'reattribution',
+				'order_id' => $order->get_id(),
+				'corrects_record_id' => $sale['id'],
+				'source_id' => wp_generate_uuid4(),
+				'cashier_id' => $new_cashier,
+				'store_id' => $new_store,
+				'approver_id' => $actor_id,
+				'payload' => array(
+					'changes' => $changes,
+					'changed_by' => $actor_id,
+					'changed_at_gmt' => current_time( 'mysql', true ),
+				),
+			)
+		);
+	}
+
+	/**
 	 * Write the sale record for completion n, the one path every completion takes (ADR 0040 rule 1c).
 	 *
 	 * @param mixed $order Order, read after the completion entry was stored.

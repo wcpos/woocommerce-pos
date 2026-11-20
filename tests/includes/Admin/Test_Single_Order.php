@@ -8,14 +8,29 @@
 namespace WCPOS\WooCommercePOS\Tests\Admin;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use WCPOS\WooCommercePOS\Admin\Orders\Single_Order;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WP_UnitTestCase;
 
 /** Test the order-edit audit hooks. */
 final class Test_Single_Order extends WP_UnitTestCase {
+	use HPOSToggleTrait;
+
+	/**
+	 * Whether this test enabled HPOS.
+	 *
+	 * @var bool
+	 */
+	private bool $attribution_hpos = false;
+
 	/** Reset posted order fields. */
 	protected function tearDown(): void {
-		unset( $_POST['customer_user'] );
+		if ( $this->attribution_hpos ) {
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
+		unset( $_POST['customer_user'], $_POST['_pos_user'], $_POST['pos_cashier_select_nonce'] );
 		parent::tearDown();
 	}
 
@@ -60,5 +75,89 @@ final class Test_Single_Order extends WP_UnitTestCase {
 			$this->note_contents( $pos_order->get_id() )
 		);
 		$this->assertSame( array(), $this->note_contents( $web_order->get_id() ) );
+	}
+	/**
+	 * A completed sale's admin correction records both the actor and original attribution.
+	 *
+	 * @dataProvider attribution_storage_backends
+	 * @param bool $hpos Whether HPOS is authoritative.
+	 */
+	public function test_cashier_save_attributes_note_to_actor_and_writes_record( bool $hpos ): void {
+		// Arrange.
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->disable_cot_sync();
+			$this->attribution_hpos = true;
+		}
+		$actor_id = self::factory()->user->create(
+			array(
+				'role' => 'administrator',
+				'display_name' => 'Admin Actor',
+			)
+		);
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Original Cashier' ) );
+		$new_id = self::factory()->user->create(
+			array(
+				'role' => 'cashier',
+				'display_name' => 'Corrected Cashier',
+			)
+		);
+		wp_set_current_user( $actor_id );
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->update_meta_data( '_pos_store', '12' );
+		$order->save();
+		$store = new Fiscal_Record_Store();
+		$sale = $store->record(
+			array(
+				'type' => 'sale',
+				'order_id' => $order->get_id(),
+				'source_id' => wp_generate_uuid4(),
+				'payload' => array(),
+			)
+		);
+		$_POST['pos_cashier_select_nonce'] = wp_create_nonce( 'pos_cashier_select_action' );
+		$_POST['_pos_user'] = (string) $new_id;
+
+		// Act.
+		( new Single_Order() )->save_cashier_select( $order->get_id() );
+
+		// Assert.
+		$this->assertSame( (string) $new_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$notes = array_values( array_filter( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), static fn( $note ) => 0 === strpos( $note->content, 'POS cashier changed' ) ) );
+		$this->assertCount( 1, $notes );
+		$this->assertSame( 'POS cashier changed from Original Cashier to Corrected Cashier.', $notes[0]->content );
+		$this->assertSame( 'Admin Actor', $notes[0]->added_by );
+		$records = $store->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sale['id'], $records[0]['corrects_record_id'] );
+		$this->assertSame( $actor_id, $records[0]['approver_id'] );
+		$this->assertSame( $new_id, $records[0]['cashier_id'] );
+		$this->assertSame( 12, $records[0]['store_id'] );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'cashier',
+					'from' => $old_id,
+					'to' => $new_id,
+				),
+			),
+			$records[0]['payload']['changes']
+		);
+	}
+
+	/** Both supported order storage backends, without HPOS compatibility sync. */
+	public function attribution_storage_backends(): array {
+		return array(
+			'posts' => array( false ),
+			'HPOS' => array( true ),
+		);
 	}
 }

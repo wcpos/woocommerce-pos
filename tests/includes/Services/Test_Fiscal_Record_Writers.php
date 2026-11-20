@@ -108,6 +108,64 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** Repeated corrections append to the latest sale without entering a session or closure. */
+	public function test_reattribution_appends_changes_to_latest_sale_only(): void {
+		// Arrange.
+		$order = $this->order();
+		$this->pay( $order );
+		$this->pay( $this->reopen( $order ) );
+		$store = new Fiscal_Record_Store();
+		$sales = $this->sales( $order->get_id() );
+		$actor_id = get_current_user_id();
+		$writers = Fiscal_Record_Writers::instance();
+		$this->assertContains( 'reattribution', Fiscal_Record_Store::TYPES );
+
+		// Act: a second correction back to the original values is a new document.
+		$writers->record_reattribution( $order, $actor_id, 1, 2, 12, 13 );
+		$writers->record_reattribution( $order, $actor_id, 2, 1, 13, 12 );
+
+		// Assert.
+		$records = $store->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 2, $records );
+		$this->assertNotSame( $records[0]['source_id'], $records[1]['source_id'] );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'cashier',
+					'from' => 1,
+					'to' => 2,
+				),
+				array(
+					'field' => 'store',
+					'from' => 12,
+					'to' => 13,
+				),
+			),
+			$records[1]['payload']['changes']
+		);
+		foreach ( $records as $record ) {
+			$this->assertSame( $sales[1]['id'], $record['corrects_record_id'] );
+			foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id' ) as $field ) {
+				$this->assertNull( $record[ $field ], $field );
+			}
+		}
+		$this->assertSame( $sales, $this->sales( $order->get_id() ) );
+		$this->assertSame(
+			0,
+			$store->count(
+				array(
+					'type' => 'reattribution',
+					'session_id' => $order->get_meta( '_wcpos_session' ),
+				)
+			)
+		);
+	}
+
 	/** Two completions insert two sale rows through record(), the second superseding the first. */
 	public function test_two_completions_write_two_sale_rows_through_record(): void {
 		// Arrange.
@@ -633,7 +691,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
-	/** recover() reads the parked map fresh, so a document parked after the caller loaded the order survives. */
+	/** Recovery reads the parked map fresh, so a document parked after the caller loaded the order survives. */
 	public function test_recover_reads_the_parked_map_fresh_so_a_document_parked_after_the_caller_loaded_the_order_survives(): void {
 		// Arrange: completion 1's sale insert fails; the caller loads the order; completion 2's insert fails too.
 		$order  = $this->order();
@@ -659,7 +717,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
-	/** recover() reads the history fresh too, so a completion parked after the caller loaded the order keeps its late correction. */
+	/** Recovery reads the history fresh too, so a completion parked after the caller loaded the order keeps its late correction. */
 	public function test_recover_writes_the_late_sale_of_a_completion_parked_after_the_caller_loaded_the_order(): void {
 		// Arrange: completion 1 in open session A and completion 2 in closed session B, both inserts
 		// failing; the caller loaded the order between them.
@@ -1366,7 +1424,14 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order   = $this->closure_ledger( $session );
 		$rows    = array_map(
 			static function ( array $row ): array {
-				$row['commands'] = array( wp_generate_uuid4() => array( 'fp' => 'sha256:x', 'kind' => 'capture', 'ref' => null, 'at_gmt' => gmdate( 'c' ) ) );
+				$row['commands'] = array(
+					wp_generate_uuid4() => array(
+						'fp' => 'sha256:x',
+						'kind' => 'capture',
+						'ref' => null,
+						'at_gmt' => gmdate( 'c' ),
+					),
+				);
 				return $row;
 			},
 			Ledger::instance()->read( $order )

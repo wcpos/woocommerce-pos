@@ -26,10 +26,11 @@ final class Status_Controller extends WP_REST_Controller {
 	 *
 	 * - `products_id_fast_path`: `GET /wcpos/v2/products?per_page=-1&_fields=id,date_modified_gmt,stock_quantity,stock_status`
 	 *   is answered from one query (#2113).
+	 * - `order_cashier_reassignment`: authorized users may reassign a sale to another POS user.
 	 *
 	 * Append new names; never rename or remove one.
 	 */
-	private const CAPABILITIES = array( 'products_id_fast_path' );
+	private const CAPABILITIES = array( 'products_id_fast_path', 'order_cashier_reassignment' );
 
 	/**
 	 * Register the sync status route.
