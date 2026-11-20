@@ -421,6 +421,53 @@ class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A reload of an already-stamped order posts sent without saving the order.
+	 */
+	public function test_send_reload_of_stamped_order_does_not_save_the_order(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+		$order      = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+		$this->render_received( $order );
+		$saves = 0;
+		$count = static function () use ( &$saves ) {
+			++$saves;
+		};
+		add_action( 'woocommerce_update_order', $count );
+
+		try {
+			// Act.
+			$output = $this->render_received( $order );
+		} finally {
+			remove_action( 'woocommerce_update_order', $count );
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 0, $saves );
+		$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
+	}
+
+	/**
 	 * Simulate Pro, which lifts the free plugin's cash/card-only restriction.
 	 */
 	private function allow_all_gateways_for_pos(): void {

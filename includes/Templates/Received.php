@@ -136,24 +136,29 @@ class Received {
 			try {
 				if ( false !== $order_json && ! $order_complete && $this->is_legacy_send( $order ) ) {
 					$attempt_id = wp_generate_uuid4();
-					$written    = Ledger::instance()->write(
+					$outcome    = 'ineligible';
+					Ledger::instance()->write(
 						$order,
-						static function ( Ledger_Draft $draft ) use ( $attempt_id ): string {
+						// A false answer stages nothing, so early paths do not save; the ledger may run this twice, and the last run sets $outcome.
+						static function ( Ledger_Draft $draft ) use ( $attempt_id, &$outcome ): bool {
 							$sale = $draft->order();
 							if ( ! self::awaits_payment( $sale ) ) {
-								return 'ineligible';
+								$outcome = 'ineligible';
+								return false;
 							}
 							if ( null !== Attempts::of( $sale )->awaiting() ) {
-								return 'awaiting';
+								$outcome = 'awaiting';
+								return false;
 							}
 							Attempts::open( $draft, $attempt_id, $sale->get_payment_method() );
 							$draft->attempt( $attempt_id, 'sent', array( 'cashier_id' => max( 0, (int) $sale->get_meta( '_pos_user' ) ) ) );
 							Attempts::await( $draft, $attempt_id, '' !== $sale->get_billing_email() ? $sale->get_billing_email() : null );
-							return 'written';
+							$outcome = 'written';
+							return true;
 						},
 						Ledger::MODE_HOLD
 					);
-					if ( 'ineligible' !== $written->answer ) {
+					if ( 'ineligible' !== $outcome ) {
 						$order_json = $this->get_order_json( $order->get_id() );
 						$order_sent = false !== $order_json;
 					}
