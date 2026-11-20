@@ -234,7 +234,7 @@ class Test_Command_Log extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $this->current_revision( $id ), $answer->get_error_data()['currentRevision'] );
 	}
 
-	/** A fresh command built on the order's 2.0.3-recipe revision (every meta row hashed) is not stale after the upgrade. */
+	/** A fresh command built on the order's 2.0.2-recipe revision (every meta row hashed) is not stale after the upgrade. */
 	public function test_run_built_on_a_2_0_3_revision_is_not_stale(): void {
 		// Arrange.
 		$order = $this->create_pos_order();

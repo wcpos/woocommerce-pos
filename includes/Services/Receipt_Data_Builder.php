@@ -1621,8 +1621,8 @@ class Receipt_Data_Builder {
 	/**
 	 * Build tax rows for any order item that exposes get_taxes().
 	 *
-	 * Resolves human-readable label and percent rate via WC_Tax when possible,
-	 * falling back to the rate id string and null rate.
+	 * Takes the label and percent rate from the order's stored tax items (what was charged),
+	 * then from WC_Tax, then falls back to the rate id string and null rate.
 	 *
 	 * @param object $item Order item.
 	 *
@@ -1642,6 +1642,7 @@ class Receipt_Data_Builder {
 
 		$totals = isset( $raw['total'] ) && \is_array( $raw['total'] ) ? $raw['total'] : array();
 
+		$charged = $this->get_charged_tax_items( $item );
 		foreach ( $totals as $tax_rate_id => $tax_amount ) {
 			if ( ! $tax_amount ) {
 				continue;
@@ -1669,6 +1670,12 @@ class Receipt_Data_Builder {
 				}
 			}
 
+			if ( isset( $charged[ (int) $tax_rate_id ] ) ) {
+				$stored = $charged[ (int) $tax_rate_id ];
+				$label  = '' !== (string) $stored->get_label( 'edit' ) ? (string) $stored->get_label( 'edit' ) : $label;
+				$rate   = null !== $stored->get_rate_percent( 'edit' ) ? (float) $stored->get_rate_percent( 'edit' ) : $rate;
+			}
+
 			$taxes[] = array(
 				'code'   => (string) $tax_rate_id,
 				'rate'   => $rate,
@@ -1678,6 +1685,31 @@ class Receipt_Data_Builder {
 		}
 
 		return $taxes;
+	}
+
+	/**
+	 * Stored tax items by rate id. A refund's parent order wins: a refund's own
+	 * tax items are re-read from the current rate table when it is created.
+	 *
+	 * @param object $item Order item.
+	 *
+	 * @return array<int, \WC_Order_Item_Tax>
+	 */
+	private function get_charged_tax_items( $item ): array {
+		$order  = method_exists( $item, 'get_order' ) ? $item->get_order() : false;
+		$orders = $order instanceof WC_Abstract_Order ? array( $order ) : array();
+		if ( $order instanceof \WC_Order_Refund ) {
+			$orders[] = wc_get_order( $order->get_parent_id() );
+		}
+		$charged = array();
+		foreach ( $orders as $source ) {
+			foreach ( $source instanceof WC_Abstract_Order ? $source->get_items( 'tax' ) : array() as $tax_item ) {
+				if ( $tax_item instanceof \WC_Order_Item_Tax ) {
+					$charged[ (int) $tax_item->get_rate_id() ] = $tax_item;
+				}
+			}
+		}
+		return $charged;
 	}
 
 	/**

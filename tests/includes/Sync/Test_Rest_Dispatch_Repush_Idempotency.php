@@ -38,6 +38,7 @@ class Tracking_Order extends WC_Order {
 	}
 }
 
+// phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- Tracking_Order is the fixture for this test class.
 /**
  * Re-pushes acknowledged order documents verbatim through the real v2 route.
  *
@@ -46,6 +47,7 @@ class Tracking_Order extends WC_Order {
  * @coversNothing
  */
 class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
+	// phpcs:enable Generic.Files.OneObjectStructurePerFile.MultipleFound
 	/**
 	 * Stable client identity used by every push in one test transaction.
 	 */
@@ -232,7 +234,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		return count(
 			array_filter(
 				$document['line_items'][0]['meta_data'] ?? array(),
-				static fn( array $meta ): bool => $key === ( $meta['key'] ?? null )
+				static fn( array $meta ): bool => ( $meta['key'] ?? null ) === $key
 			)
 		);
 	}
@@ -486,6 +488,28 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A stale push names only differences inside the revision, including the till's own edit.
+	 *
+	 * @return void
+	 */
+	public function test_stale_order_push_409_names_what_moved_inside_the_revision(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$id      = (int) $created->get_data()['document']['id'];
+		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$this->set_order_meta( $id, 'x_audit', 'moved' );
+		wc_update_order_item_meta( $line_id, 'x_line_audit', 'moved' );
+		$this->set_order_meta( $id, '_x_hidden_stamp', 'moved' );
+		// Act.
+		$stale = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
+		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null );
+		$this->assertSame( array( 'customer_note', 'line_items.' . $line_id . '.meta_data.x_line_audit' ), $stale->get_data()['differs'] ?? null, wp_json_encode( $stale->get_data() ) );
+	}
+
+	/**
 	 * A key the allow-list filter adds 409s a push once another plugin moves it.
 	 *
 	 * @return void
@@ -523,9 +547,9 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * The till's ack under the 2.0.3 recipe for an order with non-allow-listed order and hidden line meta.
+	 * The till's ack under the 2.0.2 recipe for an order with non-allow-listed order and hidden line meta.
 	 *
-	 * The new recipe plus `$old` hashes exactly what 2.0.3 hashed for this order; removing `$old` is the upgrade.
+	 * The new recipe plus `$old` hashes exactly what 2.0.2 hashed for this order; removing `$old` is the upgrade.
 	 *
 	 * @param WP_REST_Response $created The create's acknowledgement.
 	 *
@@ -541,7 +565,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 			break;
 		}
 		$order->save();
-		// The create itself also writes `_pos_user_created` and `_woocommerce_pos_version`, which 2.0.3 hashed too.
+		// The create itself also writes `_pos_user_created` and `_woocommerce_pos_version`, which 2.0.2 hashed too.
 		$old = static fn( array $keys ): array => array_merge( $keys, array( '_wc_order_attribution_source_type', '_x_hidden_line', '_pos_user_created', '_woocommerce_pos_version' ) );
 		add_filter( 'wcpos_sync_order_revision_meta_keys', $old );
 		$legacy = Order_Serializer::current_state( $id )['revision'];
@@ -551,7 +575,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A till's ack from before the upgrade (the 2.0.3 recipe) is accepted after it.
+	 * A till's ack from before the upgrade (the 2.0.2 recipe) is accepted after it.
 	 *
 	 * @return void
 	 */
@@ -567,7 +591,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A till's 2.0.3 ack still 409s once a POS-owned key moved after it.
+	 * A till's 2.0.2 ack still 409s once a POS-owned key moved after it.
 	 *
 	 * @return void
 	 */
@@ -611,7 +635,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	 */
 	private function meta_value( array $meta_data, string $key ) {
 		foreach ( $meta_data as $entry ) {
-			if ( $key === Meta_Entry::key( $entry ) ) {
+			if ( Meta_Entry::key( $entry ) === $key ) {
 				return Meta_Entry::value( $entry );
 			}
 		}
@@ -622,7 +646,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	 * The common arrange: create, write `OLD` out of band, push a first edit; its ack is the document the till holds.
 	 *
 	 * The first edit anchors on the order as it stands after the write, the revision a pull hands the
-	 * till: a visible key moves the revision, and a hidden one leaves it equal to the create's ack.
+	 * till: allow-listed order meta and visible or allow-listed line meta move the revision.
 	 *
 	 * @param callable $write Writes one value out of band: fn( int $order_id, int $line_id, string $value ).
 	 *
@@ -711,11 +735,11 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A hidden third-party order meta key the order does not have yet is written.
+	 * Foreign order meta keys with no id are written when the order does not hold them.
 	 *
 	 * @return void
 	 */
-	public function test_a_hidden_third_party_key_new_to_the_order_is_written(): void {
+	public function test_foreign_keys_new_to_the_order_without_ids_are_written(): void {
 		// Arrange.
 		$created = $this->push_order( 'create', $this->create_payload() );
 		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
@@ -724,11 +748,16 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 			'key'   => '_x_new_key',
 			'value' => 'v1',
 		);
+		$document['meta_data'][] = array(
+			'key'   => 'gift_message',
+			'value' => 'hello',
+		);
 		// Act.
 		$push = $this->push_order( 'update', $document, $created->get_data()['currentRevision'] );
 		// Assert.
 		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
 		$this->assertSame( 'v1', wc_get_order( (int) $document['id'] )->get_meta( '_x_new_key' ) );
+		$this->assertSame( 'hello', wc_get_order( (int) $document['id'] )->get_meta( 'gift_message' ) );
 	}
 
 	/**
@@ -854,21 +883,91 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A third party's change to visible order meta still 409s a stale push, as on 2.0.2.
+	 * A visible order meta key off the allow-list is outside CAS and written as pushed: the till edits
+	 * custom order fields, so a change made elsewhere does not 409 the push and the last writer wins.
 	 *
 	 * @return void
 	 */
-	public function test_a_visible_third_party_order_meta_change_still_409s(): void {
+	public function test_a_visible_third_party_order_meta_change_does_not_409_and_the_pushed_value_is_written(): void {
 		// Arrange.
 		$write                    = fn( int $id, int $line_id, string $value ) => $this->set_order_meta( $id, 'gift_message', $value );
 		list( $held, $id, $line ) = $this->held_after_first_edit( $write );
 		$this->assertSame( 'OLD', $this->meta_value( $held->get_data()['document']['meta_data'], 'gift_message' ) );
 		$write( $id, $line, 'NEW' );
 		// Act.
-		$stale = $this->push_order( 'update', $this->edited_document( $held, 'second edit' ), $held->get_data()['currentRevision'] );
+		$push = $this->push_order( 'update', $this->edited_document( $held, 'second edit' ), $held->get_data()['currentRevision'] );
 		// Assert.
-		$this->assertSame( 409, $stale->get_status(), wp_json_encode( $stale->get_data() ) );
-		$this->assertSame( 'woo_rxdb_sync_conflict', $stale->get_data()['code'] ?? null );
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( 'OLD', wc_get_order( $id )->get_meta( 'gift_message' ) );
+		$this->assertCount( 1, wc_get_order( $id )->get_meta( 'gift_message', false ) );
+	}
+
+	/**
+	 * A till's echo of a read-time line row (explicit id 0) is not stored on the line.
+	 *
+	 * @return void
+	 */
+	public function test_an_echoed_unsaved_line_meta_row_is_not_stored(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$line_id  = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$document = $this->edited_document( $created, 'echo line decoration' );
+		$document['line_items'][0]['meta_data'][] = array(
+			'id'    => 0,
+			'key'   => 'x_read_time',
+			'value' => 'now',
+		);
+		// Act.
+		$push = $this->push_order( 'update', $document, $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( array(), wc_get_order_item_meta( $line_id, 'x_read_time', false ) );
+	}
+
+	/**
+	 * Read-time order decorations neither move the revision nor become stored rows on an echo.
+	 *
+	 * @return void
+	 */
+	public function test_unsaved_order_meta_changes_do_not_409_or_get_stored(): void {
+		// Arrange: settle the first update before adding the read-time decoration.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$settled = $this->push_order( 'update', $this->edited_document( $created, 'first edit' ), $created->get_data()['currentRevision'] );
+		$this->assertSame( 200, $settled->get_status(), wp_json_encode( $settled->get_data() ) );
+		$id    = (int) $settled->get_data()['document']['id'];
+		$reads = 0;
+		$decorate = static function ( $response ) use ( &$reads ) {
+			$data = $response->get_data();
+			$data['meta_data'][] = array(
+				'id'    => 0,
+				'key'   => 'melhor_integrador_order_data',
+				'value' => array( 'date_quotation' => gmdate( 'Y-m-d H:i:s', 1800000000 + ++$reads ) ),
+			);
+			$response->set_data( $data );
+			return $response;
+		};
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', $decorate );
+		try {
+			// Act.
+			$first  = Order_Serializer::current_state( $id );
+			$second = Order_Serializer::current_state( $id );
+			$this->assertIsArray( $first );
+			$this->assertIsArray( $second );
+			$document = array_merge( $first['document'], array( 'customer_note' => 'echo decoration' ) );
+			$push = $this->push_order( 'update', $document, $first['revision'] );
+			// Assert: the decoration really changed, but the compared order did not.
+			$this->assertNotSame(
+				$this->meta_value( $first['document']['meta_data'], 'melhor_integrador_order_data' ),
+				$this->meta_value( $second['document']['meta_data'], 'melhor_integrador_order_data' )
+			);
+			$this->assertSame( $first['revision'], $second['revision'] );
+			$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+			$this->assertFalse( wc_get_order( $id )->meta_exists( 'melhor_integrador_order_data' ) );
+		} finally {
+			remove_filter( 'woocommerce_rest_prepare_shop_order_object', $decorate );
+		}
 	}
 
 	/**

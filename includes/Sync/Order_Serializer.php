@@ -30,10 +30,10 @@ final class Order_Serializer {
 	public const PULL_AUGMENTATIONS = array( 'tax_ids', 'image_cast', 'item_uuids', 'links', 'serialized_filter' );
 
 	/**
-	 * The hidden (`_`-prefixed) meta keys the canonical revision hashes: the keys the till
-	 * asserts or the server's money contract owns. The revision also hashes every visible
-	 * meta key, on the order and on lines. Another plugin's hidden meta sits outside CAS,
-	 * and the push never overwrites it once it exists (see `Order_Write_Payload`).
+	 * The meta keys the canonical revision hashes on orders: the keys the till asserts
+	 * or the server's money contract owns. Lines also hash every visible meta key.
+	 * Other order meta and foreign hidden line meta sit outside CAS; the push never overwrites
+	 * existing hidden foreign meta, and writes visible order meta as pushed (see `Order_Write_Payload`).
 	 */
 	private const REVISION_META_KEYS = array(
 		// Till-asserted.
@@ -370,9 +370,10 @@ final class Order_Serializer {
 	 * writer for nothing. `date_paid*` and `date_completed*` stay — those move with
 	 * status content.
 	 *
-	 * Order and line meta are hashed except the hidden (`_`-prefixed) keys outside the
-	 * allow-list ({@see self::revision_meta_keys()}), so another plugin's hidden meta never
-	 * 409s a till.
+	 * Order meta is hashed only for allow-listed keys ({@see self::revision_meta_keys()});
+	 * line meta hashes every visible key plus allow-listed hidden (`_`-prefixed) keys.
+	 * Foreign order meta and foreign hidden line meta never 409 a till. Explicit unsaved
+	 * rows and excluded keys stay outside the hash at both levels.
 	 *
 	 * @param array $payload Serialized order payload (transport stamps are ignored).
 	 * @return array Schema-scoped, identity-stripped, canonicalized order.
@@ -382,9 +383,69 @@ final class Order_Serializer {
 	}
 
 	/**
+	 * Diagnostics only: names, never values, inside the revision's canonical form.
+	 * The client's own edits appear alongside another writer's moves.
+	 */
+	public static function canonical_diff( array $client, array $server ): array {
+		$a     = self::canonical_form( $client );
+		$b     = self::canonical_form( $server );
+		$paths = array();
+		foreach ( array_keys( $a + $b ) as $field ) {
+			$value = $a[ $field ] ?? null;
+			$other = $b[ $field ] ?? null;
+			if ( wp_json_encode( $value ) !== wp_json_encode( $other ) ) {
+				$paths = array_merge( $paths, in_array( $field, array( 'meta_data', 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines' ), true ) ? self::list_diff( (string) $field, $value, $other ) : array( (string) $field ) );
+			}
+		}
+		$paths = array_values( array_unique( $paths ) );
+		sort( $paths, SORT_STRING );
+		return $paths;
+	}
+
+	/** Compare canonical meta groups or items, returning path names only. */
+	private static function list_diff( string $path, $a, $b ): array {
+		if ( ! is_array( $a ) || ! is_array( $b ) ) {
+			return array( $path );
+		}
+		$a   = self::keyed( $a );
+		$b   = self::keyed( $b );
+		$out = array();
+		foreach ( array_keys( $a + $b ) as $k ) {
+			$x = $a[ $k ] ?? null;
+			$y = $b[ $k ] ?? null;
+			if ( wp_json_encode( $x ) === wp_json_encode( $y ) ) {
+				continue;
+			}
+			if ( is_array( $x ) && is_array( $y ) && ! isset( $x[0] ) ) {
+				foreach ( array_keys( $x + $y ) as $key ) {
+					if ( wp_json_encode( $x[ $key ] ?? null ) !== wp_json_encode( $y[ $key ] ?? null ) ) {
+						$out = array_merge( $out, 'meta_data' === $key ? self::list_diff( "$path.$k.meta_data", $x[ $key ] ?? null, $y[ $key ] ?? null ) : array( "$path.$k.$key" ) );
+					}
+				}
+			} else {
+				$out[] = "$path.$k";
+			}
+		}
+		return $out ? $out : array( $path );
+	}
+
+	/** Group meta values by key, items by positive id or new index, and non-arrays by index. */
+	private static function keyed( array $list ): array {
+		$out = array();
+		foreach ( $list as $index => $entry ) {
+			if ( is_array( $entry ) && isset( $entry['key'] ) ) {
+				$out[ (string) $entry['key'] ][] = $entry['value'] ?? null;
+			} else {
+				$out[ is_array( $entry ) ? ( (int) ( $entry['id'] ?? 0 ) > 0 ? (int) $entry['id'] : 'new' . $index ) : $index ] = $entry;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * The stale-write facts for an order, or null when the claimed revision is current.
 	 *
-	 * A claimed revision is also current when it equals the 2.0.3 recipe (every meta row
+	 * A claimed revision is also current when it equals the 2.0.2 recipe (every meta row
 	 * hashed) of the same document: a till that acked an order before the allow-list
 	 * shipped then gets no 409 for the recipe change alone. The old form is the new form
 	 * plus meta rows, so an equal old hash implies an equal new one; this never accepts a
@@ -404,36 +465,36 @@ final class Order_Serializer {
 	}
 
 	/**
-	 * The hidden meta keys the canonical revision hashes, on the order and on lines.
+	 * The order meta allow-list, also used to include hidden line meta in the revision.
 	 *
 	 * @return string[]
 	 */
 	public static function revision_meta_keys(): array {
 		/**
-		 * Filters the hidden meta keys the canonical order revision hashes.
+		 * Filters the meta keys the canonical order revision hashes.
 		 *
-		 * The revision hashes every visible (non-`_`) meta key, on the order and on every
-		 * line, plus these `_`-prefixed keys. Another plugin's hidden meta sits outside CAS,
-		 * and the push never overwrites it once it exists (see `Order_Write_Payload`).
+		 * Order meta hashes only these keys, visible or hidden. Lines also hash every visible
+		 * (non-`_`) key. Other order meta and foreign hidden line meta sit outside CAS; the push
+		 * never overwrites existing hidden foreign meta (see `Order_Write_Payload`).
 		 * Add a key to bring site-local meta into CAS. Read the coherence contract above first.
 		 *
 		 * @since 2.0.3
 		 *
-		 * @param string[] $keys Hidden meta keys inside the hash.
+		 * @param string[] $keys Order meta keys and hidden line meta keys inside the hash.
 		 */
 		return array_map( 'strval', (array) apply_filters( 'wcpos_sync_order_revision_meta_keys', self::REVISION_META_KEYS ) );
 	}
 
-	/** The 2.0.3 recipe: every meta row hashed, #2663 exclusions included. */
+	/** The 2.0.2 recipe: every meta row hashed, #2663 exclusions included. */
 	private static function legacy_revision( array $payload ): string {
 		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::form( $payload, false ) ) );
 	}
 
 	/**
-	 * The canonical form; with `$allow_list` false, the 2.0.3 form byte for byte.
+	 * The canonical form; with `$allow_list` false, the 2.0.2 form byte for byte.
 	 *
 	 * @param array $payload    Serialized order payload.
-	 * @param bool  $allow_list Hash only allow-listed order meta and hidden line meta.
+	 * @param bool  $allow_list Hash only allow-listed order meta; lines also keep every visible key.
 	 */
 	private static function form( array $payload, bool $allow_list ): array {
 		// WooCommerce merges register_rest_field additions inside get_item_schema().
@@ -494,7 +555,8 @@ final class Order_Serializer {
 						$key = Meta_Entry::key( $entry );
 						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true )
 							&& ! in_array( $key, $excluded_meta, true )
-							&& ( null === $allowed || 0 !== strpos( (string) $key, '_' ) || in_array( $key, $allowed, true ) );
+							&& ( null === $allowed || ! self::is_unsaved_row( $entry ) )
+							&& ( null === $allowed || in_array( $key, $allowed, true ) );
 					}
 				)
 			);
@@ -503,6 +565,19 @@ final class Order_Serializer {
 		$payload = self::strip_item_identity_meta( self::strip_identity_meta( $payload ), $excluded_meta, $allowed );
 
 		return Revision::canonicalize( array_intersect_key( $payload, array_flip( $fields ) ) );
+	}
+
+	/**
+	 * A meta entry served with an explicit non-positive id is no stored row: another plugin
+	 * built it at read time. Its value can change between two reads of an unchanged order
+	 * (wp-melhor-integrador stamps `date_quotation` with the clock), so hashing it 409s every
+	 * push. An entry with no id is not unsaved by this test; the key rules still apply.
+	 *
+	 * @param mixed $entry Meta entry, array or object form.
+	 */
+	public static function is_unsaved_row( $entry ): bool {
+		$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
+		return is_numeric( $id ) && (int) $id <= 0;
 	}
 
 	/**
@@ -517,7 +592,7 @@ final class Order_Serializer {
 	 * - Normalize line_items[].image.id to an int — the augmented read lanes
 	 *   serve it typed (v1 parity) while bare wc/v3 serves a string.
 	 * - Drop item meta whose key is in `$excluded_meta` (the revision's excluded-meta filter).
-	 * - Drop `_`-prefixed item meta `$allowed` does not name; null (the 2.0.3 form) keeps it.
+	 * - Drop `_`-prefixed item meta `$allowed` does not name; null (the 2.0.2 form) keeps it.
 	 */
 	private static function strip_item_identity_meta( array $payload, array $excluded_meta, ?array $allowed ): array {
 		// coupon_lines joined the uuid-stamped set with the rest (the client pairs
@@ -545,6 +620,7 @@ final class Order_Serializer {
 						static function ( $entry ) use ( $excluded_meta, $allowed ): bool {
 							$key = Meta_Entry::key( $entry );
 							return '_woocommerce_pos_uuid' !== $key && ! in_array( $key, $excluded_meta, true )
+								&& ( null === $allowed || ! self::is_unsaved_row( $entry ) )
 								&& ( null === $allowed || 0 !== strpos( (string) $key, '_' ) || in_array( $key, $allowed, true ) );
 						}
 					)

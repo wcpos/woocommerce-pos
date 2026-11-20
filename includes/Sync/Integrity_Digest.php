@@ -155,7 +155,10 @@ final class Integrity_Digest {
 		if ( ! function_exists( 'dbDelta' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		}
-		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
+		$table = $this->table_name();
+		dbDelta( $this->schema_sql( $table, $wpdb->get_charset_collate() ) );
+		$db_error = (string) $wpdb->last_error; // Read before the probe below clears it.
+		Health::log_if_missing( $table, $db_error );
 	}
 
 
@@ -240,7 +243,7 @@ final class Integrity_Digest {
 		try {
 			( new self() )->rebuild( true );
 		} catch ( \Throwable $exception ) {
-			Logger::error( 'WCPOS sync: scheduled integrity digest rebuild failed: ' . $exception->getMessage() );
+			Logger::error( 'WCPOS sync: scheduled integrity digest rebuild failed', array( 'error' => $exception->getMessage() ) );
 		} finally {
 			self::release_rebuild_lock( $lease );
 		}
@@ -451,7 +454,7 @@ final class Integrity_Digest {
 		try {
 			$observer();
 		} catch ( \Throwable $e ) {
-			Logger::error( 'Sync digest observer failed (sync will self-heal via scan/rebuild): ' . $e->getMessage() );
+			Logger::error( 'Sync digest observer failed (sync will self-heal via scan/rebuild)', array( 'error' => $e->getMessage() ) );
 		}
 	}
 
