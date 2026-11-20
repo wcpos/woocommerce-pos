@@ -577,7 +577,7 @@ final class Order_Serializer {
 	 */
 	public static function is_unsaved_row( $entry ): bool {
 		$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
-		return null !== $id && (int) $id <= 0;
+		return is_numeric( $id ) && (int) $id <= 0;
 	}
 
 	/**
