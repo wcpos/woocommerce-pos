@@ -1204,10 +1204,11 @@ class Activator {
 
 	/**
 	 * Acquire the DB upgrade lock.
+	 * Public so Sync\Store_Repair shares the one lock.
 	 *
 	 * @return bool True when this request owns the lock.
 	 */
-	private function acquire_db_upgrade_lock(): bool {
+	public static function acquire_db_upgrade_lock(): bool {
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
 		return \WP_Upgrader::create_lock( self::DB_UPGRADE_LOCK_NAME, self::DB_UPGRADE_LOCK_TTL );
@@ -1215,8 +1216,9 @@ class Activator {
 
 	/**
 	 * Release the DB upgrade lock.
+	 * Public so Sync\Store_Repair shares the one lock.
 	 */
-	private function release_db_upgrade_lock(): void {
+	public static function release_db_upgrade_lock(): void {
 		if ( ! class_exists( '\WP_Upgrader', false ) ) {
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		}
