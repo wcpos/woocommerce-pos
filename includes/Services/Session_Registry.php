@@ -134,9 +134,9 @@ final class Session_Registry {
 	 * @param int             $expires The expiration timestamp.
 	 * @param Session_Context $context Request state the session is recorded against.
 	 *
-	 * @return array Evicted entries keyed by refresh token JTI.
+	 * @return array|null Evicted entries keyed by refresh token JTI, or null when the session could not be stored.
 	 */
-	public function record( int $user_id, string $jti, int $expires, Session_Context $context ): array {
+	public function record( int $user_id, string $jti, int $expires, Session_Context $context ): ?array {
 		// BEFORE the read: a pre-cap row can be too large to load, and this is the first
 		// point in the login flow where WCPOS knows the user id.
 		$this->discard_oversized_row( $user_id );
@@ -210,8 +210,8 @@ final class Session_Registry {
 			}
 		);
 
-		// Nothing was evicted unless the write landed; the caller blacklists what is returned.
-		return $written ? $evicted : array();
+		// Null means the session was not stored and the caller must not issue a token for it.
+		return $written ? $evicted : null;
 	}
 
 	/**

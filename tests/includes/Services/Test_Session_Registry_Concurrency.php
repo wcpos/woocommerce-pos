@@ -292,6 +292,41 @@ class Test_Session_Registry_Concurrency extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A login whose session write gives up returns an error without issuing tokens.
+	 */
+	public function test_session_row_login_whose_write_gives_up_returns_an_error_and_no_tokens(): void {
+		global $wpdb;
+
+		// Arrange.
+		$session = $this->login();
+		$jti     = $this->refresh_jti( $session['refresh_token'] );
+		$this->count_row_updates(
+			function ( int $seen ) use ( $wpdb, $jti ) {
+				$row                         = $this->stored_row();
+				$value                       = maybe_unserialize( $row->meta_value );
+				$value[ $jti ]['last_active'] = 1000 + $seen;
+				$wpdb->query(
+					$wpdb->prepare(
+						"UPDATE {$wpdb->usermeta} SET meta_value = %s WHERE umeta_id = %d",
+						maybe_serialize( $value ),
+						$row->umeta_id
+					)
+				);
+			}
+		);
+
+		// Act.
+		$result = $this->auth->generate_token_pair( $this->user );
+
+		// Assert.
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woocommerce_pos_auth_session_not_stored', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] );
+		wp_cache_delete( $this->user->ID, 'user_meta' );
+		$this->assertSame( array( $jti ), array_keys( $this->auth->sessions()->entries( $this->user->ID ) ) );
+	}
+
+	/**
 	 * A write to the session row removes duplicate rows for the key and keeps the lowest one.
 	 */
 	public function test_session_row_write_removes_duplicate_rows(): void {
