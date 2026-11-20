@@ -643,8 +643,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-17T23:57:19+00:00",
-            "published-time": "2026-10-17T23:57:53+00:00"
+            "time": "2026-10-17T23:57:19+00:00"
         },
         {
             "name": "humbug/php-scoper",
@@ -1380,16 +1379,16 @@
         },
         {
             "name": "sentry/sentry",
-            "version": "4.37.0",
+            "version": "4.37.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/getsentry/sentry-php.git",
-                "reference": "635a94908528ca5c4f0804640a0ec578e51639b3"
+                "reference": "e91d17a16a2f007c01a68b0a6140a46bb3c1f90d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/getsentry/sentry-php/zipball/635a94908528ca5c4f0804640a0ec578e51639b3",
-                "reference": "635a94908528ca5c4f0804640a0ec578e51639b3",
+                "url": "https://api.github.com/repos/getsentry/sentry-php/zipball/e91d17a16a2f007c01a68b0a6140a46bb3c1f90d",
+                "reference": "e91d17a16a2f007c01a68b0a6140a46bb3c1f90d",
                 "shasum": ""
             },
             "require": {
@@ -1461,7 +1460,7 @@
             ],
             "support": {
                 "issues": "https://github.com/getsentry/sentry-php/issues",
-                "source": "https://github.com/getsentry/sentry-php/tree/4.37.0"
+                "source": "https://github.com/getsentry/sentry-php/tree/4.37.1"
             },
             "funding": [
                 {
@@ -1473,8 +1472,7 @@
                     "type": "custom"
                 }
             ],
-            "time": "2026-11-11T15:29:22+00:00",
-            "published-time": "2026-11-11T15:35:52+00:00"
+            "time": "2026-11-17T17:03:08+00:00"
         },
         {
             "name": "symfony/console",
@@ -2808,5 +2806,5 @@
     "platform-overrides": {
         "php": "7.4"
     },
-    "plugin-api-version": "2.11.0"
+    "plugin-api-version": "2.9.0"
 }
