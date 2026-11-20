@@ -3,13 +3,17 @@
 declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Tracing;
 
+use WCPOS\Vendor\Sentry\ClientReport\ClientReportAggregator;
+use WCPOS\Vendor\Sentry\ClientReport\Reason;
 use WCPOS\Vendor\Sentry\Event;
 use WCPOS\Vendor\Sentry\EventId;
 use WCPOS\Vendor\Sentry\Profiling\Profile;
 use WCPOS\Vendor\Sentry\Profiling\Profiler;
 use WCPOS\Vendor\Sentry\Profiling\ProfilerInterface;
+use WCPOS\Vendor\Sentry\Profiling\Profiles;
 use WCPOS\Vendor\Sentry\SentrySdk;
 use WCPOS\Vendor\Sentry\State\HubInterface;
+use WCPOS\Vendor\Sentry\Transport\DataCategory;
 /**
  * This class stores all the information about a Transaction.
  */
@@ -129,6 +133,7 @@ final class Transaction extends Span
      */
     public function finish(?float $endTimestamp = null) : ?EventId
     {
+        Profiles::getInstance()->continuousProfiler()->stopForRootSpan((string) $this->getSpanId());
         if ($this->endTimestamp !== null) {
             // Transaction was already finished once and we don't want to re-flush it
             return null;
@@ -136,6 +141,12 @@ final class Transaction extends Span
         $profile = $this->profiler !== null ? $this->finishProfiler($this->profiler) : null;
         parent::finish($endTimestamp);
         if ($this->sampled !== \true) {
+            $client = $this->hub->getClient();
+            // Unsampled transactions have no span recorder, so only the span of the transaction itself is dropped
+            if ($client !== null && $client->getOptions()->isTracingEnabled()) {
+                ClientReportAggregator::getInstance()->add(DataCategory::transaction(), Reason::sampleRate(), 1);
+                ClientReportAggregator::getInstance()->add(DataCategory::span(), Reason::sampleRate(), 1);
+            }
             return null;
         }
         $finishedSpans = [];
@@ -155,6 +166,10 @@ final class Transaction extends Span
         $event->setContext('trace', $this->getTraceContext());
         $event->setSdkMetadata('dynamic_sampling_context', $this->getDynamicSamplingContext());
         $event->setSdkMetadata('transaction_metadata', $this->getMetadata());
+        $profilerId = $this->data['profiler_id'] ?? null;
+        if (\is_string($profilerId)) {
+            $event->setContext('profile', ['profiler_id' => $profilerId]);
+        }
         if ($profile !== null) {
             $event->setSdkMetadata('profile', $profile);
         }
