@@ -73,6 +73,75 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 		}
 	}
 
+	/** Only allow-listed, non-unsaved order meta contributes to the revision. */
+	public function test_revision_hashes_only_allow_listed_stored_order_meta(): void {
+		// Arrange.
+		$without = array(
+			'id' => 5,
+			'meta_data' => array(),
+		);
+		$revision = Order_Serializer::canonical_revision( $without );
+		foreach ( array( 'gift_message', 'is_vat_exempt' ) as $key ) {
+			foreach ( array( 0, '0', -1 ) as $id ) {
+				$entry = array(
+					'id' => $id,
+					'key' => $key,
+					'value' => 'yes',
+				);
+				foreach ( array( $entry, (object) $entry ) as $shape ) {
+					// Act and assert: explicit unsaved rows stay out, even for an owned key.
+					$with = array_merge( $without, array( 'meta_data' => array( $shape ) ) );
+					$this->assertSame( $revision, Order_Serializer::canonical_revision( $with ) );
+				}
+			}
+			foreach ( array(
+				array(
+					'key' => $key,
+					'value' => 'yes',
+				),
+				array(
+					'id' => 9,
+					'key' => $key,
+					'value' => 'yes',
+				),
+			) as $entry ) {
+				$with = array_merge( $without, array( 'meta_data' => array( $entry ) ) );
+				if ( 'is_vat_exempt' === $key ) {
+					$this->assertNotSame( $revision, Order_Serializer::canonical_revision( $with ) );
+				} else {
+					$this->assertSame( $revision, Order_Serializer::canonical_revision( $with ) );
+				}
+			}
+		}
+	}
+
+	/** An unsaved line decoration is ignored; visible line meta without an id still hashes. */
+	public function test_revision_ignores_unsaved_visible_line_meta(): void {
+		foreach ( array( 'line_items', 'fee_lines', 'shipping_lines', 'coupon_lines' ) as $type ) {
+			// Arrange.
+			$without = array(
+				$type => array(
+					array(
+						'id' => 7,
+						'meta_data' => array(),
+					),
+				),
+			);
+			$with = $without;
+			$with[ $type ][0]['meta_data'][] = array(
+				'id'    => 0,
+				'key'   => 'melhor_integrador_order_data',
+				'value' => array( 'date_quotation' => '2026-11-20 10:00:00' ),
+			);
+			// Act and assert.
+			$this->assertSame( Order_Serializer::canonical_revision( $without ), Order_Serializer::canonical_revision( $with ), $type );
+			$with[ $type ][0]['meta_data'][0]['value']['date_quotation'] = '2026-11-20 10:00:01';
+			$this->assertSame( Order_Serializer::canonical_revision( $without ), Order_Serializer::canonical_revision( $with ), $type );
+			unset( $with[ $type ][0]['meta_data'][0]['id'] );
+			$this->assertNotSame( Order_Serializer::canonical_revision( $without ), Order_Serializer::canonical_revision( $with ), $type );
+		}
+	}
+
 	/**
 	 * Request-derived payment links do not affect a content revision.
 	 */
