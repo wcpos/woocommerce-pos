@@ -32,8 +32,8 @@ final class Order_Serializer {
 	/**
 	 * The meta keys the canonical revision hashes on orders: the keys the till asserts
 	 * or the server's money contract owns. Lines also hash every visible meta key.
-	 * Foreign order meta and foreign hidden line meta sit outside CAS, and the push never
-	 * overwrites them once they exist (see `Order_Write_Payload`).
+	 * Other order meta and foreign hidden line meta sit outside CAS; the push never overwrites
+	 * existing hidden foreign meta, and writes visible order meta as pushed (see `Order_Write_Payload`).
 	 */
 	private const REVISION_META_KEYS = array(
 		// Till-asserted.
@@ -474,8 +474,8 @@ final class Order_Serializer {
 		 * Filters the meta keys the canonical order revision hashes.
 		 *
 		 * Order meta hashes only these keys, visible or hidden. Lines also hash every visible
-		 * (non-`_`) key. Foreign order meta and foreign hidden line meta sit outside CAS,
-		 * and the push never overwrites them once they exist (see `Order_Write_Payload`).
+		 * (non-`_`) key. Other order meta and foreign hidden line meta sit outside CAS; the push
+		 * never overwrites existing hidden foreign meta (see `Order_Write_Payload`).
 		 * Add a key to bring site-local meta into CAS. Read the coherence contract above first.
 		 *
 		 * @since 2.0.3

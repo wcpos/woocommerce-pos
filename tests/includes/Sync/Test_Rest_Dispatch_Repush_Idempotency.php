@@ -782,11 +782,11 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Pushed allow-listed meta and visible line meta are written; existing foreign order meta is kept.
+	 * Pushed allow-listed hidden meta, on the order and on a line, and visible order meta are still written.
 	 *
 	 * @return void
 	 */
-	public function test_pushed_allow_listed_and_visible_line_meta_is_written_but_foreign_order_meta_is_kept(): void {
+	public function test_pushed_allow_listed_and_visible_meta_is_still_written(): void {
 		// Arrange.
 		add_filter( 'wcpos_sync_order_revision_meta_keys', static fn( array $keys ): array => array_merge( $keys, array( '_x_site_key' ) ) );
 		$created = $this->push_order( 'create', $this->create_payload() );
@@ -828,36 +828,32 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$stored = wc_get_order_item_meta( $line_id, '_woocommerce_pos_data', true );
 		$this->assertSame( $pos_data, is_array( $stored ) ? $stored : json_decode( (string) $stored, true ) );
 		$this->assertSame( array( 'after' ), wc_get_order_item_meta( $line_id, 'x_engraving', false ) );
-		$this->assertSame( 'before', wc_get_order( $id )->get_meta( 'gift_message' ) );
-		$this->assertCount( 1, wc_get_order( $id )->get_meta( 'gift_message', false ) );
+		$this->assertSame( 'hello', wc_get_order( $id )->get_meta( 'gift_message' ) );
 		$this->assertSame( 'after', wc_get_order( $id )->get_meta( '_x_site_key' ) );
 	}
 
 	/**
-	 * A pushed entry cannot rewrite a foreign order or hidden line row through its meta id.
+	 * A pushed entry cannot rewrite a hidden third-party row through its meta id, on the order or on a line.
 	 *
 	 * @return void
 	 */
-	public function test_a_push_cannot_rewrite_a_foreign_row_by_its_meta_id(): void {
+	public function test_a_push_cannot_rewrite_a_hidden_third_party_row_by_its_meta_id(): void {
 		// Arrange.
 		$created = $this->push_order( 'create', $this->create_payload() );
 		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
 		$id      = (int) $created->get_data()['document']['id'];
 		$line_id = (int) $created->get_data()['document']['line_items'][0]['id'];
 		$this->set_order_meta( $id, '_tracking_number', 'NEW' );
-		$this->set_order_meta( $id, 'gift_message', 'NEW' );
 		wc_update_order_item_meta( $line_id, '_tracking_number', 'NEW' );
-		$row_id = static function ( array $meta_data, string $key = '_tracking_number' ): int {
+		$row_id = static function ( array $meta_data ): int {
 			foreach ( $meta_data as $meta ) {
-				if ( $meta->key === $key ) {
+				if ( '_tracking_number' === $meta->key ) {
 					return (int) $meta->id;
 				}
 			}
 			return 0;
 		};
 		$order_row = $row_id( wc_get_order( $id )->get_meta_data() );
-		$visible_row = $row_id( wc_get_order( $id )->get_meta_data(), 'gift_message' );
-		$this->assertGreaterThan( 0, $visible_row );
 		$line_row  = $row_id( wc_get_order( $id )->get_item( $line_id )->get_meta_data() );
 		$this->assertGreaterThan( 0, $order_row );
 		$this->assertGreaterThan( 0, $line_row );
@@ -865,11 +861,6 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$document['meta_data'][]                  = array(
 			'id'    => $order_row,
 			'key'   => '_x_other',
-			'value' => 'hijack',
-		);
-		$document['meta_data'][] = array(
-			'id'    => $visible_row,
-			'key'   => 'is_vat_exempt',
 			'value' => 'hijack',
 		);
 		$document['line_items'][0]['meta_data'][] = array(
@@ -882,9 +873,6 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		// Assert.
 		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
 		$this->assertSame( array( 'NEW' ), array_values( array_map( static fn( $meta ) => $meta->value, wc_get_order( $id )->get_meta( '_tracking_number', false ) ) ) );
-		$this->assertSame( 'NEW', wc_get_order( $id )->get_meta( 'gift_message' ) );
-		$this->assertCount( 1, wc_get_order( $id )->get_meta( 'gift_message', false ) );
-		$this->assertNotSame( 'hijack', wc_get_order( $id )->get_meta( 'is_vat_exempt' ) );
 		$this->assertSame( array( 'NEW' ), wc_get_order_item_meta( $line_id, '_tracking_number', false ) );
 		foreach ( wc_get_order( $id )->get_meta_data() as $meta ) {
 			$this->assertFalse( $order_row === (int) $meta->id && 'hijack' === $meta->value, 'Order meta row ' . $order_row . ' was rewritten.' );
@@ -895,11 +883,12 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * A visible foreign order meta change neither conflicts with a stale push nor gets reverted by it.
+	 * A visible order meta key off the allow-list is outside CAS and written as pushed: the till edits
+	 * custom order fields, so a change made elsewhere does not 409 the push and the last writer wins.
 	 *
 	 * @return void
 	 */
-	public function test_a_visible_third_party_order_meta_change_does_not_409_or_get_reverted(): void {
+	public function test_a_visible_third_party_order_meta_change_does_not_409_and_the_pushed_value_is_written(): void {
 		// Arrange.
 		$write                    = fn( int $id, int $line_id, string $value ) => $this->set_order_meta( $id, 'gift_message', $value );
 		list( $held, $id, $line ) = $this->held_after_first_edit( $write );
@@ -909,7 +898,7 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 		$push = $this->push_order( 'update', $this->edited_document( $held, 'second edit' ), $held->get_data()['currentRevision'] );
 		// Assert.
 		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
-		$this->assertSame( 'NEW', wc_get_order( $id )->get_meta( 'gift_message' ) );
+		$this->assertSame( 'OLD', wc_get_order( $id )->get_meta( 'gift_message' ) );
 		$this->assertCount( 1, wc_get_order( $id )->get_meta( 'gift_message', false ) );
 	}
 
