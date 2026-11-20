@@ -14,6 +14,8 @@ use WCPOS\Vendor\Sentry\EventHint;
 use WCPOS\Vendor\Sentry\EventId;
 use WCPOS\Vendor\Sentry\Integration\IntegrationInterface;
 use WCPOS\Vendor\Sentry\MonitorConfig;
+use WCPOS\Vendor\Sentry\Profiling\ProfileChunk;
+use WCPOS\Vendor\Sentry\Profiling\Profiles;
 use WCPOS\Vendor\Sentry\Severity;
 use WCPOS\Vendor\Sentry\Tracing\SamplingContext;
 use WCPOS\Vendor\Sentry\Tracing\Span;
@@ -41,6 +43,9 @@ class Hub implements HubInterface
     public function __construct(?ClientInterface $client = null, ?Scope $scope = null)
     {
         $this->stack[] = new Layer($client, $scope ?? new Scope());
+        if ($client !== null) {
+            Profiles::getInstance()->continuousProfiler()->onClientBound($client);
+        }
     }
     /**
      * {@inheritdoc}
@@ -101,6 +106,7 @@ class Hub implements HubInterface
     {
         $layer = $this->getStackTop();
         $layer->setClient($client);
+        Profiles::getInstance()->continuousProfiler()->onClientBound($client);
     }
     /**
      * {@inheritdoc}
@@ -224,6 +230,9 @@ class Hub implements HubInterface
         if ($options === null || !$options->isTracingEnabled()) {
             $transaction->setSampled(\false);
             $logger->warning(\sprintf('Transaction [%s] was started but tracing is not enabled.', (string) $transaction->getTraceId()), ['context' => $context]);
+            if ($options !== null && $options->getProfileLifecycle() === 'trace') {
+                $logger->warning('The "profile_lifecycle" option is set to "trace" but tracing is not enabled, so no profiles will be collected.');
+            }
             return $transaction;
         }
         $samplingContext = SamplingContext::getDefault($context);
@@ -275,6 +284,15 @@ class Hub implements HubInterface
         }
         $logger->info(\sprintf('Transaction [%s] was started and sampled, decided by %s.', (string) $transaction->getTraceId(), $sampleSource), ['context' => $context]);
         $transaction->initSpanRecorder();
+        if ($options->getProfileLifecycle() === 'trace') {
+            $continuousProfiler = Profiles::getInstance()->continuousProfiler();
+            $continuousProfiler->startForRootSpan((string) $transaction->getSpanId());
+            $profilerId = $continuousProfiler->getProfilerId();
+            // Backfill profiling data because the profiler was started after the transaction
+            if ($profilerId !== null) {
+                $transaction->setData(['thread.id' => ProfileChunk::THREAD_ID, 'thread.name' => ProfileChunk::THREAD_NAME, 'profiler_id' => $profilerId]);
+            }
+        }
         $profilesSampleSource = 'config:profiles_sample_rate';
         $profilesSampler = $options->getProfilesSampler();
         if ($profilesSampler !== null) {

@@ -173,17 +173,17 @@ abstract class AbstractSerializer
         return $serializers;
     }
     /**
-     * @param object   $object
-     * @param string[] $hashes
+     * @param object $object
+     * @param int[]  $hashes
      *
      * @return mixed[]|string|bool|float|int|null
      */
     protected function serializeObject($object, int $_depth = 0, array $hashes = [])
     {
-        if ($_depth >= $this->maxDepth || \in_array(\spl_object_hash($object), $hashes, \true)) {
+        if ($_depth >= $this->maxDepth || \in_array(\spl_object_id($object), $hashes, \true)) {
             return $this->serializeValue($object);
         }
-        $hashes[] = \spl_object_hash($object);
+        $hashes[] = \spl_object_id($object);
         $serializedObject = [];
         $maxBreadth = $this->options->getMaxBreadth();
         $truncatedItems = 0;
@@ -257,7 +257,7 @@ abstract class AbstractSerializer
                 $objectId = $idProperty->getValue($value);
             } elseif ($reflection->hasMethod('getId') && ($getIdMethod = $reflection->getMethod('getId'))->isPublic()) {
                 try {
-                    $objectId = $getIdMethod->invoke($value);
+                    $objectId = $getIdMethod->invoke($getIdMethod->isStatic() ? null : $value);
                 } catch (\Throwable $e) {
                     // Do nothing on purpose
                 }

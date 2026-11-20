@@ -6,6 +6,7 @@ namespace WCPOS\Vendor\Sentry\State;
 use WCPOS\Vendor\Psr\Log\LoggerInterface;
 use WCPOS\Vendor\Psr\Log\NullLogger;
 use WCPOS\Vendor\Sentry\ErrorHandler;
+use WCPOS\Vendor\Sentry\Profiling\Profiles;
 use WCPOS\Vendor\Sentry\Tracing\PropagationContext;
 /**
  * Manages runtime-local SDK state across different execution models.
@@ -101,6 +102,8 @@ final class RuntimeContextManager
         if ($runtimeContext === null) {
             return;
         }
+        Profiles::getInstance()->continuousProfiler()->stopForRuntimeContext($runtimeContext->getId());
+        Profiles::getInstance()->continuousProfiler()->capturePendingChunks();
         $logger = $this->getLoggerFromHub($runtimeContext->getHub());
         $this->flushRuntimeContextResources($runtimeContext, $timeout, $logger);
     }
@@ -109,7 +112,12 @@ final class RuntimeContextManager
      */
     public function discardActiveContext() : void
     {
-        $this->removeActiveContext();
+        $runtimeContext = $this->removeActiveContext();
+        if ($runtimeContext === null) {
+            return;
+        }
+        // The root spans of a discarded context are not finished anymore, so they must not keep the profiler running
+        Profiles::getInstance()->continuousProfiler()->stopForRuntimeContext($runtimeContext->getId());
     }
     private function flushRuntimeContextResources(RuntimeContext $runtimeContext, ?int $timeout, LoggerInterface $logger) : void
     {

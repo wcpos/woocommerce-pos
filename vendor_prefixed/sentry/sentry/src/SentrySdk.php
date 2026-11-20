@@ -5,6 +5,7 @@ namespace WCPOS\Vendor\Sentry;
 
 use WCPOS\Vendor\Sentry\Logs\Logs;
 use WCPOS\Vendor\Sentry\Metrics\TraceMetrics;
+use WCPOS\Vendor\Sentry\Profiling\Profiles;
 use WCPOS\Vendor\Sentry\State\Hub;
 use WCPOS\Vendor\Sentry\State\HubInterface;
 use WCPOS\Vendor\Sentry\State\RuntimeContext;
@@ -167,6 +168,7 @@ final class SentrySdk
     {
         Logs::getInstance()->flush();
         TraceMetrics::getInstance()->flush();
+        Profiles::getInstance()->flush();
         $client = self::getCurrentHub()->getClient();
         if ($client !== null) {
             $client->flush();
