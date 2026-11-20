@@ -137,10 +137,12 @@ final class Fiscal_Record_Writers {
 	 */
 	public function record_reattribution( WC_Order $order, int $actor_id, int $old_cashier, int $new_cashier, string $old_store, string $new_store ): bool {
 		$latest = Completion_History::of( $order )->latest();
-		$sale   = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : null;
-		$sale   = $sale ?? $this->store->find_sale( $order->get_id() );
+		if ( is_array( $latest ) ) {
+			$this->recover( $order );
+		}
+		$sale = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : $this->store->find_sale( $order->get_id() );
 		if ( null === $sale ) {
-			return true;
+			return ! is_array( $latest );
 		}
 		$changes = array();
 		foreach ( array(
