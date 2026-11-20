@@ -689,7 +689,11 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				$this->assertArrayHasKey( 'pos_card', $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_card is offered' );
 			}
 		);
+		// The card field is minted on the pay page as the order's customer.
+		$previous_user = get_current_user_id();
+		wp_set_current_user( $order->get_customer_id() );
 		$_POST['pos_card_payment_nonce_field'] = wp_create_nonce( 'pos_card_payment_nonce' );
+		wp_set_current_user( $previous_user );
 		$completed                             = did_action( 'woocommerce_payment_complete' );
 		$redirected                            = false;
 		// pay_action() catches any Exception into an error notice, so the flag, not the catch below, records the redirect.
@@ -896,6 +900,10 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 	 * @param string    $gateway_id Chosen gateway.
 	 */
 	private function pay_on_order_pay( \WC_Order $order, string $gateway_id ): void {
+		// Production's Form_Handler::pay_action() sets the order's customer before
+		// WooCommerce's handler runs, and WC 11.3.1 refuses pay_for_order otherwise.
+		$previous_user = get_current_user_id();
+		wp_set_current_user( $order->get_customer_id() );
 		$previous_query_vars                     = $GLOBALS['wp']->query_vars;
 		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
 		$_GET['key']                             = $order->get_order_key();
@@ -912,6 +920,7 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			}
 			$GLOBALS['wp']->query_vars = $previous_query_vars;
 			unset( $_GET['key'], $_POST['woocommerce_pay'], $_POST['payment_method'], $_REQUEST['woocommerce-pay-nonce'] );
+			wp_set_current_user( $previous_user );
 		}
 	}
 
