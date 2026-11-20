@@ -566,6 +566,13 @@ class Auth {
 
 		// Store refresh token JTI for potential revocation.
 		$evicted   = $this->sessions->record( $user->ID, $jti, $expire, Session_Context::from_request() );
+		if ( null === $evicted ) {
+			return new WP_Error(
+				'woocommerce_pos_auth_session_not_stored',
+				__( 'The sign-in could not be saved, please try again.', 'woocommerce-pos' ),
+				array( 'status' => 503 )
+			);
+		}
 		$issued_jti = $jti;
 		$issued_at = time();
 		foreach ( $evicted as $evicted_jti => $token_data ) {
