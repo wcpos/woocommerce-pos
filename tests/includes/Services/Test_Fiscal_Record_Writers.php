@@ -306,6 +306,23 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
 	}
 
+	/** A reopened legacy completion without a sale has nothing to correct. */
+	public function test_reattribution_reopened_legacy_without_sale_returns_true_without_record(): void {
+		// Arrange: completing outside a register leaves no history or fiscal sale.
+		$order = $this->order();
+		$order->set_date_paid( time() );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertNull( Completion_History::of( $order )->latest() );
+		$order = $this->reopen( $order );
+		$this->assertTrue( Completion_History::of( $order )->latest()['legacy'] );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+
+		// Act and assert.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
 	/** A failed correction signals listeners but must not ask for sale recovery. */
 	public function test_reattribution_failed_insert_returns_false_without_recovery_note(): void {
 		$order = $this->order();

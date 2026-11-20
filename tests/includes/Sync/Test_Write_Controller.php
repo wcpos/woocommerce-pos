@@ -14,12 +14,14 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
@@ -2075,6 +2077,54 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				)
 			)
 		);
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	public function test_reopened_legacy_order_self_claim_changes_cashier_without_refusal_note(): void {
+		// Arrange: first reopen synthesises a legacy completion, with no fiscal sale.
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Old Cashier' ) );
+		$actor = self::factory()->user->create_and_get(
+			array(
+				'role' => 'cashier',
+				'display_name' => 'New Cashier',
+			)
+		);
+		$actor->add_cap( 'reassign_woocommerce_pos_sales', false );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_date_paid( time() );
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->save();
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertTrue( Completion_History::of( $order )->latest()['legacy'] );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+		wp_set_current_user( $actor->ID );
+
+		// Match the production pull lane when hashing structured completion meta.
+		Meta_Normalizer::register_hooks();
+
+		// Act: the reopened cart is handed over to the authenticated cashier.
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_user',
+						'value' => (string) $actor->ID,
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status(), wp_json_encode( $result->get_data() ) );
+		$this->assertSame( (string) $actor->ID, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$notes = $this->noteContents( $order->get_id() );
+		$this->assertContains( 'POS cashier changed from Old Cashier to New Cashier.', $notes );
+		$this->assertCount( 0, array_filter( $notes, static fn( $note ) => false !== strpos( $note, 'not applied' ) ) );
 		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
 	}
 

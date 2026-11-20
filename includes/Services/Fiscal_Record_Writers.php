@@ -142,7 +142,7 @@ final class Fiscal_Record_Writers {
 		}
 		$sale = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : $this->store->find_sale( $order->get_id() );
 		if ( null === $sale ) {
-			return ! is_array( $latest );
+			return ! is_array( $latest ) || ! empty( $latest['legacy'] );
 		}
 		$changes = array();
 		foreach ( array(
