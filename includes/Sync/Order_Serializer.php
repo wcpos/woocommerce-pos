@@ -554,6 +554,7 @@ final class Order_Serializer {
 						$key = Meta_Entry::key( $entry );
 						return ! in_array( $key, array( '_wp_trash_meta_status', '_wp_trash_meta_time', '_wp_trash_meta_comments_status' ), true )
 							&& ! in_array( $key, $excluded_meta, true )
+							&& ( null === $allowed || ! self::is_unsaved_row( $entry ) )
 							&& ( null === $allowed || 0 !== strpos( (string) $key, '_' ) || in_array( $key, $allowed, true ) );
 					}
 				)
@@ -563,6 +564,19 @@ final class Order_Serializer {
 		$payload = self::strip_item_identity_meta( self::strip_identity_meta( $payload ), $excluded_meta, $allowed );
 
 		return Revision::canonicalize( array_intersect_key( $payload, array_flip( $fields ) ) );
+	}
+
+	/**
+	 * A meta entry served with an explicit non-positive id is no stored row: another plugin
+	 * built it at read time. Its value can change between two reads of an unchanged order
+	 * (wp-melhor-integrador stamps `date_quotation` with the clock), so hashing it 409s every
+	 * push. An entry with no id at all stays hashed, as before.
+	 *
+	 * @param mixed $entry Meta entry, array or object form.
+	 */
+	private static function is_unsaved_row( $entry ): bool {
+		$id = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
+		return null !== $id && (int) $id <= 0;
 	}
 
 	/**
@@ -605,6 +619,7 @@ final class Order_Serializer {
 						static function ( $entry ) use ( $excluded_meta, $allowed ): bool {
 							$key = Meta_Entry::key( $entry );
 							return '_woocommerce_pos_uuid' !== $key && ! in_array( $key, $excluded_meta, true )
+								&& ( null === $allowed || ! self::is_unsaved_row( $entry ) )
 								&& ( null === $allowed || 0 !== strpos( (string) $key, '_' ) || in_array( $key, $allowed, true ) );
 						}
 					)
