@@ -100,7 +100,7 @@ final class Order_Write_Payload {
 		}
 		$payload = $this->reconcile_order_item_ids( $order, $payload );
 		$payload = $this->without_internal_item_meta( $order, $payload );
-		$payload = $this->without_foreign_hidden_meta( $order, $payload );
+		$payload = $this->without_foreign_meta( $order, $payload );
 		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
 		$payload = $this->remove_omitted_order_items( $order, $payload );
 		$payload = $this->reconcile_order_coupon_lines( $order, $payload );
@@ -167,11 +167,16 @@ final class Order_Write_Payload {
 	 * newer write. The POS never owns such a key: the push may create it, never update or delete an
 	 * existing row, by key or by meta id. `_woocommerce_pos_uuid` is the POS's identity and exempt.
 	 *
+	 * Visible order meta off the allow-list is outside CAS too, and is written as pushed: the till
+	 * edits custom order fields, so the last writer wins. One exception, on the order and on stored
+	 * lines: an entry off the allow-list with an explicit unsaved id is the echo of a row another
+	 * plugin built at read time, and is dropped rather than stored.
+	 *
 	 * @param \WC_Abstract_Order|false $order   Loaded order, or false when the id did not resolve.
 	 * @param array                    $payload Order payload about to be forwarded.
 	 * @return array Payload whose meta never touches an existing foreign hidden row.
 	 */
-	private function without_foreign_hidden_meta( $order, array $payload ): array {
+	private function without_foreign_meta( $order, array $payload ): array {
 		if ( ! $order ) {
 			return $payload;
 		}
@@ -179,7 +184,7 @@ final class Order_Write_Payload {
 		$foreign = static function ( $key ) use ( $allowed ): bool {
 			return is_string( $key ) && 0 === strpos( $key, '_' ) && Pos_Uuid::META_KEY !== $key && ! in_array( $key, $allowed, true );
 		};
-		$filter  = static function ( array $meta_data, array $stored ) use ( $foreign ): array {
+		$filter  = static function ( array $meta_data, array $stored ) use ( $foreign, $allowed ): array {
 			$keys = array();
 			$ids  = array();
 			foreach ( $stored as $meta ) {
@@ -191,10 +196,11 @@ final class Order_Write_Payload {
 			return array_values(
 				array_filter(
 					$meta_data,
-					static function ( $entry ) use ( $keys, $ids, $foreign ): bool {
+					static function ( $entry ) use ( $keys, $ids, $foreign, $allowed ): bool {
 						$id  = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
 						$key = Meta_Entry::key( $entry );
-						return ! ( $foreign( $key ) && in_array( $key, $keys, true ) ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) );
+						return ! ( $foreign( $key ) && in_array( $key, $keys, true ) ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) )
+							&& ! ( Pos_Uuid::META_KEY !== $key && ! in_array( $key, $allowed, true ) && Order_Serializer::is_unsaved_row( $entry ) );
 					}
 				)
 			);
