@@ -168,9 +168,9 @@ final class Order_Write_Payload {
 	 * existing row, by key or by meta id. `_woocommerce_pos_uuid` is the POS's identity and exempt.
 	 *
 	 * Visible order meta off the allow-list is outside CAS too, and is written as pushed: the till
-	 * edits custom order fields, so the last writer wins. One exception at order level: an entry off
-	 * the allow-list with an explicit unsaved id is the echo of a row another plugin built at read
-	 * time, and is dropped rather than stored.
+	 * edits custom order fields, so the last writer wins. One exception, on the order and on stored
+	 * lines: an entry off the allow-list with an explicit unsaved id is the echo of a row another
+	 * plugin built at read time, and is dropped rather than stored.
 	 *
 	 * @param \WC_Abstract_Order|false $order   Loaded order, or false when the id did not resolve.
 	 * @param array                    $payload Order payload about to be forwarded.
@@ -184,7 +184,7 @@ final class Order_Write_Payload {
 		$foreign = static function ( $key ) use ( $allowed ): bool {
 			return is_string( $key ) && 0 === strpos( $key, '_' ) && Pos_Uuid::META_KEY !== $key && ! in_array( $key, $allowed, true );
 		};
-		$filter  = static function ( array $meta_data, array $stored, bool $order_level = false ) use ( $foreign, $allowed ): array {
+		$filter  = static function ( array $meta_data, array $stored ) use ( $foreign, $allowed ): array {
 			$keys = array();
 			$ids  = array();
 			foreach ( $stored as $meta ) {
@@ -196,17 +196,17 @@ final class Order_Write_Payload {
 			return array_values(
 				array_filter(
 					$meta_data,
-					static function ( $entry ) use ( $keys, $ids, $foreign, $allowed, $order_level ): bool {
+					static function ( $entry ) use ( $keys, $ids, $foreign, $allowed ): bool {
 						$id  = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
 						$key = Meta_Entry::key( $entry );
 						return ! ( $foreign( $key ) && in_array( $key, $keys, true ) ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) )
-							&& ! ( $order_level && Pos_Uuid::META_KEY !== $key && ! in_array( $key, $allowed, true ) && Order_Serializer::is_unsaved_row( $entry ) );
+							&& ! ( Pos_Uuid::META_KEY !== $key && ! in_array( $key, $allowed, true ) && Order_Serializer::is_unsaved_row( $entry ) );
 					}
 				)
 			);
 		};
 		if ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) {
-			$payload['meta_data'] = $filter( $payload['meta_data'], $order->get_meta_data(), true );
+			$payload['meta_data'] = $filter( $payload['meta_data'], $order->get_meta_data() );
 		}
 		foreach ( array_keys( self::ITEM_CLASSES ) as $type ) {
 			foreach ( isset( $payload[ $type ] ) && is_array( $payload[ $type ] ) ? $payload[ $type ] : array() as $i => $line ) {

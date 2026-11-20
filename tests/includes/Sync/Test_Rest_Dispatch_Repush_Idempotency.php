@@ -903,6 +903,29 @@ class Test_Rest_Dispatch_Repush_Idempotency extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A till's echo of a read-time line row (explicit id 0) is not stored on the line.
+	 *
+	 * @return void
+	 */
+	public function test_an_echoed_unsaved_line_meta_row_is_not_stored(): void {
+		// Arrange.
+		$created = $this->push_order( 'create', $this->create_payload() );
+		$this->assertSame( 201, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$line_id  = (int) $created->get_data()['document']['line_items'][0]['id'];
+		$document = $this->edited_document( $created, 'echo line decoration' );
+		$document['line_items'][0]['meta_data'][] = array(
+			'id'    => 0,
+			'key'   => 'x_read_time',
+			'value' => 'now',
+		);
+		// Act.
+		$push = $this->push_order( 'update', $document, $created->get_data()['currentRevision'] );
+		// Assert.
+		$this->assertSame( 200, $push->get_status(), wp_json_encode( $push->get_data() ) );
+		$this->assertSame( array(), wc_get_order_item_meta( $line_id, 'x_read_time', false ) );
+	}
+
+	/**
 	 * Read-time order decorations neither move the revision nor become stored rows on an echo.
 	 *
 	 * @return void
