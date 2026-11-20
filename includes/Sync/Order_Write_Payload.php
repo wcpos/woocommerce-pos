@@ -888,6 +888,12 @@ final class Order_Write_Payload {
 		// keys coupon_lines by code instead, so the marker must be dropped here: the
 		// remaining codes then differ from the stored set and the remove-and-reapply
 		// below removes the coupon, or match it (a retried push) and nothing is sent.
+		$deleted_coupon_ids = array();
+		foreach ( $payload['coupon_lines'] as $line ) {
+			if ( self::is_coupon_deletion_marker( $line ) ) {
+				$deleted_coupon_ids[ (int) $line['id'] ] = true;
+			}
+		}
 		$payload['coupon_lines'] = array_values(
 			array_filter(
 				$payload['coupon_lines'],
@@ -901,9 +907,12 @@ final class Order_Write_Payload {
 		// intent inherits the stored one, so an unchanged set matches and a changed one can be
 		// registered. A line with its own intent, or showing another one (type fields or a
 		// keyless value that differ: an edit, not a drop), is left to fail as before; a real
-		// store coupon lends nothing.
+		// store coupon lends nothing; an item the payload deletes lends nothing.
 		$stored_intents = array();
 		foreach ( $order->get_coupons() as $coupon ) {
+			if ( isset( $deleted_coupon_ids[ $coupon->get_id() ] ) ) {
+				continue;
+			}
 			$intent = Quick_Discount::intent_from_item( $coupon );
 			if ( null !== $intent ) {
 				$stored_intents[ Quick_Discount::set_key( $coupon->get_code(), null ) ] = $intent;

@@ -845,6 +845,72 @@ class Test_Rest_Dispatch_Quick_Discount extends Sync_REST_Store_Test_Case {
 		$this->assert_unscoped();
 	}
 
+	/** POS-2RT: a deleted quick discount lends no intent to a re-added code without a store coupon. */
+	public function test_v2_deleted_quick_discount_lends_no_intent_to_a_readded_code(): void {
+		// Arrange
+		$order = $this->created_order( 'v2', $this->payload( array( $this->quick_line() ) ) );
+		$id = $this->single_coupon( $order )->get_id();
+
+		// Act
+		$response = $this->write_order(
+			'v2',
+			array(
+				'coupon_lines' => array(
+					array(
+						'id' => $id,
+						'code' => null,
+					),
+					array( 'code' => 'pos-discount' ),
+				),
+			),
+			$order->get_id()
+		);
+
+		// Assert
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'woocommerce_rest_invalid_coupon', $response->get_data()['code'] );
+		$this->assert_unscoped();
+	}
+
+	/** POS-2RT: deleting a quick discount allows a re-added code to apply the store coupon. */
+	public function test_v2_deleted_quick_discount_with_same_code_store_coupon_applies_the_store_coupon(): void {
+		// Arrange
+		$order = $this->created_order( 'v2', $this->payload( array( $this->quick_line() ) ) );
+		$id = $this->single_coupon( $order )->get_id();
+		$real = new WC_Coupon();
+		$real->set_code( 'pos-discount' );
+		$real->set_discount_type( 'percent' );
+		$real->set_amount( '50' );
+		$real->save();
+		try {
+			// Act
+			$response = $this->write_order(
+				'v2',
+				array(
+					'coupon_lines' => array(
+						array(
+							'id' => $id,
+							'code' => null,
+						),
+						array( 'code' => 'pos-discount' ),
+					),
+				),
+				$order->get_id()
+			);
+
+			// Assert
+			$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			$order = wc_get_order( $order->get_id() );
+			$item = $this->single_coupon( $order );
+			$this->assertSame( 'pos-discount', $item->get_code() );
+			$this->assertSame( '', $item->get_meta( '_wcpos_quick_discount' ) );
+			$this->assertSame( '60.00', $order->get_total() );
+		} finally {
+			$real->delete( true );
+		}
+		$this->assert_unscoped();
+	}
+
 	public function test_registry_is_code_scoped_unrestricted_and_clear_is_idempotent(): void {
 		$qd = new Quick_Discount();
 		try {
