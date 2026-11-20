@@ -4,7 +4,7 @@ Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.4
+Stable tag: 2.0.5
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -296,6 +296,20 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 8. Offline: the Offline badge beside the store name while the till keeps working.
 
 == Changelog ==
+
+= 2.0.5 - 2026/11/20 =
+
+- **A manager can reassign a completed sale to another cashier from the order screen in WP Admin, and the change of cashier is added to the sale's fiscal record.**
+- **Taking payment for a guest order through a gateway's pay window works again on WooCommerce 11.3.1, which had started refusing it.**
+- **Creating a customer at the till no longer fails with "Missing parameter(s): username" or "password" when the store does not generate usernames and passwords at checkout; WCPOS generates them.**
+- **Checking out an order with a quick discount no longer fails with "pos-discount does not exist" when the till sends the order again.**
+- **Sales no longer fail with a sync conflict when another plugin adds order data that changes every time it is read: only WCPOS's own order data is compared.**
+- **A sync table that goes missing after setup (a cleanup plugin, a partial restore) is re-created automatically instead of leaving the tills unable to sync, and the reason a table could not be created is logged.**
+- **A returned item prints on the receipt with its negative quantity and its real price and savings, instead of quantity 0 at 0.00.**
+- **A sign-in whose session cannot be saved during heavy concurrent logins now fails cleanly instead of giving the till tokens the server never recorded, and overlapping sign-ins and sign-outs no longer undo each other.**
+- The default payment method chosen under POS > Checkout is sent to the till again, ready for the app to preselect it as 1.x did.
+- Online shop pages on stores using POS Only products do less work on queries that are not about products.
+- Developers: fatal-error reports now carry the kind of request, its REST route and a masked path; turn this off with the `wcpos_error_reporting_request_context` filter. Bundled Sentry SDK updated to 4.37.1, with guzzlehttp/psr7 held at 3.2.0. Translations pinned to 2026.11.21.
 
 = 2.0.4 - 2026/11/15 =
 
