@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\Logger;
+
 /**
  * Checks whether the sync store tables are installed.
  */
@@ -32,6 +34,29 @@ final class Health {
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The known table name is escaped for LIKE and must not be double-escaped by prepare().
 		return $table === $wpdb->get_var( "SHOW TABLES LIKE '" . $wpdb->esc_like( $table ) . "'" );
+	}
+
+	/**
+	 * Log a sync store table that dbDelta() left missing, with the database's reason.
+	 *
+	 * WordPress's dbDelta() reports nothing when a CREATE fails (a denied CREATE privilege, a
+	 * full disk), so without this a site whose sync store never installs only ever answers
+	 * wcpos_sync_unavailable and nothing records why.
+	 *
+	 * @param string $table    Fully qualified table name.
+	 * @param string $db_error $wpdb->last_error, read straight after dbDelta().
+	 */
+	public static function log_if_missing( string $table, string $db_error ): void {
+		if ( self::table_exists( $table ) ) {
+			return;
+		}
+		Logger::error(
+			'Sync table could not be created',
+			array(
+				'table'    => $table,
+				'db_error' => $db_error,
+			)
+		);
 	}
 
 	/**
