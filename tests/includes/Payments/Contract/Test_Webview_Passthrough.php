@@ -613,7 +613,6 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 		$order                                = $this->create_order( true );
 		$status                               = $order->get_status();
 		$total                                = $order->get_total();
-		$_POST['pos_cash_payment_nonce_field'] = wp_create_nonce( 'pos_cash_payment_nonce' );
 		$_POST['pos-cash-tendered']            = $order->get_total();
 		$completed                            = did_action( 'woocommerce_payment_complete' );
 		$redirect                             = static function () {
@@ -623,12 +622,12 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		try {
-			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_cash' ) );
+			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_cash', array( 'pos_cash_payment_nonce_field' => 'pos_cash_payment_nonce' ) ) );
 		} catch ( \RuntimeException $exception ) {
 			$this->assertSame( 'redirected', $exception->getMessage() );
 		} finally {
 			remove_filter( 'wp_redirect', $redirect );
-			unset( $_POST['pos_cash_payment_nonce_field'], $_POST['pos-cash-tendered'] );
+			unset( $_POST['pos-cash-tendered'] );
 			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
 			wc_clear_notices();
 		}
@@ -653,7 +652,6 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				$this->assertArrayHasKey( 'pos_card', $this->on_pay_page( $open, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_card is offered' );
 			}
 		);
-		$_POST['pos_card_payment_nonce_field'] = wp_create_nonce( 'pos_card_payment_nonce' );
 		$completed                             = did_action( 'woocommerce_payment_complete' );
 		$redirect                              = static function () {
 			throw new \RuntimeException( 'redirected' ); // WooCommerce's success branch exits after the redirect.
@@ -662,12 +660,11 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		try {
-			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_card' ) );
+			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_card', array( 'pos_card_payment_nonce_field' => 'pos_card_payment_nonce' ) ) );
 		} catch ( \RuntimeException $exception ) {
 			$this->assertSame( 'redirected', $exception->getMessage() );
 		} finally {
 			remove_filter( 'wp_redirect', $redirect );
-			unset( $_POST['pos_card_payment_nonce_field'] );
 			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
 			wc_clear_notices();
 		}
@@ -689,7 +686,6 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 				$this->assertArrayHasKey( 'pos_card', $this->on_pay_page( $order, static fn() => WC()->payment_gateways()->get_available_payment_gateways() ), 'precondition: pos_card is offered' );
 			}
 		);
-		$_POST['pos_card_payment_nonce_field'] = wp_create_nonce( 'pos_card_payment_nonce' );
 		$completed                             = did_action( 'woocommerce_payment_complete' );
 		$redirected                            = false;
 		// pay_action() catches any Exception into an error notice, so the flag, not the catch below, records the redirect.
@@ -701,12 +697,11 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 
 		// Act.
 		try {
-			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_card' ) );
+			$this->in_pos_request( fn() => $this->pay_on_order_pay( $order, 'pos_card', array( 'pos_card_payment_nonce_field' => 'pos_card_payment_nonce' ) ) );
 		} catch ( \RuntimeException $exception ) {
 			$this->assertSame( 'redirected', $exception->getMessage() );
 		} finally {
 			remove_filter( 'wp_redirect', $redirect );
-			unset( $_POST['pos_card_payment_nonce_field'] );
 			$errors = array_column( wc_get_notices( 'error' ), 'notice' );
 			wc_clear_notices();
 		}
@@ -892,17 +887,26 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * POST WooCommerce's order-pay form for the order with the gateway, through WC_Form_Handler::pay_action().
 	 *
-	 * @param \WC_Order $order      Order.
-	 * @param string    $gateway_id Chosen gateway.
+	 * The POST runs as the order's customer, as Form_Handler::pay_action() switches it in production: since
+	 * WooCommerce 11.3.1 pay_action() refuses a user who cannot pay_for_order, and the nonces are minted as that user.
+	 *
+	 * @param \WC_Order $order          Order.
+	 * @param string    $gateway_id     Chosen gateway.
+	 * @param array     $gateway_nonces The gateway form's nonce fields, field name => nonce action.
 	 */
-	private function pay_on_order_pay( \WC_Order $order, string $gateway_id ): void {
+	private function pay_on_order_pay( \WC_Order $order, string $gateway_id, array $gateway_nonces = array() ): void {
+		$previous_user                           = get_current_user_id();
 		$previous_query_vars                     = $GLOBALS['wp']->query_vars;
+		wp_set_current_user( $order->get_customer_id() );
 		$GLOBALS['wp']->query_vars['order-pay'] = $order->get_id();
 		$_GET['key']                             = $order->get_order_key();
 		$_POST['woocommerce_pay']                = '1';
 		$_POST['payment_method']                 = $gateway_id;
 		$_REQUEST['woocommerce-pay-nonce']       = wp_create_nonce( 'woocommerce-pay' );
-		$level                                   = ob_get_level();
+		foreach ( $gateway_nonces as $field => $action ) {
+			$_POST[ $field ] = wp_create_nonce( $action );
+		}
+		$level = ob_get_level();
 
 		try {
 			\WC_Form_Handler::pay_action();
@@ -912,6 +916,10 @@ class Test_Webview_Passthrough extends WCPOS_REST_Unit_Test_Case {
 			}
 			$GLOBALS['wp']->query_vars = $previous_query_vars;
 			unset( $_GET['key'], $_POST['woocommerce_pay'], $_POST['payment_method'], $_REQUEST['woocommerce-pay-nonce'] );
+			foreach ( array_keys( $gateway_nonces ) as $field ) {
+				unset( $_POST[ $field ] );
+			}
+			wp_set_current_user( $previous_user );
 		}
 	}
 
