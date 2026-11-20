@@ -489,6 +489,45 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A POS guest sale with a billing email, paid after WooCommerce's 10-minute
+	 * email-verification grace period, still reaches the gateway: the cashier's
+	 * token and the order key are the proof of access, and the POS guest is never
+	 * signed in to verify an email. WooCommerce 11.3.1 refuses the pay POST
+	 * silently when verification is required.
+	 */
+	public function test_pay_action_guest_with_email_after_grace_period_reaches_the_gateway(): void {
+		// Arrange.
+		$order = $this->create_pos_order_with_billing_email( 'buyer@example.com' );
+		$order->set_total( '10.00' );
+		$order->set_date_created( time() - HOUR_IN_SECONDS );
+		$order->save();
+		$other = $this->create_pos_order_with_billing_email( 'other@example.com' );
+		$other->set_date_created( time() - HOUR_IN_SECONDS );
+		$other->save();
+		$this->arrange_pos_pay_post( $order );
+		$before = did_action( 'woocommerce_before_pay_action' );
+		$level  = ob_get_level();
+
+		// Act: ours switches to the guest, then WooCommerce's handler runs, as on the 'wp' hook.
+		( new Form_Handler() )->pay_action();
+		$_REQUEST['woocommerce-pay-nonce'] = wp_create_nonce( 'woocommerce-pay' );
+		try {
+			\WC_Form_Handler::pay_action();
+		} finally {
+			while ( ob_get_level() > $level ) {
+				ob_end_clean();
+			}
+			unset( $_REQUEST['woocommerce-pay-nonce'] );
+			wc_clear_notices();
+		}
+
+		// Assert.
+		$this->assertSame( $before + 1, did_action( 'woocommerce_before_pay_action' ), 'The pay POST reaches the gateway step.' );
+		$this->assertFalse( \Automattic\WooCommerce\Internal\Utilities\Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+		$this->assertTrue( \Automattic\WooCommerce\Internal\Utilities\Users::should_user_verify_order_email( $other->get_id(), null, 'order-pay' ), 'Only the order being paid skips verification.' );
+	}
+
+	/**
 	 * Stripe below 10.2.0 passes only the required fields; with no request to
 	 * read, the email counts as blank.
 	 */
