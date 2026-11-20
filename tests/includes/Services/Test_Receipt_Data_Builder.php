@@ -2049,6 +2049,45 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * WooCommerce raises a returned line's legacy subtotal (below its total) to the total
+	 * on every read, so the builder never sees the pre-1.9 shape on a return.
+	 */
+	public function test_build_returned_line_stored_in_pre_1_9_shape_is_read_back_clamped_to_its_total(): void {
+		// Arrange.
+		update_option( 'woocommerce_calc_taxes', 'no' );
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos', '1' );
+		$item = new \WC_Order_Item_Product();
+		$item->set_name( 'Returned Product' );
+		$item->set_quantity( -1 );
+		$item->set_total( -15.0 );
+		$item->set_subtotal( -18.0 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => '15',
+				'regular_price' => '18',
+				'tax_status'    => 'none',
+			)
+		);
+		$order->add_item( $item );
+		$order->save();
+		$this->assertSame( -18.0, (float) wc_get_order_item_meta( $item->get_id(), '_line_subtotal', true ) );
+
+		// Act.
+		$read      = wc_get_order( $order->get_id() );
+		$read_item = array_values( $read->get_items( 'line_item' ) )[0];
+		$line      = $this->builder->build( $read, 'live' )['lines'][0];
+
+		// Assert.
+		$this->assertSame( -15.0, (float) $read_item->get_subtotal() );
+		$this->assertSame( -15.0, (float) $read_item->get_total() );
+		$this->assertSame( -15.0, $line['line_subtotal_excl'] );
+		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
 	 * Create a taxless POS order whose lines carry signed quantities and recorded prices.
 	 *
 	 * @param array $lines Rows of array( qty, line total, recorded price, recorded regular price ).
