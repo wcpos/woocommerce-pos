@@ -317,7 +317,7 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 		$envelope = Descriptor_Builder::instance()->all();
 
 		// Assert.
-		$this->assertSame( array( 'schema', 'contract', 'methods' ), array_keys( $envelope ) );
+		$this->assertSame( array( 'schema', 'contract', 'methods', 'default_method' ), array_keys( $envelope ) );
 		$this->assertSame( 1, $envelope['schema'] );
 		$this->assertSame( '1.3', $envelope['contract'] );
 		$this->assertCount( count( $gateways ), $envelope['methods'] );
@@ -330,6 +330,18 @@ class Test_Descriptor_Builder extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( '1.3', $envelope['contract'] );
+	}
+
+	/** The envelope carries the admin's default gateway as default_method. */
+	public function test_envelope_carries_default_gateway(): void {
+		// Arrange.
+		update_option( 'woocommerce_pos_settings_payment_gateways', array( 'default_gateway' => 'pos_card' ) );
+
+		// Act.
+		$envelope = Descriptor_Builder::instance()->all();
+
+		// Assert.
+		$this->assertSame( 'pos_card', $envelope['default_method'] );
 	}
 
 	/** Unknown kind filters are rejected. */

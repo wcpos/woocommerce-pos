@@ -161,7 +161,9 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 		$output = ob_get_clean();
 
 		// Assert.
-		$this->assertEquals( 2, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+		// Compare decoded text: WordPress 7.2 kses may return character references decoded.
+		$symbol = html_entity_decode( get_woocommerce_currency_symbol( $order_currency ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$this->assertSame( 2, substr_count( html_entity_decode( $output, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), $symbol ) );
 	}
 
 	/**
@@ -186,7 +188,8 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 			$output = ob_get_clean();
 
 			// Assert.
-			$this->assertEquals( 2, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+			$symbol = html_entity_decode( get_woocommerce_currency_symbol( $order_currency ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$this->assertSame( 2, substr_count( html_entity_decode( $output, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), $symbol ) );
 		} finally {
 			$this->clean_up_cot_setup();
 			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
