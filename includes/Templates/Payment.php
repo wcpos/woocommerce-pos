@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Form_Handler;
 use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
@@ -196,6 +197,42 @@ class Payment {
 				wp_die(
 					esc_html__( 'Sorry, this order cannot be paid for. The order key is missing or invalid.', 'woocommerce-pos' ),
 					/* translators: Short WCPOS UI label; keep concise. */
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
+			// The same cashier token check as the pay and coupon POSTs, before the user is switched to the customer.
+			$token_status = Form_Handler::cashier_token_status( $this->order );
+			if ( 'mismatch' === $token_status ) {
+				// A refresh cannot fix this, so it sends the app no signal.
+				wp_die(
+					/* translators: Checkout/payment form error message shown when the cashier token does not match. */
+					esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
+					/* translators: Checkout/payment form error message title. */
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+			if ( '' !== $token_status ) {
+				// Payload confirmed against the app's listener (monorepo webview/index.tsx).
+				$js = 'var m = ' . wp_json_encode(
+					array(
+						'action'  => 'wcpos-session-expired',
+						'orderId' => $this->order->get_id(),
+					)
+				) . ';'
+					. 'if ( window.ReactNativeWebView ) { window.ReactNativeWebView.postMessage( JSON.stringify( m ) ); }'
+					. 'window.parent.postMessage( m, \'*\' );';
+
+				$html = '<p>' .
+					/* translators: Shown on the POS pay page when the cashier's session has expired. */
+					esc_html__( 'Your session has expired. Close this payment window and open it again.', 'woocommerce-pos' )
+					. '</p>' . wp_get_inline_script_tag( $js );
+
+				wp_die(
+					$html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped text and a script tag built from a JSON-encoded order id.
+					/* translators: Checkout/payment form error message title. */
 					esc_html__( 'Error', 'woocommerce-pos' ),
 					array( 'response' => 403 )
 				);
