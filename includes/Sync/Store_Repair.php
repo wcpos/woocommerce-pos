@@ -50,7 +50,8 @@ final class Store_Repair {
 			wp_cache_delete( Api::SCHEMA_OPTION, 'options' );
 			wp_cache_delete( 'alloptions', 'options' );
 			// Activation runs the install without this lock and can delete the latch.
-			if ( Api::SCHEMA_VERSION !== get_option( Api::SCHEMA_OPTION ) ) {
+			// The caches were just cleared, so this re-read can differ from the first; PHPStan cannot see that.
+			if ( Api::SCHEMA_VERSION !== get_option( Api::SCHEMA_OPTION ) ) { // @phpstan-ignore notIdentical.alwaysFalse
 				return false;
 			}
 			if ( false !== get_transient( self::ATTEMPT_TRANSIENT ) ) {
