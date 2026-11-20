@@ -155,6 +155,7 @@ class Payment_Methods_Controller extends WC_REST_Controller {
 					'type'  => 'array',
 					'items' => $descriptor,
 				),
+				'default_method' => array( 'type' => array( 'string', 'null' ) ),
 			),
 		);
 	}
