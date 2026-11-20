@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use WP_REST_Request;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Health;
@@ -200,6 +201,19 @@ class Test_Sync_Store_Repair extends Sync_REST_Store_Test_Case {
 		update_option( Sync_Journal::EPOCH_OPTION, 'known-epoch' );
 		( new Sync_Journal() )->advance_prune_watermark( 'product', 7 );
 		$this->record_queries();
+		$this->capture_logs();
+		update_option(
+			Sync_Journal::BACKFILL_OPTION,
+			array(
+				'status'      => 'complete',
+				'nextPage'    => 3,
+				'pageSize'    => 50,
+				'processed'   => 42,
+				'lastOrderId' => 9,
+				'lastRunGmt'  => '2026-01-01T00:00:00+00:00',
+			),
+			false
+		);
 
 		// Act.
 		$repaired = Store_Repair::repaired();
@@ -210,6 +224,13 @@ class Test_Sync_Store_Repair extends Sync_REST_Store_Test_Case {
 		$this->assertNotSame( 'known-epoch', get_option( Sync_Journal::EPOCH_OPTION ) );
 		$this->assertFalse( get_option( 'wcpos_change_log_prune_watermark_product' ) );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION ) );
+		$this->assertCount( 1, preg_grep( '/^error .*Sync store tables were missing; repair attempted/', $this->logs ) );
+		$this->assertCount( 0, preg_grep( '/^warning .*Sync store tables were missing; repair attempted/', $this->logs ) );
+		// The backfill restarts as on a fresh install (no orders here, so it is complete at once).
+		$backfill = get_option( Sync_Journal::BACKFILL_OPTION );
+		$this->assertSame( 'complete', $backfill['status'] );
+		$this->assertSame( 0, $backfill['processed'] );
+		$this->assertNotSame( '2026-01-01T00:00:00+00:00', $backfill['lastRunGmt'] );
 		foreach ( $this->queries as $query ) {
 			if ( preg_match( '/^\s*(CREATE|ALTER|DESCRIBE)\b/i', $query ) ) {
 				$this->assertStringNotContainsString( $wpdb->prefix . Health::STORED_DIGEST_TABLE, $query );
@@ -336,6 +357,20 @@ class Test_Sync_Store_Repair extends Sync_REST_Store_Test_Case {
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/changes/tick' ) );
 		// Assert.
 		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( Health::is_healthy() );
+	}
+
+	/** The admin gate also repairs a missing digest and lets an administrator through. */
+	public function test_admin_gate_serves_request_after_digest_repair(): void {
+		// Arrange.
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+		$this->use_alt_site( array( 'journal', 'mutations' ) );
+		$routes = $this->server->get_routes();
+		$check  = $routes['/wcpos/v2/integrity/rebuild'][0]['permission_callback'];
+		// Act.
+		$result = call_user_func( $check, new WP_REST_Request( 'POST', '/wcpos/v2/integrity/rebuild' ) );
+		// Assert.
+		$this->assertTrue( $result );
 		$this->assertTrue( Health::is_healthy() );
 	}
 
