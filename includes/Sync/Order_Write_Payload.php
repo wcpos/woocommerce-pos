@@ -100,7 +100,7 @@ final class Order_Write_Payload {
 		}
 		$payload = $this->reconcile_order_item_ids( $order, $payload );
 		$payload = $this->without_internal_item_meta( $order, $payload );
-		$payload = $this->without_foreign_hidden_meta( $order, $payload );
+		$payload = $this->without_foreign_meta( $order, $payload );
 		$payload = $this->hydrate_line_identity_from_stored( $order, $payload );
 		$payload = $this->remove_omitted_order_items( $order, $payload );
 		$payload = $this->reconcile_order_coupon_lines( $order, $payload );
@@ -160,30 +160,31 @@ final class Order_Write_Payload {
 	}
 
 	/**
-	 * Drop pushed order and line meta that would overwrite another plugin's hidden meta (POS-2VT).
+	 * Drop pushed meta that would overwrite another plugin's order or hidden line meta (POS-2VT).
 	 *
-	 * The app echoes the meta it last pulled. Hidden (`_`-prefixed) meta off the revision allow-list
-	 * is outside CAS, so a stale echo would pass the compare and silently revert another plugin's
-	 * newer write. The POS never owns such a key: the push may create it, never update or delete an
-	 * existing row, by key or by meta id. `_woocommerce_pos_uuid` is the POS's identity and exempt.
+	 * Order meta off the revision allow-list is foreign, visible or hidden; on lines only hidden
+	 * (`_`-prefixed) keys are foreign. These keys sit outside CAS, so a stale echo could silently
+	 * revert another plugin's newer write. The push may create a key, never update or delete an
+	 * existing row, by key or by meta id. Foreign order entries with explicit unsaved ids are
+	 * read-time decorations and are dropped even for a new key. `_woocommerce_pos_uuid` is exempt.
 	 *
 	 * @param \WC_Abstract_Order|false $order   Loaded order, or false when the id did not resolve.
 	 * @param array                    $payload Order payload about to be forwarded.
-	 * @return array Payload whose meta never touches an existing foreign hidden row.
+	 * @return array Payload whose meta never touches an existing foreign row.
 	 */
-	private function without_foreign_hidden_meta( $order, array $payload ): array {
+	private function without_foreign_meta( $order, array $payload ): array {
 		if ( ! $order ) {
 			return $payload;
 		}
 		$allowed = Order_Serializer::revision_meta_keys();
-		$foreign = static function ( $key ) use ( $allowed ): bool {
-			return is_string( $key ) && 0 === strpos( $key, '_' ) && Pos_Uuid::META_KEY !== $key && ! in_array( $key, $allowed, true );
+		$foreign = static function ( $key, bool $order_level ) use ( $allowed ): bool {
+			return is_string( $key ) && ( $order_level || 0 === strpos( $key, '_' ) ) && Pos_Uuid::META_KEY !== $key && ! in_array( $key, $allowed, true );
 		};
-		$filter  = static function ( array $meta_data, array $stored ) use ( $foreign ): array {
+		$filter  = static function ( array $meta_data, array $stored, bool $order_level = false ) use ( $foreign ): array {
 			$keys = array();
 			$ids  = array();
 			foreach ( $stored as $meta ) {
-				if ( $foreign( $meta->key ) ) {
+				if ( $foreign( $meta->key, $order_level ) ) {
 					$keys[] = $meta->key;
 					$ids[]  = (int) $meta->id;
 				}
@@ -191,16 +192,17 @@ final class Order_Write_Payload {
 			return array_values(
 				array_filter(
 					$meta_data,
-					static function ( $entry ) use ( $keys, $ids, $foreign ): bool {
+					static function ( $entry ) use ( $keys, $ids, $foreign, $order_level ): bool {
 						$id  = is_array( $entry ) ? ( $entry['id'] ?? null ) : ( is_object( $entry ) ? ( $entry->id ?? null ) : null );
 						$key = Meta_Entry::key( $entry );
-						return ! ( $foreign( $key ) && in_array( $key, $keys, true ) ) && ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) );
+						return ! ( $foreign( $key, $order_level ) && ( in_array( $key, $keys, true ) || ( $order_level && Order_Serializer::is_unsaved_row( $entry ) ) ) )
+							&& ! ( is_numeric( $id ) && in_array( (int) $id, $ids, true ) );
 					}
 				)
 			);
 		};
 		if ( isset( $payload['meta_data'] ) && is_array( $payload['meta_data'] ) ) {
-			$payload['meta_data'] = $filter( $payload['meta_data'], $order->get_meta_data() );
+			$payload['meta_data'] = $filter( $payload['meta_data'], $order->get_meta_data(), true );
 		}
 		foreach ( array_keys( self::ITEM_CLASSES ) as $type ) {
 			foreach ( isset( $payload[ $type ] ) && is_array( $payload[ $type ] ) ? $payload[ $type ] : array() as $i => $line ) {
