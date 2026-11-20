@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-20T19:55:45+00:00\n"
+"POT-Creation-Date: 2026-11-20T20:39:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -151,27 +151,18 @@ msgid "Online"
 msgstr ""
 
 #. translators: Order list label shown in WooCommerce admin for POS orders.
-#: includes/Admin/Orders/Single_Order.php:69
+#: includes/Admin/Orders/Single_Order.php:70
 msgid "POS Cashier"
 msgstr ""
 
 #. translators: Order list label shown in WooCommerce admin for POS orders.
-#: includes/Admin/Orders/Single_Order.php:70
+#: includes/Admin/Orders/Single_Order.php:71
 msgid "Search for a cashier&hellip;"
 msgstr ""
 
-#. translators: 1: old POS cashier, 2: new POS cashier.
-#: includes/Admin/Orders/Single_Order.php:112
-#: includes/Services/Order_Notes.php:83
-#, php-format
-msgid "POS cashier changed from %1$s to %2$s."
-msgstr ""
-
-#. translators: Fallback cashier name shown when the POS cashier user cannot be found.
 #: includes/Admin/Orders/Single_Order.php:113
-#: includes/Admin/Orders/Single_Order.php:114
-#: includes/Services/Order_Notes.php:35
-msgid "Unknown"
+#: includes/API/V2/Writers/Order_Writer.php:843
+msgid "POS cashier or store change was not applied because its change record could not be written. Try again."
 msgstr ""
 
 #. translators: Permalink settings label for the POS base URL.
@@ -1215,7 +1206,7 @@ msgid "The session request could not be completed."
 msgstr ""
 
 #. translators: 1: line name, 2: units.
-#: includes/API/V2/Writers/Order_Writer.php:589
+#: includes/API/V2/Writers/Order_Writer.php:590
 #, php-format
 msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
 msgstr ""
@@ -1865,14 +1856,14 @@ msgid "Invalid receipt document."
 msgstr ""
 
 #. translators: %s: fiscal record type (sale, refund, void, cancellation).
-#: includes/Services/Fiscal_Record_Writers.php:113
-#: includes/Services/Fiscal_Record_Writers.php:352
+#: includes/Services/Fiscal_Record_Writers.php:114
+#: includes/Services/Fiscal_Record_Writers.php:405
 #, php-format
 msgid "POS fiscal %s record could not be written; it will need recovery."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Writers.php:213
-#: includes/Services/Fiscal_Record_Writers.php:336
+#: includes/Services/Fiscal_Record_Writers.php:266
+#: includes/Services/Fiscal_Record_Writers.php:389
 msgid "POS fiscal sale record recovered."
 msgstr ""
 
@@ -1888,6 +1879,11 @@ msgstr ""
 #: includes/Services/Order_Notes.php:26
 #, php-format
 msgid "POS provenance keys cannot be changed after the sale: %s"
+msgstr ""
+
+#. translators: Fallback cashier name shown when the POS cashier user cannot be found.
+#: includes/Services/Order_Notes.php:35
+msgid "Unknown"
 msgstr ""
 
 #. translators: Customer name shown in an order note for a guest checkout.
@@ -1914,6 +1910,12 @@ msgstr ""
 #: includes/Services/Order_Notes.php:72
 #, php-format
 msgid "Order created via POS by %1$s at %2$s."
+msgstr ""
+
+#. translators: 1: old POS cashier, 2: new POS cashier.
+#: includes/Services/Order_Notes.php:83
+#, php-format
+msgid "POS cashier changed from %1$s to %2$s."
 msgstr ""
 
 #. translators: 1: old POS store, 2: new POS store.
