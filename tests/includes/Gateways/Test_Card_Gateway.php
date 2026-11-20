@@ -78,7 +78,9 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$output = ob_get_clean();
 
 		// Assert.
-		$this->assertEquals( 1, substr_count( $output, get_woocommerce_currency_symbol( $order_currency ) ) );
+		// Compare decoded text: WordPress 7.2 kses may return character references decoded.
+		$symbol = html_entity_decode( get_woocommerce_currency_symbol( $order_currency ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$this->assertSame( 1, substr_count( html_entity_decode( $output, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), $symbol ) );
 	}
 
 	/**
