@@ -835,14 +835,8 @@ class Receipt_Data_Builder {
 				),
 			);
 		$ledger_rows = $order instanceof \WC_Order ? Ledger::instance()->read( $order ) : array();
-		$counting     = array_values(
-			array_filter(
-				$ledger_rows,
-				static function ( array $row ): bool {
-					return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
-				}
-			)
-		);
+		// Where the money is: a corrected row and its R- print as nothing, its R+ as the payment (#3647).
+		$counting = Ledger::effective_rows( $ledger_rows );
 		if ( $ledger_rows ) {
 			$payments   = array();
 			$change_sum = 0.0;
@@ -1093,14 +1087,7 @@ class Receipt_Data_Builder {
 		$data['has_tax_summary'] = ! empty( $data['tax_summary'] );
 		$allocations = $refund->get_meta( '_wcpos_refund_allocations', true );
 		if ( ! $refund->meta_exists( '_wcpos_refund_allocations' ) ) {
-			$counting = array_values(
-				array_filter(
-					Ledger::instance()->read( $order ),
-					static function ( array $row ): bool {
-						return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
-					}
-				)
-			);
+			$counting = Ledger::effective_rows( Ledger::instance()->read( $order ) );
 			$allocations = 1 === count( $counting ) ? array(
 				array(
 					'payment_id' => $counting[0]['id'],

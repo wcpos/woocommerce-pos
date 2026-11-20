@@ -24,7 +24,7 @@ use WP_Error;
  */
 final class Command_Log {
 	/** Commands kept on the row they act on. */
-	public const ROW_KINDS = array( 'intent', 'capture', 'void', 'refund' );
+	public const ROW_KINDS = array( 'intent', 'capture', 'void', 'refund', 'correct' );
 	/** Commands kept on the order, because they may complete with no row. */
 	public const ORDER_KINDS = array( 'submit', 'cancel', 'close' );
 	/** The order-level map, in `Pos_Order_Audit::SERVER_MONEY_META_KEYS` so a push cannot write it. */
@@ -216,6 +216,12 @@ final class Command_Log {
 					'payment' => $payment,
 					'order'   => $summary,
 					'handoff' => new \stdClass(),
+				);
+			case 'correct':
+				// The entry rides the corrected row; the first answer was R+, found by its correction link.
+				return array(
+					'payment' => Ledger::to_answer( (array) Ledger::correction_of( $ledger->read( $order ), (string) $entry['payment_id'] ) ),
+					'order'   => $summary,
 				);
 			case 'refund':
 				return array( 'payment' => $payment );

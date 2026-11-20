@@ -85,11 +85,14 @@ final class Session_Figures {
 	/**
 	 * Break expected cash into the drawer equation's terms, from the same snapshot as expected().
 	 *
-	 * Identity, exact in DECIMAL(65,4): float + cash_sales.amount + Σ paid_in.amount
+	 * Identity, exact in DECIMAL(65,4): float + cash_sales.amount + cash_corrections + Σ paid_in.amount
 	 * − paid_out.amount − cash_refunds.amount === expected()['cash'].
 	 *
 	 * - float: the counted opening float.
-	 * - cash_sales: captured cash-kind session legs that are not refund tenders; count is their distinct orders.
+	 * - cash_sales: captured cash-kind session legs that are neither refund tenders nor tender
+	 *   corrections; count is their distinct orders.
+	 * - cash_corrections: the signed sum of cash-kind tender correction legs (#3647), money moved
+	 *   into the drawer from another tender or out of it to another; never a sale or a refund.
 	 * - paid_in: each non-voided paid-in, in movement order, with the movement id the detail's
 	 *   movements list carries; an empty reason reads as null.
 	 * - paid_out: the non-voided paid-outs; note is the reason only when there is exactly one.
@@ -108,13 +111,16 @@ final class Session_Figures {
 		$sales = array();
 		$sale_orders = array();
 		$refunds = array();
+		$corrections = array();
 		$refund_count = 0;
 		foreach ( $this->legs() as $order_id => $rows ) {
 			foreach ( $rows as $row ) {
 				if ( 'cash' !== self::tender_key( $row ) ) {
 					continue;
 				}
-				if ( self::is_refund_tender( $row ) ) {
+				if ( self::is_correction( $row ) ) {
+					$corrections[] = $row['amount'];
+				} elseif ( self::is_refund_tender( $row ) ) {
 					$refunds[] = self::negate( $row['amount'] );
 					++$refund_count;
 				} else {
@@ -173,6 +179,7 @@ final class Session_Figures {
 				'amount' => Closure_Store::sum( $refunds ),
 				'count' => $refund_count,
 			),
+			'cash_corrections' => Closure_Store::sum( $corrections ),
 			'no_sales' => $no_sales,
 			'voids' => $voids,
 		);
@@ -197,12 +204,18 @@ final class Session_Figures {
 				'name' => isset( $gateways[ $key ] ) ? $gateways[ $key ]->get_title() : '',
 				'sales' => array(),
 				'refunds' => array(),
+				'corrections' => array(),
 			);
-			$methods[ $key ][ self::is_refund_tender( $row ) ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
+			if ( self::is_correction( $row ) ) {
+				$methods[ $key ]['corrections'][] = $row['amount'];
+			} else {
+				$methods[ $key ][ self::is_refund_tender( $row ) ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
+			}
 		}
 		foreach ( $methods as &$method ) {
 			$method['sales'] = Closure_Store::sum( $method['sales'] );
 			$method['refunds'] = Closure_Store::sum( $method['refunds'] );
+			$method['corrections'] = Closure_Store::sum( $method['corrections'] );
 		}
 		$this->memo['payment_methods'] = $methods;
 		return $methods;
@@ -509,6 +522,10 @@ final class Session_Figures {
 		);
 		foreach ( $this->legs() as $rows ) {
 			foreach ( $rows as $row ) {
+				// A correction pair nets to zero; unsigned, both legs would count as sales.
+				if ( self::is_correction( $row ) ) {
+					continue;
+				}
 				$totals[ self::is_refund_tender( $row ) ? 'refunds' : 'sales' ][] = ltrim( $row['amount'], '-' );
 			}
 		}
@@ -682,7 +699,18 @@ final class Session_Figures {
 	 * @param array $row Tender row.
 	 */
 	public static function is_refund_tender( array $row ): bool {
+		if ( self::is_correction( $row ) ) {
+			return false;
+		}
 		return 'refund' === ( $row['kind'] ?? '' ) || '-' === substr( (string) $row['amount'], 0, 1 );
+	}
+
+	/** A tender correction leg (#3647): R- or R+, money moved between tenders, never a sale or a refund.
+	 *
+	 * @param array $row Tender row.
+	 */
+	public static function is_correction( array $row ): bool {
+		return 'tender_correction' === ( $row['entry'] ?? '' );
 	}
 
 	/** Derive correction deltas without a session, float or movements.

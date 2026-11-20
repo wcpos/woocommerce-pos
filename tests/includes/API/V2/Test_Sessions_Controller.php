@@ -1204,6 +1204,7 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 					'amount' => '14.0000',
 					'count' => 2,
 				),
+				'cash_corrections' => '0.0000',
 				'no_sales' => 0,
 				'voids' => 1,
 			),

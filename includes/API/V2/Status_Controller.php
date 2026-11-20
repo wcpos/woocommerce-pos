@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Health;
@@ -26,6 +27,8 @@ final class Status_Controller extends WP_REST_Controller {
 	 *
 	 * - `products_id_fast_path`: `GET /wcpos/v2/products?per_page=-1&_fields=id,date_modified_gmt,stock_quantity,stock_status`
 	 *   is answered from one query (#2113).
+	 * - `tender_correction`: `POST /wcpos/v2/orders/{id}/payments/{uuid}/correct` (#3647). Added by `get_status()`
+	 *   only while no fiscal module is active, so it is not in this list.
 	 *
 	 * Append new names; never rename or remove one.
 	 */
@@ -68,7 +71,7 @@ final class Status_Controller extends WP_REST_Controller {
 				'healthy'        => array() === $missing_tables,
 				'missing_tables' => $missing_tables,
 				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
-				'capabilities'   => self::CAPABILITIES,
+				'capabilities'   => Ledger::tender_correction_available() ? array_merge( self::CAPABILITIES, array( 'tender_correction' ) ) : self::CAPABILITIES,
 			),
 			200
 		);

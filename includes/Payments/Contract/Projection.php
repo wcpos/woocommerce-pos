@@ -34,11 +34,13 @@ final class Projection {
 		}
 		$closing  = Ledger::MODE_CLOSE === $mode;
 		$counting = array_values( array_filter( $rows, static fn( $row ) => in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true ) ) );
-		$paying   = array_values( array_filter( $counting, static fn( $row ) => 'stored_value' !== ( $row['kind'] ?? '' ) ) );
+		// Method and title say where the money is: a corrected row and its R- name nothing (#3647).
+		$effective = Ledger::effective_rows( $rows );
+		$paying    = array_values( array_filter( $effective, static fn( $row ) => 'stored_value' !== ( $row['kind'] ?? '' ) ) );
 		// The paying row: the largest, then the earliest captured (a missing time sorts last).
 		$time     = static fn( $row ) => is_string( $row['captured_at_gmt'] ?? null ) && false !== strtotime( $row['captured_at_gmt'] ) ? strtotime( $row['captured_at_gmt'] ) : PHP_INT_MAX;
 		$selected = null;
-		foreach ( $paying ? $paying : $counting as $row ) {
+		foreach ( $paying ? $paying : $effective as $row ) {
 			$amount = Money::minor( $row['amount'] );
 			if ( null === $selected || $amount > Money::minor( $selected['amount'] ) || ( Money::minor( $selected['amount'] ) === $amount && $time( $row ) < $time( $selected ) ) ) {
 				$selected = $row;
@@ -47,7 +49,7 @@ final class Projection {
 		// No counting row leaves method and title untouched (the cart, or every leg voided).
 		if ( $selected ) {
 			$titles = array();
-			foreach ( $counting as $row ) {
+			foreach ( $effective as $row ) {
 				$titles[] = $title ? (string) $title( $row['method_id'] ) : (string) $row['method_id'];
 			}
 			$refs             = is_array( $selected['provider_refs'] ?? null ) ? $selected['provider_refs'] : array();

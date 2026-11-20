@@ -52,6 +52,7 @@ class Payments_Controller extends WC_REST_Controller {
 		'intent_item'  => 'intent',
 		'capture_item' => 'capture',
 		'void_item'    => 'void',
+		'correct_item' => 'correct',
 		'refund_item'  => 'refund',
 		'submit_item'  => 'submit',
 		'cancel_item'  => 'cancel',
@@ -72,6 +73,16 @@ class Payments_Controller extends WC_REST_Controller {
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/capture' => array( WP_REST_Server::CREATABLE, 'capture_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/refund' => array( WP_REST_Server::CREATABLE, 'refund_item' ),
 			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/void' => array( WP_REST_Server::CREATABLE, 'void_item' ),
+			$payment_path . '/(?P<uuid>[0-9a-fA-F-]{36})/correct' => array(
+				WP_REST_Server::CREATABLE,
+				'correct_item',
+				array(
+					'method_id' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+				),
+			),
 		);
 		foreach ( $routes as $route => $definition ) {
 			register_rest_route(
@@ -108,6 +119,7 @@ class Payments_Controller extends WC_REST_Controller {
 							);
 						},
 						'permission_callback' => array( $this, 'payments_permissions_check' ),
+						'args'                => $definition[2] ?? array(),
 					),
 				)
 			);
@@ -279,6 +291,25 @@ class Payments_Controller extends WC_REST_Controller {
 		$params = is_array( $params ) ? $params : $request->get_body_params();
 		$reason = sanitize_text_field( (string) ( $params['reason'] ?? '' ) );
 		$row    = Ledger::instance()->void( $order, strtolower( (string) $request['uuid'] ), $reason, $command );
+		if ( is_wp_error( $row ) ) {
+			return $row;
+		}
+		return $this->payment_response( $row, $order );
+	}
+
+	/**
+	 * Correct a captured manual payment's tender: answers R+, the money on the target method (#3647).
+	 *
+	 * @param WP_REST_Request    $request Request object.
+	 * @param Money_Command|null $command The command; its entry rides the corrected row.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function correct_item( $request, ?Money_Command $command = null ) {
+		$order = $this->get_order( (int) $request['id'] );
+		if ( is_wp_error( $order ) ) {
+			return $order;
+		}
+		$row = Ledger::instance()->correct( $order, strtolower( (string) $request['uuid'] ), (string) $request['method_id'], $command );
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
