@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Templates;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use ReflectionMethod;
 use WC_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Templates\Payment;
 
 /**
@@ -325,6 +326,7 @@ class Test_Payment_Store_Format extends WC_Unit_Test_Case {
 		$buffer_level = ob_get_level();
 		add_filter( 'wcpos_locate_template', $template_filter, 10, 2 );
 		$_GET['key'] = $order->get_order_key();
+		$_GET['token'] = Auth::instance()->generate_access_token( get_user_by( 'id', $this->factory->user->create( array( 'role' => 'administrator' ) ) ) );
 		ob_start();
 
 		try {
