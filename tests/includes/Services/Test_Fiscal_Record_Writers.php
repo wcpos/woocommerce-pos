@@ -121,8 +121,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( 'reattribution', Fiscal_Record_Store::TYPES );
 
 		// Act: a second correction back to the original values is a new document.
-		$writers->record_reattribution( $order, $actor_id, 1, 2, 12, 13 );
-		$writers->record_reattribution( $order, $actor_id, 2, 1, 13, 12 );
+		$this->assertTrue( $writers->record_reattribution( $order, $actor_id, 1, 2, '12', '13' ) );
+		$this->assertTrue( $writers->record_reattribution( $order, $actor_id, 2, 1, '13', '12' ) );
 
 		// Assert.
 		$records = $store->list(
@@ -142,8 +142,8 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				),
 				array(
 					'field' => 'store',
-					'from' => 12,
-					'to' => 13,
+					'from' => '12',
+					'to' => '13',
 				),
 			),
 			$records[1]['payload']['changes']
@@ -161,6 +161,46 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				array(
 					'type' => 'reattribution',
 					'session_id' => $order->get_meta( '_wcpos_session' ),
+				)
+			)
+		);
+	}
+
+	/** Orders without a sale may be reassigned without a fiscal correction. */
+	public function test_reattribution_without_sale_returns_true(): void {
+		$order = $this->order();
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, 'store-a', 'store-b' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/** A failed correction signals listeners but must not ask for sale recovery. */
+	public function test_reattribution_failed_insert_returns_false_without_recovery_note(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$failed = array();
+		$observe = static function ( $type ) use ( &$failed ): void {
+			$failed[] = $type;
+		};
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10, 2 );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
+		try {
+			$result = Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10 );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
+		}
+
+		$this->assertFalse( $result );
+		$this->assertSame( array( 'reattribution' ), $failed );
+		$this->assertEquals( $notes, wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
 				)
 			)
 		);

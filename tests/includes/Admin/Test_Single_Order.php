@@ -153,6 +153,70 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * A failed fiscal insert must not change the admin cashier or claim it did.
+	 *
+	 * @dataProvider attribution_storage_backends
+	 * @param bool $hpos Whether HPOS is authoritative.
+	 */
+	public function test_cashier_save_failed_record_leaves_cashier_unchanged( bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->disable_cot_sync();
+			$this->attribution_hpos = true;
+		}
+		$actor_id = self::factory()->user->create(
+			array(
+				'role' => 'administrator',
+				'display_name' => 'Admin Actor',
+			)
+		);
+		$old_id = self::factory()->user->create();
+		wp_set_current_user( $actor_id );
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->update_meta_data( '_pos_store', 'store-a' );
+		$order->save();
+		$store = new Fiscal_Record_Store();
+		$store->record(
+			array(
+				'type' => 'sale',
+				'order_id' => $order->get_id(),
+				'source_id' => wp_generate_uuid4(),
+				'payload' => array(),
+			)
+		);
+		$_POST['pos_cashier_select_nonce'] = wp_create_nonce( 'pos_cashier_select_action' );
+		$_POST['_pos_user'] = (string) $actor_id;
+		$before_notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'id' );
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10, 2 );
+		try {
+			( new Single_Order() )->save_cashier_select( $order->get_id() );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10 );
+		}
+
+		$this->assertSame( (string) $old_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$notes = array_filter( $notes, static fn( $note ) => ! in_array( $note->id, $before_notes, true ) );
+		$this->assertCount( 1, $notes );
+		$note = reset( $notes );
+		$this->assertSame( 'POS cashier or store change was not applied because its change record could not be written. Try again.', $note->content );
+		$this->assertSame( 'Admin Actor', $note->added_by );
+		$this->assertSame(
+			array(),
+			$store->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
+				)
+			)
+		);
+	}
+
 	/** Both supported order storage backends, without HPOS compatibility sync. */
 	public function attribution_storage_backends(): array {
 		return array(

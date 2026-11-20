@@ -102,18 +102,21 @@ class Single_Order {
 
 			// Update meta only if _pos_user has changed.
 			if ( $current_pos_cashier !== $new_pos_cashier ) {
-				$order->update_meta_data( '_pos_user', (string) $new_pos_cashier );
-				$order->save();
-
-				Order_Notes::add_cashier_change_note( $order, $current_pos_cashier, $new_pos_cashier );
-				Fiscal_Record_Writers::instance()->record_reattribution(
+				if ( ! Fiscal_Record_Writers::instance()->record_reattribution(
 					$order,
 					get_current_user_id(),
 					$current_pos_cashier,
 					$new_pos_cashier,
-					(int) $order->get_meta( '_pos_store' ),
-					(int) $order->get_meta( '_pos_store' )
-				);
+					(string) $order->get_meta( '_pos_store' ),
+					(string) $order->get_meta( '_pos_store' )
+				) ) {
+					$order->add_order_note( __( 'POS cashier or store change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
+					return;
+				}
+				$order->update_meta_data( '_pos_user', (string) $new_pos_cashier );
+				$order->save();
+
+				Order_Notes::add_cashier_change_note( $order, $current_pos_cashier, $new_pos_cashier );
 			}
 		}
 	}

@@ -96,7 +96,7 @@ final class Fiscal_Record_Writers {
 	/**
 	 * Insert through the store and make a failed write visible on the order.
 	 *
-	 * The business transition has already happened when a writer runs, so a
+	 * Except for reattribution, the business transition has already happened, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
 	 * sale row is recovered by the next money command or refund on the order, or the payments sweep (recover());
 	 * every failure is surfaced as an order note and an action for a recovery job.
@@ -109,8 +109,10 @@ final class Fiscal_Record_Writers {
 			return true;
 		}
 		$type = (string) ( $fields['type'] ?? '' );
-		/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
-		$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
+		if ( 'reattribution' !== $type ) {
+			/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
+			$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
+		}
 		/**
 		 * Fires when a write-once fiscal record could not be inserted.
 		 *
@@ -130,13 +132,13 @@ final class Fiscal_Record_Writers {
 	 * @param int      $actor_id    Acting user.
 	 * @param int      $old_cashier Previous cashier.
 	 * @param int      $new_cashier Current cashier.
-	 * @param int      $old_store   Previous store.
-	 * @param int      $new_store   Current store.
+	 * @param string   $old_store   Previous store.
+	 * @param string   $new_store   Current store.
 	 */
-	public function record_reattribution( WC_Order $order, int $actor_id, int $old_cashier, int $new_cashier, int $old_store, int $new_store ): void {
+	public function record_reattribution( WC_Order $order, int $actor_id, int $old_cashier, int $new_cashier, string $old_store, string $new_store ): bool {
 		$sale = $this->store->find_sale( $order->get_id() );
 		if ( null === $sale ) {
-			return;
+			return true;
 		}
 		$changes = array();
 		foreach ( array(
@@ -151,7 +153,7 @@ final class Fiscal_Record_Writers {
 				);
 			}
 		}
-		$this->write(
+		return $this->write(
 			$order,
 			array(
 				'type' => 'reattribution',
@@ -159,7 +161,7 @@ final class Fiscal_Record_Writers {
 				'corrects_record_id' => $sale['id'],
 				'source_id' => wp_generate_uuid4(),
 				'cashier_id' => $new_cashier,
-				'store_id' => $new_store,
+				'store_id' => ctype_digit( $new_store ) && (int) $new_store > 0 ? (int) $new_store : null,
 				'approver_id' => $actor_id,
 				'payload' => array(
 					'changes' => $changes,

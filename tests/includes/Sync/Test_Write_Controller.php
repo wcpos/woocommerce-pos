@@ -2271,6 +2271,142 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 	}
 
+	/** Store identifiers must survive the caller and the fiscal payload unchanged. */
+	public function test_completed_store_reassignment_preserves_non_numeric_identifiers(): void {
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_store', 'store-a' );
+		$order->save();
+		$this->seedAttributionSale( $order );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_store',
+						'value' => 'store-b',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( 'store-b', wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'store',
+					'from' => 'store-a',
+					'to' => 'store-b',
+				),
+			),
+			$records[0]['payload']['changes']
+		);
+		$this->assertNull( $records[0]['store_id'] );
+	}
+
+	/**
+	 * A refused record preserves attribution and lets the same push be retried.
+	 *
+	 * @dataProvider failed_attribution_changes
+	 * @param string $field Attribution to change.
+	 * @param string $old_store Previous store, including an unfilled store.
+	 * @param bool   $hpos Whether HPOS is authoritative.
+	 */
+	public function test_reassignment_failed_record_preserves_attribution_and_retry_writes_once( string $field, string $old_store, bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->disable_cot_sync();
+			$this->attributionHpos = true;
+		}
+		$actor = self::factory()->user->create_and_get(
+			array(
+				'role' => 'administrator',
+				'display_name' => 'Change Actor',
+			)
+		);
+		$actor->add_cap( 'reassign_woocommerce_pos_sales' );
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Old Cashier' ) );
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->update_meta_data( '_pos_store', $old_store );
+		$order->save();
+		$this->seedAttributionSale( $order );
+		wp_set_current_user( $actor->ID );
+		$meta = array();
+		if ( 'store' !== $field ) {
+			$meta[] = array(
+				'key' => '_pos_user',
+				'value' => (string) $actor->ID,
+			);
+		}
+		if ( 'cashier' !== $field ) {
+			$meta[] = array(
+				'key' => '_pos_store',
+				'value' => 'store-b',
+			);
+		}
+		$payload = array( 'meta_data' => $meta );
+		$before_notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'id' );
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10, 2 );
+		try {
+			$result = $this->updateOrder( $order, $payload );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10 );
+		}
+
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) $old_id, $after->get_meta( '_pos_user' ) );
+		$this->assertSame( $old_store, (string) $after->get_meta( '_pos_store' ) );
+		$this->assertSame( (string) $old_id, (string) $this->metaValue( $result->get_data()['document'], '_pos_user' ) );
+		$this->assertSame( $old_store, (string) $this->metaValue( $result->get_data()['document'], '_pos_store' ) );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$notes = array_filter( $notes, static fn( $note ) => ! in_array( $note->id, $before_notes, true ) );
+		$this->assertCount( 1, $notes );
+		$note = reset( $notes );
+		$this->assertSame( 'POS cashier or store change was not applied because its change record could not be written. Try again.', $note->content );
+		$this->assertSame( 'Change Actor', $note->added_by );
+		$store = new Fiscal_Record_Store();
+		$query = array(
+			'order_id' => $order->get_id(),
+			'type' => 'reattribution',
+		);
+		$this->assertSame( array(), $store->list( $query ) );
+
+		$result = $this->updateOrder( $after, $payload );
+
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) ( 'store' === $field ? $old_id : $actor->ID ), $after->get_meta( '_pos_user' ) );
+		$this->assertSame( 'cashier' === $field ? $old_store : 'store-b', $after->get_meta( '_pos_store' ) );
+		$this->assertCount( 1, $store->list( $query ) );
+	}
+
+	/** Failure coverage for both storage engines and an early fill of an empty store. */
+	public function failed_attribution_changes(): array {
+		return array(
+			'cashier posts' => array( 'cashier', 'store-a', false ),
+			'cashier HPOS' => array( 'cashier', 'store-a', true ),
+			'store posts' => array( 'store', 'store-a', false ),
+			'store HPOS' => array( 'store', 'store-a', true ),
+			'empty store' => array( 'store', '', false ),
+			'both' => array( 'both', 'store-a', false ),
+		);
+	}
+
 	public function test_completed_store_reassignment_preserves_totals_and_line_taxes(): void {
 		// Arrange: non-zero stored taxes must not be recalculated for the new store.
 		$order = OrderHelper::create_order();
@@ -2324,8 +2460,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			array(
 				array(
 					'field' => 'store',
-					'from' => 12,
-					'to' => 13,
+					'from' => '12',
+					'to' => '13',
 				),
 			),
 			$records[0]['payload']['changes']

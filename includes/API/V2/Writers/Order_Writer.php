@@ -824,6 +824,24 @@ class Order_Writer extends Null_Writer {
 		}
 		$cashier_changed = null !== $new_user && $cashier_allowed && (string) $old_user !== (string) $new_user;
 		$store_changed = $context['store_authorized'] && (string) $old_store !== (string) $change['_pos_store'];
+		$reopens = 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' );
+		if ( ( $cashier_changed || $store_changed ) && ! $reopens && ! Fiscal_Record_Writers::instance()->record_reattribution(
+			$order,
+			$current_user,
+			(int) $old_user,
+			$cashier_changed ? $new_user : (int) $old_user,
+			(string) $old_store,
+			$store_changed ? (string) $change['_pos_store'] : (string) $old_store
+		) ) {
+			if ( $store_changed ) {
+				// fill_meta may already have persisted the requested store; restore the pre-push value.
+				$order->update_meta_data( '_pos_store', (string) $old_store );
+				$order->save();
+			}
+			$cashier_changed = false;
+			$store_changed = false;
+			$order->add_order_note( __( 'POS cashier or store change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
+		}
 		if ( $cashier_changed ) {
 			$order->update_meta_data( '_pos_user', (string) $new_user );
 		}
@@ -833,7 +851,7 @@ class Order_Writer extends Null_Writer {
 		if ( $cashier_changed || $store_changed ) {
 			$order->save();
 		}
-		if ( 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' ) ) {
+		if ( $reopens ) {
 			Order_Notes::add_reopen_note( $order, $current_user, $order->get_meta( '_pos_store' ) );
 		} else {
 			if ( $cashier_changed ) {
@@ -841,16 +859,6 @@ class Order_Writer extends Null_Writer {
 			}
 			if ( $store_changed ) {
 				Order_Notes::add_store_change_note( $order, $old_store, $change['_pos_store'] );
-			}
-			if ( $cashier_changed || $store_changed ) {
-				Fiscal_Record_Writers::instance()->record_reattribution(
-					$order,
-					$current_user,
-					(int) $old_user,
-					(int) $order->get_meta( '_pos_user' ),
-					(int) $old_store,
-					(int) $order->get_meta( '_pos_store' )
-				);
 			}
 		}
 		if ( array_key_exists( 'customer_id', $current ) && array_key_exists( 'customer_id', $data ) && (int) $current['customer_id'] !== (int) $data['customer_id'] ) {
