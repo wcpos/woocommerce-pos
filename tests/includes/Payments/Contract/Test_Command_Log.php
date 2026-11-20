@@ -172,17 +172,18 @@ class Test_Command_Log extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** The eight money commands and the keys of their replayed answer. */
+	/** The nine money commands and the keys of their replayed answer. */
 	public function kinds(): array {
 		return array(
-			'record'  => array( 'record', array() ),
-			'intent'  => array( 'intent', array( 'payment', 'order', 'handoff' ) ),
-			'capture' => array( 'capture', array( 'payment', 'order' ) ),
-			'void'    => array( 'void', array( 'payment', 'order' ) ),
-			'refund'  => array( 'refund', array( 'payment' ) ),
-			'submit'  => array( 'submit', array( 'outcome', 'payment', 'order' ) ),
-			'cancel'  => array( 'cancel', array( 'order' ) ),
-			'close'   => array( 'close', array( 'order', 'completion' ) ),
+			'record'   => array( 'record', array() ),
+			'intent'   => array( 'intent', array( 'payment', 'order', 'handoff' ) ),
+			'capture'  => array( 'capture', array( 'payment', 'order' ) ),
+			'void'     => array( 'void', array( 'payment', 'order' ) ),
+			'refund'   => array( 'refund', array( 'payment' ) ),
+			'submit'   => array( 'submit', array( 'outcome', 'payment', 'order' ) ),
+			'cancel'   => array( 'cancel', array( 'order' ) ),
+			'close'    => array( 'close', array( 'order', 'completion' ) ),
+			'complete' => array( 'complete', array( 'order' ) ),
 		);
 	}
 
@@ -392,6 +393,63 @@ class Test_Command_Log extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'owed_at_n', $entry );
 	}
 
+	/** A complete (Pro, monorepo#3648) keeps its entry on the order and replays it; its entry write moves no money. */
+	public function test_complete_run_keeps_its_entry_on_the_order_and_replays_it(): void {
+		// Arrange: a paid POS sale, processing.
+		$order = $this->create_pos_order();
+		$id    = $order->get_id();
+		$this->seed( $id, array( $this->row( '92.95' ) ) );
+		$order = $this->fresh( $id );
+		$order->set_status( 'processing' );
+		$order->save();
+		Ledger::flush( $id ); // The transition deferred its completion to the end of its request; that request ends here.
+		$standing = Completion_History::of( $this->fresh( $id ) )->standing();
+		$rows     = $this->rows_without_commands( $id );
+		$total    = $this->fresh( $id )->get_total();
+		$command  = new Money_Command( wp_generate_uuid4(), 'sha256:complete', 'complete', '', null, $this->current_revision( $id ) );
+		$work     = $this->complete_work( $id );
+
+		// Act.
+		Command_Log::run( wc_get_order( $id ), $command, $work );
+		$again = Command_Log::run( wc_get_order( $id ), $command, $work );
+		$other = Command_Log::run( wc_get_order( $id ), new Money_Command( $command->id(), 'sha256:other', 'complete', '', null, $command->revision() ), $work );
+
+		// Assert.
+		$entry = $this->map( $id )[ strtolower( $command->id() ) ] ?? array();
+		$this->assertSame( 1, $this->runs );
+		$this->assertSame( 'completed', $this->fresh( $id )->get_status() );
+		$this->assertSame( 'complete', $entry['kind'] ?? null );
+		$this->assertSame( $command->fp(), $entry['fp'] ?? null );
+		$this->assertSame( array( 'order' ), array_keys( $again ) );
+		$this->assertInstanceOf( WP_Error::class, $other );
+		$this->assertSame( 'wcpos_command_conflict', $other->get_error_code() );
+		$this->assertSame( 422, $other->get_error_data()['status'] );
+		$this->assertSame( $rows, $this->rows_without_commands( $id ) );
+		$this->assertSame( $standing, Completion_History::of( $this->fresh( $id ) )->standing() );
+		$this->assertSame( $total, $this->fresh( $id )->get_total() );
+	}
+
+	/** A complete on an online order its gateway paid (no ledger rows) keeps its entry and adds no row. */
+	public function test_complete_run_on_an_order_with_no_ledger_rows_keeps_its_entry_and_status(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$id    = $order->get_id();
+		$order->set_status( 'processing' );
+		$order->save();
+		$command = new Money_Command( wp_generate_uuid4(), 'sha256:complete', 'complete', '', null, $this->current_revision( $id ) );
+		$work    = $this->complete_work( $id );
+
+		// Act.
+		Command_Log::run( wc_get_order( $id ), $command, $work );
+		Command_Log::run( wc_get_order( $id ), $command, $work );
+
+		// Assert.
+		$this->assertSame( 1, $this->runs );
+		$this->assertSame( 'completed', $this->fresh( $id )->get_status() );
+		$this->assertSame( 'complete', $this->map( $id )[ strtolower( $command->id() ) ]['kind'] ?? null );
+		$this->assertSame( array(), Ledger::instance()->read( $this->fresh( $id ) ) );
+	}
+
 	/**
 	 * A submit replays the attempt's fate, `recorded` with its row only to the command that first answered it.
 	 *
@@ -499,6 +557,34 @@ class Test_Command_Log extends WCPOS_REST_Unit_Test_Case {
 			++$this->runs;
 			return Ledger::instance()->record( wc_get_order( $id ), array_intersect_key( $row, array_flip( array( 'id', 'method_id', 'amount', 'currency' ) ) ), array(), $command );
 		};
+	}
+
+	/**
+	 * The handler Pro's complete route runs, counting its runs.
+	 *
+	 * @param int $id Order id.
+	 */
+	private function complete_work( int $id ): callable {
+		return function () use ( $id ) {
+			++$this->runs;
+			wc_get_order( $id )->update_status( 'completed' );
+			return array( 'order' => Ledger::instance()->summary( wc_get_order( $id ) ) );
+		};
+	}
+
+	/**
+	 * The stored payment rows, each without its command map.
+	 *
+	 * @param int $id Order id.
+	 */
+	private function rows_without_commands( int $id ): array {
+		return array_map(
+			static function ( array $row ): array {
+				unset( $row['commands'] );
+				return $row;
+			},
+			Ledger::instance()->read( $this->fresh( $id ) )
+		);
 	}
 
 	/**

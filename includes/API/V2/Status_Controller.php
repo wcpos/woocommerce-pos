@@ -28,6 +28,7 @@ final class Status_Controller extends WP_REST_Controller {
 	 *   is answered from one query (#2113).
 	 *
 	 * Append new names; never rename or remove one.
+	 * Plugins append through `wcpos_status_capabilities`, and a core name is always kept.
 	 */
 	private const CAPABILITIES = array( 'products_id_fast_path' );
 
@@ -63,12 +64,23 @@ final class Status_Controller extends WP_REST_Controller {
 	public function get_status( WP_REST_Request $request ): WP_REST_Response {
 		$missing_tables = Health::missing_tables();
 
+		/**
+		 * Filters the capability names `/wcpos/v2/status` advertises: plugins (Pro) append the names of features they serve.
+		 *
+		 * @since 2.0.5
+		 *
+		 * @param string[]        $capabilities The core capability names.
+		 * @param WP_REST_Request $request      Request object.
+		 */
+		$extras = apply_filters( 'wcpos_status_capabilities', self::CAPABILITIES, $request );
+		$extras = is_array( $extras ) ? array_filter( $extras, static fn( $name ) => is_string( $name ) && '' !== $name ) : array();
+
 		return new WP_REST_Response(
 			array(
 				'healthy'        => array() === $missing_tables,
 				'missing_tables' => $missing_tables,
 				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
-				'capabilities'   => self::CAPABILITIES,
+				'capabilities'   => array_values( array_unique( array_merge( self::CAPABILITIES, $extras ) ) ),
 			),
 			200
 		);
