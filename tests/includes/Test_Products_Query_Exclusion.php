@@ -574,6 +574,112 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Archives return both products with or without the non-product early return.
+	 * Catalog visibility hides the POS Only product on the real storefront.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_product_cat_archive_query_returns_pos_only_product_unfiltered(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$term     = wp_insert_term( 'POS Archive Cat', 'product_cat' );
+		$term_id  = (int) $term['term_id'];
+		$pos_only = ProductHelper::create_simple_product();
+		$visible  = ProductHelper::create_simple_product();
+		$pos_only->set_category_ids( array( $term_id ) );
+		$pos_only->save();
+		$visible->set_category_ids( array( $term_id ) );
+		$visible->save();
+		$this->set_pos_only_ids( array( $pos_only->get_id() ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'product_cat'    => get_term( $term_id, 'product_cat' )->slug,
+				'post_status'    => 'publish',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$expected = array( $pos_only->get_id(), $visible->get_id() );
+		sort( $expected );
+		sort( $ids );
+		$this->assertSame( $expected, $ids );
+		$this->assertSame( 0, substr_count( $query->request, 'NOT IN (' ), $query->request );
+	}
+
+	/**
+	 * Search returns both products with or without the non-product early return.
+	 * Catalog visibility hides the POS Only product on the real storefront.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_storefront_search_query_returns_pos_only_product_unfiltered(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product();
+		$visible  = ProductHelper::create_simple_product();
+		$pos_only->set_name( 'Zebrafish one' );
+		$pos_only->save();
+		$visible->set_name( 'Zebrafish two' );
+		$visible->save();
+		$this->set_pos_only_ids( array( $pos_only->get_id() ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				's'              => 'Zebrafish',
+				'post_status'    => 'publish',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$expected = array( $pos_only->get_id(), $visible->get_id() );
+		sort( $expected );
+		sort( $ids );
+		$this->assertSame( $expected, $ids );
+		$this->assertSame( 0, substr_count( $query->request, 'NOT IN (' ), $query->request );
+	}
+
+	/**
+	 * Product search excludes POS Only with or without the non-product early return.
+	 * Catalog visibility also hides the POS Only product on the real storefront.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_storefront_product_search_query_excludes_pos_only_product(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product();
+		$visible  = ProductHelper::create_simple_product();
+		$pos_only->set_name( 'Zebrafish one' );
+		$pos_only->save();
+		$visible->set_name( 'Zebrafish two' );
+		$visible->save();
+		$this->set_pos_only_ids( array( $pos_only->get_id() ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args( array( 's' => 'Zebrafish' ) ) );
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$expected = array( $visible->get_id() );
+		sort( $expected );
+		sort( $ids );
+		$this->assertSame( $expected, $ids );
+		$this->assertSame( 1, substr_count( $query->request, 'NOT IN (' ), $query->request );
+	}
+
+	/**
 	 * Arguments for a storefront product id query.
 	 *
 	 * @param array $args Arguments that override the defaults.
