@@ -337,7 +337,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'wcpos_logging', $capture, 10, 2 );
 		try {
 			$order   = OrderHelper::create_order();
-			$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+			$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() . '/pdf' );
 			$request->set_param( 'template_id', 'wp-overnight-invoice' );
 			$response = $this->server->dispatch( $request );
 		} finally {
