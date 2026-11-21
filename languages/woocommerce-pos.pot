@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-21T16:09:32+00:00\n"
+"POT-Creation-Date: 2026-11-21T17:41:56+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -817,29 +817,29 @@ msgstr ""
 msgid "Template not found."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:352
 #: includes/API/V1/Receipts_Controller.php:360
+#: includes/API/V1/Receipts_Controller.php:368
 #: includes/Templates/Receipt.php:253
 #: includes/Templates/Receipt.php:261
 #: includes/Templates/Receipt.php:272
 msgid "Could not generate the receipt PDF."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:377
+#: includes/API/V1/Receipts_Controller.php:385
 msgid "Another print of this order is in progress; try again."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:395
+#: includes/API/V1/Receipts_Controller.php:403
 #: includes/API/V2/Closures_Controller.php:389
 #: includes/Templates/Receipt.php:544
 msgid "The closure request could not be completed."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:399
+#: includes/API/V1/Receipts_Controller.php:407
 msgid "Receipt document could not be read."
 msgstr ""
 
-#: includes/API/V1/Receipts_Controller.php:414
+#: includes/API/V1/Receipts_Controller.php:422
 msgid "Sorry, you cannot view receipts."
 msgstr ""
 
