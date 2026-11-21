@@ -523,7 +523,7 @@ class Order_Writer extends Null_Writer {
 		require_once WC()->plugin_path() . '/includes/admin/wc-admin-functions.php';
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			list( $product_id, $variation_id, $reduced, $name ) = $bindings[ $item->get_id() ] ?? array( 0, 0, 0, '' );
-			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product
+			if ( 0 != $reduced && $item instanceof \WC_Order_Item_Product
 				&& ( $product_id !== $item->get_product_id() || $variation_id !== $item->get_variation_id() ) ) {
 				if ( ! $reduced_now ) {
 					self::move_stock( $order, $item->get_product(), $item->get_name(), $reduced, 'decrease' );
@@ -737,7 +737,7 @@ class Order_Writer extends Null_Writer {
 		$context['bindings'] = array();
 		foreach ( $context['adjust_stock'] ? $order->get_items( 'line_item' ) : array() as $item ) {
 			$reduced = wc_stock_amount( $item->get_meta( '_reduced_stock', true ) );
-			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product ) {
+			if ( 0 != $reduced && $item instanceof \WC_Order_Item_Product ) {
 				$context['bindings'][ $item->get_id() ] = array( $item->get_product_id(), $item->get_variation_id(), $reduced, $item->get_name() );
 			}
 		}
