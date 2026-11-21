@@ -457,6 +457,229 @@ class Test_Products_Query_Exclusion extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A query for posts never asks whether to hide POS Only products.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::hide_pos_only_products
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_non_product_query_skips_pos_only_visibility_decision(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		$calls = 0;
+		add_filter(
+			'wcpos_hide_pos_only_products',
+			function ( $hide ) use ( &$calls ) {
+				++$calls;
+				return $hide;
+			}
+		);
+
+		// Act.
+		$query = new WP_Query( array( 'post_type' => 'post' ) );
+
+		// Assert.
+		$this->assertSame( 0, $calls );
+		$this->assertSame( 0, substr_count( $query->request, 'NOT IN (' ), $query->request );
+
+		// Act.
+		new WP_Query( $this->product_query_args() );
+
+		// Assert.
+		$this->assertGreaterThan( 0, $calls );
+	}
+
+	/**
+	 * A storefront product query carries the POS Only ids once and hides them.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_product_query_where_carries_pos_only_ids_once(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args() );
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$this->assertSame( 1, substr_count( $query->request, 'NOT IN (' ), $query->request );
+		$this->assertNotContains( $pos_only, $ids );
+		$this->assertContains( $visible, $ids );
+	}
+
+	/**
+	 * A POS Only id added between two queries is excluded from the second.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_skip_recheck_still_excludes_when_ids_change_between_queries(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$new_id   = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		$first = new WP_Query( $this->product_query_args() );
+
+		// Act.
+		$this->set_pos_only_ids( array( $pos_only, $new_id ) );
+		$second = new WP_Query( $this->product_query_args() );
+		$ids    = array_map( 'intval', $second->posts );
+
+		// Assert.
+		$this->assertContains( $new_id, array_map( 'intval', $first->posts ) );
+		$this->assertNotContains( $new_id, $ids );
+		$this->assertSame( array( $visible ), $ids );
+	}
+
+	/**
+	 * A POS Only id added after pre_get_posts but before our posts_where is still excluded.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_pos_only_id_added_between_pre_get_posts_and_posts_where_is_excluded(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product()->get_id();
+		$new_id   = ProductHelper::create_simple_product()->get_id();
+		$visible  = ProductHelper::create_simple_product()->get_id();
+		$this->set_pos_only_ids( array( $pos_only ) );
+		new Products();
+		$changed = false;
+		add_filter(
+			'posts_where',
+			function ( $where ) use ( &$changed, $pos_only, $new_id ) {
+				if ( ! $changed ) {
+					$changed = true;
+					$this->set_pos_only_ids( array( $pos_only, $new_id ) );
+				}
+				return $where;
+			},
+			10
+		);
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args() );
+
+		// Assert.
+		$this->assertSame( array( $visible ), array_map( 'intval', $query->posts ) );
+	}
+
+	/**
+	 * Archives return both products with or without the non-product early return.
+	 * Catalog visibility hides the POS Only product on the real storefront.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_product_cat_archive_query_returns_pos_only_product_unfiltered(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$term     = wp_insert_term( 'POS Archive Cat', 'product_cat' );
+		$term_id  = (int) $term['term_id'];
+		$pos_only = ProductHelper::create_simple_product();
+		$visible  = ProductHelper::create_simple_product();
+		$pos_only->set_category_ids( array( $term_id ) );
+		$pos_only->save();
+		$visible->set_category_ids( array( $term_id ) );
+		$visible->save();
+		$this->set_pos_only_ids( array( $pos_only->get_id() ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				'product_cat'    => get_term( $term_id, 'product_cat' )->slug,
+				'post_status'    => 'publish',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$expected = array( $pos_only->get_id(), $visible->get_id() );
+		sort( $expected );
+		sort( $ids );
+		$this->assertSame( $expected, $ids );
+		$this->assertSame( 0, substr_count( $query->request, 'NOT IN (' ), $query->request );
+	}
+
+	/**
+	 * Search returns both products with or without the non-product early return.
+	 * Catalog visibility hides the POS Only product on the real storefront.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_storefront_search_query_returns_pos_only_product_unfiltered(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product();
+		$visible  = ProductHelper::create_simple_product();
+		$pos_only->set_name( 'Zebrafish one' );
+		$pos_only->save();
+		$visible->set_name( 'Zebrafish two' );
+		$visible->save();
+		$this->set_pos_only_ids( array( $pos_only->get_id() ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query(
+			array(
+				's'              => 'Zebrafish',
+				'post_status'    => 'publish',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$expected = array( $pos_only->get_id(), $visible->get_id() );
+		sort( $expected );
+		sort( $ids );
+		$this->assertSame( $expected, $ids );
+		$this->assertSame( 0, substr_count( $query->request, 'NOT IN (' ), $query->request );
+	}
+
+	/**
+	 * Product search excludes POS Only with or without the non-product early return.
+	 * Catalog visibility also hides the POS Only product on the real storefront.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Products::exclude_pos_only_products_from_where
+	 */
+	public function test_storefront_product_search_query_excludes_pos_only_product(): void {
+		// Arrange.
+		$this->enable_pos_only_products();
+		$pos_only = ProductHelper::create_simple_product();
+		$visible  = ProductHelper::create_simple_product();
+		$pos_only->set_name( 'Zebrafish one' );
+		$pos_only->save();
+		$visible->set_name( 'Zebrafish two' );
+		$visible->save();
+		$this->set_pos_only_ids( array( $pos_only->get_id() ) );
+		new Products();
+
+		// Act.
+		$query = new WP_Query( $this->product_query_args( array( 's' => 'Zebrafish' ) ) );
+		$ids   = array_map( 'intval', $query->posts );
+
+		// Assert.
+		$expected = array( $visible->get_id() );
+		sort( $expected );
+		sort( $ids );
+		$this->assertSame( $expected, $ids );
+		$this->assertSame( 1, substr_count( $query->request, 'NOT IN (' ), $query->request );
+	}
+
+	/**
 	 * Arguments for a storefront product id query.
 	 *
 	 * @param array $args Arguments that override the defaults.

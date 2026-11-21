@@ -9,11 +9,50 @@
 
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 
 /** Adapts customer tax IDs and walk-in billing emails around wc/v3. */
 class Customer_Writer extends Null_Writer {
+	/** The wc/v3 route a customer create forwards to. */
+	private const CREATE_ROUTE = '/wc/v3/customers';
+
+	/**
+	 * Forward a create with wc/v3's checkout-driven username/password requirement lifted.
+	 *
+	 * wc/v3 marks `username` / `password` required from the store's checkout options, so WordPress
+	 * refuses them missing before WooCommerce can generate them (POS-2QW). The till never sends a
+	 * password, nor a username while the POS `generate_username` setting is on. Filter scoped to this forward.
+	 */
+	public function forward( array $prepared, callable $forward ) {
+		if ( 'POST' !== $prepared['method'] || self::CREATE_ROUTE !== $prepared['route'] ) {
+			return parent::forward( $prepared, $forward );
+		}
+		$fields = SettingsService::instance()->generate_username_enabled() ? array( 'username', 'password' ) : array( 'password' );
+		$relax  = static function ( $endpoints ) use ( $fields ) {
+			foreach ( $endpoints[ self::CREATE_ROUTE ] ?? array() as $key => $handler ) {
+				$methods = \is_int( $key ) ? ( $handler['methods'] ?? '' ) : '';
+				$methods = \is_array( $methods ) ? $methods : explode( ',', (string) $methods );
+				if ( ! \in_array( 'POST', array_map( 'strtoupper', array_map( 'trim', $methods ) ), true ) ) {
+					continue;
+				}
+				foreach ( $fields as $field ) {
+					if ( isset( $handler['args'][ $field ] ) ) {
+						$endpoints[ self::CREATE_ROUTE ][ $key ]['args'][ $field ]['required'] = false;
+					}
+				}
+			}
+			return $endpoints;
+		};
+		add_filter( 'rest_endpoints', $relax );
+		try {
+			return parent::forward( $prepared, $forward );
+		} finally {
+			remove_filter( 'rest_endpoints', $relax );
+		}
+	}
+
 	/** Prepare a customer create. */
 	public function prepare_create( array $meta, array $payload, callable $validate_tax_ids ) {
 		$error = $validate_tax_ids( $payload );
