@@ -301,25 +301,26 @@ Older releases are listed on [GitHub](https://github.com/wcpos/woocommerce-pos/r
 
 = 2.0.5 - 2026/11/20 =
 
+A manager can now move a sale to another cashier, and guest payments on the pay page work again on WooCommerce 11.3.1.
+
 * Paying for a guest order on the pay page works again on WooCommerce 11.3.1, which dropped the payment once the order was over 10 minutes old.
-* Adding a customer at the till no longer fails with "Missing parameter(s): username" when WooCommerce does not generate usernames or passwords itself.
+* Adding a customer at the till no longer fails with "Missing parameter(s): username" or "password" when WooCommerce does not generate them itself.
 * Checking out an order with a quick discount no longer fails with "pos-discount does not exist" when the till sends the order again.
-* Sales no longer fail to check out when another plugin shows order data that keeps changing, such as the current time.
-* If a cleanup plugin or a partial restore deletes a table WCPOS uses for syncing, WCPOS re-creates it so tills sync again, or logs why it cannot.
-* Sign-ins and sign-outs of the same user that happen at the same moment no longer undo each other.
-* If the store cannot save a sign-in, it now fails straight away instead of seeming to work and failing on the next step.
-* A returned item prints on the receipt and is saved with the sale at its negative quantity and its price, not quantity 0 at 0.00.
-* If you edited a receipt template, test it with a return: a returned item's quantity is now negative, which the template must handle.
-* New: a manager can move a sale to another cashier, and a completed sale keeps a record of the change.
-* When a cashier edits a custom order field at the till, the till's value is saved, even if the field was changed in the store since the last sync.
-* If you chose to send error reports to WCPOS, crash reports now say what the store was doing, hiding anything in the web address that looks like a key.
+* Sales no longer fail when another plugin's order data keeps changing; a till's edit to a custom order field now replaces one made in WP Admin.
+* A returned item prints and is saved at its negative quantity and real price, not 0 at 0.00; if you edited a receipt template, test it with a return.
+* New: a manager can move a sale to another cashier from the order screen in WP Admin, and a completed sale keeps a record of the change.
+* Also fixes several rare sign-in and syncing problems; opt-in error reports to WCPOS now say what the store was doing; the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/v2.0.5).
 
 = 2.0.4 - 2026/11/15 =
+
+Receipts show tax as the order was charged, and the Plugins screen shows the upgrade notice as formatted text.
 
 * Receipts show each item's tax with the name and rate the order was charged, even after the tax rate is renamed (WooCommerce Tax does this).
 * The orange "Important" upgrade notice on the Plugins screen shows formatted text instead of raw HTML tags.
 
 = 2.0.3 - 2026/11/13 =
+
+Sales no longer fail because of other plugins' hidden order data, and the online shop loads faster on stores with many POS Only products.
 
 * Sales no longer fail with "Checkout failed" when another plugin keeps updating its own hidden data on an order.
 * A till no longer overwrites another plugin's hidden order data, such as a tracking number, with an older copy.
@@ -327,45 +328,36 @@ Older releases are listed on [GitHub](https://github.com/wcpos/woocommerce-pos/r
 
 = 2.0.2 - 2026/11/12 =
 
+Online shop pages load faster on stores with many POS Only products, and the daily file check no longer raises a false alarm.
+
 * Online shop pages load faster on stores with many POS Only products, which are now looked up once per page instead of once per product.
 * The daily file check no longer reports a healthy install as modified when an update lands while the old code is still running.
 
 = 2.0.1 - 2026/11/10 =
 
+Cash and card payments at the till work again on some stores.
+
 * POS Cash and Card take payments again where another plugin loads WooCommerce's payment methods early (PAYMENT999 "Payment method not found").
 
 = 2.0.0 - 2026/11/09 =
 
-WCPOS 2.0 is a major update with an entirely new interface: [what's new](https://docs.wcpos.com/getting-started/whats-new). Cashiers will need time to learn it, so update when you have time, not during a busy shift.
+WCPOS 2.0 gives the POS its own checkout, with cash, split payments and card readers (Pro) at the till, and the till keeps taking cash when the connection drops.
+
+It is a major update with an entirely new interface: [what's new](https://docs.wcpos.com/getting-started/whats-new). Cashiers will need time to learn it, so update when you have time, not during a busy shift.
 
 Sync every till before you upgrade: 2.0 starts a new local database and does not carry over unsent 1.11 sales. Rolling back to 1.11 also starts empty, so sync before you roll back too.
 
 The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
 
-* Checkout opens beside the cart, instead of sending every sale through the pay page.
-* Cash is taken at the till, so it lands in the register's count; card and the other manual payment methods stay on the Legacy tab.
-* One order can be paid in several payments, for example part cash and part card, each recorded as it is taken.
-* Cash sales keep going when the connection drops.
-* Stripe Terminal and SumUp card readers pair with the till over Bluetooth (Pro); Tap to Pay on iPhone and Android follows in an app update.
-* Registers track the opening float, cash in and out, the count at close and the difference from what was expected.
-* Set up registers in POS > Settings > General > Register; Free includes one register, and more registers need Pro.
-* Closures are saved as numbered documents you can reprint, recount and export as CSV from POS > Settings.
-* A new Reports screen has a comparison period, a chart and cards for orders, products, taxes, refunds, payments, categories and cashiers.
-* A customer-facing display (Pro) opens in any device's browser and pairs with a till using a code.
-* Every POS screen is redrawn, with a Scale setting for compact, regular or spacious layouts and a Fonts setting under Settings > Theme.
-* Marking a product POS Only hides it from your online shop (catalog visibility Hidden); existing ones are updated once at upgrade.
-* The POS loads from cdn.wcpos.com, or jsDelivr if that is down, and is checked for tampering before it runs.
-* The template gallery has Receipts, Reports, Closures, Display and Email tabs, and receipt fonts download when needed.
-* The cashier who opened a session cannot approve that session's cash difference, and the Access screen can restore the default permissions.
+* Checkout opens beside the cart, and cash taken there lands in the register's count; card and other manual payment methods stay on the Legacy tab.
+* Registers track the opening float, cash in and out, and the count at close; Free includes one register, and more registers need Pro.
+* The cashier who opened a register session cannot approve its cash difference.
+* POS Only products are hidden from the online shop; products already marked POS Only are changed once at upgrade.
 * The experimental magnetic card reader is removed, and card terminal extensions (Stripe, SumUp and the others) need WCPOS Pro from 2.0.
 * Developers: hooks are renamed `wcpos_*` (the old names still fire, deprecated) and the 1.x compatibility shims are removed.
+* Also new: a Reports screen, saved closing reports and a customer display (Pro); the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/v2.0.0).
 
-For testers coming from the 2.0 beta 3:
-
-* A sale, refund or payment change saved while a register is closing is never lost from the books; it lands in the closure or a correction to it.
-* Register sessions with thousands of sales no longer run out of memory when working out the X-report and expected figures.
-* The pay page shows the order's own currency symbol on the Cash and Card fields, in the store's money format.
-* Refund receipts add up (Pro): any part of a refund not tied to a payment prints as cash, so the total matches the amount refunded.
+For testers coming from the 2.0 beta 3: a sale, refund or payment change saved while a register is closing is never lost from the books. Other beta fixes are on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/v2.0.0).
 
 == Upgrade Notice ==
 

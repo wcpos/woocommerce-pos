@@ -164,27 +164,38 @@ Template:
 ```text
 = X.Y.Z - YYYY/MM/DD =
 
+<One plain sentence: the best news for a shop.>
+
 * <What the shop owner notices, in one sentence.>
 * New: <a new thing they can do.>
 * Developers: <only a removed or renamed hook, filter or route.>
+* Also fixes <kinds of problem>; the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/vX.Y.Z).
 ```
 
-An X.Y.0 entry may open with up to three plain paragraphs before the list (what changed, what to do first, a link), each at most two sentences and 250 characters; its list holds new features without the "New:" label, then removals or new requirements, then the Developers line. Fixes for beta testers follow a plain line such as "For testers coming from the 2.0 beta 3:".
+Summary sentence: every entry opens with one plain sentence, a paragraph of its own between the heading and the list, at most 200 characters. It leads with the best news for a shop (a new ability, or a sale or payment that works again), names at most two changes, keeps a fix a fix ("again", "no longer") and claims nothing the release's PRs do not support. In an entry of one to three lines it may restate the top line in fewer words; never pad it.
 
-Order of lines: (1) security fixes, starting "Security:"; (2) fixes where a sale, payment, sign-in or stored record (an order, a customer, an edit) failed, was lost or was stored wrong; (3) "New:" lines; (4) other fixes and changes, including a loosened-guard line from the table (a till can now overwrite store data); (5) speed and appearance; (6) the Developers line. Within a group, what most shops notice comes first. A line that asks the shop to act starts "If you …" and goes directly after the line for the same PR, or after group (2) when there is none.
+Selection test: a line earns its own place only if a shop owner would recognise the problem or use the feature. A "readme" yes in the table makes a change a candidate; the test decides whether it gets its own line or goes in the closer, and a release mechanic gets neither. These always get their own line, however rare: a security fix; any fix where a shop could lose a sale, a payment or a record; an action the shop must take; a removal or a raised requirement (an X.Y.0 entry may carry these two in its paragraphs); a new safeguard on cash, payments or sign-in, or a change made to existing store records at upgrade, unless another section of the readme already states it.
+
+Cap: at most 7 bullets per entry. Keep the always-own lines, fill the rest in the order below, and fold what is left into the closer. Two effects of one PR may share a line, joined by a semicolon, within 150 characters.
+
+Closer: at most one per list, always its last bullet: "Also fixes <kinds of problem: sign-in, syncing, receipts…>; the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/vX.Y.Z)." Features folded from an X.Y.0 list use "Also new: …". It names the kinds, never just "bugs". It may carry one plain "now" clause about data sent off the site, naming who receives it and that it is opt-in ("opt-in error reports to WCPOS now …"). With nothing to fold there is no closer. Folding removes detail; it never changes a claim.
+
+An X.Y.0 entry may follow its summary sentence with up to three plain paragraphs (what changed, what to do first, a link), each at most two sentences and 250 characters; its list holds new features without the "New:" label, then removals or new requirements, then the Developers line, then its closer. Fixes for beta testers go in one plain paragraph after the list, at most two sentences, starting "For testers coming from the 2.0 beta 3:": each always-own fix, then "Other beta fixes are on [GitHub](…)." It does not count toward the cap.
+
+Order of lines: (1) security fixes, starting "Security:"; (2) fixes where a sale, payment, sign-in or stored record (an order, a customer, an edit) failed, was lost or was stored wrong; (3) "New:" lines; (4) other fixes and changes, including a loosened-guard line from the table (a till can now overwrite store data); (5) speed and appearance; (6) the Developers line; (7) the closer. Within a group, what most shops notice comes first. An action for the shop starts "If you …", as its own line directly after the line for the same PR (after group (2) when there is none), or as the last clause of that line.
 
 Do:
-- Start with what the reader sees or does: "Receipts show…", "Paying for a guest order… works again", "Sales no longer fail with…". Write one sentence per line, present tense, at most 150 characters, ending with a full stop. A fix reads as a fix ("no longer", "again"); only new abilities get "New:".
+- Start with what the reader sees or does: "Receipts show…", "Paying for a guest order… works again", "Sales no longer fail with…". Write one sentence per line, present tense, at most 150 characters (a link counts as its text), ending with a full stop. A fix reads as a fix ("no longer", "again"); only new abilities get "New:".
 - Quote on-screen error text exactly, in double quotes, so merchants can search for it. Name screens as the cashier or WP Admin shows them (the pay page, POS > Checkout), never by a generic word, and the WooCommerce version a fix depends on. Use one name for a screen across the whole changelog, the name earlier entries already use; when a new entry finds two, rename the older lines to match.
 - Mark Pro-only features "(Pro)". A line about data sent off the site names who receives it and says if it is opt-in.
 
 Don't:
-- Use bold or italics anywhere in the changelog. Use no emoji, no all-caps words (acronyms such as CSV are fine) and no backticks except on the Developers line.
+- Use bold or italics anywhere in the changelog, the summary sentence included. Use no emoji, no all-caps words (acronyms such as CSV are fine) and no backticks except on the Developers line.
 - Write PR or issue numbers, tracker ids, HTTP codes, hook, class or field names, or internal words (revision, envelope, allow-list, journal, 409, gateway, pane, CDN, fiscal record, sync table, token, payload, event, fatal error, request, path), or mention version bumps, `.pot` updates, translation pins, dependency updates, CI or tests.
 - Start any line inside an entry with `=`: a `= ` line ends extraction early, and an `==` line does not stop it, so it leaks into the body. Use only `= X.Y.Z - YYYY/MM/DD =` headings, `* ` bullets, plain paragraphs and `[text](url)` links.
-- Inflate: no "major" (except for an X.0.0 release), "much faster" or "various improvements", and no number or scope ("every", "always") the PR does not state.
+- Inflate: no "major" (except in an X.0.0 entry's paragraphs and its Upgrade Notice), "much", "huge", "dramatically", "powerful" or "seamless"; no "various fixes" or "bug fixes" (only the closer groups, by kind); no number or scope ("every", "always") the PR does not state.
 
-Developers line: add one closing "Developers:" line only when a site with custom code must act (a hook, filter, REST route or public method removed or renamed). Everything else developer-facing is GitHub only.
+Developers line: add one "Developers:" line, group (6), only when a site with custom code must act (a hook, filter, REST route or public method removed or renamed). Everything else developer-facing is GitHub only. It counts toward the cap.
 
 Retention: the changelog keeps the current minor line only: its X.Y.0 entry and its newest patch entries, at most six entries in all, newest first (drop the oldest patch first). When X.Y+1.0 or X+1.0.0 ships, the previous line's entries leave the readme. The section opens with this line, above the first entry, so the extraction script never picks it up: `Older releases are listed on [GitHub](https://github.com/wcpos/woocommerce-pos/releases).`
 
@@ -204,6 +215,8 @@ Coming from 1.11? WCPOS 2.0 is a major update with a new interface: update when 
 ```text
 = 2.0.3 - 2026/11/13 =
 
+Sales no longer fail because of other plugins' hidden order data, and the online shop loads faster on stores with many POS Only products.
+
 * Sales no longer fail with "Checkout failed" when another plugin keeps updating its own hidden data on an order.
 * A till no longer overwrites another plugin's hidden order data, such as a tracking number, with an older copy.
 * Product lists in the online shop load faster on stores with tens of thousands of POS Only products.
@@ -214,6 +227,8 @@ Coming from 1.11? WCPOS 2.0 is a major update with a new interface: update when 
 ```text
 = 2.0.4 - 2026/11/15 =
 
+Receipts show tax as the order was charged, and the Plugins screen shows the upgrade notice as formatted text.
+
 * Receipts show each item's tax with the name and rate the order was charged, even after the tax rate is renamed (WooCommerce Tax does this).
 * The orange "Important" upgrade notice on the Plugins screen shows formatted text instead of raw HTML tags.
 ```
@@ -223,25 +238,32 @@ Coming from 1.11? WCPOS 2.0 is a major update with a new interface: update when 
 ```text
 = 2.0.5 - 2026/11/20 =
 
+A manager can now move a sale to another cashier, and guest payments on the pay page work again on WooCommerce 11.3.1.
+
 * Paying for a guest order on the pay page works again on WooCommerce 11.3.1, which dropped the payment once the order was over 10 minutes old.
-* Adding a customer at the till no longer fails with "Missing parameter(s): username" when WooCommerce does not generate usernames or passwords itself.
+* Adding a customer at the till no longer fails with "Missing parameter(s): username" or "password" when WooCommerce does not generate them itself.
 * Checking out an order with a quick discount no longer fails with "pos-discount does not exist" when the till sends the order again.
-* Sales no longer fail to check out when another plugin shows order data that keeps changing, such as the current time.
-* If a cleanup plugin or a partial restore deletes a table WCPOS uses for syncing, WCPOS re-creates it so tills sync again, or logs why it cannot.
-* Sign-ins and sign-outs of the same user that happen at the same moment no longer undo each other.
-* If the store cannot save a sign-in, it now fails straight away instead of seeming to work and failing on the next step.
-* A returned item prints on the receipt and is saved with the sale at its negative quantity and its price, not quantity 0 at 0.00.
-* If you edited a receipt template, test it with a return: a returned item's quantity is now negative, which the template must handle.
-* New: a manager can move a sale to another cashier, and a completed sale keeps a record of the change.
-* When a cashier edits a custom order field at the till, the till's value is saved, even if the field was changed in the store since the last sync.
-* If you chose to send error reports to WCPOS, crash reports now say what the store was doing, hiding anything in the web address that looks like a key.
+* Sales no longer fail when another plugin's order data keeps changing; a till's edit to a custom order field now replaces one made in WP Admin.
+* A returned item prints and is saved at its negative quantity and real price, not 0 at 0.00; if you edited a receipt template, test it with a return.
+* New: a manager can move a sale to another cashier from the order screen in WP Admin, and a completed sale keeps a record of the change.
+* Also fixes several rare sign-in and syncing problems; opt-in error reports to WCPOS now say what the store was doing; the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/v2.0.5).
 ```
+
+## Rest of the readme
+
+Above `== Changelog ==` (Description, Installation, FAQ) the same restraint applies; Paul's complaint covered these sections too. The extraction script never reads them, so headings are safe there.
+- Headings carry the structure: `== Section ==`, then `= Sub-heading =`. A line that is only bold text becomes a `= … =` heading, or a plain line ending in a colon when it already sits under one.
+- Bold: at most one phrase per `== … ==` section, inside a sentence. Never a whole line, a line's opening words or a list item's lead-in: `* **Cash.** Use the keypad…` becomes `* Cash. Use the keypad…`.
+- The changelog's word rules apply: plain words, no inflation words, no emoji, no all-caps.
+- Pricing, licensing and feature claims (what Free includes, what Pro adds and costs, the licence) are owned by the product, not by this standard. A formatting pass removes markup around them and never changes their words.
 
 ## Pre-publish checklist
 
 - [ ] Every PR in `vPREV..HEAD` is in the GitHub notes, or is left out with its row of the table named in the release PR. Every readme line traces to a PR in the GitHub notes, and every number in either text appears in a PR body, measured on the merged head or on the previous release.
 - [ ] Security, data-loss and payment fixes are in both texts, first in their group.
-- [ ] Every bullet under Developer and contract changes says "Additive", names the action, says "New error code on …", or (for a recipe change) says what happens to held values; `grep -n '\*\*'` over the changelog section finds nothing, nor does a grep for italic emphasis (`*word*`, `_word_`): `grep -nE '(^|[ (])[*_][^ *_][^*_]*[*_]([ .,;:)]|$)'`, and no readme bullet is over 150 characters after its `* `.
+- [ ] Every bullet under Developer and contract changes says "Additive", names the action, says "New error code on …", or (for a recipe change) says what happens to held values.
+- [ ] Each readme entry is its heading, one summary sentence (not starting `*` or `=`), then at most 7 bullets in all (a beta paragraph after the list is not counted); count them with `awk '/^== /{c=/Changelog/} c&&/^= [0-9]/{v=$2} c&&/^\* /{n[v]++} END{for(v in n)print v, n[v]}' readme.txt`. Each closer is last in its list and links that version's `releases/tag/vX.Y.Z`; no bullet is over 150 characters after its `* ` (a link counts as its text). `grep -n '\*\*'` over the changelog section finds nothing, nor does a grep for italic emphasis (`*word*`, `_word_`): `grep -nE '(^|[ (])[*_][^ *_][^*_]*[*_]([ .,;:)]|$)'`.
+- [ ] Rest of the readme: `grep -nE '^[[:space:]]*([*-]|[0-9]+\.)?[[:space:]]*\*\*' readme.txt` finds nothing (no bold line, opening or lead-in); `awk '/^== /{s=$0} {n=gsub(/\*\*[^*]+\*\*/,"&"); c[s]+=n} END{for(s in c) if(c[s]>1) print c[s], s}' readme.txt` prints nothing (at most one bold phrase per section), and `grep -n '\*\*'` finds none from `== Changelog ==` down; `git diff --word-diff --word-diff-regex='[^*[:space:]]+' readme.txt` shows no changed word in a pricing, licensing or feature claim (asterisks are ignored, so only real wording changes show).
 - [ ] `readme-changelog-section.sh X.Y.Z` prints exactly the new entry. Run it for the oldest kept entry too: after that entry's last line only `== Upgrade Notice ==` may follow (the script does not stop at `==`). A `release.yml` re-run for that oldest version would publish that `== Upgrade Notice ==` line, so remove it from that release body by hand.
 - [ ] The translation pin named in Maintenance is the last pin PR in the range. Retention applied, the opening GitHub line present, and the Upgrade Notice is one `= X.Y.Z =` for this release (or none), at most 300 characters of plain text.
 - [ ] If `release.yml` still fills the body from the readme, the publisher has run `gh release edit vX.Y.Z --notes-file notes.md` and checked the result.

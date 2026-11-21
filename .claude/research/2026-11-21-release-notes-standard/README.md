@@ -17,13 +17,16 @@ How the climb ran:
 | 4 | 54 | 62 | 56 | 172 |
 | 5 | 60 | 60 | 59 | 179 |
 | 6 | not judged | | | |
+| 7 | 57 | n/a | 55 | readme side only, out of 140 |
 
 How to read the scores:
 - Lap 2 scored well but still held overclaims, which laps 3 and 4 found and removed. So the dip after lap 2 is mostly the judges getting stricter, not the text getting worse.
 - Lap 5 was a pass that only corrected facts, and it scored highest.
 - Lap 6 applied the lap 5 MUST-FIXes that the coordinator accepted (rulings in `rationale.md`) and was not re-judged.
+- Lap 7 was the desk's readme-only lap: a summary sentence on every entry, a 7-bullet cap with one grouped closer, a selection test (a line stays only if a shop owner would recognise the problem or use the feature), and a "Rest of the readme" bold rule. The GitHub side is unchanged from lap 6, so only the shop and editor judges scored it. Their MUST-FIXes (a returned item's price, two 2.0.0 cash and upgrade points, a word-diff check) went into one final pass that was not re-judged.
 
 Files:
 - `research.md`: how the WordPress.org parser renders a readme, its limits, and the reference changelogs.
 - `rubric.md`: the judging rubric.
 - `rationale.md`: the drafter's decisions for laps 5 and 6.
+- `rationale-lap7.md`: the drafter's decisions for lap 7 and its final pass.
