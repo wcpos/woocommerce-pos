@@ -9,6 +9,9 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
 use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController;
+use Automattic\WooCommerce\Utilities\OrderUtil;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -1006,6 +1009,69 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $history );
 		$this->assertNull( $history[0]['reopened_at_gmt'] );
 		$this->assertSame( array( 1 ), $this->announced );
+	}
+
+	/** A completion another request stored after this request cached the order is the one append() finds standing. */
+	public function test_append_reads_a_completion_stored_after_the_order_was_cached(): void {
+		// Arrange.
+		global $wpdb;
+		$order = $this->create_pos_order();
+		$order->set_date_paid( time() );
+		$order->set_status( 'completed' );
+		$order->save();
+		$id = $order->get_id();
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $id ) )->entries(), 'Precondition: this request caches the order with no history.' );
+		$stored = array(
+			'id'              => wp_generate_uuid4(),
+			'n'               => 1,
+			'at_gmt'          => '2026-10-22T09:00:00+00:00',
+			'sale_time'       => null,
+			'sale_tz'         => null,
+			'register'        => null,
+			'session'         => null,
+			'counter'         => null,
+			'total'           => '92.95',
+			'payment_ids'     => array(),
+			'reopened_at_gmt' => null,
+		);
+		$meta   = array(
+			'meta_key'   => Completion_Stamp::META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			'meta_value' => wp_json_encode( array( $stored ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+		);
+		$hpos   = OrderUtil::custom_orders_table_usage_is_enabled();
+		if ( $hpos ) {
+			$wpdb->insert( $wpdb->prefix . 'wc_orders_meta', array( 'order_id' => $id ) + $meta );
+		}
+		if ( ! $hpos || OrderUtil::is_custom_order_tables_in_sync() ) {
+			$wpdb->insert( $wpdb->postmeta, array( 'post_id' => $id ) + $meta );
+		}
+
+		// Act.
+		$entry = Completion_Stamp::append( $order, new Completion_Origin() );
+
+		// Assert.
+		$this->assertSame( $stored['id'], $entry['id'] ?? null );
+		$this->assertSame( 1, $entry['n'] ?? null );
+		$this->assertSame( array(), $this->announced );
+	}
+
+	/** With WooCommerce's HPOS data-store caching on, the order row and meta it cached are dropped too. */
+	public function test_append_reads_a_completion_stored_after_the_order_was_cached_with_hpos_datastore_caching(): void {
+		if ( ! OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$this->markTestSkipped( 'HPOS data-store caching only caches orders on HPOS storage.' );
+		}
+		if ( ! defined( CustomOrdersTableController::class . '::HPOS_DATASTORE_CACHING_ENABLED_OPTION' ) ) {
+			$this->markTestSkipped( 'This WooCommerce version has no HPOS data-store caching.' );
+		}
+		update_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION, 'yes' );
+		try {
+			$this->assertTrue( OrderUtil::custom_orders_table_datastore_cache_enabled(), 'Precondition: data-store caching is on.' );
+
+			// Same Arrange, Act and Assert, now with the order row and meta cached by the data store.
+			$this->test_append_reads_a_completion_stored_after_the_order_was_cached();
+		} finally {
+			delete_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION );
+		}
 	}
 
 	/**
