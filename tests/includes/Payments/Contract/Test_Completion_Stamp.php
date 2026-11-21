@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
@@ -1069,6 +1070,105 @@ class Test_Completion_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 			// Same Arrange, Act and Assert, now with the order row and meta cached by the data store.
 			$this->test_append_reads_a_completion_stored_after_the_order_was_cached();
+		} finally {
+			delete_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION );
+		}
+	}
+
+	/** Another request's change between the paid transition and the flush: status, total, then what storage holds. */
+	public static function changed_after_paid_cases(): array {
+		return array(
+			'reopened'      => array( 'pos-open', null, array( 'pos-open', array( 'captured 92.95' ), 'paid', 0, 'owes 0.00' ) ),
+			'total raised'  => array( null, '100.00', array( 'pos-partial', array( 'captured 92.95' ), 'sent', 0, 'owes 7.05' ) ),
+			'total lowered' => array( null, '50.00', array( 'processing', array( 'captured 92.95' ), 'paid', 1, 'overpaid 42.95' ) ),
+		);
+	}
+
+	/**
+	 * A sent invoice marked paid in wp-admin mints what the gateway took, whatever another request changed before the
+	 * flush: `date_paid` is WooCommerce's fact that money moved, and the amount is what the gateway took when the sale
+	 * was marked paid, so a reopened sale keeps the payment and a changed total shows as owing or overpaid.
+	 *
+	 * @dataProvider changed_after_paid_cases
+	 *
+	 * @param string|null $status   The other request's status, unprefixed.
+	 * @param string|null $total    The other request's total.
+	 * @param array       $expected Status, rows, the attempt's fate, completion entries, balance.
+	 */
+	public function test_deferred_gateway_completion_mints_what_the_gateway_took_after_another_request_changed_the_order( ?string $status, ?string $total, array $expected ): void {
+		global $wpdb;
+		// Arrange: register B sends an invoice; wp-admin marks it paid, which defers the completion.
+		$order   = $this->create_pos_order();
+		$attempt = wp_generate_uuid4();
+		$this->assertSame( 'sent', $this->submit( $order, $attempt, 'wcpos_stamp_sent', $this->provenance( self::REGISTER_B, self::SESSION_B ) )->get_data()['outcome'] );
+		$id = $order->get_id();
+		wc_get_order( $id )->update_status( 'processing' );
+		wc_get_order( $id ); // A listener in this request reads the order after the transition.
+		// Another request's change, straight to storage, so this request's caches never see it.
+		$hpos = OrderUtil::custom_orders_table_usage_is_enabled();
+		if ( $hpos ) {
+			$set = array_filter(
+				array(
+					'status'       => null === $status ? null : 'wc-' . $status,
+					'total_amount' => $total,
+				)
+			);
+			$this->assertSame( 1, $wpdb->update( $wpdb->prefix . 'wc_orders', $set, array( 'id' => $id ) ) );
+		}
+		if ( ! $hpos || OrderUtil::is_custom_order_tables_in_sync() ) {
+			if ( null !== $status ) {
+				$this->assertSame( 1, $wpdb->update( $wpdb->posts, array( 'post_status' => 'wc-' . $status ), array( 'ID' => $id ) ) );
+			}
+			if ( null !== $total ) {
+				$where = array(
+					'post_id'  => $id,
+					'meta_key' => '_order_total', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				);
+				$this->assertSame( 1, $wpdb->update( $wpdb->postmeta, array( 'meta_value' => $total ), $where ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			}
+		}
+
+		// Act.
+		Ledger::flush( $id );
+
+		// Assert: storage, with every cache dropped.
+		wp_cache_flush();
+		$stored  = wc_get_order( $id );
+		$rows    = Ledger::instance()->read( $stored );
+		$balance = Money::minor( $stored->get_total() ) - Money::minor( Ledger::instance()->paid( $rows ) );
+		$this->assertSame(
+			array( $expected[0], $expected[1], array( $attempt => $expected[2] ), $expected[3], $expected[4] ),
+			array(
+				$stored->get_status(),
+				array_map( static fn( array $row ): string => $row['status'] . ' ' . $row['amount'], $rows ),
+				Attempts::of( $stored )->fates(),
+				count( $this->stored_history( $id ) ),
+				( $balance < 0 ? 'overpaid ' : 'owes ' ) . Money::format( abs( $balance ) ),
+			)
+		);
+	}
+
+	/**
+	 * The same, with WooCommerce's HPOS data-store caching on: the read after the transition caches the order row
+	 * and meta as they were before the other request's write.
+	 *
+	 * @dataProvider changed_after_paid_cases
+	 *
+	 * @param string|null $status   The other request's status, unprefixed.
+	 * @param string|null $total    The other request's total.
+	 * @param array       $expected Status, rows, the attempt's fate, completion entries, balance.
+	 */
+	public function test_deferred_gateway_completion_mints_what_the_gateway_took_after_another_request_changed_the_order_with_hpos_datastore_caching( ?string $status, ?string $total, array $expected ): void {
+		if ( ! OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$this->markTestSkipped( 'HPOS data-store caching only caches orders on HPOS storage.' );
+		}
+		if ( ! defined( CustomOrdersTableController::class . '::HPOS_DATASTORE_CACHING_ENABLED_OPTION' ) ) {
+			$this->markTestSkipped( 'This WooCommerce version has no HPOS data-store caching.' );
+		}
+		update_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION, 'yes' );
+		try {
+			$this->assertTrue( OrderUtil::custom_orders_table_datastore_cache_enabled(), 'Precondition: data-store caching is on.' );
+			$this->test_deferred_gateway_completion_mints_what_the_gateway_took_after_another_request_changed_the_order( $status, $total, $expected );
 		} finally {
 			delete_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION );
 		}
