@@ -1895,6 +1895,7 @@ class Ledger {
 	 * @param WC_Order $order The caller's order.
 	 */
 	private function refresh( WC_Order $order ): void {
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$order->get_data_store()->read( $order );
 		$order->read_meta_data( true );
 		// Its items too (a tip fee the write added): WooCommerce reads them again on the next get_items().
@@ -2659,18 +2660,7 @@ class Ledger {
 		if ( class_exists( \Automattic\WooCommerce\Caches\OrderCache::class ) ) {
 			wc_get_container()->get( \Automattic\WooCommerce\Caches\OrderCache::class )->remove( $id );
 		}
-		if ( function_exists( 'wc_get_container' ) &amp;&amp; class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class ) ) {
-			$data_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class );
-			if ( method_exists( $data_store, 'clear_cached_data' ) ) {
-				$data_store->clear_cached_data( array( $id ) );
-			}
-			if ( class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class ) ) {
-				$meta_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class );
-				if ( method_exists( $meta_store, 'clear_cached_data' ) ) {
-					$meta_store->clear_cached_data( array( $id ) );
-				}
-			}
-		}
+		Order_Meta_Store::forget_datastore_cache( $id );
 		$order = wc_get_order( $id );
 		if ( ! $order instanceof WC_Order ) {
 			throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS order could not be read.' );
