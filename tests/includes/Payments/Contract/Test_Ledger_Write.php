@@ -378,6 +378,38 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		$this->assertSame( array(), Ledger::instance()->read( $stale ), 'Precondition: the caller\'s object never saw a row.' );
 	}
 
+	/** A status another request committed after this request cached the order is the status the write decides from. */
+	public function test_write_reads_status_committed_after_the_order_was_cached_from_storage(): void {
+		// Arrange.
+		global $wpdb;
+		$order = wc_create_order();
+		$order->set_status( 'pending' );
+		$order->save();
+		$id = $order->get_id();
+		$this->assertSame( 'pending', wc_get_order( $id )->get_status(), 'Precondition: this request caches the pending order.' );
+		$hpos = OrderUtil::custom_orders_table_usage_is_enabled();
+		if ( $hpos ) {
+			$wpdb->update( $wpdb->prefix . 'wc_orders', array( 'status' => 'wc-processing' ), array( 'id' => $id ) );
+		}
+		if ( ! $hpos || OrderUtil::is_custom_order_tables_in_sync() ) {
+			$wpdb->update( $wpdb->posts, array( 'post_status' => 'wc-processing' ), array( 'ID' => $id ) );
+		}
+		$seen = null;
+
+		// Act.
+		Ledger::instance()->write(
+			$id,
+			function ( Ledger_Draft $draft ) use ( &$seen ) {
+				$seen = $draft->order()->get_status();
+				return false;
+			},
+			Ledger::MODE_HOLD
+		);
+
+		// Assert.
+		$this->assertSame( 'processing', $seen );
+	}
+
 	/**
 	 * A change that breaks a stored row's invariants is a programming error: it throws and stores nothing (I5).
 	 *
