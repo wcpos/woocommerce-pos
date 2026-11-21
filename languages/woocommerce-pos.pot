@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-21T10:23:00+00:00\n"
+"POT-Creation-Date: 2026-11-21T14:50:09+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1079,7 +1079,7 @@ msgstr ""
 #: includes/API/V2/Payments_Controller.php:218
 #: includes/API/V2/Payment_Methods_Controller.php:110
 #: includes/Payments/Contract/Gateway_Handler.php:59
-#: includes/Payments/Contract/Gateway_Submission.php:130
+#: includes/Payments/Contract/Gateway_Submission.php:131
 #: includes/Payments/Contract/Ledger.php:1671
 msgid "Payment method not found."
 msgstr ""
@@ -1105,8 +1105,8 @@ msgid "Sorry, you cannot bootstrap payment methods."
 msgstr ""
 
 #: includes/API/V2/Payment_Methods_Controller.php:116
-#: includes/Payments/Contract/Gateway_Submission.php:51
-#: includes/Payments/Contract/Ledger.php:3087
+#: includes/Payments/Contract/Gateway_Submission.php:52
+#: includes/Payments/Contract/Ledger.php:3077
 msgid "Payment capture mode is unsupported."
 msgstr ""
 
@@ -1356,12 +1356,12 @@ msgid "This payment capture mode does not support that operation."
 msgstr ""
 
 #. translators: 1: attempt id, 2: payment method title.
-#: includes/Payments/Contract/Attempts.php:317
+#: includes/Payments/Contract/Attempts.php:318
 #, php-format
 msgid "WCPOS payment attempt %1$s: the outcome is unknown and %2$s cannot say whether money was taken. Check the payment with the provider, then cancel the attempt at the POS if nothing was charged."
 msgstr ""
 
-#: includes/Payments/Contract/Attempts.php:406
+#: includes/Payments/Contract/Attempts.php:407
 msgid "Clearing the awaiting-customer state"
 msgstr ""
 
@@ -1369,12 +1369,12 @@ msgstr ""
 msgid "This command ID was already used with a different request."
 msgstr ""
 
-#: includes/Payments/Contract/Command_Log.php:241
-#: includes/Payments/Contract/Gateway_Submission.php:108
+#: includes/Payments/Contract/Command_Log.php:244
+#: includes/Payments/Contract/Gateway_Submission.php:109
 msgid "This attempt was cancelled or superseded at the till."
 msgstr ""
 
-#: includes/Payments/Contract/Command_Log.php:267
+#: includes/Payments/Contract/Command_Log.php:270
 msgid "The order changed since this command was built; read it again."
 msgstr ""
 
@@ -1405,121 +1405,121 @@ msgstr ""
 msgid "This payment cannot be voided."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:54
+#: includes/Payments/Contract/Gateway_Submission.php:55
 msgid "Attempt ID must be a UUID."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:57
+#: includes/Payments/Contract/Gateway_Submission.php:58
 msgid "Only POS orders take a gateway submission."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:79
+#: includes/Payments/Contract/Gateway_Submission.php:80
 msgid "An earlier payment attempt on this order has no outcome yet."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:113
+#: includes/Payments/Contract/Gateway_Submission.php:114
 msgid "Payment method is not enabled for the POS."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:121
+#: includes/Payments/Contract/Gateway_Submission.php:122
 msgid "Order is already paid."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:125
+#: includes/Payments/Contract/Gateway_Submission.php:126
 msgid "Order already has a live payment."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:206
+#: includes/Payments/Contract/Gateway_Submission.php:207
 msgid "The payment method rejected the details entered."
 msgstr ""
 
 #. translators: 1: attempt id, 2: payment method title.
-#: includes/Payments/Contract/Gateway_Submission.php:294
+#: includes/Payments/Contract/Gateway_Submission.php:295
 #, php-format
 msgid "WCPOS payment attempt %1$s: %2$s failed after the payment was sent. Check with the provider whether money was taken, then cancel the attempt at the POS."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:298
-#: includes/Payments/Contract/Gateway_Submission.php:313
+#: includes/Payments/Contract/Gateway_Submission.php:299
+#: includes/Payments/Contract/Gateway_Submission.php:314
 msgid "The payment provider failed."
 msgstr ""
 
 #. translators: %s: the host the gateway wanted to redirect the browser to.
-#: includes/Payments/Contract/Gateway_Submission.php:317
+#: includes/Payments/Contract/Gateway_Submission.php:318
 #, php-format
 msgid "This payment method wants to open %s in a browser, which the POS cannot follow."
 msgstr ""
 
 #. translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the order status the merchant stored for this gateway.
-#: includes/Payments/Contract/Gateway_Submission.php:378
+#: includes/Payments/Contract/Gateway_Submission.php:379
 #, php-format
 msgid "Settled via POS: %1$s on %2$s"
 msgstr ""
 
 #. translators: 1: the gateway's verb label (e.g. "Send invoice"), 2: the destination the cashier entered.
-#: includes/Payments/Contract/Gateway_Submission.php:394
+#: includes/Payments/Contract/Gateway_Submission.php:395
 #, php-format
 msgid "Sent via POS: %1$s (%2$s)"
 msgstr ""
 
 #. translators: 1: attempt id, 2: payment method title.
-#: includes/Payments/Contract/Gateway_Submission.php:417
+#: includes/Payments/Contract/Gateway_Submission.php:418
 #, php-format
 msgid "WCPOS payment attempt %1$s: %2$s answered, but the POS could not record it. Check the order with the provider, then cancel the attempt at the POS."
 msgstr ""
 
 #. translators: %s: attempt id.
-#: includes/Payments/Contract/Gateway_Submission.php:446
+#: includes/Payments/Contract/Gateway_Submission.php:447
 #, php-format
 msgid "Payment attempt %s may already have been paid by the gateway; reconcile the payment before cancelling it."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:454
+#: includes/Payments/Contract/Gateway_Submission.php:455
 msgid "This invoice cannot be cancelled."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:457
+#: includes/Payments/Contract/Gateway_Submission.php:458
 msgid "The invoice was sent by a different payment method."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:461
+#: includes/Payments/Contract/Gateway_Submission.php:462
 msgid "A newer invoice has been sent for this order."
 msgstr ""
 
 #. translators: 1: the payment method title, 2: the cashier's reason.
-#: includes/Payments/Contract/Gateway_Submission.php:467
+#: includes/Payments/Contract/Gateway_Submission.php:468
 #, php-format
 msgid "Cancelled via POS: %1$s. %2$s"
 msgstr ""
 
 #. translators: 1: attempt id, 2: the staff member's display name, 3: the cashier's reason.
-#: includes/Payments/Contract/Gateway_Submission.php:501
+#: includes/Payments/Contract/Gateway_Submission.php:502
 #, php-format
 msgid "WCPOS payment attempt %1$s closed at the POS by %2$s: nothing more was charged, and the sale's payments already cover it. %3$s"
 msgstr ""
 
 #. translators: 1: attempt id, 2: the staff member's display name, 3: the cashier's reason.
-#: includes/Payments/Contract/Gateway_Submission.php:501
+#: includes/Payments/Contract/Gateway_Submission.php:502
 msgid "an unknown user"
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:626
+#: includes/Payments/Contract/Gateway_Submission.php:629
 msgid "This field must be true or false."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:631
+#: includes/Payments/Contract/Gateway_Submission.php:634
 msgid "This field must be text."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:635
+#: includes/Payments/Contract/Gateway_Submission.php:638
 msgid "This field is required."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:639
+#: includes/Payments/Contract/Gateway_Submission.php:642
 msgid "Choose one of the listed options."
 msgstr ""
 
-#: includes/Payments/Contract/Gateway_Submission.php:653
+#: includes/Payments/Contract/Gateway_Submission.php:656
 msgid "Check the payment fields."
 msgstr ""
 
@@ -1562,7 +1562,7 @@ msgstr ""
 
 #: includes/Payments/Contract/Ledger.php:881
 #: includes/Payments/Contract/Ledger.php:1735
-#: includes/Payments/Contract/Ledger.php:1908
+#: includes/Payments/Contract/Ledger.php:1909
 msgid "Another payment is already in progress on this order."
 msgstr ""
 
@@ -1635,28 +1635,28 @@ msgid "The order is not covered by its payments."
 msgstr ""
 
 #. translators: %s: payment row uuid.
-#: includes/Payments/Contract/Ledger.php:1985
+#: includes/Payments/Contract/Ledger.php:1986
 #, php-format
 msgid "WCPOS payment %s voided."
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: void reason given by the cashier.
-#: includes/Payments/Contract/Ledger.php:1987
+#: includes/Payments/Contract/Ledger.php:1988
 #, php-format
 msgid "WCPOS payment %1$s voided: %2$s"
 msgstr ""
 
 #. translators: %s: what the deferred work was for.
-#: includes/Payments/Contract/Ledger.php:2694
+#: includes/Payments/Contract/Ledger.php:2684
 #, php-format
 msgid "WCPOS: %s did not complete; reconcile manually."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:3082
+#: includes/Payments/Contract/Ledger.php:3072
 msgid "Payment not found."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:3092
+#: includes/Payments/Contract/Ledger.php:3082
 msgid "Payment transition is invalid."
 msgstr ""
 
@@ -1861,13 +1861,13 @@ msgstr ""
 
 #. translators: %s: fiscal record type (sale, refund, void, cancellation).
 #: includes/Services/Fiscal_Record_Writers.php:114
-#: includes/Services/Fiscal_Record_Writers.php:405
+#: includes/Services/Fiscal_Record_Writers.php:407
 #, php-format
 msgid "POS fiscal %s record could not be written; it will need recovery."
 msgstr ""
 
-#: includes/Services/Fiscal_Record_Writers.php:266
-#: includes/Services/Fiscal_Record_Writers.php:389
+#: includes/Services/Fiscal_Record_Writers.php:267
+#: includes/Services/Fiscal_Record_Writers.php:391
 msgid "POS fiscal sale record recovered."
 msgstr ""
 
