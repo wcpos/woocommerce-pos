@@ -11,7 +11,13 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Payments\Contract\Declared_Fields;
+use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_REST_Request;
 
@@ -121,10 +127,79 @@ class Received {
 				$order_complete = false;
 			}
 
+			// A send-declaring Legacy gateway leaves the order unpaid and redirects here.
+			// Recheck eligibility under the lock before writing the awaiting-customer stamp
+			// (descriptor spec §3.2 / §4.2); reloads cannot double-stamp. Refresh the JSON even
+			// when another request stamped it, then post wcpos-payment-sent. The cashier is
+			// the order's _pos_user; older apps ignore the action as before. An earlier attempt
+			// still in flight blocks the stamp, so the sweep keeps reconciling it.
+			$order_sent = false;
+			try {
+				if ( false !== $order_json && ! $order_complete && $this->is_legacy_send( $order ) ) {
+					$attempt_id = wp_generate_uuid4();
+					$outcome    = 'ineligible';
+					Ledger::instance()->write(
+						$order,
+						// A false answer stages nothing, so early paths do not save; the ledger may run this twice, and the last run sets $outcome.
+						static function ( Ledger_Draft $draft ) use ( $attempt_id, &$outcome ): bool {
+							$sale = $draft->order();
+							if ( ! self::awaits_payment( $sale ) ) {
+								$outcome = 'ineligible';
+								return false;
+							}
+							if ( null !== Attempts::of( $sale )->awaiting() ) {
+								$outcome = 'awaiting';
+								return false;
+							}
+							// An earlier attempt with no known outcome is reconciled first, as native submit refuses via eligible( 'submit' ); stamping would supersede it out of the sweep.
+							if ( null !== Attempts::of( $sale )->eligible( 'submit' ) ) {
+								$outcome = 'ineligible';
+								return false;
+							}
+							Attempts::open( $draft, $attempt_id, $sale->get_payment_method() );
+							$draft->attempt( $attempt_id, 'sent', array( 'cashier_id' => max( 0, (int) $sale->get_meta( '_pos_user' ) ) ) );
+							Attempts::await( $draft, $attempt_id, '' !== $sale->get_billing_email() ? $sale->get_billing_email() : null );
+							$outcome = 'written';
+							return true;
+						},
+						Ledger::MODE_HOLD
+					);
+					if ( 'ineligible' !== $outcome ) {
+						$order_json = $this->get_order_json( $order->get_id() );
+						$order_sent = false !== $order_json;
+					}
+				}
+			} catch ( \Throwable $e ) {
+				Logger::log( sprintf( 'Received order %d could not record the Legacy send: %s', $order->get_id(), $e->getMessage() ) );
+			}
+
 			include wcpos_locate_template( 'received.php' );
 			exit;
 		} catch ( Exception $e ) {
 			\wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Whether the order is unpaid and still awaiting payment.
+	 *
+	 * @param WC_Order $order The order.
+	 */
+	private static function awaits_payment( WC_Order $order ): bool {
+		return ! $order->is_paid() && $order->has_status( array( 'pending', 'on-hold' ) );
+	}
+
+	/**
+	 * Whether an unpaid POS order ran a gateway that declares a send verb.
+	 *
+	 * @param WC_Order $order The order.
+	 */
+	private function is_legacy_send( WC_Order $order ): bool {
+		if ( ! wcpos_is_pos_order( $order ) || ! self::awaits_payment( $order ) ) {
+			return false;
+		}
+		$gateway = Descriptor_Builder::instance()->gateway( $order->get_payment_method() );
+		$fields  = null === $gateway ? null : Declared_Fields::for_gateway( $gateway );
+		return 'send' === ( $fields['verb']['kind'] ?? null );
 	}
 }

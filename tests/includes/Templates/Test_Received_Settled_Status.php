@@ -8,6 +8,9 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 use WCPOS\WooCommercePOS\Templates\Received;
 use WC_Order;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -251,6 +254,270 @@ class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertStringContainsString( "action: 'wcpos-payment-received'", $output );
+	}
+
+	/**
+	 * A send-declaring gateway run through the Legacy pay window leaves the order
+	 * pending: the page writes the awaiting-customer stamp once and posts it.
+	 */
+	public function test_send_declaring_gateway_pending_order_writes_awaiting_stamp_and_renders_sent_script(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+		$order = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+
+		try {
+			// Act: the second render is a reload.
+			$first  = $this->render_received( $order );
+			$second = $this->render_received( $order );
+		} finally {
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		foreach ( array( $first, $second ) as $output ) {
+			$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
+			$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+		}
+		$this->assertSame( 1, preg_match( '/var order = (.+);/', $first, $matches ) );
+		$payload = json_decode( $matches[1], true );
+		$this->assertSame( $order->get_id(), $payload['id'] );
+		$this->assertContains( Attempts::META_KEY, array_column( $payload['meta_data'], 'key' ) );
+		$fresh    = wc_get_order( $order->get_id() );
+		$awaiting = Attempts::of( $fresh )->awaiting();
+		$this->assertSame( 'bacs', $awaiting['method_id'] );
+		$this->assertSame( 'customer@example.com', $awaiting['destination'] );
+		$this->assertSame( $cashier_id, $awaiting['cashier_id'] );
+		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
+		$this->assertSame( 'pending', $fresh->get_status() );
+	}
+
+	/**
+	 * An overlapping send still posts the payload fetched after its stamp.
+	 */
+	public function test_send_stamp_written_by_overlapping_request_still_posts_fresh_payload(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		$order      = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+		$first_fetch = true;
+		$overlap     = static function ( $response ) use ( $order, $cashier_id, &$first_fetch ) {
+			if ( $first_fetch ) {
+				$first_fetch = false;
+				Ledger::instance()->write(
+					wc_get_order( $order->get_id() ),
+					static function ( Ledger_Draft $draft ) use ( $cashier_id ): void {
+						$id = wp_generate_uuid4();
+						Attempts::open( $draft, $id, 'bacs' );
+						$draft->attempt( $id, 'sent', array( 'cashier_id' => $cashier_id ) );
+						Attempts::await( $draft, $id, 'customer@example.com' );
+					},
+					Ledger::MODE_HOLD
+				);
+			}
+			return $response;
+		};
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+		add_filter( 'rest_post_dispatch', $overlap );
+
+		try {
+			// Act.
+			$output = $this->render_received( $order );
+		} finally {
+			remove_filter( 'rest_post_dispatch', $overlap );
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
+		$this->assertSame( 1, preg_match( '/var order = (.+);/', $output, $matches ) );
+		$payload = json_decode( $matches[1], true );
+		$this->assertContains( Attempts::META_KEY, array_column( $payload['meta_data'], 'key' ) );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
+	}
+
+	/**
+	 * A cancellation before the locked write prevents the stamp and sent event.
+	 */
+	public function test_send_order_cancelled_before_lock_gets_no_stamp_and_no_sent_script(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		$order      = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+		$first_fetch = true;
+		$cancel      = static function ( $response ) use ( $order, &$first_fetch ) {
+			if ( $first_fetch ) {
+				$first_fetch = false;
+				wc_get_order( $order->get_id() )->update_status( 'cancelled' );
+			}
+			return $response;
+		};
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+		add_filter( 'rest_post_dispatch', $cancel );
+
+		try {
+			// Act.
+			$output = $this->render_received( $order );
+		} finally {
+			remove_filter( 'rest_post_dispatch', $cancel );
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertStringNotContainsString( 'wcpos-payment-sent', $output );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertNull( Attempts::of( $fresh )->awaiting() );
+		$this->assertSame( 'cancelled', $fresh->get_status() );
+	}
+
+	/**
+	 * An earlier attempt still in flight is not superseded out of the sweep by a new stamp.
+	 */
+	public function test_send_with_earlier_attempt_in_flight_gets_no_stamp_and_keeps_it_swept(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		$order      = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+		$in_flight = wp_generate_uuid4();
+		Ledger::instance()->write(
+			wc_get_order( $order->get_id() ),
+			static function ( Ledger_Draft $draft ) use ( $in_flight, $cashier_id ): void {
+				Attempts::open( $draft, $in_flight, 'bacs' );
+				$draft->attempt( $in_flight, 'sent', array( 'cashier_id' => $cashier_id ) );
+			},
+			Ledger::MODE_HOLD
+		);
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+
+		try {
+			// Act.
+			$output = $this->render_received( wc_get_order( $order->get_id() ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertStringNotContainsString( 'wcpos-payment-sent', $output );
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertNull( Attempts::of( $fresh )->awaiting() );
+		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
+		$this->assertSame( 'sent', Attempts::of( $fresh )->get( $in_flight )['fate'] );
+		$this->assertSame( array( $in_flight ), Attempts::of( $fresh )->to_index() );
+		$this->assertSame( 'pending', $fresh->get_status() );
+	}
+
+	/**
+	 * A reload of an already-stamped order posts sent without saving the order.
+	 */
+	public function test_send_reload_of_stamped_order_does_not_save_the_order(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+		$order      = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+		$this->render_received( $order );
+		$saves = 0;
+		$count = static function () use ( &$saves ) {
+			++$saves;
+		};
+		add_action( 'woocommerce_update_order', $count );
+
+		try {
+			// Act.
+			$output = $this->render_received( $order );
+		} finally {
+			remove_action( 'woocommerce_update_order', $count );
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 0, $saves );
+		$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
 	}
 
 	/**
