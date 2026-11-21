@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
@@ -408,6 +409,25 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertSame( 'processing', $seen );
+	}
+
+	/** With WooCommerce's HPOS data-store caching on, the order row and meta it cached are dropped too. */
+	public function test_write_reads_status_committed_after_the_order_was_cached_with_hpos_datastore_caching(): void {
+		if ( ! OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$this->markTestSkipped( 'HPOS data-store caching only caches orders on HPOS storage.' );
+		}
+		if ( ! defined( CustomOrdersTableController::class . '::HPOS_DATASTORE_CACHING_ENABLED_OPTION' ) ) {
+			$this->markTestSkipped( 'This WooCommerce version has no HPOS data-store caching.' );
+		}
+		update_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION, 'yes' );
+		try {
+			$this->assertTrue( OrderUtil::custom_orders_table_datastore_cache_enabled(), 'Precondition: data-store caching is on.' );
+
+			// Same Arrange, Act and Assert, now with the order row and meta cached by the data store.
+			$this->test_write_reads_status_committed_after_the_order_was_cached_from_storage();
+		} finally {
+			delete_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION );
+		}
 	}
 
 	/**
