@@ -13,6 +13,7 @@ use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WCPOS\WooCommercePOS\Payments\Paid_Date_Suppression;
+use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WP_Error;
 
@@ -517,6 +518,7 @@ class Gateway_Submission {
 	 * @param WC_Order $order Order object.
 	 */
 	private static function reread( WC_Order $order ): WC_Order {
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$fresh = wc_get_order( $order->get_id() );
 		$fresh = $fresh instanceof WC_Order ? $fresh : $order;
 		$fresh->read_meta_data( true );
@@ -581,6 +583,7 @@ class Gateway_Submission {
 				Ledger::MODE_HOLD
 			);
 		} catch ( Ledger_Persistence_Exception $error ) {
+			Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 			$stored = wc_get_order( $order->get_id() );
 			$stored->read_meta_data( true );
 			$state = Attempts::of( $stored )->get( (string) $attempt_id )['fate'] ?? null;

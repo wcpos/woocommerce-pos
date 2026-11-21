@@ -615,18 +615,7 @@ final class Session_Figures {
 		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Caches\OrderCache::class ) ) {
 			wc_get_container()->get( \Automattic\WooCommerce\Caches\OrderCache::class )->remove( $id );
 		}
-		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class ) ) {
-			$data_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class );
-			if ( method_exists( $data_store, 'clear_cached_data' ) ) {
-				$data_store->clear_cached_data( array( $id ) );
-			}
-			if ( class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class ) ) {
-				$meta_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class );
-				if ( method_exists( $meta_store, 'clear_cached_data' ) ) {
-					$meta_store->clear_cached_data( array( $id ) );
-				}
-			}
-		}
+		Order_Meta_Store::forget_datastore_cache( $id );
 	}
 
 	/** Whether this closure counted the row, never inferred from clocks.

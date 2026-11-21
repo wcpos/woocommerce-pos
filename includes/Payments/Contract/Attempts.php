@@ -238,6 +238,7 @@ final class Attempts {
 			return null; // Busy: the holder or the next sweep asks.
 		}
 		try {
+			\WCPOS\WooCommercePOS\Services\Order_Meta_Store::forget_datastore_cache( $id );
 			$fresh = wc_get_order( $id );
 			if ( $fresh instanceof WC_Order ) {
 				$fresh->read_meta_data( true );

@@ -304,18 +304,7 @@ final class Completion_Stamp {
 	 * @param int $id Order ID.
 	 */
 	private static function fresh( int $id ): ?WC_Order {
-		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class ) ) {
-			$data_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class );
-			if ( method_exists( $data_store, 'clear_cached_data' ) ) {
-				$data_store->clear_cached_data( array( $id ) );
-			}
-			if ( class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class ) ) {
-				$meta_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class );
-				if ( method_exists( $meta_store, 'clear_cached_data' ) ) {
-					$meta_store->clear_cached_data( array( $id ) );
-				}
-			}
-		}
+		\WCPOS\WooCommercePOS\Services\Order_Meta_Store::forget_datastore_cache( $id );
 		$order = wc_get_order( $id );
 		if ( ! $order instanceof WC_Order ) {
 			return null;

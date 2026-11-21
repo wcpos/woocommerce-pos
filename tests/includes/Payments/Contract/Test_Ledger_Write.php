@@ -430,6 +430,46 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		}
 	}
 
+	/** A payment row another request stored as close()'s write released the order lock is on the caller's order after it. */
+	public function test_close_refreshes_the_callers_order_with_a_row_stored_after_its_write(): void {
+		// Arrange: a covered sale; "another request" stores a row as soon as the write releases the order lock.
+		global $wpdb;
+		$id = $this->create_pos_order()->get_id();
+		$this->seed_rows( $id, array( $this->row( '92.95' ) ) );
+		$order = wc_get_order( $id );
+		$late  = $this->row( '5.00', 'failed' );
+		$store = static function ( string $sql ) use ( $wpdb, $id, $late, &$store ): string {
+			if ( false !== strpos( $sql, "RELEASE_LOCK('wcpos_order_{$id}_" ) ) {
+				remove_filter( 'query', $store );
+				$s      = \WCPOS\WooCommercePOS\Services\Order_Meta_Store::schema();
+				$ledger = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$s['meta']} WHERE {$s['owner']} = %d AND meta_key = %s", $id, Ledger::META_KEY ) ), true ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Order_Meta_Store table and column names.
+				$ledger['payments'][] = $late;
+				$wpdb->query( $wpdb->prepare( "UPDATE {$s['meta']} SET meta_value = %s WHERE {$s['owner']} = %d AND meta_key = %s", wp_json_encode( $ledger ), $id, Ledger::META_KEY ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Order_Meta_Store table and column names.
+			}
+			return $sql;
+		};
+		add_filter( 'query', $store );
+
+		// Act.
+		Ledger::instance()->close( $order );
+
+		// Assert.
+		$this->assertContains( $late['id'], array_column( Ledger::instance()->read( $order ), 'id' ) );
+	}
+
+	/** With WooCommerce's HPOS data-store caching on, refresh() drops the order row and meta it cached too. */
+	public function test_close_refreshes_the_callers_order_with_a_row_stored_after_its_write_with_hpos_datastore_caching(): void {
+		if ( ! OrderUtil::custom_orders_table_usage_is_enabled() || ! defined( CustomOrdersTableController::class . '::HPOS_DATASTORE_CACHING_ENABLED_OPTION' ) ) {
+			$this->markTestSkipped( 'HPOS data-store caching needs HPOS storage and a WooCommerce version that has it.' );
+		}
+		update_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION, 'yes' );
+		try {
+			$this->test_close_refreshes_the_callers_order_with_a_row_stored_after_its_write();
+		} finally {
+			delete_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION );
+		}
+	}
+
 	/**
 	 * A change that breaks a stored row's invariants is a programming error: it throws and stores nothing (I5).
 	 *
