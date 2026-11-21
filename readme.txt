@@ -297,191 +297,77 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
+Older releases are listed on [GitHub](https://github.com/wcpos/woocommerce-pos/releases).
+
 = 2.0.5 - 2026/11/20 =
 
-- **A manager can reassign a completed sale to another cashier from the order screen in WP Admin, and the change of cashier is added to the sale's fiscal record.**
-- **Taking payment for a guest order through a gateway's pay window works again on WooCommerce 11.3.1, which had started refusing it.**
-- **Creating a customer at the till no longer fails with "Missing parameter(s): username" or "password" when the store does not generate usernames and passwords at checkout; WCPOS generates them.**
-- **Checking out an order with a quick discount no longer fails with "pos-discount does not exist" when the till sends the order again.**
-- **Sales no longer fail with a sync conflict when another plugin adds order data that changes every time it is read: only WCPOS's own order data is compared.**
-- **A sync table that goes missing after setup (a cleanup plugin, a partial restore) is re-created automatically instead of leaving the tills unable to sync, and the reason a table could not be created is logged.**
-- **A returned item prints on the receipt with its negative quantity and its real price and savings, instead of quantity 0 at 0.00.**
-- **A sign-in whose session cannot be saved during heavy concurrent logins now fails cleanly instead of giving the till tokens the server never recorded, and overlapping sign-ins and sign-outs no longer undo each other.**
-- The default payment method chosen under POS > Checkout is sent to the till again, ready for the app to preselect it as 1.x did.
-- Online shop pages on stores using POS Only products do less work on queries that are not about products.
-- Developers: fatal-error reports now carry the kind of request, its REST route and a masked path; turn this off with the `wcpos_error_reporting_request_context` filter. Bundled Sentry SDK updated to 4.37.1, with guzzlehttp/psr7 held at 3.2.0. Translations pinned to 2026.11.21.
+* Paying for a guest order on the pay page works again on WooCommerce 11.3.1, which dropped the payment once the order was over 10 minutes old.
+* Adding a customer at the till no longer fails with "Missing parameter(s): username" when WooCommerce does not generate usernames or passwords itself.
+* Checking out an order with a quick discount no longer fails with "pos-discount does not exist" when the till sends the order again.
+* Sales no longer fail to check out when another plugin shows order data that keeps changing, such as the current time.
+* If a cleanup plugin or a partial restore deletes a table WCPOS uses for syncing, WCPOS re-creates it so tills sync again, or logs why it cannot.
+* Sign-ins and sign-outs of the same user that happen at the same moment no longer undo each other.
+* If the store cannot save a sign-in, it now fails straight away instead of seeming to work and failing on the next step.
+* A returned item prints on the receipt and is saved with the sale at its negative quantity and its price, not quantity 0 at 0.00.
+* If you edited a receipt template, test it with a return: a returned item's quantity is now negative, which the template must handle.
+* New: a manager can move a sale to another cashier, and a completed sale keeps a record of the change.
+* When a cashier edits a custom order field at the till, the till's value is saved, even if the field was changed in the store since the last sync.
+* If you chose to send error reports to WCPOS, crash reports now say what the store was doing, hiding anything in the web address that looks like a key.
 
 = 2.0.4 - 2026/11/15 =
 
-- **Receipts print each item's tax with the name and rate the order was charged, so reprinting an older order after a tax rate was renamed (WooCommerce Tax does this) no longer shows the new name and percent against the old amount.**
-- **The orange "Important" upgrade notice on the Plugins screen shows as formatted text instead of raw HTML tags.**
-- Developers: an order push refused as a conflict (409) now lists in `differs` the fields that differ (names only, never values); sync digest failures are logged under one fixed message, so they group as one error report; translations pinned to 2026.11.18.
+* Receipts show each item's tax with the name and rate the order was charged, even after the tax rate is renamed (WooCommerce Tax does this).
+* The orange "Important" upgrade notice on the Plugins screen shows formatted text instead of raw HTML tags.
 
 = 2.0.3 - 2026/11/13 =
 
-- **Sales no longer fail with "Checkout failed" when another plugin keeps updating its own hidden data on an order, and a till no longer writes an older copy of that data back.**
-- **Online shop pages on stores with tens of thousands of POS Only products load about twice as fast: each product list carries the POS Only list once, not twice.**
-- Developers: two new filters for the order revision: `wcpos_sync_order_revision_excluded_meta_keys` leaves keys out of it, and `wcpos_sync_order_revision_meta_keys` lists the hidden keys kept in it.
+* Sales no longer fail with "Checkout failed" when another plugin keeps updating its own hidden data on an order.
+* A till no longer overwrites another plugin's hidden order data, such as a tracking number, with an older copy.
+* Product lists in the online shop load faster on stores with tens of thousands of POS Only products.
 
 = 2.0.2 - 2026/11/12 =
 
-- **Shops with many POS Only products load faster: the POS Only lists are read once per page, not once for every product shown.**
-- **The daily file check no longer reports a healthy install as modified when an update lands while the old code is still running.**
+* Online shop pages load faster on stores with many POS Only products, which are now looked up once per page instead of once per product.
+* The daily file check no longer reports a healthy install as modified when an update lands while the old code is still running.
 
 = 2.0.1 - 2026/11/10 =
 
-- **POS Cash and Card take payments again on stores where another plugin loads WooCommerce's payment gateways early (PAYMENT999 "Payment method not found").**
+* POS Cash and Card take payments again where another plugin loads WooCommerce's payment methods early (PAYMENT999 "Payment method not found").
 
 = 2.0.0 - 2026/11/09 =
 
-**WCPOS 2.0 is a major update: an entirely new interface and many new features, and cashiers will need time to get used to it.** Update when you have time to learn the new interface, not during a busy shift. What's new: https://docs.wcpos.com/getting-started/whats-new
+WCPOS 2.0 is a major update with an entirely new interface: [what's new](https://docs.wcpos.com/getting-started/whats-new). Cashiers will need time to learn it, so update when you have time, not during a busy shift.
 
-**Sync every till before upgrading: 2.0 starts a new local database and does not carry over unsent 1.11 sales.** Rolling back to 1.11 also starts from an empty local database, so sync before you roll back too. The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
+Sync every till before you upgrade: 2.0 starts a new local database and does not carry over unsent 1.11 sales. Rolling back to 1.11 also starts empty, so sync before you roll back too.
 
-WCPOS 2.0 gives the POS its own checkout: cash, split payments and card readers handled at the register itself, with a cash drawer that opens and closes with each shift. Every screen is redrawn, and the till keeps taking cash when the connection drops.
+The app and the plugin must both be on 2.0; a 1.11 app asks for an update when it meets a 2.0 plugin. WCPOS 2.0 needs WooCommerce 9.0 or later.
 
-- **A checkout that belongs to the POS.** Checkout opens in a tender pane beside the cart instead of sending every sale through WooCommerce's order-pay page. Cash is taken at the till, so it lands in the register's count; card and the other manual gateways keep the Legacy tab.
-- **Split payments.** Take one order in several payments, for example part cash and part card, each recorded as it is taken.
-- **Card readers connected straight to the POS (Pro).** Stripe Terminal and SumUp readers pair with the till over Bluetooth; Tap to Pay on iPhone and Android follows in an app update.
-- **Registers and cash drawer sessions.** Opening float, cash in and out, a count at close and the difference against what was expected; set up in POS > Settings > General > Register. Free includes one register; more registers need Pro.
-- **Closures are saved, numbered documents** you can reprint, recount and export as CSV from POS Settings.
-- **Cash sales keep going when the connection drops.**
-- **A new Reports screen** with a comparison period, a chart and cards for orders, products, taxes, refunds, payments, categories and cashiers.
-- **A customer-facing display (Pro).** Open the display page on any device's browser and pair it to a till with a code.
-- **A redesigned POS** with a Scale setting for compact, regular or spacious layouts, and a Fonts setting under Settings > Theme.
-- **POS Only products are hidden from your online shop.** Marking a product POS Only sets its catalog visibility to Hidden; existing POS Only products are updated once at upgrade.
-- **The POS loads from cdn.wcpos.com, with jsDelivr as the fallback.** The bundle is signed and checked before it runs.
-- **The template gallery has Receipts, Reports, Closures, Display and Email tabs**, and receipt fonts download on demand.
-- **The cashier who opened a session cannot approve its own variance**, and the Access screen can restore the default capabilities.
-- **The experimental magnetic card reader is removed.** Card terminal extensions (Stripe, SumUp and the others) need WCPOS Pro from 2.0.
-- Developers: sync protocol 3; every plugin hook is now named `wcpos_*` (the `woocommerce_pos_*` names still fire as deprecated aliases); the 1.x compatibility shims are removed; translations pinned to 2026.11.14; the vendored SQLite worker matches web-bundle v2.0.17.
+* Checkout opens beside the cart, instead of sending every sale through the pay page.
+* Cash is taken at the till, so it lands in the register's count; card and the other manual payment methods stay on the Legacy tab.
+* One order can be paid in several payments, for example part cash and part card, each recorded as it is taken.
+* Cash sales keep going when the connection drops.
+* Stripe Terminal and SumUp card readers pair with the till over Bluetooth (Pro); Tap to Pay on iPhone and Android follows in an app update.
+* Registers track the opening float, cash in and out, the count at close and the difference from what was expected.
+* Set up registers in POS > Settings > General > Register; Free includes one register, and more registers need Pro.
+* Closures are saved as numbered documents you can reprint, recount and export as CSV from POS > Settings.
+* A new Reports screen has a comparison period, a chart and cards for orders, products, taxes, refunds, payments, categories and cashiers.
+* A customer-facing display (Pro) opens in any device's browser and pairs with a till using a code.
+* Every POS screen is redrawn, with a Scale setting for compact, regular or spacious layouts and a Fonts setting under Settings > Theme.
+* Marking a product POS Only hides it from your online shop (catalog visibility Hidden); existing ones are updated once at upgrade.
+* The POS loads from cdn.wcpos.com, or jsDelivr if that is down, and is checked for tampering before it runs.
+* The template gallery has Receipts, Reports, Closures, Display and Email tabs, and receipt fonts download when needed.
+* The cashier who opened a session cannot approve that session's cash difference, and the Access screen can restore the default permissions.
+* The experimental magnetic card reader is removed, and card terminal extensions (Stripe, SumUp and the others) need WCPOS Pro from 2.0.
+* Developers: hooks are renamed `wcpos_*` (the old names still fire, deprecated) and the 1.x compatibility shims are removed.
 
-Since beta 3, for testers on the 2.0 beta:
+For testers coming from the 2.0 beta 3:
 
-- **A sale, refund or payment change saved while a register is closing is never lost from the books.** It lands in the closure or in a correction to it; before, one that arrived mid-close could land in neither.
-- **Large register sessions no longer run out of memory.** A session with thousands of sales could fail its X-report and expected figures on PHP's memory limit; the session's orders are now read one at a time.
-- **The order-pay page shows the order's own currency symbol on the Cash and Card fields** and formats amounts with the POS store's money format.
-- **Refund receipts add up (Pro).** When part of a refund is not tied to a payment, the remainder now prints as cash, so the receipt total matches the amount refunded.
-- Beta 3's notes said translations were pinned to 2026.11.12; beta 3 shipped pinned to 2026.11.13.
-
-= 1.11.9 - 2026/11/01 =
-
-- **Fixed POS sales saving with no tax on stores that calculate tax by the customer shipping address** -- a regression in 1.11.8. A sale with no shipping address is taxed at the customer billing address, else at the shop base address, as WooCommerce does; the till showed the right tax all along. Orders saved by 1.11.8 with no tax are corrected with Recalculate on the order's edit screen.
-- **PHP 8.5 no longer logs a deprecation notice on every POS request** from the bundled login-token library.
-- Developers: the bundled Sentry error-reporting library is updated to 4.34.0.
-
-= 1.11.8 - 2026/11/01 =
-
-- **New sales start from WooCommerce's own "Calculate tax based on" setting** (shop base address, customer billing address or customer shipping address) instead of always the shop base address. A sale with no customer address is still taxed at the shop base address, as in WooCommerce.
-- **The Extensions screen and its menu badge no longer announce an extension update that needs a newer WCPOS than this site runs.**
-- **The refund window is titled with the order number, not the order's database id.**
-- Developers: translations updated to 2026.11.0.
-
-= 1.11.7 - 2026/10/28 =
-
-- **Reading an order from the POS no longer saves it on stores using WooCommerce's High-Performance Order Storage.** The first read of a web or admin order could attribute it to the cashier who opened it and make the till's next change to that order fail as out of date.
-- **A line added to a sale that already has a coupon re-applies the coupon**, so the coupon's discount matches the order total (a 10% coupon on a $50 sale stayed at 5.00 after a second $50 line).
-- **A receipt printed for an order that still needs payment no longer shows a "PAID" row**; the Invoice template shows "Amount due" instead. The bundled Detailed Receipt template is updated.
-- **Variations load correctly on WooCommerce 11.3.** A change in how WooCommerce 11.3 applies its on-sale filter dropped variations from the POS's catalogue read, and the till treated them as removed.
-- **A sale is no longer marked paid when the store's payment check answers with an order that has no status.** The pay page's fallback check now waits for a real order status.
-- **A receipt opened from the device's own data for an order that still needs payment no longer prints a "PAID" row.** Offline, or before the store's receipt data arrives, a pending or open order printed "PAID" and the Invoice template hid its "Amount due".
-- **The loading screen's progress bar is readable on a device in dark mode.**
-- Developers: the translation template (POT) is updated; Electron desktop runtime 43.8.1.
-
-= 1.11.6 - 2026/10/21 =
-
-- **Thermal receipts no longer break words in the middle** ("devolucione / s") when printed through the print dialog, as a PDF, or as a full-receipt image. Text now wraps at word boundaries, as it does on a receipt printer.
-- **Receipts open sooner after payment on sites with a heavy theme.** The payment window's "paid" signal no longer waits for the theme's styles and scripts to load.
-- **Saving a product barcode, a cloud-print order, a negative fee's tax or a receipt template no longer saves the record twice.** Each write now runs once inside WooCommerce's own save, so other plugins' save hooks fire once, and a cloud print problem no longer leaves an "Error during status transition" note on the order.
-- **The receipt screen warns when what prints will differ from the template you chose.** A thermal template with no receipt printer prints its on-screen preview through the print dialog; an HTML template on a receipt printer prints the built-in layout; an HTML template on a Star CloudPRNT or Epson cloud printer prints nothing.
-- **Automatic receipt printing no longer waits for the on-screen preview to load when the printer does not use it**: receipt printers, cloud printers and already-rendered templates.
-- **Card terminals and other non-cash gateways open the receipt as soon as the payment completes**, instead of waiting for the order to sync.
-- **A receipt that could not be downloaded in time is reported as that**, not as a printer that did not answer.
-- **Desktop: Epson network printers on port 9100 start printing up to 16 s sooner.**
-- **Guest sales on a store that taxes by shipping address are taxed at the till again.** With no shipping address the till now falls back to the billing address, then to the shop address, as WooCommerce does.
-- **The login screen says the app needs updating when the store's plugin no longer supports it**, instead of offering "Re-authenticate" and "No stores found".
-- **Logs: a catalogue change the store refused is always reported, and switching store mid-sync no longer leaves a row in the other store's log.**
-- Translations updated to 2026.10.8.
-
-= 1.11.5 - 2026/10/20 =
-
-- **Web-store sales no longer re-save the product when they reduce stock.** This fixes a checkout error and a doubled stock deduction on bank-transfer orders that a few stores saw, and keeps product descriptions exactly as you wrote them.
-- Developers: the `woocommerce_product_set_stock` / `woocommerce_variation_set_stock` listener and `Products::product_set_stock()` are removed; WooCommerce has bumped the product's modified date on every save since 3.4.0.
-
-= 1.11.4 - 2026/10/20 =
-
-- **A failed translation download no longer slows every POS and admin request.** It is retried after an hour instead of on every request -- stores whose host cannot reach the translation CDN were waiting minutes for the POS to load; English stores were not affected.
-- **Checkout and refunds no longer stop working after the browser tab or desktop window wakes with sync requests still in flight.** Every later request to the store failed until the page was reloaded.
-- **A completed order no longer logs "a change on this device clashed with an edit in your store".** The first retry of a save was reported as a conflict even though the order had saved.
-- **Logs and toasts alarm only when there is something for you to do.** A retry the app handles itself is now an information row; a warning names the record, says what happened and links to where it is fixed.
-- **A sale that times out while sending is reported as "still on its way", not as failed, so it is not entered twice.**
-- **A refund whose result could not be confirmed says so and tells you to check the order before trying again.**
-- **A storage error whose text happened to contain "409" or "CONFLICT" is no longer reported as a clash with your store.** The real error is shown instead.
-- **Web: the first download is a fifth smaller.** Error reporting and date-format languages load only when they are needed.
-- Translations updated to 2026.10.7.
-
-= 1.11.3 - 2026/10/17 =
-
-- **Couponed sales no longer come back as "different totals" on stores with tax-inclusive prices or compound tax rates.** Each discount and its tax are now rounded the way WooCommerce rounds them.
-- **Sync no longer stalls silently when the store never answers a request.** A request left unanswered for a minute is given up and retried instead of holding its sync lane until the app is restarted.
-- **The 1.11.1 memory fix now covers large catalogues and idle tills.** The sync's stock-existence checks kept every page of the product list in memory, and background re-syncs rewrote rows that had not changed.
-- **Enter Demo Store works on web when the browser blocks popups.** The demo signed in through the fallback redirect, but the result was never picked up, so nothing opened.
-- **iOS: the cart quantity no longer shows the previous value after a quick run of taps.** The order was right; only the field lagged.
-- **Centred and right-aligned receipt text prints in the right place on Star CloudPRNT and ESC/POS cloud printers.** Text was aligned twice and landed right of the logo; the preview was already correct.
-- **Retrying a payment after a declined attempt no longer leaves Process Payment spinning.** A gateway that showed the same error again was read as nothing new, so the button stayed busy for ten seconds.
-- Developers: the native and desktop apps send an `X-WCPOS-Instance` header identifying the installation on every store request, web sends it once a per-site probe confirms the header passes, and the integrity drift-rebuild counter is kept per till by it (falling back to user and store), so several tills can no longer trigger a rebuild together; `X-WCPOS-Instance` joins the CORS allow list; translations updated to 2026.10.3.
-
-= 1.11.2 - 2026/10/15 =
-
-- **The POS no longer grows in memory through a cashier day.** Background sync reads, the search index's start-up reads and the storage engine's change history were each kept for the life of the page; an all-day till on web, desktop and mobile now holds steady.
-- **Desktop no longer adds a listener on every sync poll.** Each change check left one more abort handler on the store's connection, thousands over a day.
-- **Process Payment stops spinning when the store's pay page blocks a sale.** A third-party gateway script that vetoes the submit is reported back with the store's notice instead of leaving the button busy.
-- **Cash and Card tenders submit the pay form directly,** so another gateway's checkout script can no longer cancel them.
-- **Stripe's checkout script stays off the POS payment page on stores with an older saved script list.** The shipped removals are now a floor that a saved list adds to, and they show as always removed in Checkout Settings.
-- **The pay page always has a payment method preselected.** A default gateway that was disabled or removed now falls back to the first enabled one instead of failing with "Invalid payment method".
-- **Receipt PDFs keep Greek and other non-Latin text** instead of printing "?" for labels, dates and payment methods.
-- **The plugin download is a third smaller.** Template gallery previews load from a CDN and unused PDF fonts are no longer bundled.
-- Developers: translations updated to 2026.10.0; a site can host its own gallery previews with the `woocommerce_pos_template_gallery_preview_base_url` filter.
-
-= 1.11.1 - 2026/10/15 =
-
-- **Cash and card payments work again on stores running WooCommerce Stripe 11.1.0.** Stripe's checkout script now stays off the POS payment page, where since Stripe 11.1.0 it blocked every other payment method with "Payment failed. Please try again."
-- **A payment page for an order that no longer exists answers "not found"** instead of crashing inside another gateway's code.
-- **Free sites offer Cash and Card at the till consistently.** The free-tier gateway rule applied only to the settings screen; it now applies wherever the POS reads its gateways, and falls back to an enabled gateway rather than a disabled default.
-- **POS login lockouts are keyed by account and connecting device.** Forwarded address headers are no longer trusted, and five wrong passwords from one place no longer lock the cashier out everywhere.
-- **The POS login page only redirects to known origins.** A sign-in link can no longer hand the cashier's tokens to another site.
-- **A failed sign-in no longer leaves a phantom session** in the Sessions list.
-- Developers: the uninstall cleanup definitions load on their own so Pro can reuse them; CI fails when the vendored worker's RxDB moves inside a published plugin lane.
-
-= 1.11.0 - 2026/10/14 =
-
-- **Sync now finishes its check for records deleted on the store.** Tills on some stores rejected that check and never removed orders or customers deleted in WooCommerce.
-- **A guest customer entry no longer stops customer sync.** A change recorded for the Guest customer could stall the customer lane on a till.
-- **Long product searches no longer fail on variable products.** Searches of more than ten words, or a long scanned barcode, now return results instead of an error.
-- **Orders no longer go missing from search.** A background index cleanup could restore an order's older text, so a sale stopped matching its own order number.
-- **Checkout failures show one error, not two.** A failed sale reported the same error twice; it now shows once, with the store's reason when one is given.
-- **Adding a customer whose email already exists now says so.** The store's message, such as "an account is already registered with this email", replaces a generic error.
-- **A cashier who is signed out in another tab now sees why sync is paused.** The till recovers on its own as soon as another tab renews the session.
-- **Stores behind a caching host can connect again.** A host cache that replayed old responses no longer blocks connecting; the app works around it.
-- **Damaged local sync data repairs itself.** A damaged row in a till's record of which orders exist on the store is now dropped and re-checked with the store, instead of being refused on every launch.
-- **The app no longer rebuilds its local storage indexes on every launch.** A storage check mistook normal edits for damage and rebuilt the indexes each time the app reopened.
-- **A payment page that fails to load on Android now offers Retry.** Process Payment no longer spins forever when the store's payment page cannot load.
-- **Typing quickly in Android search no longer logs sync errors.** A search cancelled by the next keystroke is now treated as cancelled.
-- **Opening the POS page no longer signs out a till that is already open.** A page load now reuses the browser's live session instead of revoking it.
-- **The POS survives a plugin update in progress.** A request that lands mid-update retries instead of failing, and Site Health checks the plugin's files against the published checksums.
-- **PrintNode and Star cloud printing stop retrying a bad key or account.** A 401, 403 or 404 fails once with a clear message.
-- **Cloud printing explains that it needs HTTPS.** Sites without HTTPS get a clear message instead of a relay error.
-- **A shop manager can no longer list or end an administrator's POS sessions.** On multisite this includes administrators of archived or deactivated network sites.
-- **The order-pay coupon form requires the order key**, as the pay form already does.
-- **Refunds stay attached to matched orders on HPOS stores.**
-- **POS Only products are hidden from ID-listing queries and related products.**
-- **The old /wcpos-login/ page is retired**, and lookalike paths no longer serve the sign-in form.
-- **Order paid dates follow one rule** for all three payment-complete answers.
-- Developers: storage engine updated to RxDB 17.6.0; clearer error reports for failed pushes and checkout timeouts; Guest (customer id 0) never enters the sync journal; the order-meta receipt snapshot is no longer written and existing rows are cleaned up; a query-string token signs in REST requests only; the scheduled integrity digest rebuild retries on database contention; updated translations template.
-
-Earlier releases (1.10 and older) are listed at https://github.com/wcpos/woocommerce-pos/releases
+* A sale, refund or payment change saved while a register is closing is never lost from the books; it lands in the closure or a correction to it.
+* Register sessions with thousands of sales no longer run out of memory when working out the X-report and expected figures.
+* The pay page shows the order's own currency symbol on the Cash and Card fields, in the store's money format.
+* Refund receipts add up (Pro): any part of a refund not tied to a payment prints as cash, so the total matches the amount refunded.
 
 == Upgrade Notice ==
 
-= 2.0.0 =
-WCPOS 2.0 is a major update: an entirely new interface and many new features. Cashiers will need time to learn it: update when you have time, not during a busy shift. Sync every till first: unsent 1.11 sales do not carry over. Needs WooCommerce 9.0+. https://docs.wcpos.com/getting-started/whats-new
+= 2.0.5 =
+Coming from 1.11? WCPOS 2.0 is a major update with a new interface: update when you have time, not during a busy shift. Sync every till first: unsent 1.11 sales do not carry over. The app must be on 2.0 too, and 2.0 needs WooCommerce 9.0 or later. https://docs.wcpos.com/getting-started/whats-new
