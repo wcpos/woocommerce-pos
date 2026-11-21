@@ -1955,6 +1955,81 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '2', (string) $item->get_meta( '_reduced_stock', true ) );
 	}
 
+	public function test_rebinding_a_reduced_return_line_to_another_product_moves_its_stock_back(): void {
+		// Arrange: a paid sale returning one P1 (10 -> 11) and selling two Y (10 -> 8).
+		$p1       = $this->stock_product( 10 );
+		$p2       = $this->stock_product( 10 );
+		$y        = $this->stock_product( 10 );
+		$order_id = $this->paid_order( 'processing', array( array( $p1, -1 ), array( $y, 2 ) ) );
+		$this->assertSame( 11, $this->stock_of( $p1 ) );
+		$this->assertSame( 8, $this->stock_of( $y ) );
+		$this->assertSame( '-1', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+
+		// Act: reopen, then move the return line to P2 (the Y line is sent unchanged: a partial set drops it).
+		$this->assertSame( 200, $this->push_status( $order_id, 'pos-open' )->get_status() );
+		list( $return_id, $y_id ) = array_keys( wc_get_order( $order_id )->get_items() );
+		$payload                  = array(
+			'line_items' => array(
+				array(
+					'id'         => $return_id,
+					'product_id' => $p2->get_id(),
+					'quantity'   => -1,
+				),
+				array(
+					'id'       => $y_id,
+					'quantity' => 2,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert: P1 gets its unit back out, P2 takes it in.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 10, $this->stock_of( $p1 ) );
+		$this->assertSame( 11, $this->stock_of( $p2 ) );
+		$this->assertSame( 8, $this->stock_of( $y ) );
+		$this->assertSame( $p2->get_id(), $this->first_item( $order_id )->get_product_id() );
+		$this->assertSame( '-1', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+
+		// Act and assert: cancelling puts every product back where it started.
+		$cancel = $this->push_status( $order_id, 'cancelled' );
+		$this->assertSame( 200, $cancel->get_status(), 'Response: ' . wp_json_encode( $cancel->get_data() ) );
+		$this->assertSame( 10, $this->stock_of( $p1 ) );
+		$this->assertSame( 10, $this->stock_of( $p2 ) );
+		$this->assertSame( 10, $this->stock_of( $y ) );
+	}
+
+	public function test_rebinding_a_line_with_no_stock_reduction_moves_only_the_new_product(): void {
+		// Arrange: a paid sale of two A (10 -> 8) whose line holds no reduction, reopened.
+		$a        = $this->stock_product( 10 );
+		$b        = $this->stock_product( 5 );
+		$order_id = $this->paid_sale_of_two( $a );
+		$item     = $this->first_item( $order_id );
+		$item->update_meta_data( '_reduced_stock', '0' );
+		$item->save();
+		$this->assertSame( 200, $this->push_status( $order_id, 'pos-open' )->get_status() );
+		$payload = array(
+			'line_items' => array(
+				array(
+					'id'         => $item->get_id(),
+					'product_id' => $b->get_id(),
+					'quantity'   => 2,
+				),
+			),
+			'meta_data'  => $this->uuid_meta(),
+		);
+
+		// Act.
+		$response = $this->push_envelope( 'update', $payload, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 8, $this->stock_of( $a ) );
+		$this->assertSame( 3, $this->stock_of( $b ) );
+		$this->assertSame( '2', (string) $this->first_item( $order_id )->get_meta( '_reduced_stock', true ) );
+	}
+
 	/** A paid sale (processing unless told otherwise) of one taxed line (10.00 at 10%) whose POS line data says taxable. */
 	protected function paid_taxed_pos_line_order( string $status = 'processing' ): int {
 		update_option( 'woocommerce_calc_taxes', 'yes' );
