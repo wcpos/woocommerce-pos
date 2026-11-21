@@ -2613,12 +2613,31 @@ class Ledger {
 	}
 
 	/**
-	 * The order and its meta as storage holds them.
+	 * The order and its meta as storage holds them. This request's copies are dropped first, so a status
+	 * another request committed since it cached the order is the one read: posts storage reads through
+	 * the posts and post meta caches, HPOS through WooCommerce's order cache and, when its data-store
+	 * caching is on, the order row and meta caches.
 	 *
 	 * @param int $id Order id.
 	 * @throws Ledger_Persistence_Exception When the order cannot be read.
 	 */
 	private function fresh( int $id ): WC_Order {
+		clean_post_cache( $id );
+		if ( class_exists( \Automattic\WooCommerce\Caches\OrderCache::class ) ) {
+			wc_get_container()->get( \Automattic\WooCommerce\Caches\OrderCache::class )->remove( $id );
+		}
+		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class ) ) {
+			$data_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class );
+			if ( method_exists( $data_store, 'clear_cached_data' ) ) {
+				$data_store->clear_cached_data( array( $id ) );
+			}
+			if ( class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class ) ) {
+				$meta_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class );
+				if ( method_exists( $meta_store, 'clear_cached_data' ) ) {
+					$meta_store->clear_cached_data( array( $id ) );
+				}
+			}
+		}
 		$order = wc_get_order( $id );
 		if ( ! $order instanceof WC_Order ) {
 			throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS order could not be read.' );
