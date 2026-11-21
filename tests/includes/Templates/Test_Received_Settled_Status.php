@@ -421,6 +421,59 @@ class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * An earlier attempt still in flight is not superseded out of the sweep by a new stamp.
+	 */
+	public function test_send_with_earlier_attempt_in_flight_gets_no_stamp_and_keeps_it_swept(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$fields = static function ( $block, $gateway ) {
+			return 'bacs' === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
+		$order      = $this->create_pos_order( 'bacs', 'pending' );
+		$cashier_id = self::factory()->user->create();
+		$order->set_billing_email( 'customer@example.com' );
+		$order->update_meta_data( '_pos_user', $cashier_id );
+		$order->save();
+		wp_set_current_user( 0 );
+		$in_flight = wp_generate_uuid4();
+		Ledger::instance()->write(
+			wc_get_order( $order->get_id() ),
+			static function ( Ledger_Draft $draft ) use ( $in_flight, $cashier_id ): void {
+				Attempts::open( $draft, $in_flight, 'bacs' );
+				$draft->attempt( $in_flight, 'sent', array( 'cashier_id' => $cashier_id ) );
+			},
+			Ledger::MODE_HOLD
+		);
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+
+		try {
+			// Act.
+			$output = $this->render_received( wc_get_order( $order->get_id() ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertStringNotContainsString( 'wcpos-payment-sent', $output );
+		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertNull( Attempts::of( $fresh )->awaiting() );
+		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
+		$this->assertSame( 'sent', Attempts::of( $fresh )->get( $in_flight )['fate'] );
+		$this->assertSame( array( $in_flight ), Attempts::of( $fresh )->to_index() );
+		$this->assertSame( 'pending', $fresh->get_status() );
+	}
+
+	/**
 	 * A reload of an already-stamped order posts sent without saving the order.
 	 */
 	public function test_send_reload_of_stamped_order_does_not_save_the_order(): void {

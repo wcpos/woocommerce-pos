@@ -131,7 +131,8 @@ class Received {
 			// Recheck eligibility under the lock before writing the awaiting-customer stamp
 			// (descriptor spec §3.2 / §4.2); reloads cannot double-stamp. Refresh the JSON even
 			// when another request stamped it, then post wcpos-payment-sent. The cashier is
-			// the order's _pos_user; older apps ignore the action as before.
+			// the order's _pos_user; older apps ignore the action as before. An earlier attempt
+			// still in flight blocks the stamp, so the sweep keeps reconciling it.
 			$order_sent = false;
 			try {
 				if ( false !== $order_json && ! $order_complete && $this->is_legacy_send( $order ) ) {
@@ -148,6 +149,11 @@ class Received {
 							}
 							if ( null !== Attempts::of( $sale )->awaiting() ) {
 								$outcome = 'awaiting';
+								return false;
+							}
+							// An earlier attempt with no known outcome is reconciled first, as native submit refuses via eligible( 'submit' ); stamping would supersede it out of the sweep.
+							if ( null !== Attempts::of( $sale )->eligible( 'submit' ) ) {
+								$outcome = 'ineligible';
 								return false;
 							}
 							Attempts::open( $draft, $attempt_id, $sale->get_payment_method() );
