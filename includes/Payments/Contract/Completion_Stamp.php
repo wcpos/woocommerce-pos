@@ -297,8 +297,9 @@ final class Completion_Stamp {
 	}
 
 	/**
-	 * A fresh read of the order and its meta: drops WooCommerce's HPOS data-store caches for the order first, so the
-	 * forced meta read is not served from them when that caching is on.
+	 * The order with its meta (the completion history) re-read from storage. WooCommerce's HPOS data-store caches for
+	 * the order are dropped first, so the forced meta read is not served from them when that caching is on. Other
+	 * order fields can still come from this request's order cache.
 	 *
 	 * @param int $id Order ID.
 	 */
