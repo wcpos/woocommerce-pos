@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Command_Log;
@@ -376,6 +377,57 @@ class Test_Ledger_Write extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( array( $first['id'], $late['id'] ), array_column( $this->stored_rows( $stale->get_id() ), 'id' ) );
 		$this->assertSame( array(), Ledger::instance()->read( $stale ), 'Precondition: the caller\'s object never saw a row.' );
+	}
+
+	/** A status another request committed after this request cached the order is the status the write decides from. */
+	public function test_write_reads_status_committed_after_the_order_was_cached_from_storage(): void {
+		// Arrange.
+		global $wpdb;
+		$order = wc_create_order();
+		$order->set_status( 'pending' );
+		$order->save();
+		$id = $order->get_id();
+		$this->assertSame( 'pending', wc_get_order( $id )->get_status(), 'Precondition: this request caches the pending order.' );
+		$hpos = OrderUtil::custom_orders_table_usage_is_enabled();
+		if ( $hpos ) {
+			$wpdb->update( $wpdb->prefix . 'wc_orders', array( 'status' => 'wc-processing' ), array( 'id' => $id ) );
+		}
+		if ( ! $hpos || OrderUtil::is_custom_order_tables_in_sync() ) {
+			$wpdb->update( $wpdb->posts, array( 'post_status' => 'wc-processing' ), array( 'ID' => $id ) );
+		}
+		$seen = null;
+
+		// Act.
+		Ledger::instance()->write(
+			$id,
+			function ( Ledger_Draft $draft ) use ( &$seen ) {
+				$seen = $draft->order()->get_status();
+				return false;
+			},
+			Ledger::MODE_HOLD
+		);
+
+		// Assert.
+		$this->assertSame( 'processing', $seen );
+	}
+
+	/** With WooCommerce's HPOS data-store caching on, the order row and meta it cached are dropped too. */
+	public function test_write_reads_status_committed_after_the_order_was_cached_with_hpos_datastore_caching(): void {
+		if ( ! OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$this->markTestSkipped( 'HPOS data-store caching only caches orders on HPOS storage.' );
+		}
+		if ( ! defined( CustomOrdersTableController::class . '::HPOS_DATASTORE_CACHING_ENABLED_OPTION' ) ) {
+			$this->markTestSkipped( 'This WooCommerce version has no HPOS data-store caching.' );
+		}
+		update_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION, 'yes' );
+		try {
+			$this->assertTrue( OrderUtil::custom_orders_table_datastore_cache_enabled(), 'Precondition: data-store caching is on.' );
+
+			// Same Arrange, Act and Assert, now with the order row and meta cached by the data store.
+			$this->test_write_reads_status_committed_after_the_order_was_cached_from_storage();
+		} finally {
+			delete_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION );
+		}
 	}
 
 	/**
