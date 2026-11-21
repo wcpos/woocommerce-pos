@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 2.0.4\n"
+"Project-Id-Version: WCPOS 2.0.5\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-20T20:50:45+00:00\n"
+"POT-Creation-Date: 2026-11-21T10:23:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1106,7 +1106,7 @@ msgstr ""
 
 #: includes/API/V2/Payment_Methods_Controller.php:116
 #: includes/Payments/Contract/Gateway_Submission.php:51
-#: includes/Payments/Contract/Ledger.php:3068
+#: includes/Payments/Contract/Ledger.php:3087
 msgid "Payment capture mode is unsupported."
 msgstr ""
 
@@ -1647,16 +1647,16 @@ msgid "WCPOS payment %1$s voided: %2$s"
 msgstr ""
 
 #. translators: %s: what the deferred work was for.
-#: includes/Payments/Contract/Ledger.php:2675
+#: includes/Payments/Contract/Ledger.php:2694
 #, php-format
 msgid "WCPOS: %s did not complete; reconcile manually."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:3063
+#: includes/Payments/Contract/Ledger.php:3082
 msgid "Payment not found."
 msgstr ""
 
-#: includes/Payments/Contract/Ledger.php:3073
+#: includes/Payments/Contract/Ledger.php:3092
 msgid "Payment transition is invalid."
 msgstr ""
 
