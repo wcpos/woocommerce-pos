@@ -73,6 +73,9 @@ final class Meta_Normalizer {
 	/**
 	 * Recursively normalize every meta_data array in a document or payload.
 	 *
+	 * Unchanged subtrees are returned as the same arrays, so a payload with nothing to
+	 * normalize is never copied (copy-on-write; Sentry POS-34M).
+	 *
 	 * @param mixed $payload Document or payload being prepared for the wire.
 	 *
 	 * @return mixed
@@ -82,12 +85,35 @@ final class Meta_Normalizer {
 			return $payload;
 		}
 
+		$changed = false;
+
+		return self::normalize_array( $payload, $changed );
+	}
+
+	/**
+	 * Normalize one array level, writing a child back only when it changed.
+	 *
+	 * @param array $payload Array being prepared for the wire.
+	 * @param bool  $changed Set to true when any child of `$payload` changed.
+	 *
+	 * @return array
+	 */
+	private static function normalize_array( array $payload, bool &$changed ): array {
 		foreach ( $payload as $key => $value ) {
-			if ( 'meta_data' === $key && is_array( $value ) ) {
-				$value = self::normalize_meta_data( $value );
+			if ( ! is_array( $value ) ) {
+				continue;
 			}
 
-			$payload[ $key ] = is_array( $value ) ? self::normalize( $value ) : $value;
+			$child_changed = false;
+			if ( 'meta_data' === $key ) {
+				$value = self::normalize_meta_data( $value, $child_changed );
+			}
+			$value = self::normalize_array( $value, $child_changed );
+
+			if ( $child_changed ) {
+				$payload[ $key ] = $value;
+				$changed         = true;
+			}
 		}
 
 		return $payload;
@@ -128,10 +154,11 @@ final class Meta_Normalizer {
 	 * Normalize structured meta values and derived display fields.
 	 *
 	 * @param array $meta_data Serialized REST meta entries.
+	 * @param bool  $changed   Set to true when `$meta_data` was altered.
 	 *
 	 * @return array
 	 */
-	private static function normalize_meta_data( array $meta_data ): array {
+	private static function normalize_meta_data( array $meta_data, bool &$changed ): array {
 		$was_list = array_keys( $meta_data ) === array_keys( array_values( $meta_data ) );
 		$dropped  = false;
 		foreach ( $meta_data as $index => $entry ) {
@@ -148,6 +175,7 @@ final class Meta_Normalizer {
 				if ( self::exceeds_value_budget( $data['value'] ?? null ) ) {
 					self::drop_oversized( $meta_data, $index, $data );
 					$dropped = true;
+					$changed = true;
 					continue;
 				}
 				$entry = json_decode( wp_json_encode( $data ), true );
@@ -160,6 +188,7 @@ final class Meta_Normalizer {
 			if ( ! $is_meta_object && self::exceeds_value_budget( $entry['value'] ?? null ) ) {
 				self::drop_oversized( $meta_data, $index, $entry );
 				$dropped = true;
+				$changed = true;
 				continue;
 			}
 
@@ -183,14 +212,16 @@ final class Meta_Normalizer {
 				}
 			}
 
-			if ( ! $is_meta_object || $entry_changed ) {
+			if ( $entry_changed ) {
 				$meta_data[ $index ] = $entry;
+				$changed             = true;
 			}
 		}
 
 		if ( $dropped && $was_list ) {
 			// A list with a hole JSON-encodes as an object; the wire expects a list.
 			$meta_data = array_values( $meta_data );
+			$changed   = true;
 		}
 
 		return $meta_data;
