@@ -13,7 +13,7 @@ interface EmailDesignSettings {
 }
 
 const queryKey = ['customer-email-design'];
-const path = 'wcpos/v1/templates/customer-email-design?wcpos=1';
+const path = 'wcpos/v2/templates/customer-email-design?wcpos=1';
 
 export function CustomerEmailDesigns() {
 	const client = useQueryClient();

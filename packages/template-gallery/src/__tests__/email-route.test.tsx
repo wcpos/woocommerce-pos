@@ -21,7 +21,7 @@ describe('email designs route', () => {
 			{ id: 13, title: 'Market design', status: 'publish' },
 			{ id: 27, title: 'New look', status: 'draft' },
 		];
-		const endpoint = 'wcpos/v1/templates/customer-email-design?wcpos=1';
+		const endpoint = 'wcpos/v2/templates/customer-email-design?wcpos=1';
 		let templateId = 0;
 		let unavailableDesign = unavailable;
 		const fetch = vi.fn<Parameters<typeof apiFetch.setFetchHandler>[0]>((options) => {

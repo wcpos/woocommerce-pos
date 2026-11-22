@@ -19,7 +19,10 @@ use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 	use HPOSToggleTrait;
 
-	private const ROUTE = '/wcpos/v1/templates/customer-email-design';
+	/** Read the current wp-admin assignment. */
+	private function settings(): \WP_REST_Response {
+		return $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/templates/customer-email-design' ) );
+	}
 
 	/**
 	 * Create a merchant template.
@@ -48,7 +51,7 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 	 * @param int $id Design ID.
 	 */
 	private function select( int $id ): \WP_REST_Response {
-		$request = new \WP_REST_Request( 'POST', self::ROUTE );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/templates/customer-email-design' );
 		$request->set_param( 'template_id', $id );
 		return $this->server->dispatch( $request );
 	}
@@ -113,7 +116,7 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 		$user = $this->factory->user->create_and_get();
 		$user->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $user->ID );
-		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/templates/' . $id ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/templates/' . $id ) );
 		$this->assertSame( 404, $response->get_status() );
 	}
 
@@ -123,7 +126,7 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 		wp_set_object_terms( $id, array( 'display', 'email' ), 'wcpos_template_type' );
 		$this->assertNull( Print_Job_Service::load_template( (string) $id, 'display' ) );
 		$this->assertSame( 400, $this->select( $id )->get_status() );
-		$this->assertSame( array(), $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['designs'] );
+		$this->assertSame( array(), $this->settings()->get_data()['designs'] );
 	}
 
 	/** Password-protected designs must never be sent to a customer. */
@@ -136,7 +139,7 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 				'post_password' => 'fixture',
 			)
 		);
-		$data = $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data();
+		$data = $this->settings()->get_data();
 		$this->assertSame( 0, $data['template_id'] );
 		$this->assertSame( array(), $data['designs'] );
 		$this->assertSame( 400, $this->select( $id )->get_status() );
@@ -193,17 +196,17 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 		foreach ( array( $this->design( 'Draft', 'draft' ), $this->design( 'Receipt', 'publish', 'receipt' ), $this->design( 'Code', 'publish', 'email', 'legacy-php' ) ) as $invalid ) {
 			$this->assertSame( 400, $this->select( $invalid )->get_status() );
 		}
-		$this->assertSame( $id, $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['template_id'] );
+		$this->assertSame( $id, $this->settings()->get_data()['template_id'] );
 		wp_trash_post( $id );
-		$this->assertTrue( $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['unavailable_design'] );
-		$this->assertSame( 0, $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['template_id'] );
+		$this->assertTrue( $this->settings()->get_data()['unavailable_design'] );
+		$this->assertSame( 0, $this->settings()->get_data()['template_id'] );
 		$this->assertFalse( $this->select( 0 )->get_data()['unavailable_design'] );
 	}
 
 	/** A signed-in shopper cannot read drafts or bind a notification. */
 	public function test_customer_cannot_manage_designs(): void {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'customer' ) ) );
-		$this->assertSame( 403, $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_status() );
+		$this->assertSame( 403, $this->settings()->get_status() );
 		$this->assertSame( 403, $this->select( 0 )->get_status() );
 	}
 }

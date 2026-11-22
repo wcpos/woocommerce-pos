@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V1;
 
 use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\API\Controller_Registry;
 use WCPOS\WooCommercePOS\Services\Customer_Email_Design;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
@@ -81,29 +82,32 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/customer-email-design',
-			array(
+		// The registry promotes this shared controller to v2. New settings are v2-only.
+		if ( Controller_Registry::V2_NAMESPACE === $this->namespace ) {
+			register_rest_route(
+				$this->namespace,
+				'/' . $this->rest_base . '/customer-email-design',
 				array(
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => array( $this, 'get_customer_email_design' ),
-					'permission_callback' => array( $this, 'update_item_permissions_check' ),
-				),
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'set_customer_email_design' ),
-					'permission_callback' => array( $this, 'update_item_permissions_check' ),
-					'args'                => array(
-						'template_id' => array(
-							'type'     => 'integer',
-							'minimum'  => 0,
-							'required' => true,
+					array(
+						'methods'             => WP_REST_Server::READABLE,
+						'callback'            => array( $this, 'get_customer_email_design' ),
+						'permission_callback' => array( $this, 'update_item_permissions_check' ),
+					),
+					array(
+						'methods'             => WP_REST_Server::CREATABLE,
+						'callback'            => array( $this, 'set_customer_email_design' ),
+						'permission_callback' => array( $this, 'update_item_permissions_check' ),
+						'args'                => array(
+							'template_id' => array(
+								'type'     => 'integer',
+								'minimum'  => 0,
+								'required' => true,
+							),
 						),
 					),
-				),
-			)
-		);
+				)
+			);
+		}
 
 		// 2. GET /templates/active (fixed path).
 		register_rest_route(
