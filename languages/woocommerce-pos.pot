@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-21T17:41:56+00:00\n"
+"POT-Creation-Date: 2026-11-22T14:57:43+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -287,7 +287,7 @@ msgstr ""
 #: includes/Form_Handler.php:61
 #: includes/Form_Handler.php:73
 #: includes/Form_Handler.php:87
-#: includes/Form_Handler.php:101
+#: includes/Form_Handler.php:108
 #: includes/Templates/Payment.php:203
 #: includes/Templates/Payment.php:537
 #: includes/Templates/Received.php:92
@@ -1227,7 +1227,7 @@ msgid "Token not provided."
 msgstr ""
 
 #. translators: Checkout/payment form error message shown when the cashier token does not match.
-#: includes/Form_Handler.php:99
+#: includes/Form_Handler.php:106
 msgid "Cashier token mismatch."
 msgstr ""
 
