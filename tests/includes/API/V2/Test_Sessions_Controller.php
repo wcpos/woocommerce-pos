@@ -2030,6 +2030,114 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 409, $this->post( 'movements', $fields )->get_status() );
 		}
 	}
+
+	/** Post a cash movement while the request's store reach is store 789 only.
+	 *
+	 * @param array $fields Request fields.
+	 */
+	private function movement_in_reach_789( array $fields ) {
+		$reach = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $reach );
+		try {
+			return $this->post( 'movements', $fields );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+		}
+	}
+
+	/** A movement on a session outside the store reach is refused as an unknown session. */
+	public function test_movement_create_other_store_session_returns_404(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+
+		// Act.
+		$response = $this->movement_in_reach_789(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session_id,
+				'type' => 'paid_out',
+				'amount' => '200',
+				'reason' => 'Supplies',
+				'created_at' => '2026-09-11T10:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( array(), ( new Cash_Movement_Store() )->list( $session_id ) );
+	}
+
+	/** A reversal on a session outside the store reach is refused and leaves its target unvoided. */
+	public function test_movement_void_other_store_session_returns_404(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$target = $this->movement( $session_id, 'paid_in', '20', 'Change' );
+
+		// Act.
+		$response = $this->movement_in_reach_789(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session_id,
+				'type' => 'void',
+				'amount' => '0',
+				'voids' => $target,
+				'reason' => '',
+				'created_at' => '2026-09-11T10:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertNull( ( new Cash_Movement_Store() )->get( $session_id, $target )['voided_by'] );
+	}
+
+	/** A replay naming a movement outside the store reach returns no movement. */
+	public function test_movement_replay_other_store_returns_404(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$movement_id = $this->movement( $session_id, 'paid_in', '20', 'Change' );
+
+		// Act.
+		$response = $this->movement_in_reach_789(
+			array(
+				'id' => $movement_id,
+				'session_id' => $session_id,
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'amount', $response->get_data() );
+		$this->assertArrayNotHasKey( 'reason', $response->get_data() );
+	}
+
+	/** A movement on a session inside the store reach is recorded. */
+	public function test_movement_session_in_reach_succeeds(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 789 ) )->get_data()['id'];
+
+		// Act.
+		$response = $this->movement_in_reach_789(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session_id,
+				'type' => 'paid_in',
+				'amount' => '20',
+				'reason' => 'Change',
+				'created_at' => '2026-09-11T10:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertCount( 1, ( new Cash_Movement_Store() )->list( $session_id ) );
+	}
+
 	/** Lists are newest first, paginated, validated and extension-scoped. */
 	public function test_list_pagination_and_extension_filters(): void {
 		$a = $this->post( 'sessions', $this->fields( 765 ) )->get_data();

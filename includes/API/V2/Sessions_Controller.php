@@ -90,6 +90,13 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( $movement && ! Pos_Uuid::is_uuid( $request['session_id'] ) ) {
 				return $this->error( 'rest_invalid_param', 400, 'session_id' );
 			}
+			if ( $movement ) {
+				// A movement's session must be in the request's store reach; a missing session keeps its own answers.
+				$session = ( new Register_Session_Store() )->get( strtolower( $request['session_id'] ) );
+				if ( $session && ! Store_Reach::for_request( $request )->admits( $session['store_id'] ) ) {
+					return $this->error( 'wcpos_session_not_found', 404 );
+				}
+			}
 			// A movement is keyed by (session, uuid): its replay is looked up in the body's session.
 			$existing = $movement ? $store->get( strtolower( $request['session_id'] ), $request['id'] ) : $store->get( $request['id'] );
 			/** Filter a directly addressed session or movement row on the write routes; nothing hooks it today. Read routes are checked by Store_Reach. */
