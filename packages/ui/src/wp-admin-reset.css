@@ -67,3 +67,17 @@
 .wp-admin .wcpos-admin-app textarea:focus {
 	box-shadow: none;
 }
+
+/*
+ * At <=782px forms.css grows the checkbox to 25px and its tick to 30px. checkbox.tsx pins
+ * the box at 16px, so put back forms.css's desktop tick or the 16px box clips a 30px tick.
+ * Scoped to that component: an unpinned checkbox gets the 25px box, where 30px is right.
+ */
+@media screen and (max-width: 782px) {
+	.wp-admin .wcpos-admin-app input.wcpos-checkbox:checked::before {
+		width: 1.3125rem;
+		height: 1.3125rem;
+		margin: -0.1875rem 0 0;
+		margin-inline-start: -0.25rem; /* forms-rtl.css flips it to the right edge */
+	}
+}
