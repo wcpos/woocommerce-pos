@@ -102,6 +102,9 @@ class Single_Order {
 
 			// Update meta only if _pos_user has changed.
 			if ( $current_pos_cashier !== $new_pos_cashier ) {
+				if ( ! $this->can_assign_cashier( $new_pos_cashier ) ) {
+					return;
+				}
 				if ( ! Fiscal_Record_Writers::instance()->record_reattribution(
 					$order,
 					get_current_user_id(),
@@ -119,6 +122,25 @@ class Single_Order {
 				Order_Notes::add_cashier_change_note( $order, $current_pos_cashier, $new_pos_cashier );
 			}
 		}
+	}
+
+	/**
+	 * Whether the current user may make a user the order's cashier.
+	 *
+	 * Mirrors the reassignment rule the POS order writer applies.
+	 *
+	 * @param int $user_id The proposed cashier.
+	 */
+	private function can_assign_cashier( int $user_id ): bool {
+		if ( get_current_user_id() === $user_id ) {
+			return true;
+		}
+		if ( ! current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
+			return false;
+		}
+		$user = get_userdata( $user_id );
+
+		return $user && $user->has_cap( 'access_woocommerce_pos' );
 	}
 
 	/**

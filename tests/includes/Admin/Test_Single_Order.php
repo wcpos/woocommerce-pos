@@ -217,6 +217,80 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * A completed POS sale with its sale record, posted for a cashier change.
+	 *
+	 * @param int $old_id Current cashier.
+	 * @param int $new_id Posted cashier.
+	 */
+	private function posted_cashier_change( int $old_id, int $new_id ): \WC_Order {
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->update_meta_data( '_pos_store', '12' );
+		$order->save();
+		( new Fiscal_Record_Store() )->record(
+			array(
+				'type' => 'sale',
+				'order_id' => $order->get_id(),
+				'source_id' => wp_generate_uuid4(),
+				'payload' => array(),
+			)
+		);
+		$_POST['pos_cashier_select_nonce'] = wp_create_nonce( 'pos_cashier_select_action' );
+		$_POST['_pos_user'] = (string) $new_id;
+
+		return $order;
+	}
+
+	/**
+	 * Reattribution records written for an order.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function reattributions( int $order_id ): array {
+		return ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order_id,
+				'type' => 'reattribution',
+			)
+		);
+	}
+
+	/** A user who may not reassign sales cannot move a sale to another cashier. */
+	public function test_save_cashier_select_without_reassign_cap_does_not_change_pos_user(): void {
+		// Arrange.
+		$actor_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$old_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$new_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $actor_id );
+		$order = $this->posted_cashier_change( $old_id, $new_id );
+
+		// Act.
+		( new Single_Order() )->save_cashier_select( $order->get_id() );
+
+		// Assert.
+		$this->assertSame( (string) $old_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$this->assertSame( array(), $this->reattributions( $order->get_id() ) );
+	}
+
+	/** A sale cannot be moved to a user without POS access, even by a user who may reassign sales. */
+	public function test_save_cashier_select_target_without_pos_access_is_refused(): void {
+		// Arrange.
+		$actor_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$old_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$new_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $actor_id );
+		$order = $this->posted_cashier_change( $old_id, $new_id );
+
+		// Act.
+		( new Single_Order() )->save_cashier_select( $order->get_id() );
+
+		// Assert.
+		$this->assertSame( (string) $old_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$this->assertSame( array(), $this->reattributions( $order->get_id() ) );
+	}
+
 	/** Both supported order storage backends, without HPOS compatibility sync. */
 	public function attribution_storage_backends(): array {
 		return array(
