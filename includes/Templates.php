@@ -35,6 +35,9 @@ class Templates {
 	/**
 	 * Supported template types.
 	 */
+	public const TYPE_CUSTOMER_EMAIL = 'email';
+
+	/** Types selected by a cashier, display or report picker. */
 	const SUPPORTED_TYPES = array( 'receipt', 'report', 'display', 'closure' );
 
 	/**
@@ -63,7 +66,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 7;
+	public const DEFAULT_TERMS_VERSION = 8;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -191,7 +194,7 @@ class Templates {
 	private function default_terms_present(): bool {
 		// Every supported type is seeded, so every one is verified — a list kept
 		// here by hand let `display` seed without being checked (next, 2026-09).
-		foreach ( self::SUPPORTED_TYPES as $slug ) {
+		foreach ( array_merge( self::SUPPORTED_TYPES, array( self::TYPE_CUSTOMER_EMAIL ) ) as $slug ) {
 			if ( ! term_exists( $slug, 'wcpos_template_type' ) ) {
 				return false;
 			}
@@ -1383,6 +1386,10 @@ class Templates {
 	 * @return void
 	 */
 	private function register_default_template_types(): void {
+		if ( ! term_exists( self::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type' ) ) {
+			wp_insert_term( 'Email', 'wcpos_template_type', array( 'slug' => self::TYPE_CUSTOMER_EMAIL ) );
+		}
+
 		// Check if terms already exist to avoid duplicates.
 		if ( ! term_exists( 'receipt', 'wcpos_template_type' ) ) {
 			wp_insert_term(

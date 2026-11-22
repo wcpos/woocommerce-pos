@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 
 use WC_Email;
 use WC_Order;
+use WCPOS\WooCommercePOS\Services\Customer_Email_Design;
 use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
@@ -54,6 +55,9 @@ class Emails {
 			add_filter( "woocommerce_email_enabled_{$email_id}", array( $this, 'manage_customer_emails' ), 999, 3 );
 		}
 
+		// Replace only the HTML order details within a completed POS sale notification.
+		add_filter( 'wc_get_template', array( $this, 'customer_order_details_template' ), 10, 3 );
+
 		// Control new_order recipients (admin + cashier) via the recipient filter.
 		add_filter( 'woocommerce_email_recipient_new_order', array( $this, 'filter_new_order_recipients' ), 10, 3 );
 
@@ -65,6 +69,24 @@ class Emails {
 		add_action( 'woocommerce_order_status_pos-partial_to_completed', array( $this, 'trigger_new_order_email' ), 10, 2 );
 		add_action( 'woocommerce_order_status_pos-partial_to_processing', array( $this, 'trigger_new_order_email' ), 10, 2 );
 		add_action( 'woocommerce_order_status_pos-partial_to_on-hold', array( $this, 'trigger_new_order_email' ), 10, 2 );
+	}
+
+	/**
+	 * Select the POS order details view within the normal WooCommerce email.
+	 *
+	 * @param string $path Resolved template file.
+	 * @param string $name WooCommerce template name.
+	 * @param array  $args Template context.
+	 */
+	public function customer_order_details_template( $path, $name, $args ): string {
+		if ( 'emails/email-order-details.php' !== $name || ! empty( $args['wcpos_default_details'] )
+			|| empty( $args['email'] ) || ! $args['email'] instanceof WC_Email || 'customer_completed_order' !== $args['email']->id
+			|| ! empty( $args['sent_to_admin'] ) || empty( $args['order'] ) || ! $args['order'] instanceof WC_Order
+			|| ! wcpos_is_pos_order( $args['order'] ) || ! Customer_Email_Design::active() ) {
+			return $path;
+		}
+
+		return PLUGIN_PATH . 'templates/customer-email-order-details.php';
 	}
 
 	/**
