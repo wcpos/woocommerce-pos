@@ -75,40 +75,7 @@ class Form_Handler {
 				);
 			}
 
-			// Check for 'wcpos_jwt' and fall back to 'token' if not present.
-			// remove 'token' when wcpos_jwt is fully implemented.
-			$token_key = isset( $_GET['wcpos_jwt'] ) ? 'wcpos_jwt' : ( isset( $_GET['token'] ) ? 'token' : null );
-
-			if ( null === $token_key || ! isset( $_GET[ $token_key ] ) ) {
-				wp_die(
-					/* translators: Checkout/payment form error message shown when no cashier token is provided. */
-					esc_html__( 'Token not provided.', 'woocommerce-pos' ),
-					/* translators: Checkout/payment form error message title. */
-					esc_html__( 'Error', 'woocommerce-pos' ),
-					array( 'response' => 403 )
-				);
-			}
-
-			// Verify the cashier is authorized to access the order.
-			$provided_token = sanitize_text_field( wp_unslash( $_GET[ $token_key ] ) );
-			$auth = AuthService::instance();
-			$user = $auth->validate_token( $provided_token );
-
-			// The token's user must still be able to open the POS and edit this order.
-			$token_user = is_wp_error( $user ) ? false : get_user_by( 'id', absint( $user->data->user->id ?? 0 ) );
-			if (
-				! $token_user
-				|| ! Services\Cashier::instance()->can_open_pos( $token_user )
-				|| true !== Services\Permission_Rules::verdict( 'orders', 'edit', $order->get_id(), $token_user->ID )
-			) {
-				wp_die(
-					/* translators: Checkout/payment form error message shown when the cashier token does not match. */
-					esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
-					/* translators: Checkout/payment form error message title. */
-					esc_html__( 'Error', 'woocommerce-pos' ),
-					array( 'response' => 403 )
-				);
-			}
+			self::assert_cashier_may_edit( $order );
 
 			$this->pay_order_id = $order->get_id();
 
@@ -149,6 +116,49 @@ class Form_Handler {
 				add_filter( 'wc_stripe_create_customer_required_fields', array( $this, 'stripe_guest_required_fields' ), 10, 2 );
 				add_filter( 'wc_stripe_create_customer_args', array( $this, 'stripe_guest_customer_args' ) );
 			}
+		}
+	}
+
+	/**
+	 * Refuse the request (403) unless it carries a valid cashier token whose user can still
+	 * open the POS and edit this order.
+	 *
+	 * @param \WC_Order $order The order the request acts on.
+	 */
+	private static function assert_cashier_may_edit( \WC_Order $order ): void {
+		// Check for 'wcpos_jwt' and fall back to 'token' if not present.
+		// remove 'token' when wcpos_jwt is fully implemented.
+		$token_key = isset( $_GET['wcpos_jwt'] ) ? 'wcpos_jwt' : ( isset( $_GET['token'] ) ? 'token' : null );
+
+		if ( null === $token_key || ! isset( $_GET[ $token_key ] ) ) {
+			wp_die(
+				/* translators: Checkout/payment form error message shown when no cashier token is provided. */
+				esc_html__( 'Token not provided.', 'woocommerce-pos' ),
+				/* translators: Checkout/payment form error message title. */
+				esc_html__( 'Error', 'woocommerce-pos' ),
+				array( 'response' => 403 )
+			);
+		}
+
+		// Verify the cashier is authorized to access the order.
+		$provided_token = sanitize_text_field( wp_unslash( $_GET[ $token_key ] ) );
+		$auth = AuthService::instance();
+		$user = $auth->validate_token( $provided_token );
+
+		// The token's user must still be able to open the POS and edit this order.
+		$token_user = is_wp_error( $user ) ? false : get_user_by( 'id', absint( $user->data->user->id ?? 0 ) );
+		if (
+			! $token_user
+			|| ! Services\Cashier::instance()->can_open_pos( $token_user )
+			|| true !== Services\Permission_Rules::verdict( 'orders', 'edit', $order->get_id(), $token_user->ID )
+		) {
+			wp_die(
+				/* translators: Checkout/payment form error message shown when the cashier token does not match. */
+				esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
+				/* translators: Checkout/payment form error message title. */
+				esc_html__( 'Error', 'woocommerce-pos' ),
+				array( 'response' => 403 )
+			);
 		}
 	}
 
@@ -269,6 +279,7 @@ class Form_Handler {
 		if ( ! $order || '' === $provided_key || ! $order->key_is_valid( $provided_key ) ) {
 			return;
 		}
+		self::assert_cashier_may_edit( $order );
 
 		if ( isset( $_POST['pos_apply_coupon'] ) ) {
 			$coupon_code = isset( $_POST['pos_coupon_code'] ) ? sanitize_text_field( wp_unslash( $_POST['pos_coupon_code'] ) ) : '';

@@ -144,6 +144,17 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Mint a cashier token for the given user into the request, as the pay page URL carries it.
+	 *
+	 * @param int $user_id The user the cashier token is minted for.
+	 */
+	private function add_cashier_token( int $user_id ): void {
+		$token = Auth::instance()->generate_access_token( get_user_by( 'id', $user_id ) );
+		$this->assertIsString( $token, 'precondition: cashier JWT minted' );
+		$_GET['token'] = $token;
+	}
+
+	/**
 	 * A missing order key must not allow a coupon to be applied.
 	 */
 	public function test_coupon_action_without_order_key_does_not_apply_coupon(): void {
@@ -206,6 +217,7 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 			)
 		);
 		$this->arrange_pos_coupon_post( $order, 'apply', 'keycheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->cashier );
 
 		// Act.
 		( new Form_Handler() )->coupon_action();
@@ -231,6 +243,7 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 			)
 		);
 		$this->arrange_pos_coupon_post( $order, 'remove', 'keycheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->cashier );
 
 		// Act.
 		( new Form_Handler() )->coupon_action();
@@ -827,5 +840,88 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 		$this->arrange_pos_pay_post( $order, $this->create_pos_user( true ) );
 
 		$this->assert_pay_action( $order, false, $this->factory->user->create( array( 'role' => 'customer' ) ) );
+	}
+
+	/**
+	 * Run coupon_action() and assert its refusal and the order's coupons afterwards.
+	 *
+	 * @param \WC_Order   $order   The order being updated.
+	 * @param string|null $refusal The expected 403 message, or null when the request must pass.
+	 * @param array       $codes   The order's coupon codes after the request.
+	 */
+	private function assert_coupon_action( \WC_Order $order, ?string $refusal, array $codes ): void {
+		$handler  = new Form_Handler();
+		$captured = null;
+		$die      = static function () use ( &$captured ) {
+			return static function ( $message, $title, $args ) use ( &$captured ) {
+				$captured = array( $message, $args['response'] ?? null );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Capture wp_die output, not rendering.
+				throw new \WPDieException( $message );
+			};
+		};
+		add_filter( 'wp_die_handler', $die );
+		try {
+			$handler->coupon_action();
+		} catch ( \WPDieException $exception ) {
+			unset( $exception ); // Captured by the handler above.
+		} finally {
+			remove_filter( 'wp_die_handler', $die );
+		}
+
+		$this->assertSame( null === $refusal ? null : array( $refusal, 403 ), $captured );
+		$this->assertSame( $codes, wc_get_order( $order->get_id() )->get_coupon_codes() );
+	}
+
+	/** The right order key without a cashier token does not apply a coupon. */
+	public function test_coupon_action_without_token_is_refused(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		CouponHelper::create_coupon( 'keycheck' );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'customer' ) ) );
+		$this->arrange_pos_coupon_post( $order, 'apply', 'keycheck', $order->get_order_key() );
+
+		// Act and assert.
+		$this->assert_coupon_action( $order, 'Token not provided.', array() );
+	}
+
+	/** A token minted before its user lost POS access no longer applies a coupon. */
+	public function test_coupon_action_demoted_cashier_is_refused(): void {
+		// Arrange.
+		$cashier = $this->create_pos_user( false );
+		$order   = $this->create_order_for( null );
+		CouponHelper::create_coupon( 'keycheck' );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'customer' ) ) );
+		$this->arrange_pos_coupon_post( $order, 'apply', 'keycheck', $order->get_order_key() );
+		$this->add_cashier_token( $cashier );
+		get_user_by( 'id', $cashier )->add_cap( 'access_woocommerce_pos', false );
+
+		// Act and assert.
+		$this->assert_coupon_action( $order, 'Cashier token mismatch.', array() );
+	}
+
+	/** A role that may edit only its own orders cannot change another cashier's POS order. */
+	public function test_coupon_action_minimal_role_on_other_cashiers_pos_order_is_refused(): void {
+		// Arrange.
+		$order = $this->create_order_for( $this->create_pos_user( true ) );
+		CouponHelper::create_coupon( 'keycheck' );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'customer' ) ) );
+		$this->arrange_pos_coupon_post( $order, 'apply', 'keycheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->create_pos_user( true ) );
+
+		// Act and assert.
+		$this->assert_coupon_action( $order, 'Cashier token mismatch.', array() );
+	}
+
+	/** A cashier who may edit others' orders applies a coupon to another cashier's POS order. */
+	public function test_coupon_action_other_cashier_who_can_edit_passes(): void {
+		// Arrange.
+		$order = $this->create_order_for( $this->create_pos_user( false ) );
+		CouponHelper::create_coupon( 'keycheck' );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'customer' ) ) );
+		$this->arrange_pos_coupon_post( $order, 'apply', 'keycheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->create_pos_user( false ) );
+
+		// Act and assert.
+		$this->assert_coupon_action( $order, null, array( 'keycheck' ) );
 	}
 }
