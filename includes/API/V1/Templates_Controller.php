@@ -1009,8 +1009,8 @@ class Templates_Controller extends WP_REST_Controller {
 		$id   = $request['id'];
 		$type = $request->get_param( 'type' ) ?? 'receipt';
 
-		// Validate the template exists (database, virtual, or gallery).
-		$template = TemplatesManager::find_template_or_gallery( $id, $type );
+		// The admin preview can also render a saved email design, outside the till's print lookup.
+		$template = is_numeric( $id ) ? TemplatesManager::get_template( (int) $id ) : TemplatesManager::find_template_or_gallery( $id, $type );
 
 		if ( ! $template ) {
 			return new WP_Error(
@@ -1680,6 +1680,7 @@ class Templates_Controller extends WP_REST_Controller {
 			array(
 				'post_type'      => 'wcpos_template',
 				'post_status'    => array( 'publish', 'draft' ),
+				'has_password'   => false,
 				'posts_per_page' => -1,
 				'orderby'        => 'title',
 				'order'          => 'ASC',

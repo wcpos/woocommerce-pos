@@ -628,7 +628,9 @@ class Templates {
 	 */
 	public static function find_template( $reference, string $type = 'receipt' ): ?array {
 		if ( is_numeric( $reference ) ) {
-			return self::get_template( (int) $reference );
+			$template = self::get_template( (int) $reference );
+			// Email designs belong to the wp-admin editor, never to a print or till lookup.
+			return $template && self::TYPE_CUSTOMER_EMAIL === $template['type'] ? null : $template;
 		}
 
 		return self::get_virtual_template( (string) $reference, $type );
@@ -1493,6 +1495,11 @@ class Templates {
 			<div id="<?php echo esc_attr( $taxonomy ); ?>-all" class="tabs-panel">
 				<ul id="<?php echo esc_attr( $taxonomy ); ?>checklist" class="categorychecklist form-no-clear">
 					<?php foreach ( $terms as $term ) : ?>
+						<?php
+						if ( self::TYPE_CUSTOMER_EMAIL === $term->slug ) {
+							continue;
+						}
+						?>
 						<li>
 							<label class="selectit">
 								<input 

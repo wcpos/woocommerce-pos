@@ -14,9 +14,14 @@ use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
 class Customer_Email_Design {
 	private const META_KEY = '_wcpos_customer_completed_order_template_id';
 
+	/**
+	 * Find an email design available for customer delivery.
+	 *
+	 * @param int $id Template post ID.
+	 */
 	private static function published( int $id ): ?\WP_Post {
 		$post = $id ? get_post( $id ) : null;
-		if ( ! $post || 'wcpos_template' !== $post->post_type || 'publish' !== $post->post_status
+		if ( ! $post || 'wcpos_template' !== $post->post_type || 'publish' !== $post->post_status || '' !== $post->post_password
 			|| ! has_term( Templates::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', $post )
 			|| 'logicless' !== get_post_meta( $id, '_template_engine', true ) ) {
 			return null;
