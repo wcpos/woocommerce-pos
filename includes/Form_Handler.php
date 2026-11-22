@@ -86,7 +86,14 @@ class Form_Handler {
 			$provided_token = sanitize_text_field( wp_unslash( $_GET[ $token_key ] ) );
 			$auth = AuthService::instance();
 			$user = $auth->validate_token( $provided_token );
-			if ( is_wp_error( $user ) ) {
+
+			// The token's user must still be able to open the POS and edit this order.
+			$token_user = is_wp_error( $user ) ? false : get_user_by( 'id', absint( $user->data->user->id ?? 0 ) );
+			if (
+				! $token_user
+				|| ! Services\Cashier::instance()->can_open_pos( $token_user )
+				|| true !== Services\Permission_Rules::verdict( 'orders', 'edit', $order->get_id(), $token_user->ID )
+			) {
 				wp_die(
 					/* translators: Checkout/payment form error message shown when the cashier token does not match. */
 					esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
