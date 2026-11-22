@@ -463,13 +463,14 @@ export function App({ config }: AppProps) {
 		<>
 			<TemplateInfoBar type={config.type} engine={engine} paperWidth={paperWidth} />
 			<div
-				className="wcpos:flex wcpos:gap-3 wcpos:mt-4 wcpos:items-stretch"
+				className={`wcpos:flex wcpos:gap-3 wcpos:mt-4 wcpos:items-stretch ${config.type === 'email' ? 'wcpos:max-sm:flex-col' : ''}`}
 				style={getEditorLayoutStyle()}
 			>
 				{showFieldPicker && (
 					<FieldPicker
 						schema={config.fieldSchema}
 						engine={engine}
+						stackOnPhone={config.type === 'email'}
 						onInsertField={handleInsertField}
 					/>
 				)}
@@ -500,6 +501,7 @@ export function App({ config }: AppProps) {
 					/>
 				) : engine === 'logicless' ? (
 					<LivePreview
+						label={config.type === 'email' ? t('editor.email_content_preview') : undefined}
 						content={content}
 						sampleData={preview.data}
 						loading={preview.loading}

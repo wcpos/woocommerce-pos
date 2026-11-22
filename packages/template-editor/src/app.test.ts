@@ -276,6 +276,7 @@ describe('email design editor', () => {
 		try {
 			await act(async () => root.render(createElement(App, { config: email })));
 			expect(container.textContent).toContain('Customer email design.');
+			expect(container.textContent).toContain('Content preview');
 			expect(container.textContent).not.toContain('Sample Data');
 			await vi.waitFor(() => {
 				expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain(

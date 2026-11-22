@@ -94,6 +94,7 @@ export function CustomerEmailDesigns() {
 						{t(save.isPending ? 'email.saving' : 'email.save')}
 					</button>
 				</div>
+				<p className="wcpos:mt-3 wcpos:mb-0 wcpos:text-gray-600">{t('email.format_help')}</p>
 				{save.isError && (
 					<p role="alert">
 						{t('email.save_failed')} {getErrorMessage(save.error)}

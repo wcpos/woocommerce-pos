@@ -133,6 +133,7 @@
 	"layout.email_title": "Customer Email Designs",
 	"layout.email_description": "Customize the order details in the completed order email WooCommerce sends for in-store purchases.",
 	"email.design_for_completed_orders": "Design for completed POS order emails",
+	"email.format_help": "A design replaces the order table and product notes in classic HTML email, including the HTML part of multipart email. Plain-text and block emails keep their WooCommerce content.",
 	"email.woocommerce_default": "Use the WooCommerce default",
 	"email.save": "Save",
 	"email.saving": "Saving…",

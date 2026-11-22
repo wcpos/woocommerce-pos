@@ -19,7 +19,7 @@ export function TypeTabs({ activeType }: TypeTabsProps) {
 	const navigate = useNavigate();
 
 	return (
-		<div className="wcpos:flex wcpos:gap-1 wcpos:border-b wcpos:border-gray-200 wcpos:mb-4">
+		<div className="wcpos:flex wcpos:flex-wrap wcpos:gap-1 wcpos:border-b wcpos:border-gray-200 wcpos:mb-4">
 			{tabs.map((tab) => (
 				<button
 					key={tab.id}
@@ -27,7 +27,7 @@ export function TypeTabs({ activeType }: TypeTabsProps) {
 					aria-current={activeType === tab.id ? 'page' : undefined}
 					onClick={() => navigate({ to: '/', search: { type: tab.id } })}
 					className={classnames(
-						'wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:border-b-2 wcpos:-mb-px wcpos:bg-transparent wcpos:cursor-pointer',
+						'wcpos:px-2 wcpos:sm:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:border-b-2 wcpos:-mb-px wcpos:bg-transparent wcpos:cursor-pointer',
 						tab.id === activeType
 							? 'wcpos:border-wp-admin-theme-color wcpos:text-wp-admin-theme-color'
 							: 'wcpos:border-transparent wcpos:text-gray-500'
