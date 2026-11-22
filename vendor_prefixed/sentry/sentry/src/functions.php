@@ -11,6 +11,7 @@ use WCPOS\Vendor\Sentry\Integration\OTLPIntegration;
 use WCPOS\Vendor\Sentry\Logs\Logs;
 use WCPOS\Vendor\Sentry\Metrics\Metrics;
 use WCPOS\Vendor\Sentry\Metrics\TraceMetrics;
+use WCPOS\Vendor\Sentry\Profiling\Profiles;
 use WCPOS\Vendor\Sentry\State\HubInterface;
 use WCPOS\Vendor\Sentry\State\Scope;
 use WCPOS\Vendor\Sentry\Tracing\PropagationContext;
@@ -74,6 +75,8 @@ use WCPOS\Vendor\Sentry\Transport\TransportInterface;
  *     max_value_length?: int,
  *     org_id?: int|null,
  *     prefixes?: array<string>,
+ *     profile_lifecycle?: "manual"|"trace",
+ *     profile_session_sample_rate?: int|float|null,
  *     profiler_factory?: callable|null,
  *     profiles_sample_rate?: int|float|null,
  *     profiles_sampler?: callable|null,
@@ -459,6 +462,13 @@ function metrics() : Metrics
 function traceMetrics() : TraceMetrics
 {
     return TraceMetrics::getInstance();
+}
+/**
+ * Get the Sentry Profiles client.
+ */
+function profiler() : Profiles
+{
+    return Profiles::getInstance();
 }
 /**
  * @deprecated use `traceMetrics` instead

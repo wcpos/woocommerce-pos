@@ -7,10 +7,12 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
+use Automattic\WooCommerce\Internal\Utilities\Users;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Form_Handler;
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Cashier;
 use WC_Unit_Test_Case;
 
 /**
@@ -21,6 +23,11 @@ use WC_Unit_Test_Case;
  * @coversNothing
  */
 class Test_Form_Handler extends WC_Unit_Test_Case {
+	/**
+	 * A role holding only what a till needs to open and edit its own orders.
+	 */
+	private const MINIMAL_POS_ROLE = 'wcpos_test_minimal_pos';
+
 	/**
 	 * Cashier user ID.
 	 *
@@ -42,9 +49,10 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	public function tearDown(): void {
 		global $wp;
 		unset( $wp->query_vars['order-pay'], $wp->query_vars['wcpos'] );
-		unset( $_GET['key'], $_GET['token'], $_POST['woocommerce_pay'] );
+		unset( $_GET['key'], $_GET['token'], $_POST['woocommerce_pay'], $_POST['woocommerce-pay-nonce'], $_REQUEST['woocommerce-pay-nonce'] );
 		unset( $_POST['pos_apply_coupon'], $_POST['pos_remove_coupon'], $_POST['pos_coupon_code'], $_POST['pos_coupon_nonce'] );
 		wp_set_current_user( 0 );
+		remove_role( self::MINIMAL_POS_ROLE );
 		// Hooks added during the test (ours and Form_Handler's) are restored by
 		// the WP test framework's hook backup in parent::tearDown().
 		parent::tearDown();
@@ -96,16 +104,17 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Point the request context at a POS pay POST for the given order.
 	 *
-	 * @param \WC_Order $order The order being paid.
+	 * @param \WC_Order $order      The order being paid.
+	 * @param int|null  $token_user The user the cashier token is minted for, or null for the default cashier.
 	 */
-	private function arrange_pos_pay_post( \WC_Order $order ): void {
+	private function arrange_pos_pay_post( \WC_Order $order, ?int $token_user = null ): void {
 		global $wp;
 		$wp->query_vars['order-pay'] = $order->get_id();
 		$wp->query_vars['wcpos']     = 1;
 		$_GET['key']                 = $order->get_order_key();
 		$_POST['woocommerce_pay']    = '1';
 
-		$token = Auth::instance()->generate_access_token( get_user_by( 'id', $this->cashier ) );
+		$token = Auth::instance()->generate_access_token( get_user_by( 'id', $token_user ?? $this->cashier ) );
 		$this->assertIsString( $token, 'precondition: cashier JWT minted' );
 		$_GET['token'] = $token;
 	}
@@ -489,6 +498,186 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Create a POS guest order with an email, past WooCommerce's 10-minute grace period.
+	 *
+	 * @return \WC_Order The saved order.
+	 */
+	private function create_pos_guest_order_past_grace_period(): \WC_Order {
+		$order = $this->create_pos_order_with_billing_email( 'guest@example.test' );
+		$order->set_date_created( time() - HOUR_IN_SECONDS );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * An authenticated POS pay POST lifts WC 11.3.1's order-pay email verification.
+	 */
+	public function test_pay_action_guest_with_email_after_grace_period_lifts_order_pay_email_verification(): void {
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+		wp_set_current_user( 0 );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ), 'precondition: verification required' );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertFalse( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+	}
+
+	/**
+	 * The lift covers only the order being paid, in the 'order-pay' context.
+	 */
+	public function test_order_pay_email_verification_lift_is_scoped_to_the_paid_order(): void {
+		// Arrange.
+		$order       = $this->create_pos_guest_order_past_grace_period();
+		$other_order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertTrue( Users::should_user_verify_order_email( $other_order->get_id(), null, 'order-pay' ) );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-received' ) );
+	}
+
+	/**
+	 * Pay POSTs that fail WCPOS's order key or cashier token check.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function pay_refusal_cases(): array {
+		return array(
+			'bad_token'       => array( 'bad_token' ),
+			'missing_token'   => array( 'missing_token' ),
+			'expired_token'   => array( 'expired_token' ),
+			'wrong_order_key' => array( 'wrong_order_key' ),
+		);
+	}
+
+	/**
+	 * Break the arranged POS pay POST the way the named refusal case says.
+	 *
+	 * @param string $refusal_case One of pay_refusal_cases().
+	 */
+	private function apply_pay_refusal( string $refusal_case ): void {
+		switch ( $refusal_case ) {
+			case 'bad_token':
+				$_GET['token'] = 'not-a-jwt';
+				break;
+			case 'missing_token':
+				unset( $_GET['token'] );
+				break;
+			case 'expired_token':
+				$expire = static fn( $expire, $issued_at ) => $issued_at - 1;
+				add_filter( 'wcpos_jwt_access_token_expire', $expire, 10, 2 );
+				$_GET['token'] = Auth::instance()->generate_access_token( get_user_by( 'id', $this->cashier ) );
+				remove_filter( 'wcpos_jwt_access_token_expire', $expire, 10 );
+				break;
+			case 'wrong_order_key':
+				$_GET['key'] = 'wc_order_wrong';
+				break;
+		}
+	}
+
+	/**
+	 * A pay POST that fails authentication dies without lifting the email gate.
+	 *
+	 * @dataProvider pay_refusal_cases
+	 *
+	 * @param string $refusal_case The way the POST fails authentication.
+	 */
+	public function test_pay_action_unauthenticated_pay_post_keeps_order_pay_email_verification( string $refusal_case ): void {
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+		$this->apply_pay_refusal( $refusal_case );
+		wp_set_current_user( 0 );
+
+		// Act.
+		try {
+			( new Form_Handler() )->pay_action();
+			$this->fail( 'pay_action() must die on a POST that fails authentication' );
+		} catch ( \WPDieException $e ) {
+			$this->addToAssertionCount( 1 ); // The refusal is the expected outcome.
+		}
+
+		// Assert.
+		$this->assertFalse( has_filter( 'woocommerce_order_email_verification_required' ) );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+	}
+
+	/**
+	 * Outside a POS request the email gate is left to WooCommerce.
+	 */
+	public function test_pay_action_outside_pos_request_keeps_order_pay_email_verification(): void {
+		global $wp;
+
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+		unset( $wp->query_vars['wcpos'] );
+		wp_set_current_user( 0 );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertFalse( has_filter( 'woocommerce_order_email_verification_required' ) );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+	}
+
+	/**
+	 * A third-party apply_filters() call with only the value keeps that value.
+	 */
+	public function test_lift_order_pay_email_verification_one_argument_returns_required(): void {
+		// Arrange.
+		$handler = new Form_Handler();
+
+		// Act.
+		$required = $handler->lift_order_pay_email_verification( true );
+
+		// Assert.
+		$this->assertTrue( $required );
+	}
+
+	/**
+	 * WCPOS's handler then WooCommerce's, in 'wp' order: WooCommerce 11.3.1's
+	 * pay_for_order and email gates let the guest POS payment through.
+	 */
+	public function test_pay_action_guest_past_grace_period_reaches_woocommerce_before_pay_action(): void {
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$order->set_total( 50 ); // The helper order has a 0.00 total, so it would not need payment.
+		$order->save();
+		$this->arrange_pos_pay_post( $order );
+		wp_set_current_user( 0 );
+		$nonce                             = $this->mint_template_pay_nonce();
+		$_POST['woocommerce-pay-nonce']    = $nonce;
+		$_REQUEST['woocommerce-pay-nonce'] = $nonce; // WooCommerce reads the nonce from $_REQUEST.
+		$this->assertTrue( $order->needs_payment(), 'precondition: the order needs payment' );
+		$before_pay = did_action( 'woocommerce_before_pay_action' );
+		$level      = ob_get_level();
+
+		// Act.
+		try {
+			( new Form_Handler() )->pay_action();
+			\WC_Form_Handler::pay_action();
+		} finally {
+			while ( ob_get_level() > $level ) {
+				ob_end_clean(); // WooCommerce's pay_action() opens a buffer it leaves open.
+			}
+		}
+
+		// Assert.
+		$this->assertSame( $before_pay + 1, did_action( 'woocommerce_before_pay_action' ) );
+		wc_clear_notices();
+	}
+
+	/**
 	 * Stripe below 10.2.0 passes only the required fields; with no request to
 	 * read, the email counts as blank.
 	 */
@@ -501,5 +690,142 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( array(), $required_fields );
+	}
+
+	/**
+	 * Create a user with the plugin's default cashier role, or with a role that
+	 * may open the POS and edit only its own orders.
+	 *
+	 * @param bool $minimal Whether to use the minimal role.
+	 *
+	 * @return int The user ID.
+	 */
+	private function create_pos_user( bool $minimal ): int {
+		if ( $minimal && ! get_role( self::MINIMAL_POS_ROLE ) ) {
+			$caps = array( 'read', 'access_woocommerce_pos', 'publish_shop_orders', 'edit_shop_orders' );
+			add_role( self::MINIMAL_POS_ROLE, 'Minimal POS', array_fill_keys( $caps, true ) );
+		}
+		$user_id = $this->factory->user->create( array( 'role' => $minimal ? self::MINIMAL_POS_ROLE : 'cashier' ) );
+		$this->assertTrue( Cashier::instance()->can_open_pos( get_user_by( 'id', $user_id ) ), 'precondition: the user can open the POS' );
+		$this->assertSame( ! $minimal, user_can( $user_id, 'edit_others_shop_orders' ), 'precondition: edit_others_shop_orders' );
+
+		return $user_id;
+	}
+
+	/**
+	 * Create a web order (created at checkout, no cashier) or a POS order assigned to a cashier.
+	 *
+	 * @param int|null $cashier_id The cashier the POS order belongs to, or null for a web order.
+	 *
+	 * @return \WC_Order The saved order.
+	 */
+	private function create_order_for( ?int $cashier_id ): \WC_Order {
+		$order = OrderHelper::create_order( array( 'customer_id' => $this->factory->user->create( array( 'role' => 'customer' ) ) ) );
+		$order->set_created_via( null === $cashier_id ? 'checkout' : 'woocommerce-pos' );
+		if ( null !== $cashier_id ) {
+			$order->update_meta_data( '_pos_user', (string) $cashier_id );
+		}
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * Run pay_action() under the given current user and assert the outcome. A pass
+	 * registers the pay nonce correction and switches to the order's customer; a
+	 * refusal is the token-failure 403 and leaves the current user unchanged.
+	 *
+	 * @param \WC_Order $order   The order being paid.
+	 * @param bool      $passes  Whether the request must pass the gate.
+	 * @param int       $current The request's current user before the gate.
+	 */
+	private function assert_pay_action( \WC_Order $order, bool $passes, int $current = 0 ): void {
+		wp_set_current_user( $current );
+		$handler = new Form_Handler();
+		$refusal = null;
+		$die     = static function () use ( &$refusal ) {
+			return static function ( $message, $title, $args ) use ( &$refusal ) {
+				$refusal = array( $message, $args['response'] ?? null );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Capture wp_die output, not rendering.
+				throw new \WPDieException( $message );
+			};
+		};
+		add_filter( 'wp_die_handler', $die );
+		try {
+			$handler->pay_action();
+		} catch ( \WPDieException $exception ) {
+			unset( $exception ); // Captured by the handler above.
+		} finally {
+			remove_filter( 'wp_die_handler', $die );
+		}
+
+		$this->assertSame( $passes ? null : array( 'Cashier token mismatch.', 403 ), $refusal );
+		$this->assertSame( $passes ? 20 : false, has_filter( 'nonce_user_logged_out', array( $handler, 'nonce_user_logged_out' ) ) );
+		$this->assertSame( $passes ? $order->get_customer_id() : $current, get_current_user_id() );
+	}
+
+	/** A default cashier pays a synced web order at the till. */
+	public function test_pay_action_default_cashier_on_web_order_passes(): void {
+		$order = $this->create_order_for( null );
+		$this->arrange_pos_pay_post( $order, $this->create_pos_user( false ) );
+
+		$this->assert_pay_action( $order, true );
+	}
+
+	/** A role that may edit only its own orders pays its own POS order. */
+	public function test_pay_action_minimal_role_on_own_pos_order_passes(): void {
+		$user  = $this->create_pos_user( true );
+		$order = $this->create_order_for( $user );
+		$this->arrange_pos_pay_post( $order, $user );
+
+		$this->assert_pay_action( $order, true );
+	}
+
+	/** That role cannot pay another cashier's POS order, whoever the request is logged in as. */
+	public function test_pay_action_minimal_role_on_other_cashiers_pos_order_is_refused(): void {
+		$order = $this->create_order_for( $this->create_pos_user( true ) );
+		$this->arrange_pos_pay_post( $order, $this->create_pos_user( true ) );
+
+		$this->assert_pay_action( $order, false, $this->cashier );
+	}
+
+	/** That role cannot pay a web order, whoever the request is logged in as. */
+	public function test_pay_action_minimal_role_on_web_order_is_refused(): void {
+		$order = $this->create_order_for( null );
+		$this->arrange_pos_pay_post( $order, $this->create_pos_user( true ) );
+
+		$this->assert_pay_action( $order, false, $this->cashier );
+	}
+
+	/** A token minted before its user lost POS access no longer pays. */
+	public function test_pay_action_demoted_cashier_is_refused(): void {
+		$cashier = $this->create_pos_user( false );
+		$order   = $this->create_order_for( null );
+		$this->arrange_pos_pay_post( $order, $cashier );
+		get_user_by( 'id', $cashier )->add_cap( 'access_woocommerce_pos', false );
+		$this->assertFalse( Cashier::instance()->can_open_pos( get_user_by( 'id', $cashier ) ), 'precondition: demoted' );
+
+		$this->assert_pay_action( $order, false, $this->cashier );
+	}
+
+	/** WooCommerce refusing the order edit refuses the pay POST. */
+	public function test_pay_action_woocommerce_edit_refusal_is_refused(): void {
+		$order = $this->create_order_for( null );
+		$this->arrange_pos_pay_post( $order, $this->create_pos_user( false ) );
+		add_filter( 'woocommerce_rest_check_permissions', '__return_false', 1000 );
+
+		try {
+			$this->assert_pay_action( $order, false );
+		} finally {
+			remove_filter( 'woocommerce_rest_check_permissions', '__return_false', 1000 );
+		}
+	}
+
+	/** A refusal leaves a logged-in request's current user as it was. */
+	public function test_pay_action_refusal_leaves_current_user_unchanged(): void {
+		$order = $this->create_order_for( null );
+		$this->arrange_pos_pay_post( $order, $this->create_pos_user( true ) );
+
+		$this->assert_pay_action( $order, false, $this->factory->user->create( array( 'role' => 'customer' ) ) );
 	}
 }

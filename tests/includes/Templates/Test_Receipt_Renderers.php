@@ -9,7 +9,9 @@ namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
+use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
 use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
 use WC_REST_Unit_Test_Case;
@@ -291,6 +293,57 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
 		$this->assertStringNotContainsString( '{{', $output );
 		$this->assertStringContainsString( 'print-color-adjust', $output, 'Gallery wrapper must keep print-color-adjust through kses.' );
+	}
+
+	/**
+	 * Rendered gallery receipts print a Savings row for the sold line only, never for a return.
+	 */
+	public function test_rendered_receipts_show_no_savings_row_on_a_returned_line(): void {
+		// Arrange: one sold and one returned at 15.00, regular 18.00, taxes off.
+		update_option( 'woocommerce_calc_taxes', 'no' );
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos', '1' );
+		foreach ( array( 1 => 15.0, -1 => -15.0 ) as $qty => $total ) {
+			$item = new \WC_Order_Item_Product();
+			$item->set_name( $qty < 0 ? 'Returned Product' : 'Sold Product' );
+			$item->set_quantity( $qty );
+			$item->set_subtotal( $total );
+			$item->set_total( $total );
+			POSLineItemHelper::add_pos_data_to_item(
+				$item,
+				array(
+					'price'         => '15',
+					'regular_price' => '18',
+					'tax_status'    => 'none',
+				)
+			);
+			$order->add_item( $item );
+		}
+		$order->calculate_totals( false );
+		$order->save();
+		$order        = wc_get_order( $order->get_id() );
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$label        = $receipt_data['i18n']['savings'];
+		$negative     = Receipt_Money_Formatter::format(
+			array( 'line_savings' => -3.0 ),
+			$receipt_data['order']['currency'] ?? 'USD',
+			$receipt_data['presentation_hints'] ?? array()
+		)['line_savings_display'];
+
+		foreach ( array( 'standard-receipt.html', 'thermal-simple-80mm.xml' ) as $file ) {
+			// Act.
+			$template = array(
+				'content' => file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $file ),
+			);
+			ob_start();
+			( new Logicless_Renderer() )->render( $template, $order, $receipt_data );
+			$output = ob_get_clean();
+
+			// Assert.
+			$this->assertSame( 1, substr_count( $output, $label ), $file );
+			$this->assertStringNotContainsString( '-' . $negative, $output, $file );
+		}
 	}
 
 	/**

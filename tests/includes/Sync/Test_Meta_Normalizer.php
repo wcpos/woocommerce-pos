@@ -380,6 +380,84 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 
 		$this->assertEquals( $once, $twice );
 	}
+
+	/**
+	 * A payload with no meta is returned without copying its arrays (Sentry POS-34M).
+	 */
+	public function test_normalize_payload_without_meta_adds_under_ten_percent_memory(): void {
+		// Arrange.
+		$payload_start = memory_get_usage();
+		$payload       = array();
+		for ( $i = 0; $i < 3000; $i++ ) {
+			$payload[] = array(
+				'id'         => $i,
+				'name'       => 'Product ' . $i,
+				'price'      => (string) ( $i * 1.5 ),
+				'categories' => array(
+					array( 'id' => $i, 'name' => 'Cat ' . $i ),
+					array( 'id' => $i + 1, 'name' => 'Cat ' . ( $i + 1 ) ),
+				),
+				'images'     => array( array( 'id' => $i, 'src' => 'https://example.com/' . $i . '.jpg' ) ),
+				'attributes' => array( array( 'id' => $i, 'options' => array( 'S' . $i, 'M' . $i, 'L' . $i ) ) ),
+			);
+		}
+		$payload_bytes = memory_get_usage() - $payload_start;
+
+		// Act.
+		$before     = memory_get_usage();
+		$normalized = Meta_Normalizer::normalize( $payload );
+		$extra      = memory_get_usage() - $before;
+
+		// Assert.
+		$this->assertLessThan(
+			(int) ( $payload_bytes * 0.1 ),
+			$extra,
+			sprintf( 'normalize() kept %d extra bytes for a %d-byte payload with no meta.', $extra, $payload_bytes )
+		);
+		$this->assertSame( $payload, $normalized );
+	}
+
+	/**
+	 * A payload whose array meta needs no normalization is returned without copying (Sentry POS-34M).
+	 */
+	public function test_normalize_payload_with_unchanged_array_meta_adds_under_ten_percent_memory(): void {
+		// Arrange.
+		$payload_start = memory_get_usage();
+		$payload       = array();
+		$n             = 0;
+		for ( $i = 0; $i < 2000; $i++ ) {
+			$meta_data = array();
+			for ( $m = 0; $m < 5; $m++ ) {
+				++$n;
+				$meta_data[] = array( 'id' => $n, 'key' => '_k' . $n, 'value' => 'v' . $n );
+			}
+			$line_meta = array();
+			for ( $m = 0; $m < 2; $m++ ) {
+				++$n;
+				$line_meta[] = array( 'id' => $n, 'key' => '_k' . $n, 'value' => 'v' . $n );
+			}
+			$payload[] = array(
+				'id'         => $i,
+				'meta_data'  => $meta_data,
+				'line_items' => array( array( 'id' => $i, 'meta_data' => $line_meta ) ),
+			);
+		}
+		unset( $meta_data, $line_meta );
+		$payload_bytes = memory_get_usage() - $payload_start;
+
+		// Act.
+		$before     = memory_get_usage();
+		$normalized = Meta_Normalizer::normalize( $payload );
+		$extra      = memory_get_usage() - $before;
+
+		// Assert.
+		$this->assertLessThan(
+			(int) ( $payload_bytes * 0.1 ),
+			$extra,
+			sprintf( 'normalize() kept %d extra bytes for a %d-byte payload with unchanged array meta.', $extra, $payload_bytes )
+		);
+		$this->assertSame( $payload, $normalized );
+	}
 }
 
 /**

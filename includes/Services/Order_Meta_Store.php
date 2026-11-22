@@ -49,6 +49,27 @@ final class Order_Meta_Store {
 	}
 
 	/**
+	 * Drop WooCommerce's HPOS data-store caches (the order row and its meta) for one order or refund, so a forced read
+	 * goes to the database when that caching is on. On posts storage, and when those classes are missing, it does nothing.
+	 *
+	 * @param int $id Order or refund id.
+	 */
+	public static function forget_datastore_cache( int $id ): void {
+		if ( function_exists( 'wc_get_container' ) && class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class ) ) {
+			$data_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class );
+			if ( method_exists( $data_store, 'clear_cached_data' ) ) {
+				$data_store->clear_cached_data( array( $id ) );
+			}
+			if ( class_exists( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class ) ) {
+				$meta_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStoreMeta::class );
+				if ( method_exists( $meta_store, 'clear_cached_data' ) ) {
+					$meta_store->clear_cached_data( array( $id ) );
+				}
+			}
+		}
+	}
+
+	/**
 	 * The active order store's identifiers, for a join order_ids() does not cover: `orders` and `meta`
 	 * (full table names), and the columns `id`, `type`, `status`, `created`, `modified` (GMT) of the
 	 * orders table and `owner`, `meta_id` of the meta table.

@@ -119,6 +119,14 @@ class Error_Reporter {
 	 */
 	private bool $reporting = false;
 
+	/**
+	 * Index in `$wp_current_filter` that the executing Action Scheduler
+	 * action's own hook occupies, or null when no action is running.
+	 *
+	 * @var null|int
+	 */
+	private ?int $as_depth = null;
+
 	/** Get the singleton instance. */
 	public static function instance(): self {
 		if ( null === self::$instance ) {
@@ -174,9 +182,25 @@ class Error_Reporter {
 		try {
 			add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'filter_rest_request_after_callbacks' ), 999, 3 );
 			register_shutdown_function( array( __CLASS__, 'handle_shutdown' ) );
+			foreach ( array( 'action_scheduler_begin_execute', 'action_scheduler_after_execute', 'action_scheduler_failed_execution' ) as $as_hook ) {
+				add_action( $as_hook, array( __CLASS__, 'track_action' ), 10, 0 );
+			}
 		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Reporting must never break plugin initialization.
 		}
+	}
+
+	/**
+	 * Track where the executing Action Scheduler action sits in the hook stack.
+	 *
+	 * On `begin_execute`, that hook occupies the last index; once it pops, the
+	 * action's own hook is pushed at that same index. On `after_execute` and
+	 * `failed_execution`, the action is over. No database read.
+	 */
+	public static function track_action(): void {
+		$stack = isset( $GLOBALS['wp_current_filter'] ) && \is_array( $GLOBALS['wp_current_filter'] ) ? $GLOBALS['wp_current_filter'] : array();
+
+		self::instance()->as_depth = 'action_scheduler_begin_execute' === current_action() ? \count( $stack ) - 1 : null;
 	}
 
 	/** Whether reporting is allowed by consent and environment. */
@@ -481,6 +505,7 @@ class Error_Reporter {
 				'fatal_file' => $relative,
 				'fatal_line' => $line,
 			);
+			$tags         = array_merge( $this->get_request_context_tags(), $tags );
 			$level        = 'critical';
 			$fingerprint  = array( 'wcpos-fatal', $relative, $line );
 
@@ -503,6 +528,130 @@ class Error_Reporter {
 		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Fatal reporting must not create another fatal.
 		}
+	}
+
+	/**
+	 * Describe the request a fatal interrupted. Fatal events only.
+	 *
+	 * Every value is masked: no query string, URL number, email or long token
+	 * leaves the site. Best-effort: a throw returns what was collected so far.
+	 *
+	 * @return array<string, string> Tags, empty values omitted.
+	 */
+	private function get_request_context_tags(): array {
+		$tags = array();
+		try {
+			/**
+			 * Filters whether fatal error reports carry request context tags.
+			 *
+			 * @param bool $enabled Default true.
+			 */
+			if ( ! apply_filters( 'wcpos_error_reporting_request_context', true ) ) {
+				return $tags;
+			}
+
+			$kinds = array(
+				'cli'    => \defined( 'WP_CLI' ) && WP_CLI,
+				'cron'   => wp_doing_cron(),
+				'ajax'   => wp_doing_ajax(),
+				'rest'   => \defined( 'REST_REQUEST' ) && REST_REQUEST,
+				'admin'  => is_admin(),
+				'xmlrpc' => \defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
+			);
+			$kind                 = array_search( true, $kinds, true );
+			$tags['request_kind'] = false === $kind ? 'frontend' : (string) $kind;
+
+			$wp_main = $GLOBALS['wp'] ?? null;
+			if ( $wp_main instanceof \WP && isset( $wp_main->query_vars['rest_route'] ) && \is_string( $wp_main->query_vars['rest_route'] ) ) {
+				$tags['rest_route'] = self::mask_path( strtolower( $wp_main->query_vars['rest_route'] ), false );
+			}
+
+			// Not sanitized on purpose: sanitizing strips the %-octets the mask must see.
+			$uri  = isset( $_SERVER['REQUEST_URI'] ) && \is_string( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$path = '' === $uri ? null : wp_parse_url( $uri, PHP_URL_PATH );
+			if ( \is_string( $path ) ) {
+				$tags['uri_path'] = self::mask_path( $path, true );
+			}
+
+			$stack = isset( $GLOBALS['wp_current_filter'] ) && \is_array( $GLOBALS['wp_current_filter'] ) ? array_values( $GLOBALS['wp_current_filter'] ) : array();
+			$hooks = array();
+			foreach ( \array_slice( $stack, -6 ) as $hook ) {
+				$hooks[] = self::mask_segment( (string) $hook, 64 );
+			}
+			$tags['hook_stack'] = implode( '>', $hooks );
+
+			if ( null !== $this->as_depth && isset( $stack[ $this->as_depth ] ) ) {
+				$tags['as_action'] = self::mask_segment( (string) $stack[ $this->as_depth ], 64 );
+			}
+
+			global $wpdb;
+			if ( isset( $wpdb->num_queries ) ) {
+				$tags['db_queries'] = (string) $wpdb->num_queries;
+			}
+			$tags['wp_queries'] = (string) did_action( 'pre_get_posts' );
+
+			$settings                    = Settings::instance();
+			$tags['pos_only_products']   = (string) \count( (array) ( $settings->get_pos_only_product_visibility_settings()['ids'] ?? array() ) );
+			$tags['pos_only_variations'] = (string) \count( (array) ( $settings->get_pos_only_variations_visibility_settings()['ids'] ?? array() ) );
+		} catch ( Throwable $throwable ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Keep what was collected; context must never cost the fatal report.
+		}
+
+		$out = array();
+		foreach ( $tags as $key => $value ) {
+			if ( '' !== $value ) {
+				$out[ $key ] = mb_substr( $value, 0, 200, 'UTF-8' );
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Mask a URL or route path segment by segment.
+	 *
+	 * @param string $path   Path without a query string.
+	 * @param bool   $is_uri True for the request URI: the segment after `author`
+	 *                       is masked and at most 4 segments are kept, then `/…`.
+	 *                       False for a REST route: at most 6 segments.
+	 *
+	 * @return string Masked path, or '' when there are no segments.
+	 */
+	private static function mask_path( string $path, bool $is_uri ): string {
+		$segments = array_values( array_diff( explode( '/', $path ), array( '' ) ) );
+		$masked   = array();
+		foreach ( $segments as $index => $segment ) {
+			$after_author = $is_uri && $index > 0 && 'author' === $segments[ $index - 1 ];
+			$masked[]     = $after_author ? '{s}' : self::mask_segment( $segment );
+		}
+
+		$max = $is_uri ? 4 : 6;
+
+		return empty( $masked ) ? '' : '/' . implode( '/', \array_slice( $masked, 0, $max ) ) . ( $is_uri && \count( $masked ) > $max ? '/…' : '' );
+	}
+
+	/**
+	 * Mask one path segment or hook name so no id, email or token leaves the site.
+	 *
+	 * `{s}` for `@`, `%`, over-length, or 16+ characters with a digit (URL
+	 * segments only; hook names pass 64 as code identifiers). Every digit run
+	 * becomes `{n}`, except an API version segment such as `v1`.
+	 *
+	 * @param string $segment    Raw segment.
+	 * @param int    $max_length Longest segment kept, in bytes.
+	 *
+	 * @return string Masked segment.
+	 */
+	private static function mask_segment( string $segment, int $max_length = 32 ): string {
+		if ( preg_match( '/[@%]/', $segment ) || \strlen( $segment ) > $max_length || ( $max_length <= 32 && \strlen( $segment ) >= 16 && preg_match( '/\d/', $segment ) ) ) {
+			return '{s}';
+		}
+		if ( preg_match( '/^v\d{1,2}$/', $segment ) ) {
+			return $segment;
+		}
+		$masked = preg_replace( '/\d+/', '{n}', $segment );
+
+		return \is_string( $masked ) ? $masked : '{s}';
 	}
 
 	/**
