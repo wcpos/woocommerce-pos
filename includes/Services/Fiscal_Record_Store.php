@@ -19,7 +19,7 @@ final class Fiscal_Record_Store {
 	use Owned_Table;
 
 	/** PHP validation keeps the portable schema free of ENUMs. */
-	public const TYPES = array( 'sale', 'refund', 'void', 'cancellation', 'late_sale', 'late_refund', 'late_movement', 'recount' );
+	public const TYPES = array( 'sale', 'refund', 'void', 'cancellation', 'late_sale', 'late_refund', 'late_movement', 'recount', 'reattribution' );
 	/** Bound payload-heavy read responses. */
 	public const MAX_PER_PAGE = 200;
 	/** Keep ordinary history reads small. */

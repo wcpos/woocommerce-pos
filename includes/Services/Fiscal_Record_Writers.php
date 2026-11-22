@@ -96,7 +96,7 @@ final class Fiscal_Record_Writers {
 	/**
 	 * Insert through the store and make a failed write visible on the order.
 	 *
-	 * The business transition has already happened when a writer runs, so a
+	 * Except for reattribution, the business transition has already happened, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
 	 * sale row is recovered by the next money command or refund on the order, or the payments sweep (recover());
 	 * every failure is surfaced as an order note and an action for a recovery job.
@@ -109,8 +109,10 @@ final class Fiscal_Record_Writers {
 			return true;
 		}
 		$type = (string) ( $fields['type'] ?? '' );
-		/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
-		$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
+		if ( 'reattribution' !== $type ) {
+			/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
+			$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
+		}
 		/**
 		 * Fires when a write-once fiscal record could not be inserted.
 		 *
@@ -121,6 +123,57 @@ final class Fiscal_Record_Writers {
 		do_action( 'wcpos_fiscal_record_failed', $type, $order, $fields );
 		do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( $type, $order, $fields ), '2.0.0', 'wcpos_fiscal_record_failed' );
 		return false;
+	}
+
+	/**
+	 * Append an attribution correction to the latest sale, outside all session and closure figures.
+	 *
+	 * @param WC_Order $order       Order whose attribution changed.
+	 * @param int      $actor_id    Acting user.
+	 * @param int      $old_cashier Previous cashier.
+	 * @param int      $new_cashier Current cashier.
+	 * @param string   $old_store   Previous store.
+	 * @param string   $new_store   Current store.
+	 */
+	public function record_reattribution( WC_Order $order, int $actor_id, int $old_cashier, int $new_cashier, string $old_store, string $new_store ): bool {
+		$latest = Completion_History::of( $order )->latest();
+		if ( is_array( $latest ) ) {
+			$this->recover( $order );
+		}
+		$sale = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : $this->store->find_sale( $order->get_id() );
+		if ( null === $sale ) {
+			return ! is_array( $latest ) || ! empty( $latest['legacy'] );
+		}
+		$changes = array();
+		foreach ( array(
+			'cashier' => array( $old_cashier, $new_cashier ),
+			'store' => array( $old_store, $new_store ),
+		) as $field => $values ) {
+			if ( $values[0] !== $values[1] ) {
+				$changes[] = array(
+					'field' => $field,
+					'from' => $values[0],
+					'to' => $values[1],
+				);
+			}
+		}
+		return $this->write(
+			$order,
+			array(
+				'type' => 'reattribution',
+				'order_id' => $order->get_id(),
+				'corrects_record_id' => $sale['id'],
+				'source_id' => wp_generate_uuid4(),
+				'cashier_id' => $new_cashier,
+				'store_id' => ctype_digit( $new_store ) && (int) $new_store > 0 ? (int) $new_store : null,
+				'approver_id' => $actor_id,
+				'payload' => array(
+					'changes' => $changes,
+					'changed_by' => $actor_id,
+					'changed_at_gmt' => current_time( 'mysql', true ),
+				),
+			)
+		);
 	}
 
 	/**
@@ -159,6 +212,7 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		try {
+			Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 			$fresh = wc_get_order( $order->get_id() );
 			if ( ! $fresh instanceof WC_Order ) {
 				return;
@@ -313,6 +367,7 @@ final class Fiscal_Record_Writers {
 	 */
 	public function retry( WC_Order $order ): void {
 		$this->recover( $order );
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$fresh = wc_get_order( $order->get_id() );
 		if ( ! $fresh instanceof WC_Order ) {
 			return;
@@ -688,6 +743,7 @@ final class Fiscal_Record_Writers {
 				(string) $provenance['session_id'],
 				function () use ( $order, $refund_id, $provenance ): void {
 					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					Order_Meta_Store::forget_datastore_cache( $refund_id );
 					$fresh = wc_get_order( $refund_id );
 					if ( ! $fresh instanceof WC_Order_Refund ) {
 						return;
@@ -943,6 +999,7 @@ final class Fiscal_Record_Writers {
 				$session_id,
 				function () use ( $order, $row, $refund, $amount, $session_id ): void {
 					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					Order_Meta_Store::forget_datastore_cache( $refund->get_id() );
 					$fresh = wc_get_order( $refund->get_id() );
 					if ( $fresh instanceof WC_Order_Refund ) {
 						$fresh->read_meta_data( true );

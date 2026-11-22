@@ -82,3 +82,9 @@ updates:
       # Pinned exactly: 0.17+ drops the PHP 7.4 platform target this build
       # resolves against, and the config still uses 0.16's `whitelist` key.
       - dependency-name: "humbug/php-scoper"
+      # Pinned at 3.2.0: 3.4.0 calls trigger_deprecation() (symfony/deprecation-contracts, not
+      # shipped), which php-scoper prefixes into WCPOS\Vendor where nothing defines it, a
+      # runtime fatal caught by Vendor_Prefixed_Call_Audit_Test (#2671). Unpin when the
+      # scoped build defines or patches that call (#2678).
+      - dependency-name: "guzzlehttp/psr7"
+        versions: [">3.2.0"]

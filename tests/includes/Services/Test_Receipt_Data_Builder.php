@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Services\Register_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Services\Receipt_Money_Formatter;
+use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
@@ -1954,6 +1955,171 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 0.0, (float) $line['qty'] );
 		$this->assertEquals( 0.0, (float) $line['unit_price_incl'] );
 		$this->assertEquals( 0.0, (float) $line['unit_price_excl'] );
+	}
+
+	/**
+	 * Test a returned (negative) line keeps its signed quantity and a positive unit price.
+	 */
+	public function test_build_negative_line_keeps_signed_quantity_and_unit_price(): void {
+		// Arrange: 2 sold at 10.00 and 1 returned at 10.00, taxes off.
+		update_option( 'woocommerce_calc_taxes', 'no' );
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Sold Product' );
+		$product->set_regular_price( '10.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 2 );
+		$returned = new \WC_Order_Item_Product();
+		$returned->set_name( 'Returned Product' );
+		$returned->set_quantity( -1 );
+		$returned->set_subtotal( -10 );
+		$returned->set_total( -10 );
+		$order->add_item( $returned );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$sold_line     = $payload['lines'][0];
+		$returned_line = $payload['lines'][1];
+		$this->assertSame( -1.0, $returned_line['qty'] );
+		$this->assertEqualsWithDelta( 10.0, $returned_line['unit_price_incl'], 0.001 );
+		$this->assertEqualsWithDelta( 10.0, $returned_line['unit_price_excl'], 0.001 );
+		$this->assertEqualsWithDelta( 10.0, $returned_line['unit_subtotal_incl'], 0.001 );
+		$this->assertEqualsWithDelta( -10.0, $returned_line['line_total_incl'], 0.001 );
+		$this->assertSame( 2.0, $sold_line['qty'] );
+		$this->assertEqualsWithDelta( 10.0, $sold_line['unit_price_incl'], 0.001 );
+		$this->assertSame( 1.0, $payload['totals']['total_qty'] );
+	}
+
+	/**
+	 * A returned on-sale line shows no savings, and nets the sale's savings to zero.
+	 */
+	public function test_build_returned_line_with_pos_sale_price_has_no_line_savings(): void {
+		// Arrange: one sold and one returned at 15.00, regular 18.00.
+		$order = $this->create_signed_pos_price_order(
+			array(
+				array( 1, 15.0, '15', '18' ),
+				array( -1, -15.0, '15', '18' ),
+			)
+		);
+
+		// Act.
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Assert.
+		$sold_line     = $payload['lines'][0];
+		$returned_line = $payload['lines'][1];
+		$this->assertSame( 0.0, $returned_line['line_savings'] );
+		$this->assertSame( 0.0, $returned_line['line_savings_incl'] );
+		$this->assertSame( 0.0, $returned_line['line_savings_excl'] );
+		$this->assertSame( -1.0, $returned_line['qty'] );
+		foreach ( array( 'line_regular_total', 'line_regular_total_incl', 'line_regular_total_excl', 'line_selling_total', 'line_selling_total_incl', 'line_selling_total_excl' ) as $key ) {
+			$this->assertSame( 0.0, $returned_line[ $key ], $key );
+		}
+		$this->assertSame( 15.0, $returned_line['unit_price'] );
+		$this->assertSame( -15.0, $returned_line['line_total'] );
+		$this->assertSame( 3.0, $sold_line['line_savings'] );
+		$this->assertSame( 0.0, $payload['totals']['sale_savings_total'] );
+		$this->assertSame( 0.0, $payload['totals']['total_saved'] );
+	}
+
+	/**
+	 * A full-price sale with an on-sale return never reports a negative saved total.
+	 */
+	public function test_build_full_price_sale_with_on_sale_return_never_saves_a_negative_total(): void {
+		// Arrange: sold at full price 20.00, returned at 15.00 against regular 18.00.
+		$order = $this->create_signed_pos_price_order(
+			array(
+				array( 1, 20.0, '20', '20' ),
+				array( -1, -15.0, '15', '18' ),
+			)
+		);
+
+		// Act.
+		$totals = $this->builder->build( $order, 'live' )['totals'];
+
+		// Assert.
+		foreach ( array( 'total_saved', 'total_saved_incl', 'total_saved_excl', 'sale_savings_total', 'sale_savings_total_incl', 'sale_savings_total_excl' ) as $key ) {
+			$this->assertSame( 0.0, $totals[ $key ], $key );
+		}
+	}
+
+	/**
+	 * WooCommerce raises a returned line's legacy subtotal (below its total) to the total
+	 * on every read, so the builder never sees the pre-1.9 shape on a return.
+	 */
+	public function test_build_returned_line_stored_in_pre_1_9_shape_is_read_back_clamped_to_its_total(): void {
+		// Arrange.
+		update_option( 'woocommerce_calc_taxes', 'no' );
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos', '1' );
+		$item = new \WC_Order_Item_Product();
+		$item->set_name( 'Returned Product' );
+		$item->set_quantity( -1 );
+		$item->set_total( -15.0 );
+		$item->set_subtotal( -18.0 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => '15',
+				'regular_price' => '18',
+				'tax_status'    => 'none',
+			)
+		);
+		$order->add_item( $item );
+		$order->save();
+		$this->assertSame( -18.0, (float) wc_get_order_item_meta( $item->get_id(), '_line_subtotal', true ) );
+
+		// Act.
+		$read      = wc_get_order( $order->get_id() );
+		$read_item = array_values( $read->get_items( 'line_item' ) )[0];
+		$line      = $this->builder->build( $read, 'live' )['lines'][0];
+
+		// Assert.
+		$this->assertSame( -15.0, (float) $read_item->get_subtotal() );
+		$this->assertSame( -15.0, (float) $read_item->get_total() );
+		$this->assertSame( -15.0, $line['line_subtotal_excl'] );
+		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Create a taxless POS order whose lines carry signed quantities and recorded prices.
+	 *
+	 * @param array $lines Rows of array( qty, line total, recorded price, recorded regular price ).
+	 *
+	 * @return \WC_Order
+	 */
+	private function create_signed_pos_price_order( array $lines ): \WC_Order {
+		update_option( 'woocommerce_calc_taxes', 'no' );
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos', '1' );
+		foreach ( $lines as $row ) {
+			list( $qty, $total, $price, $regular_price ) = $row;
+			$item = new \WC_Order_Item_Product();
+			$item->set_name( $qty < 0 ? 'Returned Product' : 'Sold Product' );
+			$item->set_quantity( $qty );
+			$item->set_subtotal( $total );
+			$item->set_total( $total );
+			POSLineItemHelper::add_pos_data_to_item(
+				$item,
+				array(
+					'price'         => $price,
+					'regular_price' => $regular_price,
+					'tax_status'    => 'none',
+				)
+			);
+			$order->add_item( $item );
+		}
+		$order->calculate_totals( false );
+		$order->save();
+
+		return wc_get_order( $order->get_id() );
 	}
 
 	/**

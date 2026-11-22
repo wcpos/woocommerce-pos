@@ -12,6 +12,7 @@ use WCPOS\Vendor\Sentry\Integration\IntegrationRegistry;
 use WCPOS\Vendor\Sentry\Serializer\RepresentationSerializer;
 use WCPOS\Vendor\Sentry\Serializer\RepresentationSerializerInterface;
 use WCPOS\Vendor\Sentry\State\Scope;
+use WCPOS\Vendor\Sentry\Transport\DataCategory;
 use WCPOS\Vendor\Sentry\Transport\Result;
 use WCPOS\Vendor\Sentry\Transport\TransportInterface;
 /**
@@ -30,7 +31,7 @@ class Client implements ClientInterface
     /**
      * The version of the SDK.
      */
-    public const SDK_VERSION = '4.35.0';
+    public const SDK_VERSION = '4.37.0';
     /**
      * Regex pattern to detect if a string is a regex pattern (starts and ends with / optionally followed by flags).
      * Supported flags: i (case-insensitive), m (multiline), s (dotall), u (unicode).
@@ -127,6 +128,7 @@ class Client implements ClientInterface
         $className = \get_class($exception);
         if ($this->shouldIgnoreException($className)) {
             $this->logger->info('The exception will be discarded because it matches an entry in "ignore_exceptions".', ['className' => $className]);
+            ClientReportAggregator::getInstance()->add(DataCategory::error(), Reason::eventProcessor(), 1);
             return null;
             // short circuit to avoid unnecessary processing
         }
@@ -149,7 +151,6 @@ class Client implements ClientInterface
             return null;
         }
         try {
-            /** @var Result $result */
             $result = $this->transport->send($event);
             $event = $result->getEvent();
             if ($event !== null) {
@@ -263,20 +264,32 @@ class Client implements ClientInterface
         }
         if ($scope !== null) {
             $beforeEventProcessors = $event;
+            $spanCountBeforeEventProcessors = \count($event->getSpans());
             $event = $scope->applyToEvent($event, $hint, $this->options);
             if ($event === null) {
                 $this->logger->info(\sprintf('The %s will be discarded because one of the event processors returned "null".', $eventDescription), ['event' => $beforeEventProcessors]);
                 ClientReportAggregator::getInstance()->addEvent($beforeEventProcessors, Reason::eventProcessor());
                 return null;
             }
+            $this->recordRemovedSpans($spanCountBeforeEventProcessors, $event, Reason::eventProcessor());
         }
         $beforeSendCallback = $event;
+        $spanCountBeforeSendCallback = \count($event->getSpans());
         $event = $this->applyBeforeSendCallback($event, $hint);
         if ($event === null) {
             $this->logger->info(\sprintf('The %s will be discarded because the "%s" callback returned "null".', $eventDescription, $this->getBeforeSendCallbackName($beforeSendCallback)), ['event' => $beforeSendCallback]);
             ClientReportAggregator::getInstance()->addEvent($beforeSendCallback, Reason::beforeSend());
+            return null;
         }
+        $this->recordRemovedSpans($spanCountBeforeSendCallback, $event, Reason::beforeSend());
         return $event;
+    }
+    private function recordRemovedSpans(int $spanCountBefore, Event $event, Reason $reason) : void
+    {
+        $removedSpans = $spanCountBefore - \count($event->getSpans());
+        if ($removedSpans > 0) {
+            ClientReportAggregator::getInstance()->add(DataCategory::span(), $reason, $removedSpans);
+        }
     }
     private function getEventDescription(Event $event) : string
     {
@@ -380,6 +393,7 @@ class Client implements ClientInterface
             foreach ($exceptions as $exception) {
                 if ($this->shouldIgnoreException($exception->getType())) {
                     $this->logger->info(\sprintf('The %s will be discarded because it matches an entry in "ignore_exceptions".', $eventDescription), ['event' => $event]);
+                    ClientReportAggregator::getInstance()->addEvent($event, Reason::eventProcessor());
                     return null;
                 }
             }
@@ -388,6 +402,7 @@ class Client implements ClientInterface
             $transactionName = $event->getTransaction();
             if ($transactionName !== null && $this->shouldIgnoreTransaction($transactionName)) {
                 $this->logger->info(\sprintf('The %s will be discarded because it matches a entry in "ignore_transactions".', $eventDescription), ['event' => $event]);
+                ClientReportAggregator::getInstance()->addEvent($event, Reason::eventProcessor());
                 return null;
             }
             $statusCode = $this->getTransactionHttpStatusCode($event);

@@ -48,6 +48,13 @@ class Products {
 	private $pos_only_exclusions = array();
 
 	/**
+	 * The last post__not_in hide_pos_only_products() wrote, and the ids it merged in.
+	 *
+	 * @var array{not_in: int[], ids: int[]}|null
+	 */
+	private $last_applied = null;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -169,6 +176,9 @@ class Products {
 	 * @param \WP_Query $query The query being filtered.
 	 */
 	public function hide_pos_only_products( \WP_Query $query ): void {
+		if ( ! $this->is_product_query( $query ) ) {
+			return;
+		}
 		if ( ! $this->should_hide_pos_only_products( $query ) ) {
 			return;
 		}
@@ -192,6 +202,10 @@ class Products {
 			$existing_excludes = array();
 		}
 		$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
+		$this->last_applied = array(
+			'not_in' => $query->get( 'post__not_in' ),
+			'ids'    => $exclude_ids,
+		);
 	}
 
 	/**
@@ -208,10 +222,18 @@ class Products {
 	public function exclude_pos_only_products_from_where( $where, $query ) {
 		global $wpdb;
 
+		if ( ! $this->is_product_query( $query ) ) {
+			return $where;
+		}
 		if ( $this->should_hide_pos_only_products( $query ) ) {
 			$exclusion = $this->get_pos_only_excluded_ids( $query );
+			// The last post__not_in hide_pos_only_products() wrote holds every one of the ids it wrote; when
+			// this query still carries that array and the ids are unchanged, the re-check would find nothing.
+			$applied = null !== $this->last_applied
+				&& $this->last_applied['not_in'] === $query->get( 'post__not_in' )
+				&& $this->last_applied['ids'] === $exclusion['ids'];
 			if ( $query->get( 'p' ) || ! empty( $query->get( 'post__in' ) )
-				|| array_diff( $exclusion['ids'], array_map( 'absint', (array) $query->get( 'post__not_in' ) ) )
+				|| ( ! $applied && array_diff( $exclusion['ids'], array_map( 'absint', (array) $query->get( 'post__not_in' ) ) ) )
 				|| false === strpos( $where, " AND {$wpdb->posts}.ID NOT IN (" ) ) {
 				$where .= $exclusion['sql'];
 			}
@@ -235,6 +257,17 @@ class Products {
 
 		$settings = Settings::instance();
 		return $settings->is_product_pos_only( $product_id ) || $settings->is_variation_pos_only( $product_id ) ? false : $visible;
+	}
+
+	/**
+	 * Whether the query's post types include products or variations.
+	 *
+	 * @param \WP_Query $query The query being filtered.
+	 */
+	private function is_product_query( \WP_Query $query ): bool {
+		$post_types = (array) $query->get( 'post_type' );
+
+		return \in_array( 'product', $post_types, true ) || \in_array( 'product_variation', $post_types, true );
 	}
 
 	/**

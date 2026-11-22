@@ -216,6 +216,10 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		delete_option( Sync_Api::SCHEMA_OPTION );
 
 		$expected = array(
+			// Error_Reporter tracks the executing Action Scheduler action for fatal reports (#2696).
+			'action_scheduler_after_execute'                        => array( 10 ),
+			'action_scheduler_begin_execute'                        => array( 10 ),
+			'action_scheduler_failed_execution'                     => array( 10 ),
 			'activated_plugin'                                      => array( 10 ),
 			'admin_enqueue_scripts'                                 => array( 10 ),
 			'admin_init'                                            => array( 10 ),
