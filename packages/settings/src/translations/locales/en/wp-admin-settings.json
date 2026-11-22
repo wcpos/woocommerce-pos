@@ -133,7 +133,7 @@
 	"checkout.hpos_notice_docs_link": "How to switch",
 	"access.default_roles_warning": "By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles. It is recommended that you <strong>do not change</strong> the default settings unless you are fully aware of the consequences.",
 	"access.visit_documentation": "For more information please visit the <a>documentation</a>.",
-	"access.tasks_title_role": "What a {role} can do",
+	"access.tasks_title_role": "What the {role} role can do",
 	"access.defaults_changed": "Changed from the WCPOS defaults",
 	"access.defaults_in_use": "Using the WCPOS defaults",
 	"access.restore_defaults": "Restore defaults",

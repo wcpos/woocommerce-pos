@@ -346,7 +346,7 @@ describe('Access screen defaults and mixed tasks', () => {
 		expect(screen.getByTestId('access-restore-defaults')).toBeDisabled();
 		expect(screen.getByText('Using the WCPOS defaults')).toBeInTheDocument();
 		expect(
-			screen.getByRole('heading', { name: 'What a Administrator can do' })
+			screen.getByRole('heading', { name: 'What the Administrator role can do' })
 		).toBeInTheDocument();
 		expect(screen.getByTestId('access-role-administrator').querySelector('[title]')).toBeNull();
 	});
