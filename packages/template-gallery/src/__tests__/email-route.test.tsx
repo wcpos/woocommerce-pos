@@ -16,19 +16,25 @@ vi.mock('@wcpos/ui', async (importOriginal) => ({
 }));
 
 describe('email designs route', () => {
-	it('edits both design statuses and applies or disables only a published design', async () => {
+	it.each([false, true])('saves designs and the default (unavailable: %s)', async (unavailable) => {
 		const designs = [
 			{ id: 13, title: 'Market design', status: 'publish' },
 			{ id: 27, title: 'New look', status: 'draft' },
 		];
 		const endpoint = 'wcpos/v1/templates/customer-email-design?wcpos=1';
 		let templateId = 0;
+		let unavailableDesign = unavailable;
 		const fetch = vi.fn<Parameters<typeof apiFetch.setFetchHandler>[0]>((options) => {
 			if (!options.path?.startsWith(endpoint)) return Promise.resolve([]);
 			if (options.method === 'POST') {
 				templateId = (options.data as { template_id: number }).template_id;
+				unavailableDesign = false;
 			}
-			return Promise.resolve({ template_id: templateId, designs });
+			return Promise.resolve({
+				template_id: templateId,
+				unavailable_design: unavailableDesign,
+				designs,
+			});
 		});
 		apiFetch.setFetchHandler(fetch);
 		const router = createRouter({
@@ -66,17 +72,26 @@ describe('email designs route', () => {
 			expect(Array.from(select.options, (option) => option.value)).toEqual(['0', '13']);
 			expect(select.value).toBe('0');
 
-			for (const id of [13, 0]) {
+			const form = container.querySelector('form')!;
+			expect(form.querySelector('button')?.disabled).toBe(!unavailable);
+			expect(container.textContent?.includes('email.previous_design_unavailable')).toBe(
+				unavailable
+			);
+
+			for (const id of unavailable ? [0, 13, 0] : [13, 0]) {
 				await act(async () => {
 					select.value = String(id);
 					select.dispatchEvent(new Event('change', { bubbles: true }));
 				});
-				const form = container.querySelector('form')!;
 				await act(async () => {
 					form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 				});
 				await vi.waitFor(() => {
+					expect(fetch).toHaveBeenLastCalledWith(
+						expect.objectContaining({ method: 'POST', data: { template_id: id } })
+					);
 					expect(templateId).toBe(id);
+					expect(container.textContent).not.toContain('email.previous_design_unavailable');
 					expect(form.querySelector('button')?.disabled).toBe(true);
 				});
 			}

@@ -13,7 +13,7 @@ const rootRoute = createRootRoute({
 
 function TemplateScreen() {
 	const { type } = useSearch({ from: '/' });
-	return type === 'email' ? <CustomerEmailDesigns /> : <GalleryGrid />;
+	return type === 'email' ? <CustomerEmailDesigns /> : <GalleryGrid type={type} />;
 }
 
 const indexRoute = createRoute({

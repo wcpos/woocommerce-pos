@@ -8,6 +8,7 @@ import { t } from '../translations';
 
 interface EmailDesignSettings {
 	template_id: number;
+	unavailable_design?: boolean;
 	designs: { id: number; title: string; status: 'publish' | 'draft' }[];
 }
 
@@ -51,13 +52,14 @@ export function CustomerEmailDesigns() {
 	}
 
 	const selected = selection ?? data.template_id;
+	const canSave = !save.isPending && (selected !== data.template_id || data.unavailable_design);
 	return (
 		<>
 			<form
 				className="wcpos:mb-6 wcpos:max-w-2xl wcpos:rounded wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:p-4"
 				onSubmit={(event) => {
 					event.preventDefault();
-					if (selected !== data.template_id && !save.isPending) save.mutate(selected);
+					if (canSave) save.mutate(selected);
 				}}
 			>
 				<label
@@ -86,14 +88,15 @@ export function CustomerEmailDesigns() {
 								</option>
 							))}
 					</select>
-					<button
-						type="submit"
-						className="button button-primary"
-						disabled={selected === data.template_id || save.isPending}
-					>
+					<button type="submit" className="button button-primary" disabled={!canSave}>
 						{t(save.isPending ? 'email.saving' : 'email.save')}
 					</button>
 				</div>
+				{data.unavailable_design && (
+					<p role="status" className="wcpos:mt-3 wcpos:mb-0">
+						{t('email.previous_design_unavailable')}
+					</p>
+				)}
 				<p className="wcpos:mt-3 wcpos:mb-0 wcpos:text-gray-600">{t('email.format_help')}</p>
 				{save.isError && (
 					<p role="alert">
