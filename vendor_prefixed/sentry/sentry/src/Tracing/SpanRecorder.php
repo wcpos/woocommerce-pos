@@ -3,6 +3,9 @@
 declare (strict_types=1);
 namespace WCPOS\Vendor\Sentry\Tracing;
 
+use WCPOS\Vendor\Sentry\ClientReport\ClientReportAggregator;
+use WCPOS\Vendor\Sentry\ClientReport\Reason;
+use WCPOS\Vendor\Sentry\Transport\DataCategory;
 final class SpanRecorder
 {
     /**
@@ -31,6 +34,7 @@ final class SpanRecorder
     {
         if (\count($this->spans) > $this->maxSpans) {
             $span->detachSpanRecorder();
+            ClientReportAggregator::getInstance()->add(DataCategory::span(), Reason::bufferOverflow(), 1);
         } else {
             $this->spans[] = $span;
         }

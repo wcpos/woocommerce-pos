@@ -54,7 +54,8 @@ trait Endpoint_Permissions {
 		}
 		// F13: refuse to serve/persist against a broken or still-installing store — 503,
 		// not a stale read or a silently-swallowed write.
-		if ( $this->health_gated() && ! Health::is_healthy() ) {
+		// A latched store that lost a table repairs only what is missing (Store_Repair), at most once per interval.
+		if ( $this->health_gated() && ! Health::is_healthy() && ! Store_Repair::repaired() ) {
 			return Health::unhealthy_error();
 		}
 
@@ -70,7 +71,7 @@ trait Endpoint_Permissions {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			return false;
 		}
-		if ( $this->health_gated() && ! Health::is_healthy() ) {
+		if ( $this->health_gated() && ! Health::is_healthy() && ! Store_Repair::repaired() ) {
 			return Health::unhealthy_error();
 		}
 

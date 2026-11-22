@@ -155,7 +155,10 @@ final class Integrity_Digest {
 		if ( ! function_exists( 'dbDelta' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		}
-		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
+		$table = $this->table_name();
+		dbDelta( $this->schema_sql( $table, $wpdb->get_charset_collate() ) );
+		$db_error = (string) $wpdb->last_error; // Read before the probe below clears it.
+		Health::log_if_missing( $table, $db_error );
 	}
 
 

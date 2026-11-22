@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
@@ -522,7 +523,7 @@ class Order_Writer extends Null_Writer {
 		require_once WC()->plugin_path() . '/includes/admin/wc-admin-functions.php';
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			list( $product_id, $variation_id, $reduced, $name ) = $bindings[ $item->get_id() ] ?? array( 0, 0, 0, '' );
-			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product
+			if ( 0 != $reduced && $item instanceof \WC_Order_Item_Product
 				&& ( $product_id !== $item->get_product_id() || $variation_id !== $item->get_variation_id() ) ) {
 				if ( ! $reduced_now ) {
 					self::move_stock( $order, $item->get_product(), $item->get_name(), $reduced, 'decrease' );
@@ -736,7 +737,7 @@ class Order_Writer extends Null_Writer {
 		$context['bindings'] = array();
 		foreach ( $context['adjust_stock'] ? $order->get_items( 'line_item' ) : array() as $item ) {
 			$reduced = wc_stock_amount( $item->get_meta( '_reduced_stock', true ) );
-			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product ) {
+			if ( 0 != $reduced && $item instanceof \WC_Order_Item_Product ) {
 				$context['bindings'][ $item->get_id() ] = array( $item->get_product_id(), $item->get_variation_id(), $reduced, $item->get_name() );
 			}
 		}
@@ -815,11 +816,34 @@ class Order_Writer extends Null_Writer {
 		$change       = $context['reassignment'];
 		$old_user     = $order->get_meta( '_pos_user' );
 		$old_store    = null !== $context['pre_store'] ? $context['pre_store'] : $order->get_meta( '_pos_store' );
-		$cashier_changed = isset( $change['_pos_user'] ) && is_numeric( $change['_pos_user'] )
-			&& (int) $change['_pos_user'] === $current_user && (string) $old_user !== (string) $current_user;
+		$new_user = isset( $change['_pos_user'] ) && is_numeric( $change['_pos_user'] ) ? (int) $change['_pos_user'] : null;
+		$cashier_allowed = $new_user === $current_user;
+		if ( null !== $new_user && ! $cashier_allowed && current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
+			$target_user = get_userdata( $new_user );
+			$cashier_allowed = $target_user && $target_user->has_cap( 'access_woocommerce_pos' );
+		}
+		$cashier_changed = null !== $new_user && $cashier_allowed && (string) $old_user !== (string) $new_user;
 		$store_changed = $context['store_authorized'] && (string) $old_store !== (string) $change['_pos_store'];
+		$reopens = 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' );
+		if ( ( $cashier_changed || $store_changed ) && ! $reopens && ! Fiscal_Record_Writers::instance()->record_reattribution(
+			$order,
+			$current_user,
+			(int) $old_user,
+			$cashier_changed ? $new_user : (int) $old_user,
+			(string) $old_store,
+			$store_changed ? (string) $change['_pos_store'] : (string) $old_store
+		) ) {
+			if ( $store_changed ) {
+				// fill_meta may already have persisted the requested store; restore the pre-push value.
+				$order->update_meta_data( '_pos_store', (string) $old_store );
+				$order->save();
+			}
+			$cashier_changed = false;
+			$store_changed = false;
+			$order->add_order_note( __( 'POS cashier or store change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
+		}
 		if ( $cashier_changed ) {
-			$order->update_meta_data( '_pos_user', (string) $current_user );
+			$order->update_meta_data( '_pos_user', (string) $new_user );
 		}
 		if ( $store_changed ) {
 			$order->update_meta_data( '_pos_store', (string) $change['_pos_store'] );
@@ -827,11 +851,11 @@ class Order_Writer extends Null_Writer {
 		if ( $cashier_changed || $store_changed ) {
 			$order->save();
 		}
-		if ( 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' ) ) {
+		if ( $reopens ) {
 			Order_Notes::add_reopen_note( $order, $current_user, $order->get_meta( '_pos_store' ) );
 		} else {
 			if ( $cashier_changed ) {
-				Order_Notes::add_cashier_change_note( $order, $old_user, $current_user );
+				Order_Notes::add_cashier_change_note( $order, $old_user, $new_user );
 			}
 			if ( $store_changed ) {
 				Order_Notes::add_store_change_note( $order, $old_store, $change['_pos_store'] );

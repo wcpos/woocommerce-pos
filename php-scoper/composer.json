@@ -12,6 +12,7 @@
     "chillerlan/php-qrcode": "^5.0",
     "dompdf/dompdf": "^3.1",
     "firebase/php-jwt": "^6.10.0",
+    "guzzlehttp/psr7": ">=3.2.0 <3.2.1",
     "picqer/php-barcode-generator": "^2.4",
     "sentry/sentry": "^4.31"
   },

@@ -15,6 +15,13 @@ use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 class Form_Handler {
 
 	/**
+	 * The order an authenticated POS pay POST is paying, or 0.
+	 *
+	 * @var int
+	 */
+	private $pay_order_id = 0;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -70,6 +77,8 @@ class Form_Handler {
 
 			self::assert_cashier_may_edit( $order );
 
+			$this->pay_order_id = $order->get_id();
+
 			// set customer.
 			wp_set_current_user( $order->get_customer_id() );
 
@@ -86,6 +95,16 @@ class Form_Handler {
 			 * Priority 20 so it wins over WC_Session_Handler's filter (priority 10).
 			 */
 			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 20, 2 );
+
+			/*
+			 * WooCommerce 11.3.1 refuses an order-pay POST for a guest order with a
+			 * billing email once the 10-minute grace period has passed, unless the
+			 * shopper verified the email. The WCPOS pay page has no email challenge,
+			 * and this request is already authenticated by the order key and the
+			 * cashier token, so lift the requirement for this order in the
+			 * 'order-pay' context only.
+			 */
+			add_filter( 'woocommerce_order_email_verification_required', array( $this, 'lift_order_pay_email_verification' ), 10, 3 );
 
 			/*
 			 * A WCPOS guest has no email and the pay page collects no billing
@@ -241,6 +260,24 @@ class Form_Handler {
 		}
 
 		return $uid;
+	}
+
+	/**
+	 * Lift WooCommerce's order-pay email verification (WC 11.3.1+) for the one
+	 * order an authenticated POS pay POST is paying; see pay_action().
+	 *
+	 * @param bool           $required Whether WooCommerce requires email verification.
+	 * @param \WC_Order|null $order    The order being checked, or null when a caller passes none.
+	 * @param string         $context  The verification context, or '' when a caller passes none.
+	 *
+	 * @return bool
+	 */
+	public function lift_order_pay_email_verification( $required, $order = null, $context = '' ) {
+		if ( 'order-pay' === $context && $order instanceof \WC_Order && $this->pay_order_id === $order->get_id() ) {
+			return false;
+		}
+
+		return $required;
 	}
 
 	/**
