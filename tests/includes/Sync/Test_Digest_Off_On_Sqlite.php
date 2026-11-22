@@ -1,6 +1,6 @@
 <?php
 /**
- * The integrity digest is switched off on SQLite (#2661).
+ * The integrity digest is switched off on SQLite (#2661): REST responses.
  *
  * The suite runs on MySQL/MariaDB, so the detector is forced through its test
  * override; every gate is exercised without a SQLite database.
@@ -10,7 +10,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
@@ -19,7 +18,7 @@ use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 
 /**
- * Digest gates behind Digest_Support::is_disabled().
+ * Digest-off REST responses: sequence log, scans, bucket listing, digests and rebuild.
  *
  * @covers \WCPOS\WooCommercePOS\Sync\Digest_Support
  * @covers \WCPOS\WooCommercePOS\Sync\Integrity_Digest
@@ -153,48 +152,6 @@ class Test_Digest_Off_On_Sqlite extends Sync_REST_Store_Test_Case {
 		$this->assertFalse( $data['meta']['supported'] );
 		$this->assertArrayNotHasKey( 'rebuilding', $data['meta'] );
 		$this->assertSame( 'Integrity digest is off on this database engine (SQLite); changes are tracked by the sequence log.', $data['meta']['note'] );
-	}
-
-	/**
-	 * (a) No save observer and no shutdown flush; only the Site Health test.
-	 */
-	public function test_register_hooks_when_disabled_adds_no_observers(): void {
-		// Arrange: setUp registered the hooks with the digest off.
-
-		// Act.
-		$product_observer  = has_action( 'woocommerce_update_product', array( $this->digest, 'record_post_saved' ) );
-		$customer_observer = has_action( 'profile_update', array( $this->digest, 'record_customer_saved' ) );
-		$order_observer    = has_action( 'woocommerce_update_order', array( $this->digest, 'record_order_saved' ) );
-		$shutdown_flush    = has_action( 'shutdown', array( Integrity_Digest::class, 'flush_pending_digests_at_shutdown' ) );
-		$site_health       = has_filter( 'site_status_tests', array( Integrity_Digest::class, 'site_status_tests' ) );
-
-		// Assert.
-		$this->assertFalse( $product_observer );
-		$this->assertFalse( $customer_observer );
-		$this->assertFalse( $order_observer );
-		$this->assertFalse( $shutdown_flush );
-		$this->assertNotFalse( $site_health );
-	}
-
-	/**
-	 * (b) Product, customer and order saves write no digest row and log nothing.
-	 */
-	public function test_saves_when_disabled_write_no_digest_rows_and_log_no_error(): void {
-		// Arrange.
-		$product = ProductHelper::create_simple_product();
-		$this->factory->user->create( array( 'role' => 'customer' ) );
-		$order = OrderHelper::create_order();
-
-		// Act: the flush stands in for shutdown.
-		$product->set_name( 'Renamed' );
-		$product->save();
-		$order->set_customer_note( 'saved again' );
-		$order->save();
-		Integrity_Digest::flush_pending_digests();
-
-		// Assert.
-		$this->assertSame( 0, $this->digest_rows() );
-		$this->assertSame( array(), $this->logged );
 	}
 
 	/**
@@ -356,42 +313,6 @@ class Test_Digest_Off_On_Sqlite extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * (h) The cron rebuild writes nothing and releases its lease.
-	 */
-	public function test_run_scheduled_rebuild_when_disabled_writes_nothing_and_releases_lease(): void {
-		// Arrange.
-		ProductHelper::create_simple_product();
-		Integrity_Digest::reset_request_state();
-		set_transient( Integrity_Digest::REBUILD_LOCK, 'lease-under-test', Integrity_Digest::REBUILD_LOCK_TTL );
-
-		// Act.
-		Integrity_Digest::run_scheduled_rebuild();
-
-		// Assert.
-		$this->assertSame( 0, $this->digest_rows() );
-		$this->assertFalse( get_transient( Integrity_Digest::REBUILD_LOCK ) );
-		$this->assertSame( array(), $this->logged );
-	}
-
-	/**
-	 * (i) Site Health carries one recommended notice.
-	 */
-	public function test_site_health_when_disabled_reports_recommended_notice(): void {
-		// Arrange.
-		$tests = array( 'direct' => array() );
-
-		// Act.
-		$tests  = apply_filters( 'site_status_tests', $tests ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WP core hook.
-		$result = Integrity_Digest::site_health_test();
-
-		// Assert.
-		$this->assertArrayHasKey( 'wcpos_sync_digest_sqlite', $tests['direct'] );
-		$this->assertSame( array( Integrity_Digest::class, 'site_health_test' ), $tests['direct']['wcpos_sync_digest_sqlite']['test'] );
-		$this->assertSame( 'recommended', $result['status'] );
-		$this->assertSame( 'wcpos_sync_digest_sqlite', $result['test'] );
-	}
-
-	/**
 	 * (j) The admin rebuild is not implemented on this engine.
 	 */
 	public function test_rebuild_endpoint_when_disabled_returns_501(): void {
@@ -405,29 +326,5 @@ class Test_Digest_Off_On_Sqlite extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 501, $response->get_status() );
 		$this->assertSame( 'woocommerce_pos_sync_integrity_unavailable', $response->get_data()['code'] );
 		$this->assertSame( 0, $this->digest_rows() );
-	}
-
-	/**
-	 * (k) On MySQL nothing changes: observers register and no notice is added.
-	 */
-	public function test_register_hooks_when_not_disabled_keeps_observers_and_adds_no_notice(): void {
-		// Arrange.
-		$this->remove_observer_callbacks( array( $this->digest ) );
-		remove_filter( 'site_status_tests', array( Integrity_Digest::class, 'site_status_tests' ) );
-		Digest_Support::set_override_for_tests( false );
-		$digest = new Integrity_Digest();
-
-		// Act.
-		$digest->register_hooks();
-		$observer = has_action( 'woocommerce_update_product', array( $digest, 'record_post_saved' ) );
-		$tests    = apply_filters( 'site_status_tests', array( 'direct' => array() ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WP core hook.
-		$this->remove_observer_callbacks( array( $digest ) );
-		Digest_Support::reset();
-		$detected = Digest_Support::is_disabled();
-
-		// Assert.
-		$this->assertSame( 10, $observer );
-		$this->assertArrayNotHasKey( 'wcpos_sync_digest_sqlite', $tests['direct'] );
-		$this->assertFalse( $detected );
 	}
 }
