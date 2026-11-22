@@ -17,6 +17,7 @@ use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WCPOS\WooCommercePOS\Payments\Idempotency_Repository;
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WP_Error;
 use WP_REST_Request;
@@ -282,6 +283,15 @@ class Checkout_Controller extends WC_REST_Controller {
 				/* translators: REST API schema field label or error message. */
 				__( 'Order not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
+			);
+		}
+
+		// Checkout on an order needs the right to edit that order.
+		if ( true !== Permission_Rules::verdict( 'orders', 'edit', $order_id, 0, 'v1' ) ) {
+			return new WP_Error(
+				'wcpos_rest_cannot_edit_order',
+				__( 'Sorry, you are not allowed to edit this order.', 'woocommerce-pos' ),
+				array( 'status' => rest_authorization_required_code() )
 			);
 		}
 

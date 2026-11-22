@@ -958,25 +958,57 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that manual email endpoint handles invalid email address.
-	 *
-	 * Note: Currently the endpoint accepts any string as email and relies on WooCommerce
-	 * to handle/fail the actual send. This test documents current behavior.
-	 * TODO: Consider adding email format validation to the endpoint.
+	 * The manual email endpoint refuses a value that is not an email address.
 	 */
-	public function test_manual_email_accepts_string_email(): void {
-		$order = OrderHelper::create_order();
-
+	public function test_send_email_invalid_address_returns_400(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
 		$request->set_body_params(
 			array(
-				'email' => 'invalid-email-address',
+				'email'   => 'invalid-email-address',
+				'save_to' => 'billing',
 			)
 		);
+
+		// Act.
 		$response = $this->server->dispatch( $request );
 
-		// Currently accepts any string - WooCommerce handles validation during send
-		$this->assertEquals( 200, $response->get_status(), 'Endpoint accepts any string as email' );
+		// Assert.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		$this->assertNotSame( 'invalid-email-address', wc_get_order( $order->get_id() )->get_billing_email() );
+	}
+
+	/**
+	 * Saving the address to another cashier's order needs edit_others_shop_orders.
+	 */
+	public function test_send_email_save_to_billing_non_owner_returns_403(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_user', (string) get_current_user_id() );
+		$order->save();
+		$billing_before = $order->get_billing_email();
+		$staff          = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		foreach ( array( 'access_woocommerce_pos', 'publish_shop_orders', 'edit_shop_orders' ) as $cap ) {
+			$staff->add_cap( $cap );
+		}
+		wp_set_current_user( $staff->ID );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
+		$request->set_body_params(
+			array(
+				'email'   => 'someone-else@example.com',
+				'save_to' => 'billing',
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'wcpos_rest_cannot_edit_order', $response->get_data()['code'] );
+		$this->assertSame( $billing_before, wc_get_order( $order->get_id() )->get_billing_email() );
 	}
 
 	/**

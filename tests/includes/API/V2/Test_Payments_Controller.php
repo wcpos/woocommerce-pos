@@ -558,6 +558,40 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'rest_forbidden', $response->get_data()['code'] );
 	}
 
+	/** Recording a payment on another cashier's order needs edit_others_shop_orders. */
+	public function test_record_payment_non_owner_without_edit_others_returns_403(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$order->update_meta_data( '_pos_user', (string) get_current_user_id() );
+		$order->save();
+		wp_set_current_user( $this->create_staff_without_edit_others() );
+
+		// Act.
+		$response = $this->record( $order, $this->payment( 'pos_cash', '92.95', array( 'tendered' => '100.00' ) ) );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'wcpos_rest_cannot_edit_order', $response->get_data()['code'] );
+		$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/** A cashier without edit_others_shop_orders still records payments on their own order. */
+	public function test_record_payment_own_order_still_succeeds(): void {
+		// Arrange.
+		$cashier = $this->create_staff_without_edit_others();
+		$order   = $this->create_pos_order();
+		$order->update_meta_data( '_pos_user', (string) $cashier );
+		$order->save();
+		wp_set_current_user( $cashier );
+
+		// Act.
+		$response = $this->record( $order, $this->payment( 'pos_cash', '92.95', array( 'tendered' => '100.00' ) ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'captured', $response->get_data()['payment']['status'] );
+	}
+
 	/** A covered open order completes on close. */
 	public function test_close_on_a_covered_open_order_completes_it(): void {
 		// Arrange: money recorded without deriving.
@@ -2983,6 +3017,18 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/close' );
 		$request->set_body_params( $this->envelope( $order ) );
 		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * Create a POS user who may edit only their own orders.
+	 */
+	private function create_staff_without_edit_others(): int {
+		$user = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		foreach ( array( 'access_woocommerce_pos', 'publish_shop_orders', 'edit_shop_orders' ) as $cap ) {
+			$user->add_cap( $cap );
+		}
+
+		return $user->ID;
 	}
 
 	private function create_pos_order(): \WC_Order {

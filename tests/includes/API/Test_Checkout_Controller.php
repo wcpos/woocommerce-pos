@@ -359,6 +359,46 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( $data['terminal'] );
 	}
 
+	/** Checkout on another cashier's order needs edit_others_shop_orders. */
+	public function test_checkout_non_owner_without_edit_others_returns_403(): void {
+		// Arrange.
+		$order = $this->create_order_owned_by( get_current_user_id() );
+		wp_set_current_user( $this->create_staff_without_edit_others() );
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+		$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
+		$request->set_body_params(
+			array(
+				'gateway_id'   => 'pos_cash',
+				'action'       => 'start',
+				'payment_data' => array(
+					'amount_tendered' => '50.00',
+				),
+			)
+		);
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'wcpos_rest_cannot_edit_order', $response->get_data()['code'] );
+		$this->assertFalse( wc_get_order( $order->get_id() )->is_paid() );
+	}
+
+	/** Reading another cashier's checkout state needs edit_others_shop_orders. */
+	public function test_checkout_state_get_non_owner_returns_403(): void {
+		// Arrange.
+		$order = $this->create_order_owned_by( get_current_user_id() );
+		wp_set_current_user( $this->create_staff_without_edit_others() );
+
+		// Act.
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' ) );
+
+		// Assert.
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'wcpos_rest_cannot_edit_order', $response->get_data()['code'] );
+	}
+
 	/**
 	 * It scopes idempotent checkout replays to a single order.
 	 */
@@ -658,5 +698,36 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function get_claim_option_key( int $order_id, string $key ): string {
 		return 'wcpos_idempotency_claim_' . md5( 'checkout:' . $order_id . '|' . $key );
+	}
+
+	/**
+	 * Create a POS user who may edit only their own orders.
+	 */
+	private function create_staff_without_edit_others(): int {
+		$user = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		foreach ( array( 'access_woocommerce_pos', 'publish_shop_orders', 'edit_shop_orders' ) as $cap ) {
+			$user->add_cap( $cap );
+		}
+
+		return $user->ID;
+	}
+
+	/**
+	 * Create an unpaid POS cash order assigned to a cashier.
+	 *
+	 * @param int $cashier_id Cashier the order is assigned to.
+	 */
+	private function create_order_owned_by( int $cashier_id ): \WC_Order {
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'pos_cash',
+				'total'          => '50.00',
+			)
+		);
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos_user', (string) $cashier_id );
+		$order->save();
+
+		return $order;
 	}
 }
