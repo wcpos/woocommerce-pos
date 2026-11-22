@@ -81,7 +81,8 @@ class Emails {
 	public function customer_order_details_template( $path, $name, $args ): string {
 		if ( 'emails/email-order-details.php' !== $name || ! empty( $args['wcpos_default_details'] )
 			|| empty( $args['email'] ) || ! $args['email'] instanceof WC_Email || 'customer_completed_order' !== $args['email']->id
-			|| ! empty( $args['sent_to_admin'] ) || empty( $args['order'] ) || ! $args['order'] instanceof WC_Order
+			|| ! empty( $args['email']->block_email_editor_enabled ) || ! empty( $args['sent_to_admin'] )
+			|| empty( $args['order'] ) || ! $args['order'] instanceof WC_Order
 			|| ! wcpos_is_pos_order( $args['order'] ) || ! Customer_Email_Design::active() ) {
 			return $path;
 		}

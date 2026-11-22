@@ -189,6 +189,33 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 			$this->assertStringNotContainsString( 'Juniper counter', $emails[ $key ]->get_content_html() );
 		}
 	}
+
+	/** Woo's block editor renders its own order table through the classic template hook. */
+	public function test_block_email_keeps_woocommerce_order_details(): void {
+		$email = WC()->mailer()->get_emails()['WC_Email_Customer_Completed_Order'];
+		if ( ! method_exists( $email, 'get_block_editor_email_template_content' ) ) {
+			$this->markTestSkipped( 'This WooCommerce version has no block email editor.' );
+		}
+		$id = $this->design( '<p>Juniper counter {{order.number}}</p>' );
+		$this->assertSame( 200, $this->select( $id )->get_status() );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		$previous_order   = $email->object;
+		$previous_setting = $email->block_email_editor_enabled;
+		try {
+			$email->object                     = $order;
+			$email->block_email_editor_enabled = true;
+			$html = $email->get_block_editor_email_template_content();
+			$this->assertStringNotContainsString( 'Juniper counter', $html );
+			$this->assertStringContainsString( current( $order->get_items() )->get_name(), $html );
+		} finally {
+			$email->object                     = $previous_order;
+			$email->block_email_editor_enabled = $previous_setting;
+		}
+	}
+
 	/** Only a published, logic-less email design can be activated. */
 	public function test_invalid_designs_cannot_replace_an_active_design(): void {
 		$id = $this->design( '<p>Amber</p>' );
