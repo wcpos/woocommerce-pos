@@ -68,7 +68,7 @@ final class Status_Controller extends WP_REST_Controller {
 		/**
 		 * Filters the capability names `/wcpos/v2/status` advertises: plugins (Pro) append the names of features they serve.
 		 *
-		 * @since 2.0.5
+		 * @since 2.0.6
 		 *
 		 * @param string[]        $capabilities The core capability names.
 		 * @param WP_REST_Request $request      Request object.

@@ -375,6 +375,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	public function test_sync_status_appends_filtered_capabilities_after_the_core_names(): void {
 		// Arrange.
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+		$core   = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) )->get_data()['capabilities'];
 		$append = static function ( $capabilities ) {
 			$capabilities[] = 'order_complete';
 			return $capabilities;
@@ -386,7 +387,8 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		remove_filter( 'wcpos_status_capabilities', $append );
-		$this->assertSame( array( 'products_id_fast_path', 'order_complete' ), $data['capabilities'] );
+		$this->assertContains( 'products_id_fast_path', $core );
+		$this->assertSame( array_merge( $core, array( 'order_complete' ) ), $data['capabilities'] );
 	}
 
 	/**
@@ -395,6 +397,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	public function test_sync_status_keeps_core_capabilities_when_a_filter_drops_them(): void {
 		// Arrange.
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+		$core     = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) )->get_data()['capabilities'];
 		$replace  = static function () {
 			return array( 'x', '', 7, 'x' );
 		};
@@ -411,7 +414,8 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		remove_filter( 'wcpos_status_capabilities', $nonsense );
 
 		// Assert.
-		$this->assertSame( array( 'products_id_fast_path', 'x' ), $replaced['capabilities'] );
-		$this->assertSame( array( 'products_id_fast_path' ), $scalar['capabilities'] );
+		$this->assertContains( 'products_id_fast_path', $core );
+		$this->assertSame( array_merge( $core, array( 'x' ) ), $replaced['capabilities'] );
+		$this->assertSame( $core, $scalar['capabilities'] );
 	}
 }
