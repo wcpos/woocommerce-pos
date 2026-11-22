@@ -258,6 +258,171 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( ( new Register_Session_Store() )->get( $fields['session_id'] ) );
 	}
 
+	/** Dispatch a v2 write under the given store reach answer.
+	 *
+	 * @param array  $answer Store reach filter answer.
+	 * @param string $route Resource path.
+	 * @param array  $fields Request fields.
+	 */
+	private function post_in_reach( array $answer, string $route, array $fields ) {
+		$reach = static function () use ( $answer ) {
+			return $answer;
+		};
+		add_filter( Store_Reach::FILTER, $reach );
+		try {
+			return $this->post( $route, $fields );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+		}
+	}
+
+	/** A status change on another store's session reads as an unknown session and changes nothing. */
+	public function test_session_status_other_store_session_returns_404(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$route = 'sessions/' . $id . '/status';
+		$counting = array(
+			'status' => 'counting',
+			'at' => '2026-09-11T11:00:00Z',
+		);
+		$closing = array(
+			'status' => 'closed',
+			'counted' => array( 'cash' => '0' ),
+			'at' => '2026-09-11T11:00:00Z',
+		);
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), $route, $counting );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$row = ( new Register_Session_Store() )->get( $id );
+		$this->assertSame( 'open', $row['status'] );
+		$this->assertNull( $row['counting_by'] );
+
+		// Arrange.
+		$this->assertSame( 200, $this->post( $route, $counting )->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), $route, $closing );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+	}
+
+	/** Approval on another store's session reads as an unknown session and records no approver. */
+	public function test_session_approve_other_store_session_returns_404(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'user_pass' => 'approval-fixture',
+			)
+		);
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$approved_by = ( new Register_Session_Store() )->get( $id )['approved_by'];
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/approve',
+			array(
+				'username' => $manager->user_login,
+				'password' => 'approval-fixture',
+				'counted'  => array( 'cash' => '0' ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( $approved_by, ( new Register_Session_Store() )->get( $id )['approved_by'] );
+	}
+
+	/** Replaying another store's session id reads as an unknown session and returns no figures. */
+	public function test_session_replay_other_store_returns_404(): void {
+		// Arrange.
+		$fields = $this->fields( 456 );
+		$this->assertSame( 201, $this->post( 'sessions', $fields )->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), 'sessions', $fields );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'expected_float', $response->get_data() );
+		$this->assertArrayNotHasKey( 'counted_float', $response->get_data() );
+	}
+
+	/** A session on an unassigned register is written only under the unassigned reach, which opens no other store. */
+	public function test_session_status_unassigned_session_follows_unassigned_reach(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( null ) )->get_data()['id'];
+		$other = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$counting = array(
+			'status' => 'counting',
+			'at' => '2026-09-11T11:00:00Z',
+		);
+
+		// Act.
+		$refused = $this->post_in_reach( array( 'store_id' => array( 789 ) ), 'sessions/' . $id . '/status', $counting );
+		$other_store = $this->post_in_reach(
+			array(
+				'store_id' => array( 789 ),
+				'unassigned' => true,
+			),
+			'sessions/' . $other . '/status',
+			$counting
+		);
+		$admitted = $this->post_in_reach(
+			array(
+				'store_id' => array( 789 ),
+				'unassigned' => true,
+			),
+			'sessions/' . $id . '/status',
+			$counting
+		);
+
+		// Assert.
+		$this->assertSame( 404, $refused->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $refused->get_data()['code'] );
+		$this->assertSame( 404, $other_store->get_status() );
+		$this->assertSame( 200, $admitted->get_status() );
+		$this->assertSame( 'counting', $admitted->get_data()['status'] );
+	}
+
+	/** A session in reach keeps its write routes. */
+	public function test_session_status_session_in_reach_succeeds(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( 789 ) )->get_data()['id'];
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'counting', $response->get_data()['status'] );
+	}
+
 	/** Ids that name another store's rows are refused by identity, before any row is read or returned. */
 	public function test_carry_replay_checks_the_returned_rows_store_reach(): void {
 		$hidden = $this->fields( 456 );

@@ -95,6 +95,10 @@ class Sessions_Controller extends \WP_REST_Controller {
 			/** Filter a directly addressed session or movement row on the write routes; nothing hooks it today. Read routes are checked by Store_Reach. */
 			$row = apply_filters( 'wcpos_session_row', $existing, $request );
 			$row = apply_filters_deprecated( 'woocommerce_pos_session_row', array( $row, $request ), '2.0.0', 'wcpos_session_row' );
+			// A directly addressed session must be in the request's store reach.
+			if ( $row && ! $movement && ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+				return $this->error( 'wcpos_session_not_found', 404 );
+			}
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
