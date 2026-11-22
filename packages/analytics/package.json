@@ -10,7 +10,7 @@
     "@wcpos/i18n": "workspace:*",
     "@woocommerce/components": "^14.1.0",
     "@wordpress/api-fetch": "^8",
-    "@wordpress/components": "^44",
+    "@wordpress/components": "^45",
     "@wordpress/element": "^8.5.0",
     "@wordpress/hooks": "^5",
     "@wordpress/url": "^4.45.0",
