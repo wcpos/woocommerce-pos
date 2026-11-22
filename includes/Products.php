@@ -251,12 +251,20 @@ class Products {
 	 * @param int  $product_id The product or variation ID.
 	 */
 	public function filter_pos_only_product_visibility( $visible, $product_id ) {
-		if ( ! $visible || ! $this->is_storefront_request() ) {
+		if ( ! $visible ) {
 			return $visible;
 		}
 
-		$settings = Settings::instance();
-		return $settings->is_product_pos_only( $product_id ) || $settings->is_variation_pos_only( $product_id ) ? false : $visible;
+		return $this->is_hidden_on_storefront( (int) $product_id ) ? false : $visible;
+	}
+
+	/**
+	 * Whether a product or variation id is POS Only and the request is a storefront one.
+	 *
+	 * @param int $id The product or variation id.
+	 */
+	private function is_hidden_on_storefront( int $id ): bool {
+		return $this->is_storefront_request() && ( Settings::instance()->is_product_pos_only( $id ) || Settings::instance()->is_variation_pos_only( $id ) );
 	}
 
 	/**
