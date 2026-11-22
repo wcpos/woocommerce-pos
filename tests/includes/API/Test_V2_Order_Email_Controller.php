@@ -16,7 +16,13 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 	use HPOSToggleTrait;
 
+	/**
+	 * Whether this test switched WooCommerce to order tables.
+	 *
+	 * @var bool
+	 */
 	private $cot_enabled = false;
+
 	/**
 	 * Enable the sync surface before REST routes are registered.
 	 */
@@ -48,6 +54,13 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->cot_enabled = true;
 		}
 		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_wcpos_receipt_print_count', '3' );
+		$order->save();
+		$before = $order->get_billing_email();
+		$settings = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['customer_emails'] = array( 'enabled' => false );
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
 		$selected = $this->factory->post->create(
 			array(
 				'post_type' => 'wcpos_template',
@@ -72,6 +85,7 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 				array(
 					'email' => 'fixture@example.org',
 					'template_id' => (string) $selected,
+					'save_to' => $hpos ? 'billing' : '',
 				)
 			);
 			$response = $this->server->dispatch( $request );
@@ -79,6 +93,9 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'pre_wp_mail', $capture, 10 );
 		}
 		$this->assertSame( 200, $response->get_status() );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertSame( '3', (string) $fresh->get_meta( '_wcpos_receipt_print_count' ) );
+		$this->assertSame( $hpos ? 'fixture@example.org' : $before, $fresh->get_billing_email() );
 		$this->assertStringStartsWith( '%PDF-', $pdf );
 		preg_match_all( '/stream\r?\n(.*?)\r?\nendstream/s', $pdf, $streams );
 		$text = '';
@@ -218,6 +235,9 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertNotEmpty( $path );
 			$this->assertFileDoesNotExist( $path );
 			$this->assertFalse( has_filter( 'wp_mail_from', array( $sender, 'get_from_address' ) ) );
+			$this->assertFalse( has_action( 'phpmailer_init', array( $sender, 'handle_multipart' ) ) );
+			$this->assertFalse( has_action( 'woocommerce_update_options_email_' . $sender->id, array( $sender, 'process_admin_options' ) ) );
+			$this->assertFalse( has_filter( 'wp_get_attachment_image_attributes', array( $sender, 'prevent_lazy_loading_on_attachment' ) ) );
 		}
 	}
 

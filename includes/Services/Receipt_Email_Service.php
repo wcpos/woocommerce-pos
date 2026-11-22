@@ -81,6 +81,10 @@ class Receipt_Email_Service {
 				remove_filter( 'wp_mail_from', array( $transport, 'get_from_address' ) );
 				remove_filter( 'wp_mail_from_name', array( $transport, 'get_from_name' ) );
 				remove_filter( 'wp_mail_content_type', array( $transport, 'get_content_type' ) );
+				// A manual send owns this WC_Email instance, including its constructor hooks.
+				remove_action( 'phpmailer_init', array( $transport, 'handle_multipart' ) );
+				remove_action( 'woocommerce_update_options_email_' . $transport->id, array( $transport, 'process_admin_options' ) );
+				remove_filter( 'wp_get_attachment_image_attributes', array( $transport, 'prevent_lazy_loading_on_attachment' ), 1 );
 			}
 			if ( ! $accepted ) {
 				return $this->mail_error();
