@@ -69,6 +69,7 @@ export function CustomerEmailDesigns() {
 				<div className="wcpos:flex wcpos:flex-wrap wcpos:items-center wcpos:gap-2">
 					<select
 						id="wcpos-customer-email-design"
+						className="wcpos:border wcpos:border-gray-300 wcpos:rounded"
 						value={selected}
 						disabled={save.isPending}
 						onChange={(event) => {

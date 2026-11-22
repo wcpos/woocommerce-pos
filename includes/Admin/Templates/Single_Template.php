@@ -197,6 +197,10 @@ class Single_Template {
 		// Remove default taxonomy metaboxes — consolidated into Template Settings.
 		remove_meta_box( 'wcpos_template_typediv', 'wcpos_template', 'side' );
 		remove_meta_box( 'wcpos_template_categorydiv', 'wcpos_template', 'side' );
+		if ( $post && has_term( TemplatesManager::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', $post ) ) {
+			remove_meta_box( 'tagsdiv-wcpos_template_type', 'wcpos_template', 'side' );
+			remove_meta_box( 'tagsdiv-wcpos_template_category', 'wcpos_template', 'side' );
+		}
 
 		// Move Publish box to the top of the sidebar by re-registering it first.
 		remove_meta_box( 'submitdiv', 'wcpos_template', 'side' );
@@ -351,14 +355,18 @@ class Single_Template {
 	 */
 	public function hide_publish_status_controls(): void {
 		$screen = get_current_screen();
-		if ( ! $screen || 'wcpos_template' !== $screen->post_type ||
-			has_term( TemplatesManager::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', get_post() ) ) {
+		if ( ! $screen || 'wcpos_template' !== $screen->post_type ) {
 			return;
 		}
 
+		$is_email = has_term( TemplatesManager::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', get_post() );
 		?>
 		<style>
-			#misc-publishing-actions .misc-pub-post-status,
+			<?php if ( ! $is_email ) : ?>
+			#misc-publishing-actions .misc-pub-post-status {
+				display: none;
+			}
+			<?php endif; ?>
 			#misc-publishing-actions #visibility {
 				display: none;
 			}
