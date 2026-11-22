@@ -28,4 +28,9 @@ if ! grep -Fq 'Skipping stale WooCommerce pre-release' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
+if ! grep -Fq 'docker manifest inspect "wordpress:cli-php${PHP_LATEST_MINOR}"' "$WORKFLOW_FILE"; then
+  echo "Expected update-test-matrix workflow to check the WordPress images exist before rotating PHP" >&2
+  exit 1
+fi
+
 echo "Update test matrix workflow version logic checks passed"
