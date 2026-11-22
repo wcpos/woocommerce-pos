@@ -60,6 +60,7 @@ class Descriptor_Builder {
 			'schema' => 1,
 			'contract' => '1.3',
 			'methods' => $methods,
+			'default_method' => isset( $settings['default_gateway'] ) && \is_string( $settings['default_gateway'] ) ? $settings['default_gateway'] : null,
 		);
 	}
 
