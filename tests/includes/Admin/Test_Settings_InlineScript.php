@@ -108,6 +108,26 @@ class Test_Settings_InlineScript extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test a product meta key with markup characters reaches the script hex-escaped.
+	 */
+	public function test_settings_inline_script_meta_key_with_html_comment_is_hex_escaped(): void {
+		// Arrange.
+		$product_id = self::factory()->post->create( array( 'post_type' => 'product' ) );
+		add_post_meta( $product_id, '<!--<script', '1' );
+		$settings = new \WCPOS\WooCommercePOS\Admin\Settings();
+		$method   = new \ReflectionMethod( \WCPOS\WooCommercePOS\Admin\Settings::class, 'inline_script' );
+		$method->setAccessible( true );
+
+		// Act.
+		$script = $method->invoke( $settings );
+
+		// Assert.
+		$this->assertStringContainsString( '<!--<script', $script );
+		$this->assertStringNotContainsString( '<!--', $script );
+		$this->assertStringNotContainsString( '<script', $script );
+	}
+
+	/**
 	 * Test the environment reports HPOS order storage and the WooCommerce settings URL.
 	 */
 	public function test_inline_script_order_storage_with_hpos_reports_hpos_true(): void {
@@ -124,7 +144,7 @@ class Test_Settings_InlineScript extends \WP_UnitTestCase {
 			// Assert.
 			$this->assertStringContainsString( '"order_storage":{"hpos":true,', $script );
 			$this->assertStringContainsString(
-				'"settings_url":' . json_encode( admin_url( 'admin.php?page=wc-settings&tab=advanced&section=features' ) ),
+				'"settings_url":' . wp_json_encode( admin_url( 'admin.php?page=wc-settings&tab=advanced&section=features' ), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ),
 				$script
 			);
 		} finally {
