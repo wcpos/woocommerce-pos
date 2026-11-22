@@ -39,7 +39,11 @@ class Receipt_Email_Service {
 			return new WP_Error( 'wcpos_receipt_template_not_found', __( 'This receipt template is no longer available.', 'woocommerce-pos' ), array( 'status' => 404 ) );
 		}
 
+		$update_billing = $save_billing && $order->get_billing_email() !== $email;
 		try {
+			if ( $update_billing ) {
+				$order->set_billing_email( $email );
+			}
 			// The sale preview uses live receipt data. Building it does not count a print.
 			$data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 			$renderer = new Template_Pdf_Service();
@@ -56,7 +60,7 @@ class Receipt_Email_Service {
 		}
 
 		// A private directory keeps the attachment filename readable on older WordPress versions.
-		$directory = trailingslashit( sys_get_temp_dir() ) . 'wcpos-' . wp_generate_uuid4();
+		$directory = trailingslashit( get_temp_dir() ) . 'wcpos-' . wp_generate_uuid4();
 		if ( ! mkdir( $directory, 0700 ) ) {
 			return $this->mail_error();
 		}
@@ -65,8 +69,7 @@ class Receipt_Email_Service {
 			if ( file_put_contents( $path, $pdf ) !== strlen( $pdf ) ) {
 				return $this->mail_error();
 			}
-			if ( $save_billing && $order->get_billing_email() !== $email ) {
-				$order->set_billing_email( $email );
+			if ( $update_billing ) {
 				$order->save();
 			}
 			/* translators: %s: order number. */

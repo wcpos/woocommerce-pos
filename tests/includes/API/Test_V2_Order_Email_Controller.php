@@ -45,9 +45,14 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * The mail transport receives the chosen design and its order data.
 	 *
 	 * @dataProvider order_storage
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 * @param bool $hpos Whether to use order tables.
 	 */
 	public function test_selected_design_reaches_mail_as_pdf( bool $hpos ): void {
+		if ( ! defined( 'WP_TEMP_DIR' ) ) {
+			define( 'WP_TEMP_DIR', WP_CONTENT_DIR );
+		}
 		if ( $hpos ) {
 			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
 			$this->setup_cot();
@@ -55,6 +60,7 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 		$order = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_billing_email( 'original@example.org' );
 		$order->update_meta_data( '_wcpos_receipt_print_count', '3' );
 		$order->save();
 		$before = $order->get_billing_email();
@@ -66,7 +72,7 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 				'post_type' => 'wcpos_template',
 				'post_status' => 'publish',
 				'post_title' => 'Second design',
-				'post_content' => '<p>AMBER-SLIP {{order.number}}</p>',
+				'post_content' => '<p>AMBER-SLIP {{order.number}}</p><p>{{customer.billing_address.email}}</p>',
 			)
 		);
 		wp_set_object_terms( $selected, 'receipt', 'wcpos_template_type' );
@@ -104,6 +110,9 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 			$text .= false === $decoded ? $stream : $decoded;
 		}
 		$this->assertStringContainsString( mb_convert_encoding( 'AMBER-SLIP ' . $order->get_order_number(), 'UTF-16BE', 'UTF-8' ), $text );
+		$billing = $hpos ? 'fixture@example.org' : $before;
+		$this->assertStringContainsString( mb_convert_encoding( $billing, 'UTF-16BE', 'UTF-8' ), $text );
+		$this->assertSame( untrailingslashit( get_temp_dir() ), dirname( $path, 2 ) );
 		$this->assertFileDoesNotExist( $path );
 	}
 
@@ -118,6 +127,7 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 	/** A selected-template send cannot use unpublished, other-type, or malformed designs. */
 	public function test_unavailable_and_invalid_designs_do_not_send(): void {
 		$order = OrderHelper::create_order();
+		$before = $order->get_billing_email();
 		$template = $this->factory->post->create(
 			array(
 				'post_type' => 'wcpos_template',
@@ -146,7 +156,9 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertSame( 404, $this->server->dispatch( $request )->get_status() );
 		wp_set_object_terms( $template, 'receipt', 'wcpos_template_type' );
+		$request->set_param( 'save_to', 'billing' );
 		$this->assertSame( 422, $this->server->dispatch( $request )->get_status() );
+		$this->assertSame( $before, wc_get_order( $order->get_id() )->get_billing_email() );
 	}
 
 	/** An order's removed store cannot supply a receipt design. */
