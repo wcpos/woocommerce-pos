@@ -101,4 +101,74 @@ describe('email designs route', () => {
 			vi.restoreAllMocks();
 		}
 	});
+
+	it('keeps a saved design when an older refresh returns after the save', async () => {
+		const designs = [{ id: 13, title: 'Market design', status: 'publish' }];
+		const original = { template_id: 0, designs };
+		let finishRefresh!: (settings: typeof original) => void;
+		const refresh = new Promise<typeof original>((resolve) => {
+			finishRefresh = resolve;
+		});
+		let refreshStarted = false;
+		let refreshSignal: AbortSignal | null | undefined;
+		const fetch = vi.fn<Parameters<typeof apiFetch.setFetchHandler>[0]>((options) => {
+			if (options.method === 'POST') return Promise.resolve({ template_id: 13, designs });
+			if (!refreshStarted) {
+				refreshStarted = true;
+				return Promise.resolve(original);
+			}
+			refreshSignal = options.signal;
+			return refresh;
+		});
+		apiFetch.setFetchHandler(fetch);
+		const router = createRouter({
+			...galleryRouter.options,
+			history: createMemoryHistory({ initialEntries: ['/?type=email'] }),
+		});
+		vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+		const container = document.createElement('div');
+		const root = createRoot(container);
+
+		try {
+			await act(async () => {
+				await router.load();
+				root.render(
+					<QueryClientProvider client={queryClient}>
+						<RouterProvider router={router} />
+					</QueryClientProvider>
+				);
+			});
+			await vi.waitFor(() => {
+				expect(container.querySelector('select')?.value).toBe('0');
+			});
+			const pendingRefresh = queryClient.invalidateQueries();
+			await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+
+			const select = container.querySelector('select')!;
+			const form = container.querySelector('form')!;
+			await act(async () => {
+				select.value = '13';
+				select.dispatchEvent(new Event('change', { bubbles: true }));
+			});
+			await act(async () => {
+				form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+			});
+			await vi.waitFor(() => {
+				expect(container.textContent).toContain('email.saved');
+			});
+
+			await act(async () => {
+				// The transport may still finish even after its abort signal fires.
+				finishRefresh(original);
+				await pendingRefresh;
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			});
+			expect(select.value).toBe('13');
+			expect(refreshSignal?.aborted).toBe(true);
+		} finally {
+			act(() => root.unmount());
+			queryClient.clear();
+			vi.restoreAllMocks();
+		}
+	});
 });

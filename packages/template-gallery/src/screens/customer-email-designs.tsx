@@ -19,7 +19,7 @@ export function CustomerEmailDesigns() {
 	const client = useQueryClient();
 	const { data, error, isPending, refetch } = useQuery({
 		queryKey,
-		queryFn: () => apiFetch<EmailDesignSettings>({ path, method: 'GET' }),
+		queryFn: ({ signal }) => apiFetch<EmailDesignSettings>({ path, method: 'GET', signal }),
 	});
 	const [selection, setSelection] = useState<number | null>(null);
 	const save = useMutation({
@@ -29,7 +29,9 @@ export function CustomerEmailDesigns() {
 				method: 'POST',
 				data: { template_id },
 			}),
-		onSuccess: (settings) => {
+		onSuccess: async (settings) => {
+			// A refresh started before this save completed may still have the old selection.
+			await client.cancelQueries({ queryKey, exact: true });
 			client.setQueryData(queryKey, settings);
 			setSelection(null);
 		},
