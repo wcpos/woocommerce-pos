@@ -24,7 +24,10 @@ if ( '' === $wcpos_html ) {
 	// the original theme/plugin file with the same arguments without firing it again.
 	$wcpos_original = wc_locate_template( $template_name, $template_path, $default_path );
 	// Reuse WooCommerce's template resolver filter, including third-party overrides.
-	$wcpos_original = apply_filters( 'wc_get_template', $wcpos_original, $template_name, array_merge( $args, array( 'wcpos_default_details' => true ) ), $template_path, $default_path ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Existing WooCommerce template hook.
+	$wcpos_override = apply_filters( 'wc_get_template', $wcpos_original, $template_name, array_merge( $args, array( 'wcpos_default_details' => true ) ), $template_path, $default_path ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Existing WooCommerce template hook.
+	if ( is_string( $wcpos_override ) && is_file( $wcpos_override ) ) {
+		$wcpos_original = $wcpos_override;
+	}
 	include $wcpos_original;
 	return;
 }

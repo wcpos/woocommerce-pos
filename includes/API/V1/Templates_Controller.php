@@ -1696,7 +1696,8 @@ class Templates_Controller extends WP_REST_Controller {
 
 		$designs = array();
 		foreach ( $posts as $post ) {
-			if ( current_user_can( 'edit_post', $post->ID ) && 'logicless' === get_post_meta( $post->ID, '_template_engine', true ) ) {
+			if ( current_user_can( 'edit_post', $post->ID ) && 'logicless' === get_post_meta( $post->ID, '_template_engine', true )
+				&& TemplatesManager::TYPE_CUSTOMER_EMAIL === TemplatesManager::get_template_type( $post->ID ) ) {
 				$designs[] = array(
 					'id'     => $post->ID,
 					'title'  => $post->post_title,
@@ -1708,8 +1709,9 @@ class Templates_Controller extends WP_REST_Controller {
 		$active = Customer_Email_Design::active();
 		return rest_ensure_response(
 			array(
-				'template_id' => $active ? $active->ID : 0,
-				'designs'     => $designs,
+				'template_id'        => $active ? $active->ID : 0,
+				'unavailable_design' => ! $active && 0 !== Customer_Email_Design::assigned_id(),
+				'designs'            => $designs,
 			)
 		);
 	}

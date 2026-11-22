@@ -463,6 +463,24 @@ class Templates {
 	}
 
 	/**
+	 * Resolve the template's type. An imported email design with conflicting types
+	 * cannot be opened as a printable document or selected for delivery.
+	 *
+	 * @param int $id Template post ID.
+	 */
+	public static function get_template_type( int $id ): ?string {
+		$terms = wp_get_post_terms( $id, 'wcpos_template_type' );
+		if ( ! $terms || is_wp_error( $terms ) ) {
+			return 'receipt';
+		}
+		$slugs = wp_list_pluck( $terms, 'slug' );
+		if ( count( $slugs ) > 1 && in_array( self::TYPE_CUSTOMER_EMAIL, $slugs, true ) ) {
+			return null;
+		}
+		return reset( $slugs );
+	}
+
+	/**
 	 * Get a database template by ID.
 	 *
 	 * @param int $template_id Template post ID.
@@ -477,8 +495,10 @@ class Templates {
 			return null;
 		}
 
-		$terms = wp_get_post_terms( $template_id, 'wcpos_template_type' );
-		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : 'receipt';
+		$type = self::get_template_type( $template_id );
+		if ( null === $type ) {
+			return null;
+		}
 
 		$description     = get_post_meta( $template_id, '_template_description', true );
 		$language        = get_post_meta( $template_id, '_template_language', true );

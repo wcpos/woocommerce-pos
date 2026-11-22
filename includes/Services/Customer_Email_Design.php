@@ -22,7 +22,7 @@ class Customer_Email_Design {
 	private static function published( int $id ): ?\WP_Post {
 		$post = $id ? get_post( $id ) : null;
 		if ( ! $post || 'wcpos_template' !== $post->post_type || 'publish' !== $post->post_status || '' !== $post->post_password
-			|| ! has_term( Templates::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', $post )
+			|| Templates::TYPE_CUSTOMER_EMAIL !== Templates::get_template_type( $id )
 			|| 'logicless' !== get_post_meta( $id, '_template_engine', true ) ) {
 			return null;
 		}
@@ -31,8 +31,13 @@ class Customer_Email_Design {
 
 	/** Resolve the current binding again at send time in case publication changed. */
 	public static function active(): ?\WP_Post {
+		return self::published( self::assigned_id() );
+	}
+
+	/** The assignment survives temporary unpublication until the merchant clears it. */
+	public static function assigned_id(): int {
 		$term = get_term_by( 'slug', Templates::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type' );
-		return $term ? self::published( (int) get_term_meta( $term->term_id, self::META_KEY, true ) ) : null;
+		return $term ? (int) get_term_meta( $term->term_id, self::META_KEY, true ) : 0;
 	}
 
 	/**

@@ -117,6 +117,15 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 404, $response->get_status() );
 	}
 
+	/** Imported posts with conflicting types cannot enter either output path. */
+	public function test_ambiguous_email_design_is_unavailable(): void {
+		$id = $this->design( 'Private draft instructions' );
+		wp_set_object_terms( $id, array( 'display', 'email' ), 'wcpos_template_type' );
+		$this->assertNull( Print_Job_Service::load_template( (string) $id, 'display' ) );
+		$this->assertSame( 400, $this->select( $id )->get_status() );
+		$this->assertSame( array(), $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['designs'] );
+	}
+
 	/** Password-protected designs must never be sent to a customer. */
 	public function test_password_protection_deactivates_design(): void {
 		$id = $this->design( 'Internal design' );
@@ -186,8 +195,9 @@ class Test_Customer_Email_Design extends WCPOS_REST_Unit_Test_Case {
 		}
 		$this->assertSame( $id, $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['template_id'] );
 		wp_trash_post( $id );
+		$this->assertTrue( $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['unavailable_design'] );
 		$this->assertSame( 0, $this->server->dispatch( new \WP_REST_Request( 'GET', self::ROUTE ) )->get_data()['template_id'] );
-		$this->assertSame( 0, $this->select( 0 )->get_data()['template_id'] );
+		$this->assertFalse( $this->select( 0 )->get_data()['unavailable_design'] );
 	}
 
 	/** A signed-in shopper cannot read drafts or bind a notification. */
