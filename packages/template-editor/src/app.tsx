@@ -233,6 +233,9 @@ export function getReportStarter(
 }
 
 export function getDefaultDoc(config: EditorConfig): string {
+	if (config.type === 'email') {
+		return config.postContent || config.emailStarter || '';
+	}
 	if (config.type === 'report' || config.type === 'closure') {
 		return (
 			config.postContent ||
@@ -262,7 +265,11 @@ function TemplateInfoBar({
 	let text: string;
 	let bgClass: string;
 
-	if (type === 'display') {
+	if (type === 'email') {
+		icon = '\u2709\uFE0F';
+		text = t('editor.info_email');
+		bgClass = 'wcpos:bg-gray-50 wcpos:border-gray-200 wcpos:text-gray-700';
+	} else if (type === 'display') {
 		icon = '\uD83D\uDDA5\uFE0F';
 		text = t('editor.info_display');
 		bgClass = 'wcpos:bg-gray-50 wcpos:border-gray-200 wcpos:text-gray-700';
@@ -338,7 +345,7 @@ export function App({ config }: AppProps) {
 	// Listen for engine changes dispatched by the PHP metabox select
 	// (see Single_Template.php — dispatches wcposEngineChange on <select> change).
 	useEffect(() => {
-		if (config.type === 'display') return;
+		if (config.type === 'display' || config.type === 'email') return;
 		const handler = (e: Event) => {
 			const detail = (e as CustomEvent<{ engine: string }>).detail;
 			// Guard: ignore unknown engine values that are not in STARTER_SHELLS.
@@ -388,7 +395,7 @@ export function App({ config }: AppProps) {
 	// Listen for paper width changes dispatched by the PHP metabox select
 	// (see Single_Template.php — dispatches wcposPaperWidthChange on <select> change).
 	useEffect(() => {
-		if (config.type === 'display') return;
+		if (config.type === 'display' || config.type === 'email') return;
 		const handler = (e: Event) => {
 			// Guard: paper width only applies to the thermal engine.
 			if (engineRef.current !== 'thermal') return;
@@ -444,7 +451,7 @@ export function App({ config }: AppProps) {
 	const showFieldPicker = engine === 'logicless' || engine === 'thermal';
 
 	const previewToggle =
-		config.type === 'report' || config.type === 'closure' ? null : (
+		config.type === 'report' || config.type === 'closure' || config.type === 'email' ? null : (
 			<PreviewToggle
 				source={preview.source}
 				disabled={!config.hasPosOrders}

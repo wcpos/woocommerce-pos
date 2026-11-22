@@ -102,7 +102,7 @@ class Single_Template {
 		// This gallery-link hint is not a form submission and needs no nonce.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$type = isset( $_GET['wcpos_type'] ) ? sanitize_key( wp_unslash( $_GET['wcpos_type'] ) ) : '';
-		if ( \in_array( $type, TemplatesManager::SUPPORTED_TYPES, true ) ) {
+		if ( TemplatesManager::TYPE_CUSTOMER_EMAIL === $type || \in_array( $type, TemplatesManager::SUPPORTED_TYPES, true ) ) {
 			wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
 		}
 	}
@@ -145,7 +145,9 @@ class Single_Template {
 	 */
 	public function change_title_placeholder( string $title, \WP_Post $post ): string {
 		if ( 'wcpos_template' === $post->post_type ) {
-			$title = /* translators: Label or action in the receipt templates admin screen. */ __( 'Enter template name', 'woocommerce-pos' );
+			$title = has_term( TemplatesManager::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', $post )
+				? __( 'Enter email design name', 'woocommerce-pos' )
+				: __( 'Enter template name', 'woocommerce-pos' );
 		}
 
 		return $title;
@@ -164,12 +166,15 @@ class Single_Template {
 		}
 
 		// Back link to the gallery page.
-		$gallery_url = admin_url( 'admin.php?page=wcpos-templates' );
+		$is_email    = has_term( TemplatesManager::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', $post );
+		$gallery_url = admin_url( 'admin.php?page=wcpos-templates' ) . ( $is_email ? '#/?type=email' : '' );
 		printf(
 			'<p style="margin: 0 0 12px;"><a href="%s">&larr; %s</a></p>',
 			esc_url( $gallery_url ),
 			/* translators: Label or action in the receipt templates admin screen. */
-			esc_html__( 'Back to Templates', 'woocommerce-pos' )
+			$is_email
+				? esc_html__( 'Back to Email Designs', 'woocommerce-pos' )
+				: esc_html__( 'Back to Templates', 'woocommerce-pos' )
 		);
 
 		// Hidden textarea for WordPress save flow — React syncs content here.
@@ -238,8 +243,13 @@ class Single_Template {
 	public function render_settings_metabox( \WP_Post $post ): void {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
-		$template    = TemplatesManager::get_template( $post->ID );
-		$type        = $template['type'] ?? 'receipt';
+		$template = TemplatesManager::get_template( $post->ID );
+		$type     = $template['type'] ?? 'receipt';
+		if ( TemplatesManager::TYPE_CUSTOMER_EMAIL === $type ) {
+			echo '<p>' . esc_html__( 'Format: HTML and Mustache', 'woocommerce-pos' ) . '</p>';
+			return;
+		}
+
 		$is_display  = 'display' === $type;
 		$engine      = $is_display ? 'logicless' : self::get_editor_engine( $post );
 		$is_new      = 'auto-draft' === $post->post_status;
@@ -334,14 +344,15 @@ class Single_Template {
 	/**
 	 * Hide confusing WordPress Status and Visibility controls in the Publish box.
 	 *
-	 * Template availability is managed by the Template Gallery. WordPress visibility
-	 * does not affect POS template usage.
+	 * Email designs use WordPress publish status. The gallery manages availability
+	 * for the other template types.
 	 *
 	 * @return void
 	 */
 	public function hide_publish_status_controls(): void {
 		$screen = get_current_screen();
-		if ( ! $screen || 'wcpos_template' !== $screen->post_type ) {
+		if ( ! $screen || 'wcpos_template' !== $screen->post_type ||
+			has_term( TemplatesManager::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type', get_post() ) ) {
 			return;
 		}
 
@@ -398,7 +409,13 @@ class Single_Template {
 		// break the template content. We check metadata_exists rather than
 		// post_status because save_post fires after WordPress has already
 		// transitioned auto-draft → draft/publish.
-		if ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
+		$is_email = ! empty( $terms ) && TemplatesManager::TYPE_CUSTOMER_EMAIL === $terms[0]->slug;
+		if ( $is_email ) {
+			update_post_meta( $post_id, '_template_engine', 'logicless' );
+			update_post_meta( $post_id, '_template_output_type', 'html' );
+			update_post_meta( $post_id, '_template_language', 'html' );
+			delete_post_meta( $post_id, '_template_paper_width' );
+		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
 			if ( ! empty( $terms ) && 'display' === $terms[0]->slug ) {
 				update_post_meta( $post_id, '_template_engine', 'logicless' );
 				update_post_meta( $post_id, '_template_output_type', 'html' );
@@ -442,6 +459,10 @@ class Single_Template {
 
 		// Save raw content for offline-capable engines only. Legacy-php templates
 		// are executed via include, so their content must go through wp_kses.
+		// Keep WordPress's HTML filtering for email authors without unfiltered HTML access.
+		if ( $is_email && ! current_user_can( 'unfiltered_html' ) ) {
+			return;
+		}
 		$saved_engine = get_post_meta( $post_id, '_template_engine', true );
 		if ( \in_array( $saved_engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
 			$this->save_raw_content( $post_id );
@@ -607,6 +628,33 @@ class Single_Template {
 	}
 
 	/**
+	 * Provide an editable starting point for a new completed order email design.
+	 *
+	 * @return string
+	 */
+	private static function get_email_starter(): string {
+		return sprintf(
+			'<div style="font-family: sans-serif; line-height: 1.5;">
+  <h2>{{store.name}}</h2>
+  <p>%s</p>
+  <p>{{i18n.order}} #{{order.number}}</p>
+  <table style="width: 100%%; border-collapse: collapse;">
+    <thead>
+      <tr><th scope="col">{{i18n.item_short}}</th><th scope="col">{{i18n.qty_short}}</th><th scope="col">{{i18n.total}}</th></tr>
+    </thead>
+    <tbody>
+      {{#lines}}
+      <tr><td>{{name}}</td><td>{{qty}}</td><td>{{line_total_display}}</td></tr>
+      {{/lines}}
+    </tbody>
+  </table>
+  <p><strong>{{i18n.total}}: {{totals.total_incl_display}}</strong></p>
+</div>',
+			esc_html__( 'Thank you for shopping with us. Your order is complete.', 'woocommerce-pos' )
+		);
+	}
+
+	/**
 	 * Generate the inline script data for the template editor React app.
 	 *
 	 * @param \WP_Post $post Post object.
@@ -615,8 +663,9 @@ class Single_Template {
 	 */
 	private function get_editor_inline_script( \WP_Post $post ): string {
 		$template        = TemplatesManager::get_template( $post->ID );
-		$engine          = self::get_editor_engine( $post );
 		$type            = $template['type'] ?? 'receipt';
+		$is_email        = TemplatesManager::TYPE_CUSTOMER_EMAIL === $type;
+		$engine          = $is_email ? 'logicless' : self::get_editor_engine( $post );
 		$display_starter = 'display' === $type && '' === $post->post_content
 			? ( TemplatesManager::get_active_template( 'display' )['content'] ?? null )
 			: null;
@@ -640,6 +689,7 @@ class Single_Template {
 			'displayPreviewUrl' => set_url_scheme( wcpos_display_url(), is_ssl() ? 'https' : 'http' ),
 			'type'              => $type,
 			'displayStarter'    => $display_starter,
+			'emailStarter'      => $is_email && 'auto-draft' === $post->post_status ? self::get_email_starter() : null,
 			'reportStarters'    => 'report' === $type ? array(
 				'logicless' => TemplatesManager::get_gallery_template_by_key( 'report-default' )['content'],
 				'thermal' => TemplatesManager::get_gallery_template_by_key( 'thermal-report-80mm' )['content'],
@@ -655,7 +705,7 @@ class Single_Template {
 			'templateId'        => $post->ID,
 			'previewUrl'        => $preview_url,
 			'postContent'       => $post->post_content,
-			'hasPosOrders'      => (bool) wc_get_orders(
+			'hasPosOrders'      => ! $is_email && (bool) wc_get_orders(
 				array(
 					'limit'       => 1,
 					'return'      => 'ids',

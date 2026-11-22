@@ -4,11 +4,11 @@ import classnames from 'classnames';
 import { t } from '../translations';
 
 const tabs = [
-	{ id: 'receipt', labelKey: 'tabs.receipts', enabled: true },
-	{ id: 'report', labelKey: 'tabs.reports', enabled: true },
-	{ id: 'closure', labelKey: 'tabs.closures', enabled: true },
-	{ id: 'display', labelKey: 'tabs.display', enabled: true },
-	{ id: 'email', labelKey: 'tabs.email', enabled: false },
+	{ id: 'receipt', labelKey: 'tabs.receipts' },
+	{ id: 'report', labelKey: 'tabs.reports' },
+	{ id: 'closure', labelKey: 'tabs.closures' },
+	{ id: 'display', labelKey: 'tabs.display' },
+	{ id: 'email', labelKey: 'tabs.email' },
 ] as const;
 
 interface TypeTabsProps {
@@ -24,24 +24,16 @@ export function TypeTabs({ activeType }: TypeTabsProps) {
 				<button
 					key={tab.id}
 					type="button"
-					disabled={!tab.enabled}
-					onClick={() => {
-						if (tab.enabled) navigate({ to: '/', search: { type: tab.id } });
-					}}
+					aria-current={activeType === tab.id ? 'page' : undefined}
+					onClick={() => navigate({ to: '/', search: { type: tab.id } })}
 					className={classnames(
 						'wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:border-b-2 wcpos:-mb-px wcpos:bg-transparent wcpos:cursor-pointer',
 						tab.id === activeType
 							? 'wcpos:border-wp-admin-theme-color wcpos:text-wp-admin-theme-color'
-							: 'wcpos:border-transparent wcpos:text-gray-500',
-						!tab.enabled && 'wcpos:opacity-50 wcpos:cursor-not-allowed'
+							: 'wcpos:border-transparent wcpos:text-gray-500'
 					)}
 				>
 					{t(tab.labelKey)}
-					{!tab.enabled && (
-						<span className="wcpos:ml-1 wcpos:text-xs wcpos:bg-gray-100 wcpos:text-gray-500 wcpos:rounded wcpos:px-1">
-							{t('tabs.soon')}
-						</span>
-					)}
 				</button>
 			))}
 		</div>

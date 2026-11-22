@@ -32,6 +32,14 @@ function ErrorFallback({
 	);
 }
 
+const galleryCopy = {
+	receipt: { title: 'layout.title', description: 'layout.description' },
+	display: { title: 'layout.display_title', description: 'layout.display_description' },
+	closure: { title: 'layout.closure_title', description: 'layout.closure_description' },
+	report: { title: 'layout.report_title', description: 'layout.report_description' },
+	email: { title: 'layout.email_title', description: 'layout.email_description' },
+} as const;
+
 export function GalleryLayout() {
 	const { type } = useSearch({ from: '/' });
 	return (
@@ -40,38 +48,24 @@ export function GalleryLayout() {
 
 			<div className="wcpos:mb-6">
 				<h1 className="wcpos:text-2xl wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">
-					{t(
-						type === 'report'
-							? 'layout.report_title'
-							: type === 'closure'
-								? 'layout.closure_title'
-								: type === 'display'
-									? 'layout.display_title'
-									: 'layout.title'
-					)}
+					{t(galleryCopy[type].title)}
 				</h1>
 				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-2">
-					{t(
-						type === 'report'
-							? 'layout.report_description'
-							: type === 'closure'
-								? 'layout.closure_description'
-								: type === 'display'
-									? 'layout.display_description'
-									: 'layout.description'
-					)}{' '}
-					<a
-						href={
-							type === 'display'
-								? 'https://docs.wcpos.com/getting-started/free-vs-pro#customer-display'
-								: 'https://docs.wcpos.com/receipts'
-						}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="wcpos:text-wp-admin-theme-color wcpos:hover:underline"
-					>
-						{t('layout.learn_more')}
-					</a>
+					{t(galleryCopy[type].description)}{' '}
+					{type !== 'email' && (
+						<a
+							href={
+								type === 'display'
+									? 'https://docs.wcpos.com/getting-started/free-vs-pro#customer-display'
+									: 'https://docs.wcpos.com/receipts'
+							}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="wcpos:text-wp-admin-theme-color wcpos:hover:underline"
+						>
+							{t('layout.learn_more')}
+						</a>
+					)}
 				</p>
 			</div>
 

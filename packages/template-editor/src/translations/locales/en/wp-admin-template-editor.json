@@ -1,4 +1,5 @@
 {
+	"editor.info_email": "Customer email design. The preview uses a sample POS order.",
 	"editor.info_display": "Customer display template. One section per display state; the display shows the section for its current state.",
 	"editor.state_idle": "Idle",
 	"editor.state_cart_empty": "Empty cart",

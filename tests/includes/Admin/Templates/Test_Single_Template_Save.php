@@ -374,6 +374,26 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * An email design always saves as HTML, even if the form requests another engine.
+	 */
+	public function test_email_design_save_enforces_html_and_wordpress_permissions(): void {
+		$post_id = $this->create_template( 'thermal', '' );
+		wp_set_object_terms( $post_id, 'email', 'wcpos_template_type' );
+		update_post_meta( $post_id, '_template_paper_width', '58mm' );
+		$this->remove_unfiltered_html();
+		$content = '<p>Order {{order.number}}</p><script>unsafe()</script>';
+
+		$this->simulate_admin_save( $post_id, $content, 'legacy-php' );
+
+		$this->assertSame( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
+		$this->assertSame( 'html', get_post_meta( $post_id, '_template_output_type', true ) );
+		$this->assertSame( 'html', get_post_meta( $post_id, '_template_language', true ) );
+		$this->assertSame( '', get_post_meta( $post_id, '_template_paper_width', true ) );
+		$this->assertStringContainsString( '<p>Order {{order.number}}</p>', get_post_field( 'post_content', $post_id ) );
+		$this->assertStringNotContainsString( '<script>', get_post_field( 'post_content', $post_id ) );
+	}
+
+	/**
 	 * Only empty display editors receive the active display's starter content.
 	 */
 	public function test_editor_config_display_starter_is_scoped_to_empty_displays(): void {
