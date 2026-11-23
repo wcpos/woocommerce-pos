@@ -302,6 +302,51 @@ class Test_Approval_Credential_Lockout extends WCPOS_REST_Unit_Test_Case {
 		$this->assert_locked( $this->recount( $closure, $other->user_login, 'other-pass' ) );
 	}
 
+	/** A right password refused for the capability leaves the failures' 15-minute window where it was. */
+	public function test_approval_right_password_without_the_capability_does_not_extend_the_window(): void {
+		global $wpdb;
+		$closure = $this->closure();
+		$other   = self::factory()->user->create_and_get( array( 'user_pass' => 'other-pass' ) );
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->recount( $closure, $other->user_login, 'wrong' );
+		}
+		$expires = time() + 60;
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s", '4|' . $expires, $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' ) );
+
+		$this->assertSame( 'wcpos_recount_approval_forbidden', $this->recount( $closure, $other->user_login, 'other-pass' )->get_data()['code'] );
+
+		$this->assertSame( array( '4|' . $expires ), $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" ) );
+	}
+
+	/** An attempt the database could not count is refused before the password is checked. */
+	public function test_approval_attempt_that_cannot_be_counted_is_refused(): void {
+		$session = $this->counting_session();
+		$checked = false;
+		add_filter(
+			'authenticate',
+			static function ( $user ) use ( &$checked ) {
+				$checked = true;
+				return $user;
+			},
+			99
+		);
+		add_filter(
+			'query',
+			static function ( $query ) {
+				return 0 === strpos( $query, 'INSERT' ) && false !== strpos( $query, 'wcpos_auth_attempts_' ) ? 'SELECT * FROM wcpos_no_such_table' : $query;
+			}
+		);
+
+		global $wpdb;
+		$suppress = $wpdb->suppress_errors();
+
+		$response = $this->approve( $session, $this->manager->user_login, 'manager-pass' );
+
+		$wpdb->suppress_errors( $suppress );
+		$this->assert_locked( $response );
+		$this->assertFalse( $checked );
+	}
+
 	/** Attempts older than the 15-minute window no longer count. */
 	public function test_approval_attempts_past_the_window_start_a_new_count(): void {
 		global $wpdb;

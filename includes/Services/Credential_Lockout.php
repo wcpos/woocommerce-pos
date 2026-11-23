@@ -41,17 +41,22 @@ final class Credential_Lockout {
 			return false;
 		}
 		global $wpdb;
-		$now     = time();
-		$expires = $now + self::LOCKOUT_DURATION;
-		$fresh   = '1|' . $expires;
-		// The row is count|expires-at, so one statement restarts an expired window or adds one. It
-		// stops at one past the limit, so the window still ends 15 minutes after the last counted try.
+		$now   = time();
+		$fresh = '1|' . ( $now + self::LOCKOUT_DURATION );
+		// The row is count|expires-at, so one statement restarts an expired window or adds one, and
+		// stops one past the limit. Only a failure moves the expiry, as the old transient's TTL did.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
-		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', %d)))", self::ROW_PREFIX . $username_key, $fresh, $now, $fresh, self::MAX_FAILED_ATTEMPTS, $expires ) );
-		return self::attempts( $username_key ) <= self::MAX_FAILED_ATTEMPTS;
+		$written  = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', SUBSTRING_INDEX(option_value, '|', -1))))", self::ROW_PREFIX . $username_key, $fresh, $now, $fresh, self::MAX_FAILED_ATTEMPTS ) );
+		$attempts = false === $written ? null : self::attempts( $username_key );
+		if ( null === $attempts ) {
+			// Fail closed: an attempt that could not be counted is not checked.
+			Logger::error( 'WCPOS Auth: could not count a credential attempt; refusing it.' );
+			return false;
+		}
+		return $attempts <= self::MAX_FAILED_ATTEMPTS;
 	}
 
-	/** Lock an account and peer when its counted attempts reach the limit; the attempt that
+	/** Restart the 15-minute window from this failure and lock at the limit; the attempt that
 	 * failed was already counted by reserve_attempt().
 	 *
 	 * @param string $username The identifier that failed.
@@ -60,8 +65,11 @@ final class Credential_Lockout {
 		if ( empty( $username ) ) {
 			return;
 		}
+		global $wpdb;
 		$username_key = self::key( $username );
-		$attempts     = self::attempts( $username_key );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 1), '|', %d) WHERE option_name = %s", time() + self::LOCKOUT_DURATION, self::ROW_PREFIX . $username_key ) );
+		$attempts = (int) self::attempts( $username_key );
 		if ( $attempts >= self::MAX_FAILED_ATTEMPTS ) {
 			set_transient( 'wcpos_auth_lock_' . $username_key, time(), self::LOCKOUT_DURATION );
 			Logger::log( \sprintf( 'WCPOS Auth: Account locked - username: %s, IP: %s, attempts: %d', $username, self::client_ip(), $attempts ) );
@@ -127,13 +135,14 @@ final class Credential_Lockout {
 		return md5( $subject . '|' . self::client_ip() );
 	}
 
-	/** Attempts counted in a bucket's current row, read past the options cache.
+	/** Attempts counted in a bucket's row, read past the options cache; null when the read fails.
 	 *
 	 * @param string $username_key The bucket from key().
 	 */
-	private static function attempts( string $username_key ): int {
+	private static function attempts( string $username_key ): ?int {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- The counter row is never cached.
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::ROW_PREFIX . $username_key ) );
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::ROW_PREFIX . $username_key ) );
+		return null === $value ? null : (int) $value;
 	}
 }
