@@ -169,6 +169,25 @@ class Test_Payments_Delete_Void extends \WP_UnitTestCase {
 		$this->assertCount( 1, $this->logs_containing( sprintf( 'WCPOS payment %s: cancel requested before order #%d was deleted', $row['id'], $order_id ) ) );
 	}
 
+	/** Under HPOS the posts row is a placeholder or backup, so deleting it leaves the order's legs alone. */
+	public function test_deleting_the_posts_copy_under_hpos_requests_no_cancel(): void {
+		if ( ! OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$this->markTestSkipped( 'Only under HPOS is the posts row a copy of the order.' );
+		}
+		// Arrange.
+		$row      = $this->live_row( 'authorized' );
+		$order_id = $this->order_with_rows( array( $row ) );
+
+		// Act.
+		wp_delete_post( $order_id, true );
+
+		// Assert.
+		$this->assertSame( array(), Delete_Void_Test_Handler::$voids );
+		$order = wc_get_order( $order_id );
+		$this->assertInstanceOf( \WC_Order::class, $order );
+		$this->assertSame( 'authorized', Ledger::instance()->find( $order, $row['id'] )['status'] );
+	}
+
 	/** The post-delete hook fires for every post type; a non-order returns before the ledger. */
 	public function test_deleting_a_product_reads_no_ledger(): void {
 		// Arrange.
