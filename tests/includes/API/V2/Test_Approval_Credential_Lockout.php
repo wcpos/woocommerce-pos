@@ -310,12 +310,13 @@ class Test_Approval_Credential_Lockout extends WCPOS_REST_Unit_Test_Case {
 		for ( $i = 0; $i < 4; $i++ ) {
 			$this->recount( $closure, $other->user_login, 'wrong' );
 		}
-		$expires = time() + 600;
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s", '4|' . $expires, $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' ) );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT('4|', %d, '|', SUBSTRING_INDEX(option_value, '|', -1)) WHERE option_name LIKE %s", time() + 600, $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' ) );
+		$before = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" );
 
 		$this->assertSame( 'wcpos_recount_approval_forbidden', $this->recount( $closure, $other->user_login, 'other-pass' )->get_data()['code'] );
 
-		$this->assertSame( array( '4|' . $expires ), $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" ) );
+		$this->assertCount( 1, $before );
+		$this->assertSame( $before, $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" ) );
 	}
 
 	/** A window about to end stays open while a counted attempt's password is being checked. */
@@ -327,7 +328,7 @@ class Test_Approval_Credential_Lockout extends WCPOS_REST_Unit_Test_Case {
 		}
 		$ending = time() + 1;
 		$like   = $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%';
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s", '4|' . $ending, $like ) );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT('4|', %d, '|', SUBSTRING_INDEX(option_value, '|', -1)) WHERE option_name LIKE %s", $ending, $like ) );
 		$during = null;
 		add_filter(
 			'authenticate',
@@ -383,7 +384,7 @@ class Test_Approval_Credential_Lockout extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 403, $this->recount( $closure, $this->manager->user_login, 'wrong' )->get_status() );
 		}
 		// Age the window: the stored count keeps its value, its expiry moves into the past.
-		$wpdb->query( "UPDATE {$wpdb->options} SET option_value = CONCAT( SUBSTRING_INDEX( option_value, '|', 1 ), '|1' ) WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" );
+		$wpdb->query( "UPDATE {$wpdb->options} SET option_value = CONCAT( SUBSTRING_INDEX( option_value, '|', 1 ), '|1|', SUBSTRING_INDEX( option_value, '|', -1 ) ) WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" );
 		for ( $i = 0; $i < 4; $i++ ) {
 			$this->assertSame( 403, $this->recount( $closure, $this->manager->user_login, 'wrong' )->get_status() );
 		}

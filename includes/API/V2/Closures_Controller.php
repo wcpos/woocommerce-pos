@@ -141,7 +141,8 @@ class Closures_Controller extends \WP_REST_Controller {
 				// The POS login page's lockout counts the attempt before the password, so a locked account learns nothing.
 				// Bucketed as wp_authenticate() sanitizes the name, so no spelling of an account escapes it.
 				$identifier = sanitize_user( $approval['username'] );
-				if ( ! Credential_Lockout::reserve_attempt( $identifier ) ) {
+				$attempt    = Credential_Lockout::reserve_attempt( $identifier );
+				if ( null === $attempt ) {
 					return $this->error( 'wcpos_approval_locked', 429 );
 				}
 				$user = wp_authenticate( $approval['username'], $approval['password'] );
@@ -150,7 +151,7 @@ class Closures_Controller extends \WP_REST_Controller {
 					return $this->error( 'wcpos_recount_approval_invalid', 403 );
 				}
 				if ( ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
-					Credential_Lockout::release_attempt( $identifier );
+					Credential_Lockout::release_attempt( $identifier, $attempt );
 					return $this->error( 'wcpos_recount_approval_forbidden', 403 );
 				}
 				Credential_Lockout::clear( $identifier );
