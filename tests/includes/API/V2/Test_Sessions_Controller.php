@@ -423,6 +423,170 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'counting', $response->get_data()['status'] );
 	}
 
+	/** Open a store-456 session and start counting while the reach still includes that store. */
+	private function counting_session_in_store_456(): string {
+		$both = array( 'store_id' => array( 456, 789 ) );
+		$response = $this->post_in_reach( $both, 'sessions', $this->fields( 456 ) );
+		$this->assertSame( 201, $response->get_status() );
+		$id = $response->get_data()['id'];
+		$counting = $this->post_in_reach(
+			$both,
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$this->assertSame( 200, $counting->get_status() );
+		return $id;
+	}
+
+	/** A close after the user's reach lost the session's store reads as an unknown session. */
+	public function test_session_status_close_after_store_lost_returns_404(): void {
+		// Arrange.
+		$id = $this->counting_session_in_store_456();
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'closed',
+				'counted' => array( 'cash' => '100' ),
+				'at' => '2026-09-11T12:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+	}
+
+	/** An approval after the user's reach lost the session's store reads as an unknown session. */
+	public function test_session_approve_after_store_lost_returns_404(): void {
+		// Arrange.
+		$id = $this->counting_session_in_store_456();
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'user_pass' => 'approval-fixture',
+			)
+		);
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/approve',
+			array(
+				'username' => $manager->user_login,
+				'password' => 'approval-fixture',
+				'counted'  => array( 'cash' => '0' ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $id )['approved_by'] );
+	}
+
+	/** Replaying an opening after the user's reach lost the session's store reads as an unknown session. */
+	public function test_session_opening_replay_after_store_lost_returns_404(): void {
+		// Arrange.
+		$fields = $this->fields( 456 );
+		$this->assertSame( 201, $this->post_in_reach( array( 'store_id' => array( 456, 789 ) ), 'sessions', $fields )->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), 'sessions', $fields );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'counted_float', $response->get_data() );
+	}
+
+	/** An unassigned session is written when the reach names no stores at all. */
+	public function test_session_status_unassigned_session_admitted_when_reach_unrestricted(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( null ) )->get_data()['id'];
+		$route = 'sessions/' . $id . '/status';
+		$counting = $this->post_in_reach(
+			array(),
+			$route,
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$this->assertSame( 200, $counting->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach(
+			array(),
+			$route,
+			array(
+				'status' => 'closed',
+				'counted' => array( 'cash' => '100' ),
+				'at' => '2026-09-11T12:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'closed', $response->get_data()['status'] );
+	}
+
+	/** A backdated movement into a closed session outside the reach writes neither the movement nor a correction. */
+	public function test_movement_late_into_other_store_closed_session_returns_404(): void {
+		// Arrange.
+		$id = $this->counting_session_in_store_456();
+		$session = ( new Register_Session_Store() )->get( $id );
+		( new Closure_Store() )->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $id,
+				'number' => 1,
+				'opened_at_gmt' => $session['opened_at_gmt'],
+				'closed_at_gmt' => '2026-09-11 12:00:00',
+				'till_expected' => array( 'cash' => '100.0000' ),
+				'counted' => array( 'cash' => '100.0000' ),
+				'period_sales_total' => '0.0000',
+				'period_refunds_total' => '0.0000',
+				'perpetual_sales_total' => '0.0000',
+				'perpetual_refunds_total' => '0.0000',
+				'unsynced_count' => 0,
+				'unsynced_total' => '0.0000',
+				'first_sale_counter' => null,
+				'last_sale_counter' => null,
+				'software_version' => 'fixture',
+				'printed_at_gmt' => null,
+				'breakdowns' => array( 'transaction_count' => 0 ),
+			)
+		);
+		$this->assertSame( 'closed', ( new Register_Session_Store() )->get( $id )['status'] );
+		$late = array( 'type' => 'late_movement' );
+		$before = ( new Fiscal_Record_Store() )->count( $late );
+		$movement = array(
+			'id' => wp_generate_uuid4(),
+			'session_id' => $id,
+			'type' => 'paid_out',
+			'amount' => '40',
+			'reason' => 'Backdated',
+			'created_at' => '2026-09-11T10:59:59Z',
+		);
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), 'movements', $movement );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertNull( ( new Cash_Movement_Store() )->get( $id, $movement['id'] ) );
+		$this->assertSame( $before, ( new Fiscal_Record_Store() )->count( $late ) );
+	}
+
 	/** Ids that name another store's rows are refused by identity, before any row is read or returned. */
 	public function test_carry_replay_checks_the_returned_rows_store_reach(): void {
 		$hidden = $this->fields( 456 );
