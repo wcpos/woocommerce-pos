@@ -130,6 +130,7 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		$this->assertCount( 1, $notes );
 		$this->assertSame( 'POS cashier changed from Original Cashier to Corrected Cashier.', $notes[0]->content );
 		$this->assertSame( 'Admin Actor', $notes[0]->added_by );
+		$this->assertSame( array(), $this->refused_notes( $order->get_id() ) );
 		$records = $store->list(
 			array(
 				'order_id' => $order->get_id(),
@@ -272,6 +273,7 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( (string) $old_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
 		$this->assertSame( array(), $this->reattributions( $order->get_id() ) );
+		$this->assert_refused_note( $order->get_id(), $actor_id, $new_id, $old_id );
 	}
 
 	/** A sale cannot be moved to a user without POS access, even by a user who may reassign sales. */
@@ -289,6 +291,36 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( (string) $old_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
 		$this->assertSame( array(), $this->reattributions( $order->get_id() ) );
+		$this->assert_refused_note( $order->get_id(), $actor_id, $new_id, $old_id );
+	}
+
+	/**
+	 * Notes on an order that start with the refused-change prefix.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function refused_notes( int $order_id ): array {
+		return array_values( array_filter( wc_get_order_notes( array( 'order_id' => $order_id ) ), static fn( $note ) => 0 === strpos( $note->content, 'POS cashier change by' ) ) );
+	}
+
+	/**
+	 * Assert one refused-change note naming the actor, the refused user and the kept cashier.
+	 *
+	 * @param int $order_id   Order ID.
+	 * @param int $actor_id   User who tried the change.
+	 * @param int $refused_id Cashier the change was refused for.
+	 * @param int $kept_id    Cashier who stays on the order.
+	 */
+	private function assert_refused_note( int $order_id, int $actor_id, int $refused_id, int $kept_id ): void {
+		$notes = $this->refused_notes( $order_id );
+		$this->assertCount( 1, $notes );
+		$expected = sprintf(
+			'POS cashier change by %1$s to %2$s was refused: they may not assign this sale to that user. %3$s remains the cashier.',
+			get_userdata( $actor_id )->display_name,
+			get_userdata( $refused_id )->display_name,
+			get_userdata( $kept_id )->display_name
+		);
+		$this->assertSame( $expected, $notes[0]->content );
 	}
 
 	/** Both supported order storage backends, without HPOS compatibility sync. */

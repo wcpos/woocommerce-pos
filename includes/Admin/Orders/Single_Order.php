@@ -103,6 +103,7 @@ class Single_Order {
 			// Update meta only if _pos_user has changed.
 			if ( $current_pos_cashier !== $new_pos_cashier ) {
 				if ( ! $this->can_assign_cashier( $new_pos_cashier ) ) {
+					Order_Notes::add_cashier_change_refused_note( $order, get_current_user_id(), $new_pos_cashier, $current_pos_cashier );
 					return;
 				}
 				if ( ! Fiscal_Record_Writers::instance()->record_reattribution(
