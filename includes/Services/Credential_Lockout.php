@@ -118,6 +118,10 @@ final class Credential_Lockout {
 	/** Give back a counted attempt whose password was right but which was refused for another
 	 * reason (no capability, approving oneself), so it does not count as a failure.
 	 *
+	 * A lock set while this attempt held a slot counted it as a failure, so a give-back that
+	 * takes effect lifts the lock. The count is then under the limit by construction; if newer
+	 * failures fill it again, the full bucket refuses on its own until its window ends.
+	 *
 	 * @param string $username   The identifier that authenticated.
 	 * @param string $generation What reserve_attempt() returned for this attempt.
 	 */
@@ -125,7 +129,10 @@ final class Credential_Lockout {
 		if ( empty( $username ) ) {
 			return;
 		}
-		self::release_bucket_attempt( self::key( $username ), $generation );
+		$username_key = self::key( $username );
+		if ( self::release_bucket_attempt( $username_key, $generation ) ) {
+			delete_transient( 'wcpos_auth_lock_' . $username_key );
+		}
 	}
 
 	/** Restart a bucket's window from a failure counted by reserve_bucket_attempt().
@@ -149,11 +156,12 @@ final class Credential_Lockout {
 	 *
 	 * @param string $bucket     The bucket key.
 	 * @param string $generation What reserve_bucket_attempt() returned for this attempt.
+	 * @return bool Whether the give-back took effect.
 	 */
-	public static function release_bucket_attempt( string $bucket, string $generation ): void {
+	public static function release_bucket_attempt( string $bucket, string $generation ): bool {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) - 1, '|', SUBSTRING_INDEX(option_value, '|', -2)) WHERE option_name = %s AND SUBSTRING_INDEX(option_value, '|', -1) = %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > 0", self::ROW_PREFIX . $bucket, $generation ) );
+		return 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) - 1, '|', SUBSTRING_INDEX(option_value, '|', -2)) WHERE option_name = %s AND SUBSTRING_INDEX(option_value, '|', -1) = %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > 0", self::ROW_PREFIX . $bucket, $generation ) );
 	}
 
 	/** Whether a bucket's current window has reached its limit, read without counting.

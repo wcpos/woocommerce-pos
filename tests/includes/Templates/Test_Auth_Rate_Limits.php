@@ -525,6 +525,53 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A lock set while a right-password attempt held a slot is lifted when that attempt is given back.
+	 */
+	public function test_lockout_give_back_lifts_a_lock_that_counted_it(): void {
+		// Arrange: three failures, then A (right password) holds the fourth slot.
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.11';
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+			Credential_Lockout::record_failure( 'till-cashier' );
+		}
+		$a = Credential_Lockout::reserve_attempt( 'till-cashier' );
+		$this->assertNotNull( $a );
+
+		// Act: B fails in the fifth slot, which locks; A is refused for another reason and gives back.
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		Credential_Lockout::record_failure( 'till-cashier' );
+		$this->assertNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		Credential_Lockout::release_attempt( 'till-cashier', $a );
+
+		// Assert: four wrong passwords do not lock; the fifth attempt is admitted, the sixth is not.
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		$this->assertNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+	}
+
+	/**
+	 * A give-back that matches no counted attempt leaves a lock in place.
+	 */
+	public function test_lockout_late_give_back_leaves_a_lock_in_place(): void {
+		// Arrange: A is counted and cleared by a successful check; five failures then lock.
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.12';
+		$a                      = Credential_Lockout::reserve_attempt( 'till-cashier' );
+		$this->assertNotNull( $a );
+		Credential_Lockout::clear( 'till-cashier' );
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+			Credential_Lockout::record_failure( 'till-cashier' );
+		}
+
+		// Act: A's late give-back belongs to the cleared count.
+		Credential_Lockout::release_attempt( 'till-cashier', $a );
+
+		// Assert: the account is still locked.
+		$bucket = md5( 'user:' . get_user_by( 'login', 'till-cashier' )->ID . '|203.0.113.12' );
+		$this->assertNotFalse( get_transient( 'wcpos_auth_lock_' . $bucket ) );
+		$this->assertNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+	}
+
+	/**
 	 * A row in the format before generations, or any value that is not a counter, reads as an
 	 * ended window: never a fatal, and the limit holds from the next attempt.
 	 */
