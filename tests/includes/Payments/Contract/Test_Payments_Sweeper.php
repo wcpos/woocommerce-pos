@@ -132,8 +132,35 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		( new Payments_Sweeper() )->run();
 
 		// Assert.
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
 		$this->assertSame( array(), Sweep_Test_Handler::$voids );
 		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
+		$this->assertSame( 'trash', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/** A paid order moved to the trash is never captured: trash is not a paid status. */
+	public function test_sweeper_never_captures_an_unexpired_authorization_on_a_trashed_completed_order(): void {
+		// Arrange.
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg(
+			600,
+			array(
+				'status'     => 'authorized',
+				'expires_at' => gmdate( 'c', time() + 3600 ),
+			)
+		);
+		$order->set_status( 'completed' );
+		$order->save();
+		wc_get_order( $order->get_id() )->delete( false ); // Trashed after it was paid.
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( array(), Sweep_Test_Handler::$voids );
 		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
 		$this->assertSame( 'trash', wc_get_order( $order->get_id() )->get_status() );
 	}
