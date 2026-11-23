@@ -378,6 +378,65 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Make the next $conflicts reservation writes on a bucket lose to another request's count.
+	 *
+	 * @param string $bucket    The bucket key.
+	 * @param int    $conflicts How many writes lose.
+	 */
+	private function lose_writes( string $bucket, int $conflicts ): void {
+		add_filter(
+			'query',
+			static function ( $query ) use ( &$conflicts, $bucket ) {
+				global $wpdb;
+				if ( $conflicts > 0 && 0 === strpos( $query, 'UPDATE' ) && false !== strpos( $query, "= 'wcpos_auth_attempts_{$bucket}' AND option_value = '" ) ) {
+					--$conflicts;
+					// Another request counts between this reservation's read and its write.
+					$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', SUBSTRING_INDEX(option_value, '|', -2)) WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) );
+				}
+				return $query;
+			}
+		);
+	}
+
+	/**
+	 * A reservation whose write loses to another request's reads the row again and counts once.
+	 */
+	public function test_rate_limit_reservation_that_loses_a_write_counts_once_on_the_retry(): void {
+		// Arrange: one attempt counted; the next one's first write loses.
+		$bucket = md5( 'one-conflict' );
+		$first  = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+		$this->assertNotNull( $first );
+		$this->lose_writes( $bucket, 1 );
+
+		// Act.
+		$second = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+
+		// Assert: the first attempt, the other request and this one.
+		list( $count, , $generation ) = explode( '|', $this->row( $bucket ) );
+		$this->assertSame( $first, $second );
+		$this->assertSame( array( '3', $first ), array( $count, $generation ) );
+	}
+
+	/**
+	 * A reservation whose every write loses is refused without counting.
+	 */
+	public function test_rate_limit_reservation_that_loses_every_write_is_refused_uncounted(): void {
+		// Arrange.
+		$bucket = md5( 'every-conflict' );
+		$first  = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+		$this->assertNotNull( $first );
+		$this->lose_writes( $bucket, 5 );
+
+		// Act.
+		$refused = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+
+		// Assert: the first attempt and the five others, none of this one's.
+		list( $count, , $generation ) = explode( '|', $this->row( $bucket ) );
+		$this->assertNull( $refused );
+		$this->assertSame( array( '6', $first ), array( $count, $generation ) );
+	}
+
+	/**
 	 * A refused attempt writes nothing, so it holds no slot and moves no window. Replaces the
 	 * check that a refused attempt held its window until refunded: a refusal now counts nothing,
 	 * so it has nothing to give back.
