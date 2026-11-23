@@ -431,6 +431,29 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Retries against an account whose last attempt died mid-check do not keep its window open.
+	 */
+	public function test_lockout_retries_on_a_full_account_bucket_leave_its_window_alone(): void {
+		// Arrange: four failures, then a fifth attempt counted whose request never answered.
+		global $wpdb;
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->attempt( '203.0.113.10', 'till-cashier', 'wrong' );
+		}
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.10';
+		$this->assertTrue( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		$ending = '5|' . ( time() + 1 );
+		$like   = $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s AND option_value LIKE %s", $ending, $like, '5|%' ) );
+
+		// Act.
+		$auth = $this->attempt( '203.0.113.10', 'till-cashier', 'correct horse' );
+
+		// Assert: refused without a write, so the window still ends when it did.
+		$this->assertSame( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', $auth->get_error() );
+		$this->assertSame( array( $ending ), $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value LIKE %s", $like, '5|%' ) ) );
+	}
+
+	/**
 	 * A login the database could not count against the peer is refused before the password is checked.
 	 */
 	public function test_rate_limit_attempt_that_cannot_be_counted_is_refused(): void {

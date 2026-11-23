@@ -49,7 +49,9 @@ final class Credential_Lockout {
 			return true;
 		}
 		$username_key = self::key( $username );
-		if ( false !== get_transient( 'wcpos_auth_lock_' . $username_key ) ) {
+		// A full bucket without a lock (its last attempt died mid-check) is refused without a write,
+		// so retries cannot hold its window open.
+		if ( false !== get_transient( 'wcpos_auth_lock_' . $username_key ) || self::bucket_is_full( $username_key, self::MAX_FAILED_ATTEMPTS ) ) {
 			return false;
 		}
 		return self::reserve_bucket_attempt( $username_key, self::MAX_FAILED_ATTEMPTS, self::LOCKOUT_DURATION );
