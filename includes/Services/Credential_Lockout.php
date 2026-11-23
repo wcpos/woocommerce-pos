@@ -111,6 +111,14 @@ final class Credential_Lockout {
 		$attempts     = self::record_bucket_failure( $username_key, self::LOCKOUT_DURATION );
 		if ( $attempts >= self::MAX_FAILED_ATTEMPTS ) {
 			set_transient( 'wcpos_auth_lock_' . $username_key, time(), self::LOCKOUT_DURATION );
+			// A lock stands only over a full count. A give-back between the read above and the
+			// write lifted nothing, so read again after writing; one that lands later lifts the
+			// lock itself. Lifting a lock a newer failure needed is harmless: the full bucket
+			// refuses on its own.
+			if ( (int) self::attempts( $username_key ) < self::MAX_FAILED_ATTEMPTS ) {
+				delete_transient( 'wcpos_auth_lock_' . $username_key );
+				return;
+			}
 			Logger::log( \sprintf( 'WCPOS Auth: Account locked - username: %s, IP: %s, attempts: %d', $username, self::client_ip(), $attempts ) );
 		}
 	}
