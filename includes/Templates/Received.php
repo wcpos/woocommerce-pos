@@ -136,41 +136,49 @@ class Received {
 			$order_sent = false;
 			try {
 				if ( false !== $order_json && ! $order_complete && $this->is_legacy_send( $order ) ) {
-					$attempt_id = wp_generate_uuid4();
-					$outcome    = 'ineligible';
+					$attempt_id   = wp_generate_uuid4();
+					$outcome      = 'ineligible';
+					$in_flight_id = '';
 					Ledger::instance()->write(
 						$order,
 						// A false answer stages nothing, so early paths do not save; the ledger may run this twice, and the last run sets $outcome.
-						static function ( Ledger_Draft $draft ) use ( $attempt_id, &$outcome ): bool {
+						static function ( Ledger_Draft $draft ) use ( $attempt_id, &$outcome, &$in_flight_id ): bool {
 							$sale = $draft->order();
 							if ( ! self::awaits_payment( $sale ) ) {
 								$outcome = 'ineligible';
 								return false;
 							}
-							if ( null !== Attempts::of( $sale )->awaiting() ) {
+							// A reload is the same send; another method or destination is a new invoice, which supersedes the earlier one.
+							$destination = '' !== $sale->get_billing_email() ? mb_substr( sanitize_text_field( $sale->get_billing_email() ), 0, 254 ) : null;
+							$prior       = Attempts::of( $sale )->awaiting();
+							if ( null !== $prior && $prior['method_id'] === $sale->get_payment_method() && $prior['destination'] === $destination ) {
 								$outcome = 'awaiting';
 								return false;
 							}
 							// An earlier attempt with no known outcome is reconciled first, as native submit refuses via eligible( 'submit' ); stamping would supersede it out of the sweep.
-							if ( null !== Attempts::of( $sale )->eligible( 'submit' ) ) {
-								$outcome = 'ineligible';
+							$in_flight = Attempts::of( $sale )->eligible( 'submit' );
+							if ( null !== $in_flight ) {
+								$outcome      = 'in_flight';
+								$in_flight_id = (string) $in_flight['id'];
 								return false;
 							}
-							Attempts::open( $draft, $attempt_id, $sale->get_payment_method() );
-							$draft->attempt( $attempt_id, 'sent', array( 'cashier_id' => max( 0, (int) $sale->get_meta( '_pos_user' ) ) ) );
-							Attempts::await( $draft, $attempt_id, '' !== $sale->get_billing_email() ? $sale->get_billing_email() : null );
+							Attempts::open_as_till( $draft, $attempt_id, $sale->get_payment_method() );
+							Attempts::await( $draft, $attempt_id, $destination );
 							$outcome = 'written';
 							return true;
 						},
 						Ledger::MODE_HOLD
 					);
-					if ( 'ineligible' !== $outcome ) {
+					if ( 'in_flight' === $outcome ) {
+						Logger::warning( sprintf( 'WCPOS left order #%d without an invoice-sent stamp: payment attempt %s is still in flight and the sweep reconciles it first.', $order->get_id(), $in_flight_id ) );
+					}
+					if ( in_array( $outcome, array( 'written', 'awaiting' ), true ) ) {
 						$order_json = $this->get_order_json( $order->get_id() );
 						$order_sent = false !== $order_json;
 					}
 				}
 			} catch ( \Throwable $e ) {
-				Logger::log( sprintf( 'Received order %d could not record the Legacy send: %s', $order->get_id(), $e->getMessage() ) );
+				Logger::warning( sprintf( 'Received order %d could not record the Legacy send: %s', $order->get_id(), $e->getMessage() ) );
 			}
 
 			include wcpos_locate_template( 'received.php' );

@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WC_Logger_Interface;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Payments\Contract\Attempts;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
@@ -31,9 +33,20 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  */
 class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * The logger and log level capture_logs() replaced; tearDown restores them.
+	 *
+	 * @var array|null
+	 */
+	private $saved_logger;
+
+	/**
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		if ( null !== $this->saved_logger ) {
+			Logger::reset_dedup_state();
+			list( Logger::$logger, Logger::$log_level ) = $this->saved_logger;
+		}
 		wp_set_current_user( 0 );
 		delete_option( 'woocommerce_pos_settings_payment_gateways' );
 		delete_option( 'woocommerce_pos_settings_checkout' );
@@ -454,6 +467,8 @@ class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 			Ledger::MODE_HOLD
 		);
 		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+		$rows = array();
+		$this->capture_logs( $rows );
 
 		try {
 			// Act.
@@ -463,6 +478,9 @@ class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		// Assert.
+		$refusals = array_values( array_filter( $rows, static fn( array $row ): bool => 'warning' === $row['level'] && false !== strpos( $row['message'], $in_flight ) ) );
+		$this->assertCount( 1, $refusals );
+		$this->assertStringContainsString( sprintf( 'order #%d ', $order->get_id() ), $refusals[0]['message'] );
 		$this->assertStringNotContainsString( 'wcpos-payment-sent', $output );
 		$this->assertStringNotContainsString( "action: 'wcpos-payment-received'", $output );
 		$fresh = wc_get_order( $order->get_id() );
@@ -518,6 +536,109 @@ class Test_Received_Settled_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
 		$fresh = wc_get_order( $order->get_id() );
 		$this->assertCount( 1, Attempts::of( $fresh )->entries() );
+	}
+
+	/**
+	 * The stamp carries the till that rang the sale, not the anonymous viewer of the page.
+	 */
+	public function test_send_stamp_carries_the_order_till_origin(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$register = wp_generate_uuid4();
+		$session  = wp_generate_uuid4();
+		$order    = $this->create_pos_order( 'bacs', 'pending' );
+		$order->update_meta_data( '_wcpos_register', $register );
+		$order->update_meta_data( '_wcpos_session', $session );
+		$order->save();
+		$fields = $this->send_verb_for( 'bacs' );
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+
+		try {
+			// Act.
+			$output = $this->render_received( $order );
+		} finally {
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
+		$awaiting = Attempts::of( wc_get_order( $order->get_id() ) )->awaiting();
+		$this->assertSame( $register, $awaiting['provenance']['register'] ?? null );
+		$this->assertSame( $session, $awaiting['provenance']['session'] ?? null );
+	}
+
+	/**
+	 * A second invoice sent to another address is recorded, superseding the first.
+	 */
+	public function test_send_after_an_earlier_send_to_another_address_is_stamped_again(): void {
+		// Arrange.
+		$this->allow_all_gateways_for_pos();
+		$this->set_gateway_settings( 'bacs', 'wc-completed' );
+		$order = $this->create_pos_order( 'bacs', 'pending' );
+		$order->set_billing_email( 'customer@example.com' );
+		$order->save();
+		$prior = wp_generate_uuid4();
+		Ledger::instance()->write(
+			wc_get_order( $order->get_id() ),
+			static function ( Ledger_Draft $draft ) use ( $prior ): void {
+				Attempts::open( $draft, $prior, 'bacs' );
+				Attempts::await( $draft, $prior, 'old@example.com' );
+			},
+			Ledger::MODE_HOLD
+		);
+		$fields = $this->send_verb_for( 'bacs' );
+		add_filter( 'wcpos_payment_method_fields', $fields, 10, 2 );
+
+		try {
+			// Act.
+			$output = $this->render_received( wc_get_order( $order->get_id() ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_fields', $fields, 10 );
+		}
+
+		// Assert.
+		$this->assertStringContainsString( "action: 'wcpos-payment-sent'", $output );
+		$log      = Attempts::of( wc_get_order( $order->get_id() ) );
+		$awaiting = $log->awaiting();
+		$this->assertNotSame( $prior, $awaiting['attempt_id'] );
+		$this->assertSame( 'customer@example.com', $awaiting['destination'] );
+		$this->assertSame( 'superseded', $log->get( $prior )['fate'] );
+	}
+
+	/**
+	 * Swap the production logger for one that keeps every row it is given.
+	 *
+	 * @param array $rows Receives each row as level and message.
+	 */
+	private function capture_logs( array &$rows ): void {
+		$this->saved_logger = array( Logger::$logger, Logger::$log_level );
+		Logger::reset_dedup_state();
+		Logger::$logger = $this->createMock( WC_Logger_Interface::class );
+		Logger::$logger->method( 'log' )->willReturnCallback(
+			static function ( $level, $message ) use ( &$rows ) {
+				$rows[] = compact( 'level', 'message' );
+			}
+		);
+	}
+
+	/**
+	 * A fields filter that declares a send verb for one gateway.
+	 *
+	 * @param string $gateway_id Gateway id.
+	 */
+	private function send_verb_for( string $gateway_id ): callable {
+		return static function ( $block, $gateway ) use ( $gateway_id ) {
+			return $gateway_id === $gateway->id
+				? array(
+					'verb'       => array(
+						'kind'  => 'send',
+						'label' => 'Send invoice',
+					),
+					'components' => array(),
+				)
+				: $block;
+		};
 	}
 
 	/**
