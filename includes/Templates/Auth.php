@@ -132,9 +132,8 @@ class Auth {
 		}
 
 		// Check IP rate limit before processing.
-		if ( $this->is_ip_rate_limited() ) {
-			$this->error = __( 'Too many requests. Please try again later.', 'woocommerce-pos' );
-			$this->log_auth_attempt( '', 'rate_limited' );
+		if ( Credential_Lockout::bucket_is_full( $this->ip_bucket(), self::MAX_ATTEMPTS_PER_IP ) ) {
+			$this->refuse_rate_limited();
 
 			return;
 		}
@@ -386,8 +385,17 @@ class Auth {
 		$username = sanitize_user( wp_unslash( $_POST['wcpos-log'] ?? '' ) );
 		$password = isset( $_POST['wcpos-pwd'] ) ? wp_unslash( $_POST['wcpos-pwd'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Password must not be sanitized before authentication.
 
+		// Count the attempt against this peer before the password is checked, so overlapping
+		// requests cannot all pass on the same count (CWE-307).
+		if ( ! Credential_Lockout::reserve_bucket_attempt( $this->ip_bucket(), self::MAX_ATTEMPTS_PER_IP, self::RATE_LIMIT_WINDOW ) ) {
+			$this->refuse_rate_limited();
+
+			return;
+		}
+
 		// Count the attempt before the password is checked; refuse a locked account.
 		if ( ! Credential_Lockout::reserve_attempt( $username ) ) {
+			Credential_Lockout::release_bucket_attempt( $this->ip_bucket() );
 			$this->error = __( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', 'woocommerce-pos' );
 			$this->log_auth_attempt( $username, 'locked_out' );
 
@@ -399,12 +407,15 @@ class Auth {
 
 		if ( is_wp_error( $user ) ) {
 			Credential_Lockout::record_failure( $username );
-			$this->increment_ip_attempts();
+			Credential_Lockout::record_bucket_failure( $this->ip_bucket(), self::RATE_LIMIT_WINDOW );
 			$this->log_auth_attempt( $username, 'failed', $user->get_error_code() );
 			$this->error = $user->get_error_message();
 
 			return;
 		}
+
+		// A right password is not a failure, so it gives back the peer's attempt.
+		Credential_Lockout::release_bucket_attempt( $this->ip_bucket() );
 
 		// Check if user has access to POS.
 		if ( ! Cashier::instance()->can_open_pos( $user ) ) {
@@ -528,29 +539,22 @@ class Auth {
 	}
 
 	/**
-	 * Check if IP is rate limited.
+	 * The connecting peer's rate-limit bucket in Credential_Lockout's attempt rows.
 	 *
-	 * @return bool
+	 * @return string
 	 */
-	private function is_ip_rate_limited(): bool {
-		$ip            = Credential_Lockout::client_ip();
-		$transient_key = 'wcpos_auth_ip_' . md5( $ip );
-		$attempts      = (int) get_transient( $transient_key );
-
-		return $attempts >= self::MAX_ATTEMPTS_PER_IP;
+	private function ip_bucket(): string {
+		return md5( 'peer:' . Credential_Lockout::client_ip() );
 	}
 
 	/**
-	 * Increment IP attempt counter.
+	 * Refuse a login because the connecting peer is over its rate limit.
 	 *
 	 * @return void
 	 */
-	private function increment_ip_attempts(): void {
-		$ip            = Credential_Lockout::client_ip();
-		$transient_key = 'wcpos_auth_ip_' . md5( $ip );
-		$attempts      = (int) get_transient( $transient_key );
-
-		set_transient( $transient_key, $attempts + 1, self::RATE_LIMIT_WINDOW );
+	private function refuse_rate_limited(): void {
+		$this->error = __( 'Too many requests. Please try again later.', 'woocommerce-pos' );
+		$this->log_auth_attempt( '', 'rate_limited' );
 	}
 
 	/**
