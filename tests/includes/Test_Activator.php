@@ -537,32 +537,31 @@ class Test_Activator extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The role-capabilities fingerprint is stable and sensitive to definition changes.
+	 * The role-capabilities fingerprint is stable and sensitive to definition and registry-only changes.
 	 *
 	 * @covers ::role_capability_definition
 	 * @covers ::role_caps_fingerprint
 	 */
 	public function test_role_caps_fingerprint_when_definition_changes_returns_different_value(): void {
 		// Arrange.
-		$activator         = ( new ReflectionClass( Activator::class ) )->newInstanceWithoutConstructor();
-		$reflection        = new ReflectionClass( $activator );
-		$definition        = $reflection->getMethod( 'role_capability_definition' );
-		$definition->setAccessible( true );
-		$role_capabilities = $definition->invoke( null );
+		$before = $this->role_caps_fingerprint();
+		$this->assertSame( $before, $this->role_caps_fingerprint() );
 
 		// Act.
-		$changed_role_capabilities = $role_capabilities;
-		$changed_role_capabilities['cashier']['fingerprint_test_cap'] = true;
+		Permission_Registry::add_test_entry(
+			array(
+				'capability' => 'wcpos_fingerprint_test_cap',
+				'defaults'   => array( 'cashier' ),
+			)
+		);
 
 		// Assert.
-		$this->assertEquals(
-			md5( wp_json_encode( $role_capabilities ) ),
-			$this->role_caps_fingerprint()
-		);
-		$this->assertNotEquals(
-			$this->role_caps_fingerprint(),
-			md5( wp_json_encode( $changed_role_capabilities ) )
-		);
+		$this->assertNotSame( $before, $this->role_caps_fingerprint() );
+
+		Permission_Registry::reset_test_entries();
+		Permission_Registry::add_test_entry( array( 'capability' => 'wcpos_fingerprint_test_cap' ) );
+		$this->assertNotSame( $before, $this->role_caps_fingerprint() );
+		Permission_Registry::reset_test_entries();
 	}
 
 	/**

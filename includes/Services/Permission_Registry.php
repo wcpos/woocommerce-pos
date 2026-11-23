@@ -15,7 +15,11 @@ final class Permission_Registry {
 	 */
 	public const MARKER_BASELINE = '2.2.0';
 
-	/** @var array[] Entries appended by tests. */
+	/**
+	 * Entries appended by tests.
+	 *
+	 * @var array[]
+	 */
 	private static $test_entries = array();
 
 	/**

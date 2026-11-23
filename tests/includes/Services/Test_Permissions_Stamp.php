@@ -15,7 +15,11 @@ use WP_User;
 
 /** Permissions stamp contracts. */
 class Test_Permissions_Stamp extends WCPOS_REST_Unit_Test_Case {
-	/** @var string Original store currency. */
+	/**
+	 * Original store currency.
+	 *
+	 * @var string
+	 */
 	private $currency;
 
 	/** Start with the default cashier grants. */
@@ -38,7 +42,7 @@ class Test_Permissions_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 	/** Signed-in successful responses expose the current user's stamp. */
 	public function test_wcpos_v2_response_for_signed_in_user_carries_the_stamp(): void {
-		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings' ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
 		$headers  = $response->get_headers();
 
 		$this->assertSame( 200, $response->get_status() );
@@ -49,7 +53,7 @@ class Test_Permissions_Stamp extends WCPOS_REST_Unit_Test_Case {
 
 	/** Opted-in response bodies mirror the same stamp. */
 	public function test_enveloped_response_mirrors_the_stamp(): void {
-		$request = $this->wp_rest_get_request( '/wcpos/v2/settings' );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/status' );
 		$request->set_param( '_wcpos_envelope', '1' );
 
 		$response = $this->server->dispatch( $request );
