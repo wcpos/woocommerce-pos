@@ -24,7 +24,7 @@ WCPOS was called WooCommerce POS until November 2025.
 
 Try it first at [demo.wcpos.com/pos](https://demo.wcpos.com/pos), login `demo` / `demo`.
 
-Desktop app (Windows 10 or later, macOS 12 or later, Linux x64): [Windows](https://updates.wcpos.com/electron/download/win32-x64) · [Mac (Apple silicon)](https://updates.wcpos.com/electron/download/darwin-arm64) · [Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64) · [Linux (.deb)](https://updates.wcpos.com/electron/download/linux-x64) · [Linux (.rpm)](https://updates.wcpos.com/electron/download/linux-x64-rpm)
+Desktop app (Windows 10 or later, macOS 13 or later, Linux x64): [Windows](https://updates.wcpos.com/electron/download/win32-x64) · [Mac (Apple silicon)](https://updates.wcpos.com/electron/download/darwin-arm64) · [Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64) · [Linux (.deb)](https://updates.wcpos.com/electron/download/linux-x64) · [Linux (.rpm)](https://updates.wcpos.com/electron/download/linux-x64-rpm)
 
 Mobile apps, in beta (iOS and iPadOS 16.4 or later, Android 10 or later): [iPhone and iPad (TestFlight beta)](https://testflight.apple.com/join/JGBdVRrW) · [Android (Google Play beta)](https://play.google.com/apps/testing/com.wcpos.main)
 
@@ -185,7 +185,7 @@ No. The POS sells from your WooCommerce products, stock and prices, and every sa
 Any modern web browser, plus desktop and mobile apps. One login works on all of them.
 
 * Windows 10 or later, 64-bit.
-* Mac on macOS 12 or later, Apple silicon or Intel.
+* Mac on macOS 13 or later, Apple silicon or Intel.
 * Linux, 64-bit, as a .deb or .rpm package.
 * iPhone and iPad on iOS 16.4 or later, in beta through TestFlight.
 * Android 10 or later, in beta through Google Play.
