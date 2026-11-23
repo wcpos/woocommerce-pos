@@ -61,13 +61,13 @@ class Test_Payment_Index extends WC_Unit_Test_Case {
 		$this->assertSame( $order->get_id(), $found );
 	}
 
-	/** The sweep reaches live orders holding the live-leg index, least recently modified first. */
-	public function test_order_ids_with_live_legs_live_orders_come_oldest_modified_first(): void {
+	/** The sweep reaches live and trashed orders holding the live-leg index, least recently modified first. */
+	public function test_order_ids_with_live_legs_live_and_trashed_orders_come_oldest_modified_first(): void {
 		// Arrange.
-		$newest = $this->live_leg_order( time() - 60 );
-		$oldest = $this->live_leg_order( time() - 3600 );
-		$middle = $this->live_leg_order( time() - 600 );
-		$this->live_leg_order( time() - 7200, 'trash' );
+		$newest  = $this->live_leg_order( time() - 60 );
+		$oldest  = $this->live_leg_order( time() - 3600 );
+		$middle  = $this->live_leg_order( time() - 600 );
+		$trashed = $this->live_leg_order( time() - 7200, 'trash' );
 		$this->live_leg_order( time() - 7200, 'auto-draft' );
 		$settled = wc_create_order();
 
@@ -75,7 +75,7 @@ class Test_Payment_Index extends WC_Unit_Test_Case {
 		$ids = Payment_Index::order_ids_with_live_legs( 10 );
 
 		// Assert.
-		$this->assertSame( array( $oldest, $middle, $newest ), $ids );
+		$this->assertSame( array( $trashed, $oldest, $middle, $newest ), $ids );
 		$this->assertNotContains( $settled->get_id(), $ids );
 	}
 
