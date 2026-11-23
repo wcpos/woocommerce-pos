@@ -7,7 +7,10 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WC_Payment_Gateway;
+use WC_Payment_Gateways;
 use WCPOS\WooCommercePOS\Services\Extensions;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WP_UnitTestCase;
 
 /**
@@ -30,6 +33,13 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	private $mock_catalog_data = array();
 
 	/**
+	 * The `woocommerce_payment_gateways` callback a test registered, if any.
+	 *
+	 * @var callable|null
+	 */
+	private $stub_gateway_filter = null;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -44,6 +54,13 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	public function tearDown(): void {
 		delete_transient( 'wcpos_extensions_catalog' );
 		delete_site_option( 'auto_update_plugins' );
+		delete_option( 'woocommerce_pos_settings_payment_gateways' );
+		Payment_Gateways_Section::register_free_tier_rule();
+		if ( $this->stub_gateway_filter ) {
+			remove_filter( 'woocommerce_payment_gateways', $this->stub_gateway_filter );
+			$this->stub_gateway_filter = null;
+			$this->reset_gateway_registry();
+		}
 		parent::tearDown();
 	}
 
@@ -368,6 +385,162 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'auto_update', $extensions[0] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * An active payment extension reports its gateway, whether the POS has it on, and its own setup state.
+	 */
+	public function test_active_payment_extension_reports_pos_setup(): void {
+		$this->register_stub_gateway( 'wcpos_ext_needs_setup', true );
+		$this->enable_in_pos( 'wcpos_ext_needs_setup' );
+
+		$extension = $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_needs_setup' );
+
+		$this->assertSame( 'wcpos_ext_needs_setup', $extension['gateway_id'] );
+		$this->assertTrue( $extension['pos_enabled'] );
+		$this->assertTrue( $extension['needs_setup'] );
+	}
+
+	/**
+	 * A gateway whose needs_setup() says it is finished, switched off in the POS.
+	 */
+	public function test_active_payment_extension_reports_finished_setup_and_pos_off(): void {
+		$this->register_stub_gateway( 'wcpos_ext_finished', false );
+
+		$extension = $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_finished' );
+
+		$this->assertSame( 'wcpos_ext_finished', $extension['gateway_id'] );
+		$this->assertFalse( $extension['pos_enabled'] );
+		$this->assertFalse( $extension['needs_setup'] );
+	}
+
+	/**
+	 * A gateway that does not override needs_setup() cannot say: the setup state is unknown.
+	 */
+	public function test_active_payment_extension_needs_setup_is_null_without_an_override(): void {
+		$this->register_stub_gateway( 'wcpos_ext_unknown', null );
+
+		$extension = $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_unknown' );
+
+		$this->assertSame( 'wcpos_ext_unknown', $extension['gateway_id'] );
+		$this->assertArrayHasKey( 'needs_setup', $extension );
+		$this->assertNull( $extension['needs_setup'] );
+	}
+
+	/**
+	 * No setup fields without a section in the settings URL, without a registered
+	 * gateway, for another category, or for an inactive extension.
+	 */
+	public function test_pos_setup_fields_are_omitted_when_they_do_not_apply(): void {
+		$this->register_stub_gateway( 'wcpos_ext_needs_setup', true );
+		$url = 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_needs_setup';
+
+		$cases = array(
+			'no section'      => $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout' ),
+			'no gateway'      => $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_missing' ),
+			'other category'  => $this->get_single_extension( 'catalog', $url ),
+			'inactive plugin' => $this->get_single_extension( 'payments', $url, false ),
+		);
+
+		foreach ( $cases as $label => $extension ) {
+			$this->assertArrayNotHasKey( 'gateway_id', $extension, $label );
+			$this->assertArrayNotHasKey( 'pos_enabled', $extension, $label );
+			$this->assertArrayNotHasKey( 'needs_setup', $extension, $label );
+		}
+	}
+
+	/**
+	 * Fetch the extensions list for a one-entry catalog whose plugin is WooCommerce.
+	 *
+	 * @param string $category     Catalog category.
+	 * @param string $settings_url Catalog settings_url.
+	 * @param bool   $active       Whether the plugin is active.
+	 *
+	 * @return array The single extension entry.
+	 */
+	private function get_single_extension( string $category, string $settings_url, bool $active = true ): array {
+		update_option( 'active_plugins', $active ? array( 'woocommerce/woocommerce.php' ) : array() );
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'category'       => $category,
+				'latest_version' => '0.0.1',
+				'settings_url'   => $settings_url,
+			),
+		);
+		delete_transient( 'wcpos_extensions_catalog' );
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+		$extensions = $this->service->get_extensions();
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+
+		$this->assertCount( 1, $extensions );
+
+		return $extensions[0];
+	}
+
+	/**
+	 * Register a stub WooCommerce gateway for the rest of the test.
+	 *
+	 * @param string    $id          Gateway id.
+	 * @param bool|null $needs_setup What an overriding needs_setup() returns; null for no override.
+	 */
+	private function register_stub_gateway( string $id, ?bool $needs_setup ): void {
+		if ( null === $needs_setup ) {
+			$gateway = new class() extends WC_Payment_Gateway {
+				/** No form fields. */
+				public function __construct() {}
+			};
+		} else {
+			$gateway = new class() extends WC_Payment_Gateway {
+				/**
+				 * What needs_setup() returns.
+				 *
+				 * @var bool
+				 */
+				public $stub_needs_setup = false;
+
+				/** No form fields. */
+				public function __construct() {}
+
+				/**
+				 * The stubbed setup state.
+				 *
+				 * @return bool
+				 */
+				public function needs_setup() {
+					return $this->stub_needs_setup;
+				}
+			};
+			$gateway->stub_needs_setup = $needs_setup;
+		}
+		$gateway->id    = $id;
+		$gateway->title = $id;
+
+		$this->stub_gateway_filter = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+		add_filter( 'woocommerce_payment_gateways', $this->stub_gateway_filter );
+		$this->reset_gateway_registry();
+	}
+
+	/**
+	 * Switch a gateway on in the POS settings, standing in for Pro's lift of the free-tier rule.
+	 *
+	 * @param string $id Gateway id.
+	 */
+	private function enable_in_pos( string $id ): void {
+		remove_filter( 'option_woocommerce_pos_settings_payment_gateways', array( Payment_Gateways_Section::class, 'free_tier_rule' ) );
+		update_option( 'woocommerce_pos_settings_payment_gateways', array( 'gateways' => array( $id => array( 'enabled' => true ) ) ) );
+	}
+
+	/**
+	 * Rebuild WooCommerce's gateway list from the current filters.
+	 */
+	private function reset_gateway_registry(): void {
+		$registry                   = WC_Payment_Gateways::instance();
+		$registry->payment_gateways = array();
+		$registry->init();
 	}
 
 	/**

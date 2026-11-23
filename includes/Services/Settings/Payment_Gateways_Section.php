@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
+use WC_Payment_Gateway;
 use WC_Payment_Gateways;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
@@ -101,6 +102,21 @@ class Payment_Gateways_Section extends Abstract_Section {
 			}
 		}
 		return $options;
+	}
+
+	/**
+	 * Whether a gateway's own WooCommerce settings still need finishing.
+	 *
+	 * WC_Payment_Gateway::needs_setup() returns false for every gateway that does not
+	 * override it, so only an override can answer; otherwise the answer is unknown.
+	 *
+	 * @param WC_Payment_Gateway $gateway The gateway.
+	 * @return bool|null Null when the gateway cannot say.
+	 */
+	public static function gateway_needs_setup( WC_Payment_Gateway $gateway ): ?bool {
+		$declared_by = ( new \ReflectionMethod( $gateway, 'needs_setup' ) )->getDeclaringClass()->getName();
+
+		return WC_Payment_Gateway::class === $declared_by ? null : (bool) $gateway->needs_setup();
 	}
 
 	/**

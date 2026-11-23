@@ -39,6 +39,12 @@ export interface Extension {
 	auto_update?: boolean;
 	settings_url?: string;
 	log_source?: string;
+	/** Active payment extensions only: the WooCommerce gateway the extension registers. */
+	gateway_id?: string;
+	/** Whether that gateway is switched on in the POS. */
+	pos_enabled?: boolean;
+	/** Whether its WooCommerce settings still need finishing; null when the gateway cannot say. */
+	needs_setup?: boolean | null;
 }
 
 function Extensions() {

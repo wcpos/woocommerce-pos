@@ -9,6 +9,10 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WC_Payment_Gateway;
+use WC_Payment_Gateways;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
+
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
@@ -136,6 +140,9 @@ class Extensions {
 
 		$extensions = array();
 
+		// Read once, and only when an active payment extension needs it: the read re-inits WooCommerce's gateways.
+		$pos_gateways = null;
+
 		foreach ( $catalog as $entry ) {
 			$slug        = $entry['slug'] ?? '';
 			$plugin_file = $this->find_plugin_file( $slug, $installed_plugins );
@@ -170,6 +177,11 @@ class Extensions {
 				if ( ! empty( $entry['settings_url'] ) && \is_string( $entry['settings_url'] ) ) {
 					$entry['settings_url'] = admin_url( $entry['settings_url'] );
 				}
+
+				if ( $is_active && 'payments' === ( $entry['category'] ?? '' ) ) {
+					$pos_gateways = $pos_gateways ?? Settings::instance()->get_payment_gateways_settings();
+					$entry        = array_merge( $entry, $this->pos_setup( $entry, $pos_gateways ) );
+				}
 			}
 
 			$entry['status'] = $status;
@@ -177,6 +189,33 @@ class Extensions {
 		}
 
 		return $extensions;
+	}
+
+	/**
+	 * Where an active payment extension stands in the POS.
+	 *
+	 * The gateway id is the `section` of the catalog's WooCommerce settings URL.
+	 *
+	 * @param array $entry        Catalog entry.
+	 * @param array $pos_gateways The POS payment-gateways settings view.
+	 *
+	 * @return array `gateway_id`, `pos_enabled` and `needs_setup` (null when the gateway
+	 *               cannot say), or nothing when no gateway is registered under the id.
+	 */
+	private function pos_setup( array $entry, array $pos_gateways ): array {
+		wp_parse_str( (string) wp_parse_url( (string) ( $entry['settings_url'] ?? '' ), PHP_URL_QUERY ), $query );
+		$gateway_id = \is_string( $query['section'] ?? null ) ? $query['section'] : '';
+		$gateway    = '' === $gateway_id ? null : ( WC_Payment_Gateways::instance()->payment_gateways()[ $gateway_id ] ?? null );
+
+		if ( ! $gateway instanceof WC_Payment_Gateway ) {
+			return array();
+		}
+
+		return array(
+			'gateway_id'  => $gateway_id,
+			'pos_enabled' => ! empty( $pos_gateways['gateways'][ $gateway_id ]['enabled'] ),
+			'needs_setup' => Payment_Gateways_Section::gateway_needs_setup( $gateway ),
+		);
 	}
 
 	/**
