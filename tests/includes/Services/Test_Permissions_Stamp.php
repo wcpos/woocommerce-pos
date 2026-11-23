@@ -109,8 +109,9 @@ class Test_Permissions_Stamp extends WCPOS_REST_Unit_Test_Case {
 	public function test_signed_out_response_carries_no_stamp(): void {
 		wp_set_current_user( 0 );
 
-		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings' ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/ping' ) );
 
+		$this->assertSame( 200, $response->get_status() );
 		$this->assertArrayNotHasKey( Permissions_Stamp::HEADER, $response->get_headers() );
 	}
 }

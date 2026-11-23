@@ -34,7 +34,8 @@ class Test_Permission_Registry extends WP_UnitTestCase {
 
 	/** Freeze the original API groups and their order. */
 	public function test_access_capability_groups_match_the_two_point_zero_lists(): void {
-		$customer_create_cap = version_compare( WC()->version, '9.9', '>=' )
+		// WC 9.9 replaced promote_users with create_customers for customer creation.
+		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' ) // @phpstan-ignore-line
 			? 'create_customers'
 			: 'promote_users';
 

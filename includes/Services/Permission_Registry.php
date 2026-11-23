@@ -27,7 +27,10 @@ final class Permission_Registry {
 		$managers            = array( 'administrator', 'shop_manager' );
 		$all                 = array( 'administrator', 'shop_manager', 'cashier' );
 		$cashier             = array( 'cashier' );
-		$customer_create_cap = version_compare( WC()->version, '9.9', '>=' ) ? 'create_customers' : 'promote_users';
+		// WC 9.9 replaced promote_users with create_customers for customer creation.
+		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' ) // @phpstan-ignore-line
+			? 'create_customers'
+			: 'promote_users';
 		// Capability => row, group, default roles, in the existing API order.
 		$rows = array(
 			'access_woocommerce_pos'          => array( 'use_pos', 'pos', $all ),
