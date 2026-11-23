@@ -55,17 +55,19 @@ class Feature_Flags {
 	 * `plan` takes the hash range `indie` held (the first half), so a site that
 	 * was on `free-plus` stays on `free-plus`. `indie` stays listed at 0% (Paul,
 	 * 2026-11-23: plan vs free-plus 50/50, indie to 0%); the bundle still has it.
+	 * Later the same day: "Move plan to 100% for now" — `free-plus` is listed at
+	 * 0% too. Both stay in the bundle.
 	 *
 	 * @var array<int, array{key: string, rollout: int}>
 	 */
 	const LANDING_VARIANTS = array(
 		array(
 			'key'     => 'plan',
-			'rollout' => 50,
+			'rollout' => 100,
 		),
 		array(
 			'key'     => 'free-plus',
-			'rollout' => 50,
+			'rollout' => 0,
 		),
 		array(
 			'key'     => 'indie',
