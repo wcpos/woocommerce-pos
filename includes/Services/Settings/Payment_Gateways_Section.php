@@ -188,7 +188,7 @@ class Payment_Gateways_Section extends Abstract_Section {
 	protected function sanitize( array $settings ): array {
 		foreach ( $settings['gateways'] ?? array() as $id => $gateway ) {
 			// Computed on every read; a PATCH echoes the view back, so keep it out of the option.
-			unset( $settings['gateways'][ $id ]['capture_mode'], $settings['gateways'][ $id ]['kind'] );
+			unset( $settings['gateways'][ $id ]['capture_mode'], $settings['gateways'][ $id ]['kind'], $settings['gateways'][ $id ]['needs_setup'] );
 			// A writer that skipped the endpoint (save_settings) cannot store a value the list and the
 			// till would refuse; it becomes no rounding. The pre-save filter runs after this.
 			$increment = (string) ( $gateway['rounding_increment'] ?? '' );
@@ -274,6 +274,7 @@ class Payment_Gateways_Section extends Abstract_Section {
 				array(
 					'capture_mode' => explode( ':', Descriptor_Builder::resolve_mode( $gateway ), 2 )[0],
 					'kind'         => Descriptor_Builder::resolve_kind( $gateway ),
+					'needs_setup'  => self::gateway_needs_setup( $gateway ),
 				)
 			);
 

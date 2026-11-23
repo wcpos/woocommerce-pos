@@ -427,6 +427,47 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Each gateway says whether its own settings need finishing; null when it does not override needs_setup().
+	 */
+	public function test_read_exposes_needs_setup_and_write_does_not_store_it(): void {
+		$gateway     = new class() extends WC_Payment_Gateway {
+			/** No form fields. */
+			public function __construct() {
+				$this->id = 'wcpos_unfinished_gateway';
+			}
+
+			/**
+			 * Its settings are not finished.
+			 *
+			 * @return bool
+			 */
+			public function needs_setup() {
+				return true;
+			}
+		};
+		$add_gateway = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+		add_filter( 'woocommerce_payment_gateways', $add_gateway );
+
+		try {
+			$section  = new Payment_Gateways_Section();
+			$gateways = $section->read()['gateways'];
+
+			$this->assertTrue( $gateways['wcpos_unfinished_gateway']['needs_setup'] );
+			$this->assertNull( $gateways['pos_cash']['needs_setup'] );
+
+			$section->write( $section->read() );
+			$stored = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways'];
+			$this->assertArrayNotHasKey( 'needs_setup', $stored['wcpos_unfinished_gateway'] );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			WC_Payment_Gateways::instance()->payment_gateways = array();
+			WC_Payment_Gateways::instance()->init();
+		}
+	}
+
+	/**
 	 * Register a stub gateway with the given public properties for the duration
 	 * of the callback, then restore the gateway registry.
 	 *

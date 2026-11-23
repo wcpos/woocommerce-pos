@@ -56,6 +56,8 @@ interface GatewayItem {
 	order: number;
 	enabled: boolean;
 	order_status?: string;
+	/** Whether its own WooCommerce settings need finishing; null when it cannot say. */
+	needs_setup?: boolean | null;
 }
 
 interface GatewayRowProps {
@@ -75,6 +77,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 	const dragHandleRef = React.useRef<HTMLTableCellElement>(null);
 	const [isDragging, setIsDragging] = React.useState(false);
 	const [closestEdge, setClosestEdge] = React.useState<Edge | null>(null);
+	const wooSettingsUrl = `admin.php?page=wc-settings&tab=checkout&section=${item.id}`;
 
 	React.useEffect(() => {
 		const row = rowRef.current;
@@ -147,8 +150,23 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 			</TableCell>
 			<TableCell className="wcpos:text-ellipsis wcpos:overflow-hidden wcpos:whitespace-nowrap">
 				<strong>{item.title}</strong>
+				{item.enabled && item.needs_setup === true && (
+					<div className="wcpos:text-xs wcpos:text-gray-500">
+						{t('checkout.gateway_settings_unfinished')}{' '}
+						<a
+							href={wooSettingsUrl}
+							className="wcpos:text-wp-admin-theme-color wcpos:hover:underline"
+						>
+							{t('checkout.open_settings')}
+						</a>
+					</div>
+				)}
 			</TableCell>
-			<TableCell className="wcpos:whitespace-nowrap">{item.id}</TableCell>
+			<TableCell>
+				<span className="wcpos:block wcpos:max-w-44 wcpos:truncate" title={item.id}>
+					{item.id}
+				</span>
+			</TableCell>
 			<TableCell className="wcpos:whitespace-nowrap wcpos:text-center">
 				<Toggle
 					aria-label={item.title}
@@ -204,7 +222,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 						{t('common.pos_settings')}
 					</DropdownMenuItem>
 					{!['pos_cash', 'pos_card'].includes(item.id) && (
-						<DropdownMenuItem href={`admin.php?page=wc-settings&tab=checkout&section=${item.id}`}>
+						<DropdownMenuItem href={wooSettingsUrl}>
 							{t('common.woocommerce_settings')}
 						</DropdownMenuItem>
 					)}

@@ -134,6 +134,8 @@
 	"checkout.gateways": "Gateways",
 	"checkout.gateways_description": "Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.",
 	"checkout.gateway_id": "Gateway ID",
+	"checkout.gateway_settings_unfinished": "Its settings aren't finished.",
+	"checkout.open_settings": "Open settings",
 	"checkout.rounding": "Rounding",
 	"checkout.no_rounding": "No rounding",
 	"checkout.rounding_tip": "Cash payments round to the nearest increment; card and online payments keep full precision.",
