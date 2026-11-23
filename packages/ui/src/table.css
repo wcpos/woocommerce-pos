@@ -1,0 +1,80 @@
+/**
+ * Scroll shadows for Table (table.tsx): a soft inner shadow on the edge where columns are
+ * hidden, so a table that scrolls sideways on a phone does not look finished.
+ *
+ * - Two sticky strips inside the scroller, either side of the <table>, drawn above the rows:
+ *   a shadow painted on the scroller's own background sits under the rows' backgrounds
+ *   (the gray-50 header and striped rows hide it). Negative margins keep them out of layout.
+ * - Shown by a scroll-driven animation on the scroller. A table that fits has no scroll
+ *   range, its timeline is inactive and both strips stay at opacity 0. Browsers without
+ *   scroll timelines also show none, which is how every table looked before.
+ * - `scroll(nearest)`, not a named timeline on a wrapper: Safari ignores `timeline-scope`.
+ * - Longhands, not `animation`: the minifier rewrites a name-less shorthand to `none`.
+ * - Import it outside any `@layer`, next to wp-admin-reset.css.
+ */
+
+.wcpos-table {
+	display: flex;
+}
+
+.wcpos-table::before,
+.wcpos-table::after {
+	content: "";
+	position: sticky;
+	z-index: 1;
+	flex: none;
+	width: 1rem;
+	pointer-events: none;
+	opacity: 0;
+	animation-timing-function: linear;
+	animation-fill-mode: both;
+	animation-timeline: scroll(nearest inline);
+}
+
+/* Start edge: appears once the table has scrolled away from it. */
+.wcpos-table::before {
+	inset-inline-start: 0;
+	margin-inline-end: -1rem;
+	background: linear-gradient(
+		to right,
+		color-mix(in srgb, var(--wcpos-color-gray-900) 15%, transparent),
+		transparent
+	);
+	animation-name: wcpos-table-shadow-in;
+	animation-range: 0 1rem;
+}
+
+/* End edge: shown while more is hidden past it, gone at the end. */
+.wcpos-table::after {
+	inset-inline-end: 0;
+	margin-inline-start: -1rem;
+	background: linear-gradient(
+		to left,
+		color-mix(in srgb, var(--wcpos-color-gray-900) 15%, transparent),
+		transparent
+	);
+	animation-name: wcpos-table-shadow-out;
+	animation-range: calc(100% - 1rem) 100%;
+}
+
+/* The gradients are physical; mirror them where start is the right edge. */
+[dir="rtl"] .wcpos-table::before,
+[dir="rtl"] .wcpos-table::after {
+	scale: -1 1;
+}
+
+@keyframes wcpos-table-shadow-in {
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes wcpos-table-shadow-out {
+	from {
+		opacity: 1;
+	}
+
+	to {
+		opacity: 0;
+	}
+}
