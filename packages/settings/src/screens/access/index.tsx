@@ -98,11 +98,7 @@ function Access() {
 	);
 
 	const documentationLink = (
-		<a
-			href="https://docs.wcpos.com/settings/wp-admin/access"
-			target="_blank"
-			rel="noreferrer"
-		/>
+		<a href="https://docs.wcpos.com/settings/wp-admin/access" target="_blank" rel="noreferrer" />
 	);
 
 	return (

@@ -212,6 +212,7 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		try {
+			Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 			$fresh = wc_get_order( $order->get_id() );
 			if ( ! $fresh instanceof WC_Order ) {
 				return;
@@ -366,6 +367,7 @@ final class Fiscal_Record_Writers {
 	 */
 	public function retry( WC_Order $order ): void {
 		$this->recover( $order );
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$fresh = wc_get_order( $order->get_id() );
 		if ( ! $fresh instanceof WC_Order ) {
 			return;
@@ -741,6 +743,7 @@ final class Fiscal_Record_Writers {
 				(string) $provenance['session_id'],
 				function () use ( $order, $refund_id, $provenance ): void {
 					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					Order_Meta_Store::forget_datastore_cache( $refund_id );
 					$fresh = wc_get_order( $refund_id );
 					if ( ! $fresh instanceof WC_Order_Refund ) {
 						return;
@@ -996,6 +999,7 @@ final class Fiscal_Record_Writers {
 				$session_id,
 				function () use ( $order, $row, $refund, $amount, $session_id ): void {
 					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					Order_Meta_Store::forget_datastore_cache( $refund->get_id() );
 					$fresh = wc_get_order( $refund->get_id() );
 					if ( $fresh instanceof WC_Order_Refund ) {
 						$fresh->read_meta_data( true );

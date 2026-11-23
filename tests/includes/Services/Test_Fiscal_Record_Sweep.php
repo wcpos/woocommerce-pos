@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController;
+use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Payments_Sweeper;
@@ -299,6 +301,41 @@ class Test_Fiscal_Record_Sweep extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+	}
+
+	/** A completion another request stored after this request cached the order is the one retry() records. */
+	public function test_retry_records_a_completion_stored_after_the_order_was_cached(): void {
+		// Arrange.
+		global $wpdb;
+		$order = $this->order();
+		$this->assertSame( array(), Completion_History::of( wc_get_order( $order->get_id() ) )->entries(), 'Precondition: this request caches the order with no history.' );
+		$entry  = array(
+			'id'     => wp_generate_uuid4(),
+			'n'      => 1,
+			'at_gmt' => gmdate( 'c' ),
+			'total'  => '100.00',
+		);
+		$s      = \WCPOS\WooCommercePOS\Services\Order_Meta_Store::schema();
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$s['meta']} ({$s['owner']}, meta_key, meta_value) VALUES (%d, %s, %s)", $order->get_id(), Completion_Stamp::META_KEY, wp_json_encode( array( $entry ) ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Order_Meta_Store table and column names.
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry( $order );
+
+		// Assert.
+		$this->assertSame( array( $entry['id'] ), array_column( $this->sales( $order->get_id() ), 'source_id' ) );
+	}
+
+	/** With WooCommerce's HPOS data-store caching on, the order row and meta it cached are dropped too. */
+	public function test_retry_records_a_completion_stored_after_the_order_was_cached_with_hpos_datastore_caching(): void {
+		if ( ! OrderUtil::custom_orders_table_usage_is_enabled() || ! defined( CustomOrdersTableController::class . '::HPOS_DATASTORE_CACHING_ENABLED_OPTION' ) ) {
+			$this->markTestSkipped( 'HPOS data-store caching needs HPOS storage and a WooCommerce version that has it.' );
+		}
+		update_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION, 'yes' );
+		try {
+			$this->test_retry_records_a_completion_stored_after_the_order_was_cached();
+		} finally {
+			delete_option( CustomOrdersTableController::HPOS_DATASTORE_CACHING_ENABLED_OPTION );
+		}
 	}
 
 	/**

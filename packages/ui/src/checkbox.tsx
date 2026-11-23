@@ -40,7 +40,8 @@ export function Checkbox({
 				id={inputId}
 				type="checkbox"
 				className={classNames(
-					'wcpos:h-4 wcpos:w-4 wcpos:rounded wcpos:border-gray-300 wcpos:text-wp-admin-theme-color wcpos:focus:ring-wp-admin-theme-color',
+					// `wcpos-checkbox` is the hook for the phone-width tick fix in wp-admin-reset.css.
+					'wcpos-checkbox wcpos:h-4 wcpos:w-4 wcpos:rounded wcpos:border-gray-300 wcpos:text-wp-admin-theme-color wcpos:focus:ring-wp-admin-theme-color',
 					disabled ? 'wcpos:opacity-50 wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer'
 				)}
 				disabled={disabled}
