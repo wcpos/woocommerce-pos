@@ -4,13 +4,9 @@ import classNames from 'classnames';
 
 import { Card, Chip, DropdownMenu, DropdownMenuItem, Tooltip } from '@wcpos/ui';
 
-import {
-	CheckIcon,
-	ExtensionSetupFooter,
-	showsPosSetup,
-	renderSlot,
-	SetupChip,
-} from './extension-setup-footer';
+import { CheckIcon } from './check-icon';
+import { ExtensionSetupFooter, SetupChip, showsPosSetup } from './extension-setup-footer';
+import { renderSlot } from './extension-slots';
 import { KebabMenuTrigger } from '../../components/kebab-menu-trigger';
 import { t } from '../../translations';
 
@@ -186,7 +182,7 @@ function FooterAction({ extension }: { extension: Extension }) {
  */
 function buildFooterContent(extension: Extension): React.ReactNode {
 	if (showsPosSetup(extension)) {
-		return <ExtensionSetupFooter key={String(extension.pos_enabled)} extension={extension} />;
+		return <ExtensionSetupFooter extension={extension} />;
 	}
 
 	// Pro plugin provides the action controls.

@@ -1,22 +1,17 @@
 import * as React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SnackbarProvider } from '@wcpos/ui';
 
 import ExtensionCard from './extension-card';
 
 import type { Extension } from './index';
 
-interface MutateOptions {
-	onError?: (error: Error) => void;
-	onSettled?: () => void;
-}
-
-const mutate = vi.fn<(data: Record<string, unknown>, options?: MutateOptions) => void>();
-vi.mock('../../hooks/use-settings-api', () => ({
-	default: () => ({ data: {}, mutate }),
-}));
+const apiFetchMock = vi.fn();
+vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
 
 const base: Extension = {
 	slug: 'stripe-terminal',
@@ -40,16 +35,31 @@ const base: Extension = {
 	settings_url:
 		'https://shop.test/wp-admin/admin.php?page=wc-settings&tab=checkout&section=stripe_terminal',
 	gateway_id: 'stripe_terminal',
-	pos_enabled: false,
-	needs_setup: true,
 };
+
+interface GatewaySetup {
+	enabled: boolean;
+	needs_setup: boolean | null;
+}
 
 let client: QueryClient;
 
-function renderCard(overrides: Partial<Extension> = {}) {
+/**
+ * Render a card with its gateway's POS settings already in the `payment-gateways`
+ * query, as the route loader leaves them.
+ */
+function renderCard(
+	overrides: Partial<Extension> = {},
+	gateway: GatewaySetup = { enabled: false, needs_setup: true }
+) {
+	client.setQueryData(['payment-gateways'], {
+		gateways: { stripe_terminal: { id: 'stripe_terminal', ...gateway } },
+	});
 	return render(
 		<QueryClientProvider client={client}>
-			<ExtensionCard extension={{ ...base, ...overrides }} />
+			<SnackbarProvider>
+				<ExtensionCard extension={{ ...base, ...overrides }} />
+			</SnackbarProvider>
 		</QueryClientProvider>
 	);
 }
@@ -58,9 +68,28 @@ function registerSlots(slots: Record<string, React.ComponentType<{ extension: Ex
 	window.wcpos = { settings: { getComponent: (key: string) => slots[key] as any } };
 }
 
+/** A POST to the settings API that resolves or rejects when the test says. */
+function deferSave() {
+	let resolve!: (value: unknown) => void;
+	let reject!: (error: Error) => void;
+	apiFetchMock.mockImplementation(
+		({ method }: { method: string }) =>
+			method === 'POST'
+				? new Promise((res, rej) => {
+						resolve = res;
+						reject = rej;
+					})
+				: new Promise(() => {}) // No background refetch in these tests.
+	);
+	return {
+		resolve: (value: unknown) => act(async () => resolve(value)),
+		reject: (error: Error) => act(async () => reject(error)),
+	};
+}
+
 beforeEach(() => {
-	client = new QueryClient();
-	mutate.mockReset();
+	client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+	apiFetchMock.mockReset();
 	delete window.wcpos;
 });
 
@@ -75,19 +104,19 @@ describe('Active payment extension chip', () => {
 	beforeEach(withPro);
 
 	it.each([
-		[{ pos_enabled: false, needs_setup: true }, '2 steps left'],
-		[{ pos_enabled: true, needs_setup: true }, '1 step left'],
-		[{ pos_enabled: false, needs_setup: false }, '1 step left'],
-		[{ pos_enabled: true, needs_setup: false }, 'Ready'],
-	])('%o shows "%s"', (state, chip) => {
-		renderCard(state);
+		[{ enabled: false, needs_setup: true }, '2 steps left'],
+		[{ enabled: true, needs_setup: true }, '1 step left'],
+		[{ enabled: false, needs_setup: false }, '1 step left'],
+		[{ enabled: true, needs_setup: false }, 'Ready'],
+	])('%o shows "%s"', (gateway, chip) => {
+		renderCard({}, gateway);
 
 		expect(screen.getByText(chip)).toBeInTheDocument();
 		expect(screen.queryByText('Active')).not.toBeInTheDocument();
 	});
 
 	it('says "Check settings" when on and the settings are unknown', () => {
-		renderCard({ pos_enabled: true, needs_setup: null });
+		renderCard({}, { enabled: true, needs_setup: null });
 
 		// One chip in the header, one link in the footer.
 		expect(screen.getAllByText('Check settings')).toHaveLength(2);
@@ -95,7 +124,7 @@ describe('Active payment extension chip', () => {
 	});
 
 	it('keeps the "Update available" chip when an update waits', () => {
-		renderCard({ status: 'update_available', has_update: true, pos_enabled: false });
+		renderCard({ status: 'update_available', has_update: true });
 
 		expect(screen.getByText('Update available')).toBeInTheDocument();
 		expect(screen.queryByText('2 steps left')).not.toBeInTheDocument();
@@ -106,7 +135,7 @@ describe('Active payment extension footer', () => {
 	beforeEach(withPro);
 
 	it('links to the settings when they are not finished', () => {
-		renderCard({ needs_setup: true });
+		renderCard({}, { enabled: false, needs_setup: true });
 
 		expect(screen.getByRole('link', { name: 'Finish settings' })).toHaveAttribute(
 			'href',
@@ -116,7 +145,7 @@ describe('Active payment extension footer', () => {
 	});
 
 	it('asks the owner to check the settings when the gateway cannot say', () => {
-		renderCard({ needs_setup: null });
+		renderCard({}, { enabled: false, needs_setup: null });
 
 		expect(screen.getByRole('link', { name: 'Check settings' })).toHaveAttribute(
 			'href',
@@ -128,7 +157,7 @@ describe('Active payment extension footer', () => {
 	it.each(['active', 'update_available'] as const)(
 		'says the settings are finished (%s)',
 		(status) => {
-			renderCard({ status, pos_enabled: true, needs_setup: false });
+			renderCard({ status }, { enabled: true, needs_setup: false });
 
 			expect(screen.getByText('Settings finished')).toBeInTheDocument();
 			expect(screen.queryByRole('link', { name: /settings/i })).not.toBeInTheDocument();
@@ -136,47 +165,47 @@ describe('Active payment extension footer', () => {
 		}
 	);
 
-	it('turns the gateway on in the POS and refreshes the extensions', () => {
-		const invalidate = vi.spyOn(client, 'invalidateQueries');
-		mutate.mockImplementation((_data, options) => options?.onSettled?.());
-		renderCard({ pos_enabled: false });
+	it('turns the gateway on at once, ignores clicks while saving, and keeps it on when saved', async () => {
+		const save = deferSave();
+		renderCard({}, { enabled: false, needs_setup: true });
 
 		fireEvent.click(screen.getByRole('switch', { name: 'Off in the POS' }));
 
-		expect(mutate).toHaveBeenCalledWith(
-			{ gateways: { stripe_terminal: { enabled: true } } },
-			expect.any(Object)
-		);
-		expect(screen.getByRole('switch', { name: 'On in the POS' })).toBeChecked();
-		expect(invalidate).toHaveBeenCalledWith({ queryKey: ['extensions'] });
-		expect(screen.queryByText(/Couldn't turn it/)).not.toBeInTheDocument();
-	});
+		const toggle = await screen.findByRole('switch', { name: 'On in the POS' });
+		expect(toggle).toBeChecked();
+		expect(toggle).toBeDisabled();
+		expect(screen.getByText('1 step left')).toBeInTheDocument();
 
-	it('switches back off and says so when turning it on fails', () => {
-		mutate.mockImplementation((_data, options) => {
-			options?.onError?.(new Error('nope'));
-			options?.onSettled?.();
+		// A second click while the first save is in flight sends nothing.
+		fireEvent.click(toggle);
+		const posts = () => apiFetchMock.mock.calls.filter(([args]) => args.method === 'POST');
+		expect(posts()).toHaveLength(1);
+		expect(posts()[0][0]).toMatchObject({
+			path: 'wcpos/v2/settings/payment-gateways?wcpos=1',
+			data: { gateways: { stripe_terminal: { enabled: true } } },
 		});
-		renderCard({ pos_enabled: false });
 
-		fireEvent.click(screen.getByRole('switch', { name: 'Off in the POS' }));
-
-		expect(screen.getByRole('switch', { name: 'Off in the POS' })).not.toBeChecked();
-		expect(
-			screen.getByText("Couldn't turn it on in the POS. Please try again.")
-		).toBeInTheDocument();
-	});
-
-	it('switches back on and says so when turning it off fails', () => {
-		mutate.mockImplementation((_data, options) => options?.onError?.(new Error('nope')));
-		renderCard({ pos_enabled: true });
-
-		fireEvent.click(screen.getByRole('switch', { name: 'On in the POS' }));
+		await save.resolve({
+			gateways: { stripe_terminal: { id: 'stripe_terminal', enabled: true, needs_setup: true } },
+		});
 
 		expect(screen.getByRole('switch', { name: 'On in the POS' })).toBeChecked();
-		expect(
-			screen.getByText("Couldn't turn it off in the POS. Please try again.")
-		).toBeInTheDocument();
+		expect(screen.getByRole('switch', { name: 'On in the POS' })).not.toBeDisabled();
+	});
+
+	it('switches back off when turning it on fails', async () => {
+		const save = deferSave();
+		renderCard({}, { enabled: false, needs_setup: true });
+
+		fireEvent.click(screen.getByRole('switch', { name: 'Off in the POS' }));
+		expect(await screen.findByRole('switch', { name: 'On in the POS' })).toBeChecked();
+
+		await save.reject(new Error('Could not save'));
+
+		const toggle = screen.getByRole('switch', { name: 'Off in the POS' });
+		expect(toggle).not.toBeChecked();
+		expect(toggle).not.toBeDisabled();
+		expect(screen.getByText('2 steps left')).toBeInTheDocument();
 	});
 });
 
@@ -234,12 +263,7 @@ describe('Other cards', () => {
 			'extensions.setup_action': () => <button type="button">Setup action</button>,
 			'extensions.menu_items': () => <span role="menuitem">Deactivate</span>,
 		});
-		renderCard({
-			category: 'catalog',
-			gateway_id: undefined,
-			pos_enabled: undefined,
-			needs_setup: undefined,
-		});
+		renderCard({ category: 'catalog', gateway_id: undefined });
 
 		expect(screen.getByText('Active')).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: 'Generic action' })).toBeInTheDocument();
@@ -261,7 +285,7 @@ describe('Other cards', () => {
 	});
 
 	it('leaves an active payment card as it was without Pro', () => {
-		renderCard({ pos_enabled: false, needs_setup: true });
+		renderCard();
 
 		expect(screen.getByText('Active')).toBeInTheDocument();
 		expect(screen.queryByText('2 steps left')).not.toBeInTheDocument();

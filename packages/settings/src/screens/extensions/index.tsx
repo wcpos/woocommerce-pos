@@ -6,6 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { Button, FilterTabs } from '@wcpos/ui';
 
 import ExtensionCard from './extension-card';
+import { getSlot } from './extension-slots';
 import { setUpdateExtensionsCount } from './use-update-extensions-count';
 import { CardGrid } from '../../components/card-grid';
 import Notice from '../../components/notice';
@@ -39,12 +40,8 @@ export interface Extension {
 	auto_update?: boolean;
 	settings_url?: string;
 	log_source?: string;
-	/** Active payment extensions only: the WooCommerce gateway the extension registers. */
+	/** Active payment extensions only: its gateway in the POS payment-gateways settings. */
 	gateway_id?: string;
-	/** Whether that gateway is switched on in the POS. */
-	pos_enabled?: boolean;
-	/** Whether its WooCommerce settings still need finishing; null when the gateway cannot say. */
-	needs_setup?: boolean | null;
 }
 
 function Extensions() {
@@ -59,7 +56,7 @@ function Extensions() {
 		queryFn: () => apiFetch({ path: 'wcpos/v2/extensions?wcpos=1', method: 'GET' }),
 	});
 
-	const isPro = !!(window as any)?.wcpos?.settings?.getComponent?.('extensions.action');
+	const isPro = !!getSlot('extensions.action');
 	const refresh = async () => {
 		setIsRefreshing(true);
 		try {

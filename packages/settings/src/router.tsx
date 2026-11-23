@@ -97,6 +97,8 @@ const extensionsRoute = createRoute({
 			queryFn: () => apiFetch({ path: 'wcpos/v2/extensions?wcpos=1', method: 'GET' }),
 			retry: 1,
 		});
+		// Active payment extensions' cards read their gateway from these settings.
+		settingsLoader('payment-gateways')();
 	},
 	component: ExtensionsPage,
 });
