@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { render, screen, fireEvent } from '@testing-library/react';
 
+import wpAdminReset from '../../../../../ui/src/wp-admin-reset.css?raw';
 import { Checkbox } from '../checkbox';
 
 describe('Checkbox', () => {
@@ -45,6 +46,17 @@ describe('Checkbox', () => {
 	it('disables the checkbox when disabled prop is true', () => {
 		render(<Checkbox disabled />);
 		expect(screen.getByRole('checkbox')).toBeDisabled();
+	});
+
+	// At <=782px wp-admin's forms.css draws a 30px tick, which the 16px box shows as a solid
+	// block with the tick slipped to its bottom edge. jsdom cannot paint ::before, so pin both
+	// ends of the fix: the hook class here and the reset rule that keys on it.
+	it('keeps the hook class the phone-width tick rule in wp-admin-reset.css targets', () => {
+		render(<Checkbox checked onChange={() => {}} />);
+		expect(screen.getByRole('checkbox')).toHaveClass('wcpos-checkbox');
+		expect(wpAdminReset).toMatch(
+			/max-width:\s*782px[\s\S]*input\.wcpos-checkbox:checked::before\s*\{[^}]*width:\s*1\.3125rem/
+		);
 	});
 
 	it('associates label with input via htmlFor', () => {
