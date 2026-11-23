@@ -109,6 +109,26 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
+	 * End the windows of the matching counter rows, keeping everything after the expiry.
+	 *
+	 * @param string $like Option name pattern, already escaped for LIKE.
+	 */
+	private function end_windows( string $like ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 1), '|', %d, SUBSTRING(option_value, LENGTH(SUBSTRING_INDEX(option_value, '|', 2)) + 1)) WHERE option_name LIKE %s", time() - 1, $like ) );
+	}
+
+	/**
+	 * A counter row's stored value.
+	 *
+	 * @param string $bucket The bucket key.
+	 */
+	private function row( string $bucket ): ?string {
+		global $wpdb;
+		return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) );
+	}
+
+	/**
 	 * A stranger cannot lock the cashier out at another peer.
 	 */
 	public function test_lockout_five_failures_from_another_peer_do_not_lock_the_cashier_at_their_own_peer(): void {
@@ -313,7 +333,7 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 			$this->attempt( '203.0.113.10', 'ghost-' . $i, 'wrong' );
 		}
 		$this->assertSame( 'Too many requests. Please try again later.', $this->attempt( '203.0.113.10', 'ghost-10', 'wrong' )->get_error() );
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 1), '|', %d) WHERE option_name LIKE %s", time() - 1, $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' ) );
+		$this->end_windows( $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' );
 
 		// Act.
 		$auth = $this->attempt( '203.0.113.10', 'ghost-11', 'wrong' );
@@ -329,20 +349,21 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 		// Arrange: nine failures, then A takes the tenth slot (its account turns out to be locked).
 		$bucket = md5( 'refund-race' );
 		for ( $i = 0; $i < 10; $i++ ) {
-			$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+			$a = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+			$this->assertNotNull( $a );
 		}
 		$c    = null;
 		$step = 0;
-		// B's read-back starts C; C's read-back runs after A gives its slot back.
+		// B's read starts C; C's read runs after A gives its slot back.
 		add_filter(
 			'query',
-			static function ( $query ) use ( &$c, &$step, $bucket ) {
+			static function ( $query ) use ( &$c, &$step, $bucket, $a ) {
 				if ( 0 === strpos( $query, 'SELECT option_value' ) && false !== strpos( $query, 'wcpos_auth_attempts_' . $bucket ) ) {
 					++$step;
 					if ( 1 === $step ) {
 						$c = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
 					} elseif ( 2 === $step ) {
-						Credential_Lockout::release_bucket_attempt( $bucket );
+						Credential_Lockout::release_bucket_attempt( $bucket, $a );
 					}
 				}
 				return $query;
@@ -353,40 +374,27 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 		$b = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
 
 		// Assert: with A's slot back, at most one of B and C may check a password.
-		$this->assertLessThanOrEqual( 1, (int) $b + (int) $c );
+		$this->assertLessThanOrEqual( 1, (int) ( null !== $b ) + (int) ( null !== $c ) );
 	}
 
 	/**
-	 * A refused attempt holds its window open until it has given its count back, so the refund
-	 * cannot land in a window that replaced it.
+	 * A refused attempt writes nothing, so it holds no slot and moves no window. Replaces the
+	 * check that a refused attempt held its window until refunded: a refusal now counts nothing,
+	 * so it has nothing to give back.
 	 */
-	public function test_rate_limit_refused_attempt_holds_its_window_until_refunded(): void {
+	public function test_rate_limit_refused_attempt_leaves_its_row_untouched(): void {
 		// Arrange: a full bucket whose window is about to end.
 		global $wpdb;
-		$bucket = md5( 'refused-hold' );
-		$name   = 'wcpos_auth_attempts_' . $bucket;
-		$ending = time() + 1;
-		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, '10|' . $ending ) );
-		$during = null;
-		add_filter(
-			'query',
-			static function ( $query ) use ( &$during, $name ) {
-				global $wpdb;
-				if ( null === $during && 0 === strpos( $query, 'UPDATE' ) && false !== strpos( $query, $name ) ) {
-					$during = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
-				}
-				return $query;
-			}
-		);
+		$bucket = md5( 'refused-untouched' );
+		$full   = '10|' . ( time() + 1 ) . '|full-window';
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", 'wcpos_auth_attempts_' . $bucket, $full ) );
 
 		// Act.
-		$this->assertFalse( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		$refused = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
 
-		// Assert: just before the refund the window was held open; after it the count is back to ten.
-		list( $count, $expires ) = explode( '|', $during );
-		$this->assertSame( '11', $count );
-		$this->assertGreaterThanOrEqual( $ending + 50, (int) $expires );
-		$this->assertStringStartsWith( '10|', $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ) );
+		// Assert.
+		$this->assertNull( $refused );
+		$this->assertSame( $full, $this->row( $bucket ) );
 	}
 
 	/**
@@ -400,34 +408,88 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 		}
 
 		// Act: A holds the tenth slot, B is refused, A's password is right.
-		$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
-		$this->assertFalse( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
-		Credential_Lockout::release_bucket_attempt( $bucket );
+		$a = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+		$this->assertNotNull( $a );
+		$this->assertNull( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		Credential_Lockout::release_bucket_attempt( $bucket, $a );
 
 		// Assert: the peer still has its tenth attempt.
 		$this->assertFalse( Credential_Lockout::bucket_is_full( $bucket, 10 ) );
-		$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
 	}
 
 	/**
-	 * A right password that outlives its window gives nothing back from the window that replaced it.
+	 * A give-back after its window ended and restarted leaves the new window's count alone.
+	 * Replaces the check of the 60-second release guard: the window here ends under A however
+	 * soon A answers, which stands in for a restart between that guard's time check and its UPDATE.
 	 */
-	public function test_rate_limit_release_after_the_hold_leaves_a_later_window_alone(): void {
-		// Arrange: A is counted, then its window ends and B's failure starts a new one.
+	public function test_rate_limit_give_back_after_its_window_restarted_leaves_the_new_window_alone(): void {
+		// Arrange: A is counted, its window ends, B is counted in the next window and fails.
 		global $wpdb;
-		$bucket = md5( 'late-release' );
-		$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
-		$later = '1|' . ( time() + 900 );
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s", $later, 'wcpos_auth_attempts_' . $bucket ) );
-		$reserved_at = new \ReflectionProperty( Credential_Lockout::class, 'reserved_at' );
-		$reserved_at->setAccessible( true );
-		$reserved_at->setValue( null, array( $bucket => time() - 61 ) );
+		$bucket = md5( 'restart-give-back' );
+		$a      = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+		$this->assertNotNull( $a );
+		$this->end_windows( $wpdb->esc_like( 'wcpos_auth_attempts_' . $bucket ) );
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		Credential_Lockout::record_bucket_failure( $bucket, 900 );
+		$after_b = $this->row( $bucket );
 
-		// Act: A's password check finally answers.
-		Credential_Lockout::release_bucket_attempt( $bucket );
+		// Act: A's right password gives its attempt back.
+		Credential_Lockout::release_bucket_attempt( $bucket, $a );
 
 		// Assert: B's failure is still counted.
-		$this->assertSame( $later, $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) ) );
+		$this->assertStringStartsWith( '1|', $after_b );
+		$this->assertSame( $after_b, $this->row( $bucket ) );
+	}
+
+	/**
+	 * A give-back after a successful check cleared the account leaves the fresh count alone.
+	 */
+	public function test_lockout_give_back_after_clear_leaves_the_fresh_count_alone(): void {
+		// Arrange: B and A are counted; A's password is right and clears the account; C fails.
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.10';
+		$b                      = Credential_Lockout::reserve_attempt( 'till-cashier' );
+		$this->assertNotNull( $b );
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		Credential_Lockout::clear( 'till-cashier' );
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		Credential_Lockout::record_failure( 'till-cashier' );
+		$bucket  = md5( 'user:' . get_user_by( 'login', 'till-cashier' )->ID . '|203.0.113.10' );
+		$after_c = $this->row( $bucket );
+
+		// Act: B's right password is refused for another reason and gives its attempt back.
+		Credential_Lockout::release_attempt( 'till-cashier', $b );
+
+		// Assert: C's failure is still counted.
+		$this->assertStringStartsWith( '1|', $after_c );
+		$this->assertSame( $after_c, $this->row( $bucket ) );
+	}
+
+	/**
+	 * A row in the format before generations, or any value that is not a counter, reads as an
+	 * ended window: never a fatal, and the limit holds from the next attempt.
+	 */
+	public function test_rate_limit_row_in_an_older_format_reads_as_an_ended_window(): void {
+		global $wpdb;
+		foreach ( array( '10|' . ( time() + 900 ), 'not-a-counter' ) as $i => $stored ) {
+			// Arrange.
+			$bucket = md5( 'older-format-' . $i );
+			$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", 'wcpos_auth_attempts_' . $bucket, $stored ) );
+
+			// Act.
+			$full  = Credential_Lockout::bucket_is_full( $bucket, 10 );
+			$first = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+
+			// Assert: a fresh window of one, then ten attempts in all, then refused.
+			list( $count, , $generation ) = explode( '|', $this->row( $bucket ) ) + array( '', '', '' );
+			$this->assertFalse( $full );
+			$this->assertNotNull( $first );
+			$this->assertSame( array( '1', $first ), array( $count, $generation ) );
+			for ( $n = 1; $n < 10; $n++ ) {
+				$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+			}
+			$this->assertNull( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		}
 	}
 
 	/**
@@ -440,17 +502,18 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 			$this->attempt( '203.0.113.10', 'till-cashier', 'wrong' );
 		}
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.10';
-		$this->assertTrue( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
-		$ending = '5|' . ( time() + 1 );
-		$like   = $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%';
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s AND option_value LIKE %s", $ending, $like, '5|%' ) );
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		$like = $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT('5|', %d, '|', SUBSTRING_INDEX(option_value, '|', -1)) WHERE option_name LIKE %s AND option_value LIKE %s", time() + 1, $like, '5|%' ) );
+		$ending = $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value LIKE %s", $like, '5|%' ) );
 
 		// Act.
 		$auth = $this->attempt( '203.0.113.10', 'till-cashier', 'correct horse' );
 
 		// Assert: refused without a write, so the window still ends when it did.
 		$this->assertSame( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', $auth->get_error() );
-		$this->assertSame( array( $ending ), $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value LIKE %s", $like, '5|%' ) ) );
+		$this->assertCount( 1, $ending );
+		$this->assertSame( $ending, $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value LIKE %s", $like, '5|%' ) ) );
 	}
 
 	/**

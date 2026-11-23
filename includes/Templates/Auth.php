@@ -387,15 +387,17 @@ class Auth {
 
 		// Count the attempt against this peer before the password is checked, so overlapping
 		// requests cannot all pass on the same count (CWE-307).
-		if ( ! Credential_Lockout::reserve_bucket_attempt( $this->ip_bucket(), self::MAX_ATTEMPTS_PER_IP, self::RATE_LIMIT_WINDOW ) ) {
+		$peer_attempt = Credential_Lockout::reserve_bucket_attempt( $this->ip_bucket(), self::MAX_ATTEMPTS_PER_IP, self::RATE_LIMIT_WINDOW );
+		if ( null === $peer_attempt ) {
 			$this->refuse_rate_limited();
 
 			return;
 		}
 
 		// Count the attempt before the password is checked; refuse a locked account.
-		if ( ! Credential_Lockout::reserve_attempt( $username ) ) {
-			Credential_Lockout::release_bucket_attempt( $this->ip_bucket() );
+		$account_attempt = Credential_Lockout::reserve_attempt( $username );
+		if ( null === $account_attempt ) {
+			Credential_Lockout::release_bucket_attempt( $this->ip_bucket(), $peer_attempt );
 			$this->error = __( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', 'woocommerce-pos' );
 			$this->log_auth_attempt( $username, 'locked_out' );
 
@@ -415,11 +417,11 @@ class Auth {
 		}
 
 		// A right password is not a failure, so it gives back the peer's attempt.
-		Credential_Lockout::release_bucket_attempt( $this->ip_bucket() );
+		Credential_Lockout::release_bucket_attempt( $this->ip_bucket(), $peer_attempt );
 
 		// Check if user has access to POS.
 		if ( ! Cashier::instance()->can_open_pos( $user ) ) {
-			Credential_Lockout::release_attempt( $username );
+			Credential_Lockout::release_attempt( $username, $account_attempt );
 			$this->log_auth_attempt( $username, 'no_permission' );
 			$this->error = Cashier::instance()->missing_pos_capabilities_message( $user );
 
