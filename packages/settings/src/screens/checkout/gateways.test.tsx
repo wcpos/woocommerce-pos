@@ -41,6 +41,16 @@ describe('Gateways settings line', () => {
 		).toHaveAttribute('href', 'admin.php?page=wc-settings&tab=checkout&section=stripe_terminal');
 	});
 
+	it('wraps the note inside the name column instead of widening it', () => {
+		renderGateways([gateway('stripe_terminal', 0, true, true)]);
+
+		// Zero intrinsic width: the column keeps the width the name gives it; the note wraps in it.
+		const note = within(row('stripe_terminal')).getByText(/Its settings aren't finished\./);
+		expect(note.className.split(' ')).toEqual(
+			expect.arrayContaining(['wcpos:w-0', 'wcpos:min-w-full', 'wcpos:whitespace-normal'])
+		);
+	});
+
 	it.each([
 		['switched off', false, true],
 		['finished', true, false],

@@ -151,7 +151,8 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 			<TableCell className="wcpos:text-ellipsis wcpos:overflow-hidden wcpos:whitespace-nowrap">
 				<strong>{item.title}</strong>
 				{item.enabled && item.needs_setup === true && (
-					<div className="wcpos:text-xs wcpos:text-gray-500">
+					// Zero intrinsic width so the note wraps in the column the name sets, never widening it.
+					<div className="wcpos:w-0 wcpos:min-w-full wcpos:whitespace-normal wcpos:text-xs wcpos:text-gray-500">
 						{t('checkout.gateway_settings_unfinished')}{' '}
 						<a
 							href={wooSettingsUrl}
