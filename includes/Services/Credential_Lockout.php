@@ -21,6 +21,10 @@ final class Credential_Lockout {
 	/** Lockout duration in seconds (15 minutes). */
 	private const LOCKOUT_DURATION = 900;
 
+	/** Seconds a counted attempt keeps its window open while its password is checked; far longer
+	 * than any check, so a window cannot end and restart the count under an attempt in flight. */
+	private const IN_FLIGHT_SECONDS = 60;
+
 	/** Option name prefix of the per-bucket attempt counter, read and written only by raw SQL. */
 	private const ROW_PREFIX = 'wcpos_auth_attempts_';
 
@@ -44,9 +48,10 @@ final class Credential_Lockout {
 		$now   = time();
 		$fresh = '1|' . ( $now + self::LOCKOUT_DURATION );
 		// The row is count|expires-at, so one statement restarts an expired window or adds one, and
-		// stops one past the limit. Only a failure moves the expiry, as the old transient's TTL did.
+		// stops one past the limit. A failure sets the 15-minute expiry, as the old transient's TTL
+		// did; a counted attempt only holds the window open while it is in flight.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
-		$written  = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', SUBSTRING_INDEX(option_value, '|', -1))))", self::ROW_PREFIX . $username_key, $fresh, $now, $fresh, self::MAX_FAILED_ATTEMPTS ) );
+		$written  = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', GREATEST(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED), %d))))", self::ROW_PREFIX . $username_key, $fresh, $now, $fresh, self::MAX_FAILED_ATTEMPTS, $now + self::IN_FLIGHT_SECONDS ) );
 		$attempts = false === $written ? null : self::attempts( $username_key );
 		if ( null === $attempts ) {
 			// Fail closed: an attempt that could not be counted is not checked.

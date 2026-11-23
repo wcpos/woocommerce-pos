@@ -310,12 +310,40 @@ class Test_Approval_Credential_Lockout extends WCPOS_REST_Unit_Test_Case {
 		for ( $i = 0; $i < 4; $i++ ) {
 			$this->recount( $closure, $other->user_login, 'wrong' );
 		}
-		$expires = time() + 60;
+		$expires = time() + 600;
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s", '4|' . $expires, $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' ) );
 
 		$this->assertSame( 'wcpos_recount_approval_forbidden', $this->recount( $closure, $other->user_login, 'other-pass' )->get_data()['code'] );
 
 		$this->assertSame( array( '4|' . $expires ), $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" ) );
+	}
+
+	/** A window about to end stays open while a counted attempt's password is being checked. */
+	public function test_approval_attempt_in_flight_keeps_its_window_open(): void {
+		global $wpdb;
+		$closure = $this->closure();
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->recount( $closure, $this->manager->user_login, 'wrong' );
+		}
+		$ending = time() + 1;
+		$like   = $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s", '4|' . $ending, $like ) );
+		$during = null;
+		add_filter(
+			'authenticate',
+			static function ( $user ) use ( &$during, $like ) {
+				global $wpdb;
+				$during = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $like ) );
+				return $user;
+			},
+			99
+		);
+
+		$this->recount( $closure, $this->manager->user_login, 'wrong' );
+
+		list( $count, $expires ) = explode( '|', $during );
+		$this->assertSame( '5', $count );
+		$this->assertGreaterThanOrEqual( $ending + 50, (int) $expires );
 	}
 
 	/** An attempt the database could not count is refused before the password is checked. */
