@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import apiFetch from '@wordpress/api-fetch';
 
+import { CardGridSkeleton } from './components/skeleton';
 import { RootLayout } from './layouts/root-layout';
 import { queryClient } from './query-client';
 import AccessPage from './screens/access';
@@ -100,6 +101,9 @@ const extensionsRoute = createRoute({
 		// Active payment extensions' cards read their gateway from these settings.
 		settingsLoader('payment-gateways')();
 	},
+	// The route's own Suspense boundary catches the screen's query before the layout's
+	// does, so the skeleton the layout lists for this page is shown from here.
+	pendingComponent: () => <CardGridSkeleton cards={4} />,
 	component: ExtensionsPage,
 });
 
