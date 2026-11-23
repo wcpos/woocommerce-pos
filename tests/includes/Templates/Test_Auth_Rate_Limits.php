@@ -530,7 +530,7 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	 */
 	public function test_rate_limit_row_in_an_older_format_reads_as_an_ended_window(): void {
 		global $wpdb;
-		foreach ( array( '10|' . ( time() + 900 ), 'not-a-counter' ) as $i => $stored ) {
+		foreach ( array( '10|' . ( time() + 900 ), 'not-a-counter', '' ) as $i => $stored ) {
 			// Arrange.
 			$bucket = md5( 'older-format-' . $i );
 			$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", 'wcpos_auth_attempts_' . $bucket, $stored ) );

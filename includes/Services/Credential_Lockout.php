@@ -74,8 +74,10 @@ final class Credential_Lockout {
 		// is in flight, so a window cannot end and restart the count under it.
 		for ( $try = 0; $try < self::COUNT_TRIES; $try++ ) {
 			$now  = time();
-			$seen = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- The counter row is never cached.
-			$row  = self::live_row( $seen, $now );
+			// get_row(), not get_var(): get_var() reads an empty stored value as no row.
+			$found = $wpdb->get_row( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ), ARRAY_N ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- The counter row is never cached.
+			$seen  = null === $found ? null : (string) $found[0];
+			$row   = self::live_row( $seen, $now );
 			if ( null !== $row && $row[0] >= $limit ) {
 				return null;
 			}
