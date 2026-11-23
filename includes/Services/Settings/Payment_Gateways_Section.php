@@ -166,11 +166,20 @@ class Payment_Gateways_Section extends Abstract_Section {
 	/**
 	 * Replace reader lists wholesale while retaining PATCH semantics elsewhere.
 	 *
+	 * The view lists only the gateways registered right now, so the stored settings
+	 * of any other gateway (its plugin inactive at the moment) are carried through
+	 * untouched rather than erased by the save.
+	 *
 	 * @param array $existing Existing settings.
 	 * @param array $patch    Incoming settings.
 	 * @return array
 	 */
 	public function merge( array $existing, array $patch ): array {
+		foreach ( $this->read_raw()['gateways'] ?? array() as $id => $stored ) {
+			if ( \is_array( $stored ) && ! isset( $existing['gateways'][ $id ] ) ) {
+				$existing['gateways'][ $id ] = $stored;
+			}
+		}
 		foreach ( $patch['gateways'] ?? array() as $id => $gateway ) {
 			if ( \array_key_exists( 'allowed_readers', $gateway ) ) {
 				unset( $existing['gateways'][ $id ]['allowed_readers'] );

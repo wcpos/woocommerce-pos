@@ -11,8 +11,11 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use WC_Payment_Gateway;
+use WC_Payment_Gateways;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Tests\Helpers\Fixture_Settings_Section;
@@ -1085,6 +1088,69 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( $readers, $gateway['allowed_readers'] );
 			$this->assertSame( 'a', $gateway['default_reader'] );
 			$this->assertTrue( $gateway['lock_to_default'] );
+		}
+	}
+
+	/**
+	 * Saving one gateway keeps the stored POS settings of a gateway whose plugin is inactive.
+	 *
+	 * The view lists only registered gateways, so a save assembled from it alone
+	 * erased the settings of every gateway that was not registered at that moment.
+	 */
+	public function test_payment_gateways_save_keeps_settings_of_unregistered_gateways(): void {
+		// Arrange: save settings for a gateway while it is registered, as Pro (tier rule lifted).
+		remove_filter( 'option_woocommerce_pos_settings_payment_gateways', array( Payment_Gateways_Section::class, 'free_tier_rule' ) );
+		$gateway     = new class() extends WC_Payment_Gateway {
+			/** No form fields. */
+			public function __construct() {
+				$this->id = 'wcpos_inactive_extension';
+			}
+		};
+		$add_gateway = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+		$registry    = WC_Payment_Gateways::instance();
+
+		try {
+			add_filter( 'woocommerce_payment_gateways', $add_gateway );
+			$registry->payment_gateways = array();
+			$registry->init();
+			$saved = $this->post_settings(
+				'/wcpos/v2/settings/payment-gateways',
+				array(
+					'gateways' => array(
+						'wcpos_inactive_extension' => array(
+							'enabled'      => true,
+							'order_status' => 'wc-processing',
+						),
+					),
+				)
+			);
+			$this->assertSame( 200, $saved->get_status() );
+			$before = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways']['wcpos_inactive_extension'];
+
+			// The extension is deactivated: its gateway is no longer registered.
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			$registry->payment_gateways = array();
+			$registry->init();
+
+			// Act.
+			$response = $this->post_settings(
+				'/wcpos/v2/settings/payment-gateways',
+				array( 'gateways' => array( 'pos_card' => array( 'enabled' => false ) ) )
+			);
+
+			// Assert.
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertArrayNotHasKey( 'wcpos_inactive_extension', $response->get_data()['gateways'] );
+			$stored = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways'];
+			$this->assertSame( $before, $stored['wcpos_inactive_extension'] ?? null );
+			$this->assertFalse( $stored['pos_card']['enabled'] );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			$registry->payment_gateways = array();
+			$registry->init();
+			Payment_Gateways_Section::register_free_tier_rule();
 		}
 	}
 
