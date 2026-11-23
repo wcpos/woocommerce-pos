@@ -62,11 +62,13 @@ final class Credential_Lockout {
 		global $wpdb;
 		$now   = time();
 		$fresh = '1|' . ( $now + $window );
-		// The row is count|expires-at, so one statement restarts an expired window or adds one, and
-		// stops one past the limit. A failure sets the window's expiry, as the old transient's TTL
-		// did; a counted attempt only holds the window open while it is in flight.
+		// The row is count|expires-at, so one statement restarts an expired window or adds one. Every
+		// attempt adds one, even past the limit, so a refund can only take back its own attempt and
+		// a read-back never admits an attempt whose increment was skipped. A failure sets the
+		// window's expiry, as the old transient's TTL did; an attempt within the limit only holds the
+		// window open while it is in flight, and one past it does not, so refusals cannot keep it shut.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
-		$written  = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', GREATEST(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED), %d))))", self::ROW_PREFIX . $bucket, $fresh, $now, $fresh, $limit, $now + self::IN_FLIGHT_SECONDS ) );
+		$written  = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) >= %d, SUBSTRING_INDEX(option_value, '|', -1), GREATEST(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED), %d))))", self::ROW_PREFIX . $bucket, $fresh, $now, $fresh, $limit, $now + self::IN_FLIGHT_SECONDS ) );
 		$attempts = false === $written ? null : self::attempts( $bucket );
 		if ( null === $attempts ) {
 			// Fail closed: an attempt that could not be counted is not checked.

@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
+use WCPOS\WooCommercePOS\Services\Credential_Lockout;
 use WCPOS\WooCommercePOS\Templates\Auth;
 use WP_Error;
 use WP_UnitTestCase;
@@ -319,6 +320,57 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 
 		// Assert.
 		$this->assertSame( 'Invalid username or password.', $auth->get_error() );
+	}
+
+	/**
+	 * A refund between two attempts' writes and their read-backs cannot admit both past the limit.
+	 */
+	public function test_rate_limit_refund_between_write_and_read_admits_no_extra_attempt(): void {
+		// Arrange: nine failures, then A takes the tenth slot (its account turns out to be locked).
+		$bucket = md5( 'refund-race' );
+		for ( $i = 0; $i < 10; $i++ ) {
+			$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		}
+		$c    = null;
+		$step = 0;
+		// B's read-back starts C; C's read-back runs after A gives its slot back.
+		add_filter(
+			'query',
+			static function ( $query ) use ( &$c, &$step, $bucket ) {
+				if ( 0 === strpos( $query, 'SELECT option_value' ) && false !== strpos( $query, 'wcpos_auth_attempts_' . $bucket ) ) {
+					++$step;
+					if ( 1 === $step ) {
+						$c = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+					} elseif ( 2 === $step ) {
+						Credential_Lockout::release_bucket_attempt( $bucket );
+					}
+				}
+				return $query;
+			}
+		);
+
+		// Act.
+		$b = Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+
+		// Assert: with A's slot back, at most one of B and C may check a password.
+		$this->assertLessThanOrEqual( 1, (int) $b + (int) $c );
+	}
+
+	/**
+	 * Attempts refused past the limit are counted but do not hold the window open.
+	 */
+	public function test_rate_limit_refused_attempts_do_not_extend_the_window(): void {
+		// Arrange.
+		global $wpdb;
+		$bucket  = md5( 'refused-hold' );
+		$expires = time() + 5;
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", 'wcpos_auth_attempts_' . $bucket, '10|' . $expires ) );
+
+		// Act.
+		$this->assertFalse( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+
+		// Assert.
+		$this->assertSame( '11|' . $expires, $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) ) );
 	}
 
 	/**
