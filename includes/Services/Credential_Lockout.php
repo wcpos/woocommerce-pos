@@ -29,6 +29,13 @@ final class Credential_Lockout {
 	/** Option name prefix of the per-bucket attempt counter, read and written only by raw SQL. */
 	private const ROW_PREFIX = 'wcpos_auth_attempts_';
 
+	/** When this request counted its attempt in each bucket, so a release can tell its window is
+	 * still the one it counted in.
+	 *
+	 * @var array<string, int>
+	 */
+	private static $reserved_at = array();
+
 	/** Count an attempt for an account and peer before its password is checked.
 	 *
 	 * Returns false when the account is locked or the attempt would pass the limit; the caller
@@ -75,6 +82,7 @@ final class Credential_Lockout {
 			Logger::error( 'WCPOS Auth: could not count a credential attempt; refusing it.' );
 			return false;
 		}
+		self::$reserved_at[ $bucket ] = $now;
 		if ( $attempts > $limit ) {
 			// A refused attempt gives its own one back, so it holds no slot once the overlap ends.
 			self::release_bucket_attempt( $bucket );
@@ -130,6 +138,11 @@ final class Credential_Lockout {
 	 * @param string $bucket The bucket key.
 	 */
 	public static function release_bucket_attempt( string $bucket ): void {
+		// Within its in-flight hold an attempt's window cannot end, so the release takes back this
+		// attempt; after it, the attempt stays counted rather than refund a window that replaced it.
+		if ( time() >= ( self::$reserved_at[ $bucket ] ?? 0 ) + self::IN_FLIGHT_SECONDS ) {
+			return;
+		}
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) - 1, '|', SUBSTRING_INDEX(option_value, '|', -1)) WHERE option_name = %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > 0", self::ROW_PREFIX . $bucket ) );

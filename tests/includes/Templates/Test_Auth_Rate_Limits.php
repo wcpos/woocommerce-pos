@@ -394,6 +394,27 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A right password that outlives its window gives nothing back from the window that replaced it.
+	 */
+	public function test_rate_limit_release_after_the_hold_leaves_a_later_window_alone(): void {
+		// Arrange: A is counted, then its window ends and B's failure starts a new one.
+		global $wpdb;
+		$bucket = md5( 'late-release' );
+		$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		$later = '1|' . ( time() + 900 );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s", $later, 'wcpos_auth_attempts_' . $bucket ) );
+		$reserved_at = new \ReflectionProperty( Credential_Lockout::class, 'reserved_at' );
+		$reserved_at->setAccessible( true );
+		$reserved_at->setValue( null, array( $bucket => time() - 61 ) );
+
+		// Act: A's password check finally answers.
+		Credential_Lockout::release_bucket_attempt( $bucket );
+
+		// Assert: B's failure is still counted.
+		$this->assertSame( $later, $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) ) );
+	}
+
+	/**
 	 * A login the database could not count against the peer is refused before the password is checked.
 	 */
 	public function test_rate_limit_attempt_that_cannot_be_counted_is_refused(): void {
