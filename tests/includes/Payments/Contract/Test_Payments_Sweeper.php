@@ -91,6 +91,69 @@ class Test_Payments_Sweeper extends \WP_UnitTestCase {
 		$this->assertSame( 'voided', $row['status'] );
 	}
 
+	/** Trash is reversible, so a hold on a trashed order is released on the same expiry rule, never captured. */
+	public function test_sweeper_voids_an_expired_authorization_on_a_trashed_order(): void {
+		// Arrange.
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg(
+			600,
+			array(
+				'status'     => 'authorized',
+				'expires_at' => gmdate( 'c', time() - 60 ),
+			)
+		);
+		wc_get_order( $order->get_id() )->delete( false );
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$this->assertSame( array( $id ), Sweep_Test_Handler::$calls );
+		$this->assertSame( array( array( $id, 'expired', 'authorized' ) ), Sweep_Test_Handler::$voids );
+		$this->assertSame( 'voided', $this->row( $order, $id )['status'] );
+		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( 'trash', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/** Trashing releases nothing by itself, and a trashed order is never captured. */
+	public function test_sweeper_leaves_an_unexpired_authorization_on_a_trashed_order_standing(): void {
+		// Arrange.
+		Sweep_Test_Handler::$patch = array( 'status' => 'authorized' );
+		list( $order, $id ) = $this->leg(
+			600,
+			array(
+				'status'     => 'authorized',
+				'expires_at' => gmdate( 'c', time() + 3600 ),
+			)
+		);
+		wc_get_order( $order->get_id() )->delete( false );
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$this->assertSame( array(), Sweep_Test_Handler::$voids );
+		$this->assertSame( array(), Sweep_Test_Handler::$captures );
+		$this->assertSame( 'authorized', $this->row( $order, $id )['status'] );
+		$this->assertSame( 'trash', wc_get_order( $order->get_id() )->get_status() );
+	}
+
+	/** An unanswered row on a trashed order is closed like one on a cancelled order. */
+	public function test_sweeper_closes_an_unanswered_row_on_a_trashed_order(): void {
+		// Arrange.
+		list( $order, $id ) = $this->leg( 600, array( 'provider_refs' => array( 'reader' => 'sn-1' ) ) );
+		wc_get_order( $order->get_id() )->delete( false );
+
+		// Act.
+		( new Payments_Sweeper() )->run();
+
+		// Assert.
+		$this->assertSame( array(), Sweep_Test_Handler::$intents );
+		$this->assertSame( array( array( $id, 'order_closed', 'pending' ) ), Sweep_Test_Handler::$voids );
+		$this->assertSame( 'voided', $this->row( $order, $id )['status'] );
+		$this->assertSame( 'trash', wc_get_order( $order->get_id() )->get_status() );
+	}
+
 	public function test_sweeper_pending_with_action_is_not_redispatched(): void {
 		list( $order, $id ) = $this->leg( 600 );
 		( new Payments_Sweeper() )->run();
