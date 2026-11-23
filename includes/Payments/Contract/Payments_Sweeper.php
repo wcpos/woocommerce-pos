@@ -13,17 +13,88 @@ use WC_Order;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 
-/** Free owns scheduling; registered handlers own provider status, expiry and capture operations. */
+/**
+ * Free owns scheduling; registered handlers own provider status, expiry and capture operations.
+ * It also asks each live leg's handler to cancel when its order is permanently deleted.
+ */
 final class Payments_Sweeper {
 	const HOOK = 'wcpos_payments_sweep';
+
+	/**
+	 * Order ids whose live legs this request already asked to cancel on delete.
+	 *
+	 * @var array<int, true>
+	 */
+	private $cancelled_on_delete = array();
 
 	/** Register the callback and schedule one recurring reconciliation event. */
 	public function register_hooks(): void {
 		add_action( self::HOOK, array( $this, 'run' ) );
 		add_filter( 'cron_schedules', array( $this, 'schedules' ) );
+		add_action( 'woocommerce_before_delete_order', array( $this, 'void_live_legs_on_delete' ), 10, 1 );
+		add_action( 'before_delete_post', array( $this, 'void_live_legs_on_post_delete' ), 10, 1 );
 		if ( ! wp_next_scheduled( self::HOOK ) ) {
 			wp_schedule_event( time() + 10 * MINUTE_IN_SECONDS, 'wcpos_ten_minutes', self::HOOK );
 		}
+	}
+
+	/**
+	 * Ask each pending or authorized leg's handler to cancel before its order is permanently deleted.
+	 *
+	 * Not Ledger::void(): its apply_result() saves the order, and this runs inside WordPress's delete,
+	 * where a save is a re-entrant save (Save_Reentry_Guard); the row is about to vanish, so nothing is
+	 * persisted. Under CPT a force delete fires woocommerce_before_delete_order and then
+	 * before_delete_post for the same id, so each id is handled once per request. A failed cancel is
+	 * logged and never blocks the delete. before_delete_post reaches it only under posts storage.
+	 *
+	 * @param int|string $order_id Order id; on before_delete_post any post id.
+	 */
+	public function void_live_legs_on_delete( $order_id ): void {
+		$order_id = (int) $order_id;
+		if ( isset( $this->cancelled_on_delete[ $order_id ] ) ) {
+			return;
+		}
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order ) {
+			return;
+		}
+		$this->cancelled_on_delete[ $order_id ] = true;
+		foreach ( Ledger::instance()->read( $order ) as $row ) {
+			if ( ! in_array( $row['status'], array( 'pending', 'authorized' ), true ) || ! empty( $row['void_requested_at'] ) ) {
+				continue;
+			}
+			$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
+			if ( ! $handler ) {
+				continue;
+			}
+			try {
+				$result = $handler->void( $row, 'order_deleted' );
+				$error  = is_wp_error( $result ) ? $result->get_error_message() : null;
+			} catch ( \Throwable $e ) {
+				$error = $e->getMessage();
+			}
+			Logger::log(
+				null === $error
+					? sprintf( 'WCPOS payment %s: cancel requested before order #%d was deleted', $row['id'], $order_id )
+					: sprintf( 'WCPOS payment %s: cancel before order #%d was deleted failed: %s', $row['id'], $order_id, $error )
+			);
+		}
+	}
+
+	/**
+	 * Cancel live legs on a post delete only when posts storage holds the orders.
+	 *
+	 * Under HPOS a posts-table row is a placeholder or a sync backup, so deleting it (for example
+	 * through `wp wc hpos cleanup`) is not deleting the order; woocommerce_before_delete_order
+	 * covers the real delete there.
+	 *
+	 * @param int|string $post_id Any post id.
+	 */
+	public function void_live_legs_on_post_delete( $post_id ): void {
+		if ( \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			return;
+		}
+		$this->void_live_legs_on_delete( $post_id );
 	}
 
 	/**
