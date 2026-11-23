@@ -357,20 +357,36 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Attempts refused past the limit are counted but do not hold the window open.
+	 * A refused attempt holds its window open until it has given its count back, so the refund
+	 * cannot land in a window that replaced it.
 	 */
-	public function test_rate_limit_refused_attempts_do_not_extend_the_window(): void {
-		// Arrange.
+	public function test_rate_limit_refused_attempt_holds_its_window_until_refunded(): void {
+		// Arrange: a full bucket whose window is about to end.
 		global $wpdb;
-		$bucket  = md5( 'refused-hold' );
-		$expires = time() + 5;
-		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", 'wcpos_auth_attempts_' . $bucket, '10|' . $expires ) );
+		$bucket = md5( 'refused-hold' );
+		$name   = 'wcpos_auth_attempts_' . $bucket;
+		$ending = time() + 1;
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, '10|' . $ending ) );
+		$during = null;
+		add_filter(
+			'query',
+			static function ( $query ) use ( &$during, $name ) {
+				global $wpdb;
+				if ( null === $during && 0 === strpos( $query, 'UPDATE' ) && false !== strpos( $query, $name ) ) {
+					$during = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+				}
+				return $query;
+			}
+		);
 
 		// Act.
 		$this->assertFalse( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
 
-		// Assert.
-		$this->assertSame( '10|' . $expires, $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) ) );
+		// Assert: just before the refund the window was held open; after it the count is back to ten.
+		list( $count, $expires ) = explode( '|', $during );
+		$this->assertSame( '11', $count );
+		$this->assertGreaterThanOrEqual( $ending + 50, (int) $expires );
+		$this->assertStringStartsWith( '10|', $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ) );
 	}
 
 	/**
