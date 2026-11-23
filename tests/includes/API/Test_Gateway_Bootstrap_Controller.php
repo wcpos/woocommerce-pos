@@ -43,7 +43,7 @@ class Test_Gateway_Bootstrap_Controller extends WCPOS_REST_Unit_Test_Case {
 				return $settings;
 			}
 		);
-		$request = $this->wp_rest_post_request( '/wcpos/v1/payment-gateways/pos_cash/bootstrap' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/payment-gateways/pos_cash/bootstrap' );
 
 		// Act.
 		$response = $this->server->dispatch( $request );
