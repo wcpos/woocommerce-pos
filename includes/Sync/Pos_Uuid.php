@@ -198,14 +198,19 @@ class Pos_Uuid {
 			return 0;
 		}
 		global $wpdb;
-		$count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Count users before deleting their identity meta through the metadata API.
+		$counted = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Count users before deleting their identity meta through the metadata API.
 			$wpdb->prepare( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->usermeta} WHERE meta_key = %s", self::META_KEY )
 		);
+		// One rule for both queries: a failed count or a refused delete is null, never a
+		// number. A count that did not run answers null here, not zero.
+		if ( null === $counted ) {
+			return null;
+		}
+		$count = (int) $counted;
 		if ( 0 === $count ) {
 			return 0;
 		}
 
-		// Report what was removed, never what was only counted.
 		return delete_metadata( 'user', 0, self::META_KEY, '', true ) ? $count : null;
 	}
 
