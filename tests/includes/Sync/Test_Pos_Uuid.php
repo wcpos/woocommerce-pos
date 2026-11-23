@@ -27,6 +27,61 @@ use wpdb;
  */
 class Test_Pos_Uuid extends WP_UnitTestCase {
 	/**
+	 * Reset counts users, not duplicate rows, and leaves other identities alone.
+	 */
+	public function test_reset_user_uuids_removes_only_user_identities_and_remints_on_use(): void {
+		$product      = ProductHelper::create_simple_product();
+		$order        = OrderHelper::create_order();
+		$product_uuid = Pos_Uuid::ensure_uuid( $product );
+		$order_uuid   = Pos_Uuid::ensure_uuid( $order );
+		$site_uuid    = wcpos_get_site_uuid();
+		delete_metadata( 'user', 0, Pos_Uuid::META_KEY, '', true );
+		$users = $this->factory->user->create_many( 3 );
+		$old   = Pos_Uuid::ensure_user_uuid( $users[0] );
+		Pos_Uuid::ensure_user_uuid( $users[1] );
+		add_user_meta( $users[0], Pos_Uuid::META_KEY, wp_generate_uuid4() );
+		update_user_meta( $users[0], Pos_Uuid::META_KEY . '_1', $old );
+
+		$this->assertSame( 2, Pos_Uuid::reset_user_uuids() );
+
+		foreach ( $users as $user_id ) {
+			$this->assertFalse( metadata_exists( 'user', $user_id, Pos_Uuid::META_KEY ) );
+		}
+		$this->assertSame( $old, get_user_meta( $users[0], Pos_Uuid::META_KEY . '_1', true ) );
+		$product->read_meta_data( true );
+		$order->read_meta_data( true );
+		$this->assertSame( $product_uuid, $product->get_meta( Pos_Uuid::META_KEY ) );
+		$this->assertSame( $order_uuid, $order->get_meta( Pos_Uuid::META_KEY ) );
+		$this->assertSame( $site_uuid, get_option( 'woocommerce_pos_uuid' ) );
+		$this->assertSame( 0, Pos_Uuid::reset_user_uuids() );
+
+		$new = Pos_Uuid::ensure_user_uuid( $users[0] );
+		$this->assertTrue( Pos_Uuid::is_uuid( $new ) );
+		$this->assertNotSame( $old, $new );
+		$this->assertSame( $new, get_user_meta( $users[0], Pos_Uuid::META_KEY, true ) );
+	}
+
+	/**
+	 * Network identities must never be removed, even when a site's address moves.
+	 *
+	 * @group multisite
+	 */
+	public function test_reset_user_uuids_multisite_preserves_shared_identity(): void {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Runs in the multisite suite only.' );
+		}
+		$user_id = $this->factory->user->create();
+		$uuid    = Pos_Uuid::ensure_user_uuid( $user_id );
+
+		$this->assertSame( 0, Pos_Uuid::reset_user_uuids() );
+		update_option( 'woocommerce_pos_uuid', wp_generate_uuid4() );
+		update_option( 'woocommerce_pos_uuid_home', 'copied.example' );
+		wcpos_get_site_uuid();
+
+		$this->assertSame( $uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
+	}
+
+	/**
 	 * Tear down: unregister function mocks (multisite simulation).
 	 */
 	public function tearDown(): void {
