@@ -212,7 +212,7 @@ class Test_Received extends WCPOS_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertIsString( $json );
-		$this->assertStringContainsString( '<', $json );
+		$this->assertStringContainsString( '\u003C', $json );
 		$this->assertStringNotContainsString( '</script>', $json );
 		$this->assertStringNotContainsString( '<b>', $json );
 		$this->assertSame( $note, json_decode( $json, true )['customer_note'] );
