@@ -173,40 +173,71 @@ describe('Active payment extension footer', () => {
 
 		const toggle = await screen.findByRole('switch', { name: 'On in the POS' });
 		expect(toggle).toBeChecked();
-		expect(toggle).toBeDisabled();
 		expect(screen.getByText('1 step left')).toBeInTheDocument();
 
-		// A second click while the first save is in flight sends nothing.
+		// A second click while the first save is in flight sends nothing and changes nothing.
 		fireEvent.click(toggle);
+		await act(async () => {});
 		const posts = () => apiFetchMock.mock.calls.filter(([args]) => args.method === 'POST');
 		expect(posts()).toHaveLength(1);
 		expect(posts()[0][0]).toMatchObject({
 			path: 'wcpos/v2/settings/payment-gateways?wcpos=1',
 			data: { gateways: { stripe_terminal: { enabled: true } } },
 		});
+		expect(screen.getByRole('switch', { name: 'On in the POS' })).toBeChecked();
 
 		await save.resolve({
 			gateways: { stripe_terminal: { id: 'stripe_terminal', enabled: true, needs_setup: true } },
 		});
 
 		expect(screen.getByRole('switch', { name: 'On in the POS' })).toBeChecked();
-		expect(screen.getByRole('switch', { name: 'On in the POS' })).not.toBeDisabled();
 	});
 
-	it('switches back off when turning it on fails', async () => {
+	it('keeps keyboard focus on the switch through a flip and its save', async () => {
 		const save = deferSave();
 		renderCard({}, { enabled: false, needs_setup: true });
 
-		fireEvent.click(screen.getByRole('switch', { name: 'Off in the POS' }));
-		expect(await screen.findByRole('switch', { name: 'On in the POS' })).toBeChecked();
-
-		await save.reject(new Error('Could not save'));
-
 		const toggle = screen.getByRole('switch', { name: 'Off in the POS' });
-		expect(toggle).not.toBeChecked();
-		expect(toggle).not.toBeDisabled();
-		expect(screen.getByText('2 steps left')).toBeInTheDocument();
+		toggle.focus();
+		fireEvent.click(toggle);
+
+		const flipped = await screen.findByRole('switch', { name: 'On in the POS' });
+		expect(flipped).toBe(toggle);
+		expect(flipped).not.toBeDisabled();
+		expect(document.activeElement).toBe(toggle);
+
+		await save.resolve({
+			gateways: { stripe_terminal: { id: 'stripe_terminal', enabled: true, needs_setup: true } },
+		});
+		expect(document.activeElement).toBe(toggle);
 	});
+
+	it.each([
+		[false, 'Off in the POS', 'On in the POS', "Couldn't turn it on in the POS. Please try again."],
+		[true, 'On in the POS', 'Off in the POS', "Couldn't turn it off in the POS. Please try again."],
+	])(
+		'rolls back and says so on the card, once, when the save fails (enabled: %s)',
+		async (enabled, before, after, message) => {
+			const save = deferSave();
+			renderCard({}, { enabled, needs_setup: true });
+
+			fireEvent.click(screen.getByRole('switch', { name: before }));
+			expect(await screen.findByRole('switch', { name: after })).toBeInTheDocument();
+
+			await save.reject(new Error('Server said no'));
+
+			expect(screen.getByRole('switch', { name: before })).toBeInTheDocument();
+			expect(screen.getByText(message)).toBeInTheDocument();
+			// The card's notice is the one message: no error snackbar, no stuck "Saving".
+			expect(screen.queryByText('Server said no')).not.toBeInTheDocument();
+			expect(screen.queryByText('Saving')).not.toBeInTheDocument();
+
+			// The next attempt clears it.
+			deferSave();
+			fireEvent.click(screen.getByRole('switch', { name: before }));
+			expect(screen.queryByText(message)).not.toBeInTheDocument();
+		}
+	);
 });
 
 describe('Pro slots', () => {

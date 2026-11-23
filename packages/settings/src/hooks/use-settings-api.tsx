@@ -11,9 +11,13 @@ import useNotices from '../hooks/use-notices';
  */
 type SettingsId = 'general' | 'checkout' | 'payment-gateways' | 'access' | 'license' | 'tax_ids';
 
-const useSettingsApi = (id: SettingsId) => {
+/**
+ * @param quietErrors The caller shows its own message for a failed save, so skip the
+ *                    page notice and error snackbar (the rollback still happens).
+ */
+const useSettingsApi = (id: SettingsId, { quietErrors = false } = {}) => {
 	const queryClient = useQueryClient();
-	const { addSnackbar } = useSnackbar();
+	const { addSnackbar, removeSnackbar } = useSnackbar();
 	const { setNotice } = useNotices();
 	const endpoint = `wcpos/v2/settings/${id}?wcpos=1`;
 
@@ -60,8 +64,12 @@ const useSettingsApi = (id: SettingsId) => {
 		onSettled: (data, error, variables, context) => {
 			const errorMessage = get(error, 'message');
 			if (errorMessage) {
-				setNotice({ type: 'error', message: errorMessage });
-				addSnackbar({ message: errorMessage, id, status: 'error' });
+				if (quietErrors) {
+					removeSnackbar(id);
+				} else {
+					setNotice({ type: 'error', message: errorMessage });
+					addSnackbar({ message: errorMessage, id, status: 'error' });
+				}
 				// rollback data
 				return queryClient.setQueryData([id], context?.previousSettings);
 			}

@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { Chip, LinkButton, Toggle } from '@wcpos/ui';
+import { Chip, LinkButton, Notice, Toggle } from '@wcpos/ui';
 
 import { CheckIcon } from './check-icon';
 import { getSlot, renderSlot } from './extension-slots';
@@ -27,8 +27,8 @@ export function showsPosSetup(extension: Extension): boolean {
  * The extension's gateway in the POS payment-gateways settings, the same data the
  * Gateways table reads and writes.
  */
-function usePosGateway(gatewayId: string) {
-	const { data, mutate } = useSettingsApi('payment-gateways');
+function usePosGateway(gatewayId: string, options?: { quietErrors?: boolean }) {
+	const { data, mutate } = useSettingsApi('payment-gateways', options);
 	const gateways = data?.gateways as
 		Record<string, { enabled?: boolean; needs_setup?: boolean | null }> | undefined;
 	const gateway = gateways?.[gatewayId];
@@ -63,18 +63,33 @@ export function SetupChip({ extension }: { extension: Extension }) {
 /**
  * Footer of an active payment extension's card: the "in the POS" switch on the
  * left, the settings state (and Pro's setup action) on the right. The switch saves
- * through the settings hook, which updates it at once, rolls it back and shows the
- * error if the save fails.
+ * through the settings hook, which updates it at once and rolls it back if the save
+ * fails; the card then says so itself, as the one message for that failure.
  */
 export function ExtensionSetupFooter({ extension }: { extension: Extension }) {
 	const gatewayId = extension.gateway_id as string;
-	const { enabled, needsSetup, mutate } = usePosGateway(gatewayId);
-	// Off while a save is in flight, so a second click cannot race the first.
-	const [saving, setSaving] = React.useState(false);
+	const { enabled, needsSetup, mutate } = usePosGateway(gatewayId, { quietErrors: true });
+	// A change while a save is in flight is ignored, so a second click cannot race the
+	// first. The switch is not disabled: that would drop keyboard focus.
+	const saving = React.useRef(false);
+	// The direction of the switch that just failed to save, until the next attempt.
+	const [failedTo, setFailedTo] = React.useState<'on' | 'off' | null>(null);
 
 	const onToggle = (next: boolean) => {
-		setSaving(true);
-		mutate({ gateways: { [gatewayId]: { enabled: next } } }, { onSettled: () => setSaving(false) });
+		if (saving.current) {
+			return;
+		}
+		saving.current = true;
+		setFailedTo(null);
+		mutate(
+			{ gateways: { [gatewayId]: { enabled: next } } },
+			{
+				onError: () => setFailedTo(next ? 'on' : 'off'),
+				onSettled: () => {
+					saving.current = false;
+				},
+			}
+		);
 	};
 
 	return (
@@ -83,7 +98,6 @@ export function ExtensionSetupFooter({ extension }: { extension: Extension }) {
 				<Toggle
 					checked={enabled}
 					onChange={onToggle}
-					disabled={saving}
 					label={
 						enabled
 							? t('extensions.on_in_pos', 'On in the POS')
@@ -111,6 +125,18 @@ export function ExtensionSetupFooter({ extension }: { extension: Extension }) {
 				<p className="wcpos:m-0 wcpos:text-right wcpos:text-xs wcpos:text-gray-500">
 					{t('extensions.settings_unknown', "We can't tell if they're finished.")}
 				</p>
+			)}
+			{failedTo && (
+				<Notice status="error" isDismissible={false}>
+					<p className="wcpos:m-0 wcpos:text-xs wcpos:leading-relaxed">
+						{failedTo === 'on'
+							? t('extensions.turn_on_failed', "Couldn't turn it on in the POS. Please try again.")
+							: t(
+									'extensions.turn_off_failed',
+									"Couldn't turn it off in the POS. Please try again."
+								)}
+					</p>
+				</Notice>
 			)}
 			{/* Pro's notices (a failed update, deactivate…) get their own full-width row. */}
 			{renderSlot('extensions.setup_notice', extension)}

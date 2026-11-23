@@ -41,6 +41,8 @@
 	"extensions.settings_unknown": "We can't tell if they're finished.",
 	"extensions.on_in_pos": "On in the POS",
 	"extensions.off_in_pos": "Off in the POS",
+	"extensions.turn_on_failed": "Couldn't turn it on in the POS. Please try again.",
+	"extensions.turn_off_failed": "Couldn't turn it off in the POS. Please try again.",
 	"logs.source": "Source",
 	"common.pos_settings": "POS settings",
 	"common.save": "Save",
