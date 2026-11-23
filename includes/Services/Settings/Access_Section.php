@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services\Settings;
 
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Permission_Registry;
 use WP_Error;
 use WP_User;
 
@@ -56,7 +57,7 @@ class Access_Section implements Settings_Section_Interface {
 	}
 
 	/**
-	 * Capabilities the user can actually exercise: the Access-settings vocabulary, then the
+	 * Capabilities the user can actually exercise: the registry and filtered Access vocabulary, then the
 	 * reported-only names in REPORTED_ONLY_CAPABILITIES.
 	 *
 	 * The user_can() check is what every REST permission callback asks, so it is the
@@ -68,11 +69,22 @@ class Access_Section implements Settings_Section_Interface {
 	 *
 	 * @param WP_User $user User to report on.
 	 *
-	 * @return string[] Capability names, in capability_names() order, then each reported-only
+	 * @return string[] Registry names, then filter-added names, then each reported-only
 	 *                  capability the user holds (read by the app's gates, never a toggle).
 	 */
 	public static function effective_capabilities( WP_User $user ): array {
-		$names = self::capability_names();
+		$names = Permission_Registry::capability_names();
+		foreach ( ( new self() )->read() as $role ) {
+			foreach ( $role['capabilities'] ?? array() as $capabilities ) {
+				if ( \is_array( $capabilities ) ) {
+					foreach ( array_keys( $capabilities ) as $capability ) {
+						if ( ! in_array( $capability, $names, true ) ) {
+							$names[] = $capability;
+						}
+					}
+				}
+			}
+		}
 		// A multisite super admin holds every capability before the filter runs
 		// (WP_User::has_cap), so mirror that bypass for the two filtered names.
 		$super_admin = is_multisite() && is_super_admin( $user->ID );
@@ -128,55 +140,15 @@ class Access_Section implements Settings_Section_Interface {
 	 * @return array
 	 */
 	private static function get_caps(): array {
-		$customer_create_cap = version_compare( WC()->version, '9.9', '>=' )
-			? 'create_customers'
-			: 'promote_users';
-
-		return array(
-			'wcpos' => array(
-				'access_woocommerce_pos',
-				'manage_woocommerce_pos',
-				'manage_woocommerce_pos_cash',
-				'view_woocommerce_pos_reports',
-				'manage_woocommerce_pos_closures',
-				'reassign_woocommerce_pos_sales',
-			),
-			'wc' => array(
-				$customer_create_cap,
-				'read_private_products',
-				'edit_product',
-				'edit_products',
-				'edit_others_products',
-				'edit_private_products',
-				'edit_published_products',
-				'publish_products',
-				'delete_product',
-				'delete_products',
-				'delete_others_products',
-				'delete_private_products',
-				'delete_published_products',
-				'read_private_shop_orders',
-				'publish_shop_orders',
-				'edit_shop_orders',
-				'edit_others_shop_orders',
-				'edit_users',
-				'list_users',
-				'manage_product_terms',
-				'read_private_shop_coupons',
-				'edit_shop_coupons',
-				'edit_others_shop_coupons',
-				'edit_private_shop_coupons',
-				'edit_published_shop_coupons',
-				'publish_shop_coupons',
-				'delete_shop_coupons',
-				'delete_others_shop_coupons',
-				'delete_private_shop_coupons',
-				'delete_published_shop_coupons',
-			),
-			'wp' => array(
-				'read',
-			),
+		$caps = array(
+			'wcpos' => array(),
+			'wc' => array(),
+			'wp' => array(),
 		);
+		foreach ( Permission_Registry::entries() as $entry ) {
+			$caps[ Permission_Registry::api_group( $entry['capability'] ) ][] = $entry['capability'];
+		}
+		return $caps;
 	}
 
 	/**

@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 use WCPOS\WooCommercePOS\Admin\Consent;
 use WCPOS\WooCommercePOS\Services\Font_Pack_Loader;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
+use WCPOS\WooCommercePOS\Services\Permission_Registry;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Cleanup;
 use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WCPOS\WooCommercePOS\Sync\Health as Sync_Health;
@@ -31,6 +32,25 @@ use const DOING_AJAX;
  * Activator class.
  */
 class Activator {
+	/**
+	 * Pro store post type capabilities: granted to administrators, not POS permissions, so not in the registry.
+	 */
+	private const STORE_CAPABILITIES = array(
+		'edit_wcpos_store',
+		'read_wcpos_store',
+		'delete_wcpos_store',
+		'edit_wcpos_stores',
+		'edit_others_wcpos_stores',
+		'publish_wcpos_stores',
+		'read_private_wcpos_stores',
+		'delete_wcpos_stores',
+		'delete_private_wcpos_stores',
+		'delete_published_wcpos_stores',
+		'delete_others_wcpos_stores',
+		'edit_private_wcpos_stores',
+		'edit_published_wcpos_stores',
+	);
+
 	/**
 	 * Lock name used by WP_Upgrader::create_lock().
 	 */
@@ -138,6 +158,16 @@ class Activator {
 			}
 		}
 
+		if ( ! $full_role_sync ) {
+			foreach ( Permission_Registry::entries() as $entry ) {
+				if ( version_compare( $entry['introduced'], Permission_Registry::MARKER_BASELINE, '>=' ) ) {
+					foreach ( $granted as $slug => $capabilities ) {
+						$granted[ $slug ] = array_values( array_diff( $capabilities, array( $entry['capability'] ) ) );
+					}
+				}
+			}
+		}
+
 		// Reseed the default template terms on the next request: (re)activation
 		// is the repair a merchant reaches for after deleting a term by hand.
 		// This also runs once per upgrade (version_check re-activates to sync
@@ -166,6 +196,9 @@ class Activator {
 			)
 		);
 
+		$marker = \is_array( $synced ) && isset( $synced['_introduced'] ) && \is_array( $synced['_introduced'] ) ? $synced['_introduced'] : array();
+		$marker = $this->grant_introduced_capabilities( $marker );
+
 		$stored_roles        = get_option( wp_roles()->role_key, array() );
 		$roles_are_persisted = is_array( $stored_roles );
 		if ( $roles_are_persisted ) {
@@ -187,7 +220,7 @@ class Activator {
 		if ( $roles_are_persisted && empty( $stored_roles['cashier']['capabilities'][ $obsolete_customer_create_cap ] ) ) {
 			// Snapshot first: a fingerprint that advanced past a failed snapshot
 			// write would never retry it.
-			update_option( 'woocommerce_pos_role_caps_synced', $capability_names, true );
+			update_option( 'woocommerce_pos_role_caps_synced', $capability_names + array( '_introduced' => $marker ), true );
 			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
 		}
 
@@ -1261,70 +1294,12 @@ class Activator {
 	 * @return array<string, array<string, bool>|array<int, string>> Role capabilities keyed by role.
 	 */
 	public static function role_capability_definition(): array {
-		// WC 9.9 replaced promote_users with create_customers for customer creation.
-		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' ) // @phpstan-ignore-line
-			? 'create_customers'
-			: 'promote_users';
-
-		// Cashier role.
-		$cashier_capabilities = array(
-			'manage_woocommerce_pos_cash' => true,
-			'view_woocommerce_pos_reports' => true,
-			'read'                      => true,
-			'read_private_products'     => true,
-			'publish_products'          => true,
-			'edit_product'              => true,
-			'edit_products'             => true,
-			'edit_published_products'   => true,
-			'edit_private_products'     => true,
-			'edit_others_products'      => true,
-			'read_private_shop_orders'  => true,
-			'publish_shop_orders'       => true,
-			'edit_shop_orders'          => true,
-			'edit_others_shop_orders'   => true,
-			'list_users'                => true,
-			$customer_create_cap        => true,
-			'edit_users'                => true,
-			'read_private_shop_coupons' => true,
-			'publish_shop_coupons'      => true,
-			'edit_shop_coupons'         => true,
-			'edit_published_shop_coupons' => true,
-			'edit_private_shop_coupons' => true,
-			'edit_others_shop_coupons'  => true,
-			'manage_product_terms'      => true,
-		);
-
+		// The cashier access gate is still prepended by single_activate() and create_pos_roles().
+		$cashier = array_diff( Permission_Registry::defaults_for_role( 'cashier' ), array( 'access_woocommerce_pos' ) );
 		return array(
-			'cashier'       => $cashier_capabilities,
-			'administrator' => array(
-				'manage_woocommerce_pos',
-				'manage_woocommerce_pos_cash',
-				'view_woocommerce_pos_reports',
-				'manage_woocommerce_pos_closures',
-				'reassign_woocommerce_pos_sales',
-				'access_woocommerce_pos',
-				'edit_wcpos_store',
-				'read_wcpos_store',
-				'delete_wcpos_store',
-				'edit_wcpos_stores',
-				'edit_others_wcpos_stores',
-				'publish_wcpos_stores',
-				'read_private_wcpos_stores',
-				'delete_wcpos_stores',
-				'delete_private_wcpos_stores',
-				'delete_published_wcpos_stores',
-				'delete_others_wcpos_stores',
-				'edit_private_wcpos_stores',
-				'edit_published_wcpos_stores',
-			),
-			'shop_manager'  => array(
-				'manage_woocommerce_pos',
-				'access_woocommerce_pos',
-				'manage_woocommerce_pos_cash',
-				'view_woocommerce_pos_reports',
-				'manage_woocommerce_pos_closures',
-				'reassign_woocommerce_pos_sales',
-			),
+			'cashier'       => array_fill_keys( $cashier, true ),
+			'administrator' => array_merge( Permission_Registry::defaults_for_role( 'administrator' ), self::STORE_CAPABILITIES ),
+			'shop_manager'  => Permission_Registry::defaults_for_role( 'shop_manager' ),
 		);
 	}
 
@@ -1332,7 +1307,36 @@ class Activator {
 	 * Get the role-capabilities definition fingerprint.
 	 */
 	private function role_caps_fingerprint(): string {
-		return md5( wp_json_encode( self::role_capability_definition() ) );
+		$entries = array();
+		foreach ( Permission_Registry::entries() as $entry ) {
+			$entries[] = array_intersect_key( $entry, array_flip( array( 'capability', 'introduced', 'split_from' ) ) );
+		}
+		return md5( wp_json_encode( array( self::role_capability_definition(), $entries ) ) );
+	}
+
+	/**
+	 * Grant each newly introduced capability once, preserving later owner removals.
+	 *
+	 * @param array $marker Capability names mapped to their introduced version.
+	 * @return array Updated marker, including legacy capabilities recorded without grants.
+	 */
+	private function grant_introduced_capabilities( array $marker ): array {
+		foreach ( Permission_Registry::entries() as $entry ) {
+			$capability = $entry['capability'];
+			if ( isset( $marker[ $capability ] ) ) {
+				continue;
+			}
+			if ( version_compare( $entry['introduced'], Permission_Registry::MARKER_BASELINE, '>=' ) ) {
+				$source = $entry['split_from'] ?? 'access_woocommerce_pos';
+				foreach ( wp_roles()->role_objects as $role ) {
+					if ( $role->has_cap( $source ) && ! $role->has_cap( $capability ) ) {
+						$role->add_cap( $capability );
+					}
+				}
+			}
+			$marker[ $capability ] = $entry['introduced'];
+		}
+		return $marker;
 	}
 
 	/**

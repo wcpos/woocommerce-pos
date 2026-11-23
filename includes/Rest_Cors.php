@@ -69,6 +69,7 @@ final class Rest_Cors {
 		'Server-Timing',         // Response telemetry.
 		'X-WCPOS-Memory-Peak',   // Response telemetry.
 		'X-WCPOS-Pressure',      // Host pressure bucket, also sent by the ping fast path.
+		'X-WCPOS-Permissions',   // Current user's permissions and store settings stamp.
 		'ETag',                  // Conditional sequence-log polling (304s).
 		'Date',                  // Server clock, used for client drift correction.
 	);

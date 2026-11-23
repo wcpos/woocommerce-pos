@@ -72,6 +72,10 @@ final class Response_Envelope {
 			$meta['page'] = 1;
 		}
 
+		if ( isset( $headers['x-wcpos-permissions'] ) && '' !== (string) $headers['x-wcpos-permissions'] ) {
+			$meta['permissions'] = (string) $headers['x-wcpos-permissions'];
+		}
+
 		if ( isset( $headers['etag'] ) ) {
 			if ( '' !== (string) $headers['etag'] ) {
 				$meta['validator'] = (string) $headers['etag'];
