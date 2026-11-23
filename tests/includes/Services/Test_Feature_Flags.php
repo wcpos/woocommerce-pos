@@ -50,9 +50,9 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 	 */
 	public function test_get_landing_variant_matches_posthog_reference_vectors(): void {
 		$vectors = array(
-			'a1b2c3d4-0000-4000-8000-000000000001' => 'indie',
+			'a1b2c3d4-0000-4000-8000-000000000001' => 'plan',
 			'11111111-1111-4111-8111-111111111111' => 'free-plus',
-			'test-distinct-id'                      => 'indie',
+			'test-distinct-id'                      => 'plan',
 			'wcpos'                                 => 'free-plus',
 			'00000000-0000-4000-8000-000000000000' => 'free-plus',
 			'f47ac10b-58cc-4372-a567-0e02b2c3d479' => 'free-plus',
@@ -68,12 +68,12 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The flag is only ever assigned one of the two configured variants.
+	 * The flag is only ever assigned one of the two variants with a non-zero rollout.
 	 */
 	public function test_get_landing_variant_only_returns_configured_variants(): void {
 		for ( $i = 0; $i < 100; $i++ ) {
 			$variant = $this->flags->get_landing_variant( wp_generate_uuid4() );
-			$this->assertContains( $variant, array( 'indie', 'free-plus' ) );
+			$this->assertContains( $variant, array( 'plan', 'free-plus' ) );
 		}
 	}
 
@@ -82,7 +82,7 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 	 */
 	public function test_get_landing_variant_splits_traffic_roughly_evenly(): void {
 		$counts = array(
-			'indie'     => 0,
+			'plan'      => 0,
 			'free-plus' => 0,
 		);
 
@@ -94,9 +94,9 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 
 		// Generous bounds (40%–60%) so the assertion never flakes while still
 		// catching a broken split (e.g. everyone landing on one arm).
-		$this->assertGreaterThan( $total * 0.4, $counts['indie'], 'indie share too low' );
-		$this->assertLessThan( $total * 0.6, $counts['indie'], 'indie share too high' );
-		$this->assertSame( $total, $counts['indie'] + $counts['free-plus'] );
+		$this->assertGreaterThan( $total * 0.4, $counts['plan'], 'plan share too low' );
+		$this->assertLessThan( $total * 0.6, $counts['plan'], 'plan share too high' );
+		$this->assertSame( $total, $counts['plan'] + $counts['free-plus'] );
 	}
 
 	/**
@@ -113,7 +113,7 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 		$flags = $this->flags->get_landing_bootstrap_flags( 'test-distinct-id' );
 
 		$this->assertArrayHasKey( 'landing-variant', $flags );
-		$this->assertSame( 'indie', $flags['landing-variant'] );
+		$this->assertSame( 'plan', $flags['landing-variant'] );
 	}
 
 	/**
