@@ -222,4 +222,134 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 		// Assert.
 		$this->assertSame( 'Too many requests. Please try again later.', $auth->get_error() );
 	}
+
+	/**
+	 * Wrong passwords in flight at once from one peer get no more password checks than its limit.
+	 */
+	public function test_rate_limit_overlapping_wrong_passwords_get_no_more_checks_than_the_limit(): void {
+		// Arrange: eleven accounts, so no account reaches its own lockout.
+		$logins = array();
+		for ( $i = 0; $i < 11; $i++ ) {
+			$logins[] = self::factory()->user->create_and_get( array( 'user_pass' => 'right-' . $i ) )->user_login;
+		}
+		$started   = 1;
+		$checks    = 0;
+		$responses = array();
+		// Each password check starts the next request before it answers, so no failure is recorded until every request is in flight.
+		add_filter(
+			'check_password',
+			function ( $check ) use ( &$started, &$checks, &$responses, $logins ) {
+				++$checks;
+				if ( $started < \count( $logins ) ) {
+					$login       = $logins[ $started++ ];
+					$responses[] = $this->attempt( '203.0.113.10', $login, 'wrong' )->get_error();
+				}
+				return $check;
+			}
+		);
+
+		// Act.
+		$responses[] = $this->attempt( '203.0.113.10', $logins[0], 'wrong' )->get_error();
+
+		// Assert.
+		$this->assertSame( 10, $checks );
+		$counts = array_count_values( $responses );
+		ksort( $counts );
+		$this->assertSame(
+			array(
+				'Invalid username or password.'              => 10,
+				'Too many requests. Please try again later.' => 1,
+			),
+			$counts
+		);
+		$this->assertSame( 'Too many requests. Please try again later.', $this->attempt( '203.0.113.10', 'ghost', 'wrong' )->get_error() );
+	}
+
+	/**
+	 * Right passwords, with or without POS access, leave the peer's budget for wrong ones untouched.
+	 */
+	public function test_rate_limit_right_passwords_do_not_count_toward_the_peer_limit(): void {
+		// Arrange.
+		remove_filter( 'wcpos_authenticate_user', array( $this, 'authentication_sentinel' ), 10 );
+		self::factory()->user->create(
+			array(
+				'user_login' => 'shopper',
+				'user_pass'  => 'shopper pass',
+				'role'       => 'subscriber',
+			)
+		);
+		add_filter(
+			'wp_redirect',
+			static function () {
+				throw new \DomainException( 'redirected' );
+			}
+		);
+		for ( $i = 0; $i < 11; $i++ ) {
+			try {
+				$this->attempt( '203.0.113.10', 'till-cashier', 'correct horse' );
+				$this->fail( 'A right password should redirect.' );
+			} catch ( \DomainException $redirected ) {
+				$this->assertSame( 'redirected', $redirected->getMessage() );
+			}
+			$auth = $this->attempt( '203.0.113.10', 'shopper', 'shopper pass' );
+			$this->assertNotSame( 'Too many requests. Please try again later.', $auth->get_error() );
+		}
+
+		// Act / Assert: the peer still has its whole budget of ten wrong passwords.
+		for ( $i = 0; $i < 10; $i++ ) {
+			$this->assertSame( 'Invalid username or password.', $this->attempt( '203.0.113.10', 'ghost-' . $i, 'wrong' )->get_error() );
+		}
+		$this->assertSame( 'Too many requests. Please try again later.', $this->attempt( '203.0.113.10', 'ghost-10', 'wrong' )->get_error() );
+	}
+
+	/**
+	 * A peer's failures older than the 15-minute window no longer count.
+	 */
+	public function test_rate_limit_window_past_its_end_starts_a_new_count(): void {
+		// Arrange.
+		global $wpdb;
+		for ( $i = 0; $i < 10; $i++ ) {
+			$this->attempt( '203.0.113.10', 'ghost-' . $i, 'wrong' );
+		}
+		$this->assertSame( 'Too many requests. Please try again later.', $this->attempt( '203.0.113.10', 'ghost-10', 'wrong' )->get_error() );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 1), '|', %d) WHERE option_name LIKE %s", time() - 1, $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' ) );
+
+		// Act.
+		$auth = $this->attempt( '203.0.113.10', 'ghost-11', 'wrong' );
+
+		// Assert.
+		$this->assertSame( 'Invalid username or password.', $auth->get_error() );
+	}
+
+	/**
+	 * A login the database could not count against the peer is refused before the password is checked.
+	 */
+	public function test_rate_limit_attempt_that_cannot_be_counted_is_refused(): void {
+		// Arrange.
+		global $wpdb;
+		$checked = false;
+		add_filter(
+			'check_password',
+			static function ( $check ) use ( &$checked ) {
+				$checked = true;
+				return $check;
+			}
+		);
+		add_filter(
+			'query',
+			static function ( $query ) {
+				return 0 === strpos( $query, 'INSERT' ) && false !== strpos( $query, 'wcpos_auth_attempts_' ) ? 'SELECT * FROM wcpos_no_such_table' : $query;
+			}
+		);
+		$suppress = $wpdb->suppress_errors();
+
+		// Act.
+		$auth = $this->attempt( '203.0.113.10', 'till-cashier', 'correct horse' );
+
+		// Assert.
+		$wpdb->suppress_errors( $suppress );
+		$this->assertSame( 'Too many requests. Please try again later.', $auth->get_error() );
+		$this->assertFalse( $checked );
+		$this->assertFalse( $this->sentinel_reached );
+	}
 }

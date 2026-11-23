@@ -12,7 +12,8 @@ use WCPOS\WooCommercePOS\Logger;
 /**
  * One failure counter for every place WCPOS checks a typed password: the POS login page and
  * the manager-approval routes. A failure on any of them counts toward one lockout, and a
- * locked account is refused on all of them.
+ * locked account is refused on all of them. The *_bucket_* methods are the atomic counter under
+ * it, also used by the login page's per-peer rate limit.
  */
 final class Credential_Lockout {
 	/** Max failed attempts per account and peer. */
@@ -44,21 +45,35 @@ final class Credential_Lockout {
 		if ( false !== get_transient( 'wcpos_auth_lock_' . $username_key ) ) {
 			return false;
 		}
+		return self::reserve_bucket_attempt( $username_key, self::MAX_FAILED_ATTEMPTS, self::LOCKOUT_DURATION );
+	}
+
+	/** Count an attempt in a bucket before its password is checked, in one atomic statement.
+	 *
+	 * Returns false when the count would pass the limit, or when the attempt could not be counted
+	 * (fail closed); the caller then refuses without checking the password. Shared by the account
+	 * lockout here and the login page's per-peer rate limit.
+	 *
+	 * @param string $bucket An md5 bucket key; the row is wcpos_auth_attempts_<bucket>.
+	 * @param int    $limit  Attempts allowed in the window.
+	 * @param int    $window Seconds a failure keeps counting.
+	 */
+	public static function reserve_bucket_attempt( string $bucket, int $limit, int $window ): bool {
 		global $wpdb;
 		$now   = time();
-		$fresh = '1|' . ( $now + self::LOCKOUT_DURATION );
+		$fresh = '1|' . ( $now + $window );
 		// The row is count|expires-at, so one statement restarts an expired window or adds one, and
-		// stops one past the limit. A failure sets the 15-minute expiry, as the old transient's TTL
+		// stops one past the limit. A failure sets the window's expiry, as the old transient's TTL
 		// did; a counted attempt only holds the window open while it is in flight.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
-		$written  = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', GREATEST(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED), %d))))", self::ROW_PREFIX . $username_key, $fresh, $now, $fresh, self::MAX_FAILED_ATTEMPTS, $now + self::IN_FLIGHT_SECONDS ) );
-		$attempts = false === $written ? null : self::attempts( $username_key );
+		$written  = $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', GREATEST(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED), %d))))", self::ROW_PREFIX . $bucket, $fresh, $now, $fresh, $limit, $now + self::IN_FLIGHT_SECONDS ) );
+		$attempts = false === $written ? null : self::attempts( $bucket );
 		if ( null === $attempts ) {
 			// Fail closed: an attempt that could not be counted is not checked.
 			Logger::error( 'WCPOS Auth: could not count a credential attempt; refusing it.' );
 			return false;
 		}
-		return $attempts <= self::MAX_FAILED_ATTEMPTS;
+		return $attempts <= $limit;
 	}
 
 	/** Restart the 15-minute window from this failure and lock at the limit; the attempt that
@@ -70,11 +85,8 @@ final class Credential_Lockout {
 		if ( empty( $username ) ) {
 			return;
 		}
-		global $wpdb;
 		$username_key = self::key( $username );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 1), '|', %d) WHERE option_name = %s", time() + self::LOCKOUT_DURATION, self::ROW_PREFIX . $username_key ) );
-		$attempts = (int) self::attempts( $username_key );
+		$attempts     = self::record_bucket_failure( $username_key, self::LOCKOUT_DURATION );
 		if ( $attempts >= self::MAX_FAILED_ATTEMPTS ) {
 			set_transient( 'wcpos_auth_lock_' . $username_key, time(), self::LOCKOUT_DURATION );
 			Logger::log( \sprintf( 'WCPOS Auth: Account locked - username: %s, IP: %s, attempts: %d', $username, self::client_ip(), $attempts ) );
@@ -90,9 +102,43 @@ final class Credential_Lockout {
 		if ( empty( $username ) ) {
 			return;
 		}
+		self::release_bucket_attempt( self::key( $username ) );
+	}
+
+	/** Restart a bucket's window from a failure counted by reserve_bucket_attempt().
+	 *
+	 * @param string $bucket The bucket key.
+	 * @param int    $window Seconds the failure keeps counting.
+	 * @return int The attempts the bucket holds.
+	 */
+	public static function record_bucket_failure( string $bucket, int $window ): int {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) - 1, '|', SUBSTRING_INDEX(option_value, '|', -1)) WHERE option_name = %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > 0", self::ROW_PREFIX . self::key( $username ) ) );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 1), '|', %d) WHERE option_name = %s", time() + $window, self::ROW_PREFIX . $bucket ) );
+		return (int) self::attempts( $bucket );
+	}
+
+	/** Give back an attempt counted by reserve_bucket_attempt() that is not a failure.
+	 *
+	 * @param string $bucket The bucket key.
+	 */
+	public static function release_bucket_attempt( string $bucket ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) - 1, '|', SUBSTRING_INDEX(option_value, '|', -1)) WHERE option_name = %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > 0", self::ROW_PREFIX . $bucket ) );
+	}
+
+	/** Whether a bucket's current window has reached its limit, read without counting.
+	 *
+	 * @param string $bucket The bucket key.
+	 * @param int    $limit  Attempts allowed in the window.
+	 */
+	public static function bucket_is_full( string $bucket, int $limit ): bool {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- The counter row is never cached.
+		$value = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::ROW_PREFIX . $bucket ) );
+		list( $count, $expires ) = array_map( 'intval', explode( '|', $value ) ) + array( 0, 0 );
+		return $expires >= time() && $count >= $limit;
 	}
 
 	/** Clear the attempts and lock for an account and peer after a successful check, and drop
