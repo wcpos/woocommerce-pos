@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\API\V1\Raw_Response;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Closure_Csv;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Credential_Lockout;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -137,13 +138,21 @@ class Closures_Controller extends \WP_REST_Controller {
 				if ( ! is_array( $approval ) || ! is_string( $approval['username'] ?? null ) || ! is_string( $approval['password'] ?? null ) ) {
 					return $this->error( 'wcpos_recount_approval_invalid', 403 );
 				}
+				// The POS login page's lockout, checked before the password so a locked account learns nothing.
+				// Bucketed as wp_authenticate() sanitizes the name, so no spelling of an account escapes it.
+				$identifier = sanitize_user( $approval['username'] );
+				if ( Credential_Lockout::is_locked( $identifier ) ) {
+					return $this->error( 'wcpos_approval_locked', 429 );
+				}
 				$user = wp_authenticate( $approval['username'], $approval['password'] );
 				if ( is_wp_error( $user ) ) {
+					Credential_Lockout::record_failure( $identifier );
 					return $this->error( 'wcpos_recount_approval_invalid', 403 );
 				}
 				if ( ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
 					return $this->error( 'wcpos_recount_approval_forbidden', 403 );
 				}
+				Credential_Lockout::clear( $identifier );
 				$approver_id = $user->ID;
 			}
 

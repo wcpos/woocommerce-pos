@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Credential_Lockout;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
@@ -328,10 +329,21 @@ class Sessions_Controller extends \WP_REST_Controller {
 		if ( ! is_string( $request['username'] ) || ! is_string( $request['password'] ) ) {
 			return $this->error( 'wcpos_override_refused', 403 );
 		}
+		// The POS login page's lockout, checked before the password so a locked account learns nothing.
+		// Bucketed as wp_authenticate() sanitizes the name, so no spelling of an account escapes it.
+		$identifier = sanitize_user( $request['username'] );
+		if ( Credential_Lockout::is_locked( $identifier ) ) {
+			return $this->error( 'wcpos_approval_locked', 429 );
+		}
 		$user = wp_authenticate( $request['username'], $request['password'] );
-		if ( is_wp_error( $user ) || get_current_user_id() === $user->ID || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
+		if ( is_wp_error( $user ) ) {
+			Credential_Lockout::record_failure( $identifier );
 			return $this->error( 'wcpos_override_refused', 403 );
 		}
+		if ( get_current_user_id() === $user->ID || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
+			return $this->error( 'wcpos_override_refused', 403 );
+		}
+		Credential_Lockout::clear( $identifier );
 		$counted = Closure_Store::tenders( $request['counted'] );
 		if ( null === $counted ) {
 			return $this->error( 'rest_invalid_param', 400, 'counted' );
