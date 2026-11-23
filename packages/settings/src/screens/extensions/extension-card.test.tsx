@@ -68,7 +68,12 @@ afterEach(() => {
 	delete window.wcpos;
 });
 
+// Pro registers the setup action; the setup card shows only alongside it.
+const withPro = () => registerSlots({ 'extensions.setup_action': () => null });
+
 describe('Active payment extension chip', () => {
+	beforeEach(withPro);
+
 	it.each([
 		[{ pos_enabled: false, needs_setup: true }, '2 steps left'],
 		[{ pos_enabled: true, needs_setup: true }, '1 step left'],
@@ -98,6 +103,8 @@ describe('Active payment extension chip', () => {
 });
 
 describe('Active payment extension footer', () => {
+	beforeEach(withPro);
+
 	it('links to the settings when they are not finished', () => {
 		renderCard({ needs_setup: true });
 
@@ -118,13 +125,16 @@ describe('Active payment extension footer', () => {
 		expect(screen.getByText("We can't tell if they're finished.")).toBeInTheDocument();
 	});
 
-	it('says the settings are finished', () => {
-		renderCard({ pos_enabled: true, needs_setup: false });
+	it.each(['active', 'update_available'] as const)(
+		'says the settings are finished (%s)',
+		(status) => {
+			renderCard({ status, pos_enabled: true, needs_setup: false });
 
-		expect(screen.getByText('Settings finished')).toBeInTheDocument();
-		expect(screen.queryByRole('link', { name: /settings/i })).not.toBeInTheDocument();
-		expect(screen.getByRole('switch', { name: 'On in the POS' })).toBeChecked();
-	});
+			expect(screen.getByText('Settings finished')).toBeInTheDocument();
+			expect(screen.queryByRole('link', { name: /settings/i })).not.toBeInTheDocument();
+			expect(screen.getByRole('switch', { name: 'On in the POS' })).toBeChecked();
+		}
+	);
 
 	it('turns the gateway on in the POS and refreshes the extensions', () => {
 		const invalidate = vi.spyOn(client, 'invalidateQueries');
@@ -191,7 +201,10 @@ describe('Pro slots', () => {
 	});
 
 	it('shows the menu for the menu-items slot alone', () => {
-		registerSlots({ 'extensions.menu_items': () => <span role="menuitem">Deactivate</span> });
+		registerSlots({
+			'extensions.setup_action': () => null,
+			'extensions.menu_items': () => <span role="menuitem">Deactivate</span>,
+		});
 		renderCard({ settings_url: undefined });
 
 		fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
@@ -230,5 +243,14 @@ describe('Other cards', () => {
 		expect(screen.getByText('Inactive')).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: 'Generic action' })).toBeInTheDocument();
 		expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+	});
+
+	it('leaves an active payment card as it was without Pro', () => {
+		renderCard({ pos_enabled: false, needs_setup: true });
+
+		expect(screen.getByText('Active')).toBeInTheDocument();
+		expect(screen.queryByText('2 steps left')).not.toBeInTheDocument();
+		expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: 'Finish settings' })).not.toBeInTheDocument();
 	});
 });

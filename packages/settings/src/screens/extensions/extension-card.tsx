@@ -7,7 +7,7 @@ import { Card, Chip, DropdownMenu, DropdownMenuItem, Tooltip } from '@wcpos/ui';
 import {
 	CheckIcon,
 	ExtensionSetupFooter,
-	isActivePayment,
+	showsPosSetup,
 	renderSlot,
 	SetupChip,
 } from './extension-setup-footer';
@@ -185,7 +185,7 @@ function FooterAction({ extension }: { extension: Extension }) {
  * empty gray bar).
  */
 function buildFooterContent(extension: Extension): React.ReactNode {
-	if (isActivePayment(extension)) {
+	if (showsPosSetup(extension)) {
 		return <ExtensionSetupFooter key={String(extension.pos_enabled)} extension={extension} />;
 	}
 
@@ -213,7 +213,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 
 	const showSettingsItem = !!extension.settings_url && extension.status !== 'not_installed';
 	const showGitHubItem = !!extension.homepage && isGitHubUrl(extension.homepage);
-	const menuItems = isActivePayment(extension)
+	const menuItems = showsPosSetup(extension)
 		? renderSlot('extensions.menu_items', extension)
 		: null;
 	const showKebab = showSettingsItem || showGitHubItem || !!menuItems;
@@ -264,7 +264,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 						{extension.name}
 					</h3>
 					<div className="wcpos:flex wcpos:flex-wrap wcpos:items-center wcpos:gap-x-1.5 wcpos:gap-y-1 wcpos:mt-1">
-						{isActivePayment(extension) && extension.status === 'active' ? (
+						{showsPosSetup(extension) && extension.status === 'active' ? (
 							<SetupChip extension={extension} />
 						) : (
 							<StatusBadge status={extension.status} />

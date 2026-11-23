@@ -11,13 +11,16 @@ import { t } from '../../translations';
 import type { Extension } from './index';
 
 /**
- * An active payment extension whose gateway WooCommerce knows: its card shows
- * whether cashiers can use it and lets the owner fix that from the card.
+ * An active payment extension whose gateway WooCommerce knows, on a site with Pro:
+ * its card shows whether cashiers can use it and lets the owner fix that from the
+ * card. Without Pro, Free's tier rule keeps the gateway off in the POS, so the card
+ * stays as it was.
  */
-export function isActivePayment(extension: Extension): boolean {
+export function showsPosSetup(extension: Extension): boolean {
 	return (
 		(extension.status === 'active' || extension.status === 'update_available') &&
-		!!extension.gateway_id
+		!!extension.gateway_id &&
+		!!(window as any).wcpos?.settings?.getComponent?.('extensions.setup_action')
 	);
 }
 
@@ -120,8 +123,7 @@ export function ExtensionSetupFooter({ extension }: { extension: Extension }) {
 								: t('extensions.check_settings', 'Check settings')}
 						</LinkButton>
 					)}
-					{/* Left out while an update waits: the switch, this and Update do not fit a phone row. */}
-					{extension.needs_setup === false && extension.status !== 'update_available' && (
+					{extension.needs_setup === false && (
 						<span className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:text-sm wcpos:text-gray-700">
 							<CheckIcon className="wcpos:h-3.5 wcpos:w-3.5 wcpos:text-green-700" />
 							{t('extensions.settings_finished', 'Settings finished')}
