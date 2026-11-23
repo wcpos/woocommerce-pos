@@ -148,6 +148,10 @@ if ( \defined( 'WP_CLI' ) && WP_CLI ) {
 	}
 
 	\WP_CLI::add_command( 'wcpos anon-id', \WCPOS\WooCommercePOS\CLI\Anon_ID_Command::class );
+	if ( ! class_exists( \WCPOS\WooCommercePOS\CLI\User_Identity_Command::class ) ) {
+		require_once __DIR__ . '/includes/CLI/User_Identity_Command.php';
+	}
+	\WP_CLI::add_command( 'wcpos user-identity', \WCPOS\WooCommercePOS\CLI\User_Identity_Command::class );
 }
 
 // Environment variables.
