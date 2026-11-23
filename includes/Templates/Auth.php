@@ -386,8 +386,8 @@ class Auth {
 		$username = sanitize_user( wp_unslash( $_POST['wcpos-log'] ?? '' ) );
 		$password = isset( $_POST['wcpos-pwd'] ) ? wp_unslash( $_POST['wcpos-pwd'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Password must not be sanitized before authentication.
 
-		// Check if username is locked out.
-		if ( Credential_Lockout::is_locked( $username ) ) {
+		// Count the attempt before the password is checked; refuse a locked account.
+		if ( ! Credential_Lockout::reserve_attempt( $username ) ) {
 			$this->error = __( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', 'woocommerce-pos' );
 			$this->log_auth_attempt( $username, 'locked_out' );
 
@@ -408,6 +408,7 @@ class Auth {
 
 		// Check if user has access to POS.
 		if ( ! Cashier::instance()->can_open_pos( $user ) ) {
+			Credential_Lockout::release_attempt( $username );
 			$this->log_auth_attempt( $username, 'no_permission' );
 			$this->error = Cashier::instance()->missing_pos_capabilities_message( $user );
 

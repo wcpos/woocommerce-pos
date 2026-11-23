@@ -21,15 +21,38 @@ final class Credential_Lockout {
 	/** Lockout duration in seconds (15 minutes). */
 	private const LOCKOUT_DURATION = 900;
 
-	/** Whether an identifier is locked out for this peer.
+	/** Option name prefix of the per-bucket attempt counter, read and written only by raw SQL. */
+	private const ROW_PREFIX = 'wcpos_auth_attempts_';
+
+	/** Count an attempt for an account and peer before its password is checked.
+	 *
+	 * Returns false when the account is locked or the attempt would pass the limit; the caller
+	 * then refuses without checking the password. The attempt is counted in one atomic statement
+	 * before the check, so overlapping requests cannot all pass on the same count (CWE-307).
 	 *
 	 * @param string $username The identifier as typed.
 	 */
-	public static function is_locked( string $username ): bool {
-		return ! empty( $username ) && false !== get_transient( 'wcpos_auth_lock_' . self::key( $username ) );
+	public static function reserve_attempt( string $username ): bool {
+		if ( empty( $username ) ) {
+			return true;
+		}
+		$username_key = self::key( $username );
+		if ( false !== get_transient( 'wcpos_auth_lock_' . $username_key ) ) {
+			return false;
+		}
+		global $wpdb;
+		$now     = time();
+		$expires = $now + self::LOCKOUT_DURATION;
+		$fresh   = '1|' . $expires;
+		// The row is count|expires-at, so one statement restarts an expired window or adds one. It
+		// stops at one past the limit, so the window still ends 15 minutes after the last counted try.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') ON DUPLICATE KEY UPDATE option_value = IF(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d, %s, IF(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d, option_value, CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) + 1, '|', %d)))", self::ROW_PREFIX . $username_key, $fresh, $now, $fresh, self::MAX_FAILED_ATTEMPTS, $expires ) );
+		return self::attempts( $username_key ) <= self::MAX_FAILED_ATTEMPTS;
 	}
 
-	/** Record a failed attempt for an account and peer, locking at the limit.
+	/** Lock an account and peer when its counted attempts reach the limit; the attempt that
+	 * failed was already counted by reserve_attempt().
 	 *
 	 * @param string $username The identifier that failed.
 	 */
@@ -38,15 +61,29 @@ final class Credential_Lockout {
 			return;
 		}
 		$username_key = self::key( $username );
-		$attempts     = (int) get_transient( 'wcpos_auth_fail_' . $username_key ) + 1;
-		set_transient( 'wcpos_auth_fail_' . $username_key, $attempts, self::LOCKOUT_DURATION );
+		$attempts     = self::attempts( $username_key );
 		if ( $attempts >= self::MAX_FAILED_ATTEMPTS ) {
 			set_transient( 'wcpos_auth_lock_' . $username_key, time(), self::LOCKOUT_DURATION );
 			Logger::log( \sprintf( 'WCPOS Auth: Account locked - username: %s, IP: %s, attempts: %d', $username, self::client_ip(), $attempts ) );
 		}
 	}
 
-	/** Clear failed attempts for an account and peer after a successful check.
+	/** Give back a counted attempt whose password was right but which was refused for another
+	 * reason (no capability, approving oneself), so it does not count as a failure.
+	 *
+	 * @param string $username The identifier that authenticated.
+	 */
+	public static function release_attempt( string $username ): void {
+		if ( empty( $username ) ) {
+			return;
+		}
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Atomic counter; update_option() reads then writes.
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) - 1, '|', SUBSTRING_INDEX(option_value, '|', -1)) WHERE option_name = %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > 0", self::ROW_PREFIX . self::key( $username ) ) );
+	}
+
+	/** Clear the attempts and lock for an account and peer after a successful check, and drop
+	 * any other bucket whose window has ended.
 	 *
 	 * @param string $username The identifier to clear.
 	 */
@@ -54,8 +91,10 @@ final class Credential_Lockout {
 		if ( empty( $username ) ) {
 			return;
 		}
+		global $wpdb;
 		$username_key = self::key( $username );
-		delete_transient( 'wcpos_auth_fail_' . $username_key );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Rows written by reserve_attempt(), never through the options API.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s OR (option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) < %d)", self::ROW_PREFIX . $username_key, $wpdb->esc_like( self::ROW_PREFIX ) . '%', time() ) );
 		delete_transient( 'wcpos_auth_lock_' . $username_key );
 	}
 
@@ -86,5 +125,15 @@ final class Credential_Lockout {
 		$user    = $user ? $user : get_user_by( 'email', $username );
 		$subject = $user ? 'user:' . $user->ID : 'input:' . strtolower( trim( $username ) );
 		return md5( $subject . '|' . self::client_ip() );
+	}
+
+	/** Attempts counted in a bucket's current row, read past the options cache.
+	 *
+	 * @param string $username_key The bucket from key().
+	 */
+	private static function attempts( string $username_key ): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- The counter row is never cached.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::ROW_PREFIX . $username_key ) );
 	}
 }
