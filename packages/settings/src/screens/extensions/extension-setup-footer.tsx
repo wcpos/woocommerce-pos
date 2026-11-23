@@ -149,6 +149,8 @@ export function ExtensionSetupFooter({ extension }: { extension: Extension }) {
 					</p>
 				</Notice>
 			)}
+			{/* Pro's notices (a failed update, deactivate…) get their own full-width row. */}
+			{renderSlot('extensions.setup_notice', extension)}
 		</div>
 	);
 }

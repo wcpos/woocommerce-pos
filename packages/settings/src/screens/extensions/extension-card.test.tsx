@@ -210,6 +210,21 @@ describe('Pro slots', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
 		expect(screen.getByRole('menuitem', { name: 'Deactivate' })).toBeInTheDocument();
 	});
+
+	it('renders the setup notice as its own row under the footer row, not among the buttons', () => {
+		registerSlots({
+			'extensions.setup_action': () => <button type="button">Update</button>,
+			'extensions.setup_notice': ({ extension }) => <span>Could not update {extension.slug}</span>,
+		});
+		renderCard();
+
+		const notice = screen.getByText('Could not update stripe-terminal');
+		const buttonGroup = screen.getByRole('button', { name: 'Update' }).parentElement as HTMLElement;
+		const footerRow = buttonGroup.parentElement as HTMLElement;
+		expect(buttonGroup.contains(notice)).toBe(false);
+		expect(footerRow.contains(notice)).toBe(false);
+		expect(footerRow.parentElement?.contains(notice)).toBe(true);
+	});
 });
 
 describe('Other cards', () => {
