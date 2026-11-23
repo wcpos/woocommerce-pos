@@ -61,6 +61,38 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 		$this->assertSame( $new, get_user_meta( $users[0], Pos_Uuid::META_KEY, true ) );
 	}
 
+	/** A failed deletion returns null and leaves the identity in place. */
+	public function test_reset_user_uuids_failed_delete_returns_null(): void {
+		$user_id = $this->factory->user->create();
+		$uuid    = Pos_Uuid::ensure_user_uuid( $user_id );
+		add_filter( 'delete_user_metadata', '__return_false' );
+
+		try {
+			$this->assertNull( Pos_Uuid::reset_user_uuids() );
+			$this->assertSame( $uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
+		} finally {
+			remove_filter( 'delete_user_metadata', '__return_false' );
+		}
+	}
+
+	/** An empty store returns zero without attempting a deletion. */
+	public function test_reset_user_uuids_empty_store_returns_zero_without_delete(): void {
+		delete_metadata( 'user', 0, Pos_Uuid::META_KEY, '', true );
+		$delete_calls = 0;
+		$filter       = function () use ( &$delete_calls ) {
+			++$delete_calls;
+			return false;
+		};
+		add_filter( 'delete_user_metadata', $filter );
+
+		try {
+			$this->assertSame( 0, Pos_Uuid::reset_user_uuids() );
+			$this->assertSame( 0, $delete_calls );
+		} finally {
+			remove_filter( 'delete_user_metadata', $filter );
+		}
+	}
+
 	/**
 	 * Network identities must never be removed, even when a site's address moves.
 	 *

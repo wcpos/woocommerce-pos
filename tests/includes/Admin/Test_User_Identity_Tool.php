@@ -35,6 +35,21 @@ class Test_User_Identity_Tool extends WP_UnitTestCase {
 		$this->assertFalse( metadata_exists( 'user', $user_id, Pos_Uuid::META_KEY ) );
 	}
 
+	/** A failed reset returns false through WooCommerce's tool callback. */
+	public function test_tool_failed_delete_returns_false(): void {
+		$user_id = $this->factory->user->create();
+		Pos_Uuid::ensure_user_uuid( $user_id );
+		( new Admin() )->init();
+		$tools = apply_filters( 'woocommerce_debug_tools', array() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Exercise WooCommerce's filter.
+		add_filter( 'delete_user_metadata', '__return_false' );
+
+		try {
+			$this->assertFalse( call_user_func( $tools['wcpos_reset_user_identities']['callback'] ) );
+		} finally {
+			remove_filter( 'delete_user_metadata', '__return_false' );
+		}
+	}
+
 	/**
 	 * A network must not offer a store-local identity reset.
 	 *

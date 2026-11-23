@@ -14,6 +14,9 @@ class User_Identity_Command {
 	/**
 	 * Clears user UUIDs so they are minted again on next use.
 	 *
+	 * Use this on a store that was copied from another store, when the POS app reports AUTH342.
+	 * Sync any waiting sales from the tills first. Afterwards, remove this store from each till and connect it again.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp wcpos user-identity reset
@@ -26,7 +29,12 @@ class User_Identity_Command {
 			$this->error( 'Accounts are shared across a multisite network, so this store cannot be given its own.' );
 			return;
 		}
-		$this->success( \sprintf( 'WCPOS account identities reset. Users affected: %d.', Pos_Uuid::reset_user_uuids() ) );
+		$count = Pos_Uuid::reset_user_uuids();
+		if ( null === $count ) {
+			$this->error( 'The reset failed. No account identities were changed.' );
+			return;
+		}
+		$this->success( \sprintf( 'WCPOS account identities reset. Users affected: %d.', $count ) );
 	}
 
 	/**

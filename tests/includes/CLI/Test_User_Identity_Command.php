@@ -68,6 +68,23 @@ class Test_User_Identity_Command extends WP_UnitTestCase {
 		$this->assertSame( array(), $command->errors );
 	}
 
+	/** A failed reset reports an error instead of a success message. */
+	public function test_reset_failed_delete_reports_error(): void {
+		$user_id = $this->factory->user->create();
+		Pos_Uuid::ensure_user_uuid( $user_id );
+		$command = $this->command_double();
+		add_filter( 'delete_user_metadata', '__return_false' );
+
+		try {
+			$command->reset( array(), array() );
+
+			$this->assertSame( array( 'The reset failed. No account identities were changed.' ), $command->errors );
+			$this->assertSame( array(), $command->messages );
+		} finally {
+			remove_filter( 'delete_user_metadata', '__return_false' );
+		}
+	}
+
 	/**
 	 * Network accounts cannot be reset from one store.
 	 *

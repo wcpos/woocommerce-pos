@@ -35,12 +35,21 @@ class User_Identity_Tool {
 		return $tools;
 	}
 
-	/** Reset identities and return WooCommerce's tool result message. */
-	public function reset(): string {
+	/**
+	 * Reset identities and return WooCommerce's tool result.
+	 *
+	 * @return string|false Success message or false on deletion failure.
+	 */
+	public function reset() {
+		$count = Pos_Uuid::reset_user_uuids();
+		if ( null === $count ) {
+			return false;
+		}
+
 		return \sprintf(
 			/* translators: %d: Number of users whose WCPOS account identity was reset. */
 			__( 'WCPOS account identities reset. Users affected: %d.', 'woocommerce-pos' ),
-			Pos_Uuid::reset_user_uuids()
+			$count
 		);
 	}
 }
