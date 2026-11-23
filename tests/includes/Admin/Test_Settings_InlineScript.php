@@ -122,7 +122,7 @@ class Test_Settings_InlineScript extends \WP_UnitTestCase {
 		$script = $method->invoke( $settings );
 
 		// Assert.
-		$this->assertStringContainsString( '<!--<script', $script );
+		$this->assertStringContainsString( '\u003C!--\u003Cscript', $script );
 		$this->assertStringNotContainsString( '<!--', $script );
 		$this->assertStringNotContainsString( '<script', $script );
 	}
