@@ -525,6 +525,82 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A lock set while a right-password attempt held a slot is lifted when that attempt is given back.
+	 */
+	public function test_lockout_give_back_lifts_a_lock_that_counted_it(): void {
+		// Arrange: three failures, then A (right password) holds the fourth slot.
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.11';
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+			Credential_Lockout::record_failure( 'till-cashier' );
+		}
+		$a = Credential_Lockout::reserve_attempt( 'till-cashier' );
+		$this->assertNotNull( $a );
+
+		// Act: B fails in the fifth slot, which locks; A is refused for another reason and gives back.
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		Credential_Lockout::record_failure( 'till-cashier' );
+		$this->assertNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		Credential_Lockout::release_attempt( 'till-cashier', $a );
+
+		// Assert: four wrong passwords do not lock; the fifth attempt is admitted, the sixth is not.
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		$this->assertNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+	}
+
+	/**
+	 * A give-back that lands between a failure's count and its lock write leaves no lock behind.
+	 */
+	public function test_lockout_give_back_during_the_lock_write_leaves_no_lock(): void {
+		// Arrange: three failures, A (right password) holds the fourth slot, B holds the fifth.
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.13';
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+			Credential_Lockout::record_failure( 'till-cashier' );
+		}
+		$a = Credential_Lockout::reserve_attempt( 'till-cashier' );
+		$this->assertNotNull( $a );
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+		$bucket    = md5( 'user:' . get_user_by( 'login', 'till-cashier' )->ID . '|203.0.113.13' );
+		$give_back = static function ( $value ) use ( $a ) {
+			Credential_Lockout::release_attempt( 'till-cashier', $a );
+			return $value;
+		};
+		add_filter( 'pre_set_transient_wcpos_auth_lock_' . $bucket, $give_back );
+
+		// Act: B fails; A gives back after B read five attempts and before B writes the lock.
+		Credential_Lockout::record_failure( 'till-cashier' );
+		remove_filter( 'pre_set_transient_wcpos_auth_lock_' . $bucket, $give_back );
+
+		// Assert: four wrong passwords do not lock.
+		$this->assertFalse( get_transient( 'wcpos_auth_lock_' . $bucket ) );
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+	}
+
+	/**
+	 * A give-back that matches no counted attempt leaves a lock in place.
+	 */
+	public function test_lockout_late_give_back_leaves_a_lock_in_place(): void {
+		// Arrange: A is counted and cleared by a successful check; five failures then lock.
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.12';
+		$a                      = Credential_Lockout::reserve_attempt( 'till-cashier' );
+		$this->assertNotNull( $a );
+		Credential_Lockout::clear( 'till-cashier' );
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->assertNotNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+			Credential_Lockout::record_failure( 'till-cashier' );
+		}
+
+		// Act: A's late give-back belongs to the cleared count.
+		Credential_Lockout::release_attempt( 'till-cashier', $a );
+
+		// Assert: the account is still locked.
+		$bucket = md5( 'user:' . get_user_by( 'login', 'till-cashier' )->ID . '|203.0.113.12' );
+		$this->assertNotFalse( get_transient( 'wcpos_auth_lock_' . $bucket ) );
+		$this->assertNull( Credential_Lockout::reserve_attempt( 'till-cashier' ) );
+	}
+
+	/**
 	 * A row in the format before generations, or any value that is not a counter, reads as an
 	 * ended window: never a fatal, and the limit holds from the next attempt.
 	 */
