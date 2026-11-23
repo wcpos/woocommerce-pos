@@ -285,6 +285,7 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 		$total_before = wc_get_order( $order->get_id() )->get_total();
 		wp_set_current_user( 0 ); // The pay page creates the nonce before it switches user.
 		$this->arrange_pos_coupon_post( $order, 'apply', 'paidcheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->cashier );
 
 		// Act.
 		( new Form_Handler() )->coupon_action();
@@ -319,6 +320,7 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 		$this->assertFalse( wc_get_order( $order->get_id() )->is_paid(), 'precondition: the order is unpaid' );
 		wp_set_current_user( 0 );
 		$this->arrange_pos_coupon_post( $order, 'remove', 'fullcheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->cashier );
 
 		// Act.
 		( new Form_Handler() )->coupon_action();
