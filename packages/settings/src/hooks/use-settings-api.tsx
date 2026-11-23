@@ -1,6 +1,6 @@
 import { useQueryClient, useSuspenseQuery, useMutation } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
-import { merge, cloneDeep, get } from 'lodash';
+import { merge, cloneDeep, get, isPlainObject } from 'lodash';
 
 import { useSnackbar } from '@wcpos/ui';
 
@@ -10,6 +10,20 @@ import useNotices from '../hooks/use-notices';
  * Settings sections served by `wcpos/v2/settings/{id}`.
  */
 type SettingsId = 'general' | 'checkout' | 'payment-gateways' | 'access' | 'license' | 'tax_ids';
+
+/**
+ * `current` with every key path in `changed` set back to its value in `previous`.
+ */
+function rollbackKeys(current: unknown, previous: unknown, changed: unknown): unknown {
+	if (!isPlainObject(changed) || !isPlainObject(current)) {
+		return cloneDeep(previous);
+	}
+	const next = { ...(current as Record<string, unknown>) };
+	Object.entries(changed as Record<string, unknown>).forEach(([key, value]) => {
+		next[key] = rollbackKeys(next[key], get(previous, key), value);
+	});
+	return next;
+}
 
 /**
  * @param quietErrors The caller shows its own message for a failed save, so skip the
@@ -70,8 +84,11 @@ const useSettingsApi = (id: SettingsId, { quietErrors = false } = {}) => {
 					setNotice({ type: 'error', message: errorMessage });
 					addSnackbar({ message: errorMessage, id, status: 'error' });
 				}
-				// rollback data
-				return queryClient.setQueryData([id], context?.previousSettings);
+				// Roll back only the keys this save changed: another save may have landed
+				// since the snapshot, and restoring the whole snapshot would undo it.
+				return queryClient.setQueryData([id], (current: unknown) =>
+					rollbackKeys(current, context?.previousSettings, variables)
+				);
 			}
 			addSnackbar({ message: 'Saved', id, status: 'success' });
 			return queryClient.setQueryData([id], data);
