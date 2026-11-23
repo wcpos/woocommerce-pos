@@ -62,6 +62,23 @@ class Test_V2_Order_Email_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The v2 email route accepts only an email address.
+	 */
+	public function test_send_email_invalid_address_returns_400(): void {
+		// Arrange.
+		$order   = OrderHelper::create_order();
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/email' );
+		$request->set_body_params( array( 'email' => 'not-an-email' ) );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
+	/**
 	 * The email routes declare a callable route schema, so the `help` index renders.
 	 *
 	 * WordPress calls `call_user_func( $options['schema'] )` for every registered

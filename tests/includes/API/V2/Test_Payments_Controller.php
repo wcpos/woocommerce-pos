@@ -3021,10 +3021,14 @@ class Test_Payments_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Create a POS user who may edit only their own orders.
+	 *
+	 * It holds the cashier baseline (Cashier::missing_pos_capabilities()): the money
+	 * routes answer with the order's revision, read through WooCommerce, which needs
+	 * read_private_shop_orders.
 	 */
 	private function create_staff_without_edit_others(): int {
 		$user = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
-		foreach ( array( 'access_woocommerce_pos', 'publish_shop_orders', 'edit_shop_orders' ) as $cap ) {
+		foreach ( array( 'access_woocommerce_pos', 'publish_shop_orders', 'read_private_products', 'read_private_shop_orders', 'list_users', 'edit_shop_orders' ) as $cap ) {
 			$user->add_cap( $cap );
 		}
 
