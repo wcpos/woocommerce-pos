@@ -364,7 +364,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Arrange.
 		$order = $this->create_order_owned_by( get_current_user_id() );
 		wp_set_current_user( $this->create_staff_without_edit_others() );
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' );
 		$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
 		$request->set_body_params(
 			array(
@@ -392,7 +392,7 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $this->create_staff_without_edit_others() );
 
 		// Act.
-		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/orders/' . $order->get_id() . '/checkout' ) );
 
 		// Assert.
 		$this->assertSame( 403, $response->get_status() );

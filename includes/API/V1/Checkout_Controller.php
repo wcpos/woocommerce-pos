@@ -287,7 +287,8 @@ class Checkout_Controller extends WC_REST_Controller {
 		}
 
 		// Checkout on an order needs the right to edit that order.
-		if ( true !== Permission_Rules::verdict( 'orders', 'edit', $order_id, 0, 'v1' ) ) {
+		$lane = 'wcpos/v2' === $this->namespace ? 'v2' : 'v1';
+		if ( true !== Permission_Rules::verdict( 'orders', 'edit', $order_id, 0, $lane ) ) {
 			return new WP_Error(
 				'wcpos_rest_cannot_edit_order',
 				__( 'Sorry, you are not allowed to edit this order.', 'woocommerce-pos' ),
