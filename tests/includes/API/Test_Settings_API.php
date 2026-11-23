@@ -1155,6 +1155,150 @@ class Test_Settings_API extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Without Pro, the carried entry of an unregistered gateway is stored as the free-tier
+	 * rule reads it: switched off, everything else kept. Pins today's behaviour.
+	 */
+	public function test_payment_gateways_save_with_free_tier_rule_stores_unregistered_gateway_off(): void {
+		remove_filter( 'option_woocommerce_pos_settings_payment_gateways', array( Payment_Gateways_Section::class, 'free_tier_rule' ) );
+		$gateway  = $this->stub_gateway( 'wcpos_inactive_extension' );
+		$registry = WC_Payment_Gateways::instance();
+		$add      = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+
+		try {
+			add_filter( 'woocommerce_payment_gateways', $add );
+			$registry->payment_gateways = array();
+			$registry->init();
+			$this->post_settings(
+				'/wcpos/v2/settings/payment-gateways',
+				array(
+					'gateways' => array(
+						'wcpos_inactive_extension' => array(
+							'enabled'      => true,
+							'order_status' => 'wc-processing',
+						),
+					),
+				)
+			);
+			$before = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways']['wcpos_inactive_extension'];
+			$this->assertTrue( $before['enabled'] );
+
+			remove_filter( 'woocommerce_payment_gateways', $add );
+			$registry->payment_gateways = array();
+			$registry->init();
+			Payment_Gateways_Section::register_free_tier_rule();
+
+			$response = $this->post_settings(
+				'/wcpos/v2/settings/payment-gateways',
+				array( 'gateways' => array( 'pos_card' => array( 'enabled' => false ) ) )
+			);
+
+			$this->assertSame( 200, $response->get_status() );
+			remove_filter( 'option_woocommerce_pos_settings_payment_gateways', array( Payment_Gateways_Section::class, 'free_tier_rule' ) );
+			$stored = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways']['wcpos_inactive_extension'];
+			$this->assertSame( array_merge( $before, array( 'enabled' => false ) ), $stored );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add );
+			$registry->payment_gateways = array();
+			$registry->init();
+			Payment_Gateways_Section::register_free_tier_rule();
+		}
+	}
+
+	/**
+	 * The settings screen's response says per gateway whether its settings need finishing:
+	 * true/false from a needs_setup() override, null without one or when it throws.
+	 */
+	public function test_payment_gateways_rest_response_carries_needs_setup(): void {
+		$unfinished_check = static function () {
+			return true;
+		};
+		$broken_check     = static function () {
+			throw new \RuntimeException( 'remote check failed' );
+		};
+		$unfinished = $this->stub_gateway( 'wcpos_unfinished', $unfinished_check );
+		$broken     = $this->stub_gateway( 'wcpos_broken', $broken_check );
+		$registry   = WC_Payment_Gateways::instance();
+		$add        = static function ( $gateways ) use ( $unfinished, $broken ) {
+			return array_merge( $gateways, array( $unfinished, $broken ) );
+		};
+
+		try {
+			add_filter( 'woocommerce_payment_gateways', $add );
+			$registry->payment_gateways = array();
+			$registry->init();
+
+			$read  = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/settings/payment-gateways' ) );
+			$saved = $this->post_settings( '/wcpos/v2/settings/payment-gateways', array( 'default_gateway' => 'pos_cash' ) );
+
+			$responses = array(
+				'GET'  => $read,
+				'POST' => $saved,
+			);
+			foreach ( $responses as $method => $response ) {
+				$this->assertSame( 200, $response->get_status(), $method );
+				$gateways = $response->get_data()['gateways'];
+				$this->assertTrue( $gateways['wcpos_unfinished']['needs_setup'], $method );
+				$this->assertNull( $gateways['wcpos_broken']['needs_setup'], $method );
+				$this->assertArrayHasKey( 'needs_setup', $gateways['pos_cash'], $method );
+				$this->assertNull( $gateways['pos_cash']['needs_setup'], $method );
+			}
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add );
+			$registry->payment_gateways = array();
+			$registry->init();
+		}
+	}
+
+	/**
+	 * A stub gateway, optionally overriding needs_setup() with the given callback.
+	 *
+	 * @param string        $id          Gateway id.
+	 * @param callable|null $needs_setup Override body; null for no override.
+	 *
+	 * @return WC_Payment_Gateway
+	 */
+	private function stub_gateway( string $id, ?callable $needs_setup = null ): WC_Payment_Gateway {
+		if ( null === $needs_setup ) {
+			$gateway = new class() extends WC_Payment_Gateway {
+				/** No form fields. */
+				public function __construct() {}
+			};
+		} else {
+			$gateway = new class( $needs_setup ) extends WC_Payment_Gateway {
+				/**
+				 * The override body.
+				 *
+				 * @var callable
+				 */
+				private $check;
+
+				/**
+				 * Keep the override body; no form fields.
+				 *
+				 * @param callable $check Override body.
+				 */
+				public function __construct( callable $check ) {
+					$this->check = $check;
+				}
+
+				/**
+				 * The stubbed setup state.
+				 *
+				 * @return bool
+				 */
+				public function needs_setup() {
+					return ( $this->check )();
+				}
+			};
+		}
+		$gateway->id = $id;
+
+		return $gateway;
+	}
+
+	/**
 	 * Present terminal keys must have their exact REST types.
 	 */
 	public function test_rest_invalid_terminal_types_are_rejected(): void {

@@ -105,18 +105,34 @@ class Payment_Gateways_Section extends Abstract_Section {
 	}
 
 	/**
-	 * Whether a gateway's own WooCommerce settings still need finishing.
+	 * Add, per gateway, whether its own WooCommerce settings still need finishing.
 	 *
-	 * WC_Payment_Gateway::needs_setup() returns false for every gateway that does not
-	 * override it, so only an override can answer; otherwise the answer is unknown.
+	 * For the settings screen's REST response only: never call this from read(),
+	 * which feeds checkout, order writes and receipts, because a gateway's check can
+	 * block on a remote call. WC_Payment_Gateway::needs_setup() returns false for
+	 * every gateway that does not override it, so only an override can answer;
+	 * otherwise, or when the check throws, the answer is null (unknown).
 	 *
-	 * @param WC_Payment_Gateway $gateway The gateway.
-	 * @return bool|null Null when the gateway cannot say.
+	 * @param array $view The section's read view.
+	 * @return array
 	 */
-	public static function gateway_needs_setup( WC_Payment_Gateway $gateway ): ?bool {
-		$declared_by = ( new \ReflectionMethod( $gateway, 'needs_setup' ) )->getDeclaringClass()->getName();
+	public static function with_needs_setup( array $view ): array {
+		$registered = WC_Payment_Gateways::instance()->payment_gateways();
+		foreach ( $view['gateways'] ?? array() as $id => $settings ) {
+			$gateway     = $registered[ $id ] ?? null;
+			$needs_setup = null;
+			try {
+				if ( $gateway instanceof WC_Payment_Gateway
+					&& WC_Payment_Gateway::class !== ( new \ReflectionMethod( $gateway, 'needs_setup' ) )->getDeclaringClass()->getName() ) {
+					$needs_setup = (bool) $gateway->needs_setup();
+				}
+			} catch ( \Throwable $e ) {
+				$needs_setup = null;
+			}
+			$view['gateways'][ $id ]['needs_setup'] = $needs_setup;
+		}
 
-		return WC_Payment_Gateway::class === $declared_by ? null : (bool) $gateway->needs_setup();
+		return $view;
 	}
 
 	/**
@@ -283,7 +299,6 @@ class Payment_Gateways_Section extends Abstract_Section {
 				array(
 					'capture_mode' => explode( ':', Descriptor_Builder::resolve_mode( $gateway ), 2 )[0],
 					'kind'         => Descriptor_Builder::resolve_kind( $gateway ),
-					'needs_setup'  => self::gateway_needs_setup( $gateway ),
 				)
 			);
 
