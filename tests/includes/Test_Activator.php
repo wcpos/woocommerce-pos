@@ -297,7 +297,14 @@ class Test_Activator extends WP_UnitTestCase {
 		remove_all_actions( 'init' );
 		$activator = new Activator();
 		$activator->single_activate( false );
-		add_role( 'wcpos_test_pos_role', 'Test POS role', array( 'read' => true, 'access_woocommerce_pos' => true ) );
+		add_role(
+			'wcpos_test_pos_role',
+			'Test POS role',
+			array(
+				'read' => true,
+				'access_woocommerce_pos' => true,
+			)
+		);
 		add_role( 'wcpos_test_other_role', 'Test other role', array( 'read' => true ) );
 		Permission_Registry::add_test_entry( array( 'capability' => 'wcpos_test_new_cap' ) );
 		update_option( self::DB_VERSION_OPTION, '1.10.0' );
@@ -320,7 +327,14 @@ class Test_Activator extends WP_UnitTestCase {
 		remove_all_actions( 'init' );
 		$activator = new Activator();
 		$activator->single_activate( false );
-		add_role( 'wcpos_test_pos_role', 'Test POS role', array( 'read' => true, 'access_woocommerce_pos' => true ) );
+		add_role(
+			'wcpos_test_pos_role',
+			'Test POS role',
+			array(
+				'read' => true,
+				'access_woocommerce_pos' => true,
+			)
+		);
 		add_role( 'wcpos_test_other_role', 'Test other role', array( 'read' => true ) );
 		Permission_Registry::add_test_entry( array( 'capability' => 'wcpos_test_new_cap' ) );
 		update_option( self::DB_VERSION_OPTION, '1.10.0' );

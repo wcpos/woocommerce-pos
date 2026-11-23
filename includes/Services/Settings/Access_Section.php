@@ -140,7 +140,11 @@ class Access_Section implements Settings_Section_Interface {
 	 * @return array
 	 */
 	private static function get_caps(): array {
-		$caps = array( 'wcpos' => array(), 'wc' => array(), 'wp' => array() );
+		$caps = array(
+			'wcpos' => array(),
+			'wc' => array(),
+			'wp' => array(),
+		);
 		foreach ( Permission_Registry::entries() as $entry ) {
 			$caps[ Permission_Registry::api_group( $entry['capability'] ) ][] = $entry['capability'];
 		}
