@@ -32,6 +32,28 @@ class Test_Gateway_Bootstrap_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A gateway that is not enabled for POS returns no bootstrap payload.
+	 */
+	public function test_bootstrap_gateway_disabled_for_pos_returns_400(): void {
+		// Arrange.
+		add_filter(
+			'wcpos_payment_gateways_settings',
+			static function ( $settings ) {
+				$settings['gateways']['pos_cash']['enabled'] = false;
+				return $settings;
+			}
+		);
+		$request = $this->wp_rest_post_request( '/wcpos/v2/payment-gateways/pos_cash/bootstrap' );
+
+		// Act.
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'wcpos_payment_gateway_not_available', $response->get_data()['code'] );
+	}
+
+	/**
 	 * It rejects non-array bootstrap context values.
 	 */
 	public function test_bootstrap_rejects_scalar_context(): void {

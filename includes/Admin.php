@@ -25,6 +25,7 @@ use WCPOS\WooCommercePOS\Admin\Products\List_Products;
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
 use WCPOS\WooCommercePOS\Admin\Settings;
 use WCPOS\WooCommercePOS\Admin\Templates\Single_Template;
+use WCPOS\WooCommercePOS\Admin\User_Identity_Tool;
 use WP_Screen;
 
 /**
@@ -93,6 +94,7 @@ class Admin {
 	public function init(): void {
 		new Notices();
 		new Font_Pack_Notice();
+		new User_Identity_Tool();
 	}
 
 	/**

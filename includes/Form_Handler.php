@@ -281,6 +281,11 @@ class Form_Handler {
 		}
 		self::assert_cashier_may_edit( $order );
 
+		// A paid order's coupons are final.
+		if ( $order->is_paid() ) {
+			return;
+		}
+
 		if ( isset( $_POST['pos_apply_coupon'] ) ) {
 			$coupon_code = isset( $_POST['pos_coupon_code'] ) ? sanitize_text_field( wp_unslash( $_POST['pos_coupon_code'] ) ) : '';
 			$apply_result = $order->apply_coupon( $coupon_code );

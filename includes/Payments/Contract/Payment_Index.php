@@ -52,7 +52,9 @@ final class Payment_Index {
 	 * the order through payment_complete(), and that is exactly the leg a sweep must
 	 * still reach when it expires uncaptured. The live-leg index drops off the order
 	 * the moment every leg settles, so the candidate set is only ever orders with
-	 * something to reconcile — never the abandoned-cart mass.
+	 * something to reconcile — never the abandoned-cart mass. A trashed order is still
+	 * swept: trash is reversible and a hold must not outlive it, so the sweeper releases
+	 * it on the same expiry rules as any other order.
 	 *
 	 * @param int $limit Batch cap.
 	 *
@@ -63,7 +65,7 @@ final class Payment_Index {
 			Ledger::LIVE_LEG_META_KEY,
 			array(
 				'type'    => 'shop_order',
-				'exclude' => array( 'trash', 'auto-draft' ),
+				'exclude' => array( 'auto-draft' ),
 				'order'   => 'modified',
 				'limit'   => $limit,
 			)

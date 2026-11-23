@@ -52,16 +52,24 @@ class Feature_Flags {
 	 * bundle (`VALID_VARIANTS` / `FALLBACK_VARIANT` in variant-loader.ts), or the
 	 * experiment denominators will silently skew. See wcpos/wp-admin-landing#39.
 	 *
+	 * `plan` takes the hash range `indie` held (the first half), so a site that
+	 * was on `free-plus` stays on `free-plus`. `indie` stays listed at 0% (Paul,
+	 * 2026-11-23: plan vs free-plus 50/50, indie to 0%); the bundle still has it.
+	 *
 	 * @var array<int, array{key: string, rollout: int}>
 	 */
 	const LANDING_VARIANTS = array(
 		array(
-			'key'     => 'indie',
+			'key'     => 'plan',
 			'rollout' => 50,
 		),
 		array(
 			'key'     => 'free-plus',
 			'rollout' => 50,
+		),
+		array(
+			'key'     => 'indie',
+			'rollout' => 0,
 		),
 	);
 
@@ -69,7 +77,7 @@ class Feature_Flags {
 	 * Build the feature-flag bootstrap map for the landing page.
 	 *
 	 * Returns a map of resolved flags keyed for PostHog's `bootstrap.featureFlags`
-	 * (e.g. `array( 'landing-variant' => 'indie' )`). Empty when no distinct id is
+	 * (e.g. `array( 'landing-variant' => 'plan' )`). Empty when no distinct id is
 	 * available, in which case the bundle resolves the variant itself.
 	 *
 	 * @param string $distinct_id Stable anonymous identifier for the visitor/site.

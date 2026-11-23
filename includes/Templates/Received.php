@@ -68,7 +68,7 @@ class Received {
 			remove_filter( 'woocommerce_rest_check_permissions', '__return_true' );
 		}
 
-		return wp_json_encode( $data );
+		return wp_json_encode( $data, JSON_HEX_TAG | JSON_HEX_AMP );
 	}
 
 	/**
@@ -85,7 +85,7 @@ class Received {
 			// Verify order key to prevent unauthenticated access.
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Order key is the auth mechanism here, matching WooCommerce core behavior.
 			$provided_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
-			if ( ! $provided_key || $provided_key !== $order->get_order_key() ) {
+			if ( ! $provided_key || ! $order->key_is_valid( $provided_key ) ) {
 				wp_die(
 					esc_html__( 'Sorry, this order cannot be viewed. The order key is missing or invalid.', 'woocommerce-pos' ),
 					/* translators: Short WCPOS UI label; keep concise. */

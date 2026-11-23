@@ -349,7 +349,7 @@
 	"settings.opening_float_help": "Pre-filled when the register is opened. The cashier can type what is actually in the drawer.",
 	"settings.ask_manager": "Ask a manager when the count is out",
 	"settings.ask_manager_limit": "<label>by more than</label> <amount></amount>",
-	"settings.ask_manager_help": "Short or over by more than this at close needs a manager's code before the register closes.",
+	"settings.ask_manager_help": "Short or over by more than this at close needs a manager's WordPress username and password before the register closes.",
 	"settings.close_reminder": "Remind the cashier to close",
 	"settings.close_reminder_time": "<label>at</label> <time></time>",
 	"settings.close_reminder_help": "After this time the bar shows Overdue, and Checkout becomes Close register when the cart is empty.",
