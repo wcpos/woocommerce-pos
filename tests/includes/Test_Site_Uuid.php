@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
-use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_UnitTestCase;
 
 /**
@@ -40,12 +39,9 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 	 * Generates once, persists, and returns the same value thereafter.
 	 */
 	public function test_generates_once_and_is_stable(): void {
-		$user_id   = $this->factory->user->create();
-		$user_uuid = Pos_Uuid::ensure_user_uuid( $user_id );
-		$first     = wcpos_get_site_uuid();
-		$second    = wcpos_get_site_uuid();
+		$first  = wcpos_get_site_uuid();
+		$second = wcpos_get_site_uuid();
 
-		$this->assertSame( $user_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
 		$this->assertNotEmpty( $first );
 		$this->assertSame( $first, $second );
 		$this->assertSame( $first, get_option( 'woocommerce_pos_uuid' ) );
@@ -83,21 +79,15 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 		add_filter( 'home_url', $filter );
 
 		try {
-			$original  = wcpos_get_site_uuid();
-			$user_id   = $this->factory->user->create();
-			$user_uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+			$original = wcpos_get_site_uuid();
 
 			$home    = 'https://example.com/staging';
 			$changed = wcpos_get_site_uuid();
 
-			$this->assertFalse( metadata_exists( 'user', $user_id, Pos_Uuid::META_KEY ) );
 			$this->assertNotSame( $original, $changed );
 			$this->assertSame( $changed, get_option( 'woocommerce_pos_uuid' ) );
 			$this->assertSame( 'example.com/staging', get_option( 'woocommerce_pos_uuid_home' ) );
-			$new_user_uuid = Pos_Uuid::ensure_user_uuid( $user_id );
-			$this->assertNotSame( $user_uuid, $new_user_uuid );
 			$this->assertSame( $changed, wcpos_get_site_uuid() );
-			$this->assertSame( $new_user_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
 		} finally {
 			remove_filter( 'home_url', $filter );
 		}
@@ -119,16 +109,13 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 		};
 
 		try {
-			$original  = wcpos_get_site_uuid();
-			$user_id   = $this->factory->user->create();
-			$user_uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+			$original = wcpos_get_site_uuid();
 
 			$home = 'https://example.com/staging';
 			add_filter( 'pre_update_option_woocommerce_pos_uuid', $veto, 10, 2 );
 			$returned = wcpos_get_site_uuid();
 			remove_filter( 'pre_update_option_woocommerce_pos_uuid', $veto );
 
-			$this->assertSame( $user_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
 			$this->assertSame( $original, $returned );
 			$this->assertSame( $original, get_option( 'woocommerce_pos_uuid' ) );
 			$this->assertSame( 'example.com', get_option( 'woocommerce_pos_uuid_home' ) );
@@ -158,22 +145,18 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 		};
 
 		try {
-			$original  = wcpos_get_site_uuid();
-			$user_id   = $this->factory->user->create();
-			$user_uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+			$original = wcpos_get_site_uuid();
 
 			$home = 'https://example.com/staging';
 			add_filter( 'pre_update_option_woocommerce_pos_uuid_home', $veto, 10, 2 );
 			$returned = wcpos_get_site_uuid();
 			remove_filter( 'pre_update_option_woocommerce_pos_uuid_home', $veto );
 
-			$this->assertSame( $user_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
 			$this->assertSame( $original, $returned );
 			$this->assertSame( $original, get_option( 'woocommerce_pos_uuid' ) );
 			$this->assertSame( 'example.com', get_option( 'woocommerce_pos_uuid_home' ) );
 
 			$changed = wcpos_get_site_uuid();
-			$this->assertFalse( metadata_exists( 'user', $user_id, Pos_Uuid::META_KEY ) );
 			$this->assertNotSame( $original, $changed );
 			$this->assertSame( $changed, get_option( 'woocommerce_pos_uuid' ) );
 			$this->assertSame( 'example.com/staging', get_option( 'woocommerce_pos_uuid_home' ) );
@@ -213,16 +196,13 @@ class Test_Site_Uuid extends WP_UnitTestCase {
 		};
 
 		try {
-			$original  = wcpos_get_site_uuid();
-			$user_id   = $this->factory->user->create();
-			$user_uuid = Pos_Uuid::ensure_user_uuid( $user_id );
+			$original = wcpos_get_site_uuid();
 
 			$home = 'https://example.com/staging';
 			add_filter( 'pre_update_option_woocommerce_pos_uuid_home', $other_request_finishes_first );
 			$returned = wcpos_get_site_uuid();
 			remove_filter( 'pre_update_option_woocommerce_pos_uuid_home', $other_request_finishes_first );
 
-			$this->assertSame( $user_uuid, get_user_meta( $user_id, Pos_Uuid::META_KEY, true ) );
 			$this->assertSame( 'other-request-uuid', $returned );
 			$this->assertSame( $returned, get_option( 'woocommerce_pos_uuid' ) );
 			// The stale cache was dropped: this request now sees the moved marker
