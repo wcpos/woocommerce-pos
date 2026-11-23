@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 use WCPOS\WooCommercePOS\API\Controller_Registry;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Client_Signal;
+use WCPOS\WooCommercePOS\Services\Permissions_Stamp;
 use WCPOS\WooCommercePOS\Services\Protocol_Gate;
 use WCPOS\WooCommercePOS\Sync\Collection_Rules;
 use WP_HTTP_Response;
@@ -478,7 +479,7 @@ class API {
 	}
 
 	/**
-	 * Add the server pressure bucket to WCPOS REST responses.
+	 * Add the server pressure bucket and signed-in user's permissions stamp to WCPOS REST responses.
 	 *
 	 * @param mixed           $response REST response.
 	 * @param WP_REST_Server  $server   REST server.
@@ -498,6 +499,9 @@ class API {
 			$pressure_bucket = API\V2\Ping::pressure_bucket();
 			if ( null !== $pressure_bucket ) {
 				$response->header( 'X-WCPOS-Pressure', $pressure_bucket );
+			}
+			if ( get_current_user_id() > 0 && $response->get_status() < 400 ) {
+				$response->header( Permissions_Stamp::HEADER, Permissions_Stamp::for_user( wp_get_current_user() ) );
 			}
 		} catch ( \Throwable $e ) {
 			return $response;

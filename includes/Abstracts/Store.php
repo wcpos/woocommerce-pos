@@ -206,6 +206,14 @@ class Store extends \WC_Data {
 	}
 
 	/**
+	 * Get the props and meta as WC_Data holds them, without computed receipt_i18n labels.
+	 * This is what the permissions stamp hashes.
+	 */
+	public function get_settings_fingerprint_data(): array {
+		return parent::get_data();
+	}
+
+	/**
 	 * Get Store name.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.

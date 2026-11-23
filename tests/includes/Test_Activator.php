@@ -11,6 +11,7 @@ use ReflectionClass;
 use WP_UnitTestCase;
 use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Admin\Consent;
+use WCPOS\WooCommercePOS\Services\Permission_Registry;
 
 /**
  * Tests for Activator behavior.
@@ -76,6 +77,9 @@ class Test_Activator extends WP_UnitTestCase {
 	 * Reset options and hooks after each test.
 	 */
 	public function tearDown(): void {
+		Permission_Registry::reset_test_entries();
+		remove_role( 'wcpos_test_pos_role' );
+		remove_role( 'wcpos_test_other_role' );
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
 		delete_option( self::ROLE_CAPS_FINGERPRINT_OPTION );
@@ -286,6 +290,104 @@ class Test_Activator extends WP_UnitTestCase {
 		// Assert.
 		$this->assertTrue( get_role( 'cashier' )->has_cap( 'manage_product_terms' ) );
 		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_products' ) );
+	}
+
+	/** New permissions are introduced once to every role with POS access. */
+	public function test_version_upgrade_grants_introduced_capability_once_to_every_role_with_pos_access(): void {
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		add_role( 'wcpos_test_pos_role', 'Test POS role', array( 'read' => true, 'access_woocommerce_pos' => true ) );
+		add_role( 'wcpos_test_other_role', 'Test other role', array( 'read' => true ) );
+		Permission_Registry::add_test_entry( array( 'capability' => 'wcpos_test_new_cap' ) );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		foreach ( array( 'administrator', 'shop_manager', 'cashier', 'wcpos_test_pos_role' ) as $role ) {
+			$this->assertTrue( get_role( $role )->has_cap( 'wcpos_test_new_cap' ), $role );
+		}
+		$this->assertFalse( get_role( 'wcpos_test_other_role' )->has_cap( 'wcpos_test_new_cap' ) );
+		$this->assertSame( '2.2.0', get_option( self::ROLE_CAPS_SYNCED_OPTION )['_introduced']['wcpos_test_new_cap'] );
+	}
+
+	/** A later upgrade preserves an owner's removal of an introduced permission. */
+	public function test_version_upgrade_does_not_regrant_introduced_capability_the_owner_removed(): void {
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		add_role( 'wcpos_test_pos_role', 'Test POS role', array( 'read' => true, 'access_woocommerce_pos' => true ) );
+		add_role( 'wcpos_test_other_role', 'Test other role', array( 'read' => true ) );
+		Permission_Registry::add_test_entry( array( 'capability' => 'wcpos_test_new_cap' ) );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+		$this->assertTrue( get_role( 'cashier' )->has_cap( 'wcpos_test_new_cap' ) );
+		get_role( 'cashier' )->remove_cap( 'wcpos_test_new_cap' );
+		remove_all_actions( 'init' );
+		delete_option( self::DB_UPGRADE_LOCK_OPTION );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, 'stale' );
+
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'wcpos_test_new_cap' ) );
+	}
+
+	/** Split permissions follow the source grant, even when listed as defaults. */
+	public function test_version_upgrade_grants_split_capability_only_to_roles_holding_its_parent(): void {
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		get_role( 'cashier' )->remove_cap( 'manage_woocommerce_pos_cash' );
+		Permission_Registry::add_test_entry(
+			array(
+				'capability' => 'wcpos_test_split_cap',
+				'split_from' => 'manage_woocommerce_pos_cash',
+				'defaults'   => array( 'administrator', 'shop_manager', 'cashier' ),
+			)
+		);
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		$this->assertTrue( get_role( 'shop_manager' )->has_cap( 'wcpos_test_split_cap' ) );
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'wcpos_test_split_cap' ) );
+	}
+
+	/** Seeding the legacy marker does not repair grants removed by the owner. */
+	public function test_first_marker_run_records_legacy_capabilities_without_granting(): void {
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$activator->single_activate( false );
+		$synced = get_option( self::ROLE_CAPS_SYNCED_OPTION );
+		unset( $synced['_introduced'] );
+		update_option( self::ROLE_CAPS_SYNCED_OPTION, $synced );
+		get_role( 'cashier' )->remove_cap( 'edit_products' );
+		update_option( self::DB_VERSION_OPTION, '1.10.0' );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_products' ) );
+		foreach ( Permission_Registry::capability_names() as $capability ) {
+			$this->assertSame( '2.0.0', get_option( self::ROLE_CAPS_SYNCED_OPTION )['_introduced'][ $capability ] );
+		}
 	}
 
 	/**
