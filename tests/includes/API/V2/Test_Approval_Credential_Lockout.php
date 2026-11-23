@@ -63,7 +63,7 @@ class Test_Approval_Credential_Lockout extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		$this->fixture_tear_down();
 		global $wpdb;
-		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient%wcpos\_auth\_%'" );
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '%wcpos\_auth\_%'" );
 		$wpdb->query( 'COMMIT' );
 		list( $_REQUEST, $_SERVER, $_POST ) = $this->request;
 	}
@@ -256,6 +256,139 @@ class Test_Approval_Credential_Lockout extends WCPOS_REST_Unit_Test_Case {
 
 			$this->assertSame( 200, $response->get_status() );
 		}
+	}
+
+	/** Overlapping wrong approvals all in flight at once get no more password checks than the limit. */
+	public function test_overlapping_wrong_approvals_get_no_more_password_checks_than_the_limit(): void {
+		$session     = $this->counting_session();
+		$checks      = 0;
+		$overlapping = 5;
+		$responses   = array();
+		// Each password check starts the next request before it answers, so no failure is recorded until every request is in flight.
+		add_filter(
+			'authenticate',
+			function ( $user ) use ( &$checks, &$overlapping, &$responses, $session ) {
+				++$checks;
+				if ( $overlapping-- > 0 ) {
+					$responses[] = $this->approve( $session, $this->manager->user_login, 'wrong' );
+				}
+				return $user;
+			},
+			99
+		);
+
+		$responses[] = $this->approve( $session, $this->manager->user_login, 'wrong' );
+
+		$this->assertSame( 5, $checks );
+		$this->assert_locked( array_shift( $responses ) );
+		foreach ( $responses as $refused ) {
+			$this->assertSame( 'wcpos_override_refused', $refused->get_data()['code'] );
+		}
+		$this->assert_locked( $this->approve( $session, $this->manager->user_login, 'manager-pass' ) );
+	}
+
+	/** A right password for an account that may not approve is not a failed attempt. */
+	public function test_approval_right_password_without_the_capability_does_not_count_toward_the_lock(): void {
+		$closure = $this->closure();
+		$other   = self::factory()->user->create_and_get( array( 'user_pass' => 'other-pass' ) );
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->assertSame( 403, $this->recount( $closure, $other->user_login, 'wrong' )->get_status() );
+		}
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->assertSame( 'wcpos_recount_approval_forbidden', $this->recount( $closure, $other->user_login, 'other-pass' )->get_data()['code'] );
+		}
+
+		$this->assertSame( 'wcpos_recount_approval_invalid', $this->recount( $closure, $other->user_login, 'wrong' )->get_data()['code'] );
+		$this->assert_locked( $this->recount( $closure, $other->user_login, 'other-pass' ) );
+	}
+
+	/** A right password refused for the capability leaves the failures' 15-minute window where it was. */
+	public function test_approval_right_password_without_the_capability_does_not_extend_the_window(): void {
+		global $wpdb;
+		$closure = $this->closure();
+		$other   = self::factory()->user->create_and_get( array( 'user_pass' => 'other-pass' ) );
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->recount( $closure, $other->user_login, 'wrong' );
+		}
+		$expires = time() + 600;
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s", '4|' . $expires, $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%' ) );
+
+		$this->assertSame( 'wcpos_recount_approval_forbidden', $this->recount( $closure, $other->user_login, 'other-pass' )->get_data()['code'] );
+
+		$this->assertSame( array( '4|' . $expires ), $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" ) );
+	}
+
+	/** A window about to end stays open while a counted attempt's password is being checked. */
+	public function test_approval_attempt_in_flight_keeps_its_window_open(): void {
+		global $wpdb;
+		$closure = $this->closure();
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->recount( $closure, $this->manager->user_login, 'wrong' );
+		}
+		$ending = time() + 1;
+		$like   = $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name LIKE %s", '4|' . $ending, $like ) );
+		$during = null;
+		add_filter(
+			'authenticate',
+			static function ( $user ) use ( &$during, $like ) {
+				global $wpdb;
+				$during = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $like ) );
+				return $user;
+			},
+			99
+		);
+
+		$this->recount( $closure, $this->manager->user_login, 'wrong' );
+
+		list( $count, $expires ) = explode( '|', $during );
+		$this->assertSame( '5', $count );
+		$this->assertGreaterThanOrEqual( $ending + 50, (int) $expires );
+	}
+
+	/** An attempt the database could not count is refused before the password is checked. */
+	public function test_approval_attempt_that_cannot_be_counted_is_refused(): void {
+		$session = $this->counting_session();
+		$checked = false;
+		add_filter(
+			'authenticate',
+			static function ( $user ) use ( &$checked ) {
+				$checked = true;
+				return $user;
+			},
+			99
+		);
+		add_filter(
+			'query',
+			static function ( $query ) {
+				return 0 === strpos( $query, 'INSERT' ) && false !== strpos( $query, 'wcpos_auth_attempts_' ) ? 'SELECT * FROM wcpos_no_such_table' : $query;
+			}
+		);
+
+		global $wpdb;
+		$suppress = $wpdb->suppress_errors();
+
+		$response = $this->approve( $session, $this->manager->user_login, 'manager-pass' );
+
+		$wpdb->suppress_errors( $suppress );
+		$this->assert_locked( $response );
+		$this->assertFalse( $checked );
+	}
+
+	/** Attempts older than the 15-minute window no longer count. */
+	public function test_approval_attempts_past_the_window_start_a_new_count(): void {
+		global $wpdb;
+		$closure = $this->closure();
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->assertSame( 403, $this->recount( $closure, $this->manager->user_login, 'wrong' )->get_status() );
+		}
+		// Age the window: the stored count keeps its value, its expiry moves into the past.
+		$wpdb->query( "UPDATE {$wpdb->options} SET option_value = CONCAT( SUBSTRING_INDEX( option_value, '|', 1 ), '|1' ) WHERE option_name LIKE 'wcpos\_auth\_attempts\_%'" );
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->assertSame( 403, $this->recount( $closure, $this->manager->user_login, 'wrong' )->get_status() );
+		}
+
+		$this->assertSame( 200, $this->recount( $closure, $this->manager->user_login, 'manager-pass' )->get_status() );
 	}
 
 	/** Approval and login failures for one account and peer fill one lockout that holds on all three. */
