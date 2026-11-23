@@ -6,8 +6,11 @@
  *   a shadow painted on the scroller's own background sits under the rows' backgrounds
  *   (the gray-50 header and striped rows hide it). Negative margins keep them out of layout.
  * - Shown by a scroll-driven animation on the scroller. A table that fits has no scroll
- *   range, its timeline is inactive and both strips stay at opacity 0. Browsers without
- *   scroll timelines also show none, which is how every table looked before.
+ *   range, its timeline is inactive and both strips stay at opacity 0.
+ * - Every animation declaration sits in `@supports`: a browser that drops
+ *   `animation-timeline` (Firefox) would run the animation on the document timeline with
+ *   zero duration, and `fill-mode: both` would pin the last frame on for good. Outside it,
+ *   the strips stay at opacity 0, which is how every table looked before.
  * - `scroll(nearest)`, not a named timeline on a wrapper: Safari ignores `timeline-scope`.
  * - Longhands, not `animation`: the minifier rewrites a name-less shorthand to `none`.
  * - Import it outside any `@layer`, next to wp-admin-reset.css.
@@ -26,9 +29,6 @@
 	width: 1rem;
 	pointer-events: none;
 	opacity: 0;
-	animation-timing-function: linear;
-	animation-fill-mode: both;
-	animation-timeline: scroll(nearest inline);
 }
 
 /* Start edge: appears once the table has scrolled away from it. */
@@ -40,8 +40,6 @@
 		color-mix(in srgb, var(--wcpos-color-gray-900) 15%, transparent),
 		transparent
 	);
-	animation-name: wcpos-table-shadow-in;
-	animation-range: 0 1rem;
 }
 
 /* End edge: shown while more is hidden past it, gone at the end. */
@@ -53,8 +51,25 @@
 		color-mix(in srgb, var(--wcpos-color-gray-900) 15%, transparent),
 		transparent
 	);
-	animation-name: wcpos-table-shadow-out;
-	animation-range: calc(100% - 1rem) 100%;
+}
+
+@supports (animation-timeline: scroll(nearest inline)) {
+	.wcpos-table::before,
+	.wcpos-table::after {
+		animation-timing-function: linear;
+		animation-fill-mode: both;
+		animation-timeline: scroll(nearest inline);
+	}
+
+	.wcpos-table::before {
+		animation-name: wcpos-table-shadow-in;
+		animation-range: 0 1rem;
+	}
+
+	.wcpos-table::after {
+		animation-name: wcpos-table-shadow-out;
+		animation-range: calc(100% - 1rem) 100%;
+	}
 }
 
 /* The gradients are physical; mirror them where start is the right edge. */

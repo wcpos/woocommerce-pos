@@ -54,8 +54,11 @@ describe('Checkbox', () => {
 	it('keeps the hook class the phone-width tick rule in wp-admin-reset.css targets', () => {
 		render(<Checkbox checked onChange={() => {}} />);
 		expect(screen.getByRole('checkbox')).toHaveClass('wcpos-checkbox');
-		expect(wpAdminReset).toMatch(
-			/max-width:\s*782px[\s\S]*input\.wcpos-checkbox:checked::before\s*\{[^}]*width:\s*1\.3125rem/
+		// The body of the 782px block: up to its closing brace at the start of a line.
+		const phoneBlock =
+			wpAdminReset.match(/@media screen and \(max-width: 782px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+		expect(phoneBlock).toMatch(
+			/input\.wcpos-checkbox:checked::before\s*\{[^}]*width:\s*1\.3125rem/
 		);
 	});
 

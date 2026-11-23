@@ -27,13 +27,19 @@ describe('Table scroll shadows', () => {
 	});
 
 	it('drives both edge shadows from the scroller they sit in', () => {
-		expect(tableCss).toMatch(
+		// Only where scroll timelines exist: elsewhere a zero-length animation with
+		// fill-mode both would pin the shadows on.
+		const [base, supported = ''] = tableCss.split(
+			'@supports (animation-timeline: scroll(nearest inline)) {'
+		);
+		expect(base.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/animation-/);
+		expect(supported).toMatch(
 			/\.wcpos-table::after\s*\{[^}]*animation-timeline:\s*scroll\(nearest inline\)/
 		);
-		expect(tableCss).toMatch(
+		expect(supported).toMatch(
 			/\.wcpos-table::before\s*\{[^}]*animation-name:\s*wcpos-table-shadow-in/
 		);
-		expect(tableCss).toMatch(
+		expect(supported).toMatch(
 			/\.wcpos-table::after\s*\{[^}]*animation-name:\s*wcpos-table-shadow-out/
 		);
 		expect(settingsCss).toContain('@import "../../ui/src/table.css";');
