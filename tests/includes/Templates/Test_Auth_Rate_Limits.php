@@ -370,7 +370,27 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 		$this->assertFalse( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
 
 		// Assert.
-		$this->assertSame( '11|' . $expires, $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) ) );
+		$this->assertSame( '10|' . $expires, $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wcpos_auth_attempts_' . $bucket ) ) );
+	}
+
+	/**
+	 * An attempt refused while another holds the last slot does not keep that slot once it is given back.
+	 */
+	public function test_rate_limit_refused_attempt_leaves_no_slot_behind(): void {
+		// Arrange: nine failures.
+		$bucket = md5( 'refused-slot' );
+		for ( $i = 0; $i < 9; $i++ ) {
+			Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 );
+		}
+
+		// Act: A holds the tenth slot, B is refused, A's password is right.
+		$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		$this->assertFalse( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
+		Credential_Lockout::release_bucket_attempt( $bucket );
+
+		// Assert: the peer still has its tenth attempt.
+		$this->assertFalse( Credential_Lockout::bucket_is_full( $bucket, 10 ) );
+		$this->assertTrue( Credential_Lockout::reserve_bucket_attempt( $bucket, 10, 900 ) );
 	}
 
 	/**
