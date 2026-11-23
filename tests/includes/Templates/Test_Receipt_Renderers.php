@@ -45,6 +45,35 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The legacy renderer removes its temp file when the template throws.
+	 */
+	public function test_legacy_renderer_throwing_template_leaves_no_temp_file(): void {
+		// Arrange.
+		$temp_dir = trailingslashit( wp_upload_dir()['basedir'] ) . 'wcpos-templates';
+		$before   = glob( $temp_dir . '/receipt_*' );
+		$before   = false === $before ? array() : $before;
+		$template = array( 'content' => '<?php throw new \RuntimeException( "template failed" );' );
+		$thrown   = null;
+
+		// Act.
+		ob_start();
+		try {
+			( new Legacy_Php_Renderer() )->render( $template, null, array() );
+		} catch ( \RuntimeException $e ) {
+			$thrown = $e;
+		} finally {
+			ob_end_clean();
+		}
+
+		// Assert.
+		$after = glob( $temp_dir . '/receipt_*' );
+		$after = false === $after ? array() : $after;
+		$this->assertInstanceOf( \RuntimeException::class, $thrown );
+		$this->assertSame( 'template failed', $thrown->getMessage() );
+		$this->assertSame( array(), array_values( array_diff( $after, $before ) ) );
+	}
+
+	/**
 	 * Test logicless renderer can replace simple placeholders.
 	 */
 	public function test_logicless_renderer_replaces_placeholders(): void {
