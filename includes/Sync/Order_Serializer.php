@@ -59,6 +59,8 @@ final class Order_Serializer {
 		'_wcpos_tax_ids',
 		'_wcpos_tax_ids_owned_keys',
 		'_wcpos_tax_ids_verified',
+		// Server-applied reporting day.
+		'_wcpos_sale_day',
 		// Server money.
 		'_wcpos_payments',
 		'_wcpos_commands',

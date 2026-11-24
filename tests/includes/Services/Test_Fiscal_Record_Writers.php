@@ -108,6 +108,173 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** Sale-day corrections name the latest completion without changing any sale or session. */
+	public function test_sale_day_correction_appends_to_latest_sale(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$this->pay( $this->reopen( $order ) );
+		$sales = $this->sales( $order->get_id() );
+		$actor = get_current_user_id();
+		$from = '2026-11-24T09:00:00Z';
+		$to = '2026-11-23T09:00:00Z';
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, $actor, $from, $to, 'Correct sale day' ) );
+
+		$this->assertContains( 'sale_day_correction', Fiscal_Record_Store::TYPES );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'sale_day_correction',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sales[1]['id'], $records[0]['corrects_record_id'] );
+		$this->assertSame( $actor, $records[0]['approver_id'] );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'sale_day',
+					'from' => $from,
+					'to' => $to,
+				),
+			),
+			$records[0]['payload']['changes']
+		);
+		$this->assertSame( 'Correct sale day', $records[0]['payload']['reason'] );
+		$this->assertSame( $actor, $records[0]['payload']['changed_by'] );
+		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id', 'cashier_id', 'store_id' ) as $key ) {
+			$this->assertNull( $records[0][ $key ], $key );
+		}
+		$this->assertSame( $sales, $this->sales( $order->get_id() ) );
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_without_sale_returns_true(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		$order = $this->order();
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_reopened_legacy_without_sale_returns_true_without_record(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		// Arrange: completing outside a register leaves no history or fiscal sale.
+		$order = $this->order();
+		$order->set_date_paid( time() );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertNull( Completion_History::of( $order )->latest() );
+		$order = $this->reopen( $order );
+		$this->assertTrue( Completion_History::of( $order )->latest()['legacy'] );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+
+		// Act and assert.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_failed_insert_returns_false_without_recovery_note(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		$order = $this->order();
+		$this->pay( $order );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$failed = array();
+		$observe = static function ( $type ) use ( &$failed ): void {
+			$failed[] = $type;
+		};
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10, 2 );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
+		try {
+			$result = Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10 );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
+		}
+
+		$this->assertFalse( $result );
+		$this->assertSame( array( 'sale_day_correction' ), $failed );
+		$this->assertEquals( $notes, wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'sale_day_correction',
+				)
+			)
+		);
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_latest_sale_insert_still_failing_returns_false_without_correction(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		// Arrange: the older completion has a sale, but the latest document is parked.
+		$order = $this->order();
+		$this->pay( $order );
+		$order = $this->reopen( $order );
+		$this->with_sale_inserts_failing(
+			function () use ( $order ): void {
+				$this->pay( $order );
+				$order = wc_get_order( $order->get_id() );
+				$latest = Completion_History::of( $order )->latest();
+				$this->assertSame( array( $latest['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
+
+				// Act and assert: recovery still cannot insert the latest sale.
+				$this->assertFalse( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+			}
+		);
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+		$this->assertCount( 1, $this->parked( $order->get_id() ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'sale_day_correction',
+				)
+			)
+		);
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_latest_parked_sale_recovers_and_corrects_that_sale(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		// Arrange.
+		$order = $this->order();
+		$this->pay( $order );
+		$order = $this->reopen( $order );
+		$this->with_sale_inserts_failing(
+			function () use ( $order ): void {
+				$this->pay( $order );
+			}
+		);
+		$order = wc_get_order( $order->get_id() );
+		$latest = Completion_History::of( $order )->latest();
+		$this->assertSame( array( $latest['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+
+		// Act.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 2, $sales );
+		$this->assertSame( $latest['id'], $sales[1]['source_id'] );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'sale_day_correction',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sales[1]['id'], $records[0]['corrects_record_id'] );
+	}
+
 	/** Repeated corrections append to the latest sale without entering a session or closure. */
 	public function test_reattribution_appends_changes_to_latest_sale_only(): void {
 		// Arrange.

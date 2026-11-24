@@ -115,6 +115,30 @@ class Test_Order_Serializer extends WP_UnitTestCase {
 		}
 	}
 
+	/** The correction moves the revision; its derived timestamp does not. */
+	public function test_sale_day_correction_is_revision_meta_but_derived_timestamp_is_not(): void {
+		$before = array(
+			'id' => 5,
+			'meta_data' => array(),
+		);
+		$after = array(
+			'id' => 5,
+			'meta_data' => array(
+				array(
+					'key' => '_wcpos_sale_day',
+					'value' => '{"at_gmt":"2026-11-23T09:12:00Z"}',
+				),
+			),
+		);
+		$this->assertNotSame( Order_Serializer::canonical_revision( $before ), Order_Serializer::canonical_revision( $after ) );
+		$derived = $after;
+		$derived['meta_data'][] = array(
+			'key' => '_wcpos_sale_day_at',
+			'value' => '1795425120',
+		);
+		$this->assertSame( Order_Serializer::canonical_revision( $after ), Order_Serializer::canonical_revision( $derived ) );
+	}
+
 	/** An unsaved line decoration is ignored; visible line meta without an id still hashes. */
 	public function test_revision_ignores_unsaved_visible_line_meta(): void {
 		foreach ( array( 'line_items', 'fee_lines', 'shipping_lines', 'coupon_lines' ) as $type ) {

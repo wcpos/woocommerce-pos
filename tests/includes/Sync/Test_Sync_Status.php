@@ -162,7 +162,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 					$wpdb->prefix . 'wcpos_sync_mutations',
 				),
 				'schema_version' => null,
-				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment' ),
+				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment', 'order_sale_day_correction' ),
 			),
 			$response->get_data()
 		);
@@ -184,7 +184,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 				'healthy'        => true,
 				'missing_tables' => array(),
 				'schema_version' => Api::SCHEMA_VERSION,
-				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment' ),
+				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment', 'order_sale_day_correction' ),
 			),
 			$response->get_data()
 		);
