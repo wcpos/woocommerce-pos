@@ -50,13 +50,13 @@ class Auth {
 	 * device with two variants installed (e.g. the store build and the dev
 	 * client) returns the login to the app that started it: `wcpos` for the
 	 * store build, `wcpos-dev` for the development client, `wcpos-adhoc` for
-	 * ad-hoc test builds (monorepo `apps/main/app.config.ts`). `exp` is the
-	 * Expo Go client. Matching is an exact `<scheme>://` prefix, so listing
-	 * `wcpos-dev` does not admit `wcpos-devious`.
+	 * ad-hoc test builds (monorepo `apps/main/app.config.ts`). Matching is an
+	 * exact `<scheme>://` prefix, so listing `wcpos-dev` does not admit
+	 * `wcpos-devious`.
 	 *
 	 * @var array
 	 */
-	private const ALLOWED_SCHEMES = array( 'wcpos', 'wcpos-dev', 'wcpos-adhoc', 'exp', 'https', 'http' );
+	private const ALLOWED_SCHEMES = array( 'wcpos', 'wcpos-dev', 'wcpos-adhoc', 'https', 'http' );
 
 	/**
 	 * Web origins that may receive a login redirect besides the site's own.
@@ -228,7 +228,7 @@ class Auth {
 					return $escaped && $this->is_allowed_web_destination( $escaped ) ? $escaped : '';
 				}
 
-				// For custom schemes (wcpos://, exp://), just return it
+				// For the app's own schemes (wcpos://, wcpos-dev://, wcpos-adhoc://), just return it
 				// These are app deep links, not web URLs.
 				return $uri;
 			}

@@ -81,7 +81,6 @@ class Test_Auth_Redirect_Uri extends WP_UnitTestCase {
 			'store build'        => array( 'wcpos://' ),
 			'development client' => array( 'wcpos-dev://' ),
 			'adhoc build'        => array( 'wcpos-adhoc://' ),
-			'Expo Go'            => array( 'exp://127.0.0.1:8081/--/' ),
 			'case-insensitive'   => array( 'WCPOS-DEV://' ),
 		);
 	}
@@ -107,6 +106,7 @@ class Test_Auth_Redirect_Uri extends WP_UnitTestCase {
 			'longer than wcpos-dev' => array( 'wcpos-devious://' ),
 			'other suffix'          => array( 'wcpos-preview://' ),
 			'exp plus slug'         => array( 'exp+wcpos://' ),
+			'Expo Go'               => array( 'exp://127.0.0.1:8081/--/' ),
 			'javascript'            => array( 'javascript:alert(1)' ),
 			'empty'                 => array( '' ),
 		);
