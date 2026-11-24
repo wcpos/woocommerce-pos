@@ -846,7 +846,8 @@ class Order_Writer extends Null_Writer {
 		if ( ! is_int( $timestamp ) || $timestamp > time() || ! preg_match( '/\S/u', $reason ) || Pos_Order_Audit::char_length( $reason ) > 500 ) {
 			return;
 		}
-		if ( ! is_array( Completion_History::of( $order )->latest() ) || ( ! $order->get_date_paid() && null === Completion_Origin::latest_captured( $order ) ) ) {
+		// A standing completion: a sale reopened since has no completion to correct.
+		if ( ! is_array( Completion_History::of( $order )->standing() ) || ( ! $order->get_date_paid() && null === Completion_Origin::latest_captured( $order ) ) ) {
 			return;
 		}
 		$to_gmt = gmdate( 'Y-m-d\TH:i:s\Z', $timestamp );

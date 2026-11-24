@@ -2698,6 +2698,18 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS sale day' ) ) ) );
 	}
 
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_on_a_reopened_sale_is_ignored( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$this->assertSame( 200, $this->updateOrder( $order, array( 'status' => 'pos-open' ) )->get_status() );
+		$result = $this->updateOrder( wc_get_order( $order->get_id() ), $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day"}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+	}
+
 	public function saleDayReopens(): array {
 		return array(
 			'manager CPT' => array( false, 'shop_manager', 'pos-open' ),
