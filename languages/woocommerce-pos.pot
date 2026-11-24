@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-24T12:32:06+00:00\n"
+"POT-Creation-Date: 2026-11-24T12:33:39+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -292,7 +292,7 @@ msgstr ""
 #: includes/Templates/Payment.php:217
 #: includes/Templates/Payment.php:240
 #: includes/Templates/Payment.php:574
-#: includes/Templates/Received.php:92
+#: includes/Templates/Received.php:98
 msgid "Error"
 msgstr ""
 
@@ -1384,12 +1384,12 @@ msgid "This payment capture mode does not support that operation."
 msgstr ""
 
 #. translators: 1: attempt id, 2: payment method title.
-#: includes/Payments/Contract/Attempts.php:320
+#: includes/Payments/Contract/Attempts.php:339
 #, php-format
 msgid "WCPOS payment attempt %1$s: the outcome is unknown and %2$s cannot say whether money was taken. Check the payment with the provider, then cancel the attempt at the POS if nothing was charged."
 msgstr ""
 
-#: includes/Payments/Contract/Attempts.php:409
+#: includes/Payments/Contract/Attempts.php:420
 msgid "Clearing the awaiting-customer state"
 msgstr ""
 
@@ -6172,11 +6172,11 @@ msgstr ""
 msgid "Please contact the site administrator for assistance."
 msgstr ""
 
-#: includes/Templates/Received.php:82
+#: includes/Templates/Received.php:88
 msgid "Sorry, this order is invalid."
 msgstr ""
 
-#: includes/Templates/Received.php:90
+#: includes/Templates/Received.php:96
 msgid "Sorry, this order cannot be viewed. The order key is missing or invalid."
 msgstr ""
 
