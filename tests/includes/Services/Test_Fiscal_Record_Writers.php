@@ -2241,6 +2241,98 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
 	}
 
+	/** A deferred correction whose legs a later completion's late_sale carried writes nothing on its retry. */
+	public function test_correction_legs_carried_by_a_later_completion_late_sale_are_not_written_again(): void {
+		// Arrange: the correction's late check is deferred by a held register.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$name      = 'wcpos_register_' . strtolower( $session['register_id'] );
+		$rewrite   = static fn( $sql ) => str_replace( "GET_LOCK( '" . $name . "', 10 )", "GET_LOCK( '" . $name . "', 0 )", $sql );
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$minus     = null;
+		$plus      = null;
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) );
+			add_filter( 'query', $rewrite );
+			try {
+				list( , $minus, $plus ) = $this->correct_to_cash( $order, $card['id'] );
+			} finally {
+				remove_filter( 'query', $rewrite );
+			}
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+			$contender->close();
+		}
+		$retry = array( $order->get_id(), $plus['id'], 2 );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', $retry ) );
+
+		// The order is reopened and completed again in the same, closed session: its late_sale carries both legs.
+		Register_Sale::complete(
+			$this->reopen( $order ),
+			array(
+				'register_id' => $session['register_id'],
+				'session_id'  => $session['id'],
+			)
+		);
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertNotSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		$this->assertEqualsCanonicalizing( array( $minus['id'], $plus['id'] ), array_column( $late[0]['payload']['tender_rows'], 'id' ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry_correction( ...$retry );
+
+		// Assert: no tender_correction late_sale, and the move is counted once.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertSame( array(), array_filter( $late, static fn( $record ) => 'tender_correction' === ( $record['payload']['kind'] ?? null ) ) );
+		$totals = array(
+			'card' => 0.0,
+			'cash' => 0.0,
+		);
+		foreach ( $late as $record ) {
+			foreach ( array_keys( $totals ) as $key ) {
+				$totals[ $key ] += (float) ( $record['payload']['expected_delta'][ $key ] ?? 0 );
+			}
+		}
+		$this->assertSame( '-10.0000', sprintf( '%.4f', $totals['card'] ) );
+		$this->assertSame( '10.0000', sprintf( '%.4f', $totals['cash'] ) );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
+	}
+
+	/** A correction whose late_sale insert fails is retried, and the retry writes the record. */
+	public function test_correction_insert_failure_schedules_retry_that_writes_the_late_sale(): void {
+		// Arrange.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$stuck = static fn( $value, $old ) => $old;
+		$plus  = null;
+
+		// Act: the late_sale sequence cannot advance, so the insert fails.
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10, 2 );
+		try {
+			list( , , $plus ) = $this->correct_to_cash( $order, $card['id'] );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10 );
+		}
+
+		// Assert: nothing written, the retry scheduled.
+		$retry = array( $order->get_id(), $plus['id'], 2 );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', $retry ) );
+
+		// Act: the retry runs once inserts work again.
+		Fiscal_Record_Writers::instance()->retry_correction( ...$retry );
+
+		// Assert.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
+	}
+
 	/** A returned line in a net-positive sale keeps its signed quantity and unit price in the sale snapshot. */
 	public function test_sale_record_snapshot_keeps_returned_line_signed_quantity(): void {
 		// Arrange: 2 sold at 10.00 and 1 returned at 10.00, order total 10.00.
