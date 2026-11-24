@@ -170,6 +170,28 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( get_current_user_id(), $records[0]['cashier_id'] );
 	}
 
+	/**
+	 * A retry of the same request reuses its record; a later change appends another.
+	 */
+	public function test_sale_day_correction_retry_reuses_its_record_and_a_later_change_appends(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$writers = Fiscal_Record_Writers::instance();
+		$store   = new Fiscal_Record_Store();
+		$query   = array(
+			'order_id' => $order->get_id(),
+			'type' => 'sale_day_correction',
+		);
+		$this->assertTrue( $writers->record_sale_day_correction( $order, 1, '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		// The order's meta was not saved (the write after the record failed): the same request again.
+		$this->assertTrue( $writers->record_sale_day_correction( $order, 1, '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:20' ) );
+		$this->assertCount( 1, $store->list( $query ) );
+		$order->update_meta_data( '_wcpos_sale_day', '{"at_gmt":"2026-11-23T09:00:00Z","reason":"Correct sale day","by":1,"changed_at_gmt":"2026-11-24T10:11:12Z"}' );
+		$order->save();
+		$this->assertTrue( $writers->record_sale_day_correction( wc_get_order( $order->get_id() ), 1, '2026-11-23T09:00:00Z', '2026-11-22T09:00:00Z', 'Again', '2026-11-24 10:12:00' ) );
+		$this->assertCount( 2, $store->list( $query ) );
+	}
+
 	/** Sale-day correction follows the existing attribution record contract. */
 	public function test_sale_day_correction_without_sale_returns_true(): void {
 		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );

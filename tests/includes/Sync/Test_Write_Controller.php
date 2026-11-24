@@ -2442,7 +2442,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( $sale['id'], $record['corrects_record_id'] );
 		$this->assertSame( $order->get_id(), $record['order_id'] );
 		$this->assertSame( get_current_user_id(), $record['approver_id'] );
-		$this->assertTrue( wp_is_uuid( $record['source_id'], 4 ) );
+		$this->assertMatchesRegularExpression( '/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/', $record['source_id'] );
 		$this->assertSame(
 			array(
 				array(
