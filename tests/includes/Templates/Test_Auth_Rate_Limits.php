@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use WCPOS\WooCommercePOS\Services\Credential_Lockout;
 use WCPOS\WooCommercePOS\Templates\Auth;
+use WCPOS\WooCommercePOS\Tests\Services\Credential_Lockout_Rows_Test;
 use WP_Error;
 use WP_UnitTestCase;
 
@@ -681,5 +682,25 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 		$this->assertSame( 'Too many requests. Please try again later.', $auth->get_error() );
 		$this->assertFalse( $checked );
 		$this->assertFalse( $this->sentinel_reached );
+	}
+
+	/**
+	 * At the live-row ceiling a peer with no row is refused, and a peer that already holds one signs in.
+	 */
+	public function test_rate_limit_at_the_row_ceiling_a_new_peer_is_refused_and_a_known_peer_signs_in(): void {
+		// Arrange: peer A holds a live peer row; then the rows reach the ceiling.
+		$this->assertSame( 'Invalid username or password.', $this->attempt( '203.0.113.10', 'till-cashier', 'wrong' )->get_error() );
+		Credential_Lockout_Rows_Test::fill_live( Credential_Lockout_Rows_Test::constant( 'MAX_LIVE_ROWS' ) );
+
+		// Act / Assert: new peer B is refused before its password is checked, and gets no row.
+		$auth = $this->attempt( '198.51.100.20', 'till-cashier', 'correct horse' );
+		$this->assertSame( 'Too many requests. Please try again later.', $auth->get_error() );
+		$this->assertFalse( $this->sentinel_reached );
+		$this->assertNull( $this->row( md5( 'peer:198.51.100.20' ) ) );
+
+		// Act / Assert: peer A's right password is checked.
+		$auth = $this->attempt( '203.0.113.10', 'till-cashier', 'correct horse' );
+		$this->assertTrue( $this->sentinel_reached );
+		$this->assertSame( 'sentinel', $auth->get_error() );
 	}
 }

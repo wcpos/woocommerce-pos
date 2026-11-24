@@ -33,6 +33,17 @@ final class Credential_Lockout {
 	 * needs another request's write in the same instant, so a few tries are plenty. */
 	private const COUNT_TRIES = 5;
 
+	/** Most live counter rows a site keeps before new unknown buckets are refused. A store's own
+	 * traffic keeps at most one peer row per till address plus a few account rows, so live rows stay
+	 * in the low hundreds even on a large store, and 5000 leaves ample headroom. Each address adds at
+	 * most 11 rows per 15-minute window (1 peer row, 10 account rows), so reaching the ceiling takes
+	 * about 455 distinct addresses inside one window. */
+	private const MAX_LIVE_ROWS = 5000;
+
+	/** Most expired counter rows one attempt deletes, so no single request does a large delete. It
+	 * is larger than the rows one attempt can add, so expired rows never pile up. */
+	private const SWEEP_BATCH = 100;
+
 	/** Count an attempt for an account and peer before its password is checked.
 	 *
 	 * Returns null when the account is locked or full; the caller then refuses without checking
@@ -45,11 +56,14 @@ final class Credential_Lockout {
 		if ( empty( $username ) ) {
 			return '';
 		}
-		$username_key = self::key( $username );
+		$subject      = self::subject( $username );
+		$username_key = md5( $subject . '|' . self::client_ip() );
 		if ( false !== get_transient( 'wcpos_auth_lock_' . $username_key ) ) {
 			return null;
 		}
-		return self::reserve_bucket_attempt( $username_key, self::MAX_FAILED_ATTEMPTS, self::LOCKOUT_DURATION );
+		// A real account's bucket is admitted past the live-row ceiling, so it always locks and counts.
+		$is_account = 0 === strpos( $subject, 'user:' );
+		return self::reserve_bucket_attempt( $username_key, self::MAX_FAILED_ATTEMPTS, self::LOCKOUT_DURATION, $is_account );
 	}
 
 	/** Count an attempt in a bucket before its password is checked (CWE-307).
@@ -62,10 +76,15 @@ final class Credential_Lockout {
 	 * @param string $bucket An md5 bucket key; the row is wcpos_auth_attempts_<bucket>.
 	 * @param int    $limit  Attempts allowed in the window.
 	 * @param int    $window Seconds a failure keeps counting.
+	 * @param bool   $exceeds_ceiling True only for a real account's bucket, which is admitted even
+	 *                                when the site holds MAX_LIVE_ROWS live rows; any other bucket
+	 *                                that would start a new live row there is refused (fail closed).
 	 */
-	public static function reserve_bucket_attempt( string $bucket, int $limit, int $window ): ?string {
+	public static function reserve_bucket_attempt( string $bucket, int $limit, int $window, bool $exceeds_ceiling = false ): ?string {
 		global $wpdb;
 		$name = self::ROW_PREFIX . $bucket;
+		$live = null;
+		self::sweep();
 		// The row is count|expires-at|generation. Each try reads the row and writes the next value
 		// only over the exact value it read, so the attempt knows its own position and the generation
 		// it was counted in, and overlapping attempts cannot pass on one count. A full bucket is
@@ -80,6 +99,15 @@ final class Credential_Lockout {
 			$row   = self::live_row( $seen, $now );
 			if ( null !== $row && $row[0] >= $limit ) {
 				return null;
+			}
+			// A new live window past the ceiling is refused without a write, as is one whose count
+			// failed; the count is read once per call.
+			if ( null === $row && ! $exceeds_ceiling ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- The counter rows are never cached.
+				$live = $live ?? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM (SELECT 1 FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(option_value, '|', 2), '|', -1) AS UNSIGNED) >= %d LIMIT %d) AS live", $wpdb->esc_like( self::ROW_PREFIX ) . '%', $now, self::MAX_LIVE_ROWS ) );
+				if ( null === $live || (int) $live >= self::MAX_LIVE_ROWS ) {
+					return null;
+				}
 			}
 			// An ended window, or a row in an older format, starts a new generation; wp_rand() is
 			// cryptographic, so no seeding elsewhere can make a generation come round again.
@@ -200,7 +228,7 @@ final class Credential_Lockout {
 	}
 
 	/** Clear the attempts and lock for an account and peer after a successful check, and drop
-	 * any other bucket whose window has ended.
+	 * one batch of other buckets whose window has ended.
 	 *
 	 * @param string $username The identifier to clear.
 	 */
@@ -211,8 +239,24 @@ final class Credential_Lockout {
 		global $wpdb;
 		$username_key = self::key( $username );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Rows written by reserve_attempt(), never through the options API.
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s OR (option_name LIKE %s AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(option_value, '|', 2), '|', -1) AS UNSIGNED) < %d)", self::ROW_PREFIX . $username_key, $wpdb->esc_like( self::ROW_PREFIX ) . '%', time() ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s", self::ROW_PREFIX . $username_key ) );
+		self::sweep();
 		delete_transient( 'wcpos_auth_lock_' . $username_key );
+	}
+
+	/** Delete up to SWEEP_BATCH counter rows whose window has ended. The DELETE repeats the expiry
+	 * condition, so a row an attempt revived between the two statements stays; a failed SELECT
+	 * sweeps nothing. */
+	private static function sweep(): void {
+		global $wpdb;
+		$now = time();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Rows written by reserve_bucket_attempt(), never through the options API.
+		$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(option_value, '|', 2), '|', -1) AS UNSIGNED) < %d LIMIT %d", $wpdb->esc_like( self::ROW_PREFIX ) . '%', $now, self::SWEEP_BATCH ) );
+		if ( empty( $names ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Rows written by reserve_bucket_attempt(), never through the options API.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name IN (" . implode( ', ', array_fill( 0, \count( $names ), '%s' ) ) . ") AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(option_value, '|', 2), '|', -1) AS UNSIGNED) < %d", array_merge( $names, array( $now ) ) ) );
 	}
 
 	/** The server-established connecting peer address.
@@ -238,10 +282,17 @@ final class Credential_Lockout {
 	 * @param string $username The identifier after sanitize_user().
 	 */
 	private static function key( string $username ): string {
-		$user    = get_user_by( 'login', $username );
-		$user    = $user ? $user : get_user_by( 'email', $username );
-		$subject = $user ? 'user:' . $user->ID : 'input:' . strtolower( trim( $username ) );
-		return md5( $subject . '|' . self::client_ip() );
+		return md5( self::subject( $username ) . '|' . self::client_ip() );
+	}
+
+	/** What a bucket counts for: 'user:<ID>' for a real account, 'input:<identifier>' otherwise.
+	 *
+	 * @param string $username The identifier after sanitize_user().
+	 */
+	private static function subject( string $username ): string {
+		$user = get_user_by( 'login', $username );
+		$user = $user ? $user : get_user_by( 'email', $username );
+		return $user ? 'user:' . $user->ID : 'input:' . strtolower( trim( $username ) );
 	}
 
 	/** Attempts counted in a bucket's row, read past the options cache; null when the read fails.
