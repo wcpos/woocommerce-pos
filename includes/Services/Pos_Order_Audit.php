@@ -31,10 +31,11 @@ final class Pos_Order_Audit {
 	 *
 	 * `_pos_payment_asserted` is a legacy marker (ADR 0035 path 3, removed under ADR 0040):
 	 * orders written before 2.0.0 carry it, and a client still may not write it.
+	 * `_wcpos_sale_day_request` is consumed by Order_Writer, never persisted as order meta.
 	 *
 	 * @var string[]
 	 */
-	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count', '_wcpos_sale_day', '_wcpos_sale_day_at' );
+	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count', '_wcpos_sale_day', '_wcpos_sale_day_at', '_wcpos_sale_day_request' );
 
 	/**
 	 * Meta the server alone writes: the ledger and its index rows, the Tip fee's row mark (item meta, also

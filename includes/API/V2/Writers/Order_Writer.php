@@ -132,14 +132,14 @@ class Order_Writer extends Null_Writer {
 
 	/**
 	 * Hold the order lock (the one the money commands hold) from the
-	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b) or correct a sale day,
+	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b) or carries `_wcpos_sale_day_request`,
 	 * so a capture cannot land between the compare and the write. The Mutation_Store record
 	 * lock is already held; Order_Lock falls back to its option lease on servers that cannot
 	 * nest named locks. A note-only push takes no order lock.
 	 */
 	public function with_write_lock( int $id, array $payload, callable $work ) {
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
-			if ( '_wcpos_sale_day' === Meta_Entry::key( $entry ) ) {
+			if ( '_wcpos_sale_day_request' === Meta_Entry::key( $entry ) ) {
 				return self::under_order_lock( $id, $work );
 			}
 		}
@@ -623,7 +623,7 @@ class Order_Writer extends Null_Writer {
 	}
 
 	/**
-	 * Capture and authorize the cashier/store reassignment lifecycle.
+	 * Capture cashier/store reassignment and the `_wcpos_sale_day_request` row from the incoming document.
 	 *
 	 * @param int      $id          Order ID.
 	 * @param array    $payload     Client order document.
@@ -641,7 +641,7 @@ class Order_Writer extends Null_Writer {
 		$clear_register = false;
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
 			$key = Meta_Entry::key( $entry );
-			if ( '_wcpos_sale_day' === $key ) {
+			if ( '_wcpos_sale_day_request' === $key ) {
 				$sale_day = Meta_Entry::value( $entry );
 			}
 			if ( '_wcpos_register' === $key ) {
@@ -831,10 +831,7 @@ class Order_Writer extends Null_Writer {
 			return;
 		}
 		$change = json_decode( $value, true );
-		if ( ! is_array( $change ) || ! is_string( $change['at_gmt'] ?? null ) || ! is_string( $change['reason'] ?? null ) ) {
-			return;
-		}
-		if ( array_key_exists( 'by', $change ) || array_key_exists( 'changed_at_gmt', $change ) ) {
+		if ( ! is_array( $change ) || ! is_string( $change['at_gmt'] ?? null ) || ! is_string( $change['reason'] ?? null ) || ! is_string( $change['from'] ?? null ) ) {
 			return;
 		}
 		$timestamp = $this->order_payload->validate_client_created_gmt( array( 'date_created_gmt' => $change['at_gmt'] ) );
@@ -848,6 +845,9 @@ class Order_Writer extends Null_Writer {
 		}
 		$to_gmt = gmdate( 'Y-m-d\TH:i:s\Z', $timestamp );
 		$stored = Meta_Normalizer::decode_to_array( $order->get_meta( '_wcpos_sale_day' ) );
+		if ( ( is_string( $stored['at_gmt'] ?? null ) ? $stored['at_gmt'] : '' ) !== $change['from'] ) {
+			return;
+		}
 		$from_gmt = is_string( $stored['at_gmt'] ?? null ) ? $stored['at_gmt'] : ( $order->get_date_paid() ? gmdate( 'Y-m-d\TH:i:s\Z', $order->get_date_paid()->getTimestamp() ) : '' );
 		if ( $from_gmt === $to_gmt ) {
 			return;

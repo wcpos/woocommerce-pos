@@ -14,9 +14,13 @@ use WP_UnitTestCase;
  * Pos_Order_Audit_Test class.
  */
 class Pos_Order_Audit_Test extends WP_UnitTestCase {
-	/** Clients cannot write either sale-day key directly on create or update. */
+	/** Clients cannot persist sale-day facts or the request row on create or update. */
 	public function test_sale_day_meta_is_server_owned(): void {
 		$meta = array(
+			array(
+				'key' => '_wcpos_sale_day_request',
+				'value' => '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}',
+			),
 			array(
 				'key' => '_wcpos_sale_day',
 				'value' => '{"at_gmt":"2026-11-23T09:12:00Z"}',
