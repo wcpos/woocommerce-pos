@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\Services\Withheld_Fields;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
@@ -96,6 +98,7 @@ class Revision {
 	}
 
 	public static function compute( array $data ): string {
+		$data = Withheld_Fields::project_for_revision( $data );
 		return 'sha256:' . hash( 'sha256', (string) wp_json_encode( self::canonicalize( $data ) ) );
 	}
 
@@ -139,6 +142,7 @@ class Revision {
 	 * @return array Schema-scoped, identity-stripped, canonicalized record.
 	 */
 	public static function canonical_variation( array $record ): array {
+		$record = Withheld_Fields::project_for_revision( $record );
 		// WooCommerce merges register_rest_field additions inside get_item_schema().
 		$controller = new class() extends \WC_REST_Product_Variations_Controller {
 			/** Keep the core schema; extensions opt in through the revision-fields filter. */

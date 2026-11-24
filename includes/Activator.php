@@ -1327,6 +1327,11 @@ class Activator {
 				continue;
 			}
 			if ( version_compare( $entry['introduced'], Permission_Registry::MARKER_BASELINE, '>=' ) ) {
+				// Marker first: a grant whose marker failed to persist is skipped and retried,
+				// never repeated after the owner removes it.
+				if ( ! $this->persist_introduced_marker( $marker + array( $capability => $entry['introduced'] ), $capability ) ) {
+					continue;
+				}
 				$source = $entry['split_from'] ?? 'access_woocommerce_pos';
 				foreach ( wp_roles()->role_objects as $role ) {
 					if ( $role->has_cap( $source ) && ! $role->has_cap( $capability ) ) {
@@ -1337,6 +1342,23 @@ class Activator {
 			$marker[ $capability ] = $entry['introduced'];
 		}
 		return $marker;
+	}
+
+	/**
+	 * Merge the marker into the stored snapshot before a grant.
+	 *
+	 * @param array  $marker     Capability names mapped to their introduced version.
+	 * @param string $capability Capability about to be granted.
+	 * @return bool Whether the stored marker now records the capability.
+	 */
+	private function persist_introduced_marker( array $marker, string $capability ): bool {
+		$stored                = get_option( 'woocommerce_pos_role_caps_synced', array() );
+		$stored                = \is_array( $stored ) ? $stored : array();
+		$known                 = isset( $stored['_introduced'] ) && \is_array( $stored['_introduced'] ) ? $stored['_introduced'] : array();
+		$stored['_introduced'] = $marker + $known;
+		update_option( 'woocommerce_pos_role_caps_synced', $stored, true );
+		$after = get_option( 'woocommerce_pos_role_caps_synced' );
+		return \is_array( $after ) && isset( $after['_introduced'][ $capability ] );
 	}
 
 	/**

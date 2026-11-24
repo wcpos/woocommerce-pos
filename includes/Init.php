@@ -313,6 +313,22 @@ class Init {
 				'phase'    => 'post-latch',
 			),
 			array(
+				'hook'     => 'rest_request_before_callbacks',
+				'callback' => array( Services\Withheld_Fields::class, 'filter_request' ),
+				'priority' => 10,
+				'args'     => 3,
+				'reason'   => 'Default 10; drops withheld keys (cost) before the permission check and callbacks. Unconditional: a token-authenticated wc/v3 request carries no marker.',
+				'phase'    => 'post-latch',
+			),
+			array(
+				'hook'     => 'rest_pre_echo_response',
+				'callback' => array( Services\Withheld_Fields::class, 'filter_response' ),
+				'priority' => 999,
+				'args'     => 3,
+				'reason'   => 'At 999 so keys added by earlier listeners are withheld too; the outermost serving seam after embedding. Unconditional, as above.',
+				'phase'    => 'post-latch',
+			),
+			array(
 				'hook'     => null,
 				'callback' => array( Services\Receipt_Snapshot_Cleanup::class, 'register' ),
 				'priority' => 10,

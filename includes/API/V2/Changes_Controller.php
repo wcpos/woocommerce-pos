@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API\V2;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Withheld_Fields;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal;
 use WCPOS\WooCommercePOS\Sync\Collections;
@@ -684,6 +685,7 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * phantom changes (measured live: 43/52 false positives per no-op sweep).
 	 */
 	private function canonicalize_for_revision( array $payload ): array {
+		$payload  = Withheld_Fields::project_for_revision( $payload );
 		$excluded = apply_filters( 'wcpos_sync_revision_excluded_fields', array( 'related_ids', '_links', 'links' ) );
 		$excluded = apply_filters_deprecated( 'woocommerce_pos_sync_revision_excluded_fields', array( $excluded ), '2.0.0', 'wcpos_sync_revision_excluded_fields' );
 		foreach ( (array) $excluded as $field ) {

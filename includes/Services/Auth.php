@@ -40,6 +40,13 @@ class Auth {
 	private $sessions;
 
 	/**
+	 * User id last authenticated from a WCPOS token; 0 when none.
+	 *
+	 * @var int
+	 */
+	private $token_user_id = 0;
+
+	/**
 	 * Constructor is private to prevent direct instantiation.
 	 * Or Auth::instance() instead.
 	 */
@@ -134,8 +141,9 @@ class Auth {
 	 * @return false|int|WP_Error User ID, validation error, or false when no WCPOS token is present.
 	 */
 	public function authenticate_request() {
-		$auth_header = $this->get_auth_header();
-		$token       = $this->extract_token( $auth_header );
+		$this->token_user_id = 0;
+		$auth_header         = $this->get_auth_header();
+		$token               = $this->extract_token( $auth_header );
 		if ( null === $token ) {
 			return false;
 		}
@@ -145,7 +153,15 @@ class Auth {
 			return $decoded_token;
 		}
 
-		return absint( $decoded_token->data->user->id );
+		$this->token_user_id = absint( $decoded_token->data->user->id );
+		return $this->token_user_id;
+	}
+
+	/**
+	 * The user the last authenticate_request() verified a WCPOS token for, or 0.
+	 */
+	public function token_user_id(): int {
+		return $this->token_user_id;
 	}
 
 	/**
