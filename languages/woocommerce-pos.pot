@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-24T10:29:49+00:00\n"
+"POT-Creation-Date: 2026-11-24T12:32:06+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -64,7 +64,7 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:327
 #: includes/Services/Receipt_I18n_Labels.php:113
 #: includes/Services/Reports_Registry.php:188
-#: includes/Templates/Payment.php:395
+#: includes/Templates/Payment.php:432
 #: templates/receipt.php:203
 msgid "Cashier"
 msgstr ""
@@ -286,10 +286,12 @@ msgstr ""
 #: includes/Admin/Settings.php:60
 #: includes/Form_Handler.php:61
 #: includes/Form_Handler.php:73
-#: includes/Form_Handler.php:138
-#: includes/Form_Handler.php:159
-#: includes/Templates/Payment.php:203
-#: includes/Templates/Payment.php:537
+#: includes/Form_Handler.php:136
+#: includes/Form_Handler.php:146
+#: includes/Templates/Payment.php:204
+#: includes/Templates/Payment.php:217
+#: includes/Templates/Payment.php:240
+#: includes/Templates/Payment.php:574
 #: includes/Templates/Received.php:92
 msgid "Error"
 msgstr ""
@@ -1247,12 +1249,13 @@ msgid "Order key mismatch."
 msgstr ""
 
 #. translators: Checkout/payment form error message shown when no cashier token is provided.
-#: includes/Form_Handler.php:136
+#: includes/Form_Handler.php:134
 msgid "Token not provided."
 msgstr ""
 
 #. translators: Checkout/payment form error message shown when the cashier token does not match.
-#: includes/Form_Handler.php:157
+#: includes/Form_Handler.php:144
+#: includes/Templates/Payment.php:215
 msgid "Cashier token mismatch."
 msgstr ""
 
@@ -1919,7 +1922,7 @@ msgstr ""
 #. translators: Short WCPOS UI label; keep concise.
 #: includes/Services/Order_Notes.php:42
 #: includes/Services/Receipt_Data_Builder.php:631
-#: includes/Templates/Payment.php:413
+#: includes/Templates/Payment.php:450
 #: tests/includes/Templates/Test_Receipt_Renderers.php:298
 msgid "Guest"
 msgstr ""
@@ -6024,77 +6027,82 @@ msgstr ""
 msgid "The cashier's slip for the cash bag: float, counted tenders, denominations, movements, note and signature lines. No sales or tax figures."
 msgstr ""
 
-#: includes/Templates/Payment.php:201
+#: includes/Templates/Payment.php:202
 msgid "Sorry, this order cannot be paid for. The order key is missing or invalid."
 msgstr ""
 
-#: includes/Templates/Payment.php:220
+#. translators: Shown on the POS pay page when the cashier's session has expired.
+#: includes/Templates/Payment.php:234
+msgid "Your session has expired. Close this payment window and open it again."
+msgstr ""
+
+#: includes/Templates/Payment.php:257
 msgid "This order cannot be paid for. Please contact us if you need assistance."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:228
+#: includes/Templates/Payment.php:265
 msgid "Pay for order"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:312
+#: includes/Templates/Payment.php:349
 msgid "Checkout Settings"
 msgstr ""
 
-#: includes/Templates/Payment.php:318
+#: includes/Templates/Payment.php:355
 msgid "Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts."
 msgstr ""
 
-#: includes/Templates/Payment.php:320
+#: includes/Templates/Payment.php:357
 msgid "Disable All Styles and Scripts"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:323
+#: includes/Templates/Payment.php:360
 msgid "Disable wp_head"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:328
+#: includes/Templates/Payment.php:365
 msgid "Disable wp_footer"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:333
+#: includes/Templates/Payment.php:370
 msgid "Disable Selected Styles"
 msgstr ""
 
-#: includes/Templates/Payment.php:340
-#: includes/Templates/Payment.php:352
+#: includes/Templates/Payment.php:377
+#: includes/Templates/Payment.php:389
 msgid "always removed on the POS payment page"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:345
+#: includes/Templates/Payment.php:382
 msgid "Disable Selected Scripts"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:358
+#: includes/Templates/Payment.php:395
 msgid "Submit"
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Payment.php:412
+#: includes/Templates/Payment.php:449
 msgid "Paying as customer"
 msgstr ""
 
-#: includes/Templates/Payment.php:513
+#: includes/Templates/Payment.php:550
 #: includes/Template_Router.php:130
 msgid "Sorry, this order is invalid and cannot be paid for."
 msgstr ""
 
-#: includes/Templates/Payment.php:517
+#: includes/Templates/Payment.php:554
 msgid "Sorry, this order has already been paid for."
 msgstr ""
 
-#: includes/Templates/Payment.php:535
+#: includes/Templates/Payment.php:572
 msgid "You do not have permission to modify checkout settings."
 msgstr ""
 
