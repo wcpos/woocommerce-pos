@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
+use WCPOS\WooCommercePOS\Sync\Digest_Support;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
@@ -151,8 +152,13 @@ final class Integrity_Controller extends WP_REST_Controller {
 
 	/**
 	 * Backfill pre-existing rows and repair stored digest drift.
+	 *
+	 * @return WP_Error|WP_REST_Response WP_Error (501) when the digest is off on this database engine.
 	 */
-	public function rebuild( WP_REST_Request $request ): WP_REST_Response {
+	public function rebuild( WP_REST_Request $request ) {
+		if ( Digest_Support::is_disabled() ) {
+			return $this->digest_unavailable( 'integrity/rebuild', 501 );
+		}
 		$started = microtime( true );
 		$result  = $this->digests->rebuild();
 
@@ -197,6 +203,10 @@ final class Integrity_Controller extends WP_REST_Controller {
 				\sprintf( 'integrity/bucket does not support the "%s" collection', $collection ),
 				array( 'status' => 400 )
 			);
+		}
+
+		if ( Digest_Support::is_disabled() ) {
+			return $this->digest_unavailable( 'integrity/bucket', 503 );
 		}
 
 		$range_start = $bucket * $bucket_size;
@@ -271,6 +281,16 @@ final class Integrity_Controller extends WP_REST_Controller {
 				);
 			}
 			$bucket = max( 0, (int) $bucket_raw );
+			if ( Digest_Support::is_disabled() ) {
+				return $this->digest_off_envelope(
+					array(
+						'bucket_size' => $bucket_size,
+						'bucket' => $bucket,
+					),
+					$started,
+					$collection
+				);
+			}
 			if ( true === Collections::row( $collection )['repair']['self_heal'] && $this->maybe_schedule_digest_rebuild() ) {
 				return rest_ensure_response(
 					$this->envelope(
@@ -300,6 +320,17 @@ final class Integrity_Controller extends WP_REST_Controller {
 		$first_bucket = $after_id > 0 ? ( (int) floor( $after_id / $bucket_size ) ) + 1 : 0;
 		$window_start = $first_bucket * $bucket_size;
 		$window_end   = ( $first_bucket + $limit_buckets ) * $bucket_size;
+
+		if ( Digest_Support::is_disabled() ) {
+			return $this->digest_off_envelope(
+				array(
+					'bucket_size' => $bucket_size,
+					'after_id' => $window_end - 1,
+				),
+				$started,
+				$collection
+			);
+		}
 
 		if ( true === Collections::row( $collection )['repair']['self_heal'] && $this->maybe_schedule_digest_rebuild() ) {
 			return rest_ensure_response(
@@ -583,12 +614,39 @@ final class Integrity_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * The scan answer when the digest is off (SQLite, #2661): nothing to report, and why.
+	 *
+	 * @param array  $checkpoint Checkpoint the client resumes from.
+	 * @param float  $started    Request start time.
+	 * @param string $collection Requested collection.
+	 */
+	private function digest_off_envelope( array $checkpoint, float $started, string $collection ): WP_REST_Response {
+		return rest_ensure_response(
+			$this->envelope( $checkpoint, array(), true, $started, 'Integrity digest is off on this database engine (SQLite); changes are tracked by the sequence log.', false, $collection, false )
+		);
+	}
+
+	/**
+	 * The error for a digest-backed route when the digest is off (SQLite, #2661).
+	 *
+	 * @param string $route  Route named in the message.
+	 * @param int    $status HTTP status.
+	 */
+	private function digest_unavailable( string $route, int $status ): WP_Error {
+		return new WP_Error(
+			'woocommerce_pos_sync_integrity_unavailable',
+			\sprintf( '%s is unavailable: the integrity digest is off on this database engine.', $route ),
+			array( 'status' => $status )
+		);
+	}
+
+	/**
 	 * Same envelope shape as class-changes-controller.php so the matrix client plumbing stays uniform.
 	 */
-	private function envelope( array $checkpoint, array $changes, bool $complete, float $started, ?string $note = null, bool $rebuilding = false, string $collection = 'products' ): array {
+	private function envelope( array $checkpoint, array $changes, bool $complete, float $started, ?string $note = null, bool $rebuilding = false, string $collection = 'products', bool $supported = true ): array {
 		$meta = array(
 			'duration_ms' => round( ( microtime( true ) - $started ) * 1000, 3 ),
-			'supported'   => true,
+			'supported'   => $supported,
 		);
 		if ( null !== $note ) {
 			$meta['note'] = $note;
