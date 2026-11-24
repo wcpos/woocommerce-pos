@@ -450,6 +450,41 @@ class Test_Activator extends WP_UnitTestCase {
 		$this->assertFalse( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
 	}
 
+	/** A marker write that fails during an upgrade leaves the role-caps sync pending, so the next check grants. */
+	public function test_failed_marker_write_during_version_check_leaves_sync_pending_and_retries(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$this->arrange_two_point_one_install( $activator );
+		update_option( self::DB_VERSION_OPTION, \WCPOS\WooCommercePOS\VERSION );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+		$reject = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+
+		// Act 1: the marker write is rejected.
+		add_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10, 2 );
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+		remove_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10 );
+
+		// Assert 1.
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+		$this->assertNotSame( $this->role_caps_fingerprint(), get_option( self::ROLE_CAPS_FINGERPRINT_OPTION ) );
+
+		// Act 2: the next check retries.
+		remove_all_actions( 'init' );
+		delete_option( self::DB_UPGRADE_LOCK_OPTION );
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert 2.
+		$this->assertTrue( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+		$this->assertSame( $this->role_caps_fingerprint(), get_option( self::ROLE_CAPS_FINGERPRINT_OPTION ) );
+	}
+
 	/** A fresh install grants view_woocommerce_pos_costs to the three default roles. */
 	public function test_fresh_install_grants_costs_to_the_default_roles(): void {
 		delete_option( self::ROLE_CAPS_SYNCED_OPTION );

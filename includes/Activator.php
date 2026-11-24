@@ -197,7 +197,8 @@ class Activator {
 		);
 
 		$marker = \is_array( $synced ) && isset( $synced['_introduced'] ) && \is_array( $synced['_introduced'] ) ? $synced['_introduced'] : array();
-		$marker = $this->grant_introduced_capabilities( $marker );
+		$marker_failed = false;
+		$marker        = $this->grant_introduced_capabilities( $marker, $marker_failed );
 
 		$stored_roles        = get_option( wp_roles()->role_key, array() );
 		$roles_are_persisted = is_array( $stored_roles );
@@ -221,7 +222,10 @@ class Activator {
 			// Snapshot first: a fingerprint that advanced past a failed snapshot
 			// write would never retry it.
 			update_option( 'woocommerce_pos_role_caps_synced', $capability_names + array( '_introduced' => $marker ), true );
-			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
+			// A failed marker write leaves the fingerprint stale so version_check() retries the grant.
+			if ( ! $marker_failed ) {
+				update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
+			}
 		}
 
 		// Flag the consent pop-up for the next admin page load, and open the
@@ -1317,10 +1321,11 @@ class Activator {
 	/**
 	 * Grant each newly introduced capability once, preserving later owner removals.
 	 *
-	 * @param array $marker Capability names mapped to their introduced version.
+	 * @param array $marker        Capability names mapped to their introduced version.
+	 * @param bool  $marker_failed Set true when a marker write failed and its grant was skipped.
 	 * @return array Updated marker, including legacy capabilities recorded without grants.
 	 */
-	private function grant_introduced_capabilities( array $marker ): array {
+	private function grant_introduced_capabilities( array $marker, bool &$marker_failed ): array {
 		foreach ( Permission_Registry::entries() as $entry ) {
 			$capability = $entry['capability'];
 			if ( isset( $marker[ $capability ] ) ) {
@@ -1330,6 +1335,7 @@ class Activator {
 				// Marker first: a grant whose marker failed to persist is skipped and retried,
 				// never repeated after the owner removes it.
 				if ( ! $this->persist_introduced_marker( $marker + array( $capability => $entry['introduced'] ), $capability ) ) {
+					$marker_failed = true;
 					continue;
 				}
 				$source = $entry['split_from'] ?? 'access_woocommerce_pos';

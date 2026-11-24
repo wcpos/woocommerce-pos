@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 require_once __DIR__ . '/../../Helpers/Withheld_Fields_Walk.php';
 
+use WCPOS\WooCommercePOS\Services\Withheld_Fields;
 use WCPOS\WooCommercePOS\Tests\Helpers\Withheld_Fields_Walk;
 use WCPOS\WooCommercePOS\Tests\Sync\Sync_REST_Store_Test_Case;
 use WP_REST_Request;
@@ -253,6 +254,22 @@ class Test_Withheld_Fields_Walk extends Sync_REST_Store_Test_Case {
 			$this->assertSame( 200, $status, $path . ' ' . wp_json_encode( $body ) );
 			$this->assertNotSame( array(), $this->cost_paths( $body ), $path );
 		}
+	}
+
+	/** A cookie request to an uppercase WCPOS namespace, which WordPress routes, is still withheld. */
+	public function test_restricted_cookie_request_with_uppercase_namespace_serves_no_cost(): void {
+		// Arrange.
+		$cashier = $this->restricted_cashier();
+		$this->sign_in_with_cookie( $cashier );
+		$request = $this->wp_rest_get_request( '/WCPOS/v2/products' );
+		$request->set_query_params( array( 'include' => array( $this->ids['simple'] ) ) );
+		// Act.
+		list( $status, $body ) = $this->serve( $request );
+		// Assert.
+		$this->assertSame( 200, $status, wp_json_encode( $body ) );
+		$this->assertCount( 1, $body );
+		$this->assert_no_cost( $body[0] );
+		$this->assertTrue( Withheld_Fields::applies_to( new WP_REST_Request( 'POST', '/WCPOS/V1/products/1' ) ) );
 	}
 
 	/** The four wc/v3 reads that carry cost. */

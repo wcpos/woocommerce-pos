@@ -67,7 +67,7 @@ final class Withheld_Fields {
 	 * @param WP_REST_Request $request Request.
 	 */
 	public static function applies_to( WP_REST_Request $request ): bool {
-		if ( 1 === preg_match( '#^/wcpos/v[12](/|$)#', (string) $request->get_route() ) ) {
+		if ( 1 === preg_match( '#^/wcpos/v[12](/|$)#i', (string) $request->get_route() ) ) {
 			return true;
 		}
 		$token_user = Auth::instance()->token_user_id();
