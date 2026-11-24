@@ -12,6 +12,7 @@ use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\ClientReportItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\EventItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\LogsItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\MetricsItem;
+use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\ProfileChunkItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\ProfileItem;
 use WCPOS\Vendor\Sentry\Serializer\EnvelopItems\TransactionItem;
 use WCPOS\Vendor\Sentry\Tracing\DynamicSamplingContext;
@@ -77,6 +78,9 @@ final class PayloadSerializer implements PayloadSerializerInterface
                 break;
             case EventType::metrics():
                 $items[] = MetricsItem::toEnvelopeItem($event);
+                break;
+            case EventType::profileChunk():
+                $items[] = ProfileChunkItem::toEnvelopeItem($event);
                 break;
             case EventType::clientReport():
                 $items[] = ClientReportItem::toEnvelopeItem($event);

@@ -20,6 +20,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WCPOS\WooCommercePOS\Services\Cashier;
+use WCPOS\WooCommercePOS\Services\Credential_Lockout;
 use WP_Error;
 use WP_User;
 
@@ -38,16 +39,6 @@ class Auth {
 	private const RATE_LIMIT_WINDOW = 900;
 
 	/**
-	 * Account lockout: max failed attempts per account and peer.
-	 */
-	private const MAX_FAILED_ATTEMPTS = 5;
-
-	/**
-	 * Account lockout: duration in seconds (15 minutes).
-	 */
-	private const LOCKOUT_DURATION = 900;
-
-	/**
 	 * Auth session expiration in seconds (10 minutes).
 	 */
 	private const AUTH_SESSION_EXPIRY = 600;
@@ -59,13 +50,13 @@ class Auth {
 	 * device with two variants installed (e.g. the store build and the dev
 	 * client) returns the login to the app that started it: `wcpos` for the
 	 * store build, `wcpos-dev` for the development client, `wcpos-adhoc` for
-	 * ad-hoc test builds (monorepo `apps/main/app.config.ts`). `exp` is the
-	 * Expo Go client. Matching is an exact `<scheme>://` prefix, so listing
-	 * `wcpos-dev` does not admit `wcpos-devious`.
+	 * ad-hoc test builds (monorepo `apps/main/app.config.ts`). Matching is an
+	 * exact `<scheme>://` prefix, so listing `wcpos-dev` does not admit
+	 * `wcpos-devious`.
 	 *
 	 * @var array
 	 */
-	private const ALLOWED_SCHEMES = array( 'wcpos', 'wcpos-dev', 'wcpos-adhoc', 'exp', 'https', 'http' );
+	private const ALLOWED_SCHEMES = array( 'wcpos', 'wcpos-dev', 'wcpos-adhoc', 'https', 'http' );
 
 	/**
 	 * Web origins that may receive a login redirect besides the site's own.
@@ -141,9 +132,8 @@ class Auth {
 		}
 
 		// Check IP rate limit before processing.
-		if ( $this->is_ip_rate_limited() ) {
-			$this->error = __( 'Too many requests. Please try again later.', 'woocommerce-pos' );
-			$this->log_auth_attempt( '', 'rate_limited' );
+		if ( Credential_Lockout::bucket_is_full( $this->ip_bucket(), self::MAX_ATTEMPTS_PER_IP ) ) {
+			$this->refuse_rate_limited();
 
 			return;
 		}
@@ -238,7 +228,7 @@ class Auth {
 					return $escaped && $this->is_allowed_web_destination( $escaped ) ? $escaped : '';
 				}
 
-				// For custom schemes (wcpos://, exp://), just return it
+				// For the app's own schemes (wcpos://, wcpos-dev://, wcpos-adhoc://), just return it
 				// These are app deep links, not web URLs.
 				return $uri;
 			}
@@ -395,8 +385,19 @@ class Auth {
 		$username = sanitize_user( wp_unslash( $_POST['wcpos-log'] ?? '' ) );
 		$password = isset( $_POST['wcpos-pwd'] ) ? wp_unslash( $_POST['wcpos-pwd'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Password must not be sanitized before authentication.
 
-		// Check if username is locked out.
-		if ( $this->is_username_locked( $username ) ) {
+		// Count the attempt against this peer before the password is checked, so overlapping
+		// requests cannot all pass on the same count (CWE-307).
+		$peer_attempt = Credential_Lockout::reserve_bucket_attempt( $this->ip_bucket(), self::MAX_ATTEMPTS_PER_IP, self::RATE_LIMIT_WINDOW );
+		if ( null === $peer_attempt ) {
+			$this->refuse_rate_limited();
+
+			return;
+		}
+
+		// Count the attempt before the password is checked; refuse a locked account.
+		$account_attempt = Credential_Lockout::reserve_attempt( $username );
+		if ( null === $account_attempt ) {
+			Credential_Lockout::release_bucket_attempt( $this->ip_bucket(), $peer_attempt );
 			$this->error = __( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', 'woocommerce-pos' );
 			$this->log_auth_attempt( $username, 'locked_out' );
 
@@ -407,16 +408,20 @@ class Auth {
 		$user = $this->authenticate_direct( $username, $password );
 
 		if ( is_wp_error( $user ) ) {
-			$this->record_failed_attempt( $username );
-			$this->increment_ip_attempts();
+			Credential_Lockout::record_failure( $username );
+			Credential_Lockout::record_bucket_failure( $this->ip_bucket(), self::RATE_LIMIT_WINDOW );
 			$this->log_auth_attempt( $username, 'failed', $user->get_error_code() );
 			$this->error = $user->get_error_message();
 
 			return;
 		}
 
+		// A right password is not a failure, so it gives back the peer's attempt.
+		Credential_Lockout::release_bucket_attempt( $this->ip_bucket(), $peer_attempt );
+
 		// Check if user has access to POS.
 		if ( ! Cashier::instance()->can_open_pos( $user ) ) {
+			Credential_Lockout::release_attempt( $username, $account_attempt );
 			$this->log_auth_attempt( $username, 'no_permission' );
 			$this->error = Cashier::instance()->missing_pos_capabilities_message( $user );
 
@@ -424,7 +429,7 @@ class Auth {
 		}
 
 		// Clear failed attempts on successful login.
-		$this->clear_failed_attempts( $username );
+		Credential_Lockout::clear( $username );
 
 		// Clean up auth session.
 		$session_key = 'wcpos_auth_session_' . md5( $this->state . $this->redirect_uri );
@@ -536,145 +541,22 @@ class Auth {
 	}
 
 	/**
-	 * Check if IP is rate limited.
-	 *
-	 * @return bool
-	 */
-	private function is_ip_rate_limited(): bool {
-		$ip            = $this->get_client_ip();
-		$transient_key = 'wcpos_auth_ip_' . md5( $ip );
-		$attempts      = (int) get_transient( $transient_key );
-
-		return $attempts >= self::MAX_ATTEMPTS_PER_IP;
-	}
-
-	/**
-	 * Increment IP attempt counter.
-	 *
-	 * @return void
-	 */
-	private function increment_ip_attempts(): void {
-		$ip            = $this->get_client_ip();
-		$transient_key = 'wcpos_auth_ip_' . md5( $ip );
-		$attempts      = (int) get_transient( $transient_key );
-
-		set_transient( $transient_key, $attempts + 1, self::RATE_LIMIT_WINDOW );
-	}
-
-	/**
-	 * Lockout bucket for an identifier as typed by this peer.
-	 *
-	 * The bucket is the canonical account (login and email aliases share it)
-	 * joined to the connecting peer, so a stranger's failures never lock the
-	 * cashier out from their own till, and rotating the typed alias does not
-	 * buy a second budget. An identifier that matches no account gets its own
-	 * bucket per peer so guessing unknown names is still counted.
-	 *
-	 * @param string $username The identifier as typed.
-	 *
-	 * @return string Hash used as the transient key suffix.
-	 */
-	private function lockout_key( string $username ): string {
-		$user = get_user_by( 'login', $username );
-		if ( ! $user ) {
-			$user = get_user_by( 'email', $username );
-		}
-		$subject = $user ? 'user:' . $user->ID : 'input:' . strtolower( trim( $username ) );
-
-		return md5( $subject . '|' . $this->get_client_ip() );
-	}
-
-	/**
-	 * Check if login is locked out for an account and peer.
-	 *
-	 * @param string $username The username to check.
-	 *
-	 * @return bool
-	 */
-	private function is_username_locked( string $username ): bool {
-		if ( empty( $username ) ) {
-			return false;
-		}
-
-		$username_key  = $this->lockout_key( $username );
-		$transient_key = 'wcpos_auth_lock_' . $username_key;
-
-		return false !== get_transient( $transient_key );
-	}
-
-	/**
-	 * Record a failed login attempt for an account and peer.
-	 *
-	 * @param string $username The username that failed.
-	 *
-	 * @return void
-	 */
-	private function record_failed_attempt( string $username ): void {
-		if ( empty( $username ) ) {
-			return;
-		}
-
-		$username_key = $this->lockout_key( $username );
-		$attempts_key = 'wcpos_auth_fail_' . $username_key;
-		$attempts     = (int) get_transient( $attempts_key );
-		$attempts++;
-
-		set_transient( $attempts_key, $attempts, self::LOCKOUT_DURATION );
-
-		// Lock account after max attempts.
-		if ( $attempts >= self::MAX_FAILED_ATTEMPTS ) {
-			$lock_key = 'wcpos_auth_lock_' . $username_key;
-			set_transient( $lock_key, time(), self::LOCKOUT_DURATION );
-
-			// Log the lockout.
-			Logger::log(
-				\sprintf(
-					'WCPOS Auth: Account locked - username: %s, IP: %s, attempts: %d',
-					$username,
-					$this->get_client_ip(),
-					$attempts
-				)
-			);
-		}
-	}
-
-	/**
-	 * Clear failed attempts for an account and peer after successful login.
-	 *
-	 * @param string $username The username to clear.
-	 *
-	 * @return void
-	 */
-	private function clear_failed_attempts( string $username ): void {
-		if ( empty( $username ) ) {
-			return;
-		}
-
-		$username_key = $this->lockout_key( $username );
-		delete_transient( 'wcpos_auth_fail_' . $username_key );
-		delete_transient( 'wcpos_auth_lock_' . $username_key );
-	}
-
-	/**
-	 * Get the server-established connecting peer address.
-	 *
-	 * Forwarded headers are caller-controlled unless the host rewrites them,
-	 * letting a caller choose its own bucket. A host behind a trusted proxy
-	 * normalises REMOTE_ADDR itself (mod_remoteip / real_ip), which is the only
-	 * trustworthy place for that policy.
+	 * The connecting peer's rate-limit bucket in Credential_Lockout's attempt rows.
 	 *
 	 * @return string
 	 */
-	private function get_client_ip(): string {
-		if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+	private function ip_bucket(): string {
+		return md5( 'peer:' . Credential_Lockout::client_ip() );
+	}
 
-			if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-				return $ip;
-			}
-		}
-
-		return 'unknown';
+	/**
+	 * Refuse a login because the connecting peer is over its rate limit.
+	 *
+	 * @return void
+	 */
+	private function refuse_rate_limited(): void {
+		$this->error = __( 'Too many requests. Please try again later.', 'woocommerce-pos' );
+		$this->log_auth_attempt( '', 'rate_limited' );
 	}
 
 	/**
@@ -691,7 +573,7 @@ class Auth {
 			'WCPOS Auth: %s - username: %s, IP: %s, state: %s',
 			$status,
 			$username ? $username : 'unknown',
-			$this->get_client_ip(),
+			Credential_Lockout::client_ip(),
 			substr( $this->state, 0, 8 ) . '...' // Truncate state for logs.
 		);
 

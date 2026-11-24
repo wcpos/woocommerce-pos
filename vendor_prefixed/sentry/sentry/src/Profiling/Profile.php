@@ -5,18 +5,22 @@ namespace WCPOS\Vendor\Sentry\Profiling;
 
 use WCPOS\Vendor\Psr\Log\LoggerInterface;
 use WCPOS\Vendor\Psr\Log\NullLogger;
+use WCPOS\Vendor\Sentry\ClientReport\ClientReportAggregator;
+use WCPOS\Vendor\Sentry\ClientReport\Reason;
 use WCPOS\Vendor\Sentry\Context\OsContext;
 use WCPOS\Vendor\Sentry\Context\RuntimeContext;
 use WCPOS\Vendor\Sentry\Event;
 use WCPOS\Vendor\Sentry\EventId;
 use WCPOS\Vendor\Sentry\Options;
-use WCPOS\Vendor\Sentry\Util\PrefixStripper;
+use WCPOS\Vendor\Sentry\Transport\DataCategory;
 use WCPOS\Vendor\Sentry\Util\SentryUid;
 /**
  * Type definition of the Sentry profile format.
  * All fields are none otpional.
  *
  * @see https://develop.sentry.dev/sdk/sample-format/
+ *
+ * @phpstan-import-type ExcimerLogStackEntry from ExcimerLogConverter
  *
  * @phpstan-type SentryProfileFrame array{
  *     abs_path: string,
@@ -60,21 +64,9 @@ use WCPOS\Vendor\Sentry\Util\SentryUid;
  *        stacks: array<int, array<int, int>>,
  *    },
  * }
- * @phpstan-type ExcimerLogStackEntryTrace array{
- *     file: string,
- *     line: int,
- *     class?: string,
- *     function?: string,
- *     closure_line?: int,
- * }
- * @phpstan-type ExcimerLogStackEntry array{
- *     trace: array<int, ExcimerLogStackEntryTrace>,
- *     timestamp: float
- * }
  */
 final class Profile
 {
-    use PrefixStripper;
     /**
      * @var string The version of the profile format
      */
@@ -145,95 +137,49 @@ final class Profile
     {
         if (!$this->validateExcimerLog()) {
             $this->logger->warning('The profile does not contain enough samples, the profile will be discarded.');
+            ClientReportAggregator::getInstance()->add(DataCategory::profile(), Reason::insufficientData(), 1);
             return null;
         }
         $osContext = $event->getOsContext();
         if (!$this->validateOsContext($osContext)) {
             $this->logger->warning('The OS context is not missing or invalid, the profile will be discarded.');
+            ClientReportAggregator::getInstance()->add(DataCategory::profile(), Reason::insufficientData(), 1);
             return null;
         }
         $runtimeContext = $event->getRuntimeContext();
         if (!$this->validateRuntimeContext($runtimeContext)) {
             $this->logger->warning('The runtime context is not missing or invalid, the profile will be discarded.');
+            ClientReportAggregator::getInstance()->add(DataCategory::profile(), Reason::insufficientData(), 1);
             return null;
         }
         if (!$this->validateEvent($event)) {
             $this->logger->warning('The event is missing a transaction and/or trace ID, the profile will be discarded.');
+            ClientReportAggregator::getInstance()->add(DataCategory::profile(), Reason::insufficientData(), 1);
             return null;
         }
+        $profileData = ExcimerLogConverter::convert($this->excimerLog, $this->options);
         $frames = [];
-        $frameHashMap = [];
-        $stacks = [];
-        $stackHashMap = [];
-        $registerStack = static function (array $stack) use(&$stacks, &$stackHashMap) : int {
-            $stackHash = \md5(\serialize($stack));
-            if (\array_key_exists($stackHash, $stackHashMap) === \false) {
-                $stackHashMap[$stackHash] = \count($stacks);
-                $stacks[] = $stack;
-            }
-            return $stackHashMap[$stackHash];
-        };
+        foreach ($profileData->getFrames() as $frame) {
+            $frames[] = ['filename' => $frame->getFilename(), 'abs_path' => $frame->getAbsPath(), 'module' => $frame->getModule(), 'function' => $frame->getFunction(), 'lineno' => $frame->getLineno()];
+        }
         $samples = [];
         $duration = 0;
-        $loggedStacks = $this->prepareStacks();
-        foreach ($loggedStacks as $stack) {
-            $stackFrames = [];
-            foreach ($stack['trace'] as $frame) {
-                $absolutePath = $frame['file'];
-                $lineno = $frame['line'];
-                $frameKey = "{$absolutePath}:{$lineno}";
-                $frameIndex = $frameHashMap[$frameKey] ?? null;
-                if ($frameIndex === null) {
-                    $file = $this->stripPrefixFromFilePath($this->options, $absolutePath);
-                    $module = null;
-                    if (isset($frame['class'], $frame['function'])) {
-                        // Class::method
-                        $function = $frame['class'] . '::' . $frame['function'];
-                        $module = $frame['class'];
-                    } elseif (isset($frame['function'])) {
-                        // {closure}
-                        $function = $frame['function'];
-                    } else {
-                        // /index.php
-                        $function = $file;
-                    }
-                    $frameHashMap[$frameKey] = $frameIndex = \count($frames);
-                    $frames[] = ['filename' => $file, 'abs_path' => $absolutePath, 'module' => $module, 'function' => $function, 'lineno' => $lineno];
-                }
-                $stackFrames[] = $frameIndex;
-            }
-            $stackId = $registerStack($stackFrames);
-            $duration = $stack['timestamp'];
-            $samples[] = ['stack_id' => $stackId, 'thread_id' => self::THREAD_ID, 'elapsed_since_start_ns' => (int) \round($duration * 1000000000.0)];
+        foreach ($profileData->getSamples() as $sample) {
+            $duration = $sample->getTimestamp();
+            $samples[] = ['stack_id' => $sample->getStackId(), 'thread_id' => self::THREAD_ID, 'elapsed_since_start_ns' => (int) \round($duration * 1000000000.0)];
         }
         if (!$this->validateMaxDuration((float) $duration)) {
             $this->logger->warning(\sprintf('The profile is %ss which is longer than the allowed %ss, the profile will be discarded.', (float) $duration, self::MAX_PROFILE_DURATION));
+            ClientReportAggregator::getInstance()->add(DataCategory::profile(), Reason::invalid(), 1);
             return null;
         }
         $startTime = \DateTime::createFromFormat('U.u', \number_format($this->startTimeStamp, 4, '.', ''), new \DateTimeZone('UTC'));
         if ($startTime === \false) {
             $this->logger->warning(\sprintf('The start time (%s) of the profile is not valid, the profile will be discarded.', $this->startTimeStamp));
+            ClientReportAggregator::getInstance()->add(DataCategory::profile(), Reason::invalid(), 1);
             return null;
         }
-        return ['device' => ['architecture' => $osContext->getMachineType()], 'event_id' => $this->eventId ? (string) $this->eventId : SentryUid::generate(), 'os' => ['name' => $osContext->getName(), 'version' => $osContext->getVersion(), 'build_number' => $osContext->getBuild() ?? ''], 'platform' => 'php', 'release' => $event->getRelease() ?? '', 'environment' => $event->getEnvironment() ?? Event::DEFAULT_ENVIRONMENT, 'runtime' => ['name' => $runtimeContext->getName(), 'sapi' => $runtimeContext->getSAPI(), 'version' => $runtimeContext->getVersion()], 'timestamp' => $startTime->format(\DATE_RFC3339_EXTENDED), 'transaction' => ['id' => (string) $event->getId(), 'name' => $event->getTransaction(), 'trace_id' => $event->getTraceId(), 'active_thread_id' => self::THREAD_ID], 'version' => self::VERSION, 'profile' => ['frames' => $frames, 'samples' => $samples, 'stacks' => $stacks]];
-    }
-    /**
-     * This method is mainly used to be able to mock the ExcimerLog class in the tests.
-     *
-     * @return array<int, ExcimerLogStackEntry>
-     */
-    private function prepareStacks() : array
-    {
-        $stacks = [];
-        foreach ($this->excimerLog as $stack) {
-            if ($stack instanceof \WCPOS\Vendor\ExcimerLogEntry) {
-                $stacks[] = ['trace' => $stack->getTrace(), 'timestamp' => $stack->getTimestamp()];
-            } else {
-                /** @var ExcimerLogStackEntry $stack */
-                $stacks[] = $stack;
-            }
-        }
-        return $stacks;
+        return ['device' => ['architecture' => $osContext->getMachineType()], 'event_id' => $this->eventId ? (string) $this->eventId : SentryUid::generate(), 'os' => ['name' => $osContext->getName(), 'version' => $osContext->getVersion(), 'build_number' => $osContext->getBuild() ?? ''], 'platform' => 'php', 'release' => $event->getRelease() ?? '', 'environment' => $event->getEnvironment() ?? Event::DEFAULT_ENVIRONMENT, 'runtime' => ['name' => $runtimeContext->getName(), 'sapi' => $runtimeContext->getSAPI(), 'version' => $runtimeContext->getVersion()], 'timestamp' => $startTime->format(\DATE_RFC3339_EXTENDED), 'transaction' => ['id' => (string) $event->getId(), 'name' => $event->getTransaction(), 'trace_id' => $event->getTraceId(), 'active_thread_id' => self::THREAD_ID], 'version' => self::VERSION, 'profile' => ['frames' => $frames, 'samples' => $samples, 'stacks' => $profileData->getStacks()]];
     }
     private function validateExcimerLog() : bool
     {

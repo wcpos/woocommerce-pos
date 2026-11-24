@@ -188,6 +188,33 @@ class Pos_Uuid {
 	}
 
 	/**
+	 * Clear copied-store account identities; replacements are minted on next use.
+	 * Network accounts are shared across sites and must keep their identities.
+	 *
+	 * @return int|null Users reset, zero on multisite or when none exist, or null on deletion failure.
+	 */
+	public static function reset_user_uuids(): ?int {
+		if ( is_multisite() ) {
+			return 0;
+		}
+		global $wpdb;
+		$counted = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Count users before deleting their identity meta through the metadata API.
+			$wpdb->prepare( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->usermeta} WHERE meta_key = %s", self::META_KEY )
+		);
+		// One rule for both queries: a failed count or a refused delete is null, never a
+		// number. A count that did not run answers null here, not zero.
+		if ( null === $counted ) {
+			return null;
+		}
+		$count = (int) $counted;
+		if ( 0 === $count ) {
+			return 0;
+		}
+
+		return delete_metadata( 'user', 0, self::META_KEY, '', true ) ? $count : null;
+	}
+
+	/**
 	 * Legacy WP_User adapter for the shared WC_Data identity path (ADR 0021).
 	 *
 	 * @param mixed $user WP_User-like object or numeric user id.

@@ -157,6 +157,8 @@ class Settings {
 		$store_options = apply_filters_deprecated( 'woocommerce_pos_cloud_print_store_options', array( $store_options ), '2.0.0', 'wcpos_cloud_print_store_options' );
 		$anon_id         = ( new \WCPOS\WooCommercePOS\Services\Anon_ID() )->get();
 		$site_uuid       = get_option( 'woocommerce_pos_uuid', '' );
+		// Embedded data is encoded with markup characters hex-escaped.
+		$json_flags      = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
@@ -174,28 +176,29 @@ class Settings {
             anon_id: %s,
             site_uuid: %s
         }; wcpos.translationVersion = %s;',
-			json_encode(
+			wp_json_encode(
 				array(
 					'cloudflare'    => ( new Cloudflare_Detector() )->detect(),
 					'order_storage' => array(
 						'hpos'         => Order_Meta_Store::hpos(),
 						'settings_url' => admin_url( 'admin.php?page=wc-settings&tab=advanced&section=features' ),
 					),
-				)
+				),
+				$json_flags
 			),
-			json_encode( $barcodes ),
-			json_encode( $order_statuses ),
-			json_encode( $countries ),
-			json_encode( $store_country ),
-			json_encode( html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ) ),
-			json_encode( function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 ),
-			json_encode( array_values( (array) $store_options ) ),
-			json_encode( $update_ext_count ),
-			json_encode( $unread_logs ),
-			json_encode( $current_user_id ),
-			json_encode( $anon_id ),
-			json_encode( $site_uuid ),
-			json_encode( TRANSLATION_VERSION )
+			wp_json_encode( $barcodes, $json_flags ),
+			wp_json_encode( $order_statuses, $json_flags ),
+			wp_json_encode( $countries, $json_flags ),
+			wp_json_encode( $store_country, $json_flags ),
+			wp_json_encode( html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ), $json_flags ),
+			wp_json_encode( function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2, $json_flags ),
+			wp_json_encode( array_values( (array) $store_options ), $json_flags ),
+			wp_json_encode( $update_ext_count, $json_flags ),
+			wp_json_encode( $unread_logs, $json_flags ),
+			wp_json_encode( $current_user_id, $json_flags ),
+			wp_json_encode( $anon_id, $json_flags ),
+			wp_json_encode( $site_uuid, $json_flags ),
+			wp_json_encode( TRANSLATION_VERSION, $json_flags )
 		);
 	}
 

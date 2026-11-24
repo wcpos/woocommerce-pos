@@ -37,6 +37,7 @@ class Order_Email_Controller extends \WCPOS\WooCommercePOS\API\V1\Orders_Control
 						array(
 							'email'   => array(
 								'type'        => 'string',
+								'format'      => 'email',
 								'description' => /* translators: REST API schema field label or error message. */ __( 'Email address', 'woocommerce-pos' ),
 								'required'    => true,
 							),

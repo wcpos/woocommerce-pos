@@ -958,28 +958,6 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that manual email endpoint handles invalid email address.
-	 *
-	 * Note: Currently the endpoint accepts any string as email and relies on WooCommerce
-	 * to handle/fail the actual send. This test documents current behavior.
-	 * TODO: Consider adding email format validation to the endpoint.
-	 */
-	public function test_manual_email_accepts_string_email(): void {
-		$order = OrderHelper::create_order();
-
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
-		$request->set_body_params(
-			array(
-				'email' => 'invalid-email-address',
-			)
-		);
-		$response = $this->server->dispatch( $request );
-
-		// Currently accepts any string - WooCommerce handles validation during send
-		$this->assertEquals( 200, $response->get_status(), 'Endpoint accepts any string as email' );
-	}
-
-	/**
 	 * Test that manual email endpoint requires an email address.
 	 */
 	public function test_manual_email_requires_email_param(): void {

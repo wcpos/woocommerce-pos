@@ -46,6 +46,10 @@ class DataCategory
     {
         return self::getInstance('profile');
     }
+    public static function profileChunk() : self
+    {
+        return self::getInstance('profile_chunk');
+    }
     public static function attachment() : self
     {
         return self::getInstance('attachment');

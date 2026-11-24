@@ -323,6 +323,35 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/** A failed render is logged at error level, so it reaches Sentry, with its cause in the context. */
+	public function test_get_receipt_pdf_render_failure_logs_the_cause_at_error_level(): void {
+		$logs    = array();
+		$capture = static function ( $enabled, $message ) use ( &$logs ) {
+			$logs[] = array( \WCPOS\WooCommercePOS\Logger::$log_level, explode( ' | Context: ', $message, 2 ) );
+			return false;
+		};
+		$doc = $this->getMockBuilder( \stdClass::class )->addMethods( array( 'get_pdf' ) )->getMock();
+		$doc->method( 'get_pdf' )->willThrowException( new \RuntimeException( 'font missing' ) );
+		add_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter( 'wcpos_wp_overnight_pdf_document', static fn () => $doc );
+		add_filter( 'wcpos_logging', $capture, 10, 2 );
+		try {
+			$order   = OrderHelper::create_order();
+			$request = $this->wp_rest_get_request( '/wcpos/v2/receipts/' . $order->get_id() . '/pdf' );
+			$request->set_param( 'template_id', 'wp-overnight-invoice' );
+			$response = $this->server->dispatch( $request );
+		} finally {
+			remove_filter( 'wcpos_logging', $capture, 10 );
+			remove_all_filters( 'wcpos_wp_overnight_pdf_document' );
+			remove_filter( 'wcpos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		}
+		$errors = array_values( array_filter( $logs, static fn ( $l ) => array( 'error', 'Receipt PDF render failed' ) === array( $l[0], $l[1][0] ) ) );
+		$this->assertSame( array( 500, 'wcpos_receipt_pdf_failed', 1 ), array( $response->get_status(), $response->get_data()['code'], \count( $errors ) ) );
+		$context = json_decode( $errors[0][1][1], true );
+		$this->assertSame( array( $order->get_id(), 'RuntimeException', 'font missing' ), array( $context['order_id'], $context['exception'], $context['message'] ) );
+		$this->assertMatchesRegularExpression( '/^Test_Receipts_Controller\.php:\d+$/', $context['at'] );
+	}
+
 	/**
 	 * Test PDF endpoint sets no-store cache header.
 	 */

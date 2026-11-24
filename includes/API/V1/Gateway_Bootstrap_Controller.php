@@ -101,6 +101,14 @@ class Gateway_Bootstrap_Controller extends WC_REST_Controller {
 			);
 		}
 
+		if ( ! $this->gateway_contract->is_pos_enabled( $gateway ) ) {
+			return new WP_Error(
+				'wcpos_payment_gateway_not_available',
+				__( 'Payment gateway is not available for POS checkout.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$context = (array) $request->get_param( 'context' );
 		$data    = $this->gateway_contract->get_bootstrap_response( $gateway_id, $context, $request, $gateway );
 

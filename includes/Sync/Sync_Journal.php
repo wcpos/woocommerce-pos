@@ -95,6 +95,8 @@ final class Sync_Journal {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		}
 		dbDelta( $this->schema_sql( $table_name, $wpdb->get_charset_collate() ) );
+		$db_error = (string) $wpdb->last_error; // Read before the probe below clears it.
+		Health::log_if_missing( $table_name, $db_error );
 
 		if ( ! $table_existed && Health::table_exists( $table_name ) ) {
 			self::reset_prune_watermarks();

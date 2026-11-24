@@ -658,15 +658,13 @@ class Receipt_Data_Builder {
 			$line_subtotal_tax  = (float) $item->get_subtotal_tax();
 			$line_subtotal_incl = $line_subtotal_excl + $line_subtotal_tax;
 
-			$qty = (float) $item->get_quantity();
-			if ( $qty <= 0 ) {
-				$qty = 0.0;
-			}
+			// Signed: a returned line keeps its negative qty; only zero is guarded, against division by zero.
+			$qty                = (float) $item->get_quantity();
 			$calc_dp            = wc_get_price_decimals();
-			$unit_price_incl    = $qty > 0 ? round( $line_total_incl / $qty, $calc_dp ) : 0.0;
-			$unit_price_excl    = $qty > 0 ? round( $line_total_excl / $qty, $calc_dp ) : 0.0;
-			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $calc_dp ) : 0.0;
-			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $calc_dp ) : 0.0;
+			$unit_price_incl    = 0.0 !== $qty ? round( $line_total_incl / $qty, $calc_dp ) : 0.0;
+			$unit_price_excl    = 0.0 !== $qty ? round( $line_total_excl / $qty, $calc_dp ) : 0.0;
+			$unit_subtotal_incl = 0.0 !== $qty ? round( $line_subtotal_incl / $qty, $calc_dp ) : 0.0;
+			$unit_subtotal_excl = 0.0 !== $qty ? round( $line_subtotal_excl / $qty, $calc_dp ) : 0.0;
 
 			$discounts_incl = max( 0, $line_subtotal_incl - $line_total_incl );
 			$discounts_excl = max( 0, $line_subtotal_excl - $line_total_excl );
@@ -818,6 +816,23 @@ class Receipt_Data_Builder {
 			),
 			$display_incl
 		);
+		// Never a negative You saved.
+		foreach ( array( 'total_saved', 'total_saved_incl', 'total_saved_excl', 'sale_savings_total', 'sale_savings_total_incl', 'sale_savings_total_excl' ) as $key ) {
+			if ( null !== $totals[ $key ] ) {
+				$totals[ $key ] = max( 0.0, $totals[ $key ] );
+			}
+		}
+		// A return shows no Savings row; the sale's saved total nets returns before this point.
+		foreach ( $lines as &$line ) {
+			if ( (float) $line['qty'] < 0.0 ) {
+				foreach ( array( 'line_savings', 'line_savings_incl', 'line_savings_excl', 'line_regular_total', 'line_regular_total_incl', 'line_regular_total_excl', 'line_selling_total', 'line_selling_total_incl', 'line_selling_total_excl' ) as $key ) {
+					if ( null !== $line[ $key ] ) {
+						$line[ $key ] = 0.0;
+					}
+				}
+			}
+		}
+		unset( $line );
 
 		// A payable order has taken no payment yet: an empty list, so templates skip their PAID block
 		// ({{#payments.0}}) instead of printing the total as if it had been received. Ledger rows,

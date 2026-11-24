@@ -1866,6 +1866,7 @@ class Ledger {
 	 * @param WC_Order $order The caller's order.
 	 */
 	private function refresh( WC_Order $order ): void {
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$order->get_data_store()->read( $order );
 		$order->read_meta_data( true );
 		// Its items too (a tip fee the write added): WooCommerce reads them again on the next get_items().
@@ -2803,12 +2804,20 @@ class Ledger {
 	}
 
 	/**
-	 * The order and its meta as storage holds them.
+	 * The order and its meta as storage holds them. This request's copies are dropped first, so a status
+	 * another request committed since it cached the order is the one read: posts storage reads through
+	 * the posts and post meta caches, HPOS through WooCommerce's order cache and, when its data-store
+	 * caching is on, the order row and meta caches.
 	 *
 	 * @param int $id Order id.
 	 * @throws Ledger_Persistence_Exception When the order cannot be read.
 	 */
 	private function fresh( int $id ): WC_Order {
+		clean_post_cache( $id );
+		if ( class_exists( \Automattic\WooCommerce\Caches\OrderCache::class ) ) {
+			wc_get_container()->get( \Automattic\WooCommerce\Caches\OrderCache::class )->remove( $id );
+		}
+		Order_Meta_Store::forget_datastore_cache( $id );
 		$order = wc_get_order( $id );
 		if ( ! $order instanceof WC_Order ) {
 			throw Ledger_Persistence_Exception::at( 'rows', 'WCPOS order could not be read.' );

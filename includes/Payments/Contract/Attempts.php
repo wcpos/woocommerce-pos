@@ -238,6 +238,7 @@ final class Attempts {
 			return null; // Busy: the holder or the next sweep asks.
 		}
 		try {
+			\WCPOS\WooCommercePOS\Services\Order_Meta_Store::forget_datastore_cache( $id );
 			$fresh = wc_get_order( $id );
 			if ( $fresh instanceof WC_Order ) {
 				$fresh->read_meta_data( true );
@@ -276,6 +277,8 @@ final class Attempts {
 					if ( 'sent' !== ( $now['fate'] ?? null ) && ! ( 'paid' === $now['fate'] && null === $d->row( $now['id'] ) ) ) {
 						return false;
 					}
+					// The row is what the gateway took: the answer's amount, read in the request that saw the sale paid.
+					// Minted even if the sale was since reopened or its total changed: date_paid stands. Tests pin it.
 					if ( 'captured' === $status ) {
 						$cashier = (int) $now['cashier_id'];
 						$row     = array(

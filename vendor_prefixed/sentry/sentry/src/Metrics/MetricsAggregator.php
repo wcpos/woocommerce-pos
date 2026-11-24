@@ -93,11 +93,17 @@ final class MetricsAggregator
                 }
             } catch (\Throwable $exception) {
                 $client->getOptions()->getLoggerOrNullLogger()->error(\sprintf('The "before_send_metric" callback failed with exception: "%s".', $exception->getMessage()));
+                ClientReportAggregator::getInstance()->add(DataCategory::metric(), Reason::beforeSend(), 1);
                 return;
             }
         }
         $metrics = $this->getStorage($metricFlushThreshold);
+        $metricCount = \count($metrics);
         $metrics->push($metric);
+        // A full bounded buffer drops its oldest metric on push, so the count stays the same
+        if (\count($metrics) === $metricCount) {
+            ClientReportAggregator::getInstance()->add(DataCategory::metric(), Reason::bufferOverflow(), 1);
+        }
         if ($metricFlushThreshold !== null && \count($metrics) >= $metricFlushThreshold) {
             $this->flush($hub);
         }
