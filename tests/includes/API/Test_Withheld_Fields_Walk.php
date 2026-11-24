@@ -183,6 +183,7 @@ class Test_Withheld_Fields_Walk extends Sync_REST_Store_Test_Case {
 			'v1 product batch'     => fn() => $this->json_post( '/wcpos/v1/products/batch', array( 'update' => array( $cost + array( 'id' => $this->ids['simple'] ) ) ) ),
 			'v1 variation update'  => fn() => $this->json_post( $v1_var . '/' . $this->ids['variation'], $cost ),
 			'v1 variation batch'   => fn() => $this->json_post( $v1_var . '/batch', array( 'update' => array( $cost + array( 'id' => $this->ids['variation'] ) ) ) ),
+			'wc/v3 product update' => fn() => $this->json_post( '/wc/v3/products/' . $this->ids['simple'], $cost + array( 'name' => 'Renamed over wc/v3' ) ),
 			'v1 order create'      => fn() => $this->json_post(
 				'/wcpos/v1/orders',
 				array(
