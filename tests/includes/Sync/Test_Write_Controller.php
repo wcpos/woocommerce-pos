@@ -2710,6 +2710,20 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
 	}
 
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_correction_leaves_when_its_completion_is_reopened( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$order->update_meta_data( '_wcpos_sale_day', '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Previous correction","by":1}' );
+		$order->update_meta_data( '_wcpos_sale_day_at', '1795425120' );
+		$order->save();
+		// The one place every reopen passes through, whichever entry point changed the status.
+		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reopen( wc_get_order( $order->get_id() ) );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day_at' ) );
+	}
+
 	public function saleDayReopens(): array {
 		return array(
 			'manager CPT' => array( false, 'shop_manager', 'pos-open' ),

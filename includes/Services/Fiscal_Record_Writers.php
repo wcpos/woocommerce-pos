@@ -205,8 +205,8 @@ final class Fiscal_Record_Writers {
 				'store_id' => ctype_digit( $store ) && (int) $store > 0 ? (int) $store : null,
 				'cashier_id' => $provenance['cashier_id'],
 				'corrects_record_id' => $sale['id'],
-				// The identity is the order's state before the change: a retry after a failed save reuses its record.
-				'source_id' => Fiscal_Record_Store::digest_source_id( 'sale_day:' . $sale['id'] . ':' . $to_gmt . ':' . md5( (string) wp_json_encode( $order->get_meta( '_wcpos_sale_day' ) ) ) ),
+				// The identity is the request and the order's state before it: the same manager's retry after a failed save reuses its record.
+				'source_id' => Fiscal_Record_Store::digest_source_id( 'sale_day:' . $sale['id'] . ':' . $to_gmt . ':' . $actor_id . ':' . md5( $reason . wp_json_encode( $order->get_meta( '_wcpos_sale_day' ) ) ) ),
 				'approver_id' => $actor_id,
 				'payload' => array(
 					'changes' => array(

@@ -822,12 +822,8 @@ class Order_Writer extends Null_Writer {
 		if ( ! $order ) {
 			return;
 		}
+		// A reopen drops the correction with its completion (Completion_Stamp::reopen()).
 		if ( ! empty( $context['reopens'] ) ) {
-			if ( $order->meta_exists( '_wcpos_sale_day' ) ) {
-				$order->delete_meta_data( '_wcpos_sale_day' );
-				$order->delete_meta_data( '_wcpos_sale_day_at' );
-				$order->save();
-			}
 			return;
 		}
 		$value = $context['sale_day'] ?? null;
