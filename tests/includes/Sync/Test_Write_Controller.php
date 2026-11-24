@@ -2765,6 +2765,18 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( strtotime( $stored['changed_at_gmt'] ), strtotime( $records[0]['payload']['changed_at_gmt'] . ' UTC' ) );
 	}
 
+	public function test_sale_day_retry_keeps_the_reused_records_change_time(): void {
+		$order = $this->saleDayOrder( false );
+		$this->seedSaleDaySale( $order );
+		// The record of an earlier attempt whose order save failed.
+		$this->assertTrue( \WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T01:00:00Z', '2026-11-23T09:12:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day"}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$stored = json_decode( wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ), true );
+		$this->assertCount( 1, $this->saleDayRecords( $order->get_id() ) );
+		$this->assertSame( '2026-11-24T10:11:12Z', $stored['changed_at_gmt'] );
+	}
+
 	public function saleDayStorage(): array {
 		return array(
 			'CPT' => array( false ),

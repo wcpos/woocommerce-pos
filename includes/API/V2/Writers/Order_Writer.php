@@ -858,6 +858,17 @@ class Order_Writer extends Null_Writer {
 			$order->add_order_note( __( 'POS sale day change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
 			return;
 		}
+		// A reused record (the retry of a request whose save failed) keeps its own change time; the order follows the record.
+		$record = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $id,
+				'type' => 'sale_day_correction',
+				'per_page' => 1,
+			)
+		)[0] ?? null;
+		if ( $record && ( $record['payload']['changes'][0]['to'] ?? null ) === $to_gmt && ! empty( $record['payload']['changed_at_gmt'] ) ) {
+			$changed_at = (int) strtotime( $record['payload']['changed_at_gmt'] . ' UTC' );
+		}
 		$order->update_meta_data(
 			'_wcpos_sale_day',
 			wp_json_encode(
