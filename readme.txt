@@ -4,7 +4,7 @@ Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.5
+Stable tag: 2.0.6
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -299,6 +299,18 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 
 Older releases are listed on [GitHub](https://github.com/wcpos/woocommerce-pos/releases).
 
+= 2.0.6 - 2026/11/25 =
+
+Paying for orders, the POS login and manager approvals are better protected, and a card hold no longer stays on the customer's card after its order is deleted.
+
+* Security: paying for an order, checking it out or changing its email needs the right to edit it; if you limited cashiers' order rights, test payments.
+* Security: manager approvals lock after five wrong passwords, like the POS login; cashiers can no longer change another store's register sessions.
+* WCPOS now cancels a card hold when its order is deleted, and releases the hold of an order in the trash once it runs out.
+* Moving a returned item to another product on a reopened sale now moves its stock too.
+* New: a store copied from another store's database can give its users new POS identities in WooCommerce > Status > Tools, so cashiers sign in to both.
+* New: the plugin saves a manager's correction of the day a paid sale counts on, with a reason and an order note; the app adds the control later.
+* Also fixes security in WP Admin pages, settings screens on a phone, memory use during sync and sites running on SQLite; the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/v2.0.6).
+
 = 2.0.5 - 2026/11/20 =
 
 A manager can now move a sale to another cashier, and guest payments on the pay page work again on WooCommerce 11.3.1.
@@ -333,12 +345,6 @@ Online shop pages load faster on stores with many POS Only products, and the dai
 * Online shop pages load faster on stores with many POS Only products, which are now looked up once per page instead of once per product.
 * The daily file check no longer reports a healthy install as modified when an update lands while the old code is still running.
 
-= 2.0.1 - 2026/11/10 =
-
-Cash and card payments at the till work again on some stores.
-
-* POS Cash and Card take payments again where another plugin loads WooCommerce's payment methods early (PAYMENT999 "Payment method not found").
-
 = 2.0.0 - 2026/11/09 =
 
 WCPOS 2.0 gives the POS its own checkout, with cash, split payments and card readers (Pro) at the till, and the till keeps taking cash when the connection drops.
@@ -361,5 +367,5 @@ For testers coming from the 2.0 beta 3: a sale, refund or payment change saved w
 
 == Upgrade Notice ==
 
-= 2.0.5 =
+= 2.0.6 =
 Coming from 1.11? WCPOS 2.0 is a major update with a new interface: update when you have time, not during a busy shift. Sync every till first: unsent 1.11 sales do not carry over. The app must be on 2.0 too, and 2.0 needs WooCommerce 9.0 or later. https://docs.wcpos.com/getting-started/whats-new
