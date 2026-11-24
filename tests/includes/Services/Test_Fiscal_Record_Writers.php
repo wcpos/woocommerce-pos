@@ -119,7 +119,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$to = '2026-11-23T09:00:00Z';
 		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
 
-		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, $actor, $from, $to, 'Correct sale day' ) );
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, $actor, $from, $to, 'Correct sale day', '2026-11-24 10:11:12' ) );
 
 		$this->assertContains( 'sale_day_correction', Fiscal_Record_Store::TYPES );
 		$records = ( new Fiscal_Record_Store() )->list(
@@ -131,6 +131,9 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $records );
 		$this->assertSame( $sales[1]['id'], $records[0]['corrects_record_id'] );
 		$this->assertSame( $actor, $records[0]['approver_id'] );
+		$this->assertSame( 12, $records[0]['store_id'] );
+		$this->assertSame( $actor, $records[0]['cashier_id'] );
+		$this->assertSame( '2026-11-24 10:11:12', $records[0]['payload']['changed_at_gmt'] );
 		$this->assertSame(
 			array(
 				array(
@@ -143,17 +146,35 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertSame( 'Correct sale day', $records[0]['payload']['reason'] );
 		$this->assertSame( $actor, $records[0]['payload']['changed_by'] );
-		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id', 'cashier_id', 'store_id' ) as $key ) {
+		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id' ) as $key ) {
 			$this->assertNull( $records[0][ $key ], $key );
 		}
 		$this->assertSame( $sales, $this->sales( $order->get_id() ) );
+	}
+
+	/** Non-numeric store identifiers never become numeric record attribution. */
+	public function test_sale_day_correction_non_numeric_store_is_not_coerced(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$order->update_meta_data( '_pos_store', '12-store' );
+		$order->save();
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'sale_day_correction',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertNull( $records[0]['store_id'] );
+		$this->assertSame( get_current_user_id(), $records[0]['cashier_id'] );
 	}
 
 	/** Sale-day correction follows the existing attribution record contract. */
 	public function test_sale_day_correction_without_sale_returns_true(): void {
 		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
 		$order = $this->order();
-		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
 		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
 	}
 
@@ -171,7 +192,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
 
 		// Act and assert.
-		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
 		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
 	}
 
@@ -189,7 +210,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10, 2 );
 		add_action( 'wcpos_fiscal_record_failed', $observe );
 		try {
-			$result = Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' );
+			$result = Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' );
 		} finally {
 			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10 );
 			remove_action( 'wcpos_fiscal_record_failed', $observe );
@@ -224,7 +245,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				$this->assertSame( array( $latest['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
 
 				// Act and assert: recovery still cannot insert the latest sale.
-				$this->assertFalse( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+				$this->assertFalse( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
 			}
 		);
 		$this->assertCount( 1, $this->sales( $order->get_id() ) );
@@ -258,7 +279,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $this->sales( $order->get_id() ) );
 
 		// Act.
-		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day' ) );
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
 
 		// Assert.
 		$sales = $this->sales( $order->get_id() );

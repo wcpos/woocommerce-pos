@@ -10,6 +10,7 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
@@ -24,6 +25,7 @@ use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -130,12 +132,17 @@ class Order_Writer extends Null_Writer {
 
 	/**
 	 * Hold the order lock (the one the money commands hold) from the
-	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b),
+	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b) or correct a sale day,
 	 * so a capture cannot land between the compare and the write. The Mutation_Store record
 	 * lock is already held; Order_Lock falls back to its option lease on servers that cannot
 	 * nest named locks. A note-only push takes no order lock.
 	 */
 	public function with_write_lock( int $id, array $payload, callable $work ) {
+		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
+			if ( '_wcpos_sale_day' === Meta_Entry::key( $entry ) ) {
+				return self::under_order_lock( $id, $work );
+			}
+		}
 		if ( ! array_intersect( self::MONEY_SENSITIVE_KEYS, array_keys( $payload ) ) ) {
 			return $work();
 		}
@@ -716,6 +723,7 @@ class Order_Writer extends Null_Writer {
 		// One state from the locked pre-read; adopt_original_tender() moves neither the status nor the completion.
 		$state         = $order ? Ledger::instance()->sale_state( $order ) : null;
 		$reopens       = $state && $state->reopens( (string) ( $forward['status'] ?? '' ) );
+		$context['reopens'] = $reopens;
 		$refusal       = $state ? $this->money_gate( $order, $state, $forward, $lines_changed ) : null;
 		if ( null === $refusal && $reopens ) {
 			$refusal = self::adopt_original_tender( $order );
@@ -810,32 +818,46 @@ class Order_Writer extends Null_Writer {
 
 	/** Correct a paid sale's reporting day only after its change record has been written. */
 	private function persist_sale_day_correction( int $id, array $current, array $data, array $context ): void {
+		$order = wc_get_order( $id );
+		if ( ! $order ) {
+			return;
+		}
+		if ( ! empty( $context['reopens'] ) ) {
+			if ( $order->meta_exists( '_wcpos_sale_day' ) ) {
+				$order->delete_meta_data( '_wcpos_sale_day' );
+				$order->delete_meta_data( '_wcpos_sale_day_at' );
+				$order->save();
+			}
+			return;
+		}
 		$value = $context['sale_day'] ?? null;
-		$reopens = 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' );
-		if ( ! is_string( $value ) || $reopens || ! current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
+		if ( ! is_string( $value ) || strlen( $value ) > 4096 || ! current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
 			return;
 		}
 		$change = json_decode( $value, true );
 		if ( ! is_array( $change ) || ! is_string( $change['at_gmt'] ?? null ) || ! is_string( $change['reason'] ?? null ) ) {
 			return;
 		}
-		$timestamp = $this->order_payload->validate_client_created_gmt( array( 'date_created_gmt' => $change['at_gmt'] ) );
-		$reason = trim( $change['reason'] );
-		if ( ! is_int( $timestamp ) || $timestamp > time() || '' === $reason || mb_strlen( $reason ) > 500 ) {
+		if ( array_key_exists( 'by', $change ) || array_key_exists( 'changed_at_gmt', $change ) ) {
 			return;
 		}
-		$order = wc_get_order( $id );
-		if ( ! $order || ( ! $order->get_date_paid() && null === Completion_Origin::latest_captured( $order ) ) ) {
+		$timestamp = $this->order_payload->validate_client_created_gmt( array( 'date_created_gmt' => $change['at_gmt'] ) );
+		$reason = trim( sanitize_textarea_field( $change['reason'] ) );
+		if ( ! is_int( $timestamp ) || $timestamp > time() || ! preg_match( '/\S/u', $reason ) || Pos_Order_Audit::char_length( $reason ) > 500 ) {
+			return;
+		}
+		if ( ! is_array( Completion_History::of( $order )->latest() ) || ( ! $order->get_date_paid() && null === Completion_Origin::latest_captured( $order ) ) ) {
 			return;
 		}
 		$to_gmt = gmdate( 'Y-m-d\TH:i:s\Z', $timestamp );
-		$stored = json_decode( (string) $order->get_meta( '_wcpos_sale_day' ), true );
+		$stored = Meta_Normalizer::decode_to_array( $order->get_meta( '_wcpos_sale_day' ) );
 		$from_gmt = is_string( $stored['at_gmt'] ?? null ) ? $stored['at_gmt'] : ( $order->get_date_paid() ? gmdate( 'Y-m-d\TH:i:s\Z', $order->get_date_paid()->getTimestamp() ) : '' );
-		if ( ( $stored['at_gmt'] ?? null ) === $to_gmt ) {
+		if ( $from_gmt === $to_gmt ) {
 			return;
 		}
 		$actor = get_current_user_id();
-		if ( ! Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, $actor, $from_gmt, $to_gmt, $reason ) ) {
+		$changed_at = time();
+		if ( ! Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, $actor, $from_gmt, $to_gmt, $reason, gmdate( 'Y-m-d H:i:s', $changed_at ) ) ) {
 			$order->add_order_note( __( 'POS sale day change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
 			return;
 		}
@@ -846,7 +868,7 @@ class Order_Writer extends Null_Writer {
 					'at_gmt' => $to_gmt,
 					'reason' => $reason,
 					'by' => $actor,
-					'changed_at_gmt' => gmdate( 'Y-m-d\TH:i:s\Z' ),
+					'changed_at_gmt' => gmdate( 'Y-m-d\TH:i:s\Z', $changed_at ),
 				)
 			)
 		);

@@ -2321,7 +2321,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 	}
 
-	private function saleDayOrder( bool $hpos, string $role = 'shop_manager' ): \WC_Order {
+	private function saleDayOrder( bool $hpos, string $role = 'shop_manager', string $status = 'completed' ): \WC_Order {
 		Meta_Normalizer::register_hooks(); // Match the production pull lane when calculating revisions for JSON meta.
 		if ( $hpos ) {
 			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
@@ -2333,11 +2333,23 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		wp_set_current_user( $actor->ID );
 		$order = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
-		$order->set_status( 'completed' );
+		$order->set_status( $status );
 		$order->set_date_paid( '2026-11-24T01:00:00Z' );
 		$order->update_meta_data( '_pos_user', (string) $actor->ID );
 		$order->save();
 		return $order;
+	}
+
+	private function seedSaleDaySale( \WC_Order $order ): array {
+		$completion = \WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::seed( $order );
+		return ( new Fiscal_Record_Store() )->record(
+			array(
+				'type' => 'sale',
+				'order_id' => $order->get_id(),
+				'source_id' => $completion['id'],
+				'payload' => array( 'total' => $order->get_total() ),
+			)
+		);
 	}
 
 	private function saleDayPayload( $value ): array {
@@ -2383,7 +2395,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			$order->set_date_paid( null );
 			$order->save();
 		}
-		$sale = $this->seedAttributionSale( $order );
+		$sale = $this->seedSaleDaySale( $order );
 		$order = wc_get_order( $order->get_id() );
 		$paid = $order->get_date_paid() ? $order->get_date_paid()->format( 'c' ) : null;
 		$unchanged = array();
@@ -2401,7 +2413,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				wp_json_encode(
 					array(
 						'at_gmt' => $to,
-						'reason' => '  ' . $reason . '  ',
+						'reason' => '  <b>' . $reason . '</b>  ',
 					)
 				)
 			)
@@ -2443,8 +2455,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 		$this->assertSame( $reason, $record['payload']['reason'] );
 		$this->assertSame( get_current_user_id(), $record['payload']['changed_by'] );
+		$this->assertSame( get_current_user_id(), $record['cashier_id'] );
+		$this->assertSame( gmdate( 'Y-m-d H:i:s', strtotime( $stored['changed_at_gmt'] ) ), $record['payload']['changed_at_gmt'] );
 		$this->assertLessThanOrEqual( 5, abs( time() - strtotime( $record['payload']['changed_at_gmt'] ) ) );
-		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id', 'cashier_id', 'store_id' ) as $key ) {
+		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id', 'store_id' ) as $key ) {
 			$this->assertNull( $record[ $key ], $key );
 		}
 
@@ -2508,7 +2522,15 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			$value['reason'] = str_repeat( 'é', 501 );
 		} elseif ( 'non string reason' === $case ) {
 			$value['reason'] = 123;
-		} elseif ( 'unchanged' === $case ) {
+		} elseif ( 'markup reason' === $case ) {
+			$value['reason'] = '<b></b>';
+		} elseif ( 'nbsp reason' === $case ) {
+			$value['reason'] = "\u{00A0}";
+		} elseif ( 'long value' === $case ) {
+			$value['padding'] = str_repeat( 'x', 4096 );
+		} elseif ( 'paid instant' === $case ) {
+			$value['at_gmt'] = '2026-11-24T01:00:00Z';
+		} elseif ( in_array( $case, array( 'unchanged', 'server by', 'server time' ), true ) ) {
 			$order->update_meta_data(
 				'_wcpos_sale_day',
 				wp_json_encode(
@@ -2522,7 +2544,11 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			$order->update_meta_data( '_wcpos_sale_day_at', (string) strtotime( $value['at_gmt'] ) );
 		}
 		$order->save();
-		$this->seedAttributionSale( $order );
+		$this->seedSaleDaySale( $order );
+		if ( in_array( $case, array( 'server by', 'server time' ), true ) ) {
+			$value['at_gmt'] = '2026-11-22T09:12:00Z';
+			$value[ 'server by' === $case ? 'by' : 'changed_at_gmt' ] = null;
+		}
 		$before = $order->get_meta( '_wcpos_sale_day' );
 		$before_at = $order->get_meta( '_wcpos_sale_day_at' );
 		$notes = $this->noteContents( $order->get_id() );
@@ -2532,8 +2558,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			'key' => '_wcpos_sale_day_at',
 			'value' => '123',
 		);
-		if ( 'reopen' === $case ) {
-			$payload['status'] = 'pos-open';
+		if ( in_array( $case, array( 'reopen', 'reopen pending' ), true ) ) {
+			$payload['status'] = 'reopen' === $case ? 'pos-open' : 'pending';
 		}
 
 		$result = $this->updateOrder( $order, $payload );
@@ -2543,7 +2569,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( $before, $after->get_meta( '_wcpos_sale_day' ) );
 		$this->assertSame( $before_at, $after->get_meta( '_wcpos_sale_day_at' ) );
 		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
-		if ( 'reopen' !== $case ) {
+		if ( ! in_array( $case, array( 'reopen', 'reopen pending' ), true ) ) {
 			$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
 		} else {
 			$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS sale day' ) ) ) );
@@ -2565,7 +2591,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 	public function ignoredSaleDays(): array {
 		$cases = array();
-		foreach ( array( 'cashier', 'unpaid', 'future', 'malformed', 'not instant', 'empty reason', 'long reason', 'non string reason', 'unchanged', 'reopen', 'invalid json', 'array value' ) as $case ) {
+		foreach ( array( 'cashier', 'unpaid', 'future', 'malformed', 'not instant', 'empty reason', 'long reason', 'non string reason', 'unchanged', 'reopen', 'invalid json', 'array value', 'reopen pending', 'paid instant', 'markup reason', 'nbsp reason', 'long value', 'server by', 'server time' ) as $case ) {
 			$cases[ $case . ' CPT' ] = array( $case, false );
 			$cases[ $case . ' HPOS' ] = array( $case, true );
 		}
@@ -2575,7 +2601,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	/** @dataProvider saleDayStorage */
 	public function test_sale_day_failed_record_applies_nothing_and_adds_one_note( bool $hpos ): void {
 		$order = $this->saleDayOrder( $hpos );
-		$this->seedAttributionSale( $order );
+		$this->seedSaleDaySale( $order );
 		$notes = $this->noteContents( $order->get_id() );
 		$stuck = static fn( $value, $old ) => $old;
 		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10, 2 );
@@ -2590,6 +2616,127 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
 		$new_notes = array_values( array_diff( $this->noteContents( $order->get_id() ), $notes ) );
 		$this->assertSame( array( 'POS sale day change was not applied because its change record could not be written. Try again.' ), $new_notes );
+	}
+
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_meta_only_push_waits_for_order_lock( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$notes = $this->noteContents( $order->get_id() );
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day"}' ) );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $result->get_error_code() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+	}
+
+	/** @dataProvider saleDayUncompleted */
+	public function test_sale_day_without_completion_is_ignored( bool $hpos, bool $partial ): void {
+		$order = $this->saleDayOrder( $hpos, 'shop_manager', $partial ? 'pos-partial' : 'completed' );
+		if ( $partial ) {
+			$order->set_total( '100.00' );
+			$order->save();
+			\WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed::rows(
+				$order,
+				array(
+					array(
+						'id' => wp_generate_uuid4(),
+						'method_id' => 'pos_cash',
+						'capture_mode' => 'manual',
+						'amount' => '1.00',
+						'currency' => $order->get_currency(),
+						'status' => 'captured',
+					),
+				),
+				false
+			);
+		} else {
+			$order->set_created_via( 'checkout' );
+			$order->save();
+		}
+		$this->assertNull( Completion_History::of( $order )->latest() );
+		$this->assertNotNull( $order->get_date_paid() );
+		$notes = $this->noteContents( $order->get_id() );
+		$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day"}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day_at' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+	}
+
+	public function saleDayUncompleted(): array {
+		return array(
+			'partial CPT' => array( false, true ),
+			'partial HPOS' => array( true, true ),
+			'web CPT' => array( false, false ),
+			'web HPOS' => array( true, false ),
+		);
+	}
+
+	/** @dataProvider saleDayReopens */
+	public function test_sale_day_reopen_clears_correction_for_any_user( bool $hpos, string $role, string $status ): void {
+		$order = $this->saleDayOrder( $hpos, $role );
+		$this->seedSaleDaySale( $order );
+		$order->update_meta_data( '_wcpos_sale_day', '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Previous correction","by":1}' );
+		$order->update_meta_data( '_wcpos_sale_day_at', '1795425120' );
+		$order->save();
+		$result = $this->updateOrder( $order, array( 'status' => $status ) );
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( $status, $after->get_status() );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day_at' ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+		$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS sale day' ) ) ) );
+	}
+
+	public function saleDayReopens(): array {
+		return array(
+			'manager CPT' => array( false, 'shop_manager', 'pos-open' ),
+			'manager HPOS' => array( true, 'shop_manager', 'pos-open' ),
+			'cashier CPT' => array( false, 'cashier', 'pending' ),
+			'cashier HPOS' => array( true, 'cashier', 'pending' ),
+		);
+	}
+
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_stored_array_supplies_previous_instant( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$order->update_meta_data( '_wcpos_sale_day', array( 'at_gmt' => '2026-11-22T09:12:00Z' ) );
+		$order->save();
+		$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day"}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$records = $this->saleDayRecords( $order->get_id() );
+		$this->assertCount( 1, $records );
+		$this->assertSame( '2026-11-22T09:12:00Z', $records[0]['payload']['changes'][0]['from'] );
+	}
+
+	public function test_sale_day_slow_record_keeps_one_change_time(): void {
+		$order = $this->saleDayOrder( false );
+		$this->seedSaleDaySale( $order );
+		$slow = static function ( $value ) {
+			usleep( 1100000 );
+			return $value;
+		};
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $slow );
+		try {
+			$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day"}' ) );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $slow );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$stored = json_decode( wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ), true );
+		$records = $this->saleDayRecords( $order->get_id() );
+		$this->assertSame( strtotime( $stored['changed_at_gmt'] ), strtotime( $records[0]['payload']['changed_at_gmt'] . ' UTC' ) );
 	}
 
 	public function saleDayStorage(): array {

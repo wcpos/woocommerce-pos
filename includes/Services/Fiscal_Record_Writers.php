@@ -179,13 +179,14 @@ final class Fiscal_Record_Writers {
 	/**
 	 * Append a reporting-day correction to the latest sale, outside all session and closure figures.
 	 *
-	 * @param WC_Order $order    Order whose reporting day changed.
-	 * @param int      $actor_id Acting user.
-	 * @param string   $from_gmt Previous reporting instant in UTC, or empty.
-	 * @param string   $to_gmt   Corrected reporting instant in UTC.
-	 * @param string   $reason   Reason for the correction.
+	 * @param WC_Order $order          Order whose reporting day changed.
+	 * @param int      $actor_id       Acting user.
+	 * @param string   $from_gmt       Previous reporting instant in UTC, or empty.
+	 * @param string   $to_gmt         Corrected reporting instant in UTC.
+	 * @param string   $reason         Reason for the correction.
+	 * @param string   $changed_at_gmt Change time in UTC, in MySQL format.
 	 */
-	public function record_sale_day_correction( WC_Order $order, int $actor_id, string $from_gmt, string $to_gmt, string $reason ): bool {
+	public function record_sale_day_correction( WC_Order $order, int $actor_id, string $from_gmt, string $to_gmt, string $reason, string $changed_at_gmt ): bool {
 		$latest = Completion_History::of( $order )->latest();
 		if ( is_array( $latest ) ) {
 			$this->recover( $order );
@@ -194,11 +195,15 @@ final class Fiscal_Record_Writers {
 		if ( null === $sale ) {
 			return ! is_array( $latest ) || ! empty( $latest['legacy'] );
 		}
+		$provenance = $this->store->provenance_from_order( $order );
+		$store = (string) $provenance['store_id'];
 		return $this->write(
 			$order,
 			array(
 				'type' => 'sale_day_correction',
 				'order_id' => $order->get_id(),
+				'store_id' => ctype_digit( $store ) && (int) $store > 0 ? (int) $store : null,
+				'cashier_id' => $provenance['cashier_id'],
 				'corrects_record_id' => $sale['id'],
 				'source_id' => wp_generate_uuid4(),
 				'approver_id' => $actor_id,
@@ -212,7 +217,7 @@ final class Fiscal_Record_Writers {
 					),
 					'reason' => $reason,
 					'changed_by' => $actor_id,
-					'changed_at_gmt' => gmdate( 'Y-m-d\TH:i:s\Z' ),
+					'changed_at_gmt' => $changed_at_gmt,
 				),
 			)
 		);
