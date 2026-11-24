@@ -23,6 +23,9 @@ function OrderStatusSelect({ selectedStatus, onChange, disabled }: OrderStatusSe
 				onChange(String(value));
 			}}
 			disabled={disabled}
+			// It lives in the Gateways table: on a phone, never narrower than its longest
+			// status, so the table scrolls instead of squashing this to "Co".
+			className="wcpos:max-md:min-w-max"
 		/>
 	);
 }

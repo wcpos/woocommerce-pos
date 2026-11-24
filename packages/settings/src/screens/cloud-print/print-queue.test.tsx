@@ -124,6 +124,18 @@ beforeEach(() => {
 });
 
 describe('PrintQueue', () => {
+	// jsdom has no layout: pin that the wide table scrolls inside Table's own scroller, which
+	// carries the scroll shadows, rather than in a wrapper of its own.
+	it('scrolls the wide table in the shared Table scroller', async () => {
+		routeQueue(makeQueue);
+		renderQueue();
+
+		const scroller = await screen.findByTestId('queue-table');
+		expect(scroller).toHaveClass('wcpos-table');
+		expect(scroller.querySelector('table')).toHaveClass('wcpos:min-w-[52rem]');
+		expect(scroller.parentElement).not.toHaveClass('wcpos:overflow-x-auto');
+	});
+
 	it('renders rows with status chips, printer names, and order links', async () => {
 		routeQueue(makeQueue);
 		renderQueue();
