@@ -295,12 +295,12 @@ final class Test_Single_Order extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Notes on an order that start with the refused-change prefix.
+	 * Notes on an order that contain the refused-change phrase.
 	 *
 	 * @param int $order_id Order ID.
 	 */
 	private function refused_notes( int $order_id ): array {
-		return array_values( array_filter( wc_get_order_notes( array( 'order_id' => $order_id ) ), static fn( $note ) => 0 === strpos( $note->content, 'POS cashier change by' ) ) );
+		return array_values( array_filter( wc_get_order_notes( array( 'order_id' => $order_id ) ), static fn( $note ) => false !== strpos( $note->content, ' tried to change the POS cashier to ' ) ) );
 	}
 
 	/**
@@ -315,7 +315,7 @@ final class Test_Single_Order extends WP_UnitTestCase {
 		$notes = $this->refused_notes( $order_id );
 		$this->assertCount( 1, $notes );
 		$expected = sprintf(
-			'POS cashier change by %1$s to %2$s was refused: they may not assign this sale to that user. %3$s remains the cashier.',
+			'%1$s tried to change the POS cashier to %2$s. This was refused: they may not assign this sale to that user. %3$s remains the cashier.',
 			get_userdata( $actor_id )->display_name,
 			get_userdata( $refused_id )->display_name,
 			get_userdata( $kept_id )->display_name

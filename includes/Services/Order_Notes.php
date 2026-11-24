@@ -90,8 +90,8 @@ class Order_Notes {
 	/** Add the note for a refused cashier reassignment. */
 	public static function add_cashier_change_refused_note( WC_Order $order, $actor_id, $refused_user_id, $kept_user_id ): void {
 		$note = sprintf(
-			/* translators: 1: user who tried the change, 2: cashier the change was refused for, 3: cashier who stays on the order. */
-			__( 'POS cashier change by %1$s to %2$s was refused: they may not assign this sale to that user. %3$s remains the cashier.', 'woocommerce-pos' ),
+			/* translators: 1: the person who attempted the change (not the previous cashier), 2: the user they tried to make the cashier, 3: the cashier who stays on the order. */
+			__( '%1$s tried to change the POS cashier to %2$s. This was refused: they may not assign this sale to that user. %3$s remains the cashier.', 'woocommerce-pos' ),
 			self::cashier_name( $actor_id ),
 			self::cashier_name( $refused_user_id ),
 			self::cashier_name( $kept_user_id )
