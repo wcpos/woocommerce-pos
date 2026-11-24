@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-24T07:25:27+00:00\n"
+"POT-Creation-Date: 2026-11-24T10:29:49+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1947,10 +1947,10 @@ msgstr ""
 msgid "POS cashier changed from %1$s to %2$s."
 msgstr ""
 
-#. translators: 1: user who tried the change, 2: cashier the change was refused for, 3: cashier who stays on the order.
+#. translators: 1: the person who attempted the change (not the previous cashier), 2: the user they tried to make the cashier, 3: the cashier who stays on the order.
 #: includes/Services/Order_Notes.php:94
 #, php-format
-msgid "POS cashier change by %1$s to %2$s was refused: they may not assign this sale to that user. %3$s remains the cashier."
+msgid "%1$s tried to change the POS cashier to %2$s. This was refused: they may not assign this sale to that user. %3$s remains the cashier."
 msgstr ""
 
 #. translators: 1: old POS store, 2: new POS store.
