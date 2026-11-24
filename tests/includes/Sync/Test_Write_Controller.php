@@ -2840,6 +2840,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			$stored = $fact;
 			$this->assertFalse( $after->meta_exists( '_wcpos_sale_day_request' ) );
 			$this->assertNotContains( '_wcpos_sale_day_request', array_column( $result->get_data()['document']['meta_data'], 'key' ) );
+			$returned = Meta_Normalizer::decode_to_array( $this->metaValue( $result->get_data()['document'], '_wcpos_sale_day' ) );
+			$this->assertSame( $fact['at_gmt'], $returned['at_gmt'] ?? null );
 			$this->assertCount( 1, $this->saleDayRecords( $order->get_id() ) );
 			$this->assertCount( count( $notes ) + 1, $this->noteContents( $order->get_id() ) );
 		}
