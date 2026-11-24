@@ -685,22 +685,23 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 	}
 
 	/**
-	 * At the live-row ceiling a peer with no row is refused, and a peer that already holds one signs in.
+	 * At the live-row ceiling a peer with no row signs in with a real name, and an unknown name from
+	 * a new peer is refused before any password check.
 	 */
-	public function test_rate_limit_at_the_row_ceiling_a_new_peer_is_refused_and_a_known_peer_signs_in(): void {
-		// Arrange: peer A holds a live peer row; then the rows reach the ceiling.
-		$this->assertSame( 'Invalid username or password.', $this->attempt( '203.0.113.10', 'till-cashier', 'wrong' )->get_error() );
+	public function test_rate_limit_at_the_row_ceiling_a_new_peer_signs_in_with_a_real_name_and_an_unknown_name_is_refused(): void {
+		// Arrange.
 		Credential_Lockout_Rows_Test::fill_live( Credential_Lockout_Rows_Test::constant( 'MAX_LIVE_ROWS' ) );
 
-		// Act / Assert: new peer B is refused before its password is checked, and gets no row.
+		// Act / Assert: new peer B's right password for a real account is checked.
 		$auth = $this->attempt( '198.51.100.20', 'till-cashier', 'correct horse' );
-		$this->assertSame( 'Too many requests. Please try again later.', $auth->get_error() );
-		$this->assertFalse( $this->sentinel_reached );
-		$this->assertNull( $this->row( md5( 'peer:198.51.100.20' ) ) );
-
-		// Act / Assert: peer A's right password is checked.
-		$auth = $this->attempt( '203.0.113.10', 'till-cashier', 'correct horse' );
 		$this->assertTrue( $this->sentinel_reached );
 		$this->assertSame( 'sentinel', $auth->get_error() );
+
+		// Act / Assert: an unknown name from new peer C is refused and gets no row.
+		$this->sentinel_reached = false;
+		$auth                   = $this->attempt( '198.51.100.30', 'ghost-ceiling', 'whatever' );
+		$this->assertSame( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', $auth->get_error() );
+		$this->assertFalse( $this->sentinel_reached );
+		$this->assertNull( $this->row( 'n' . md5( 'input:ghost-ceiling|198.51.100.30' ) ) );
 	}
 }

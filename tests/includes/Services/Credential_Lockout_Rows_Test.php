@@ -57,14 +57,15 @@ class Credential_Lockout_Rows_Test extends WP_UnitTestCase {
 	 * @param int    $count  How many rows.
 	 * @param int    $expiry The rows' expires-at.
 	 * @param string $tag    Distinguishes this batch's names.
+	 * @param string $prefix Before each md5: 'n' for unknown-name rows, '' for peer and account rows.
 	 */
-	public static function insert_rows( int $count, int $expiry, string $tag ): void {
+	public static function insert_rows( int $count, int $expiry, string $tag, string $prefix = '' ): void {
 		global $wpdb;
 		$values = array();
 		$args   = array();
 		for ( $i = 0; $i < $count; $i++ ) {
 			$values[] = "(%s, %s, 'no')";
-			array_push( $args, 'wcpos_auth_attempts_' . md5( $tag . '-' . $i ), '1|' . $expiry . '|' . $tag );
+			array_push( $args, 'wcpos_auth_attempts_' . $prefix . md5( $tag . '-' . $i ), '1|' . $expiry . '|' . $tag );
 		}
 		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES " . implode( ', ', $values ), $args ) ); // phpcs:ignore WordPress.DB -- Test fixture rows.
 	}
@@ -72,21 +73,22 @@ class Credential_Lockout_Rows_Test extends WP_UnitTestCase {
 	/**
 	 * Counter rows whose window is open (live) or ended.
 	 *
-	 * @param bool $live Count live rows, or expired ones.
+	 * @param bool   $live   Count live rows, or expired ones.
+	 * @param string $prefix Only rows whose name continues with this ('n' for unknown-name rows).
 	 */
-	public static function count_rows( bool $live ): int {
+	public static function count_rows( bool $live, string $prefix = '' ): int {
 		global $wpdb;
 		$expiry = "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(option_value, '|', 2), '|', -1) AS UNSIGNED)";
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s AND {$expiry} " . ( $live ? '>=' : '<' ) . ' %d', $wpdb->esc_like( 'wcpos_auth_attempts_' ) . '%', time() ) ); // phpcs:ignore WordPress.DB -- Test fixture rows.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s AND {$expiry} " . ( $live ? '>=' : '<' ) . ' %d', $wpdb->esc_like( 'wcpos_auth_attempts_' . $prefix ) . '%', time() ) ); // phpcs:ignore WordPress.DB -- Test fixture rows.
 	}
 
 	/**
-	 * Add live rows until the current site holds $total of them.
+	 * Add live unknown-name rows until the current site holds $total of them, which fills the ceiling.
 	 *
-	 * @param int $total Live rows wanted.
+	 * @param int $total Live unknown-name rows wanted.
 	 */
 	public static function fill_live( int $total ): void {
-		self::insert_rows( $total - self::count_rows( true ), time() + 900, 'live-fill-' . wp_rand() );
+		self::insert_rows( $total - self::count_rows( true, 'n' ), time() + 900, 'live-fill-' . wp_rand(), 'n' );
 	}
 
 	/**
@@ -156,24 +158,89 @@ class Credential_Lockout_Rows_Test extends WP_UnitTestCase {
 
 		// Act / Assert.
 		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'unknown-a' ) );
+		$this->assertNotNull( $this->row( 'n' . md5( 'input:unknown-a|' . self::PEER ) ) );
 
 		// Act / Assert.
 		$this->assertNull( Credential_Lockout::reserve_attempt( 'unknown-b' ) );
-		$this->assertNull( $this->row( md5( 'input:unknown-b|' . self::PEER ) ) );
+		$this->assertNull( $this->row( 'n' . md5( 'input:unknown-b|' . self::PEER ) ) );
 		$this->assertSame( $max, self::count_rows( true ) );
 	}
 
 	/**
-	 * At the ceiling a new peer bucket is refused, and a bucket already live keeps counting.
+	 * Peer and real-account rows, which carry no unknown-name prefix, leave the ceiling untouched.
 	 */
-	public function test_rows_at_the_ceiling_refuse_a_new_peer_bucket_and_keep_counting_an_existing_one(): void {
+	public function test_rows_rows_that_are_not_unknown_names_do_not_count_toward_the_ceiling(): void {
+		// Arrange.
+		self::insert_rows( self::constant( 'MAX_LIVE_ROWS' ), time() + 900, 'known' );
+
+		// Act.
+		$admitted = Credential_Lockout::reserve_attempt( 'unknown-f' );
+
+		// Assert.
+		$this->assertNotNull( $admitted );
+		$this->assertNotNull( $this->row( 'n' . md5( 'input:unknown-f|' . self::PEER ) ) );
+	}
+
+	/**
+	 * The sweep's DELETE checks the expiry again, so a row revived after the SELECT stays.
+	 */
+	public function test_rows_sweep_keeps_a_row_revived_between_its_select_and_its_delete(): void {
+		// Arrange.
+		global $wpdb;
+		self::insert_rows( 5, time() - 60, 'expired' );
+		$revived = 'wcpos_auth_attempts_' . md5( 'expired-0' );
+		$state   = 'waiting';
+		$revive  = static function ( $query ) use ( &$state, $revived ) {
+			global $wpdb;
+			if ( 'waiting' === $state && 0 === strpos( $query, 'SELECT option_name' ) && false !== strpos( str_replace( '\\', '', $query ), 'wcpos_auth_attempts_' ) ) {
+				$state = 'selected';
+			} elseif ( 'selected' === $state ) {
+				// Another attempt revives a selected row before the DELETE runs.
+				$state = 'revived';
+				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s", '1|' . ( time() + 900 ) . '|revived', $revived ) );
+			}
+			return $query;
+		};
+		add_filter( 'query', $revive );
+
+		// Act.
+		$admitted = Credential_Lockout::reserve_bucket_attempt( md5( 'revive' ), 10, 900 );
+		remove_filter( 'query', $revive );
+
+		// Assert.
+		$this->assertNotNull( $admitted );
+		$this->assertSame( 'revived', $state );
+		$this->assertStringEndsWith( '|revived', $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $revived ) ) );
+		$this->assertSame( 0, self::count_rows( false ) );
+	}
+
+	/**
+	 * An attempt refused at the ceiling writes nothing, and sweeps nothing either.
+	 */
+	public function test_rows_a_refused_attempt_sweeps_no_expired_rows(): void {
+		// Arrange.
+		self::insert_rows( 5, time() - 60, 'expired' );
+		self::fill_live( self::constant( 'MAX_LIVE_ROWS' ) );
+
+		// Act.
+		$refused = Credential_Lockout::reserve_attempt( 'unknown-g' );
+
+		// Assert.
+		$this->assertNull( $refused );
+		$this->assertSame( 5, self::count_rows( false ) );
+	}
+
+	/**
+	 * At the ceiling a new peer bucket is admitted, and a bucket already live keeps counting.
+	 */
+	public function test_rows_at_the_ceiling_admit_a_new_peer_bucket_and_keep_counting_an_existing_one(): void {
 		// Arrange.
 		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( 'P', 10, 900 ) );
 		self::fill_live( self::constant( 'MAX_LIVE_ROWS' ) );
 
 		// Act / Assert.
-		$this->assertNull( Credential_Lockout::reserve_bucket_attempt( 'new-bucket', 10, 900 ) );
-		$this->assertNull( $this->row( 'new-bucket' ) );
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( 'new-bucket', 10, 900 ) );
+		$this->assertStringStartsWith( '1|', $this->row( 'new-bucket' ) );
 
 		// Act / Assert.
 		$this->assertStringStartsWith( '1|', $this->row( 'P' ) );
@@ -232,6 +299,6 @@ class Credential_Lockout_Rows_Test extends WP_UnitTestCase {
 		$wpdb->suppress_errors( $suppress );
 		remove_filter( 'query', $break );
 		$this->assertNull( $refused );
-		$this->assertNull( $this->row( md5( 'input:unknown-c|' . self::PEER ) ) );
+		$this->assertNull( $this->row( 'n' . md5( 'input:unknown-c|' . self::PEER ) ) );
 	}
 }
