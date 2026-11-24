@@ -274,6 +274,62 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * A paid order keeps its coupons and total, even with a valid key and nonce.
+	 */
+	public function test_coupon_action_paid_order_with_key_and_nonce_leaves_total_unchanged(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->save();
+		CouponHelper::create_coupon( 'paidcheck' );
+		$total_before = wc_get_order( $order->get_id() )->get_total();
+		wp_set_current_user( 0 ); // The pay page creates the nonce before it switches user.
+		$this->arrange_pos_coupon_post( $order, 'apply', 'paidcheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->cashier );
+
+		// Act.
+		( new Form_Handler() )->coupon_action();
+
+		// Assert.
+		$reloaded = wc_get_order( $order->get_id() );
+		$this->assertSame( $total_before, $reloaded->get_total() );
+		$this->assertSame( array(), $reloaded->get_coupon_codes() );
+	}
+
+	/**
+	 * An unpaid order brought to a zero total by a coupon can still have that coupon removed.
+	 */
+	public function test_coupon_action_zero_total_unpaid_order_can_remove_coupon(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		foreach ( array_keys( $order->get_items( 'shipping' ) ) as $shipping_item_id ) {
+			$order->remove_item( $shipping_item_id );
+		}
+		$order->calculate_totals();
+		CouponHelper::create_coupon(
+			'fullcheck',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '100',
+			)
+		);
+		$order->apply_coupon( 'fullcheck' );
+		$order->save();
+		$this->assertSame( 0.0, (float) wc_get_order( $order->get_id() )->get_total(), 'precondition: the coupon brings the total to zero' );
+		$this->assertFalse( wc_get_order( $order->get_id() )->is_paid(), 'precondition: the order is unpaid' );
+		wp_set_current_user( 0 );
+		$this->arrange_pos_coupon_post( $order, 'remove', 'fullcheck', $order->get_order_key() );
+		$this->add_cashier_token( $this->cashier );
+
+		// Act.
+		( new Form_Handler() )->coupon_action();
+
+		// Assert.
+		$this->assertSame( array(), wc_get_order( $order->get_id() )->get_coupon_codes() );
+	}
+
+	/**
 	 * A guest order's pay nonce is minted with logged-out identity 0, but a
 	 * client that replays the guest session cookie (native WebViews always do)
 	 * gets identity 't_…' at verify time — the mismatch made

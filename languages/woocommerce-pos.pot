@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T14:42:21+00:00\n"
+"POT-Creation-Date: 2026-11-23T22:49:42+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -370,6 +370,24 @@ msgstr ""
 msgid "58mm (Narrow)"
 msgstr ""
 
+#: includes/Admin/User_Identity_Tool.php:29
+msgid "Reset WCPOS account identities"
+msgstr ""
+
+#: includes/Admin/User_Identity_Tool.php:30
+msgid "Reset identities"
+msgstr ""
+
+#: includes/Admin/User_Identity_Tool.php:31
+msgid "Use this on a store that was copied from another store, when the POS app reports AUTH342. Each user gets a new POS identity the next time it is needed. Sync any waiting sales from the tills first; afterwards, remove this store from each till and connect it again."
+msgstr ""
+
+#. translators: %d: Number of users whose WCPOS account identity was reset.
+#: includes/Admin/User_Identity_Tool.php:51
+#, php-format
+msgid "WCPOS account identities reset. Users affected: %d."
+msgstr ""
+
 #. translators: REST API schema field label or error message.
 #: includes/API.php:439
 #: includes/API/V1/Cashier.php:124
@@ -471,35 +489,42 @@ msgstr ""
 msgid "Store not found or not accessible by this cashier."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:104
+#: includes/API/V1/Checkout_Controller.php:105
 msgid "Sorry, you cannot view checkout state."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:115
+#: includes/API/V1/Checkout_Controller.php:116
 msgid "Sorry, you cannot process checkout."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:143
+#: includes/API/V1/Checkout_Controller.php:144
 msgid "Missing X-WCPOS-Idempotency-Key header."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:154
+#: includes/API/V1/Checkout_Controller.php:155
 #: includes/API/V1/Gateway_Bootstrap_Controller.php:99
 msgid "Payment gateway not found."
 msgstr ""
 
-#: includes/API/V1/Checkout_Controller.php:162
+#: includes/API/V1/Checkout_Controller.php:163
+#: includes/API/V1/Gateway_Bootstrap_Controller.php:107
 msgid "Payment gateway is not available for POS checkout."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Checkout_Controller.php:283
+#: includes/API/V1/Checkout_Controller.php:284
 #: includes/API/V1/Receipts_Controller.php:283
-#: includes/API/V2/Payments_Controller.php:433
+#: includes/API/V2/Payments_Controller.php:434
 #: includes/Payments/Contract/Settlement.php:92
 msgid "Order not found."
+msgstr ""
+
+#: includes/API/V1/Checkout_Controller.php:294
+#: includes/API/V1/Orders_Controller.php:642
+#: includes/API/V2/Payments_Controller.php:438
+msgid "Sorry, you are not allowed to edit this order."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
@@ -532,7 +557,7 @@ msgstr ""
 
 #. translators: Use default WordPress translation.
 #: includes/API/V1/Customers_Controller.php:328
-#: includes/API/V1/Orders_Controller.php:586
+#: includes/API/V1/Orders_Controller.php:587
 msgid "Invalid email address."
 msgstr ""
 
@@ -567,41 +592,41 @@ msgid "You do not have permission to view logs."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/V1/Orders_Controller.php:297
-#: includes/API/V2/Order_Email_Controller.php:40
+#: includes/API/V1/Orders_Controller.php:298
+#: includes/API/V2/Order_Email_Controller.php:41
 msgid "Email address"
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:302
-#: includes/API/V2/Order_Email_Controller.php:45
+#: includes/API/V1/Orders_Controller.php:303
+#: includes/API/V2/Order_Email_Controller.php:46
 msgid "Save email to order"
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:337
+#: includes/API/V1/Orders_Controller.php:338
 msgid "Customer tax IDs snapshotted at sale time."
 msgstr ""
 
 #. translators: %s: email address.
-#: includes/API/V1/Orders_Controller.php:641
+#: includes/API/V1/Orders_Controller.php:647
 #, php-format
 msgid "Email address %s added to billing details from WCPOS."
 msgstr ""
 
 #. translators: %s: email address.
-#: includes/API/V1/Orders_Controller.php:654
+#: includes/API/V1/Orders_Controller.php:660
 #, php-format
 msgid "Order details manually sent to %s from WCPOS."
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:719
+#: includes/API/V1/Orders_Controller.php:725
 msgid "Unique identifier for the order status."
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:725
+#: includes/API/V1/Orders_Controller.php:731
 msgid "Display name of the order status."
 msgstr ""
 
-#: includes/API/V1/Orders_Controller.php:751
+#: includes/API/V1/Orders_Controller.php:757
 msgid "Whether the order email was sent."
 msgstr ""
 
@@ -830,7 +855,7 @@ msgid "Another print of this order is in progress; try again."
 msgstr ""
 
 #: includes/API/V1/Receipts_Controller.php:403
-#: includes/API/V2/Closures_Controller.php:398
+#: includes/API/V2/Closures_Controller.php:400
 #: includes/Templates/Receipt.php:544
 msgid "The closure request could not be completed."
 msgstr ""
@@ -1068,15 +1093,15 @@ msgstr ""
 msgid "Collection \"%1$s\" is not served by this route. Supported: %2$s."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:127
+#: includes/API/V2/Payments_Controller.php:128
 msgid "Sorry, you cannot manage order payments."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:147
+#: includes/API/V2/Payments_Controller.php:148
 msgid "Payment must be an object."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:218
+#: includes/API/V2/Payments_Controller.php:219
 #: includes/API/V2/Payment_Methods_Controller.php:110
 #: includes/Payments/Contract/Gateway_Handler.php:59
 #: includes/Payments/Contract/Gateway_Submission.php:131
@@ -1084,15 +1109,15 @@ msgstr ""
 msgid "Payment method not found."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:224
+#: includes/API/V2/Payments_Controller.php:225
 msgid "Values must be an object and attempt ID a UUID."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:229
+#: includes/API/V2/Payments_Controller.php:230
 msgid "Attempt ID must name the sent attempt to cancel."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:340
+#: includes/API/V2/Payments_Controller.php:341
 msgid "Invalid payment operation parameters."
 msgstr ""
 
@@ -1196,12 +1221,12 @@ msgid "Report \"%1$s\" failed: %2$s"
 msgstr ""
 
 #. translators: %s: name of the request field that was rejected.
-#: includes/API/V2/Sessions_Controller.php:501
+#: includes/API/V2/Sessions_Controller.php:503
 #, php-format
 msgid "Invalid parameter: %s"
 msgstr ""
 
-#: includes/API/V2/Sessions_Controller.php:503
+#: includes/API/V2/Sessions_Controller.php:505
 msgid "The session request could not be completed."
 msgstr ""
 
@@ -1672,12 +1697,12 @@ msgstr ""
 msgid "Another payment operation is running on this order."
 msgstr ""
 
-#: includes/Payments/Contract/Payments_Sweeper.php:37
+#: includes/Payments/Contract/Payments_Sweeper.php:108
 msgid "Every ten minutes"
 msgstr ""
 
 #. translators: 1: payment row uuid, 2: leg amount with currency.
-#: includes/Payments/Contract/Payments_Sweeper.php:128
+#: includes/Payments/Contract/Payments_Sweeper.php:199
 #, php-format
 msgid "WCPOS payment %1$s: the authorization for %2$s expired after the order was marked paid and was never captured — needs attention."
 msgstr ""
@@ -1895,7 +1920,7 @@ msgstr ""
 #: includes/Services/Order_Notes.php:42
 #: includes/Services/Receipt_Data_Builder.php:631
 #: includes/Templates/Payment.php:413
-#: tests/includes/Templates/Test_Receipt_Renderers.php:269
+#: tests/includes/Templates/Test_Receipt_Renderers.php:298
 msgid "Guest"
 msgstr ""
 
@@ -5606,42 +5631,42 @@ msgstr ""
 msgid "Missing state parameter."
 msgstr ""
 
-#: includes/Templates/Auth.php:136
-msgid "Too many requests. Please try again later."
-msgstr ""
-
-#: includes/Templates/Auth.php:345
+#: includes/Templates/Auth.php:344
 msgid "Auth session expired. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:351
+#: includes/Templates/Auth.php:350
 msgid "Invalid auth session. Please try logging in again from the app."
 msgstr ""
 
-#: includes/Templates/Auth.php:371
+#: includes/Templates/Auth.php:370
 msgid "Security check failed. Please try again."
 msgstr ""
 
 #. translators: Short WCPOS UI label; keep concise.
-#: includes/Templates/Auth.php:381
+#: includes/Templates/Auth.php:380
 msgid "Authentication failed."
 msgstr ""
 
-#: includes/Templates/Auth.php:391
+#: includes/Templates/Auth.php:401
 msgid "This account is temporarily locked due to too many failed login attempts. Please try again later."
 msgstr ""
 
-#: includes/Templates/Auth.php:432
+#: includes/Templates/Auth.php:446
 msgid "Failed to generate authentication tokens."
 msgstr ""
 
-#: includes/Templates/Auth.php:482
+#: includes/Templates/Auth.php:496
 msgid "Please enter both username and password."
 msgstr ""
 
-#: includes/Templates/Auth.php:496
-#: includes/Templates/Auth.php:505
+#: includes/Templates/Auth.php:510
+#: includes/Templates/Auth.php:519
 msgid "Invalid username or password."
+msgstr ""
+
+#: includes/Templates/Auth.php:558
+msgid "Too many requests. Please try again later."
 msgstr ""
 
 #. translators: Gallery template name shown in the admin Template Gallery.
@@ -6238,6 +6263,6 @@ msgstr ""
 msgid "Hello"
 msgstr ""
 
-#: woocommerce-pos.php:163
+#: woocommerce-pos.php:167
 msgid "The WCPOS plugin failed to load correctly."
 msgstr ""
