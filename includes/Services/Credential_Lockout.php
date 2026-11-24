@@ -35,7 +35,9 @@ final class Credential_Lockout {
 
 	/** Most live unknown-name rows a site keeps before a new unknown name is refused. A store's own
 	 * staff rarely mistype names, so these rows stay few; each address adds at most 10 per window
-	 * (the per-address limit), so reaching 5000 takes about 500 addresses inside 15 minutes. Peer and
+	 * (the per-address limit), so reaching 5000 takes about 500 addresses inside 15 minutes. The
+	 * manager-approval and till-close routes have no per-address limit, so one signed-in POS user can
+	 * reach the ceiling alone; at the ceiling only new unknown names are refused there. Peer and
 	 * real-account rows are not capped, because capping them would let an attacker lock real
 	 * managers out. */
 	private const MAX_LIVE_ROWS = 5000;
@@ -47,6 +49,11 @@ final class Credential_Lockout {
 	/** Most expired counter rows one attempt deletes, so no single request does a large delete. It
 	 * is larger than the rows one attempt can add, so expired rows never pile up. */
 	private const SWEEP_BATCH = 100;
+
+	/** Most counter rows one sweep reads, so its cost does not grow with the table. Its run starts at
+	 * a random point and wraps, so every row is reached over time, and a table of 500 rows or fewer
+	 * is swept whole. */
+	private const SWEEP_SCAN = 500;
 
 	/** Count an attempt for an account and peer before its password is checked.
 	 *
@@ -144,7 +151,9 @@ final class Credential_Lockout {
 		}
 		$username_key = self::key( $username );
 		$attempts     = self::record_bucket_failure( $username_key, self::LOCKOUT_DURATION );
-		if ( $attempts >= self::MAX_FAILED_ATTEMPTS ) {
+		// An unknown name gets no lock: its full row already refuses for the same window, and a lock
+		// would leave two option rows that only the daily purge deletes.
+		if ( $attempts >= self::MAX_FAILED_ATTEMPTS && 0 !== strpos( $username_key, self::UNKNOWN_PREFIX ) ) {
 			set_transient( 'wcpos_auth_lock_' . $username_key, time(), self::LOCKOUT_DURATION );
 			// A lock stands only over a full count. A give-back between the read above and the
 			// write lifted nothing, so read again after writing; one that lands later lifts the
@@ -251,14 +260,19 @@ final class Credential_Lockout {
 		delete_transient( 'wcpos_auth_lock_' . $username_key );
 	}
 
-	/** Delete up to SWEEP_BATCH counter rows whose window has ended. The DELETE repeats the expiry
-	 * condition, so a row an attempt revived between the two statements stays; a failed SELECT
-	 * sweeps nothing. */
+	/** Delete up to SWEEP_BATCH counter rows whose window has ended, picked from a run of at most
+	 * SWEEP_SCAN rows in name order that starts at a random name and wraps round. A row read with no
+	 * expiry counts as expired; the DELETE repeats the expiry condition and decides, so a row an
+	 * attempt revived between the statements stays. A failed or empty read sweeps nothing. */
 	private static function sweep(): void {
 		global $wpdb;
-		$now = time();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Rows written by reserve_bucket_attempt(), never through the options API.
-		$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(option_value, '|', 2), '|', -1) AS UNSIGNED) < %d LIMIT %d", $wpdb->esc_like( self::ROW_PREFIX ) . '%', $now, self::SWEEP_BATCH ) );
+		$now   = time();
+		$start = self::ROW_PREFIX . ( 0 === wp_rand( 0, 1 ) ? '' : self::UNKNOWN_PREFIX ) . md5( (string) wp_rand() );
+		$rows  = (array) $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name >= %s ORDER BY option_name LIMIT %d", $wpdb->esc_like( self::ROW_PREFIX ) . '%', $start, self::SWEEP_SCAN ), ARRAY_N ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Rows written by reserve_bucket_attempt(), never through the options API.
+		if ( \count( $rows ) < self::SWEEP_SCAN ) {
+			$rows = array_merge( $rows, (array) $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s ORDER BY option_name LIMIT %d", $wpdb->esc_like( self::ROW_PREFIX ) . '%', $start, self::SWEEP_SCAN - \count( $rows ) ), ARRAY_N ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- As above.
+		}
+		$names = array_slice( array_keys( array_filter( array_column( $rows, 1, 0 ), static fn( $value ) => (int) ( explode( '|', (string) $value )[1] ?? 0 ) < $now ) ), 0, self::SWEEP_BATCH );
 		if ( empty( $names ) ) {
 			return;
 		}

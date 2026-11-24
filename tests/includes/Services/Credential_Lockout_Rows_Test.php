@@ -192,10 +192,9 @@ class Credential_Lockout_Rows_Test extends WP_UnitTestCase {
 		$state   = 'waiting';
 		$revive  = static function ( $query ) use ( &$state, $revived ) {
 			global $wpdb;
-			if ( 'waiting' === $state && 0 === strpos( $query, 'SELECT option_name' ) && false !== strpos( str_replace( '\\', '', $query ), 'wcpos_auth_attempts_' ) ) {
-				$state = 'selected';
-			} elseif ( 'selected' === $state ) {
-				// Another attempt revives a selected row before the DELETE runs.
+			// The sweep's DELETE names the row only when its SELECT returned it as expired.
+			if ( 'waiting' === $state && 0 === strpos( $query, 'DELETE FROM' ) && false !== strpos( $query, "'" . $revived . "'" ) ) {
+				// Another attempt revives that row just before the DELETE runs.
 				$state = 'revived';
 				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s", '1|' . ( time() + 900 ) . '|revived', $revived ) );
 			}
@@ -231,6 +230,104 @@ class Credential_Lockout_Rows_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An attempt refused because its bucket is full writes nothing, and sweeps nothing either.
+	 */
+	public function test_rows_a_full_bucket_refusal_sweeps_no_expired_rows(): void {
+		// Arrange: fill the bucket first, since the admitted attempts sweep.
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( 'F', 2, 900 ) );
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( 'F', 2, 900 ) );
+		self::insert_rows( 5, time() - 60, 'expired' );
+
+		// Act.
+		$refused = Credential_Lockout::reserve_bucket_attempt( 'F', 2, 900 );
+
+		// Assert.
+		$this->assertNull( $refused );
+		$this->assertSame( 5, self::count_rows( false ) );
+	}
+
+	/**
+	 * One sweep reads at most SWEEP_SCAN rows, however many counter rows there are.
+	 */
+	public function test_rows_a_sweep_reads_at_most_sweep_scan_rows(): void {
+		// Arrange: more live rows than one sweep reads, and a bucket whose next attempt writes.
+		global $wpdb;
+		$scan = self::constant( 'SWEEP_SCAN' );
+		self::insert_rows( 1200, time() + 900, 'scan' );
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( md5( 'scan-bucket' ), 10, 900 ) );
+		$sweeps  = array();
+		$pending = false;
+		$watch   = static function ( $query ) use ( &$sweeps, &$pending ) {
+			global $wpdb;
+			// The filter runs before the next query, so num_rows still holds the sweep SELECT's rows.
+			if ( $pending ) {
+				$sweeps[ \count( $sweeps ) - 1 ][1] = $wpdb->num_rows;
+				$pending                            = false;
+			}
+			if ( 0 === strpos( $query, 'SELECT option_name' ) && false !== strpos( str_replace( '\\', '', $query ), 'wcpos_auth_attempts_' ) ) {
+				$sweeps[] = array( $query, 0 );
+				$pending  = true;
+			}
+			return $query;
+		};
+		add_filter( 'query', $watch );
+
+		// Act.
+		$admitted = Credential_Lockout::reserve_bucket_attempt( md5( 'scan-bucket' ), 10, 900 );
+		remove_filter( 'query', $watch );
+		if ( $pending ) {
+			$sweeps[ \count( $sweeps ) - 1 ][1] = $wpdb->num_rows;
+		}
+
+		// Assert: each statement is limited to what the sweep has left to read, and together they
+		// read exactly SWEEP_SCAN of the 1201 rows.
+		$this->assertNotNull( $admitted );
+		$read = 0;
+		foreach ( $sweeps as $sweep ) {
+			$this->assertSame( 1, preg_match( '/ LIMIT (\d+)$/', trim( $sweep[0] ), $match ) );
+			$this->assertSame( $scan - $read, (int) $match[1] );
+			$read += $sweep[1];
+		}
+		$this->assertSame( $scan, $read );
+	}
+
+	/**
+	 * Unknown-name rows, which sort after every hex name, are swept as well.
+	 */
+	public function test_rows_expired_unknown_name_rows_are_swept_too(): void {
+		// Arrange.
+		self::insert_rows( self::constant( 'SWEEP_BATCH' ) + 50, time() - 60, 'expired', 'n' );
+
+		// Act / Assert.
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( md5( 'sweep-n-a' ), 10, 900 ) );
+		$this->assertSame( 50, self::count_rows( false, 'n' ) );
+		$this->assertNotNull( Credential_Lockout::reserve_bucket_attempt( md5( 'sweep-n-b' ), 10, 900 ) );
+		$this->assertSame( 0, self::count_rows( false, 'n' ) );
+	}
+
+	/**
+	 * An unknown name at the limit leaves no lock transient behind, and its full row still refuses it.
+	 */
+	public function test_rows_an_unknown_name_at_the_limit_gets_no_lock_transient_and_is_still_refused(): void {
+		// Arrange.
+		$bucket = 'n' . md5( 'input:unknown-h|' . self::PEER );
+
+		// Act: five counted failures.
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->assertNotNull( Credential_Lockout::reserve_attempt( 'unknown-h' ) );
+			Credential_Lockout::record_failure( 'unknown-h' );
+		}
+
+		// Assert.
+		$this->assertFalse( get_transient( 'wcpos_auth_lock_' . $bucket ) );
+		$this->assertNull( Credential_Lockout::reserve_attempt( 'unknown-h' ) );
+
+		// Act / Assert: once the row's window ends, the name is admitted again.
+		$this->end_window( $bucket );
+		$this->assertNotNull( Credential_Lockout::reserve_attempt( 'unknown-h' ) );
+	}
+
+	/**
 	 * At the ceiling a new peer bucket is admitted, and a bucket already live keeps counting.
 	 */
 	public function test_rows_at_the_ceiling_admit_a_new_peer_bucket_and_keep_counting_an_existing_one(): void {
@@ -262,6 +359,7 @@ class Credential_Lockout_Rows_Test extends WP_UnitTestCase {
 			$this->assertNotNull( Credential_Lockout::reserve_attempt( 'ceiling-manager' ) );
 			Credential_Lockout::record_failure( 'ceiling-manager' );
 		}
+		$this->assertNotFalse( get_transient( 'wcpos_auth_lock_' . $bucket ) );
 		$this->assertNull( Credential_Lockout::reserve_attempt( 'ceiling-manager' ) );
 
 		// Act / Assert: a successful check unlocks.
