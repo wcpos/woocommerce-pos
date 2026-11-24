@@ -14,7 +14,7 @@
 	<meta charset="<?php bloginfo( 'charset' ); ?>"/>
 	<meta name="viewport" content="width=device-width, initial-scale=1"/>
 	<?php // Signal before wp_head(): the theme's render-blocking head assets must not delay the sale. ?>
-	<?php if ( $order_complete ) { ?>
+	<?php if ( $order_complete || ! empty( $order_sent ) ) { ?>
 	<script>
 		(function() {
 			// Parse the order JSON from PHP
@@ -23,7 +23,7 @@
 			// Check if postMessage function exists for window.top
 			if (typeof window.top.postMessage === 'function') {
 				window.top.postMessage({
-					action: 'wcpos-payment-received',
+					action: '<?php echo esc_js( $order_complete ? 'wcpos-payment-received' : 'wcpos-payment-sent' ); ?>',
 					payload: order
 				}, '*');
 			}
@@ -31,7 +31,7 @@
 			// Check if ReactNativeWebView object and postMessage function exists
 			if (typeof window.ReactNativeWebView !== 'undefined' && typeof window.ReactNativeWebView.postMessage === 'function') {
 				window.ReactNativeWebView.postMessage(JSON.stringify({
-					action: 'wcpos-payment-received',
+					action: '<?php echo esc_js( $order_complete ? 'wcpos-payment-received' : 'wcpos-payment-sent' ); ?>',
 					payload: order
 				}));
 			}

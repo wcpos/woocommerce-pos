@@ -85,6 +85,25 @@ final class Attempts {
 	}
 
 	/**
+	 * Stage a new `sent` attempt that carries the till's own provenance: the order's cashier and till tuple, never whoever is viewing.
+	 *
+	 * @param Ledger_Draft $d         The write's draft.
+	 * @param string       $id        Attempt id.
+	 * @param string       $method_id The gateway's method id.
+	 */
+	public static function open_as_till( Ledger_Draft $d, string $id, string $method_id ): void {
+		self::open( $d, $id, $method_id );
+		$d->attempt(
+			$id,
+			'sent',
+			array(
+				'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
+				'origin'     => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
+			)
+		);
+	}
+
+	/**
 	 * The gateway sent the customer something to pay: the attempt awaits them, and earlier sends are replaced.
 	 *
 	 * @param Ledger_Draft $d           The write's draft.
@@ -342,16 +361,8 @@ final class Attempts {
 				static function ( Ledger_Draft $d ) use ( $id, $method_id ): bool {
 					$entry = self::of( $d->order() )->get( $id );
 					if ( null === $entry ) {
-						self::open( $d, $id, $method_id );
 						// The lost row's own provenance: the operator and till that rang the sale, never whoever paid.
-						$d->attempt(
-							$id,
-							'sent',
-							array(
-								'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
-								'origin'     => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
-							)
-						);
+						self::open_as_till( $d, $id, $method_id );
 					}
 					if ( null === $entry || 'sent' === $entry['fate'] ) {
 						self::resolve( $d, $id, 'paid' ); // Awaits no one: the customer paid.
