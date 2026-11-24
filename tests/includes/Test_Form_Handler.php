@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
+use Automattic\WooCommerce\Internal\Utilities\Users;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Form_Handler;
@@ -48,7 +49,7 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 	public function tearDown(): void {
 		global $wp;
 		unset( $wp->query_vars['order-pay'], $wp->query_vars['wcpos'] );
-		unset( $_GET['key'], $_GET['token'], $_POST['woocommerce_pay'] );
+		unset( $_GET['key'], $_GET['token'], $_POST['woocommerce_pay'], $_POST['woocommerce-pay-nonce'], $_REQUEST['woocommerce-pay-nonce'] );
 		unset( $_POST['pos_apply_coupon'], $_POST['pos_remove_coupon'], $_POST['pos_coupon_code'], $_POST['pos_coupon_nonce'] );
 		wp_set_current_user( 0 );
 		remove_role( self::MINIMAL_POS_ROLE );
@@ -507,6 +508,186 @@ class Test_Form_Handler extends WC_Unit_Test_Case {
 		$this->assertFalse( has_filter( 'wc_stripe_create_customer_args' ) );
 		$this->assertSame( $required_fields, apply_filters( 'wc_stripe_create_customer_required_fields', $required_fields, $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
 		$this->assertSame( $request, apply_filters( 'wc_stripe_create_customer_args', $request ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Stripe's hook.
+	}
+
+	/**
+	 * Create a POS guest order with an email, past WooCommerce's 10-minute grace period.
+	 *
+	 * @return \WC_Order The saved order.
+	 */
+	private function create_pos_guest_order_past_grace_period(): \WC_Order {
+		$order = $this->create_pos_order_with_billing_email( 'guest@example.test' );
+		$order->set_date_created( time() - HOUR_IN_SECONDS );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * An authenticated POS pay POST lifts WC 11.3.1's order-pay email verification.
+	 */
+	public function test_pay_action_guest_with_email_after_grace_period_lifts_order_pay_email_verification(): void {
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+		wp_set_current_user( 0 );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ), 'precondition: verification required' );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertFalse( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+	}
+
+	/**
+	 * The lift covers only the order being paid, in the 'order-pay' context.
+	 */
+	public function test_order_pay_email_verification_lift_is_scoped_to_the_paid_order(): void {
+		// Arrange.
+		$order       = $this->create_pos_guest_order_past_grace_period();
+		$other_order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertTrue( Users::should_user_verify_order_email( $other_order->get_id(), null, 'order-pay' ) );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-received' ) );
+	}
+
+	/**
+	 * Pay POSTs that fail WCPOS's order key or cashier token check.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function pay_refusal_cases(): array {
+		return array(
+			'bad_token'       => array( 'bad_token' ),
+			'missing_token'   => array( 'missing_token' ),
+			'expired_token'   => array( 'expired_token' ),
+			'wrong_order_key' => array( 'wrong_order_key' ),
+		);
+	}
+
+	/**
+	 * Break the arranged POS pay POST the way the named refusal case says.
+	 *
+	 * @param string $refusal_case One of pay_refusal_cases().
+	 */
+	private function apply_pay_refusal( string $refusal_case ): void {
+		switch ( $refusal_case ) {
+			case 'bad_token':
+				$_GET['token'] = 'not-a-jwt';
+				break;
+			case 'missing_token':
+				unset( $_GET['token'] );
+				break;
+			case 'expired_token':
+				$expire = static fn( $expire, $issued_at ) => $issued_at - 1;
+				add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire, 10, 2 );
+				$_GET['token'] = Auth::instance()->generate_access_token( get_user_by( 'id', $this->cashier ) );
+				remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire, 10 );
+				break;
+			case 'wrong_order_key':
+				$_GET['key'] = 'wc_order_wrong';
+				break;
+		}
+	}
+
+	/**
+	 * A pay POST that fails authentication dies without lifting the email gate.
+	 *
+	 * @dataProvider pay_refusal_cases
+	 *
+	 * @param string $refusal_case The way the POST fails authentication.
+	 */
+	public function test_pay_action_unauthenticated_pay_post_keeps_order_pay_email_verification( string $refusal_case ): void {
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+		$this->apply_pay_refusal( $refusal_case );
+		wp_set_current_user( 0 );
+
+		// Act.
+		try {
+			( new Form_Handler() )->pay_action();
+			$this->fail( 'pay_action() must die on a POST that fails authentication' );
+		} catch ( \WPDieException $e ) {
+			$this->addToAssertionCount( 1 ); // The refusal is the expected outcome.
+		}
+
+		// Assert.
+		$this->assertFalse( has_filter( 'woocommerce_order_email_verification_required' ) );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+	}
+
+	/**
+	 * Outside a POS request the email gate is left to WooCommerce.
+	 */
+	public function test_pay_action_outside_pos_request_keeps_order_pay_email_verification(): void {
+		global $wp;
+
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$this->arrange_pos_pay_post( $order );
+		unset( $wp->query_vars['wcpos'] );
+		wp_set_current_user( 0 );
+
+		// Act.
+		( new Form_Handler() )->pay_action();
+
+		// Assert.
+		$this->assertFalse( has_filter( 'woocommerce_order_email_verification_required' ) );
+		$this->assertTrue( Users::should_user_verify_order_email( $order->get_id(), null, 'order-pay' ) );
+	}
+
+	/**
+	 * A third-party apply_filters() call with only the value keeps that value.
+	 */
+	public function test_lift_order_pay_email_verification_one_argument_returns_required(): void {
+		// Arrange.
+		$handler = new Form_Handler();
+
+		// Act.
+		$required = $handler->lift_order_pay_email_verification( true );
+
+		// Assert.
+		$this->assertTrue( $required );
+	}
+
+	/**
+	 * WCPOS's handler then WooCommerce's, in 'wp' order: WooCommerce 11.3.1's
+	 * pay_for_order and email gates let the guest POS payment through.
+	 */
+	public function test_pay_action_guest_past_grace_period_reaches_woocommerce_before_pay_action(): void {
+		// Arrange.
+		$order = $this->create_pos_guest_order_past_grace_period();
+		$order->set_total( 50 ); // The helper order has a 0.00 total, so it would not need payment.
+		$order->save();
+		$this->arrange_pos_pay_post( $order );
+		wp_set_current_user( 0 );
+		$nonce                             = $this->mint_template_pay_nonce();
+		$_POST['woocommerce-pay-nonce']    = $nonce;
+		$_REQUEST['woocommerce-pay-nonce'] = $nonce; // WooCommerce reads the nonce from $_REQUEST.
+		$this->assertTrue( $order->needs_payment(), 'precondition: the order needs payment' );
+		$before_pay = did_action( 'woocommerce_before_pay_action' );
+		$level      = ob_get_level();
+
+		// Act.
+		try {
+			( new Form_Handler() )->pay_action();
+			\WC_Form_Handler::pay_action();
+		} finally {
+			while ( ob_get_level() > $level ) {
+				ob_end_clean(); // WooCommerce's pay_action() opens a buffer it leaves open.
+			}
+		}
+
+		// Assert.
+		$this->assertSame( $before_pay + 1, did_action( 'woocommerce_before_pay_action' ) );
+		wc_clear_notices();
 	}
 
 	/**
