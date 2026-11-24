@@ -2841,7 +2841,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			$this->assertFalse( $after->meta_exists( '_wcpos_sale_day_request' ) );
 			$this->assertNotContains( '_wcpos_sale_day_request', array_column( $result->get_data()['document']['meta_data'], 'key' ) );
 			$this->assertCount( 1, $this->saleDayRecords( $order->get_id() ) );
-			$this->assertCount( 1, array_diff( $this->noteContents( $order->get_id() ), $notes ) );
+			$this->assertCount( count( $notes ) + 1, $this->noteContents( $order->get_id() ) );
 		}
 	}
 
