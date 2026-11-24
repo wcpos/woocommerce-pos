@@ -201,6 +201,9 @@ final class Completion_Stamp {
 				}
 				$history[ $last ]['reopened_at_gmt'] = gmdate( 'c' );
 			}
+			// A sale-day correction belongs to the completion it corrected: it leaves with it, on every reopen path.
+			$fresh->delete_meta_data( '_wcpos_sale_day' );
+			$fresh->delete_meta_data( '_wcpos_sale_day_at' );
 			if ( ! self::persist( $fresh, $history, null ) ) {
 				self::failed( $fresh, __( 'WCPOS: the reopen could not be recorded on the completion history; reconcile manually.', 'woocommerce-pos' ) );
 			}

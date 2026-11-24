@@ -34,7 +34,7 @@ final class Pos_Order_Audit {
 	 *
 	 * @var string[]
 	 */
-	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count' );
+	private const SERVER_META_KEYS = array( '_pos_user', '_pos_user_created', '_pos_payment_asserted', '_woocommerce_pos_version', '_wcpos_sale_received_gmt', '_wcpos_receipt_print_count', '_wcpos_sale_day', '_wcpos_sale_day_at' );
 
 	/**
 	 * Meta the server alone writes: the ledger and its index rows, the Tip fee's row mark (item meta, also

@@ -87,6 +87,20 @@ class Order_Notes {
 		$order->add_order_note( $note, 0, true );
 	}
 
+	/** Add the reporting-day correction note using the site's dates and timezone. */
+	public static function add_sale_day_change_note( WC_Order $order, string $from_gmt, string $to_gmt, string $reason ): void {
+		$format = get_option( 'date_format' );
+		$to = wp_date( $format, strtotime( $to_gmt ) );
+		if ( '' === $from_gmt ) {
+			/* translators: 1: corrected sale date, 2: reason. */
+			$note = sprintf( __( 'POS sale day set to %1$s. Reason: %2$s', 'woocommerce-pos' ), $to, $reason );
+		} else {
+			/* translators: 1: previous sale date, 2: corrected sale date, 3: reason. */
+			$note = sprintf( __( 'POS sale day changed from %1$s to %2$s. Reason: %3$s', 'woocommerce-pos' ), wp_date( $format, strtotime( $from_gmt ) ), $to, $reason );
+		}
+		$order->add_order_note( $note, 0, true );
+	}
+
 	/** Add the note for a refused cashier reassignment. */
 	public static function add_cashier_change_refused_note( WC_Order $order, $actor_id, $refused_user_id, $kept_user_id ): void {
 		$note = sprintf(
