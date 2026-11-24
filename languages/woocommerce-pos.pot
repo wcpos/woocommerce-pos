@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-24T12:33:39+00:00\n"
+"POT-Creation-Date: 2026-11-24T12:36:33+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1833,6 +1833,7 @@ msgid "WCPOS file integrity"
 msgstr ""
 
 #: includes/Services/File_Integrity.php:272
+#: includes/Sync/Integrity_Digest.php:466
 msgid "WCPOS"
 msgstr ""
 
@@ -5186,6 +5187,18 @@ msgstr ""
 
 #: includes/Sync/Health.php:107
 msgid "The WCPOS sync store is not installed yet (initialising or a schema install failed). Retry shortly."
+msgstr ""
+
+#: includes/Sync/Integrity_Digest.php:449
+msgid "WCPOS sync integrity checks"
+msgstr ""
+
+#: includes/Sync/Integrity_Digest.php:469
+msgid "WCPOS sync integrity checks are off on SQLite"
+msgstr ""
+
+#: includes/Sync/Integrity_Digest.php:470
+msgid "The POS still syncs through its change log, but the background integrity check that catches changes made outside WordPress (direct database edits, some imports) does not run on this database. SQLite is not a supported database for WCPOS."
 msgstr ""
 
 #: includes/Sync/Order_Write_Payload.php:435
