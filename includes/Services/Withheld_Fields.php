@@ -103,6 +103,34 @@ final class Withheld_Fields {
 	}
 
 	/**
+	 * Strip the callback's response before rest_post_dispatch, where _fields selects by index.
+	 *
+	 * @param mixed           $response Callback response.
+	 * @param mixed           $handler  Route handler.
+	 * @param WP_REST_Request $request  Request.
+	 * @return mixed
+	 */
+	public static function filter_callback_response( $response, $handler, $request ) {
+		if ( ! $request instanceof WP_REST_Request || ! self::applies_to( $request ) ) {
+			return $response;
+		}
+		$withheld = array_flip( self::withheld_for( get_current_user_id() ) );
+		if ( array() === $withheld || ( ! $response instanceof \WP_HTTP_Response && ! \is_array( $response ) ) ) {
+			return $response;
+		}
+		$removed  = false;
+		$stripped = self::remove( $response instanceof \WP_HTTP_Response ? $response->get_data() : $response, $withheld, $removed );
+		if ( ! $removed ) {
+			return $response;
+		}
+		if ( \is_array( $response ) ) {
+			return $stripped;
+		}
+		$response->set_data( $stripped );
+		return $response;
+	}
+
+	/**
 	 * Drop withheld keys from a write before any callback reads it.
 	 *
 	 * @param mixed           $response Response so far.

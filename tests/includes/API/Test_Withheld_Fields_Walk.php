@@ -272,6 +272,42 @@ class Test_Withheld_Fields_Walk extends Sync_REST_Store_Test_Case {
 		$this->assertTrue( Withheld_Fields::applies_to( new WP_REST_Request( 'POST', '/WCPOS/V1/products/1' ) ) );
 	}
 
+	/** A _fields selection by index serves no meta value the full response withholds. */
+	public function test_restricted_index_path_field_selection_serves_no_withheld_meta_value(): void {
+		// Arrange.
+		update_option( 'woocommerce_feature_cost_of_goods_sold_enabled', 'no' );
+		$stored = current( wc_get_order( $this->ids['refund'] )->get_items() )->get_meta_data();
+		$keys   = array_map(
+			static function ( $meta ) {
+				return $meta->key;
+			},
+			$stored
+		);
+		$this->assertContains( '_cogs_value', $keys );
+		$paths = array();
+		foreach ( range( 0, \count( $stored ) + 1 ) as $i ) {
+			$paths[] = 'line_items.0.meta_data.' . $i . '.value';
+		}
+		$this->sign_in_with_token( $this->restricted_cashier() );
+		$routes = array(
+			'/wcpos/v2/refunds'                                  => array( 'include' => array( $this->ids['refund'] ) ),
+			'/wc/v3/orders/' . $this->ids['order'] . '/refunds' => array(),
+		);
+		foreach ( $routes as $route => $query ) {
+			$lists = array();
+			foreach ( array( 'line_items', implode( ',', $paths ) ) as $fields ) {
+				$request = 0 === strpos( $route, '/wcpos/' ) ? $this->wp_rest_get_request( $route ) : new WP_REST_Request( 'GET', $route );
+				$request->set_query_params( $query + array( '_fields' => $fields ) );
+				// Act.
+				list( $status, $body ) = $this->serve_selected( $request );
+				$this->assertSame( 200, $status, $route . ' ' . wp_json_encode( $body ) );
+				$lists[] = array_column( $body[0]['line_items'][0]['meta_data'], 'value' );
+			}
+			// Assert.
+			$this->assertSame( $lists[0], $lists[1], $route );
+		}
+	}
+
 	/** The four wc/v3 reads that carry cost. */
 	private function wc_v3_paths(): array {
 		return array(

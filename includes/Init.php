@@ -329,6 +329,14 @@ class Init {
 				'phase'    => 'post-latch',
 			),
 			array(
+				'hook'     => 'rest_request_after_callbacks',
+				'callback' => array( Services\Withheld_Fields::class, 'filter_callback_response' ),
+				'priority' => 999,
+				'args'     => 3,
+				'reason'   => 'At 999, after other after-callback listeners, so cost is withheld before rest_post_dispatch, where core\'s _fields selection runs at 10 and can select a meta value by index without its key. Unconditional, as above.',
+				'phase'    => 'post-latch',
+			),
+			array(
 				'hook'     => null,
 				'callback' => array( Services\Receipt_Snapshot_Cleanup::class, 'register' ),
 				'priority' => 10,

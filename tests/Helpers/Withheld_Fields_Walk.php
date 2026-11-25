@@ -169,6 +169,20 @@ trait Withheld_Fields_Walk {
 	}
 
 	/**
+	 * Serve a request like serve(), with the rest_post_dispatch step (core's _fields selection).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return array{0: int, 1: mixed} Status and the decoded body the client receives.
+	 */
+	protected function serve_selected( WP_REST_Request $request ): array {
+		$server   = rest_get_server();
+		$response = apply_filters( 'rest_post_dispatch', rest_ensure_response( rest_do_request( $request ) ), $server, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Serve the core dispatch filter, as WP_REST_Server does.
+		$data     = $server->response_to_data( $response, false );
+		$data     = apply_filters( 'rest_pre_echo_response', $data, $server, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Serve the core echo filter, as WP_REST_Server does.
+		return array( $response->get_status(), json_decode( (string) wp_json_encode( $data ), true ) );
+	}
+
+	/**
 	 * A WCPOS POST request with a JSON body.
 	 *
 	 * @param string $path Route.
