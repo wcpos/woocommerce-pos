@@ -83,7 +83,7 @@ if [[ "$(grep -Fc '.github/scripts/test-deploy-dev-workflow.sh' "$TEST_WORKFLOW_
 fi
 
 # The checks below run workflow shell in a temp tree with stub tools.
-TEST_ROOT="$(mktemp -d)"
+TEST_ROOT="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 STUBS="$TEST_ROOT/bin"
 mkdir "$STUBS"
@@ -120,32 +120,71 @@ for TOOL in scp ssh; do
   fi
 done
 
-# Unpack: these need GNU tar, mv and find.
+# Unpack: these need GNU tar, mv, find and stat.
 mkdir "$TEST_ROOT/mv-probe"
 if ! mv -T "$TEST_ROOT/mv-probe" "$TEST_ROOT/mv-probe-moved" 2>/dev/null; then
   echo 'FAIL: the unpack checks need GNU mv with -T (run them on Linux)' >&2
   exit 1
 fi
-export REAL_TAR REAL_MV
+export REAL_TAR REAL_MV REAL_STAT
 REAL_TAR="$(command -v tar)"
 REAL_MV="$(command -v mv)"
+REAL_STAT="$(command -v stat)"
 cat >"$STUBS/chown" <<'STUB'
 #!/usr/bin/env bash
 exit 0
 STUB
+# Logs the arguments, the -C directory and the private directory's mode. TAR_BEFORE=links: every plugins entry
+# but the live one becomes a link to OTHER. TAR_AFTER: move-plugins (plugins replaced by a link to OTHER) or
+# '<mode> <entry>' (an unpacked entry gets that mode).
 cat >"$STUBS/tar" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >>"$TAR_LOG"
-exec "$REAL_TAR" "$@"
+ARGS=("$@")
+for ((i = 0; i < ${#ARGS[@]} - 1; i++)); do
+  [[ "${ARGS[i]}" != -C ]] || DEST="${ARGS[i + 1]}"
+done
+echo "${DEST:-} $("$REAL_STAT" -c %a "$TEST_PRIV")" >>"$TAR_DEST_LOG"
+if [[ "$TAR_BEFORE" == links ]]; then
+  for E in "$TEST_PLUGINS"/* "$TEST_PLUGINS"/.[!.]*; do
+    if [[ "$E" != "$TEST_PLUGINS/woocommerce-pos" ]] && [[ -e "$E" || -L "$E" ]]; then
+      rm -rf "$E" && ln -s "$TEST_OTHER" "$E"
+    fi
+  done
+fi
+"$REAL_TAR" "$@" || exit
+case "$TAR_AFTER" in
+  '') ;;
+  move-plugins) "$REAL_MV" -T "$TEST_PLUGINS" "$TEST_PLUGINS.moved" && ln -s "$TEST_OTHER" "$TEST_PLUGINS" ;;
+  *) chmod "${TAR_AFTER%% *}" "$DEST/${TAR_AFTER#* }" ;;
+esac
 STUB
+# MV_FAIL fails the move of the per-run copy into place ("term" also stops the deploy).
+# MV_LINK=1: once the live copy is moved aside, a link to OTHER takes its place.
+# MV_LINK=put-back: just before the moved-aside copy is put back, a link to OTHER takes the live path.
 cat >"$STUBS/mv" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$MV_LOG"
-if [[ -n "$MV_FAIL" && "${@: -2:1}" == *.tmp ]]; then
+if [[ -n "$MV_FAIL" && "${@: -2:1}" == *.4242 ]]; then
   [[ "$MV_FAIL" != term ]] || kill -TERM "$PPID"
   exit 1
 fi
-exec "$REAL_MV" "$@"
+if [[ "$MV_LINK" == put-back && "${@: -2:1}" == *.old ]]; then
+  ln -s "$TEST_OTHER" "${@: -1}"
+fi
+"$REAL_MV" "$@" || exit
+if [[ "$MV_LINK" == 1 && "${@: -1}" == *.old ]]; then
+  ln -s "$TEST_OTHER" "${@: -2:1}"
+fi
+STUB
+# STAT_OTHER_DEV: the plugins directory reports another device.
+cat >"$STUBS/stat" <<'STUB'
+#!/usr/bin/env bash
+if [[ -n "$STAT_OTHER_DEV" && "$1 $2" == '-c %d' && "$3" -ef "$TEST_PLUGINS" ]]; then
+  echo 999999
+  exit 0
+fi
+exec "$REAL_STAT" "$@"
 STUB
 cat >"$STUBS/docker" <<'STUB'
 #!/usr/bin/env bash
@@ -166,19 +205,22 @@ STUB
 chmod +x "$STUBS"/*
 
 CASE="$TEST_ROOT/case"
-STAGE="$TEST_ROOT/stage"
+PKG="$TEST_ROOT/pkg"
 HTML="$CASE/data/wordpress/dev-free/html"
-LIVE="$HTML/wp-content/plugins/woocommerce-pos"
+PLUGINS="$HTML/wp-content/plugins"
+LIVE="$PLUGINS/woocommerce-pos"
+PRIV="$CASE/data/wordpress/.wcpos-deploy"
+OLD="$PRIV/dev-free.woocommerce-pos.old"
+OTHER="$CASE/other"
 REMOTE_UNDER_TEST="${REMOTE_DEPLOY//\/tmp\//"$CASE/tmp/"}"
 REMOTE_UNDER_TEST="${REMOTE_UNDER_TEST//\/data\/wordpress/"$CASE/data/wordpress"}"
 
 new_case() {
-  rm -rf "$CASE" "$STAGE"
-  mkdir -p "$CASE/tmp" "$(dirname "$LIVE")" "$STAGE/includes"
-  echo new >"$STAGE/readme.txt"
-  echo '<?php' >"$STAGE/includes/a.php"
+  rm -rf "$CASE" "$PKG"
+  mkdir -p "$CASE/tmp" "$PLUGINS" "$OTHER" "$PKG/includes"
+  echo new >"$PKG/readme.txt"
+  echo '<?php' >"$PKG/includes/a.php"
   echo victim >"$CASE/victim"
-  : >"$CASE/tar.log"
 }
 
 add_old_copy() {
@@ -189,94 +231,244 @@ add_old_copy() {
 }
 
 pack() {
-  (cd "$STAGE" && tar -czf "$CASE/tmp/pkg.tar.gz" .)
+  (cd "$PKG" && tar -czf "$CASE/tmp/pkg.tar.gz" .)
 }
 
+entries() {
+  ls -A "$1/" 2>/dev/null | LC_ALL=C sort || true
+}
+
+# Knobs for the stubs (MV_FAIL, MV_LINK, TAR_BEFORE, TAR_AFTER, STAT_OTHER_DEV) and DEPLOY_UMASK
+# are set as a prefix of the call.
 deploy() {
+  : >"$CASE/tar.log"; : >"$CASE/tar-dest.log"; : >"$CASE/mv.log"
+  PLUGINS_BEFORE="$(entries "$PLUGINS")"
   STATUS=0
-  PATH="$STUBS:$PATH" TAR_LOG="$CASE/tar.log" MV_LOG="$CASE/mv.log" MV_FAIL="${MV_FAIL:-}" \
-    DEPLOY_TEST_HTML="$HTML" bash -s -- pkg.tar.gz 4242 dev-free \
-    <<<"$REMOTE_UNDER_TEST" >"$CASE/out.log" 2>&1 || STATUS=$?
+  (
+    [[ -z "${DEPLOY_UMASK:-}" ]] || umask "$DEPLOY_UMASK"
+    PATH="$STUBS:$PATH" TAR_LOG="$CASE/tar.log" TAR_DEST_LOG="$CASE/tar-dest.log" MV_LOG="$CASE/mv.log" \
+      MV_FAIL="${MV_FAIL:-}" MV_LINK="${MV_LINK:-}" TAR_BEFORE="${TAR_BEFORE:-}" TAR_AFTER="${TAR_AFTER:-}" \
+      STAT_OTHER_DEV="${STAT_OTHER_DEV:-}" TEST_PRIV="$PRIV" TEST_PLUGINS="$PLUGINS" TEST_OTHER="$OTHER" \
+      DEPLOY_TEST_HTML="$HTML" bash -s -- pkg.tar.gz 4242 dev-free <<<"$REMOTE_UNDER_TEST" >"$CASE/out.log" 2>&1
+  ) || STATUS=$?
 }
 
-# Lists a tree: path, type, link target or checksum. $2 set: leave the marker out.
+# Lists a path: a link or a file as itself, a tree as path, type, link target or checksum.
+# $2 set: leave the marker out.
 snapshot() {
-  [[ -e "$1" ]] || { echo absent; return; }
+  if [[ -L "$1" ]]; then echo "link -> $(readlink "$1")"; return; fi
+  if [[ -f "$1" ]]; then echo "file $(cksum <"$1")"; return; fi
+  [[ -d "$1" ]] || { echo absent; return; }
   (cd "$1" && find . -mindepth 1 ${2:+-path ./.wcpos-deploy-run -prune -o} -print | LC_ALL=C sort |
     while IFS= read -r p; do
       if [[ -L "$p" ]]; then echo "$p -> $(readlink "$p")"
       elif [[ -d "$p" ]]; then echo "$p/"
-      else echo "$p $(cksum <"$p")"; fi
+      elif [[ -f "$p" ]]; then echo "$p $(cksum <"$p")"
+      else echo "$p (special)"; fi
     done)
 }
 
-# $1 case, $2 ok|fail, $3 expected live snapshot, $4 tmp-allowed when a .tmp may be left.
+no_tar() { [[ ! -s "$CASE/tar.log" ]] || fail "unpack case $1: tar must not run"; }
+other_is() { [[ "$(snapshot "$OTHER")" == "$2" ]] || fail "unpack case $1: the other directory must not change"; }
+
+# $1 case, $2 ok|fail, $3 expected live snapshot. Optional after that:
+#   priv=<entry>    the private directory holds this entry (default: nothing)
+#   no-priv         the private directory is not checked
+#   plugins=<list>  the plugins entries (default: those before the run, plus the live copy on success)
 check_run() {
-  local name="$1"
+  local name="$1" want_priv='' check_priv=1 want_plugins="$PLUGINS_BEFORE" opt dest='' mode=''
+  [[ "$2" != ok ]] ||
+    want_plugins="$({ [[ -z "$PLUGINS_BEFORE" ]] || echo "$PLUGINS_BEFORE"; echo woocommerce-pos; } | LC_ALL=C sort -u)"
+  for opt in "${@:4}"; do
+    case "$opt" in
+      priv=*) want_priv="${opt#priv=}" ;;
+      no-priv) check_priv='' ;;
+      plugins=*) want_plugins="${opt#plugins=}" ;;
+    esac
+  done
   if [[ "$2" == ok ]]; then
     [[ "$STATUS" -eq 0 ]] || fail "unpack case $name: deploy must succeed (exit $STATUS)"
     [[ "$(snapshot "$LIVE" no-marker)" == "$3" ]] || fail "unpack case $name: live directory must hold the package"
     [[ -f "$LIVE/.wcpos-deploy-run" && ! -L "$LIVE/.wcpos-deploy-run" && "$(cat "$LIVE/.wcpos-deploy-run")" == 4242 ]] ||
       fail "unpack case $name: marker must be a regular file holding the run id"
     grep -qx -- --no-same-owner "$CASE/tar.log" || fail "unpack case 11 ($name): tar must extract with --no-same-owner"
+    grep -qx -- --no-same-permissions "$CASE/tar.log" ||
+      fail "unpack case 12 ($name): tar must extract with --no-same-permissions"
+    read -r dest mode <"$CASE/tar-dest.log" || true
+    [[ -n "$dest" && "${dest%/*}" == "$PRIV" && "$mode" == 700 ]] ||
+      fail "unpack case 18 ($name): tar must unpack inside the private directory while it is mode 700"
   else
     [[ "$STATUS" -ne 0 ]] || fail "unpack case $name: deploy must fail"
     [[ "$(snapshot "$LIVE")" == "$3" ]] || fail "unpack case $name: live directory must be left as it was"
   fi
   [[ "$(cat "$CASE/victim")" == victim ]] || fail "unpack case $name: file outside the plugin must not change"
-  [[ ! -e "$LIVE.old" ]] || fail "unpack case $name: no .old directory may be left"
-  if [[ "${4:-}" != tmp-allowed && -e "$LIVE.tmp" ]]; then
-    fail "unpack case $name: no .tmp directory may be left"
+  if [[ -n "$check_priv" ]]; then
+    [[ -d "$PRIV" && ! -L "$PRIV" && "$(stat -c %a "$PRIV")" == 700 ]] ||
+      fail "unpack case $name: the private directory must be a mode 700 directory"
+    [[ "$(entries "$PRIV")" == "$want_priv" ]] || fail "unpack case $name: the private directory must hold nothing else"
   fi
+  [[ "$(entries "$PLUGINS")" == "$want_plugins" ]] || fail "unpack case $name: the plugins directory must hold nothing else"
 }
 
 # 1: clean package over an existing live directory.
 new_case; add_old_copy "$LIVE"; pack; deploy
-check_run 1 ok "$(snapshot "$STAGE" no-marker)"
+check_run 1 ok "$(snapshot "$PKG" no-marker)"
 
 # 2: clean package, no live directory.
 new_case; pack; deploy
-check_run 2 ok "$(snapshot "$STAGE" no-marker)"
+check_run 2 ok "$(snapshot "$PKG" no-marker)"
 
 # 3-5: links that lead out of the package are rejected.
 for LINK_CASE in '3 .wcpos-deploy-run abs' '4 .wcpos-deploy-run rel' '5 includes/b.php abs'; do
   read -r NAME LINK_PATH KIND <<<"$LINK_CASE"
   new_case; add_old_copy "$LIVE"
   if [[ "$KIND" == abs ]]; then
-    ln -s "$CASE/victim" "$STAGE/$LINK_PATH"
+    ln -s "$CASE/victim" "$PKG/$LINK_PATH"
   else
-    ln -s ../../../../../../../victim "$STAGE/$LINK_PATH"
+    ln -s ../../../../../../../victim "$PKG/$LINK_PATH"
   fi
   pack; BEFORE="$(snapshot "$LIVE")"; deploy
   check_run "$NAME" fail "$BEFORE"
 done
 
 # 6: marker as a link to a file inside the package.
-new_case; ln -s readme.txt "$STAGE/.wcpos-deploy-run"; pack; deploy
-check_run 6 ok "$(snapshot "$STAGE" no-marker)"
+new_case; ln -s readme.txt "$PKG/.wcpos-deploy-run"; pack; deploy
+check_run 6 ok "$(snapshot "$PKG" no-marker)"
 [[ "$(cat "$LIVE/readme.txt" 2>/dev/null)" == new ]] || fail 'unpack case 6: the linked file must not change'
 
 # 7: marker as a directory.
-new_case; mkdir "$STAGE/.wcpos-deploy-run"; echo x >"$STAGE/.wcpos-deploy-run/x"; pack; deploy
-check_run 7 ok "$(snapshot "$STAGE" no-marker)"
+new_case; mkdir "$PKG/.wcpos-deploy-run"; echo x >"$PKG/.wcpos-deploy-run/x"; pack; deploy
+check_run 7 ok "$(snapshot "$PKG" no-marker)"
 
-# 8 and 8b: the move-in fails, or TERM arrives during it.
+# 8 and 8b: the move of the per-run copy into place fails, or TERM arrives during it.
 for MV_CASE in '8 fail' '8b term'; do
   read -r NAME MODE <<<"$MV_CASE"
   new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
   MV_FAIL="$MODE" deploy
-  check_run "$NAME" fail "$BEFORE" tmp-allowed
-  grep -q '\.tmp ' "$CASE/mv.log" 2>/dev/null || fail "unpack case $NAME: the move-in must have been tried"
+  check_run "$NAME" fail "$BEFORE"
+  grep -q '\.4242 woocommerce-pos$' "$CASE/mv.log" || fail "unpack case $NAME: the move into place must have been tried"
 done
 
-# 9: a stopped run left only the .old copy, then a rejected package.
-new_case; add_old_copy "$LIVE.old"; ln -s "$CASE/victim" "$STAGE/.wcpos-deploy-run"; pack
-BEFORE="$(snapshot "$LIVE.old")"; deploy
-check_run 9 fail "$BEFORE"
+# 9: a stopped run left only the moved-aside copy, then a rejected package.
+new_case; mkdir -m 700 "$PRIV"; add_old_copy "$OLD"; ln -s "$CASE/victim" "$PKG/.wcpos-deploy-run"; pack
+BEFORE="$(snapshot "$OLD")"; deploy
+check_run 9 fail "$BEFORE" plugins=woocommerce-pos
 
 # 10: unreadable package.
 new_case; add_old_copy "$LIVE"; echo 'not a package' >"$CASE/tmp/pkg.tar.gz"; BEFORE="$(snapshot "$LIVE")"; deploy
-check_run 10 fail "$BEFORE" tmp-allowed
+check_run 10 fail "$BEFORE"
+
+# 12: loose modes in the package are not carried over, even under umask 000.
+new_case; add_old_copy "$LIVE"
+echo a >"$PKG/suid.php"; echo b >"$PKG/sgid.php"; echo c >"$PKG/open.php"
+chmod 4755 "$PKG/suid.php"; chmod 2755 "$PKG/sgid.php"; chmod 0666 "$PKG/open.php"; chmod 0777 "$PKG/includes" "$PKG"
+pack; DEPLOY_UMASK=000 deploy
+check_run 12 ok "$(snapshot "$PKG" no-marker)"
+[[ -d "$LIVE" && -z "$(find "$LIVE" ! -type l -perm /6022)" ]] || fail 'unpack case 12: no entry may keep a loose mode'
+
+# 13a-e: an entry with a loose mode after unpacking is rejected.
+for MODE_CASE in '13a 4644 readme.txt' '13b 2644 readme.txt' '13c 0664 readme.txt' '13d 0646 readme.txt' '13e 0777 .'; do
+  read -r NAME MODE ENTRY <<<"$MODE_CASE"
+  new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
+  TAR_AFTER="$MODE $ENTRY" deploy
+  check_run "$NAME" fail "$BEFORE"
+done
+
+# 14 and 14b: anything but files, directories and links is rejected (the device only as root).
+for NODE_CASE in '14 fifo' '14b char'; do
+  read -r NAME KIND <<<"$NODE_CASE"
+  new_case; add_old_copy "$LIVE"
+  if [[ "$KIND" == fifo ]]; then
+    mkfifo "$PKG/includes/node"
+  elif [[ "$EUID" -ne 0 ]] || ! mknod -m 644 "$PKG/includes/node" c 1 3 2>/dev/null; then
+    continue
+  fi
+  pack; BEFORE="$(snapshot "$LIVE")"; deploy
+  check_run "$NAME" fail "$BEFORE"
+done
+
+# 15: a link with .. inside its target is rejected.
+new_case; add_old_copy "$LIVE"; ln -s includes/../../victim "$PKG/link.php"; pack
+BEFORE="$(snapshot "$LIVE")"; deploy
+check_run 15 fail "$BEFORE"
+
+# 16 and 16b: plugins, or wp-content, is a link to another directory before the run.
+for LINKED_CASE in '16 plugins' '16b wp-content'; do
+  read -r NAME LINKED <<<"$LINKED_CASE"
+  new_case; pack
+  if [[ "$LINKED" == plugins ]]; then
+    add_old_copy "$OTHER/woocommerce-pos"; rmdir "$PLUGINS"; ln -s "$OTHER" "$PLUGINS"
+  else
+    add_old_copy "$OTHER/plugins/woocommerce-pos"; rmdir "$PLUGINS" "$HTML/wp-content"; ln -s "$OTHER" "$HTML/wp-content"
+  fi
+  BEFORE="$(snapshot "$LIVE")"; OTHER_BEFORE="$(snapshot "$OTHER")"; deploy
+  check_run "$NAME" fail "$BEFORE"
+  other_is "$NAME" "$OTHER_BEFORE"
+  no_tar "$NAME"
+done
+
+# 17: the plugins path changes while unpacking: plugins is renamed and a link to another directory takes its place.
+new_case; add_old_copy "$LIVE"; pack
+TAR_AFTER=move-plugins deploy
+check_run 17 fail absent plugins=
+other_is 17 ''
+
+# 18b: before unpacking, every plugins entry but the live one becomes a link to another directory.
+new_case; add_old_copy "$LIVE"; mkdir "$PLUGINS/woocommerce-pos.tmp" "$PLUGINS/woocommerce-pos.old" "$PLUGINS/akismet"; pack
+TAR_BEFORE=links deploy
+check_run 18b ok "$(snapshot "$PKG" no-marker)"
+other_is 18b ''
+
+# 19: once the live copy is moved aside, a link to another directory takes its place; the next run cleans up.
+new_case; add_old_copy "$LIVE"; pack
+MV_LINK=1 deploy
+check_run 19 fail "link -> $OTHER" priv=dev-free.woocommerce-pos.old
+other_is 19 ''
+pack; deploy
+check_run '19 (next run)' ok "$(snapshot "$PKG" no-marker)"
+other_is '19 (next run)' ''
+
+# 19b: the move into place fails, and just before the put-back a link to another directory takes the live path.
+new_case; add_old_copy "$LIVE"; pack
+MV_FAIL=fail MV_LINK=put-back deploy
+check_run 19b fail "link -> $OTHER" priv=dev-free.woocommerce-pos.old
+other_is 19b ''
+
+# 20a-c: the private directory is a link (also to a mode 700 directory of this user), has mode 755,
+# or belongs to another user (only as root).
+for PRIV_CASE in 20a 20a2 20b 20c; do
+  new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
+  case "$PRIV_CASE" in
+    20a) ln -s "$OTHER" "$PRIV" ;;
+    20a2) chmod 700 "$OTHER"; ln -s "$OTHER" "$PRIV" ;;
+    20b) mkdir -m 755 "$PRIV" ;;
+    20c) [[ "$EUID" -eq 0 ]] || continue; mkdir -m 700 "$PRIV"; chown 1000:1000 "$PRIV" ;;
+  esac
+  deploy
+  check_run "$PRIV_CASE" fail "$BEFORE" no-priv
+  no_tar "$PRIV_CASE"
+  other_is "$PRIV_CASE" ''
+done
+
+# 21: the plugins directory reports another file system than the private directory.
+new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
+STAT_OTHER_DEV=1 deploy
+check_run 21 fail "$BEFORE"
+no_tar 21
+
+# 22a-b: the live path is a dangling link or a file. 23a-b: the same, and the move into place fails.
+for SHAPE_CASE in '22a link' '22b file' '23a link fail' '23b file fail'; do
+  read -r NAME SHAPE MODE <<<"$SHAPE_CASE"
+  new_case; pack
+  if [[ "$SHAPE" == link ]]; then ln -s "$CASE/nowhere" "$LIVE"; else echo file >"$LIVE"; fi
+  BEFORE="$(snapshot "$LIVE")"
+  MV_FAIL="$MODE" deploy
+  if [[ -n "$MODE" ]]; then
+    check_run "$NAME" fail "$BEFORE"
+  else
+    check_run "$NAME" ok "$(snapshot "$PKG" no-marker)"
+  fi
+done
 
 if [[ "$FAILURES" -ne 0 ]]; then
   exit 1
