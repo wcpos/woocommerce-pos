@@ -117,11 +117,12 @@ final class Orders_Controller extends WP_REST_Controller {
 		$ids       = array_map( 'intval', array_column( $page_rows, 'order_id' ) );
 
 		/**
-		 * Filters the order IDs eligible for the custom pull lane.
+		 * Filters the order IDs a client may be served: a page of the order pull
+		 * lane here, and the live rows of the orders change stream
+		 * (`changes/sequence-log?collection=orders`).
 		 *
-		 * The interim hook-parity seam for order-scoping plugins on a lane that
-		 * bypasses `woocommerce_rest_orders_prepare_object_query`. It retires with
-		 * the lane at the 2.0.0 protocol boundary (ADR 0035, #1748).
+		 * The hook-parity seam for order-scoping plugins on the two lanes that
+		 * bypass `woocommerce_rest_orders_prepare_object_query` (ADR 0035, #1748).
 		 *
 		 * The contract, precisely:
 		 *  - NARROW ONLY. Return the subset of `$ids` to serve; ids added by the
@@ -138,8 +139,8 @@ final class Orders_Controller extends WP_REST_Controller {
 		 *
 		 * @since 1.10.3
 		 *
-		 * @param int[]           $ids     Candidate order IDs in this pull page.
-		 * @param WP_REST_Request $request Pull request.
+		 * @param int[]           $ids     Candidate order IDs on this page.
+		 * @param WP_REST_Request $request The request being served, of either lane.
 		 */
 		$filtered = apply_filters( 'wcpos_order_pull_ids', $ids, $request );
 		$filtered = apply_filters_deprecated( 'woocommerce_pos_order_pull_ids', array( $filtered, $request ), '2.0.0', 'wcpos_order_pull_ids' );

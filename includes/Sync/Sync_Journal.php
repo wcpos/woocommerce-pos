@@ -59,6 +59,12 @@ final class Sync_Journal {
 	 */
 	const PRUNE_WATERMARK_OPTION_PREFIX = 'wcpos_change_log_prune_watermark_';
 
+	/** How long a missing sequence number may still be a transaction that has not committed. */
+	private const HOLD_BACK_SECONDS = 10;
+
+	/** Bounds the hold-back read to the newest rows; a store writing more in 10 s falls back to the order windows. */
+	private const HOLD_BACK_SCAN = 1000;
+
 	public function table_name(): string {
 		global $wpdb;
 		return $wpdb->prefix . Health::SYNC_JOURNAL_TABLE;
@@ -1163,8 +1169,14 @@ final class Sync_Journal {
 		return array_unique( array_merge( array( 'order' ), self::catalogue_object_types() ) );
 	}
 
-	/** One page of the change stream past a cursor, plus the head it was read against. */
-	public function page( array $object_types, int $since, int $limit ): array {
+	/**
+	 * One page of the change stream past a cursor, plus the head it was read against.
+	 *
+	 * `$hold_back` never moves a cursor past a number an open transaction may still commit:
+	 * rows stop at the settled sequence and head drops to the stream's last row at or below
+	 * it, never below `$since`. Without it the page reads exactly what it always has.
+	 */
+	public function page( array $object_types, int $since, int $limit, bool $hold_back = false ): array {
 		global $wpdb;
 		$types = array();
 		foreach ( $object_types as $object_type ) {
@@ -1173,6 +1185,9 @@ final class Sync_Journal {
 				$types[] = $object_type;
 			}
 		}
+		// Read BEFORE the rows: every number up to it was visible then, so a row that commits
+		// between the two reads waits for the next page instead of being jumped.
+		$settled = $hold_back ? $this->settled_sequence( max( 0, $since ) ) : null;
 
 		$sql  = 'SELECT sequence, object_id, object_type, deleted, revision, modified_gmt FROM ' . $this->table_name() . ' WHERE ';
 		$args = array();
@@ -1180,11 +1195,23 @@ final class Sync_Journal {
 			$sql .= 'object_type IN (' . implode( ',', array_fill( 0, count( $types ), '%s' ) ) . ') AND ';
 			$args = $types;
 		}
-		$sql .= 'sequence > %d ORDER BY sequence ASC LIMIT %d';
+		$sql .= 'sequence > %d';
 		$args[] = max( 0, $since );
+		if ( null !== $settled ) {
+			$sql   .= ' AND sequence <= %d';
+			$args[] = $settled;
+		}
+		$sql .= ' ORDER BY sequence ASC LIMIT %d';
 		$args[] = max( 1, $limit );
 
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, ...$args ), ARRAY_A );
+
+		$head = $this->head_sequence( $types );
+		if ( null !== $settled && $head > $settled ) {
+			// Below the gap for a fresh client, which jumps to head; never below a held cursor, whose row may be gone.
+			$in   = array() !== $types ? 'object_type IN (' . implode( ',', array_fill( 0, count( $types ), '%s' ) ) . ') AND ' : '';
+			$head = max( $since, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT MAX(sequence) FROM ' . $this->table_name() . ' WHERE ' . $in . 'sequence <= %d', ...array_merge( $types, array( $settled ) ) ) ) );
+		}
 
 		return array(
 			'rows' => array_map(
@@ -1193,8 +1220,37 @@ final class Sync_Journal {
 				},
 				is_array( $rows ) ? $rows : array()
 			),
-			'head' => $this->head_sequence( $types ),
+			'head' => $head,
 		);
+	}
+
+	/**
+	 * The highest sequence at or above `$since` that a cursor at `$since` may move to.
+	 *
+	 * Every type shares one AUTO_INCREMENT, so a number is missing only when no row holds it.
+	 * The first missing number whose next row is young (either way, so a row stamped ahead by
+	 * a fast clock cannot hold) may be an open transaction; older gaps are permanent.
+	 */
+	private function settled_sequence( int $since ): int {
+		global $wpdb;
+		$tail = $wpdb->get_results( $wpdb->prepare( 'SELECT sequence, created_gmt FROM ' . $this->table_name() . ' WHERE sequence > %d ORDER BY sequence DESC LIMIT %d', $since, self::HOLD_BACK_SCAN ), ARRAY_A );
+		if ( ! is_array( $tail ) || array() === $tail ) {
+			return $since; // No rows, or a failed read: settle nothing.
+		}
+		$tail = array_reverse( $tail );
+		// A full tail may start above unread numbers: its first row is then taken as following the one before.
+		$previous = \count( $tail ) < self::HOLD_BACK_SCAN ? $since : (int) $tail[0]['sequence'] - 1;
+		$now      = time();
+		foreach ( $tail as $row ) {
+			$sequence = (int) $row['sequence'];
+			$created  = strtotime( (string) $row['created_gmt'] . ' UTC' );
+			if ( $sequence !== $previous + 1 && false !== $created && abs( $now - $created ) < self::HOLD_BACK_SECONDS ) {
+				return $previous;
+			}
+			$previous = $sequence;
+		}
+
+		return $previous;
 	}
 
 	/** Coerce a raw journal row to the served scalar types. */
