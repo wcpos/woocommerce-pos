@@ -646,6 +646,14 @@ final class Collection_Rules_Plan {
 				}
 			}
 
+			if ( isset( $rule['numeric_range'] ) ) {
+				$this->claimed_keys[] = $key;
+				if ( is_numeric( $value ) && $value >= 0 ) {
+					$this->claims[ $canonical ] = (int) $value;
+				}
+				continue;
+			}
+
 			$this->claims[ $canonical ] = $this->normalize( $value, $rule, \is_array( $entry ) ? ( $entry['parse'] ?? null ) : null );
 			$this->claimed_keys[]       = $key;
 		}
@@ -760,7 +768,7 @@ final class Collection_Rules_Plan {
 		$metas = array();
 		foreach ( $this->rules['filters'] ?? array() as $canonical => $rule ) {
 			// The posts dialect of any_of is a meta group; HPOS uses column/subquery SQL.
-			$has_meta = isset( $rule['meta'] ) || ( Collection_Rules::STORAGE_POSTS === $this->storage && isset( $rule['any_of']['posts'] ) );
+			$has_meta = isset( $rule['meta'] ) || ( Collection_Rules::STORAGE_POSTS === $this->storage && ( isset( $rule['any_of']['posts'] ) || isset( $rule['numeric_range'] ) ) );
 			if ( ! $has_meta || ! isset( $this->claims[ $canonical ] ) ) {
 				continue;
 			}
@@ -798,6 +806,16 @@ final class Collection_Rules_Plan {
 	 */
 	private function apply_meta_filters( array $args ): array {
 		foreach ( $this->claimed_meta_filters() as $canonical => $rule ) {
+			if ( isset( $rule['numeric_range'] ) ) {
+				$args['meta_query'][] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Sale-day bounds are stored in order meta.
+					'key'     => $rule['numeric_range']['key'],
+					'value'   => $this->claims[ $canonical ],
+					'compare' => $rule['numeric_range']['compare'],
+					'type'    => 'NUMERIC',
+				);
+				continue;
+			}
+
 			if ( isset( $rule['any_of']['posts'] ) ) {
 				$value = $this->claims[ $canonical ];
 				if ( '' === $value ) {
@@ -1002,6 +1020,17 @@ final class Collection_Rules_Plan {
 				continue;
 			}
 			$value = $this->claims[ $canonical ];
+
+			if ( isset( $rule['numeric_range'] ) ) {
+				$meta = $query->get_table_name( 'meta' );
+				$compare = $rule['numeric_range']['compare'];
+				$clauses['where'] .= $wpdb->prepare(
+					" AND {$orders}.id IN ( SELECT order_id FROM {$meta} WHERE meta_key = %s AND CAST(meta_value AS SIGNED) {$compare} %d )",
+					$rule['numeric_range']['key'],
+					$value
+				);
+				continue;
+			}
 
 			if ( isset( $rule['any_of']['hpos'] ) ) {
 				if ( '' === $value ) {

@@ -10,14 +10,18 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting, Generic.Files.OneObjectStructurePerFile, WordPress.NamingConventions -- Ported lab suite preserves its fake-store vocabulary and compact scenarios.
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
@@ -30,6 +34,9 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 final class Test_Write_Controller extends WP_UnitTestCase {
 	use Sync_Observer_Unhook_Trait;
+	use HPOSToggleTrait;
+
+	private bool $attributionHpos = false;
 
 	public const REC = '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d';
 	/** The throwaway cashier-tier role the Access-settings grant test mutates. */
@@ -49,6 +56,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	}
 
 	protected function tearDown(): void {
+		if ( $this->attributionHpos ) {
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
 		remove_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1 );
 		// $wp_roles is an in-memory global the transaction rollback does not restore,
 		// so the granted role must go before the next test reads role capabilities.
@@ -199,7 +210,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	private function provenance_payload( array $tuple ): array {
 		$meta = array();
 		foreach ( $tuple as $key => $value ) {
-			$meta[] = array( 'key' => $key, 'value' => $value );
+			$meta[] = array(
+				'key' => $key,
+				'value' => $value,
+			);
 		}
 		return array( 'meta_data' => $meta );
 	}
@@ -221,12 +235,14 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			}
 		};
 		$current = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
-		$envelope = $this->envelope( array(
-			'collection' => 'orders',
-			'operation' => 'update',
-			'baseRevision' => Order_Serializer::canonical_revision( $current ),
-			'payload' => $payload,
-		) );
+		$envelope = $this->envelope(
+			array(
+				'collection' => 'orders',
+				'operation' => 'update',
+				'baseRevision' => Order_Serializer::canonical_revision( $current ),
+				'payload' => $payload,
+			)
+		);
 		return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
 	}
 
@@ -245,13 +261,25 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$quantity       = $order->get_item( $item_id )->get_quantity();
 		$payload        = array(
 			'customer_note' => 'Must wait',
-			'line_items'    => array( array( 'id' => $item_id, 'quantity' => $quantity + 2 ) ),
+			'line_items'    => array(
+				array(
+					'id' => $item_id,
+					'quantity' => $quantity + 2,
+				),
+			),
 		);
 		$store          = new Fake_Mutation_Store();
 		$store->resolve = $order->get_id();
 		$push           = function () use ( $store, $order, $payload ) {
 			$current  = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
-			$envelope = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => Order_Serializer::canonical_revision( $current ), 'payload' => $payload ) );
+			$envelope = $this->envelope(
+				array(
+					'collection' => 'orders',
+					'operation' => 'update',
+					'baseRevision' => Order_Serializer::canonical_revision( $current ),
+					'payload' => $payload,
+				)
+			);
 			return ( new Write_Controller( $store ) )->push( $this->request( $envelope ) );
 		};
 		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
@@ -293,7 +321,14 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$store          = new Fake_Mutation_Store();
 		$store->resolve = $order->get_id();
 		$current        = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
-		$envelope       = $this->envelope( array( 'collection' => 'orders', 'operation' => 'update', 'baseRevision' => Order_Serializer::canonical_revision( $current ), 'payload' => array( 'customer_note' => 'Goes through' ) ) );
+		$envelope       = $this->envelope(
+			array(
+				'collection' => 'orders',
+				'operation' => 'update',
+				'baseRevision' => Order_Serializer::canonical_revision( $current ),
+				'payload' => array( 'customer_note' => 'Goes through' ),
+			)
+		);
 		$lock           = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
 		$this->assertTrue( $lock->acquire( $order->get_id() ) );
 
@@ -365,7 +400,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$tuple = $this->provenance_tuple();
 		$before = time();
-		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload' => $this->provenance_payload( $tuple ),
+			)
+		);
 		$this->assertSame( 201, $result->get_status() );
 		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
 		foreach ( $tuple as $key => $value ) {
@@ -394,7 +435,16 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		};
 		add_action( 'woocommerce_payment_complete', $recorder, 5 );
 		try {
-			$result = $this->update_provenance_order( $order, array_merge( $this->provenance_payload( $tuple ), array( 'set_paid' => true, 'payment_method' => 'pos_cash' ) ) );
+			$result = $this->update_provenance_order(
+				$order,
+				array_merge(
+					$this->provenance_payload( $tuple ),
+					array(
+						'set_paid' => true,
+						'payment_method' => 'pos_cash',
+					)
+				)
+			);
 		} finally {
 			remove_action( 'woocommerce_payment_complete', $recorder, 5 );
 		}
@@ -457,7 +507,15 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$order->save();
 		$this->assertTrue( wc_get_order( $order->get_id() )->needs_payment(), 'fixture must still need payment' );
 		$register = wp_generate_uuid4();
-		$result   = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_register' => $register, '_wcpos_sale_counter' => '124' ) ) );
+		$result   = $this->update_provenance_order(
+			$order,
+			$this->provenance_payload(
+				array(
+					'_wcpos_register' => $register,
+					'_wcpos_sale_counter' => '124',
+				)
+			)
+		);
 		$this->assertSame( 200, $result->get_status() );
 		$order = wc_get_order( $order->get_id() );
 		$this->assertSame( $register, $order->get_meta( '_wcpos_register' ) );
@@ -513,7 +571,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	public function test_create_loose_sale_time_shapes_are_dropped(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		foreach ( array( '2026-6-1 12:00+02:00', 'tomorrow +00:00', '2026-06-01T12:00:00', '2026-02-30T12:00:00+02:00' ) as $shape ) {
-			$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( array( '_wcpos_sale_time' => $shape ) ) ) );
+			$result = $this->push(
+				new Fake_Mutation_Store(),
+				array(
+					'collection' => 'orders',
+					'payload' => $this->provenance_payload( array( '_wcpos_sale_time' => $shape ) ),
+				)
+			);
 			$this->assertSame( 201, $result->get_status() );
 			$order = wc_get_order( (int) $result->get_data()['document']['id'] );
 			$this->assertSame( '', $order->get_meta( '_wcpos_sale_time' ), $shape );
@@ -551,7 +615,15 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		};
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
 		try {
-			$result = $this->update_provenance_order( $order, $this->provenance_payload( array( '_wcpos_sale_counter' => '77', '_wcpos_register' => wp_generate_uuid4() ) ) );
+			$result = $this->update_provenance_order(
+				$order,
+				$this->provenance_payload(
+					array(
+						'_wcpos_sale_counter' => '77',
+						'_wcpos_register' => wp_generate_uuid4(),
+					)
+				)
+			);
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', $race, 5 );
 		}
@@ -567,7 +639,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	public function test_create_far_future_sale_time_is_kept(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$tuple  = array( '_wcpos_sale_time' => '2031-06-01T12:00:00+02:00' );
-		$result = $this->push( new Fake_Mutation_Store(), array( 'collection' => 'orders', 'payload' => $this->provenance_payload( $tuple ) ) );
+		$result = $this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'orders',
+				'payload' => $this->provenance_payload( $tuple ),
+			)
+		);
 		$this->assertSame( 201, $result->get_status() );
 		$order = wc_get_order( (int) $result->get_data()['document']['id'] );
 		$this->assertSame( '2031-06-01T12:00:00+02:00', $order->get_meta( '_wcpos_sale_time' ) );
@@ -1952,6 +2030,1035 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( (string) $new_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
 		$this->assertSame( (string) $new_id, (string) $this->metaValue( $result->get_data()['document'], '_pos_user' ) );
 		$this->assertContains( 'POS cashier changed from Old Cashier to New Cashier.', $this->noteContents( $order->get_id() ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	public function test_cashier_reassignment_without_sale_writes_no_fiscal_record(): void {
+		// Arrange: an uncompleted order has no sale to correct.
+		$actor = self::factory()->user->create_and_get( array( 'role' => 'administrator' ) );
+		$actor->add_cap( 'reassign_woocommerce_pos_sales' );
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Old Cashier' ) );
+		$target_id = self::factory()->user->create(
+			array(
+				'role' => 'cashier',
+				'display_name' => 'New Cashier',
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_status( 'pending' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->save();
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+		wp_set_current_user( $actor->ID );
+
+		// Act.
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_user',
+						'value' => (string) $target_id,
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( (string) $target_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$this->assertContains( 'POS cashier changed from Old Cashier to New Cashier.', $this->noteContents( $order->get_id() ) );
+		$this->assertCount(
+			0,
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
+				)
+			)
+		);
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	public function test_reopened_legacy_order_self_claim_changes_cashier_without_refusal_note(): void {
+		// Arrange: first reopen synthesises a legacy completion, with no fiscal sale.
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Old Cashier' ) );
+		$actor = self::factory()->user->create_and_get(
+			array(
+				'role' => 'cashier',
+				'display_name' => 'New Cashier',
+			)
+		);
+		$actor->add_cap( 'reassign_woocommerce_pos_sales', false );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_date_paid( time() );
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->save();
+		$order->set_status( 'pos-open' );
+		$order->save();
+		$order = wc_get_order( $order->get_id() );
+		$this->assertTrue( Completion_History::of( $order )->latest()['legacy'] );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+		wp_set_current_user( $actor->ID );
+
+		// Match the production pull lane when hashing structured completion meta.
+		Meta_Normalizer::register_hooks();
+
+		// Act: the reopened cart is handed over to the authenticated cashier.
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_user',
+						'value' => (string) $actor->ID,
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status(), wp_json_encode( $result->get_data() ) );
+		$this->assertSame( (string) $actor->ID, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$notes = $this->noteContents( $order->get_id() );
+		$this->assertContains( 'POS cashier changed from Old Cashier to New Cashier.', $notes );
+		$this->assertCount( 0, array_filter( $notes, static fn( $note ) => false !== strpos( $note, 'not applied' ) ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	public function test_completed_order_self_claim_reopen_writes_no_reattribution_record(): void {
+		// Arrange: self-claim reopens a completed order with an existing sale.
+		$old_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$actor = self::factory()->user->create_and_get( array( 'role' => 'cashier' ) );
+		$actor->add_cap( 'reassign_woocommerce_pos_sales', false );
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->save();
+		$sale = $this->seedAttributionSale( $order );
+		$this->assertSame( 'sale', $sale['type'] );
+		wp_set_current_user( $actor->ID );
+
+		// Act.
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'status' => 'pos-open',
+				'meta_data' => array(
+					array(
+						'key' => '_pos_user',
+						'value' => (string) $actor->ID,
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status() );
+		$reread = wc_get_order( $order->get_id() );
+		$this->assertSame( 'pos-open', $reread->get_status() );
+		$this->assertSame( (string) $actor->ID, $reread->get_meta( '_pos_user' ) );
+		$this->assertCount( 1, array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => 0 === strpos( $note, 'Order re-opened via POS' ) ) );
+		$this->assertCount(
+			0,
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
+				)
+			)
+		);
+	}
+
+	/** Seed the immutable document an attribution correction must reference. */
+	private function seedAttributionSale( \WC_Order $order ): array {
+		return ( new Fiscal_Record_Store() )->record(
+			array(
+				'type' => 'sale',
+				'order_id' => $order->get_id(),
+				'source_id' => wp_generate_uuid4(),
+				'cashier_id' => (int) $order->get_meta( '_pos_user' ),
+				'store_id' => (int) $order->get_meta( '_pos_store' ),
+				'payload' => array( 'total' => $order->get_total() ),
+			)
+		);
+	}
+
+	/** @dataProvider acceptedCashierChanges */
+	public function test_completed_cashier_reassignment_writes_immutable_record( bool $self_claim, bool $hpos ): void {
+		// Arrange: self-claim does not require the reassignment capability.
+		global $wpdb;
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->disable_cot_sync();
+			$this->attributionHpos = true;
+		}
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Original Cashier' ) );
+		$actor = self::factory()->user->create_and_get( array( 'role' => 'administrator' ) );
+		$actor->add_cap( 'reassign_woocommerce_pos_sales', ! $self_claim );
+		$target_id = $self_claim ? $actor->ID : self::factory()->user->create( array( 'role' => 'cashier' ) );
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->update_meta_data( '_pos_store', '12' );
+		$order->save();
+		$sale = $this->seedAttributionSale( $order );
+		$table = ( new Fiscal_Record_Store() )->table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned fiscal table; compare the raw stored bytes.
+		$before = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $sale['id'] ), ARRAY_A );
+		wp_set_current_user( $actor->ID );
+
+		// Act.
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_user',
+						'value' => (string) $target_id,
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( (string) $target_id, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$this->assertCount( 1, array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => 0 === strpos( $note, 'POS cashier changed' ) ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$record = $records[0];
+		$this->assertSame( $sale['id'], $record['corrects_record_id'] );
+		$this->assertSame( $order->get_id(), $record['order_id'] );
+		$this->assertSame( $actor->ID, $record['approver_id'] );
+		$this->assertSame( $target_id, $record['cashier_id'] );
+		$this->assertSame( 12, $record['store_id'] );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'cashier',
+					'from' => $old_id,
+					'to' => $target_id,
+				),
+			),
+			$record['payload']['changes']
+		);
+		$this->assertSame( $actor->ID, $record['payload']['changed_by'] );
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $record['payload']['changed_at_gmt'] );
+		$this->assertLessThanOrEqual( 5, abs( strtotime( $record['received_at_gmt'] ) - strtotime( $record['payload']['changed_at_gmt'] ) ) );
+		$this->assertTrue( wp_is_uuid( $record['source_id'], 4 ) );
+		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id' ) as $field ) {
+			$this->assertNull( $record[ $field ], $field );
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Owned fiscal table.
+		$this->assertSame( $before, $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $sale['id'] ), ARRAY_A ) );
+	}
+
+	public function acceptedCashierChanges(): array {
+		return array(
+			'another POS user' => array( false, false ),
+			'self claim' => array( true, false ),
+			'another POS user HPOS' => array( false, true ),
+			'self claim HPOS' => array( true, true ),
+		);
+	}
+
+	/** @dataProvider ignoredCashierChanges */
+	public function test_completed_cashier_reassignment_unauthorized_target_is_ignored( bool $authorized, string $target ): void {
+		// Arrange.
+		$actor = self::factory()->user->create_and_get( array( 'role' => 'administrator' ) );
+		$actor->add_cap( 'reassign_woocommerce_pos_sales', $authorized );
+		$target_id = 'missing' === $target ? 999999999 : self::factory()->user->create( array( 'role' => $target ) );
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $actor->ID );
+		$order->save();
+		$this->seedAttributionSale( $order );
+		$notes = $this->noteContents( $order->get_id() );
+		wp_set_current_user( $actor->ID );
+
+		// Act.
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_user',
+						'value' => (string) $target_id,
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( (string) $actor->ID, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
+				)
+			)
+		);
+	}
+
+	public function ignoredCashierChanges(): array {
+		return array(
+			'no capability' => array( false, 'cashier' ),
+			'no POS access' => array( true, 'subscriber' ),
+			'missing user' => array( true, 'missing' ),
+		);
+	}
+
+	private function saleDayOrder( bool $hpos, string $role = 'shop_manager', string $status = 'completed' ): \WC_Order {
+		Meta_Normalizer::register_hooks(); // Match the production pull lane when calculating revisions for JSON meta.
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->disable_cot_sync();
+			$this->attributionHpos = true;
+		}
+		$actor = self::factory()->user->create_and_get( array( 'role' => $role ) );
+		wp_set_current_user( $actor->ID );
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( $status );
+		$order->set_date_paid( '2026-11-24T01:00:00Z' );
+		$order->update_meta_data( '_pos_user', (string) $actor->ID );
+		$order->save();
+		return $order;
+	}
+
+	private function seedSaleDaySale( \WC_Order $order ): array {
+		$completion = \WCPOS\WooCommercePOS\Tests\Services\Completion_Fixture::seed( $order );
+		return ( new Fiscal_Record_Store() )->record(
+			array(
+				'type' => 'sale',
+				'order_id' => $order->get_id(),
+				'source_id' => $completion['id'],
+				'payload' => array( 'total' => $order->get_total() ),
+			)
+		);
+	}
+
+	private function saleDayPayload( $value ): array {
+		return array(
+			'meta_data' => array(
+				array(
+					'key' => '_wcpos_sale_day_request',
+					'value' => $value,
+				),
+			),
+		);
+	}
+
+	private function saleDayRecords( int $id ): array {
+		return ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $id,
+				'type' => 'sale_day_correction',
+			)
+		);
+	}
+
+	/** @dataProvider saleDayPaidSources */
+	public function test_sale_day_paid_manager_correction_records_then_applies( bool $hpos, bool $ledger_only ): void {
+		$order = $this->saleDayOrder( $hpos );
+		update_option( 'timezone_string', 'America/Los_Angeles' );
+		update_option( 'date_format', 'Y-m-d' );
+		\WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed::rows(
+			$order,
+			array(
+				array(
+					'id' => wp_generate_uuid4(),
+					'method_id' => 'pos_cash',
+					'capture_mode' => 'manual',
+					'amount' => $order->get_total(),
+					'currency' => $order->get_currency(),
+					'status' => 'captured',
+				),
+			),
+			false
+		);
+		if ( $ledger_only ) {
+			$order->set_date_paid( null );
+			$order->save();
+		}
+		$sale = $this->seedSaleDaySale( $order );
+		$order = wc_get_order( $order->get_id() );
+		$paid = $order->get_date_paid() ? $order->get_date_paid()->format( 'c' ) : null;
+		$unchanged = array();
+		foreach ( array( '_wcpos_payments', '_wcpos_completions', '_wcpos_completed_at', '_wcpos_sale_time' ) as $key ) {
+			$unchanged[ $key ] = $order->get_meta( $key );
+		}
+		$from = $ledger_only ? '' : '2026-11-24T01:00:00Z';
+		$to = '2026-11-23T01:00:00Z';
+		$reason = 'Card payment taken the day before';
+		$before = ( new Order_Serializer() )->serialize_order( $order->get_id(), new WP_REST_Request() );
+
+		$result = $this->updateOrder(
+			$order,
+			$this->saleDayPayload(
+				wp_json_encode(
+					array(
+						'at_gmt' => $to,
+						'from' => '',
+						'reason' => '  <b>' . $reason . '</b>  ',
+					)
+				)
+			)
+		);
+
+		$this->assertSame( 200, $result->get_status(), wp_json_encode( $result->get_data() ) );
+		$after = wc_get_order( $order->get_id() );
+		$stored = json_decode( $after->get_meta( '_wcpos_sale_day' ), true );
+		$this->assertSame( $to, $stored['at_gmt'] );
+		$this->assertSame( $reason, $stored['reason'] );
+		$this->assertSame( get_current_user_id(), $stored['by'] );
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $stored['changed_at_gmt'] );
+		$this->assertLessThanOrEqual( 5, abs( time() - strtotime( $stored['changed_at_gmt'] ) ) );
+		$this->assertSame( (string) strtotime( $to ), $after->get_meta( '_wcpos_sale_day_at' ) );
+		$this->assertSame( $paid, $after->get_date_paid() ? $after->get_date_paid()->format( 'c' ) : null );
+		foreach ( $unchanged as $key => $value ) {
+			$this->assertSame( $value, $after->get_meta( $key ), $key );
+		}
+		$this->assertSame( $sale, ( new Fiscal_Record_Store() )->get( $sale['id'] ) );
+		$this->assertNotSame( Order_Serializer::canonical_revision( $before ), Order_Serializer::canonical_revision( $result->get_data()['document'] ) );
+		$note = $ledger_only ? 'POS sale day set to 2026-11-22. Reason: ' : 'POS sale day changed from 2026-11-23 to 2026-11-22. Reason: ';
+		$this->assertContains( $note . $reason, $this->noteContents( $order->get_id() ) );
+		$records = $this->saleDayRecords( $order->get_id() );
+		$this->assertCount( 1, $records );
+		$record = $records[0];
+		$this->assertSame( $sale['id'], $record['corrects_record_id'] );
+		$this->assertSame( $order->get_id(), $record['order_id'] );
+		$this->assertSame( get_current_user_id(), $record['approver_id'] );
+		$this->assertMatchesRegularExpression( '/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/', $record['source_id'] );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'sale_day',
+					'from' => $from,
+					'to' => $to,
+				),
+			),
+			$record['payload']['changes']
+		);
+		$this->assertSame( $reason, $record['payload']['reason'] );
+		$this->assertSame( get_current_user_id(), $record['payload']['changed_by'] );
+		$this->assertSame( get_current_user_id(), $record['cashier_id'] );
+		$this->assertSame( gmdate( 'Y-m-d H:i:s', strtotime( $stored['changed_at_gmt'] ) ), $record['payload']['changed_at_gmt'] );
+		$this->assertLessThanOrEqual( 5, abs( time() - strtotime( $record['payload']['changed_at_gmt'] ) ) );
+		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id', 'store_id' ) as $key ) {
+			$this->assertNull( $record[ $key ], $key );
+		}
+
+		// The next correction starts at the stored correction, not the paid date; 500 Unicode characters fit.
+		$second = '2026-11-21T01:00:00Z';
+		$result = $this->updateOrder(
+			$after,
+			$this->saleDayPayload(
+				wp_json_encode(
+					array(
+						'at_gmt' => $second,
+						'from' => $to,
+						'reason' => str_repeat( 'é', 500 ),
+					)
+				)
+			)
+		);
+		$this->assertSame( 200, $result->get_status(), wp_json_encode( $result->get_data() ) );
+		$records = $this->saleDayRecords( $order->get_id() );
+		$this->assertCount( 2, $records );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'sale_day',
+					'from' => $to,
+					'to' => $second,
+				),
+			),
+			$records[0]['payload']['changes']
+		);
+		$this->assertSame( $second, json_decode( wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ), true )['at_gmt'] );
+	}
+
+	public function saleDayPaidSources(): array {
+		return array(
+			'paid CPT' => array( false, false ),
+			'paid HPOS' => array( true, false ),
+			'ledger CPT' => array( false, true ),
+			'ledger HPOS' => array( true, true ),
+		);
+	}
+
+	/** @dataProvider ignoredSaleDays */
+	public function test_sale_day_refused_request_is_ignored( string $case, bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos, 'cashier' === $case ? 'cashier' : 'shop_manager' );
+		$value = array(
+			'at_gmt' => '2026-11-23T09:12:00Z',
+			'reason' => 'Correct sale day',
+			'from' => '',
+		);
+		if ( 'unpaid' === $case ) {
+			$order->set_status( 'pos-open' );
+			$order->set_date_paid( null );
+		} elseif ( 'future' === $case ) {
+			$value['at_gmt'] = gmdate( 'Y-m-d\TH:i:s\Z', time() + HOUR_IN_SECONDS );
+		} elseif ( 'malformed' === $case ) {
+			$value['at_gmt'] = '2026-02-31T09:12:00Z';
+		} elseif ( 'not instant' === $case ) {
+			$value['at_gmt'] = 'yesterday';
+		} elseif ( 'empty reason' === $case ) {
+			$value['reason'] = '   ';
+		} elseif ( 'long reason' === $case ) {
+			$value['reason'] = str_repeat( 'é', 501 );
+		} elseif ( 'non string reason' === $case ) {
+			$value['reason'] = 123;
+		} elseif ( 'markup reason' === $case ) {
+			$value['reason'] = '<b></b>';
+		} elseif ( 'nbsp reason' === $case ) {
+			$value['reason'] = "\u{00A0}";
+		} elseif ( 'long value' === $case ) {
+			$value['padding'] = str_repeat( 'x', 4096 );
+		} elseif ( 'paid instant' === $case ) {
+			$value['at_gmt'] = '2026-11-24T01:00:00Z';
+		} elseif ( in_array( $case, array( 'unchanged', 'server by', 'server time', 'stored empty from', 'stored older from' ), true ) ) {
+			$order->update_meta_data(
+				'_wcpos_sale_day',
+				wp_json_encode(
+					array(
+						'at_gmt' => $value['at_gmt'],
+						'reason' => 'Original reason',
+						'by' => 1,
+					)
+				)
+			);
+			$order->update_meta_data( '_wcpos_sale_day_at', (string) strtotime( $value['at_gmt'] ) );
+			$value['from'] = $value['at_gmt'];
+		}
+		$order->save();
+		$this->seedSaleDaySale( $order );
+		if ( in_array( $case, array( 'server by', 'server time' ), true ) ) {
+			$value['at_gmt'] = '2026-11-22T09:12:00Z';
+			$value[ 'server by' === $case ? 'by' : 'changed_at_gmt' ] = null;
+		}
+		if ( 'missing from' === $case ) {
+			unset( $value['from'] );
+		} elseif ( 'non string from' === $case ) {
+			$value['from'] = 123;
+		} elseif ( 'null from' === $case ) {
+			$value['from'] = null;
+		} elseif ( 'array from' === $case ) {
+			$value['from'] = array();
+		} elseif ( 'no correction stale from' === $case ) {
+			$value['from'] = '2026-11-22T09:12:00Z';
+		} elseif ( in_array( $case, array( 'stored empty from', 'stored older from' ), true ) ) {
+			$value['at_gmt'] = '2026-11-21T09:12:00Z';
+			$value['from'] = 'stored empty from' === $case ? '' : '2026-11-22T09:12:00Z';
+		}
+		$before = $order->get_meta( '_wcpos_sale_day' );
+		$before_at = $order->get_meta( '_wcpos_sale_day_at' );
+		$notes = $this->noteContents( $order->get_id() );
+		$raw = 'invalid json' === $case ? '{' : ( 'array value' === $case ? $value : wp_json_encode( $value ) );
+		$payload = $this->saleDayPayload( $raw );
+		if ( in_array( $case, array( 'old key', 'server by', 'server time' ), true ) ) {
+			// Echoed facts and requests under the old key are stripped, never interpreted.
+			$payload['meta_data'][0]['key'] = '_wcpos_sale_day';
+		}
+		$payload['meta_data'][] = array(
+			'key' => '_wcpos_sale_day_at',
+			'value' => '123',
+		);
+		if ( in_array( $case, array( 'reopen', 'reopen pending' ), true ) ) {
+			$payload['status'] = 'reopen' === $case ? 'pos-open' : 'pending';
+		}
+
+		$result = $this->updateOrder( $order, $payload );
+
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( $before, $after->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( $before_at, $after->get_meta( '_wcpos_sale_day_at' ) );
+		$this->assertFalse( $after->meta_exists( '_wcpos_sale_day_request' ) );
+		$this->assertNotContains( '_wcpos_sale_day_request', array_column( $result->get_data()['document']['meta_data'], 'key' ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+		if ( ! in_array( $case, array( 'reopen', 'reopen pending' ), true ) ) {
+			$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+		} else {
+			$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS sale day' ) ) ) );
+		}
+		foreach ( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] as $request ) {
+			if ( 'GET' !== $request->get_method() ) {
+				$keys = array_column( $request->get_param( 'meta_data' ) ?? array(), 'key' );
+				$this->assertNotContains( '_wcpos_sale_day', $keys );
+				$this->assertNotContains( '_wcpos_sale_day_at', $keys );
+				$this->assertNotContains( '_wcpos_sale_day_request', $keys );
+			}
+		}
+		if ( 'unchanged' === $case ) {
+			// A different day must still apply: ignoring every request is not an unchanged-date guard.
+			$result = $this->updateOrder( $after, $this->saleDayPayload( '{"at_gmt":"2026-11-22T09:12:00Z","reason":"A different day","from":"2026-11-23T09:12:00Z"}' ) );
+			$this->assertSame( 200, $result->get_status() );
+			$this->assertCount( 1, $this->saleDayRecords( $order->get_id() ) );
+		}
+	}
+
+	public function ignoredSaleDays(): array {
+		$cases = array();
+		foreach ( array( 'cashier', 'unpaid', 'future', 'malformed', 'not instant', 'empty reason', 'long reason', 'non string reason', 'unchanged', 'reopen', 'invalid json', 'array value', 'reopen pending', 'paid instant', 'markup reason', 'nbsp reason', 'long value', 'server by', 'server time', 'old key', 'missing from', 'non string from', 'null from', 'array from', 'no correction stale from', 'stored empty from', 'stored older from' ) as $case ) {
+			$cases[ $case . ' CPT' ] = array( $case, false );
+			$cases[ $case . ' HPOS' ] = array( $case, true );
+		}
+		return $cases;
+	}
+
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_failed_record_applies_nothing_and_adds_one_note( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$notes = $this->noteContents( $order->get_id() );
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10, 2 );
+		try {
+			$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}' ) );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10 );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day_at' ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+		$new_notes = array_values( array_diff( $this->noteContents( $order->get_id() ), $notes ) );
+		$this->assertSame( array( 'POS sale day change was not applied because its change record could not be written. Try again.' ), $new_notes );
+	}
+
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_meta_only_push_waits_for_order_lock( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$notes = $this->noteContents( $order->get_id() );
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $order->get_id() ) );
+		try {
+			$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}' ) );
+		} finally {
+			$lock->release( $order->get_id() );
+		}
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woo_rxdb_sync_record_locked', $result->get_error_code() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+	}
+
+	/** @dataProvider saleDayUncompleted */
+	public function test_sale_day_without_completion_is_ignored( bool $hpos, bool $partial ): void {
+		$order = $this->saleDayOrder( $hpos, 'shop_manager', $partial ? 'pos-partial' : 'completed' );
+		if ( $partial ) {
+			$order->set_total( '100.00' );
+			$order->save();
+			\WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed::rows(
+				$order,
+				array(
+					array(
+						'id' => wp_generate_uuid4(),
+						'method_id' => 'pos_cash',
+						'capture_mode' => 'manual',
+						'amount' => '1.00',
+						'currency' => $order->get_currency(),
+						'status' => 'captured',
+					),
+				),
+				false
+			);
+		} else {
+			$order->set_created_via( 'checkout' );
+			$order->save();
+		}
+		$this->assertNull( Completion_History::of( $order )->latest() );
+		$this->assertNotNull( $order->get_date_paid() );
+		$notes = $this->noteContents( $order->get_id() );
+		$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( '', wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day_at' ) );
+		$this->assertSame( $notes, $this->noteContents( $order->get_id() ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+	}
+
+	public function saleDayUncompleted(): array {
+		return array(
+			'partial CPT' => array( false, true ),
+			'partial HPOS' => array( true, true ),
+			'web CPT' => array( false, false ),
+			'web HPOS' => array( true, false ),
+		);
+	}
+
+	/** @dataProvider saleDayReopens */
+	public function test_sale_day_reopen_clears_correction_for_any_user( bool $hpos, string $role, string $status ): void {
+		$order = $this->saleDayOrder( $hpos, $role );
+		$this->seedSaleDaySale( $order );
+		$order->update_meta_data( '_wcpos_sale_day', '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Previous correction","by":1}' );
+		$order->update_meta_data( '_wcpos_sale_day_at', '1795425120' );
+		$order->save();
+		$result = $this->updateOrder( $order, array( 'status' => $status ) );
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( $status, $after->get_status() );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day_at' ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+		$this->assertSame( array(), array_values( array_filter( $this->noteContents( $order->get_id() ), static fn( $note ) => false !== strpos( $note, 'POS sale day' ) ) ) );
+	}
+
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_on_a_reopened_sale_is_ignored( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$this->assertSame( 200, $this->updateOrder( $order, array( 'status' => 'pos-open' ) )->get_status() );
+		$result = $this->updateOrder( wc_get_order( $order->get_id() ), $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( array(), $this->saleDayRecords( $order->get_id() ) );
+	}
+
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_correction_leaves_when_its_completion_is_reopened( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$order->update_meta_data( '_wcpos_sale_day', '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Previous correction","by":1}' );
+		$order->update_meta_data( '_wcpos_sale_day_at', '1795425120' );
+		$order->save();
+		// The one place every reopen passes through, whichever entry point changed the status.
+		\WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp::reopen( wc_get_order( $order->get_id() ) );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day' ) );
+		$this->assertSame( '', $after->get_meta( '_wcpos_sale_day_at' ) );
+	}
+
+	public function saleDayReopens(): array {
+		return array(
+			'manager CPT' => array( false, 'shop_manager', 'pos-open' ),
+			'manager HPOS' => array( true, 'shop_manager', 'pos-open' ),
+			'cashier CPT' => array( false, 'cashier', 'pending' ),
+			'cashier HPOS' => array( true, 'cashier', 'pending' ),
+		);
+	}
+
+	/** @dataProvider saleDayStorage */
+	public function test_sale_day_stored_array_supplies_previous_instant( bool $hpos ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		$order->update_meta_data( '_wcpos_sale_day', array( 'at_gmt' => '2026-11-22T09:12:00Z' ) );
+		$order->save();
+		$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":"2026-11-22T09:12:00Z"}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$records = $this->saleDayRecords( $order->get_id() );
+		$this->assertCount( 1, $records );
+		$this->assertSame( '2026-11-22T09:12:00Z', $records[0]['payload']['changes'][0]['from'] );
+	}
+
+	public function test_sale_day_slow_record_keeps_one_change_time(): void {
+		$order = $this->saleDayOrder( false );
+		$this->seedSaleDaySale( $order );
+		$slow = static function ( $value ) {
+			usleep( 1100000 );
+			return $value;
+		};
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $slow );
+		try {
+			$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}' ) );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $slow );
+		}
+		$this->assertSame( 200, $result->get_status() );
+		$stored = json_decode( wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ), true );
+		$records = $this->saleDayRecords( $order->get_id() );
+		$this->assertSame( strtotime( $stored['changed_at_gmt'] ), strtotime( $records[0]['payload']['changed_at_gmt'] . ' UTC' ) );
+	}
+
+	public function test_sale_day_retry_keeps_the_reused_records_change_time(): void {
+		$order = $this->saleDayOrder( false );
+		$this->seedSaleDaySale( $order );
+		// The record of an earlier attempt whose order save failed.
+		$this->assertTrue( \WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T01:00:00Z', '2026-11-23T09:12:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		$result = $this->updateOrder( $order, $this->saleDayPayload( '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}' ) );
+		$this->assertSame( 200, $result->get_status() );
+		$stored = json_decode( wc_get_order( $order->get_id() )->get_meta( '_wcpos_sale_day' ), true );
+		$this->assertCount( 1, $this->saleDayRecords( $order->get_id() ) );
+		$this->assertSame( '2026-11-24T10:11:12Z', $stored['changed_at_gmt'] );
+	}
+
+	/** @dataProvider saleDayRequestOrigins */
+	public function test_sale_day_matching_request_applies_once_and_is_never_stored( bool $hpos, string $from ): void {
+		$order = $this->saleDayOrder( $hpos );
+		$this->seedSaleDaySale( $order );
+		if ( '' !== $from ) {
+			$order->update_meta_data( '_wcpos_sale_day', wp_json_encode( array( 'at_gmt' => $from ) ) );
+			$order->update_meta_data( '_wcpos_sale_day_at', (string) strtotime( $from ) );
+			$order->save();
+		}
+		$notes = $this->noteContents( $order->get_id() );
+		$payload = $this->saleDayPayload(
+			wp_json_encode(
+				array(
+					'at_gmt' => '2026-11-21T09:12:00Z',
+					'reason' => 'Correct sale day',
+					'from' => $from,
+					// These are no longer refusal markers, but remain server-derived in the fact.
+					'by' => -1,
+					'changed_at_gmt' => '2000-01-01T00:00:00Z',
+				)
+			)
+		);
+		$stored = null;
+		for ( $attempt = 0; $attempt < 2; ++$attempt ) {
+			$result = $this->updateOrder( wc_get_order( $order->get_id() ), $payload );
+			$this->assertSame( 200, $result->get_status() );
+			$after = wc_get_order( $order->get_id() );
+			$fact = json_decode( $after->get_meta( '_wcpos_sale_day' ), true );
+			$this->assertSame( '2026-11-21T09:12:00Z', $fact['at_gmt'] );
+			$this->assertSame( get_current_user_id(), $fact['by'] );
+			$this->assertNotSame( '2000-01-01T00:00:00Z', $fact['changed_at_gmt'] );
+			$this->assertArrayNotHasKey( 'from', $fact );
+			if ( null !== $stored ) {
+				$this->assertSame( $stored, $fact );
+			}
+			$stored = $fact;
+			$this->assertFalse( $after->meta_exists( '_wcpos_sale_day_request' ) );
+			$this->assertNotContains( '_wcpos_sale_day_request', array_column( $result->get_data()['document']['meta_data'], 'key' ) );
+			$returned = Meta_Normalizer::decode_to_array( $this->metaValue( $result->get_data()['document'], '_wcpos_sale_day' ) );
+			$this->assertSame( $fact['at_gmt'], $returned['at_gmt'] ?? null );
+			$this->assertCount( 1, $this->saleDayRecords( $order->get_id() ) );
+			$this->assertCount( count( $notes ) + 1, $this->noteContents( $order->get_id() ) );
+		}
+	}
+
+	public function saleDayRequestOrigins(): array {
+		return array(
+			'uncorrected CPT' => array( false, '' ),
+			'uncorrected HPOS' => array( true, '' ),
+			'corrected CPT' => array( false, '2026-11-22T09:12:00Z' ),
+			'corrected HPOS' => array( true, '2026-11-22T09:12:00Z' ),
+		);
+	}
+
+	public function saleDayStorage(): array {
+		return array(
+			'CPT' => array( false ),
+			'HPOS' => array( true ),
+		);
+	}
+
+	/** Store identifiers must survive the caller and the fiscal payload unchanged. */
+	public function test_completed_store_reassignment_preserves_non_numeric_identifiers(): void {
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_store', 'store-a' );
+		$order->save();
+		$this->seedAttributionSale( $order );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_store',
+						'value' => 'store-b',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( 'store-b', wc_get_order( $order->get_id() )->get_meta( '_pos_store' ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'store',
+					'from' => 'store-a',
+					'to' => 'store-b',
+				),
+			),
+			$records[0]['payload']['changes']
+		);
+		$this->assertNull( $records[0]['store_id'] );
+	}
+
+	/**
+	 * A refused record preserves attribution and lets the same push be retried.
+	 *
+	 * @dataProvider failed_attribution_changes
+	 * @param string $field Attribution to change.
+	 * @param string $old_store Previous store, including an unfilled store.
+	 * @param bool   $hpos Whether HPOS is authoritative.
+	 */
+	public function test_reassignment_failed_record_preserves_attribution_and_retry_writes_once( string $field, string $old_store, bool $hpos ): void {
+		if ( $hpos ) {
+			add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+			$this->setup_cot();
+			$this->disable_cot_sync();
+			$this->attributionHpos = true;
+		}
+		$actor = self::factory()->user->create_and_get(
+			array(
+				'role' => 'administrator',
+				'display_name' => 'Change Actor',
+			)
+		);
+		$actor->add_cap( 'reassign_woocommerce_pos_sales' );
+		$old_id = self::factory()->user->create( array( 'display_name' => 'Old Cashier' ) );
+		$order = OrderHelper::create_order();
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_user', (string) $old_id );
+		$order->update_meta_data( '_pos_store', $old_store );
+		$order->save();
+		$this->seedAttributionSale( $order );
+		wp_set_current_user( $actor->ID );
+		$meta = array();
+		if ( 'store' !== $field ) {
+			$meta[] = array(
+				'key' => '_pos_user',
+				'value' => (string) $actor->ID,
+			);
+		}
+		if ( 'cashier' !== $field ) {
+			$meta[] = array(
+				'key' => '_pos_store',
+				'value' => 'store-b',
+			);
+		}
+		$payload = array( 'meta_data' => $meta );
+		$before_notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'id' );
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10, 2 );
+		try {
+			$result = $this->updateOrder( $order, $payload );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10 );
+		}
+
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) $old_id, $after->get_meta( '_pos_user' ) );
+		$this->assertSame( $old_store, (string) $after->get_meta( '_pos_store' ) );
+		$this->assertSame( (string) $old_id, (string) $this->metaValue( $result->get_data()['document'], '_pos_user' ) );
+		$this->assertSame( $old_store, (string) $this->metaValue( $result->get_data()['document'], '_pos_store' ) );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$notes = array_filter( $notes, static fn( $note ) => ! in_array( $note->id, $before_notes, true ) );
+		$this->assertCount( 1, $notes );
+		$note = reset( $notes );
+		$this->assertSame( 'POS cashier or store change was not applied because its change record could not be written. Try again.', $note->content );
+		$this->assertSame( 'Change Actor', $note->added_by );
+		$store = new Fiscal_Record_Store();
+		$query = array(
+			'order_id' => $order->get_id(),
+			'type' => 'reattribution',
+		);
+		$this->assertSame( array(), $store->list( $query ) );
+
+		$result = $this->updateOrder( $after, $payload );
+
+		$this->assertSame( 200, $result->get_status() );
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( (string) ( 'store' === $field ? $old_id : $actor->ID ), $after->get_meta( '_pos_user' ) );
+		$this->assertSame( 'cashier' === $field ? $old_store : 'store-b', $after->get_meta( '_pos_store' ) );
+		$this->assertCount( 1, $store->list( $query ) );
+	}
+
+	/** Failure coverage for both storage engines and an early fill of an empty store. */
+	public function failed_attribution_changes(): array {
+		return array(
+			'cashier posts' => array( 'cashier', 'store-a', false ),
+			'cashier HPOS' => array( 'cashier', 'store-a', true ),
+			'store posts' => array( 'store', 'store-a', false ),
+			'store HPOS' => array( 'store', 'store-a', true ),
+			'empty store' => array( 'store', '', false ),
+			'both' => array( 'both', 'store-a', false ),
+		);
+	}
+
+	public function test_completed_store_reassignment_preserves_totals_and_line_taxes(): void {
+		// Arrange: non-zero stored taxes must not be recalculated for the new store.
+		$order = OrderHelper::create_order();
+		foreach ( $order->get_items() as $item ) {
+			$item->set_taxes(
+				array(
+					'total' => array( 1 => '2.34' ),
+					'subtotal' => array( 1 => '2.34' ),
+				)
+			);
+			$item->save();
+		}
+		$order->set_cart_tax( '2.34' );
+		$order->set_total( '12.34' );
+		$order->set_status( 'completed' );
+		$order->update_meta_data( '_pos_store', '12' );
+		$order->save();
+		$this->seedAttributionSale( $order );
+		$before = wc_get_order( $order->get_id() );
+		$taxes = array_map( static fn( $item ) => $item->get_taxes(), $before->get_items() );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		// Act.
+		$result = $this->updateOrder(
+			$order,
+			array(
+				'meta_data' => array(
+					array(
+						'key' => '_pos_store',
+						'value' => '13',
+					),
+				),
+			)
+		);
+
+		// Assert.
+		$after = wc_get_order( $order->get_id() );
+		$this->assertSame( 200, $result->get_status() );
+		$this->assertSame( '13', $after->get_meta( '_pos_store' ) );
+		$this->assertSame( $before->get_total(), $after->get_total() );
+		$this->assertSame( $before->get_total_tax(), $after->get_total_tax() );
+		$this->assertSame( $taxes, array_map( static fn( $item ) => $item->get_taxes(), $after->get_items() ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'store',
+					'from' => '12',
+					'to' => '13',
+				),
+			),
+			$records[0]['payload']['changes']
+		);
+		$this->assertSame( 13, $records[0]['store_id'] );
 	}
 
 	public function test_creator_anchor_survives_reassignment_and_forgery(): void {
@@ -2120,10 +3227,11 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			)
 		);
 		$order = OrderHelper::create_order();
-		$order->set_status( 'processing' );
+		$order->set_status( 'completed' );
 		$order->update_meta_data( '_pos_user', (string) $old_user );
 		$order->update_meta_data( '_pos_store', (string) $old_store );
 		$order->save();
+		$this->seedAttributionSale( $order );
 		wp_set_current_user( $new_user );
 
 		$this->updateOrder(
@@ -2143,6 +3251,16 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			)
 		);
 
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
+				)
+			)
+		);
+		$this->assertSame( (string) $new_user, wc_get_order( $order->get_id() )->get_meta( '_pos_user' ) );
 		$notes = $this->noteContents( $order->get_id() );
 		$this->assertCount( 1, array_filter( $notes, static fn( $note ) => 0 === strpos( $note, 'Order re-opened via POS' ) ) );
 		$this->assertCount( 0, array_filter( $notes, static fn( $note ) => 0 === strpos( $note, 'POS cashier changed' ) ) );
@@ -3192,7 +4310,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		}
 		$last = $wpdb->get_row(
 			$wpdb->prepare(
-				'SELECT deleted FROM ' . $journal->table_name() . " WHERE object_type = 'product' AND object_id = %d AND sequence > %d ORDER BY sequence DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table name.
+				'SELECT deleted FROM ' . $journal->table_name() . " WHERE object_type = 'product' AND object_id = %d AND sequence > %d ORDER BY sequence DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 				$parent_id,
 				$cursor
 			)

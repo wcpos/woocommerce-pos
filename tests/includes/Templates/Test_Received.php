@@ -197,6 +197,28 @@ class Test_Received extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The embedded order JSON hex-escapes markup characters and still decodes to the stored value.
+	 */
+	public function test_received_order_json_hex_escapes_markup(): void {
+		// Arrange.
+		$note  = 'Leave at door </script><b>bold</b>';
+		$order = OrderHelper::create_order();
+		$order->set_customer_note( $note );
+		$order->save();
+		$received = new Received( $order->get_id() );
+
+		// Act.
+		$json = $received->get_order_json( $order->get_id() );
+
+		// Assert.
+		$this->assertIsString( $json );
+		$this->assertStringContainsString( '\u003C', $json );
+		$this->assertStringNotContainsString( '</script>', $json );
+		$this->assertStringNotContainsString( '<b>', $json );
+		$this->assertSame( $note, json_decode( $json, true )['customer_note'] );
+	}
+
+	/**
 	 * Test that the order JSON contains the _links with payment and receipt URLs.
 	 */
 	public function test_get_order_json_contains_pos_links(): void {

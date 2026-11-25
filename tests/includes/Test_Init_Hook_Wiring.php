@@ -50,13 +50,14 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 	 * since #1862 for the same reason again: `Catalog_Visibility` registers them
 	 * unconditionally at the same priority, so they live in the unconditional
 	 * golden above and the latch only adds the observer's callbacks to them.
+	 * `before_delete_post` and `woocommerce_before_delete_order` are absent for the same
+	 * reason: `Payments_Sweeper` cancels live payment legs on them unconditionally.
 	 *
 	 * @var string[]
 	 */
 	private const LATCHED_ONLY_HOOKS = array(
 		'add_user_role',
 		'added_term_meta',
-		'before_delete_post',
 		'created_term',
 		'delete_term',
 		'delete_user',
@@ -73,7 +74,6 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		'updated_term_meta',
 		'user_register',
 		'wcpos_sync_journal_purge',
-		'woocommerce_before_delete_order',
 		'woocommerce_before_trash_order',
 		'woocommerce_created_customer',
 		'woocommerce_new_coupon',
@@ -216,6 +216,10 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 		delete_option( Sync_Api::SCHEMA_OPTION );
 
 		$expected = array(
+			// Error_Reporter tracks the executing Action Scheduler action for fatal reports (#2696).
+			'action_scheduler_after_execute'                        => array( 10 ),
+			'action_scheduler_begin_execute'                        => array( 10 ),
+			'action_scheduler_failed_execution'                     => array( 10 ),
 			'activated_plugin'                                      => array( 10 ),
 			'admin_enqueue_scripts'                                 => array( 10 ),
 			'admin_init'                                            => array( 10 ),
@@ -266,6 +270,9 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			// sync schema is down, so the sweep and its interval register unlatched.
 			'wcpos_payments_sweep'                                  => array( 10 ),
 			'cron_schedules'                                        => array( 10 ),
+			// Payments_Sweeper also cancels live legs on a permanent delete, latch or not.
+			'before_delete_post'                                    => array( 10 ),
+			'woocommerce_before_delete_order'                       => array( 10 ),
 			'woocommerce_before_product_object_save'                => array( 10 ),
 			'woocommerce_before_product_variation_object_save'      => array( 10 ),
 			'woocommerce_duplicate_product_exclude_meta'            => array( 10 ),

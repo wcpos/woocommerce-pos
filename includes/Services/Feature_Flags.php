@@ -44,7 +44,7 @@ class Feature_Flags {
 	 *
 	 * The order and rollout percentages mirror the flag definition in PostHog so
 	 * local assignment matches what `get_all_feature_flags()` resolves there.
-	 * `free-plus` is the reference arm and the bundle's fallback variant.
+	 * `plan` is the reference arm and the bundle's fallback variant.
 	 *
 	 * KEEP IN SYNC: this is the source of truth for assignment while the
 	 * self-hosted `/flags` endpoint is unusable. If the flag's variants, order,
@@ -52,16 +52,33 @@ class Feature_Flags {
 	 * bundle (`VALID_VARIANTS` / `FALLBACK_VARIANT` in variant-loader.ts), or the
 	 * experiment denominators will silently skew. See wcpos/wp-admin-landing#39.
 	 *
+	 * `plan` takes the hash range `indie` held (the first half), so a site that
+	 * was on `free-plus` stays on `free-plus`. `indie` stays listed at 0% (Paul,
+	 * 2026-11-23: plan vs free-plus 50/50, indie to 0%); the bundle still has it.
+	 * Later the same day: "Move plan to 100% for now" — `free-plus` is listed at
+	 * 0% too. Both stay in the bundle.
+	 * 2026-11-24: `plan` vs `jobs` 50/50 ("We are going to run this as an
+	 * experiment, right?"). `plan` keeps the first half of the hash range and
+	 * `jobs` takes the second; `free-plus` and `indie` stay listed at 0%.
+	 *
 	 * @var array<int, array{key: string, rollout: int}>
 	 */
 	const LANDING_VARIANTS = array(
 		array(
-			'key'     => 'indie',
+			'key'     => 'plan',
+			'rollout' => 50,
+		),
+		array(
+			'key'     => 'jobs',
 			'rollout' => 50,
 		),
 		array(
 			'key'     => 'free-plus',
-			'rollout' => 50,
+			'rollout' => 0,
+		),
+		array(
+			'key'     => 'indie',
+			'rollout' => 0,
 		),
 	);
 
@@ -69,7 +86,7 @@ class Feature_Flags {
 	 * Build the feature-flag bootstrap map for the landing page.
 	 *
 	 * Returns a map of resolved flags keyed for PostHog's `bootstrap.featureFlags`
-	 * (e.g. `array( 'landing-variant' => 'indie' )`). Empty when no distinct id is
+	 * (e.g. `array( 'landing-variant' => 'plan' )`). Empty when no distinct id is
 	 * available, in which case the bundle resolves the variant itself.
 	 *
 	 * @param string $distinct_id Stable anonymous identifier for the visitor/site.

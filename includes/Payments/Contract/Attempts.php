@@ -85,6 +85,25 @@ final class Attempts {
 	}
 
 	/**
+	 * Stage a new `sent` attempt that carries the till's own provenance: the order's cashier and till tuple, never whoever is viewing.
+	 *
+	 * @param Ledger_Draft $d         The write's draft.
+	 * @param string       $id        Attempt id.
+	 * @param string       $method_id The gateway's method id.
+	 */
+	public static function open_as_till( Ledger_Draft $d, string $id, string $method_id ): void {
+		self::open( $d, $id, $method_id );
+		$d->attempt(
+			$id,
+			'sent',
+			array(
+				'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
+				'origin'     => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
+			)
+		);
+	}
+
+	/**
 	 * The gateway sent the customer something to pay: the attempt awaits them, and earlier sends are replaced.
 	 *
 	 * @param Ledger_Draft $d           The write's draft.
@@ -238,6 +257,7 @@ final class Attempts {
 			return null; // Busy: the holder or the next sweep asks.
 		}
 		try {
+			\WCPOS\WooCommercePOS\Services\Order_Meta_Store::forget_datastore_cache( $id );
 			$fresh = wc_get_order( $id );
 			if ( $fresh instanceof WC_Order ) {
 				$fresh->read_meta_data( true );
@@ -276,6 +296,8 @@ final class Attempts {
 					if ( 'sent' !== ( $now['fate'] ?? null ) && ! ( 'paid' === $now['fate'] && null === $d->row( $now['id'] ) ) ) {
 						return false;
 					}
+					// The row is what the gateway took: the answer's amount, read in the request that saw the sale paid.
+					// Minted even if the sale was since reopened or its total changed: date_paid stands. Tests pin it.
 					if ( 'captured' === $status ) {
 						$cashier = (int) $now['cashier_id'];
 						$row     = array(
@@ -339,16 +361,8 @@ final class Attempts {
 				static function ( Ledger_Draft $d ) use ( $id, $method_id ): bool {
 					$entry = self::of( $d->order() )->get( $id );
 					if ( null === $entry ) {
-						self::open( $d, $id, $method_id );
 						// The lost row's own provenance: the operator and till that rang the sale, never whoever paid.
-						$d->attempt(
-							$id,
-							'sent',
-							array(
-								'cashier_id' => max( 0, (int) $d->order()->get_meta( '_pos_user' ) ),
-								'origin'     => array_filter( Completion_Origin::till_tuple( $d->order() ), static fn( $value ): bool => null !== $value ),
-							)
-						);
+						self::open_as_till( $d, $id, $method_id );
 					}
 					if ( null === $entry || 'sent' === $entry['fate'] ) {
 						self::resolve( $d, $id, 'paid' ); // Awaits no one: the customer paid.

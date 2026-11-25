@@ -87,6 +87,32 @@ class Order_Notes {
 		$order->add_order_note( $note, 0, true );
 	}
 
+	/** Add the reporting-day correction note using the site's dates and timezone. */
+	public static function add_sale_day_change_note( WC_Order $order, string $from_gmt, string $to_gmt, string $reason ): void {
+		$format = get_option( 'date_format' );
+		$to = wp_date( $format, strtotime( $to_gmt ) );
+		if ( '' === $from_gmt ) {
+			/* translators: 1: corrected sale date, 2: reason. */
+			$note = sprintf( __( 'POS sale day set to %1$s. Reason: %2$s', 'woocommerce-pos' ), $to, $reason );
+		} else {
+			/* translators: 1: previous sale date, 2: corrected sale date, 3: reason. */
+			$note = sprintf( __( 'POS sale day changed from %1$s to %2$s. Reason: %3$s', 'woocommerce-pos' ), wp_date( $format, strtotime( $from_gmt ) ), $to, $reason );
+		}
+		$order->add_order_note( $note, 0, true );
+	}
+
+	/** Add the note for a refused cashier reassignment. */
+	public static function add_cashier_change_refused_note( WC_Order $order, $actor_id, $refused_user_id, $kept_user_id ): void {
+		$note = sprintf(
+			/* translators: 1: the person who attempted the change (not the previous cashier), 2: the user they tried to make the cashier, 3: the cashier who stays on the order. */
+			__( '%1$s tried to change the POS cashier to %2$s. This was refused: they may not assign this sale to that user. %3$s remains the cashier.', 'woocommerce-pos' ),
+			self::cashier_name( $actor_id ),
+			self::cashier_name( $refused_user_id ),
+			self::cashier_name( $kept_user_id )
+		);
+		$order->add_order_note( $note, 0, true );
+	}
+
 	/** Add the store reassignment audit note. */
 	public static function add_store_change_note( WC_Order $order, $old_store_id, $new_store_id ): void {
 		$note = sprintf(

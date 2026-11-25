@@ -201,6 +201,9 @@ final class Completion_Stamp {
 				}
 				$history[ $last ]['reopened_at_gmt'] = gmdate( 'c' );
 			}
+			// A sale-day correction belongs to the completion it corrected: it leaves with it, on every reopen path.
+			$fresh->delete_meta_data( '_wcpos_sale_day' );
+			$fresh->delete_meta_data( '_wcpos_sale_day_at' );
 			if ( ! self::persist( $fresh, $history, null ) ) {
 				self::failed( $fresh, __( 'WCPOS: the reopen could not be recorded on the completion history; reconcile manually.', 'woocommerce-pos' ) );
 			}
@@ -297,11 +300,14 @@ final class Completion_Stamp {
 	}
 
 	/**
-	 * A fresh read of the order and its meta.
+	 * The order with its meta (the completion history) re-read from storage. WooCommerce's HPOS data-store caches for
+	 * the order are dropped first, so the forced meta read is not served from them when that caching is on. Other
+	 * order fields can still come from this request's order cache.
 	 *
 	 * @param int $id Order ID.
 	 */
 	private static function fresh( int $id ): ?WC_Order {
+		\WCPOS\WooCommercePOS\Services\Order_Meta_Store::forget_datastore_cache( $id );
 		$order = wc_get_order( $id );
 		if ( ! $order instanceof WC_Order ) {
 			return null;

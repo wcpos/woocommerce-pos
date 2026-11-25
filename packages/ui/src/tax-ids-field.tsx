@@ -278,7 +278,11 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 	return (
 		<TableRow>
 			<TableCell>
+				{/* min-w-max here and on the inputs: full-width controls have no minimum of
+				    their own, so a phone squashed them; now the table scrolls instead. Phone
+				    only: a raised minimum would re-share the column widths on desktop. */}
 				<Select
+					className="wcpos:max-md:min-w-max"
 					aria-label={labels.type}
 					value={taxId.type}
 					options={TYPE_OPTIONS}
@@ -287,6 +291,7 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 			</TableCell>
 			<TableCell>
 				<TextInput
+					className="wcpos:max-md:min-w-max"
 					aria-label={labels.value}
 					placeholder={placeholderForTaxIdType(taxId.type, labels.value)}
 					value={valueDraft}
@@ -314,6 +319,7 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 			</TableCell>
 			<TableCell>
 				<TextInput
+					className="wcpos:max-md:min-w-max"
 					aria-label={labels.label}
 					placeholder={labels.label}
 					value={labelDraft}

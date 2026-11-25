@@ -59,8 +59,16 @@ jobs:
             echo "::error::Failed to resolve latest PHP 8.x minor version: '$PHP_LATEST_MINOR'"
             exit 1
           fi
-          echo "experimental=$PHP_LATEST_MINOR" >> $GITHUB_OUTPUT
           echo "Latest stable PHP minor: $PHP_LATEST_MINOR"
+          # wp-env builds its test containers from these images; rotating before they exist breaks every matrix job.
+          if ! docker manifest inspect "wordpress:php${PHP_LATEST_MINOR}" > /dev/null 2>&1 \
+            || ! docker manifest inspect "wordpress:cli-php${PHP_LATEST_MINOR}" > /dev/null 2>&1; then
+            PINNED=$(jq -r '.php.experimental' .github/test-matrix.json)
+            echo "::notice::PHP ${PHP_LATEST_MINOR} has no wordpress:php${PHP_LATEST_MINOR} / cli-php image yet; keeping experimental at ${PINNED}"
+            echo "experimental=${PINNED}" >> "$GITHUB_OUTPUT"
+          else
+            echo "experimental=$PHP_LATEST_MINOR" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Check for RC/beta activity
         id: rc
@@ -264,7 +272,7 @@ jobs:
       - name: Generate GitHub App token
         if: steps.updates.outputs.needed == 'true' || steps.headers.outputs.changed == 'true'
         id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ secrets.WCPOS_BOT_APP_ID }}
           private-key: ${{ secrets.WCPOS_BOT_PRIVATE_KEY }}
@@ -273,7 +281,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.updates.outputs.needed == 'true' || steps.headers.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v7
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v7
         with:
           token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore: update test matrix versions"

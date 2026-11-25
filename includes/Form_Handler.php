@@ -15,6 +15,13 @@ use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 class Form_Handler {
 
 	/**
+	 * The order an authenticated POS pay POST is paying, or 0.
+	 *
+	 * @var int
+	 */
+	private $pay_order_id = 0;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -68,33 +75,9 @@ class Form_Handler {
 				);
 			}
 
-			// Check for 'wcpos_jwt' and fall back to 'token' if not present.
-			// remove 'token' when wcpos_jwt is fully implemented.
-			$token_key = isset( $_GET['wcpos_jwt'] ) ? 'wcpos_jwt' : ( isset( $_GET['token'] ) ? 'token' : null );
+			self::assert_cashier_may_edit( $order );
 
-			if ( null === $token_key || ! isset( $_GET[ $token_key ] ) ) {
-				wp_die(
-					/* translators: Checkout/payment form error message shown when no cashier token is provided. */
-					esc_html__( 'Token not provided.', 'woocommerce-pos' ),
-					/* translators: Checkout/payment form error message title. */
-					esc_html__( 'Error', 'woocommerce-pos' ),
-					array( 'response' => 403 )
-				);
-			}
-
-			// Verify the cashier is authorized to access the order.
-			$provided_token = sanitize_text_field( wp_unslash( $_GET[ $token_key ] ) );
-			$auth = AuthService::instance();
-			$user = $auth->validate_token( $provided_token );
-			if ( is_wp_error( $user ) ) {
-				wp_die(
-					/* translators: Checkout/payment form error message shown when the cashier token does not match. */
-					esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
-					/* translators: Checkout/payment form error message title. */
-					esc_html__( 'Error', 'woocommerce-pos' ),
-					array( 'response' => 403 )
-				);
-			}
+			$this->pay_order_id = $order->get_id();
 
 			// set customer.
 			wp_set_current_user( $order->get_customer_id() );
@@ -114,6 +97,16 @@ class Form_Handler {
 			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 20, 2 );
 
 			/*
+			 * WooCommerce 11.3.1 refuses an order-pay POST for a guest order with a
+			 * billing email once the 10-minute grace period has passed, unless the
+			 * shopper verified the email. The WCPOS pay page has no email challenge,
+			 * and this request is already authenticated by the order key and the
+			 * cashier token, so lift the requirement for this order in the
+			 * 'order-pay' context only.
+			 */
+			add_filter( 'woocommerce_order_email_verification_required', array( $this, 'lift_order_pay_email_verification' ), 10, 3 );
+
+			/*
 			 * A WCPOS guest has no email and the pay page collects no billing
 			 * details, so WooCommerce Stripe would refuse to create its customer
 			 * ("Missing required customer field: email"). Stripe accepts a customer
@@ -124,6 +117,75 @@ class Form_Handler {
 				add_filter( 'wc_stripe_create_customer_args', array( $this, 'stripe_guest_customer_args' ) );
 			}
 		}
+	}
+
+	/**
+	 * Refuse the request (403) unless it carries a valid cashier token whose user can still
+	 * open the POS and edit this order.
+	 *
+	 * @param \WC_Order $order The order the request acts on.
+	 */
+	private static function assert_cashier_may_edit( \WC_Order $order ): void {
+		$status = self::cashier_token_status( $order );
+
+		if ( 'missing' === $status ) {
+			wp_die(
+				/* translators: Checkout/payment form error message shown when no cashier token is provided. */
+				esc_html__( 'Token not provided.', 'woocommerce-pos' ),
+				/* translators: Checkout/payment form error message title. */
+				esc_html__( 'Error', 'woocommerce-pos' ),
+				array( 'response' => 403 )
+			);
+		}
+
+		if ( '' !== $status ) {
+			wp_die(
+				/* translators: Checkout/payment form error message shown when the cashier token does not match. */
+				esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
+				/* translators: Checkout/payment form error message title. */
+				esc_html__( 'Error', 'woocommerce-pos' ),
+				array( 'response' => 403 )
+			);
+		}
+	}
+
+	/**
+	 * Check the request's cashier token against this order.
+	 *
+	 * @internal Called by Templates\Payment::get_template() and assert_cashier_may_edit().
+	 *
+	 * @param \WC_Order $order The order the request acts on.
+	 *
+	 * @return string '' when the token's user may edit the order, else 'missing', 'invalid' or 'mismatch'.
+	 */
+	public static function cashier_token_status( \WC_Order $order ): string {
+		// Check for 'wcpos_jwt' and fall back to 'token' if not present.
+		// remove 'token' when wcpos_jwt is fully implemented.
+		$token_key = isset( $_GET['wcpos_jwt'] ) ? 'wcpos_jwt' : ( isset( $_GET['token'] ) ? 'token' : null );
+
+		if ( null === $token_key || ! isset( $_GET[ $token_key ] ) ) {
+			return 'missing';
+		}
+
+		// Verify the cashier is authorized to access the order.
+		$provided_token = sanitize_text_field( wp_unslash( $_GET[ $token_key ] ) );
+		$auth = AuthService::instance();
+		$user = $auth->validate_token( $provided_token );
+
+		// The token's user must still be able to open the POS and edit this order.
+		$token_user = is_wp_error( $user ) ? false : get_user_by( 'id', absint( $user->data->user->id ?? 0 ) );
+		if ( ! $token_user ) {
+			return 'invalid';
+		}
+
+		if (
+			! Services\Cashier::instance()->can_open_pos( $token_user )
+			|| true !== Services\Permission_Rules::verdict( 'orders', 'edit', $order->get_id(), $token_user->ID )
+		) {
+			return 'mismatch';
+		}
+
+		return '';
 	}
 
 	/**
@@ -201,6 +263,24 @@ class Form_Handler {
 	}
 
 	/**
+	 * Lift WooCommerce's order-pay email verification (WC 11.3.1+) for the one
+	 * order an authenticated POS pay POST is paying; see pay_action().
+	 *
+	 * @param bool           $required Whether WooCommerce requires email verification.
+	 * @param \WC_Order|null $order    The order being checked, or null when a caller passes none.
+	 * @param string         $context  The verification context, or '' when a caller passes none.
+	 *
+	 * @return bool
+	 */
+	public function lift_order_pay_email_verification( $required, $order = null, $context = '' ) {
+		if ( 'order-pay' === $context && $order instanceof \WC_Order && $this->pay_order_id === $order->get_id() ) {
+			return false;
+		}
+
+		return $required;
+	}
+
+	/**
 	 * Process the coupon action.
 	 */
 	public function coupon_action() {
@@ -223,6 +303,12 @@ class Form_Handler {
 		// form posts back to that URL (action=""), so the key is always present for a real pay page.
 		$provided_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the order key is the access check; the nonce was verified above.
 		if ( ! $order || '' === $provided_key || ! $order->key_is_valid( $provided_key ) ) {
+			return;
+		}
+		self::assert_cashier_may_edit( $order );
+
+		// A paid order's coupons are final.
+		if ( $order->is_paid() ) {
 			return;
 		}
 

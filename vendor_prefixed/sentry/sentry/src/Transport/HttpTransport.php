@@ -79,6 +79,7 @@ class HttpTransport implements TransportInterface
                 if ($this->rateLimiter->isRateLimited(RateLimiter::DATA_CATEGORY_PROFILE)) {
                     // Just remove profiling data so the normal transaction can be sent.
                     $event->setSdkMetadata('profile', null);
+                    ClientReportAggregator::getInstance()->add(DataCategory::profile(), Reason::ratelimitBackoff(), 1);
                     $this->logger->warning('Rate limit exceeded for sending requests of type "profile". The profile has been dropped.', ['event' => $event]);
                 }
             }
@@ -89,8 +90,15 @@ class HttpTransport implements TransportInterface
                 $this->logger->warning('Rate limit exceeded for sending requests of type "attachment". The attachments have been dropped.', ['event' => $event]);
             }
         }
+        try {
+            $payload = $this->payloadSerializer->serialize($event);
+        } catch (\Throwable $exception) {
+            $this->logger->error(\sprintf('Failed to serialize %s. Reason: "%s".', $eventDescription, $exception->getMessage()), ['exception' => $exception, 'event' => $event]);
+            ClientReportAggregator::getInstance()->addEvent($event, Reason::internalSdkError());
+            return new Result(ResultStatus::failed());
+        }
         $request = new Request();
-        $request->setStringBody($this->payloadSerializer->serialize($event));
+        $request->setStringBody($payload);
         try {
             $response = $this->httpClient->sendRequest($request, $this->options);
         } catch (\Throwable $exception) {
@@ -100,7 +108,15 @@ class HttpTransport implements TransportInterface
         // Sentry replies to rate limited requests with an error body, so the rate limits
         // must be recorded before bailing out on error responses.
         $this->rateLimiter->handleResponse($response);
+        // Sentry already records the outcome of rate limited requests, so a 429 isn't counted again
+        if ($response->getStatusCode() >= 400 && $response->getStatusCode() !== 429) {
+            ClientReportAggregator::getInstance()->addEvent($event, Reason::sendError());
+        }
         if ($response->hasError()) {
+            // A status code of 0 means that no response was received, e.g. the connection failed
+            if ($response->getStatusCode() === 0) {
+                ClientReportAggregator::getInstance()->addEvent($event, Reason::networkError());
+            }
             $this->logger->error(\sprintf('Failed to send %s to %s. Reason: "%s".', $eventDescription, $targetDescription, $response->getError()), ['event' => $event]);
             return new Result(ResultStatus::unknown());
         }

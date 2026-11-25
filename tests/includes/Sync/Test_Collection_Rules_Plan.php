@@ -45,6 +45,8 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 		'pos_store'   => 'pos_store',
 		'created_via' => 'created_via',
 		'payment_method' => 'payment_method',
+		'pos_sale_day_after' => 'pos_sale_day_after',
+		'pos_sale_day_before' => 'pos_sale_day_before',
 		'include'     => array(
 			'key'   => 'include',
 			'when'  => 'search',
@@ -71,6 +73,61 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 		$request->set_query_params( $params );
 
 		return Collection_Rules::for_request( 'orders', $request, $param_map, $storage );
+	}
+
+	/** Numeric range bounds are integers before SQL, and invalid inputs are absent. */
+	public function test_sale_day_range_claims_only_nonnegative_numbers(): void {
+		foreach ( array( Collection_Rules::STORAGE_HPOS, Collection_Rules::STORAGE_POSTS ) as $storage ) {
+			foreach ( array( 'pos_sale_day_after', 'pos_sale_day_before' ) as $key ) {
+				foreach ( array(
+					'0' => 0,
+					'9.9' => 9,
+					'1700783999' => 1700783999,
+				) as $input => $expected ) {
+					$params = array( $key => $input );
+					$plan = $this->plan_for( $params, self::V2_MAP, $storage );
+					$this->assertSame( array( $key => $expected ), $plan->claims() );
+					$this->assertSame( array(), $plan->forwarded_params( $params ) );
+				}
+				foreach ( array( 'nope', '10 OR 1=1', '', -1, '-0.5', array( 10 ), true ) as $input ) {
+					$params = array( $key => $input );
+					$plan = $this->plan_for( $params, self::V2_MAP, $storage );
+					$this->assertTrue( $plan->is_empty() );
+					$this->assertSame( array(), $plan->claims() );
+					$this->assertSame( array(), $plan->forwarded_params( $params ) );
+				}
+			}
+		}
+	}
+
+	/** HPOS applies numeric comparisons on its own meta table, not legacy meta args. */
+	public function test_sale_day_range_hpos_uses_numeric_meta_subqueries(): void {
+		$query = new class() {
+			/**
+			 * Resolve the HPOS table name used by the clause builder.
+			 *
+			 * @param string $name Table role.
+			 * @return string
+			 */
+			public function get_table_name( string $name ): string {
+				return 'meta' === $name ? 'wp_wc_orders_meta' : 'wp_wc_orders';
+			}
+		};
+		$plan = $this->plan_for(
+			array(
+				'pos_sale_day_after' => '9.9',
+				'pos_sale_day_before' => '100',
+			),
+			self::V2_MAP
+		);
+
+		$clauses = $plan->filter( Collection_Rules_Plan::HOOK_HPOS_FILTERS, array( 'where' => '1=1' ), $query );
+
+		$this->assertSame(
+			"1=1 AND wp_wc_orders.id IN ( SELECT order_id FROM wp_wc_orders_meta WHERE meta_key = '_wcpos_sale_day_at' AND CAST(meta_value AS SIGNED) >= 9 ) AND wp_wc_orders.id IN ( SELECT order_id FROM wp_wc_orders_meta WHERE meta_key = '_wcpos_sale_day_at' AND CAST(meta_value AS SIGNED) <= 100 )",
+			$clauses['where']
+		);
+		$this->assertSame( array(), $plan->filter( Collection_Rules_Plan::HOOK_QUERY_ARGS, array() ) );
 	}
 
 	/**
@@ -323,7 +380,10 @@ class Test_Collection_Rules_Plan extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'pos_register', $rules['filters'] );
 		$this->assertSame(
-			array( 'meta' => array( 'key' => '_wcpos_register' ), 'sanitize' => 'key' ),
+			array(
+				'meta' => array( 'key' => '_wcpos_register' ),
+				'sanitize' => 'key',
+			),
 			$rules['filters']['pos_register']
 		);
 		$this->assertArrayHasKey( 'pos_register', $params );

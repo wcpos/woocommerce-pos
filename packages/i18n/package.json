@@ -6,11 +6,11 @@
   "types": "src/index.ts",
   "dependencies": {
     "@babel/runtime": "^7.29.2",
-    "i18next": "^26.0.10",
+    "i18next": "^27.1.1",
     "i18next-chained-backend": "^5.0.3",
     "i18next-http-backend": "^4.0.0",
     "i18next-localstorage-backend": "^4.3.1",
-    "react-i18next": "^17.0.7"
+    "react-i18next": "^18.0.1"
   },
   "peerDependencies": {
     "react": "^18.0.0"

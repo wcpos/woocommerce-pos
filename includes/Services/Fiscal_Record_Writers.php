@@ -104,7 +104,7 @@ final class Fiscal_Record_Writers {
 	/**
 	 * Insert through the store and make a failed write visible on the order.
 	 *
-	 * The business transition has already happened when a writer runs, so a
+	 * Except for reattribution and sale-day correction, the business transition has already happened, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
 	 * sale row is recovered by the next money command or refund on the order, or the payments sweep (recover());
 	 * every failure is surfaced as an order note and an action for a recovery job.
@@ -122,8 +122,10 @@ final class Fiscal_Record_Writers {
 			Logger::log( sprintf( 'Fiscal %s record for order #%d (source %s) could not be written; the sweep retries.', $type, $order->get_id(), (string) ( $fields['source_id'] ?? '' ) ) );
 			return false;
 		}
-		/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
-		$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
+		if ( ! in_array( $type, array( 'reattribution', 'sale_day_correction' ), true ) ) {
+			/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
+			$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
+		}
 		/**
 		 * Fires when a write-once fiscal record could not be inserted.
 		 *
@@ -134,6 +136,105 @@ final class Fiscal_Record_Writers {
 		do_action( 'wcpos_fiscal_record_failed', $type, $order, $fields );
 		do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( $type, $order, $fields ), '2.0.0', 'wcpos_fiscal_record_failed' );
 		return false;
+	}
+
+	/**
+	 * Append an attribution correction to the latest sale, outside all session and closure figures.
+	 *
+	 * @param WC_Order $order       Order whose attribution changed.
+	 * @param int      $actor_id    Acting user.
+	 * @param int      $old_cashier Previous cashier.
+	 * @param int      $new_cashier Current cashier.
+	 * @param string   $old_store   Previous store.
+	 * @param string   $new_store   Current store.
+	 */
+	public function record_reattribution( WC_Order $order, int $actor_id, int $old_cashier, int $new_cashier, string $old_store, string $new_store ): bool {
+		$latest = Completion_History::of( $order )->latest();
+		if ( is_array( $latest ) ) {
+			$this->recover( $order );
+		}
+		$sale = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : $this->store->find_sale( $order->get_id() );
+		if ( null === $sale ) {
+			return ! is_array( $latest ) || ! empty( $latest['legacy'] );
+		}
+		$changes = array();
+		foreach ( array(
+			'cashier' => array( $old_cashier, $new_cashier ),
+			'store' => array( $old_store, $new_store ),
+		) as $field => $values ) {
+			if ( $values[0] !== $values[1] ) {
+				$changes[] = array(
+					'field' => $field,
+					'from' => $values[0],
+					'to' => $values[1],
+				);
+			}
+		}
+		return $this->write(
+			$order,
+			array(
+				'type' => 'reattribution',
+				'order_id' => $order->get_id(),
+				'corrects_record_id' => $sale['id'],
+				'source_id' => wp_generate_uuid4(),
+				'cashier_id' => $new_cashier,
+				'store_id' => ctype_digit( $new_store ) && (int) $new_store > 0 ? (int) $new_store : null,
+				'approver_id' => $actor_id,
+				'payload' => array(
+					'changes' => $changes,
+					'changed_by' => $actor_id,
+					'changed_at_gmt' => current_time( 'mysql', true ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Append a reporting-day correction to the latest sale, outside all session and closure figures.
+	 *
+	 * @param WC_Order $order          Order whose reporting day changed.
+	 * @param int      $actor_id       Acting user.
+	 * @param string   $from_gmt       Previous reporting instant in UTC, or empty.
+	 * @param string   $to_gmt         Corrected reporting instant in UTC.
+	 * @param string   $reason         Reason for the correction.
+	 * @param string   $changed_at_gmt Change time in UTC, in MySQL format.
+	 */
+	public function record_sale_day_correction( WC_Order $order, int $actor_id, string $from_gmt, string $to_gmt, string $reason, string $changed_at_gmt ): bool {
+		$latest = Completion_History::of( $order )->latest();
+		if ( is_array( $latest ) ) {
+			$this->recover( $order );
+		}
+		$sale = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : $this->store->find_sale( $order->get_id() );
+		if ( null === $sale ) {
+			return ! is_array( $latest ) || ! empty( $latest['legacy'] );
+		}
+		$provenance = $this->store->provenance_from_order( $order );
+		$store = (string) $provenance['store_id'];
+		return $this->write(
+			$order,
+			array(
+				'type' => 'sale_day_correction',
+				'order_id' => $order->get_id(),
+				'store_id' => ctype_digit( $store ) && (int) $store > 0 ? (int) $store : null,
+				'cashier_id' => $provenance['cashier_id'],
+				'corrects_record_id' => $sale['id'],
+				// The identity is the request and the order's state before it: the same manager's retry after a failed save reuses its record.
+				'source_id' => Fiscal_Record_Store::digest_source_id( 'sale_day:' . $sale['id'] . ':' . $to_gmt . ':' . $actor_id . ':' . md5( $reason . wp_json_encode( $order->get_meta( '_wcpos_sale_day' ) ) ) ),
+				'approver_id' => $actor_id,
+				'payload' => array(
+					'changes' => array(
+						array(
+							'field' => 'sale_day',
+							'from' => $from_gmt,
+							'to' => $to_gmt,
+						),
+					),
+					'reason' => $reason,
+					'changed_by' => $actor_id,
+					'changed_at_gmt' => $changed_at_gmt,
+				),
+			)
+		);
 	}
 
 	/**
@@ -172,6 +273,7 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		try {
+			Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 			$fresh = wc_get_order( $order->get_id() );
 			if ( ! $fresh instanceof WC_Order ) {
 				return;
@@ -337,6 +439,7 @@ final class Fiscal_Record_Writers {
 	 * @param WC_Order $order Order.
 	 */
 	private function retry_standing( WC_Order $order ): void {
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$fresh = wc_get_order( $order->get_id() );
 		if ( ! $fresh instanceof WC_Order ) {
 			return;
@@ -489,8 +592,8 @@ final class Fiscal_Record_Writers {
 		if ( $closure && $sale ) {
 			$source_id = Fiscal_Record_Store::digest_source_id( 'late_sale:' . $sale['id'] );
 			// Legs an earlier completion's late correction already carried are not late again.
-			$carried = $this->carried_legs( $order->get_id(), $source_id );
-			$rows = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => ! in_array( $leg['id'] ?? null, $carried, true ) ) );
+			$carried = $this->carried_leg_ids( $order->get_id(), $source_id );
+			$rows    = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => ! in_array( $leg['id'] ?? null, $carried, true ) ) );
 			if ( $rows ) {
 				$delta = Session_Figures::tender_totals( $rows );
 				// Where and when the completion took the money, as the sale row says (the order's write-once
@@ -527,12 +630,14 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
-	 * The tender_rows ids every late_sale on the order carries, except the one with $source_id.
+	 * The ids of the legs the order's other late_sale records already carry: a leg one late_sale
+	 * names is counted, and no second late_sale may name it again.
 	 *
-	 * @param int    $order_id  Order ID.
-	 * @param string $source_id The asking record's source id.
+	 * @param int    $order_id         Order ID.
+	 * @param string $except_source_id The caller's own late_sale source id, whose legs a replay may rewrite.
+	 * @return array Leg ids.
 	 */
-	private function carried_legs( int $order_id, string $source_id ): array {
+	private function carried_leg_ids( int $order_id, string $except_source_id ): array {
 		$carried = array();
 		foreach ( $this->store->list(
 			array(
@@ -541,7 +646,7 @@ final class Fiscal_Record_Writers {
 				'per_page' => Fiscal_Record_Store::MAX_PER_PAGE,
 			)
 		) as $earlier ) {
-			if ( $earlier['source_id'] !== $source_id ) {
+			if ( $earlier['source_id'] !== $except_source_id ) {
 				$carried = array_merge( $carried, array_column( (array) ( $earlier['payload']['tender_rows'] ?? array() ), 'id' ) );
 			}
 		}
@@ -723,6 +828,7 @@ final class Fiscal_Record_Writers {
 				(string) $provenance['session_id'],
 				function () use ( $order, $refund_id, $provenance ): void {
 					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					Order_Meta_Store::forget_datastore_cache( $refund_id );
 					$fresh = wc_get_order( $refund_id );
 					if ( ! $fresh instanceof WC_Order_Refund ) {
 						return;
@@ -987,6 +1093,7 @@ final class Fiscal_Record_Writers {
 				$session_id,
 				function () use ( $order, $row, $refund, $amount, $session_id ): void {
 					// The close stamps `_wcpos_closure` on the refund: read it now, not as loaded before the lock.
+					Order_Meta_Store::forget_datastore_cache( $refund->get_id() );
 					$fresh = wc_get_order( $refund->get_id() );
 					if ( $fresh instanceof WC_Order_Refund ) {
 						$fresh->read_meta_data( true );
@@ -1054,8 +1161,13 @@ final class Fiscal_Record_Writers {
 			if ( ! Pos_Uuid::is_uuid( $session_id ) ) {
 				return;
 			}
-			if ( ! $this->correct_under_locks( $order, $minus, $plus, $session_id ) ) {
+			// Null: the locks were held elsewhere. False: the insert was refused, and write() noted it.
+			$written = $this->correct_under_locks( $order, $minus, $plus, $session_id );
+			if ( null === $written ) {
 				Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d could not take the order and register locks.', $plus['id'], $order->get_id() ) );
+			}
+			// A refused insert retries like a held lock; after the last attempt the parked entry is the sweep's.
+			if ( ! $written ) {
 				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::CORRECTION_RETRY_HOOK, array( $order->get_id(), (string) $plus['id'], $attempt + 1 ) ) ) {
 					Logger::log( sprintf( 'Fiscal late check for payment correction %s on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $plus['id'], $order->get_id(), $attempt ) );
 					$context = array( 'source_id' => Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] ) );
@@ -1063,10 +1175,13 @@ final class Fiscal_Record_Writers {
 						Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d was already written by the sweep.', $plus['id'], $order->get_id() ) );
 						return;
 					}
-					// Only the sweep retries it now (the parked entry selects the order): tell a human once.
-					$order->add_order_note( __( 'POS fiscal tender correction record could not be written; it will need recovery.', 'woocommerce-pos' ) );
-					do_action( 'wcpos_fiscal_record_failed', 'late_sale', $order, $context );
-					do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( 'late_sale', $order, $context ), '2.0.0', 'wcpos_fiscal_record_failed' );
+					if ( null === $written ) {
+						// Only the sweep retries it now (the parked entry selects the order): tell a human once.
+						$order->add_order_note( __( 'POS fiscal tender correction record could not be written; it will need recovery.', 'woocommerce-pos' ) );
+						do_action( 'wcpos_fiscal_record_failed', 'late_sale', $order, $context );
+						do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( 'late_sale', $order, $context ), '2.0.0', 'wcpos_fiscal_record_failed' );
+					}
+					Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 					$fresh = wc_get_order( $order->get_id() );
 					if ( $fresh instanceof WC_Order ) {
 						$fresh->read_meta_data( true );
@@ -1127,8 +1242,9 @@ final class Fiscal_Record_Writers {
 	 * @param array    $plus       R+.
 	 * @param string   $session_id Lowercase session id.
 	 * @param bool     $notify     Whether a failed write notes the order; see write().
+	 * @return bool|null Null when the locks were held elsewhere; else record_correction()'s answer.
 	 */
-	private function correct_under_locks( WC_Order $order, array $minus, array $plus, string $session_id, bool $notify = true ): bool {
+	private function correct_under_locks( WC_Order $order, array $minus, array $plus, string $session_id, bool $notify = true ): ?bool {
 		$done = false;
 		$work = function () use ( $order, $minus, $plus, $session_id, $notify, &$done ): void {
 			$done = $this->record_correction( $order, $minus, $plus, $session_id, $notify );
@@ -1138,7 +1254,7 @@ final class Fiscal_Record_Writers {
 		} finally {
 			$this->park_correction( $order->get_id(), (string) $plus['id'], $done ? null : $session_id );
 		}
-		return $locked;
+		return $locked ? $done : null;
 	}
 
 	/**
@@ -1154,6 +1270,7 @@ final class Fiscal_Record_Writers {
 			return;
 		}
 		try {
+			Order_Meta_Store::forget_datastore_cache( $order_id );
 			$fresh = wc_get_order( $order_id );
 			if ( ! $fresh instanceof WC_Order ) {
 				return; // The finally releases the lock.
@@ -1183,6 +1300,7 @@ final class Fiscal_Record_Writers {
 	 * @param WC_Order $order Order.
 	 */
 	private function recover_corrections( WC_Order $order ): void {
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$fresh = wc_get_order( $order->get_id() );
 		if ( ! $fresh instanceof WC_Order ) {
 			return;
@@ -1211,13 +1329,14 @@ final class Fiscal_Record_Writers {
 		}
 	}
 
-	/** The write behind handle_correction(), under the close's locks; false only when write() failed.
+	/** The write behind handle_correction(), under the close's locks.
 	 *
 	 * @param WC_Order $order      Order.
 	 * @param array    $minus      R-.
 	 * @param array    $plus       R+.
 	 * @param string   $session_id Lowercase session id.
 	 * @param bool     $notify     Whether a failed write notes the order; see write().
+	 * @return bool False only when the insert failed; true when written or when nothing is owed.
 	 */
 	private function record_correction( WC_Order $order, array $minus, array $plus, string $session_id, bool $notify = true ): bool {
 		$closure = ( new Closure_Store() )->for_session( $session_id );
@@ -1225,8 +1344,10 @@ final class Fiscal_Record_Writers {
 			return true; // The session is open: its close counts both legs as corrections.
 		}
 		$source_id = Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] );
-		$ids       = array_diff( array( $minus['id'], $plus['id'] ), $this->carried_legs( $order->get_id(), $source_id ) );
-		$rows      = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => in_array( $leg['id'] ?? null, $ids, true ) ) );
+		$ids       = array( $minus['id'], $plus['id'] );
+		// A later completion's late_sale may already carry both legs (this check was deferred meanwhile).
+		$carried = $this->carried_leg_ids( $order->get_id(), $source_id );
+		$rows    = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => in_array( $leg['id'] ?? null, $ids, true ) && ! in_array( $leg['id'] ?? null, $carried, true ) ) );
 		if ( count( $rows ) < 2 ) {
 			return true; // The closure counted them, or another late_sale carries them.
 		}

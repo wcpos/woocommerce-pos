@@ -112,6 +112,9 @@ final class Command_Log {
 			return $stale;
 		}
 		$answer = $work( $command );
+		if ( ! is_wp_error( $answer ) ) {
+			\WCPOS\WooCommercePOS\Services\Order_Meta_Store::forget_datastore_cache( $order->get_id() );
+		}
 		$fresh  = is_wp_error( $answer ) ? null : wc_get_order( $order->get_id() );
 		if ( $fresh instanceof WC_Order ) {
 			$fresh->read_meta_data( true );

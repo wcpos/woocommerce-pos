@@ -8,30 +8,55 @@
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Payments\Contract\Abstract_Capture_Mode_Handler;
+use WCPOS\WooCommercePOS\Payments\Contract\Capture_Mode_Registry;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Projection;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Tests\Helpers\Adopt_Refund_Test_Gateway;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
 use WCPOS\WooCommercePOS\Tests\Helpers\Money_Route_Envelope;
 use WCPOS\WooCommercePOS\Tests\Services\Closure_Test_Fixture;
 
 /** POST /orders/{id}/payments/{uuid}/correct. */
 class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
-	use Closure_Test_Fixture;
+	use Closure_Test_Fixture {
+		tearDown as closure_tear_down;
+	}
 	use Money_Route_Envelope;
+
+	/**
+	 * The gateway filter online_gateway() installed, removed again in tearDown().
+	 *
+	 * @var \Closure|null
+	 */
+	private $online_gateways = null;
 
 	/** Arm the fiscal sale and correction triggers, as the payments controller tests do. */
 	public function setUp(): void {
 		parent::setUp();
 		add_action( 'wcpos_sale_completed', array( Fiscal_Record_Writers::instance(), 'handle_sale_completed' ), 10, 2 );
 		add_action( 'wcpos_payment_corrected', array( Fiscal_Record_Writers::instance(), 'handle_correction' ), 10, 4 );
+	}
+
+	/** Drop the online gateway fixture from WooCommerce's loaded list after the test that added it. */
+	public function tearDown(): void {
+		if ( null !== $this->online_gateways ) {
+			remove_filter( 'woocommerce_payment_gateways', $this->online_gateways );
+			\WC_Payment_Gateways::instance()->init();
+			Payment_Gateways_Section::register_free_tier_rule();
+			$this->online_gateways = null;
+		}
+		$this->closure_tear_down();
 	}
 
 	/** Card 10.00 corrected to cash appends R- and R+ and moves nothing else. */
@@ -69,7 +94,7 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'captured', $reversal['status'] );
 		$this->assertSame( '10.00', $this->row( $order, $payment['id'] )['tendered'] );
 		$this->assertSame( '0.00', $this->row( $order, $payment['id'] )['change'] );
-		$this->assertSame( $before, $this->without_commands( $this->row( $order, $card['id'] ) ) );
+		$this->assertSame( $before + array( 'corrected_by' => $payment['id'] ), $this->without_commands( $this->row( $order, $card['id'] ) ) );
 		$this->assertSame( $paid, Ledger::instance()->paid( $rows ) );
 		$this->assertSame( $balance, Ledger::instance()->signed_balance( $order, $rows ) );
 		$this->assertSame( 'completed', $order->get_status() );
@@ -157,22 +182,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** The target must be a known, enabled, manual method with no provider. */
+	/** The target must be a known method enabled for POS. */
 	public function test_correct_invalid_target_method_returns_method_invalid(): void {
 		// Arrange.
 		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
-		$webview              = static fn( $mode, $gateway ) => 'pos_card' === $gateway->id ? 'webview' : $mode;
 
 		// Act / Assert: unknown.
 		$this->assert_refused( 'method_invalid', $this->correct( $order, $cash['id'], 'no_such_gateway' ) );
-
-		// A provider method: pos_card answered as a webview gateway.
-		add_filter( 'wcpos_payment_method_capture_mode', $webview, 10, 2 );
-		try {
-			$this->assert_refused( 'method_invalid', $this->correct( $order, $cash['id'], 'pos_card' ) );
-		} finally {
-			remove_filter( 'wcpos_payment_method_capture_mode', $webview, 10 );
-		}
 
 		// Disabled.
 		$this->gateway_settings(
@@ -340,6 +356,106 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'succeeded', $moved['refunds'][0]['status'] );
 	}
 
+	/** A corrected row and its R- report no refund capacity: the money moved to R+, and the uncorrected leg keeps its own. */
+	public function test_correction_leaves_corrected_row_and_reversal_without_refund_capacity(): void {
+		// Arrange.
+		list( $order, $card, $cash ) = $this->split_sale();
+
+		// Act.
+		$response = $this->correct( $order, $cash['id'], 'pos_card' );
+		$minus    = $this->reversal_of( Ledger::instance()->read( wc_get_order( $order->get_id() ) ), $cash['id'] );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->row( $order, $cash['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $minus ) );
+		$this->assertSame( Money::minor( '60.00' ), Ledger::available_for_refund( $this->row( $order, $response->get_data()['payment']['id'] ) ) );
+		$this->assertSame( Money::minor( '40.00' ), Ledger::available_for_refund( $this->row( $order, $card['id'] ) ) );
+	}
+
+	/** Pro's allocator walk: every captured row reporting capacity after a correction accepts a refund of that capacity. */
+	public function test_every_row_with_refund_capacity_after_correction_accepts_a_refund_of_it(): void {
+		// Arrange.
+		list( $order, , $cash ) = $this->split_sale();
+		$this->assertSame( 200, $this->correct( $order, $cash['id'], 'pos_card' )->get_status() );
+		$order     = wc_get_order( $order->get_id() );
+		$refund    = wc_create_refund(
+			array(
+				'order_id'       => $order->get_id(),
+				'amount'         => '100.00',
+				'refund_payment' => false,
+			)
+		);
+		$remaining = Money::minor( '100.00' );
+		$allocated = 0;
+		$results   = array();
+
+		// Act: newest row first, as Pro's allocator walks them.
+		foreach ( array_reverse( Ledger::instance()->read( $order ) ) as $row ) {
+			$capacity = Ledger::available_for_refund( $row );
+			if ( 'captured' !== $row['status'] || $capacity <= 0 || $remaining <= 0 ) {
+				continue;
+			}
+			$take                  = min( $capacity, $remaining );
+			$results[ $row['id'] ] = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), Money::format( $take ) );
+			$remaining            -= $take;
+			$allocated            += is_wp_error( $results[ $row['id'] ] ) ? 0 : $take;
+		}
+
+		// Assert.
+		foreach ( $results as $id => $result ) {
+			$this->assertNotWPError( $result, $id );
+		}
+		$this->assertSame( Money::minor( '100.00' ), $allocated );
+	}
+
+	/** A correction of a correction leaves only its last R+ refundable. */
+	public function test_correction_of_a_correction_leaves_only_the_last_leg_refundable(): void {
+		// Arrange.
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$first                = $this->correct( $order, $cash['id'], 'pos_card' )->get_data()['payment'];
+
+		// Act.
+		$response = $this->correct( $order, $first['id'], 'pos_cash' );
+		$rows     = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->row( $order, $cash['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->reversal_of( $rows, $cash['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->row( $order, $first['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->reversal_of( $rows, $first['id'] ) ) );
+		$this->assertSame( Money::minor( '10.00' ), Ledger::available_for_refund( $this->row( $order, $response->get_data()['payment']['id'] ) ) );
+	}
+
+	/** On a 0-decimal store a 0.05 increment is below one minor unit, so every whole amount is on it. */
+	public function test_correction_on_zero_decimal_store_with_sub_unit_increment_succeeds(): void {
+		// Arrange.
+		add_filter( 'wc_get_price_decimals', '__return_zero' );
+		try {
+			$order = $this->seeded( $this->row_of( 'pos_card', 'card', '60' ) );
+			$this->gateway_settings(
+				array(
+					'pos_cash' => array(
+						'enabled'            => true,
+						'rounding_increment' => '0.05',
+					),
+					'pos_card' => array( 'enabled' => true ),
+				)
+			);
+
+			// Act.
+			$response = $this->correct( $order, $this->only_id( $order ), 'pos_cash' );
+		} finally {
+			remove_filter( 'wc_get_price_decimals', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'pos_cash', $response->get_data()['payment']['method_id'] );
+		$this->assertSame( '60', $response->get_data()['payment']['amount'] );
+	}
+
 	/**
 	 * Assert a 422 refusal with its reason.
 	 *
@@ -366,6 +482,20 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$order = wc_get_order( $order->get_id() );
 		$this->assertSame( 'completed', $order->get_status() );
 		return array( $order, $response->get_data()['payment'] );
+	}
+
+	/**
+	 * A completed 100.00 sale paid card 40.00 first, then cash 60.00.
+	 *
+	 * @return array{0: \WC_Order, 1: array, 2: array} The completed order, the card answer and the cash answer.
+	 */
+	private function split_sale(): array {
+		$order = $this->create_pos_order( '100.00' );
+		$card  = $this->record( $order, $this->payment( 'pos_card', '40.00' ) )->get_data()['payment'];
+		$cash  = $this->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '60.00' ) )->get_data()['payment'];
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( 'completed', $order->get_status() );
+		return array( $order, $card, $cash );
 	}
 
 	/**
@@ -440,7 +570,7 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function reversal_of( array $rows, string $id ): array {
 		foreach ( $rows as $row ) {
-			if ( $id === ( $row['reverses'] ?? null ) ) {
+			if ( ( $row['reverses'] ?? null ) === $id ) {
 				return $row;
 			}
 		}
@@ -476,9 +606,10 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	 * @param \WC_Order $order     Order.
 	 * @param string    $id        Row id.
 	 * @param string    $method_id Target method.
+	 * @param array     $extra     Further body fields.
 	 */
-	private function correct( \WC_Order $order, string $id, string $method_id ): \WP_REST_Response {
-		return $this->command( $this->payment_path( $order, $id ) . '/correct', $this->envelope( $order, array( 'method_id' => $method_id ) ) );
+	private function correct( \WC_Order $order, string $id, string $method_id, array $extra = array() ): \WP_REST_Response {
+		return $this->command( $this->payment_path( $order, $id ) . '/correct', $this->envelope( $order, array_merge( array( 'method_id' => $method_id ), $extra ) ) );
 	}
 
 	/**
@@ -730,14 +861,15 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * A 10.00 card sale completed through the route in a session.
+	 * A 10.00 sale completed through the route in a session.
 	 *
-	 * @param array $session Session row.
+	 * @param array  $session   Session row.
+	 * @param string $method_id Method.
 	 * @return array{0: \WC_Order, 1: array} The completed order and the payment answer.
 	 */
-	private function completed_sale_in( array $session ): array {
+	private function completed_sale_in( array $session, string $method_id = 'pos_card' ): array {
 		$order   = $this->create_pos_order( '10.00' );
-		$payment = $this->payment( 'pos_card', '10.00' ) + array(
+		$payment = $this->payment( $method_id, '10.00' ) + array(
 			'register_id' => $session['register_id'],
 			'session_id'  => $session['id'],
 		);
@@ -788,6 +920,376 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 				'order_id' => $order_id,
 				'type'     => $type,
 			)
+		);
+	}
+
+	/** T1: the customer paid online on the side; cash corrected to the gateway is a hand-recorded, unverified R+. */
+	public function test_correct_cash_to_gateway_with_reference_records_unverified_manual_replacement(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+
+		// Act.
+		$response = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test', array( 'reference' => 'Stripe pi_123' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$payment = $response->get_data()['payment'];
+		$this->assertSame( 'wcpos_adopt_refund_test', $payment['method_id'] );
+		$this->assertSame( 'manual', $payment['capture_mode'] );
+		$this->assertNull( $payment['provider'] );
+		$this->assertTrue( $payment['unverified'] ?? null );
+		$this->assertSame( 'Stripe pi_123', $payment['reference'] ?? null );
+		$order  = wc_get_order( $order->get_id() );
+		$stored = $this->row( $order, $payment['id'] );
+		$this->assertSame( array(), $stored['provider_refs'] );
+		$this->assertTrue( $stored['unverified'] ?? null );
+		$this->assertSame( 'Stripe pi_123', $stored['reference'] ?? null );
+		foreach ( array( $this->reversal_of( Ledger::instance()->read( $order ), $cash['id'] ), $this->row( $order, $cash['id'] ) ) as $row ) {
+			$this->assertArrayNotHasKey( 'unverified', $row );
+			$this->assertArrayNotHasKey( 'reference', $row );
+		}
+		$this->assertSame( 'wcpos_adopt_refund_test', $order->get_payment_method() );
+		$this->assertSame( 'Online card', $order->get_payment_method_title() );
+		$notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$this->assertContains( sprintf( 'WCPOS payment %s corrected: Cash to Online card (10.00), reference Stripe pi_123', $cash['id'] ), $notes );
+	}
+
+	/** T2: a provider-descriptor target and a webview-only target are accepted and marked; a target not enabled for POS is not. */
+	public function test_correct_to_provider_or_webview_target_returns_unverified_replacement(): void {
+		// Arrange.
+		$this->online_gateway();
+		Capture_Mode_Registry::instance()->register( 'correction_provider_test', Correction_Provider_Test_Handler::class );
+		list( $first, $first_cash )   = $this->completed_sale( 'pos_cash', '10.00' );
+		list( $second, $second_cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		list( $third, $third_cash )   = $this->completed_sale( 'pos_cash', '10.00' );
+		$provider                     = static fn( $keys, $gateway ) => 'wcpos_adopt_refund_test' === $gateway->id ? array( 'correction_provider_test' ) : $keys;
+		$webview                      = static fn( $mode, $gateway ) => 'pos_card' === $gateway->id ? 'webview' : $mode;
+		add_filter( 'wcpos_payment_method_capture_modes', $provider, 10, 2 );
+		add_filter( 'wcpos_payment_method_capture_mode', $webview, 10, 2 );
+
+		try {
+			$this->assertSame( 'acme', Descriptor_Builder::instance()->get( 'wcpos_adopt_refund_test' )['capture']['provider'] );
+			$this->assertSame( array( 'webview' ), array_column( Descriptor_Builder::instance()->get( 'pos_card' )['capture']['modes'], 'mode' ) );
+
+			// Act.
+			$to_provider = $this->correct( $first, $first_cash['id'], 'wcpos_adopt_refund_test' );
+			$to_webview  = $this->correct( $second, $second_cash['id'], 'pos_card' );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $provider, 10 );
+			remove_filter( 'wcpos_payment_method_capture_mode', $webview, 10 );
+		}
+		$this->gateway_settings(
+			array(
+				'pos_cash'                => array( 'enabled' => true ),
+				'pos_card'                => array( 'enabled' => true ),
+				'wcpos_adopt_refund_test' => array( 'enabled' => false ),
+			)
+		);
+		$disabled = $this->correct( $third, $third_cash['id'], 'wcpos_adopt_refund_test' );
+
+		// Assert.
+		foreach ( array( $to_provider, $to_webview ) as $response ) {
+			$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+			$payment = $response->get_data()['payment'];
+			$this->assertSame( 'manual', $payment['capture_mode'] );
+			$this->assertNull( $payment['provider'] );
+			$this->assertTrue( $payment['unverified'] ?? null );
+			$this->assertArrayNotHasKey( 'reference', $payment );
+		}
+		$this->assert_refused( 'method_invalid', $disabled );
+	}
+
+	/** T12: a provider target that also lists a manual mode is still marked. */
+	public function test_correct_to_provider_target_that_also_lists_manual_returns_unverified_replacement(): void {
+		// Arrange.
+		$this->online_gateway();
+		Capture_Mode_Registry::instance()->register( 'correction_provider_test', Correction_Provider_Test_Handler::class );
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$provider             = static fn( $keys, $gateway ) => 'wcpos_adopt_refund_test' === $gateway->id ? array( 'correction_provider_test', 'manual' ) : $keys;
+		add_filter( 'wcpos_payment_method_capture_modes', $provider, 10, 2 );
+
+		try {
+			$descriptor = Descriptor_Builder::instance()->get( 'wcpos_adopt_refund_test' );
+			$this->assertSame( 'acme', $descriptor['capture']['provider'] );
+			$this->assertSame( array( 'device', 'manual' ), array_column( $descriptor['capture']['modes'], 'mode' ) );
+
+			// Act.
+			$response = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+		} finally {
+			remove_filter( 'wcpos_payment_method_capture_modes', $provider, 10 );
+		}
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$payment = $response->get_data()['payment'];
+		$this->assertSame( 'manual', $payment['capture_mode'] );
+		$this->assertNull( $payment['provider'] );
+		$this->assertTrue( $payment['unverified'] ?? null );
+	}
+
+	/** T3: a plain manual target is never marked; a reference on it is stored and named in the note. */
+	public function test_correct_to_plain_manual_target_with_reference_stores_it_without_unverified(): void {
+		// Arrange.
+		list( $plain_order, $plain_card ) = $this->completed_sale( 'pos_card', '10.00' );
+		list( $order, $card )             = $this->completed_sale( 'pos_card', '10.00' );
+
+		// Act.
+		$plain = $this->correct( $plain_order, $plain_card['id'], 'pos_cash' );
+		$with  = $this->correct( $order, $card['id'], 'pos_cash', array( 'reference' => 'Till slip 42' ) );
+
+		// Assert.
+		$this->assertSame( 200, $plain->get_status() );
+		$this->assertSame( 200, $with->get_status() );
+		$plain_row = $this->row( $plain_order, $plain->get_data()['payment']['id'] );
+		$with_row  = $this->row( $order, $with->get_data()['payment']['id'] );
+		$this->assertArrayNotHasKey( 'unverified', $plain_row );
+		$this->assertArrayNotHasKey( 'reference', $plain_row );
+		$this->assertArrayNotHasKey( 'unverified', $with_row );
+		$this->assertSame( 'Till slip 42', $with_row['reference'] ?? null );
+		$plain_notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $plain_order->get_id() ) ), 'content' );
+		$with_notes  = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$this->assertContains( sprintf( 'WCPOS payment %s corrected: Card to Cash (10.00)', $plain_card['id'] ), $plain_notes );
+		$this->assertContains( sprintf( 'WCPOS payment %s corrected: Card to Cash (10.00), reference Till slip 42', $card['id'] ), $with_notes );
+	}
+
+	/** T4: an unverified R+ refunds by hand, never through the gateway, and is never voided. */
+	public function test_correct_unverified_replacement_refunds_manually_and_void_returns_409(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$order                = $this->reopen( $order );
+		$response             = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$plus   = $response->get_data()['payment'];
+		$refund = wc_create_refund(
+			array(
+				'order_id'       => $order->get_id(),
+				'amount'         => '4.00',
+				'refund_payment' => false,
+			)
+		);
+
+		// Act.
+		$void  = $this->void( $order, $plus['id'] );
+		$moved = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $plus['id'], $refund->get_id(), '4.00' );
+
+		// Assert.
+		$this->assertSame( 409, $void->get_status() );
+		$this->assertSame( 'wcpos_invalid_transition', $void->get_data()['code'] );
+		$this->assertIsArray( $moved );
+		$this->assertSame( 'succeeded', $moved['refunds'][0]['status'] );
+		$this->assertArrayHasKey( 'provider_ref', $moved['refunds'][0] );
+		$this->assertNull( $moved['refunds'][0]['provider_ref'] );
+		$this->assertSame( 0, Adopt_Refund_Test_Gateway::$calls );
+		$this->assertSame( 'captured', $this->row( $order, $plus['id'] )['status'] );
+	}
+
+	/** T5: an unverified R+ corrected again to cash writes a pair that carries neither mark nor reference. */
+	public function test_correct_unverified_replacement_again_to_cash_writes_unmarked_pair(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$first                = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test', array( 'reference' => 'pi_1' ) );
+		$this->assertSame( 200, $first->get_status(), (string) wp_json_encode( $first->get_data() ) );
+		$first = $first->get_data()['payment'];
+
+		// Act.
+		$again = $this->correct( $order, $first['id'], 'pos_cash' );
+
+		// Assert.
+		$this->assertSame( 200, $again->get_status(), (string) wp_json_encode( $again->get_data() ) );
+		$this->assertSame( 'pos_cash', $again->get_data()['payment']['method_id'] );
+		$this->assertSame( $first['id'], $again->get_data()['payment']['corrects'] );
+		$rows = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		foreach ( array( $this->row( $order, $again->get_data()['payment']['id'] ), $this->reversal_of( $rows, $first['id'] ) ) as $row ) {
+			$this->assertArrayNotHasKey( 'unverified', $row );
+			$this->assertArrayNotHasKey( 'reference', $row );
+		}
+		$this->assertTrue( $this->row( $order, $first['id'] )['unverified'] ?? null );
+	}
+
+	/** T6: in a split sale only the corrected leg moves; the other leg keeps its method, amount and refund capacity. */
+	public function test_correct_split_cash_leg_to_gateway_leaves_card_leg_unchanged(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $card, $cash ) = $this->split_sale();
+		$before                      = $this->without_commands( $this->row( $order, $card['id'] ) );
+
+		// Act.
+		$response = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$plus = $this->row( $order, $response->get_data()['payment']['id'] );
+		$this->assertTrue( $plus['unverified'] ?? null );
+		$this->assertSame( $before, $this->without_commands( $this->row( $order, $card['id'] ) ) );
+		$this->assertSame( Money::minor( '40.00' ), Ledger::available_for_refund( $this->row( $order, $card['id'] ) ) );
+		$this->assertSame( Money::minor( '60.00' ), Ledger::available_for_refund( $plus ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->row( $order, $cash['id'] ) ) );
+		$this->assertSame( array( 'pos_card', 'wcpos_adopt_refund_test' ), array_column( Ledger::effective_rows( Ledger::instance()->read( wc_get_order( $order->get_id() ) ) ), 'method_id' ) );
+	}
+
+	/** T7: in the session the R+ counts under the gateway as a correction; the drawer goes down; no sale and no refund. */
+	public function test_correct_cash_sale_to_gateway_in_session_counts_a_correction_and_lowers_cash(): void {
+		// Arrange.
+		$this->online_gateway();
+		$session              = $this->closure_session( null, 'open' );
+		list( $order, $cash ) = $this->completed_sale_in( $session, 'pos_cash' );
+		$before               = Session_Figures::for_session( $session );
+		$cash_sales           = $before->terms()['cash_sales'];
+		$cash_refunds         = $before->terms()['cash_refunds'];
+		$refund_count         = $before->refund_count();
+		$expected_cash        = $before->expected()['cash'];
+
+		// Act.
+		$response = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$figures = Session_Figures::for_session( $session );
+		$online  = $figures->payment_methods()['wcpos_adopt_refund_test'];
+		$this->assertSame( '10.0000', $online['corrections'] );
+		$this->assertSame( '0.0000', $online['sales'] );
+		$this->assertSame( '0.0000', $online['refunds'] );
+		$this->assertSame( '-10.0000', $figures->terms()['cash_corrections'] );
+		$this->assertSame( Closure_Store::sum( array( $expected_cash, '-10' ) ), $figures->expected()['cash'] );
+		$this->assertSame( $cash_sales, $figures->terms()['cash_sales'] );
+		$this->assertSame( $cash_refunds, $figures->terms()['cash_refunds'] );
+		$this->assertSame( $refund_count, $figures->refund_count() );
+	}
+
+	/** T8: a reprint shows one payment on the gateway, and the reference is never printed as a transaction id. */
+	public function test_correct_cash_to_gateway_reprint_shows_one_gateway_payment_without_transaction_id(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$response             = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test', array( 'reference' => 'pi_123' ) );
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+
+		// Act.
+		$data = ( new Receipt_Data_Builder() )->build( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( array( 'wcpos_adopt_refund_test' ), array_column( $data['payments'], 'method_id' ) );
+		$this->assertSame( 'Online card', $data['payments'][0]['method_title'] );
+		$this->assertSame( '', $data['payments'][0]['transaction_id'] );
+		$this->assertSame( 10.0, $data['payments'][0]['amount'] );
+		$this->assertSame( 10.0, $data['totals']['paid_total'] );
+	}
+
+	/** T9: the reference loses tags and line breaks, is capped at 100 characters, is not stored when empty, and must be a string. */
+	public function test_correct_reference_is_sanitised_capped_and_must_be_a_string(): void {
+		// Arrange.
+		$cases = array(
+			'<script>alert(1)</script>Slip <b>42</b>' => 'Slip 42',
+			"Slip\n\t42\r"                            => 'Slip 42',
+			str_repeat( 'é', 150 )                    => str_repeat( 'é', 100 ),
+			'   '                                     => null,
+			'<b></b>'                                 => null,
+		);
+		list( $typed_order, $typed_card ) = $this->completed_sale( 'pos_card', '10.00' );
+
+		foreach ( $cases as $sent => $stored ) {
+			list( $order, $card ) = $this->completed_sale( 'pos_card', '10.00' );
+
+			// Act.
+			$response = $this->correct( $order, $card['id'], 'pos_cash', array( 'reference' => $sent ) );
+
+			// Assert.
+			$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+			$row = $this->row( $order, $response->get_data()['payment']['id'] );
+			if ( null === $stored ) {
+				$this->assertArrayNotHasKey( 'reference', $row, $sent );
+			} else {
+				$this->assertSame( $stored, $row['reference'] ?? null, $sent );
+			}
+		}
+
+		// Act / Assert: not a string.
+		$typed = $this->correct( $typed_order, $typed_card['id'], 'pos_cash', array( 'reference' => array( 'Slip 42' ) ) );
+		$this->assertSame( 400, $typed->get_status() );
+		$this->assertSame( 'rest_invalid_param', $typed->get_data()['code'] );
+		$this->assertCount( 1, Ledger::instance()->read( wc_get_order( $typed_order->get_id() ) ) );
+	}
+
+	/** T10: the same command replays the same R+ with its reference; another reference under the same id conflicts and writes nothing. */
+	public function test_correct_replay_with_reference_returns_same_replacement_and_other_reference_conflicts(): void {
+		// Arrange.
+		list( $order, $card ) = $this->completed_sale( 'pos_card', '10.00' );
+		$path                 = $this->payment_path( $order, $card['id'] ) . '/correct';
+		$body                 = $this->envelope(
+			$order,
+			array(
+				'method_id' => 'pos_cash',
+				'reference' => 'Slip 42',
+			)
+		);
+		$first                = $this->command( $path, $body );
+		$this->assertSame( 200, $first->get_status() );
+
+		// Act.
+		$replay   = $this->command( $path, $body );
+		$conflict = $this->command( $path, array_merge( $body, array( 'reference' => 'Slip 43' ) ) );
+
+		// Assert.
+		$this->assertSame( 200, $replay->get_status() );
+		$this->assertSame( $first->get_data()['payment']['id'], $replay->get_data()['payment']['id'] );
+		$this->assertSame( 'Slip 42', $replay->get_data()['payment']['reference'] ?? null );
+		$this->assertSame( 422, $conflict->get_status() );
+		$this->assertSame( 'wcpos_command_conflict', $conflict->get_data()['code'] );
+		$this->assertCount( 3, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+		$this->assertSame( 'Slip 42', $this->row( $order, $first->get_data()['payment']['id'] )['reference'] ?? null );
+	}
+
+	/** T11: a gateway-backed target answered as stored value is still refused. */
+	public function test_correct_to_gateway_target_of_stored_value_kind_returns_method_invalid(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$stored_value         = static fn( $kind, $gateway ) => 'wcpos_adopt_refund_test' === $gateway->id ? 'stored_value' : $kind;
+		add_filter( 'wcpos_payment_method_kind', $stored_value, 10, 2 );
+
+		try {
+			// Act / Assert.
+			$this->assert_refused( 'method_invalid', $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' ) );
+		} finally {
+			remove_filter( 'wcpos_payment_method_kind', $stored_value, 10 );
+		}
+	}
+
+	/** Register the online card gateway fixture, enabled for POS beside cash and card, with its refund count reset. */
+	private function online_gateway(): void {
+		remove_all_filters( 'option_woocommerce_pos_settings_payment_gateways' ); // Model a Pro site: the free-tier rule is lifted the way Pro lifts it.
+		Adopt_Refund_Test_Gateway::$calls = 0;
+		$this->online_gateways            = static fn( array $gateways ): array => array_merge( $gateways, array( Adopt_Refund_Test_Gateway::class ) );
+		add_filter( 'woocommerce_payment_gateways', $this->online_gateways );
+		\WC_Payment_Gateways::instance()->init();
+		$this->gateway_settings(
+			array(
+				'pos_cash'                => array( 'enabled' => true ),
+				'pos_card'                => array( 'enabled' => true ),
+				'wcpos_adopt_refund_test' => array( 'enabled' => true ),
+			)
+		);
+	}
+}
+
+// phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- A fixture stays with its tests, as Test_Ledger keeps its handlers.
+
+/** A provider-backed capture mode: its descriptor names a provider, as a reader integration's does. */
+class Correction_Provider_Test_Handler extends Abstract_Capture_Mode_Handler {
+	/**
+	 * Describe a device-mode method for the Acme provider.
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway.
+	 */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		return array(
+			'capture' => array(
+				'mode'     => 'device',
+				'provider' => 'acme',
+			),
 		);
 	}
 }
