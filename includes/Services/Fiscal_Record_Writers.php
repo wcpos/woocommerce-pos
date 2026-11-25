@@ -101,7 +101,7 @@ final class Fiscal_Record_Writers {
 	/**
 	 * Insert through the store and make a failed write visible on the order.
 	 *
-	 * Except for reattribution, the business transition has already happened, so a
+	 * Except for reattribution and sale-day correction, the business transition has already happened, so a
 	 * refused insert (lock timeout, database error) cannot roll it back. The
 	 * sale row is recovered by the next money command or refund on the order, or the payments sweep (recover());
 	 * every failure is surfaced as an order note and an action for a recovery job.
@@ -114,7 +114,7 @@ final class Fiscal_Record_Writers {
 			return true;
 		}
 		$type = (string) ( $fields['type'] ?? '' );
-		if ( 'reattribution' !== $type ) {
+		if ( ! in_array( $type, array( 'reattribution', 'sale_day_correction' ), true ) ) {
 			/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
 			$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
 		}
@@ -176,6 +176,54 @@ final class Fiscal_Record_Writers {
 					'changes' => $changes,
 					'changed_by' => $actor_id,
 					'changed_at_gmt' => current_time( 'mysql', true ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Append a reporting-day correction to the latest sale, outside all session and closure figures.
+	 *
+	 * @param WC_Order $order          Order whose reporting day changed.
+	 * @param int      $actor_id       Acting user.
+	 * @param string   $from_gmt       Previous reporting instant in UTC, or empty.
+	 * @param string   $to_gmt         Corrected reporting instant in UTC.
+	 * @param string   $reason         Reason for the correction.
+	 * @param string   $changed_at_gmt Change time in UTC, in MySQL format.
+	 */
+	public function record_sale_day_correction( WC_Order $order, int $actor_id, string $from_gmt, string $to_gmt, string $reason, string $changed_at_gmt ): bool {
+		$latest = Completion_History::of( $order )->latest();
+		if ( is_array( $latest ) ) {
+			$this->recover( $order );
+		}
+		$sale = is_array( $latest ) ? $this->store->find_sale( $order->get_id(), (string) $latest['id'] ) : $this->store->find_sale( $order->get_id() );
+		if ( null === $sale ) {
+			return ! is_array( $latest ) || ! empty( $latest['legacy'] );
+		}
+		$provenance = $this->store->provenance_from_order( $order );
+		$store = (string) $provenance['store_id'];
+		return $this->write(
+			$order,
+			array(
+				'type' => 'sale_day_correction',
+				'order_id' => $order->get_id(),
+				'store_id' => ctype_digit( $store ) && (int) $store > 0 ? (int) $store : null,
+				'cashier_id' => $provenance['cashier_id'],
+				'corrects_record_id' => $sale['id'],
+				// The identity is the request and the order's state before it: the same manager's retry after a failed save reuses its record.
+				'source_id' => Fiscal_Record_Store::digest_source_id( 'sale_day:' . $sale['id'] . ':' . $to_gmt . ':' . $actor_id . ':' . md5( $reason . wp_json_encode( $order->get_meta( '_wcpos_sale_day' ) ) ) ),
+				'approver_id' => $actor_id,
+				'payload' => array(
+					'changes' => array(
+						array(
+							'field' => 'sale_day',
+							'from' => $from_gmt,
+							'to' => $to_gmt,
+						),
+					),
+					'reason' => $reason,
+					'changed_by' => $actor_id,
+					'changed_at_gmt' => $changed_at_gmt,
 				),
 			)
 		);

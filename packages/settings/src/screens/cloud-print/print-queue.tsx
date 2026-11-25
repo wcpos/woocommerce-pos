@@ -425,151 +425,149 @@ export function PrintQueue() {
 							{t('cloud_print.queue_no_matches', 'No jobs match this filter.')}
 						</p>
 					) : (
-						<div className="wcpos:overflow-x-auto">
-							<Table data-testid="queue-table" className="wcpos:min-w-[52rem]">
-								<TableHeader>
-									<TableHeaderRow>
-										<TableHead className="wcpos:w-8">
-											<input
-												type="checkbox"
-												checked={allOnPageSelected}
-												onChange={toggleAll}
-												aria-label={t('cloud_print.queue_select_all', 'Select all on this page')}
-												data-testid="queue-select-all"
-											/>
-										</TableHead>
-										<TableHead className="wcpos:w-28">
-											{t('cloud_print.queue_col_order', 'Order')}
-										</TableHead>
-										<TableHead>{t('cloud_print.queue_col_printer', 'Printer')}</TableHead>
-										<TableHead>{t('cloud_print.queue_col_template', 'Template')}</TableHead>
-										<TableHead className="wcpos:w-28">
-											{t('cloud_print.queue_col_status', 'Status')}
-										</TableHead>
-										<TableHead>{t('cloud_print.queue_col_detail', 'Detail')}</TableHead>
-										<TableHead className="wcpos:w-32">
-											{t('cloud_print.queue_col_created', 'Created')}
-										</TableHead>
-										<TableHead className="wcpos:w-24" />
-									</TableHeaderRow>
-								</TableHeader>
-								<TableBody>
-									{jobs.map((job) => {
-										const meta = STATUS_META[job.status] ?? STATUS_META.pending;
-										// Every row gets an age. The old column only filled this in
-										// for waiting jobs, so a printed row — the one you check
-										// after a sale — showed a dash where its timing belonged.
-										const created = timeAgo(job.created_gmt);
-										const finished = job.terminal_at
-											? relativeAge(new Date(job.terminal_at * 1000))
-											: '';
-										return (
-											<TableRow key={job.id} data-testid={`queue-row-${job.id}`}>
-												<TableCell>
-													<input
-														type="checkbox"
-														checked={selected.has(job.id)}
-														onChange={() => toggleOne(job.id)}
-														aria-label={t('cloud_print.queue_select_job', 'Select job {id}', {
-															id: String(job.id),
-														})}
-													/>
-												</TableCell>
-												<TableCell>
-													{job.order_edit_url ? (
-														<a href={job.order_edit_url} target="_blank" rel="noopener noreferrer">
-															#{job.order_number ?? job.order_id}
-														</a>
-													) : (
-														<span className="wcpos:text-gray-500">
-															{t('cloud_print.queue_no_order', 'Job {id}', { id: String(job.id) })}
-														</span>
-													)}
-												</TableCell>
-												<TableCell>{printerNames.get(job.printer_id) ?? job.printer_id}</TableCell>
-												<TableCell className="wcpos:text-gray-600">
-													{templateNames.get(job.template_id) ?? (job.template_id || '—')}
-												</TableCell>
-												<TableCell>
-													<Chip variant={meta.variant} shape="pill" size="sm">
-														{meta.label()}
-													</Chip>
-												</TableCell>
-												<TableCell className="wcpos:text-gray-600">
-													{job.status === 'failed' && job.unconfirmed ? (
-														<span
-															className="wcpos:text-red-700"
-															data-testid={`queue-error-${job.id}`}
-														>
-															{job.retried_to
-																? t(
-																		'cloud_print.queue_unconfirmed_retried',
-																		'The printer never confirmed this job.'
-																	)
-																: t(
-																		'cloud_print.queue_unconfirmed',
-																		'The printer never confirmed this job. It was not re-sent automatically, which could print it twice — retry it if it did not print.'
-																	)}
-														</span>
-													) : job.status === 'failed' && job.error ? (
-														<span
-															className="wcpos:text-red-700"
-															data-testid={`queue-error-${job.id}`}
-														>
-															{job.error}
-														</span>
-													) : job.status === 'printed' && finished ? (
-														t('cloud_print.queue_printed_ago', 'Printed {ago}', { ago: finished })
-													) : (
-														'—'
-													)}
-												</TableCell>
-												<TableCell className="wcpos:tabular-nums wcpos:text-gray-600">
-													{created}
-												</TableCell>
-												<TableCell className="wcpos:text-right">
-													{(job.status === 'pending' || job.status === 'claimed') && (
-														<Button
-															variant="ghost-destructive"
-															onClick={() => cancelJobs.mutate({ ids: [job.id] })}
-															disabled={cancelJobs.isPending}
-															data-testid={`queue-cancel-${job.id}`}
-														>
-															{t('cloud_print.queue_cancel', 'Cancel')}
-														</Button>
-													)}
-													{job.status === 'failed' && job.retried_to ? (
-														t('cloud_print.queue_retried_as', 'Retried as #{id}', {
-															id: String(job.retried_to),
-														})
-													) : job.status === 'failed' ? (
-														<Button
-															variant="text"
-															onClick={() => retryJob.mutate(job.id)}
-															disabled={retryJob.isPending}
-															data-testid={`queue-retry-${job.id}`}
-														>
-															{t('cloud_print.queue_retry', 'Retry')}
-														</Button>
-													) : null}
+						<Table data-testid="queue-table" tableClassName="wcpos:min-w-[52rem]">
+							<TableHeader>
+								<TableHeaderRow>
+									<TableHead className="wcpos:w-8">
+										<input
+											type="checkbox"
+											checked={allOnPageSelected}
+											onChange={toggleAll}
+											aria-label={t('cloud_print.queue_select_all', 'Select all on this page')}
+											data-testid="queue-select-all"
+										/>
+									</TableHead>
+									<TableHead className="wcpos:w-28">
+										{t('cloud_print.queue_col_order', 'Order')}
+									</TableHead>
+									<TableHead>{t('cloud_print.queue_col_printer', 'Printer')}</TableHead>
+									<TableHead>{t('cloud_print.queue_col_template', 'Template')}</TableHead>
+									<TableHead className="wcpos:w-28">
+										{t('cloud_print.queue_col_status', 'Status')}
+									</TableHead>
+									<TableHead>{t('cloud_print.queue_col_detail', 'Detail')}</TableHead>
+									<TableHead className="wcpos:w-32">
+										{t('cloud_print.queue_col_created', 'Created')}
+									</TableHead>
+									<TableHead className="wcpos:w-24" />
+								</TableHeaderRow>
+							</TableHeader>
+							<TableBody>
+								{jobs.map((job) => {
+									const meta = STATUS_META[job.status] ?? STATUS_META.pending;
+									// Every row gets an age. The old column only filled this in
+									// for waiting jobs, so a printed row — the one you check
+									// after a sale — showed a dash where its timing belonged.
+									const created = timeAgo(job.created_gmt);
+									const finished = job.terminal_at
+										? relativeAge(new Date(job.terminal_at * 1000))
+										: '';
+									return (
+										<TableRow key={job.id} data-testid={`queue-row-${job.id}`}>
+											<TableCell>
+												<input
+													type="checkbox"
+													checked={selected.has(job.id)}
+													onChange={() => toggleOne(job.id)}
+													aria-label={t('cloud_print.queue_select_job', 'Select job {id}', {
+														id: String(job.id),
+													})}
+												/>
+											</TableCell>
+											<TableCell>
+												{job.order_edit_url ? (
+													<a href={job.order_edit_url} target="_blank" rel="noopener noreferrer">
+														#{job.order_number ?? job.order_id}
+													</a>
+												) : (
+													<span className="wcpos:text-gray-500">
+														{t('cloud_print.queue_no_order', 'Job {id}', { id: String(job.id) })}
+													</span>
+												)}
+											</TableCell>
+											<TableCell>{printerNames.get(job.printer_id) ?? job.printer_id}</TableCell>
+											<TableCell className="wcpos:text-gray-600">
+												{templateNames.get(job.template_id) ?? (job.template_id || '—')}
+											</TableCell>
+											<TableCell>
+												<Chip variant={meta.variant} shape="pill" size="sm">
+													{meta.label()}
+												</Chip>
+											</TableCell>
+											<TableCell className="wcpos:text-gray-600">
+												{job.status === 'failed' && job.unconfirmed ? (
+													<span
+														className="wcpos:text-red-700"
+														data-testid={`queue-error-${job.id}`}
+													>
+														{job.retried_to
+															? t(
+																	'cloud_print.queue_unconfirmed_retried',
+																	'The printer never confirmed this job.'
+																)
+															: t(
+																	'cloud_print.queue_unconfirmed',
+																	'The printer never confirmed this job. It was not re-sent automatically, which could print it twice — retry it if it did not print.'
+																)}
+													</span>
+												) : job.status === 'failed' && job.error ? (
+													<span
+														className="wcpos:text-red-700"
+														data-testid={`queue-error-${job.id}`}
+													>
+														{job.error}
+													</span>
+												) : job.status === 'printed' && finished ? (
+													t('cloud_print.queue_printed_ago', 'Printed {ago}', { ago: finished })
+												) : (
+													'—'
+												)}
+											</TableCell>
+											<TableCell className="wcpos:tabular-nums wcpos:text-gray-600">
+												{created}
+											</TableCell>
+											<TableCell className="wcpos:text-right">
+												{(job.status === 'pending' || job.status === 'claimed') && (
+													<Button
+														variant="ghost-destructive"
+														onClick={() => cancelJobs.mutate({ ids: [job.id] })}
+														disabled={cancelJobs.isPending}
+														data-testid={`queue-cancel-${job.id}`}
+													>
+														{t('cloud_print.queue_cancel', 'Cancel')}
+													</Button>
+												)}
+												{job.status === 'failed' && job.retried_to ? (
+													t('cloud_print.queue_retried_as', 'Retried as #{id}', {
+														id: String(job.retried_to),
+													})
+												) : job.status === 'failed' ? (
 													<Button
 														variant="text"
-														onClick={() => deleteJobs.mutate([job.id])}
-														disabled={deleteJobs.isPending}
-														data-testid={`queue-delete-${job.id}`}
-														aria-label={t('cloud_print.queue_delete_job', 'Delete job {id}', {
-															id: String(job.id),
-														})}
+														onClick={() => retryJob.mutate(job.id)}
+														disabled={retryJob.isPending}
+														data-testid={`queue-retry-${job.id}`}
 													>
-														{t('cloud_print.queue_delete', 'Delete')}
+														{t('cloud_print.queue_retry', 'Retry')}
 													</Button>
-												</TableCell>
-											</TableRow>
-										);
-									})}
-								</TableBody>
-							</Table>
-						</div>
+												) : null}
+												<Button
+													variant="text"
+													onClick={() => deleteJobs.mutate([job.id])}
+													disabled={deleteJobs.isPending}
+													data-testid={`queue-delete-${job.id}`}
+													aria-label={t('cloud_print.queue_delete_job', 'Delete job {id}', {
+														id: String(job.id),
+													})}
+												>
+													{t('cloud_print.queue_delete', 'Delete')}
+												</Button>
+											</TableCell>
+										</TableRow>
+									);
+								})}
+							</TableBody>
+						</Table>
 					)}
 
 					{totalPages > 1 && (

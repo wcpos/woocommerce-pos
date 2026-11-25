@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Templates;
 
 use WCPOS\WooCommercePOS\Services\Credential_Lockout;
 use WCPOS\WooCommercePOS\Templates\Auth;
+use WCPOS\WooCommercePOS\Tests\Services\Credential_Lockout_Rows_Test;
 use WP_Error;
 use WP_UnitTestCase;
 
@@ -681,5 +682,26 @@ class Test_Auth_Rate_Limits extends WP_UnitTestCase {
 		$this->assertSame( 'Too many requests. Please try again later.', $auth->get_error() );
 		$this->assertFalse( $checked );
 		$this->assertFalse( $this->sentinel_reached );
+	}
+
+	/**
+	 * At the live-row ceiling a peer with no row signs in with a real name, and an unknown name from
+	 * a new peer is refused before any password check.
+	 */
+	public function test_rate_limit_at_the_row_ceiling_a_new_peer_signs_in_with_a_real_name_and_an_unknown_name_is_refused(): void {
+		// Arrange.
+		Credential_Lockout_Rows_Test::fill_live( Credential_Lockout_Rows_Test::constant( 'MAX_LIVE_ROWS' ) );
+
+		// Act / Assert: new peer B's right password for a real account is checked.
+		$auth = $this->attempt( '198.51.100.20', 'till-cashier', 'correct horse' );
+		$this->assertTrue( $this->sentinel_reached );
+		$this->assertSame( 'sentinel', $auth->get_error() );
+
+		// Act / Assert: an unknown name from new peer C is refused and gets no row.
+		$this->sentinel_reached = false;
+		$auth                   = $this->attempt( '198.51.100.30', 'ghost-ceiling', 'whatever' );
+		$this->assertSame( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', $auth->get_error() );
+		$this->assertFalse( $this->sentinel_reached );
+		$this->assertNull( $this->row( 'n' . md5( 'input:ghost-ceiling|198.51.100.30' ) ) );
 	}
 }

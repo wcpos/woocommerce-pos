@@ -8,6 +8,7 @@ import {
 import apiFetch from '@wordpress/api-fetch';
 
 import { RootLayout } from './layouts/root-layout';
+import { ScreenSkeleton } from './layouts/screen-skeleton';
 import { queryClient } from './query-client';
 import AccessPage from './screens/access';
 import CheckoutPage from './screens/checkout';
@@ -131,4 +132,5 @@ export const router = createRouter({
 	routeTree,
 	basepath: '/',
 	history: createHashHistory(),
+	defaultPendingComponent: ScreenSkeleton,
 });

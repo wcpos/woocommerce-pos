@@ -1,5 +1,6 @@
 @import "tailwindcss" prefix(wcpos) important;
 @import "../../ui/src/wp-admin-reset.css";
+@import "../../ui/src/table.css";
 @source "../../ui/src";
 /* @config "../tailwind.config.js"; */
 

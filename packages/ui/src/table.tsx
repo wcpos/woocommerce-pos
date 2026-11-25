@@ -16,13 +16,14 @@ export type TableCellProps = React.TdHTMLAttributes<HTMLTableCellElement>;
 /**
  * Bordered table container with horizontal-scroll fallback. Renders an
  * `<table>` element; pair with `TableHeader` / `TableBody` etc. for the
- * standard chrome (gray-50 header, divider rows).
+ * standard chrome (gray-50 header, divider rows). `wcpos-table` is the hook
+ * for the scroll shadows in table.css.
  */
 function Table({ className, tableClassName, children, ...props }: TableProps) {
 	return (
 		<div
 			className={classNames(
-				'wcpos:overflow-x-auto wcpos:rounded-md wcpos:border wcpos:border-gray-200',
+				'wcpos-table wcpos:overflow-x-auto wcpos:rounded-md wcpos:border wcpos:border-gray-200',
 				className
 			)}
 			{...props}

@@ -51,11 +51,11 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 	public function test_get_landing_variant_matches_posthog_reference_vectors(): void {
 		$vectors = array(
 			'a1b2c3d4-0000-4000-8000-000000000001' => 'plan',
-			'11111111-1111-4111-8111-111111111111' => 'plan',
+			'11111111-1111-4111-8111-111111111111' => 'jobs',
 			'test-distinct-id'                      => 'plan',
-			'wcpos'                                 => 'plan',
-			'00000000-0000-4000-8000-000000000000' => 'plan',
-			'f47ac10b-58cc-4372-a567-0e02b2c3d479' => 'plan',
+			'wcpos'                                 => 'jobs',
+			'00000000-0000-4000-8000-000000000000' => 'jobs',
+			'f47ac10b-58cc-4372-a567-0e02b2c3d479' => 'jobs',
 		);
 
 		foreach ( $vectors as $distinct_id => $expected ) {
@@ -68,12 +68,30 @@ class Test_Feature_Flags extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `plan` is at 100%: every visitor resolves to it, never to an arm listed at 0%.
+	 * Only the two arms with a non-zero rollout are ever assigned, never an arm listed at 0%.
 	 */
-	public function test_get_landing_variant_only_returns_the_served_variant(): void {
+	public function test_get_landing_variant_only_returns_the_served_variants(): void {
 		for ( $i = 0; $i < 200; $i++ ) {
-			$this->assertSame( 'plan', $this->flags->get_landing_variant( wp_generate_uuid4() ) );
+			$this->assertContains( $this->flags->get_landing_variant( wp_generate_uuid4() ), array( 'plan', 'jobs' ) );
 		}
+	}
+
+	/**
+	 * The two arms split traffic roughly evenly.
+	 */
+	public function test_get_landing_variant_splits_traffic_roughly_evenly(): void {
+		$total = 2000;
+		$plan  = 0;
+		for ( $i = 0; $i < $total; $i++ ) {
+			if ( 'plan' === $this->flags->get_landing_variant( wp_generate_uuid4() ) ) {
+				++$plan;
+			}
+		}
+
+		// Generous bounds (40%–60%) so the assertion never flakes while still
+		// catching a broken split (e.g. everyone landing on one arm).
+		$this->assertGreaterThan( $total * 0.4, $plan, 'plan share too low' );
+		$this->assertLessThan( $total * 0.6, $plan, 'plan share too high' );
 	}
 
 	/**

@@ -14,6 +14,26 @@ use WP_UnitTestCase;
  * Pos_Order_Audit_Test class.
  */
 class Pos_Order_Audit_Test extends WP_UnitTestCase {
+	/** Clients cannot persist sale-day facts or the request row on create or update. */
+	public function test_sale_day_meta_is_server_owned(): void {
+		$meta = array(
+			array(
+				'key' => '_wcpos_sale_day_request',
+				'value' => '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}',
+			),
+			array(
+				'key' => '_wcpos_sale_day',
+				'value' => '{"at_gmt":"2026-11-23T09:12:00Z"}',
+			),
+			array(
+				'key' => '_wcpos_sale_day_at',
+				'value' => '123',
+			),
+		);
+		$this->assertSame( array(), Pos_Order_Audit::sanitize_create_meta( $meta ) );
+		$this->assertSame( array(), Pos_Order_Audit::strip_audit_meta( $meta ) );
+	}
+
 	/**
 	 * Every key the live order data store treats as internal is stripped: WooCommerce routes such
 	 * a key to a setter, or reads its plain row back as the order's own data (ADR 0040 rule 2).
