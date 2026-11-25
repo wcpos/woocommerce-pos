@@ -1321,6 +1321,10 @@ class Activator {
 	/**
 	 * Grant each newly introduced capability once, preserving later owner removals.
 	 *
+	 * Grants go to roles only. A user given access_woocommerce_pos directly (by a role-editor
+	 * plugin) is not granted a new capability and must be given it the same way: permissions
+	 * are per role, and a missing grant fails closed.
+	 *
 	 * @param array $marker        Capability names mapped to their introduced version.
 	 * @param bool  $marker_failed Set true when a marker write failed and its grant was skipped.
 	 * @return array Updated marker, including legacy capabilities recorded without grants.

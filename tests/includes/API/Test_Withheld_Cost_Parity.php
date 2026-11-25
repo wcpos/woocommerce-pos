@@ -78,6 +78,17 @@ class Test_Withheld_Cost_Parity extends Sync_REST_Store_Test_Case {
 				$request->set_body( (string) wp_json_encode( $this->cost( $value ) ) );
 				return $request;
 			};
+			$lanes['wc/v3 with token, form body'] = function ( float $value ) use ( $id ) {
+				$request = new WP_REST_Request( 'POST', '/wc/v3/products/' . $id );
+				$request->set_header( 'Content-Type', 'application/x-www-form-urlencoded' );
+				$request->set_body_params( $this->cost( $value ) );
+				return $request;
+			};
+			$lanes['wc/v3 with token, query params'] = function ( float $value ) use ( $id ) {
+				$request = new WP_REST_Request( 'POST', '/wc/v3/products/' . $id );
+				$request->set_query_params( $this->cost( $value ) );
+				return $request;
+			};
 		}
 		return $lanes;
 	}
@@ -106,7 +117,7 @@ class Test_Withheld_Cost_Parity extends Sync_REST_Store_Test_Case {
 		}
 	}
 
-	/** Product cost from the cashier is ignored on v1 update, v1 batch, v2 push and wc/v3 with a token. */
+	/** Product cost from the cashier is ignored on v1 update, v1 batch, v2 push and wc/v3 with a token (JSON body, form body and query params). */
 	public function test_restricted_product_cost_writes_are_ignored_on_every_lane(): void {
 		$this->assert_lanes_ignore_cashier_cost( 'simple' );
 	}

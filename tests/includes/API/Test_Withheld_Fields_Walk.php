@@ -276,6 +276,12 @@ class Test_Withheld_Fields_Walk extends Sync_REST_Store_Test_Case {
 	public function test_restricted_index_path_field_selection_serves_no_withheld_meta_value(): void {
 		// Arrange.
 		update_option( 'woocommerce_feature_cost_of_goods_sold_enabled', 'no' );
+		$item = current( wc_get_order( $this->ids['refund'] )->get_items() );
+		if ( ! $item->meta_exists( '_cogs_value' ) ) {
+			// WooCommerce 10.4 stores no refund line cost (the value stays 0 and its data store
+			// deletes `_cogs_value` at 0); store the value 11.x writes, so the protection is walked on every version.
+			wc_update_order_item_meta( $item->get_id(), '_cogs_value', -7.5 );
+		}
 		$stored = current( wc_get_order( $this->ids['refund'] )->get_items() )->get_meta_data();
 		$keys   = array_map(
 			static function ( $meta ) {
