@@ -22,7 +22,7 @@ final class Withheld_Fields {
 	 * key, and a meta_data entry is removed when its `key` is one of them.
 	 */
 	private const MAP = array(
-		'view_woocommerce_pos_costs' => array( 'cost_of_goods_sold', '_cogs_value', '_cogs_total_value' ),
+		'view_woocommerce_pos_costs' => array( 'cost_of_goods_sold', '_cogs_value', '_cogs_total_value', '_cogs_value_is_additive' ),
 	);
 
 	/**

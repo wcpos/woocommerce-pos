@@ -127,6 +127,57 @@ class Test_Withheld_Cost_Parity extends Sync_REST_Store_Test_Case {
 		$this->assert_lanes_ignore_cashier_cost( 'variation' );
 	}
 
+	/** The variation's additive cost flag in meta_data from the cashier is ignored on v1 update, v1 batch, v2 push and wc/v3 with a token. */
+	public function test_restricted_variation_additive_flag_meta_is_ignored_on_every_lane(): void {
+		// Arrange: the admin control reaches WooCommerce's internal-key notice.
+		$this->setExpectedIncorrectUsage( 'is_internal_meta_key' );
+		$id     = $this->ids['variation'];
+		$parent = wc_get_product( $this->ids['variable'] );
+		$parent->set_cogs_value( 10.0 );
+		$parent->save();
+		$flag  = array(
+			'key'   => '_cogs_value_is_additive',
+			'value' => true,
+		);
+		$body  = array( 'meta_data' => array( $flag ) );
+		$v1    = '/wcpos/v1/products/' . $this->ids['variable'] . '/variations';
+		$lanes = array(
+			'v1 update'        => fn() => $this->json_post( $v1 . '/' . $id, $body ),
+			'v1 batch'         => fn() => $this->json_post( $v1 . '/batch', array( 'update' => array( $body + array( 'id' => $id ) ) ) ),
+			'v2 push'          => fn() => $this->push_request( 'variations', 'update', $this->uuid_of( 'variation' ), $this->pulled_record( 'variations', $id )['_rxdb_revision'], $body ),
+			'wc/v3 with token' => function () use ( $id, $body ) {
+				$request = new WP_REST_Request( 'POST', '/wc/v3/products/' . $this->ids['variable'] . '/variations/' . $id );
+				$request->set_header( 'Content-Type', 'application/json' );
+				$request->set_body( (string) wp_json_encode( $body ) );
+				return $request;
+			},
+		);
+		foreach ( $lanes as $lane => $build ) {
+			$variation = wc_get_product( $id );
+			$variation->set_cogs_value_is_additive( false );
+			$variation->set_cogs_value( 4.0 );
+			$variation->save();
+			// Act: the cashier's flag is dropped.
+			$this->sign_in_with_token( $this->cashier );
+			list( $status, $response ) = $this->serve( $build() );
+			// Assert.
+			$this->assertLessThan( 300, $status, $lane . ' ' . wp_json_encode( $response ) );
+			clean_post_cache( $id );
+			clean_post_cache( $this->ids['variable'] );
+			$this->assertSame( '', get_post_meta( $id, '_cogs_value_is_additive', true ), $lane . ': cashier flag must be ignored' );
+			$this->assertSame( 4.0, wc_get_product( $id )->get_cogs_total_value(), $lane . ': cashier total cost must stay' );
+			// Act: the admin control on the same lane.
+			$this->sign_in_with_token( $this->user );
+			list( $status, $response ) = $this->serve( $build() );
+			// Assert.
+			$this->assertLessThan( 300, $status, $lane . ' admin ' . wp_json_encode( $response ) );
+			clean_post_cache( $id );
+			clean_post_cache( $this->ids['variable'] );
+			$this->assertSame( 'yes', get_post_meta( $id, '_cogs_value_is_additive', true ), $lane . ': admin flag must be recorded' );
+			$this->assertSame( 14.0, wc_get_product( $id )->get_cogs_total_value(), $lane . ': admin total cost must add the parent' );
+		}
+	}
+
 	/**
 	 * A productless line posting its own cost.
 	 *

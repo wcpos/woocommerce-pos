@@ -28,7 +28,7 @@ trait Withheld_Fields_Walk {
 	 *
 	 * @var string[]
 	 */
-	protected static $cost_keys = array( 'cost_of_goods_sold', '_cogs_value', '_cogs_total_value' );
+	protected static $cost_keys = array( 'cost_of_goods_sold', '_cogs_value', '_cogs_total_value', '_cogs_value_is_additive' );
 
 	/**
 	 * Fixture ids: simple, variable, variation, order, refund.
