@@ -182,8 +182,10 @@ jobs:
                 fi
                 # Stay in the real plugins directory from here on, and only rename in and out of it.
                 cd "$PLUGINS" || exit 1
-                if [ "$(/bin/pwd -P)" != "$PLUGINS" ] || [ "$(stat -c %d .)" != "$(stat -c %d "$STAGE")" ]; then
-                  echo "❌ ${SITE}: ${PLUGINS} must be a real path on the file system of ${STAGE}" >&2
+                MOUNT=$(findmnt -no TARGET -T "$STAGE")
+                if [ "$(/bin/pwd -P)" != "$PLUGINS" ] || [ "$(stat -c %d .)" != "$(stat -c %d "$STAGE")" ] ||
+                  [ -z "$MOUNT" ] || [ "$(findmnt -no TARGET -T "$(/bin/pwd -P)")" != "$MOUNT" ]; then
+                  echo "❌ ${SITE}: ${PLUGINS} must be a real path on the mount of ${STAGE}" >&2
                   exit 1
                 fi
                 # Put the live copy back if this run, or a killed one, stopped between the two moves below.

@@ -120,17 +120,18 @@ for TOOL in scp ssh; do
   fi
 done
 
-# Unpack: these need GNU tar, mv, find and stat.
+# Unpack: these need GNU tar, mv, find, stat and findmnt.
 mkdir "$TEST_ROOT/mv-probe"
 if ! mv -T "$TEST_ROOT/mv-probe" "$TEST_ROOT/mv-probe-moved" 2>/dev/null; then
   echo 'FAIL: the unpack checks need GNU mv with -T (run them on Linux)' >&2
   exit 1
 fi
-export REAL_TAR REAL_MV REAL_STAT REAL_FIND
+export REAL_TAR REAL_MV REAL_STAT REAL_FIND REAL_FINDMNT
 REAL_TAR="$(command -v tar)"
 REAL_MV="$(command -v mv)"
 REAL_STAT="$(command -v stat)"
 REAL_FIND="$(command -v find)"
+REAL_FINDMNT="$(command -v findmnt)"
 # CHOWN_FAIL: chown fails.
 cat >"$STUBS/chown" <<'STUB'
 #!/usr/bin/env bash
@@ -201,6 +202,16 @@ if [[ -n "$STAT_PRIV_MODE" && "$1 $2" == '-c %a' && "$3" == "$TEST_PRIV" ]]; the
 fi
 exec "$REAL_STAT" "$@"
 STUB
+# FINDMNT_FAKE=other: the plugins directory is its own mount point. FINDMNT_FAKE=none: findmnt finds nothing.
+cat >"$STUBS/findmnt" <<'STUB'
+#!/usr/bin/env bash
+[[ "$FINDMNT_FAKE" != none ]] || exit 1
+if [[ "$FINDMNT_FAKE" == other && "$1 $2 $3" == '-no TARGET -T' && "${*: -1}" -ef "$TEST_PLUGINS" ]]; then
+  echo "$TEST_PLUGINS"
+  exit 0
+fi
+exec "$REAL_FINDMNT" "$@"
+STUB
 cat >"$STUBS/docker" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
@@ -260,7 +271,7 @@ entries() {
   ls -A "$1/" 2>/dev/null | LC_ALL=C sort || true
 }
 
-# Knobs for the stubs (MV_FAIL, MV_LINK, TAR_BEFORE, TAR_AFTER, STAT_OTHER_DEV, STAT_PRIV_MODE, CHOWN_FAIL, FIND_FAIL),
+# Knobs for the stubs (MV_FAIL, MV_LINK, TAR_BEFORE, TAR_AFTER, STAT_OTHER_DEV, STAT_PRIV_MODE, FINDMNT_FAKE, CHOWN_FAIL, FIND_FAIL),
 # DEPLOY_UMASK and DEPLOY_BASH_ENV (a file named in BASH_ENV) are set as a prefix of the call.
 deploy() {
   : >"$CASE/tar.log"; : >"$CASE/tar-dest.log"; : >"$CASE/mv.log"
@@ -270,7 +281,7 @@ deploy() {
     [[ -z "${DEPLOY_UMASK:-}" ]] || umask "$DEPLOY_UMASK"
     PATH="$STUBS:$PATH" TAR_LOG="$CASE/tar.log" TAR_DEST_LOG="$CASE/tar-dest.log" MV_LOG="$CASE/mv.log" \
       MV_FAIL="${MV_FAIL:-}" MV_LINK="${MV_LINK:-}" TAR_BEFORE="${TAR_BEFORE:-}" TAR_AFTER="${TAR_AFTER:-}" \
-      STAT_OTHER_DEV="${STAT_OTHER_DEV:-}" TEST_PRIV="$PRIV" TEST_PLUGINS="$PLUGINS" TEST_OTHER="$OTHER" \
+      STAT_OTHER_DEV="${STAT_OTHER_DEV:-}" FINDMNT_FAKE="${FINDMNT_FAKE:-}" TEST_PRIV="$PRIV" TEST_PLUGINS="$PLUGINS" TEST_OTHER="$OTHER" \
       STAT_PRIV_MODE="${STAT_PRIV_MODE:-}" CHOWN_FAIL="${CHOWN_FAIL:-}" FIND_FAIL="${FIND_FAIL:-}" BASH_ENV="${DEPLOY_BASH_ENV:-}" \
       DEPLOY_TEST_HTML="$HTML" bash -s -- pkg.tar.gz 4242 dev-free <<<"$REMOTE_UNDER_TEST" >"$CASE/out.log" 2>&1
   ) || STATUS=$?
@@ -502,11 +513,15 @@ for PRIV_CASE in 20a 20a2 20a3 20b 20c; do
   other_is "$PRIV_CASE" ''
 done
 
-# 21: the plugins directory reports another file system than the private directory.
-new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
-STAT_OTHER_DEV=1 deploy
-check_run 21 fail "$BEFORE"
-no_tar 21
+# 21: the plugins directory reports another file system than the private directory. 21b: another mount point
+# on the same file system. 21c: findmnt finds no mount point.
+for MOUNT_CASE in '21 1' '21b - other' '21c - none'; do
+  read -r NAME OTHER_DEV FAKE <<<"$MOUNT_CASE"
+  new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
+  STAT_OTHER_DEV="${OTHER_DEV#-}" FINDMNT_FAKE="$FAKE" deploy
+  check_run "$NAME" fail "$BEFORE"
+  no_tar "$NAME"
+done
 
 # 22a-b: the live path is a dangling link or a file. 23a-b: the same, and the move into place fails.
 for SHAPE_CASE in '22a link' '22b file' '23a link fail' '23b file fail'; do
