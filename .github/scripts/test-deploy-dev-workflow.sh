@@ -126,13 +126,22 @@ if ! mv -T "$TEST_ROOT/mv-probe" "$TEST_ROOT/mv-probe-moved" 2>/dev/null; then
   echo 'FAIL: the unpack checks need GNU mv with -T (run them on Linux)' >&2
   exit 1
 fi
-export REAL_TAR REAL_MV REAL_STAT
+export REAL_TAR REAL_MV REAL_STAT REAL_FIND
 REAL_TAR="$(command -v tar)"
 REAL_MV="$(command -v mv)"
 REAL_STAT="$(command -v stat)"
+REAL_FIND="$(command -v find)"
+# CHOWN_FAIL: chown fails.
 cat >"$STUBS/chown" <<'STUB'
 #!/usr/bin/env bash
+[[ -z "$CHOWN_FAIL" ]] || exit 1
 exit 0
+STUB
+# FIND_FAIL: a find inside the private directory fails without output.
+cat >"$STUBS/find" <<'STUB'
+#!/usr/bin/env bash
+[[ -z "$FIND_FAIL" || "$1" != "$TEST_PRIV"/* ]] || exit 1
+exec "$REAL_FIND" "$@"
 STUB
 # Logs the arguments, the -C directory and the private directory's mode. TAR_BEFORE=links: every plugins entry
 # but the live one becomes a link to OTHER. TAR_AFTER: move-plugins (plugins replaced by a link to OTHER) or
@@ -177,11 +186,15 @@ if [[ "$MV_LINK" == 1 && "${@: -1}" == *.old ]]; then
   ln -s "$TEST_OTHER" "${@: -2:1}"
 fi
 STUB
-# STAT_OTHER_DEV: the plugins directory reports another device.
+# STAT_OTHER_DEV: the plugins directory reports another device. STAT_PRIV_MODE: the private directory reports this mode.
 cat >"$STUBS/stat" <<'STUB'
 #!/usr/bin/env bash
 if [[ -n "$STAT_OTHER_DEV" && "$1 $2" == '-c %d' && "$3" -ef "$TEST_PLUGINS" ]]; then
   echo 999999
+  exit 0
+fi
+if [[ -n "$STAT_PRIV_MODE" && "$1 $2" == '-c %a' && "$3" == "$TEST_PRIV" ]]; then
+  echo "$STAT_PRIV_MODE"
   exit 0
 fi
 exec "$REAL_STAT" "$@"
@@ -203,6 +216,13 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$STUBS"/*
+# For DEPLOY_BASH_ENV: once the deploy enters the plugins directory through a link, the link becomes a real, empty directory.
+cat >"$TEST_ROOT/cd-swap.bash" <<'STUB'
+cd() {
+  builtin cd "$@" || return
+  if [[ "$*" == "$TEST_PLUGINS" && -L "$TEST_PLUGINS" ]]; then rm "$TEST_PLUGINS" && mkdir "$TEST_PLUGINS"; fi
+}
+STUB
 
 CASE="$TEST_ROOT/case"
 PKG="$TEST_ROOT/pkg"
@@ -238,8 +258,8 @@ entries() {
   ls -A "$1/" 2>/dev/null | LC_ALL=C sort || true
 }
 
-# Knobs for the stubs (MV_FAIL, MV_LINK, TAR_BEFORE, TAR_AFTER, STAT_OTHER_DEV) and DEPLOY_UMASK
-# are set as a prefix of the call.
+# Knobs for the stubs (MV_FAIL, MV_LINK, TAR_BEFORE, TAR_AFTER, STAT_OTHER_DEV, STAT_PRIV_MODE, CHOWN_FAIL, FIND_FAIL),
+# DEPLOY_UMASK and DEPLOY_BASH_ENV (a file named in BASH_ENV) are set as a prefix of the call.
 deploy() {
   : >"$CASE/tar.log"; : >"$CASE/tar-dest.log"; : >"$CASE/mv.log"
   PLUGINS_BEFORE="$(entries "$PLUGINS")"
@@ -249,6 +269,7 @@ deploy() {
     PATH="$STUBS:$PATH" TAR_LOG="$CASE/tar.log" TAR_DEST_LOG="$CASE/tar-dest.log" MV_LOG="$CASE/mv.log" \
       MV_FAIL="${MV_FAIL:-}" MV_LINK="${MV_LINK:-}" TAR_BEFORE="${TAR_BEFORE:-}" TAR_AFTER="${TAR_AFTER:-}" \
       STAT_OTHER_DEV="${STAT_OTHER_DEV:-}" TEST_PRIV="$PRIV" TEST_PLUGINS="$PLUGINS" TEST_OTHER="$OTHER" \
+      STAT_PRIV_MODE="${STAT_PRIV_MODE:-}" CHOWN_FAIL="${CHOWN_FAIL:-}" FIND_FAIL="${FIND_FAIL:-}" BASH_ENV="${DEPLOY_BASH_ENV:-}" \
       DEPLOY_TEST_HTML="$HTML" bash -s -- pkg.tar.gz 4242 dev-free <<<"$REMOTE_UNDER_TEST" >"$CASE/out.log" 2>&1
   ) || STATUS=$?
 }
@@ -407,11 +428,39 @@ for LINKED_CASE in '16 plugins' '16b wp-content'; do
   no_tar "$NAME"
 done
 
+# 16c: plugins is a link to another directory when the deploy enters it, and a real, empty directory right after.
+new_case; pack; add_old_copy "$OTHER/woocommerce-pos"; rmdir "$PLUGINS"; ln -s "$OTHER" "$PLUGINS"
+OTHER_BEFORE="$(snapshot "$OTHER")"; DEPLOY_BASH_ENV="$TEST_ROOT/cd-swap.bash" deploy
+check_run 16c fail absent plugins=
+[[ -d "$PLUGINS" && ! -L "$PLUGINS" ]] || fail 'unpack case 16c: the plugins path must be the real, empty directory'
+other_is 16c "$OTHER_BEFORE"
+no_tar 16c
+
 # 17: the plugins path changes while unpacking: plugins is renamed and a link to another directory takes its place.
 new_case; add_old_copy "$LIVE"; pack
 TAR_AFTER=move-plugins deploy
 check_run 17 fail absent plugins=
 other_is 17 ''
+[[ "$(snapshot "$PLUGINS.moved/woocommerce-pos" no-marker)" == "$(snapshot "$PKG" no-marker)" ]] ||
+  fail 'unpack case 17: the renamed plugins directory must hold the package'
+
+# 17b: as 17, and the other directory holds a plugin of its own. 17c: as 17b, and the move into place fails.
+for MOVED_CASE in 17b '17c fail'; do
+  read -r NAME MODE <<<"$MOVED_CASE"
+  new_case; add_old_copy "$LIVE"; add_old_copy "$OTHER/woocommerce-pos"; echo other >"$OTHER/woocommerce-pos/other-only.txt"
+  pack; WAS_LIVE="$(snapshot "$LIVE")"; BEFORE="$(snapshot "$OTHER/woocommerce-pos")"; OTHER_BEFORE="$(snapshot "$OTHER")"
+  TAR_AFTER=move-plugins MV_FAIL="$MODE" deploy
+  check_run "$NAME" fail "$BEFORE"
+  other_is "$NAME" "$OTHER_BEFORE"
+  if [[ -n "$MODE" ]]; then
+    [[ "$(snapshot "$PLUGINS.moved/woocommerce-pos")" == "$WAS_LIVE" ]] ||
+      fail "unpack case $NAME: the renamed plugins directory must hold the copy that was live before the run"
+  else
+    [[ "$(snapshot "$PLUGINS.moved/woocommerce-pos" no-marker)" == "$(snapshot "$PKG" no-marker)" ]] ||
+      fail "unpack case $NAME: the renamed plugins directory must hold the package"
+    grep -q "runtime marker is '1'" "$CASE/out.log" || fail "unpack case $NAME: the run must fail at the marker check"
+  fi
+done
 
 # 18b: before unpacking, every plugins entry but the live one becomes a link to another directory.
 new_case; add_old_copy "$LIVE"; mkdir "$PLUGINS/woocommerce-pos.tmp" "$PLUGINS/woocommerce-pos.old" "$PLUGINS/akismet"; pack
@@ -435,16 +484,17 @@ check_run 19b fail "link -> $OTHER" priv=dev-free.woocommerce-pos.old
 other_is 19b ''
 
 # 20a-c: the private directory is a link (also to a mode 700 directory of this user), has mode 755,
-# or belongs to another user (only as root).
-for PRIV_CASE in 20a 20a2 20b 20c; do
-  new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
+# or belongs to another user (only as root). 20a3: as 20a2, and stat reports mode 700 for the link.
+for PRIV_CASE in 20a 20a2 20a3 20b 20c; do
+  new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"; PRIV_MODE=''
   case "$PRIV_CASE" in
     20a) ln -s "$OTHER" "$PRIV" ;;
     20a2) chmod 700 "$OTHER"; ln -s "$OTHER" "$PRIV" ;;
+    20a3) chmod 700 "$OTHER"; ln -s "$OTHER" "$PRIV"; PRIV_MODE=700 ;;
     20b) mkdir -m 755 "$PRIV" ;;
     20c) [[ "$EUID" -eq 0 ]] || continue; mkdir -m 700 "$PRIV"; chown 1000:1000 "$PRIV" ;;
   esac
-  deploy
+  STAT_PRIV_MODE="$PRIV_MODE" deploy
   check_run "$PRIV_CASE" fail "$BEFORE" no-priv
   no_tar "$PRIV_CASE"
   other_is "$PRIV_CASE" ''
@@ -468,6 +518,13 @@ for SHAPE_CASE in '22a link' '22b file' '23a link fail' '23b file fail'; do
   else
     check_run "$NAME" ok "$(snapshot "$PKG" no-marker)"
   fi
+done
+
+# 24: chown fails. 25: the package check's find fails without output.
+for KNOB_CASE in 24 25; do
+  new_case; add_old_copy "$LIVE"; pack; BEFORE="$(snapshot "$LIVE")"
+  CHOWN_FAIL="${KNOB_CASE#25}" FIND_FAIL="${KNOB_CASE#24}" deploy
+  check_run "$KNOB_CASE" fail "$BEFORE"
 done
 
 if [[ "$FAILURES" -ne 0 ]]; then
