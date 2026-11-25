@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Sync\Collections;
 use WCPOS\WooCommercePOS\Sync\Config_Fingerprint;
 use WCPOS\WooCommercePOS\Sync\Digest_Index;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Order_Change_Facts;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Product_Serializer;
 use WCPOS\WooCommercePOS\Sync\Request_Int_Param;
@@ -173,6 +174,11 @@ final class Changes_Controller extends WP_REST_Controller {
 			return $collection;
 		}
 		$is_all     = ( 'all' === $collection );
+		$is_orders  = ( 'orders' === $collection );
+		// Order ids are customer data: refuse who may not list orders, as `/orders` does, before any query.
+		if ( $is_orders && ! current_user_can( 'read_private_shop_orders' ) ) {
+			return new WP_Error( 'woocommerce_rest_cannot_view', __( 'Sorry, you cannot list resources.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
+		}
 		$limit      = $this->int_param( $request, 'limit', 100, 1, 1000 );
 		$since      = max( 0, (int) ( $request->get_param( 'since' ) ?? 0 ) );
 
@@ -180,7 +186,13 @@ final class Changes_Controller extends WP_REST_Controller {
 		// param: the products stream serves product AND variation rows, and a client
 		// replacing its standalone all-collections fingerprint poll with this
 		// embedded member must never see a narrowed snapshot (stale variations).
-		$config_fingerprint = $this->config_fingerprint_data( $request, true );
+		// Orders carry no catalogue representation, so their ETag covers head, epoch and horizon only.
+		$config_fingerprint = $is_orders
+			? array(
+				'fingerprints'   => array(),
+				'barcode_fields' => array(),
+			)
+			: $this->config_fingerprint_data( $request, true );
 		$stream_types       = $this->object_types_for_collection( $collection );
 		// STREAM-SCOPED head: orders share this AUTO_INCREMENT space, and a head
 		// that moves on foreign writes would leave this stream's cursor forever
@@ -207,16 +219,26 @@ final class Changes_Controller extends WP_REST_Controller {
 		$page = $this->journal->page( $stream_types, $since, $limit );
 		$rows = $page['rows'];
 
+		// Orders have their own row path; the catalogue loop below only moves their cursor.
+		$order_changes = $is_orders ? $this->order_changes( $rows, $request ) : null;
+		if ( is_wp_error( $order_changes ) ) {
+			return $order_changes;
+		}
+
 		// The POS servable set, resolved ONCE per request. A hidden record is FOREIGN to this
 		// stream in the way an order row is: the catalog lane will never serve it, so its update
 		// rows are dropped below.
-		$hidden_ids = array_fill_keys( ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::CATALOG ), true );
+		$hidden_ids = $is_orders ? array() : array_fill_keys( ( new Pos_Visibility() )->hidden_ids( Pos_Visibility::CATALOG ), true );
 
-		$changes          = array();
+		$changes          = $order_changes ?? array();
 		$checkpoint_since = $since;
 		foreach ( $rows as $row ) {
 			$sequence         = (int) ( $row['sequence'] ?? 0 );
 			$checkpoint_since = max( $checkpoint_since, $sequence );
+			// The cursor passes every journal row read, served or dropped.
+			if ( $is_orders ) {
+				continue;
+			}
 			$object_type      = isset( $row['object_type'] ) ? (string) $row['object_type'] : '';
 			$change           = array(
 				'sequence'     => $sequence,
@@ -317,9 +339,62 @@ final class Changes_Controller extends WP_REST_Controller {
 			$changes,
 			$complete
 		);
-		$data['config_fingerprint'] = $config_fingerprint;
+		if ( ! $is_orders ) {
+			$data['config_fingerprint'] = $config_fingerprint;
+		}
 
 		return new \WP_REST_Response( $data, 200, $headers );
+	}
+
+	/**
+	 * The orders stream's served rows for one journal page, in journal order.
+	 *
+	 * Live rows pass the order pull filter (narrow only) and carry the facts read now; a live
+	 * row with no facts is dropped. Delete markers are always served, bare.
+	 *
+	 * @param array[]         $rows    The page's journal rows.
+	 * @param WP_REST_Request $request The request, for the pull filter.
+	 * @return array[]|WP_Error The rows, or a 500 when the facts could not be read.
+	 */
+	private function order_changes( array $rows, WP_REST_Request $request ) {
+		$live = array();
+		foreach ( $rows as $row ) {
+			$id = (int) ( $row['object_id'] ?? 0 );
+			if ( empty( $row['deleted'] ) && $id > 0 ) {
+				$live[ $id ] = $id;
+			}
+		}
+		$allowed = array();
+		if ( array() !== $live ) {
+			$ids = array_values( $live );
+			/** This filter is documented in includes/API/V2/Orders_Controller.php */
+			$filtered = apply_filters( 'wcpos_order_pull_ids', $ids, $request );
+			$filtered = apply_filters_deprecated( 'woocommerce_pos_order_pull_ids', array( $filtered, $request ), '2.0.0', 'wcpos_order_pull_ids' );
+			// Narrow only: an id the filter adds is ignored.
+			$allowed = array_values( array_intersect( $ids, array_map( 'intval', (array) $filtered ) ) );
+		}
+
+		$facts = Order_Change_Facts::for_ids( $allowed );
+		if ( null === $facts ) {
+			// No checkpoint, so the client asks again from the same cursor.
+			return new WP_Error( 'woocommerce_pos_sync_order_facts_failed', __( 'Order changes could not be read.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
+
+		$changes = array();
+		foreach ( $rows as $row ) {
+			$change = array(
+				'sequence' => (int) ( $row['sequence'] ?? 0 ),
+				'id'       => (int) ( $row['object_id'] ?? 0 ),
+				'deleted'  => ! empty( $row['deleted'] ) ? 1 : 0,
+			);
+			if ( 1 === $change['deleted'] ) {
+				$changes[] = $change;
+			} elseif ( isset( $facts[ $change['id'] ] ) ) {
+				$changes[] = $change + $facts[ $change['id'] ];
+			}
+		}
+
+		return $changes;
 	}
 
 	/**
@@ -745,11 +820,12 @@ final class Changes_Controller extends WP_REST_Controller {
 	 * The `collection` values each /changes/* lane serves. Anything else is a 400,
 	 * never a silent substitution (free#1740, survey D2/D2b): the hash lanes have
 	 * an id-space for products (variations folded in) and tax_rates only, and the
-	 * sequence-log stream is `all` (the unified catalogue stream) or one of those
-	 * two narrowed streams. The shipped client sends `all`.
+	 * sequence-log stream is `all` (the unified catalogue stream), one of those
+	 * two narrowed streams, or `orders`, the order stream with its own head. The
+	 * shipped client sends `all`.
 	 */
 	private const HASH_LANE_COLLECTIONS   = array( 'products', 'tax_rates' );
-	private const STREAM_LANE_COLLECTIONS = array( 'all', 'products', 'tax_rates' );
+	private const STREAM_LANE_COLLECTIONS = array( 'all', 'products', 'tax_rates', 'orders' );
 
 	/**
 	 * Resolve the request's `collection`, or refuse it.
@@ -793,7 +869,7 @@ final class Changes_Controller extends WP_REST_Controller {
 
 	/**
 	 * The journal object_types one stream serves. `all` is the catalogue stream,
-	 * `tax_rates` is a single type, and `products`
+	 * `tax_rates` and `orders` are a single type each, and `products`
 	 * spans product AND variation because a variation change is a products-stream
 	 * event. This is the only place the endpoint names object types; the journal
 	 * itself owns the query. Total over STREAM_LANE_COLLECTIONS and nothing else:
@@ -812,6 +888,9 @@ final class Changes_Controller extends WP_REST_Controller {
 		}
 		if ( 'products' === $collection ) {
 			return array( 'product', 'variation' );
+		}
+		if ( 'orders' === $collection ) {
+			return array( 'order' );
 		}
 
 		throw new \LogicException( esc_html( \sprintf( 'Unsupported changes collection "%s" reached the stream helper; validate with collection_for_request() first.', $collection ) ) );

@@ -9,8 +9,9 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 /**
  * Pins the fail-closed rule from free#1740 (survey D2/D2b): the hash lanes serve
- * `products` and `tax_rates`, the sequence-log stream serves `all`, `products` and
- * `tax_rates`, and everything else is a 400 — never a silent products substitution.
+ * `products` and `tax_rates`, the sequence-log stream serves `all`, `products`,
+ * `tax_rates` and `orders`, and everything else is a 400 — never a silent products
+ * substitution.
  *
  * Routes are literal `/wcpos/v2/...` strings on purpose: the lane-coverage scanner
  * classifies a case by the route literals it can see, and a route assembled at
@@ -62,13 +63,15 @@ class Test_Changes_Unsupported_Collection extends Sync_REST_Store_Test_Case {
 	public function unsupported_collections(): array {
 		$cases = array();
 		foreach ( self::ALL_LANES as $route ) {
-			foreach ( array( 'coupons', 'customers', 'orders', 'variations', 'nonsense' ) as $collection ) {
+			foreach ( array( 'coupons', 'customers', 'variations', 'nonsense' ) as $collection ) {
 				$cases[ $route . ' / ' . $collection ] = array( $route, $collection );
 			}
 		}
-		// `all` is the unified catalogue stream; the hash lanes have no id-space for it.
+		// `all` is the unified catalogue stream and `orders` a sequence-log stream only;
+		// the hash lanes have no id-space for either.
 		foreach ( self::HASH_LANES as $route ) {
-			$cases[ $route . ' / all' ] = array( $route, 'all' );
+			$cases[ $route . ' / all' ]    = array( $route, 'all' );
+			$cases[ $route . ' / orders' ] = array( $route, 'orders' );
 		}
 		// An explicit empty value is malformed, not "use the default".
 		foreach ( self::ALL_LANES as $route ) {
@@ -112,6 +115,7 @@ class Test_Changes_Unsupported_Collection extends Sync_REST_Store_Test_Case {
 			'sequence-log / all'         => array( '/wcpos/v2/changes/sequence-log', 'all' ),
 			'sequence-log / products'    => array( '/wcpos/v2/changes/sequence-log', 'products' ),
 			'sequence-log / tax_rates'   => array( '/wcpos/v2/changes/sequence-log', 'tax_rates' ),
+			'sequence-log / orders'      => array( '/wcpos/v2/changes/sequence-log', 'orders' ),
 		);
 	}
 
