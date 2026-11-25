@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Cash_Movement_Store;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
+use WCPOS\WooCommercePOS\Services\Credential_Lockout;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
@@ -90,11 +91,26 @@ class Sessions_Controller extends \WP_REST_Controller {
 			if ( $movement && ! Pos_Uuid::is_uuid( $request['session_id'] ) ) {
 				return $this->error( 'rest_invalid_param', 400, 'session_id' );
 			}
+			$known = null;
+			$session = null;
+			if ( $movement ) {
+				// Out of reach answers exactly as absent: no replay, then the missing session's own answers.
+				$known = ( new Register_Session_Store() )->get( strtolower( $request['session_id'] ) );
+				$session = apply_filters( 'wcpos_session_row', $known, $request );
+				$session = apply_filters_deprecated( 'woocommerce_pos_session_row', array( $session, $request ), '2.0.0', 'wcpos_session_row' );
+				if ( ! $session || ! Store_Reach::for_request( $request )->admits( $session['store_id'] ) ) {
+					$session = null;
+				}
+			}
 			// A movement is keyed by (session, uuid): its replay is looked up in the body's session.
-			$existing = $movement ? $store->get( strtolower( $request['session_id'] ), $request['id'] ) : $store->get( $request['id'] );
+			$existing = $movement ? ( $known && ! $session ? null : $store->get( strtolower( $request['session_id'] ), $request['id'] ) ) : $store->get( $request['id'] );
 			/** Filter a directly addressed session or movement row on the write routes; nothing hooks it today. Read routes are checked by Store_Reach. */
 			$row = apply_filters( 'wcpos_session_row', $existing, $request );
 			$row = apply_filters_deprecated( 'woocommerce_pos_session_row', array( $row, $request ), '2.0.0', 'wcpos_session_row' );
+			// A directly addressed session must be in the request's store reach.
+			if ( $row && ! $movement && ! Store_Reach::for_request( $request )->admits( $row['store_id'] ) ) {
+				return $this->error( 'wcpos_session_not_found', 404 );
+			}
 			if ( substr( rtrim( $request->get_route(), '/' ), -7 ) === '/status' ) {
 				return $row ? $this->change_status( $request, $row, $store ) : $this->error( 'wcpos_session_not_found', 404 );
 			}
@@ -108,7 +124,7 @@ class Sessions_Controller extends \WP_REST_Controller {
 				$store->log_replay( $row );
 				return new WP_REST_Response( $this->visible_row( $row ) );
 			}
-			$fields = $movement ? $this->movement_fields( $request ) : $this->opening_fields( $request );
+			$fields = $movement ? $this->movement_fields( $request, $session ) : $this->opening_fields( $request );
 			if ( is_wp_error( $fields ) ) {
 				return $fields;
 			}
@@ -313,10 +329,23 @@ class Sessions_Controller extends \WP_REST_Controller {
 		if ( ! is_string( $request['username'] ) || ! is_string( $request['password'] ) ) {
 			return $this->error( 'wcpos_override_refused', 403 );
 		}
+		// The POS login page's lockout counts the attempt before the password, so a locked account learns nothing.
+		// Bucketed as wp_authenticate() sanitizes the name, so no spelling of an account escapes it.
+		$identifier = sanitize_user( $request['username'] );
+		$attempt    = Credential_Lockout::reserve_attempt( $identifier );
+		if ( null === $attempt ) {
+			return $this->error( 'wcpos_approval_locked', 429 );
+		}
 		$user = wp_authenticate( $request['username'], $request['password'] );
-		if ( is_wp_error( $user ) || get_current_user_id() === $user->ID || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
+		if ( is_wp_error( $user ) ) {
+			Credential_Lockout::record_failure( $identifier );
 			return $this->error( 'wcpos_override_refused', 403 );
 		}
+		if ( get_current_user_id() === $user->ID || ! user_can( $user, 'manage_woocommerce_pos_closures' ) ) {
+			Credential_Lockout::release_attempt( $identifier, $attempt );
+			return $this->error( 'wcpos_override_refused', 403 );
+		}
+		Credential_Lockout::clear( $identifier );
 		$counted = Closure_Store::tenders( $request['counted'] );
 		if ( null === $counted ) {
 			return $this->error( 'rest_invalid_param', 400, 'counted' );
@@ -379,9 +408,10 @@ class Sessions_Controller extends \WP_REST_Controller {
 	/** Validate a movement and its same-session void target.
 	 *
 	 * @param \WP_REST_Request $request Request.
+	 * @param array|null       $session The movement's session, or null when missing or out of reach.
 	 * @return array|WP_Error
 	 */
-	private function movement_fields( $request ) {
+	private function movement_fields( $request, ?array $session ) {
 		if ( ! Pos_Uuid::is_uuid( $request['session_id'] ) ) {
 			return $this->error( 'rest_invalid_param', 400, 'session_id' );
 		}
@@ -394,7 +424,6 @@ class Sessions_Controller extends \WP_REST_Controller {
 		if ( ! is_string( $request['reason'] ) || Pos_Order_Audit::char_length( $request['reason'] ) > 500 ) {
 			return $this->error( 'rest_invalid_param', 400, 'reason' );
 		}
-		$session = ( new Register_Session_Store() )->get( strtolower( $request['session_id'] ) );
 		if ( ! $session || ! ( new Cash_Movement_Store() )->accepts( $session, gmdate( 'Y-m-d H:i:s', strtotime( $request['created_at'] ) ) ) ) {
 			return $this->error( 'wcpos_session_not_open', 409 );
 		}

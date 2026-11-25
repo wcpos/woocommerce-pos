@@ -76,6 +76,9 @@ class ClientReportAggregator
             case EventType::metrics():
                 $this->add(DataCategory::metric(), $reason, \count($event->getMetrics()));
                 break;
+            case EventType::profileChunk():
+                $this->add(DataCategory::profileChunk(), $reason, 1);
+                break;
         }
     }
     public function flush() : void

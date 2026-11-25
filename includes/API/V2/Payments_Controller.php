@@ -19,6 +19,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
+use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WP_Error;
 use WP_REST_Request;
@@ -81,6 +82,7 @@ class Payments_Controller extends WC_REST_Controller {
 						'type'     => 'string',
 						'required' => true,
 					),
+					'reference' => array( 'type' => 'string' ),
 				),
 			),
 		);
@@ -309,7 +311,7 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( is_wp_error( $order ) ) {
 			return $order;
 		}
-		$row = Ledger::instance()->correct( $order, strtolower( (string) $request['uuid'] ), (string) $request['method_id'], $command );
+		$row = Ledger::instance()->correct( $order, strtolower( (string) $request['uuid'] ), (string) $request['method_id'], $command, (string) $request['reference'] );
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
@@ -462,6 +464,10 @@ class Payments_Controller extends WC_REST_Controller {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof WC_Order ) {
 			return new WP_Error( 'wcpos_order_not_found', __( 'Order not found.', 'woocommerce-pos' ), array( 'status' => 404 ) );
+		}
+		// Payments on an order need the right to edit that order.
+		if ( true !== Permission_Rules::verdict( 'orders', 'edit', $order_id, 0, 'v2' ) ) {
+			return new WP_Error( 'wcpos_rest_cannot_edit_order', __( 'Sorry, you are not allowed to edit this order.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 		return $order;
 	}

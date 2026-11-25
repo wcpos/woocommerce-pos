@@ -151,6 +151,150 @@ trait Collection_Rules_Parity_Tests {
 	}
 
 	/**
+	 * Sale-day bounds select corrected instants, not the later creation date.
+	 *
+	 * @dataProvider sale_day_range_cases
+	 * @param array $query Request filters.
+	 * @param array $expected_keys Matching fixture names.
+	 */
+	public function test_sale_day_range_returns_matching_orders( array $query, array $expected_keys ): void {
+		$ids = $this->create_sale_day_fixtures();
+		$actual = $this->isolated_lane_order_ids(
+			'/wcpos/v2/orders',
+			$query + array(
+				'orderby' => 'id',
+				'order' => 'asc',
+				'per_page' => 100,
+			)
+		);
+
+		$this->assertSame( array_map( static fn( $key ) => $ids[ $key ], $expected_keys ), $actual );
+	}
+
+	/**
+	 * Inclusive and one-sided bounds, with existing filters still intersecting.
+	 *
+	 * @return array
+	 */
+	public static function sale_day_range_cases(): array {
+		return array(
+			'both inclusive' => array(
+				array(
+					'pos_sale_day_after' => '1700697600',
+					'pos_sale_day_before' => '1700783999',
+				),
+				array( 'lower', 'middle', 'upper' ),
+			),
+			'after only' => array( array( 'pos_sale_day_after' => 1700697600 ), array( 'lower', 'middle', 'upper', 'after' ) ),
+			'before only' => array( array( 'pos_sale_day_before' => 1700783999 ), array( 'before', 'lower', 'middle', 'upper' ) ),
+			'equal bounds' => array(
+				array(
+					'pos_sale_day_after' => 1700740800,
+					'pos_sale_day_before' => 1700740800,
+				),
+				array( 'middle' ),
+			),
+			'store intersection' => array(
+				array(
+					'pos_sale_day_after' => 1700697600,
+					'pos_sale_day_before' => 1700783999,
+					'pos_store' => 2,
+				),
+				array( 'middle' ),
+			),
+			'creation date still intersects' => array(
+				array(
+					'pos_sale_day_after' => 1700697600,
+					'before' => '2023-11-23T23:59:59',
+				),
+				array(),
+			),
+			'invalid after is absent' => array(
+				array(
+					'pos_sale_day_after' => 'not-a-number',
+					'pos_sale_day_before' => 1700697600,
+				),
+				array( 'before', 'lower' ),
+			),
+			'invalid before is absent' => array(
+				array(
+					'pos_sale_day_after' => 1700783999,
+					'pos_sale_day_before' => '0 OR 1=1',
+				),
+				array( 'upper', 'after' ),
+			),
+			'negative bounds are absent' => array(
+				array(
+					'pos_sale_day_after' => -1,
+					'pos_sale_day_before' => '-1',
+				),
+				array( 'before', 'lower', 'middle', 'upper', 'after', 'missing' ),
+			),
+		);
+	}
+
+	/** Numeric ordering must not treat the string '9' as greater than '100'. */
+	public function test_sale_day_range_compares_meta_numerically(): void {
+		$ids = array();
+		foreach ( array( '0', '9', '100' ) as $timestamp ) {
+			$order = OrderHelper::create_order();
+			$order->update_meta_data( '_wcpos_sale_day_at', $timestamp );
+			$order->save();
+			$ids[] = $order->get_id();
+		}
+
+		$this->assertSame( array( $ids[2] ), $this->isolated_lane_order_ids( '/wcpos/v2/orders', array( 'pos_sale_day_after' => 10 ) ) );
+		$this->assertSame( array( $ids[0] ), $this->isolated_lane_order_ids( '/wcpos/v2/orders', array( 'pos_sale_day_before' => 0 ) ) );
+	}
+
+	/** The frozen lane neither advertises nor applies sale-day parameters. */
+	public function test_v1_sale_day_range_is_not_supported(): void {
+		$ids = $this->create_sale_day_fixtures();
+		$params = \WCPOS\WooCommercePOS\Sync\Collection_Rules::collection_params( 'orders' );
+		$this->assertArrayNotHasKey( 'pos_sale_day_after', $params );
+		$this->assertArrayNotHasKey( 'pos_sale_day_before', $params );
+		$this->assertSame(
+			array_values( $ids ),
+			$this->isolated_lane_order_ids(
+				'/wcpos/v1/orders',
+				array(
+					'pos_sale_day_after' => 1700697600,
+					'pos_sale_day_before' => 1700783999,
+					'orderby' => 'id',
+					'order' => 'asc',
+				)
+			)
+		);
+	}
+
+	/**
+	 * Orders created on November 24, with corrected instants around November 23 UTC.
+	 *
+	 * @return array<string, int>
+	 */
+	private function create_sale_day_fixtures(): array {
+		$ids = array();
+		foreach ( array(
+			'before' => '1700697599',
+			'lower' => '1700697600',
+			'middle' => '1700740800',
+			'upper' => '1700783999',
+			'after' => '1700784000',
+			'missing' => null,
+		) as $key => $timestamp ) {
+			$order = OrderHelper::create_order();
+			$order->set_date_created( '2023-11-24T12:00:00+00:00' );
+			$order->update_meta_data( '_pos_store', 'middle' === $key ? '2' : '1' );
+			if ( null !== $timestamp ) {
+				$order->update_meta_data( '_wcpos_sale_day_at', $timestamp );
+			}
+			$order->save();
+			$ids[ $key ] = $order->get_id();
+		}
+		return $ids;
+	}
+
+	/**
 	 * Order reads unwind every scoped query callback on both lanes.
 	 */
 	public function test_order_reads_on_both_lanes_leave_no_query_callbacks_installed(): void {
@@ -271,7 +415,7 @@ trait Collection_Rules_Parity_Tests {
 		try {
 			return $this->lane_order_ids( $route, $query );
 		} finally {
-			$GLOBALS['wp_filter'] = $filter_snapshot;
+			$GLOBALS['wp_filter'] = $filter_snapshot; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restore the test's hook snapshot between independent REST requests.
 		}
 	}
 

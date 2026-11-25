@@ -299,3 +299,29 @@ describe('TaxIdsField tax ID country/type syncing', () => {
 		);
 	});
 });
+
+// jsdom has no layout, so pin the class: on a phone each full-width control keeps its natural
+// width and the table scrolls, instead of squashing the inputs to two characters.
+describe('TaxIdsField on a phone', () => {
+	it('keeps the type, value and label controls at their natural width', () => {
+		setStoreCountry(undefined);
+		render(
+			<TaxIdsField
+				value={[{ type: 'eu_vat', value: 'DE123456789', label: 'VAT' }]}
+				onChange={vi.fn()}
+				labels={baseLabels}
+			/>
+		);
+
+		expect(screen.getByRole('combobox', { name: baseLabels.type })).toHaveClass(
+			'wcpos:max-md:min-w-max'
+		);
+		expect(screen.getByRole('textbox', { name: baseLabels.value })).toHaveClass(
+			'wcpos:max-md:min-w-max'
+		);
+		expect(screen.getByRole('textbox', { name: baseLabels.label })).toHaveClass(
+			'wcpos:max-md:min-w-max'
+		);
+		delete (window as any).wcpos;
+	});
+});

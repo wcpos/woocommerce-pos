@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API\V2;
 
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Tests exercise the WordPress and WooCommerce hooks that the proxy binds.
+
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Coupons_Proxy_Behavior;
 use WCPOS\WooCommercePOS\API\V2\Proxy\Customers_Proxy_Behavior;
@@ -170,7 +172,12 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$forwarded = $behavior->forwarded_params( $request->get_query_params(), $request );
 		$ids       = $behavior->around(
 			static function () use ( $forwarded ): array {
-				return wc_get_orders( $forwarded + array( 'return' => 'ids', 'limit' => -1 ) );
+				return wc_get_orders(
+					$forwarded + array(
+						'return' => 'ids',
+						'limit' => -1,
+					)
+				);
 			}
 		);
 
@@ -201,7 +208,12 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 		$forwarded = $behavior->forwarded_params( $request->get_query_params(), $request );
 		$ids       = $behavior->around(
 			static function () use ( $forwarded ): array {
-				return wc_get_orders( $forwarded + array( 'return' => 'ids', 'limit' => -1 ) );
+				return wc_get_orders(
+					$forwarded + array(
+						'return' => 'ids',
+						'limit' => -1,
+					)
+				);
 			}
 		);
 
@@ -307,6 +319,52 @@ class Test_Proxy_Resource_Behaviors extends WP_UnitTestCase {
 			),
 			$filtered['meta_query']
 		);
+	}
+
+	/** Sale-day params are claimed and become numeric legacy meta comparisons. */
+	public function test_order_behavior_sale_day_claims_params_and_adds_numeric_range(): void {
+		update_option( 'woocommerce_custom_orders_table_enabled', 'no' );
+		$behavior = new Orders_Proxy_Behavior();
+		$request = new WP_REST_Request( 'GET', '/wcpos/v2/orders' );
+		$input = array(
+			'pos_sale_day_after' => '9.9',
+			'pos_sale_day_before' => '100',
+			'page' => 2,
+		);
+		$request->set_query_params( $input );
+
+		$forwarded = $behavior->forwarded_params( $input, $request );
+		$filtered = $behavior->around(
+			static fn() => apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request )
+		);
+
+		$this->assertSame(
+			array(
+				'page' => 2,
+				'dp' => '6',
+			),
+			$forwarded
+		);
+		$this->assertSame(
+			array(
+				'meta_query' => array(
+					array(
+						'key' => '_wcpos_sale_day_at',
+						'value' => 9,
+						'compare' => '>=',
+						'type' => 'NUMERIC',
+					),
+					array(
+						'key' => '_wcpos_sale_day_at',
+						'value' => 100,
+						'compare' => '<=',
+						'type' => 'NUMERIC',
+					),
+				),
+			),
+			$filtered
+		);
+		$this->assertSame( array(), apply_filters( 'woocommerce_rest_shop_order_object_query', array(), $request ) );
 	}
 
 	/** The proxy claims the gateway and installs the legacy OR group only during the read. */

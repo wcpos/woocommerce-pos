@@ -7,16 +7,9 @@ import { ShellLayout } from '@wcpos/ui';
 
 import { Footer } from './footer';
 import { SettingsNavSidebar } from './nav-sidebar';
+import { ScreenSkeleton } from './screen-skeleton';
 import ErrorFallback from '../components/error';
 import Notice from '../components/notice';
-import {
-	FormSkeleton,
-	CardGridSkeleton,
-	ListSkeleton,
-	AccessSkeleton,
-	SessionsSkeleton,
-	LicenseSkeleton,
-} from '../components/skeleton';
 import useNotices from '../hooks/use-notices';
 import { t } from '../translations';
 
@@ -30,18 +23,6 @@ const pageTitles: Record<string, string> = {
 	'/export-closures': 'export_closures.title',
 	'/logs': 'common.logs',
 	'/license': 'common.license',
-};
-
-const pageSkeletons: Record<string, React.ReactNode> = {
-	'/general': <FormSkeleton rows={5} />,
-	'/checkout': <FormSkeleton rows={4} />,
-	'/cloud-print': <FormSkeleton rows={4} />,
-	'/access': <AccessSkeleton />,
-	'/sessions': <SessionsSkeleton />,
-	'/extensions': <CardGridSkeleton cards={4} />,
-	'/export-closures': <FormSkeleton rows={1} />,
-	'/logs': <ListSkeleton rows={8} />,
-	'/license': <LicenseSkeleton />,
 };
 
 export function RootLayout() {
@@ -81,7 +62,7 @@ export function RootLayout() {
 			)}
 
 			<ErrorBoundary FallbackComponent={ErrorFallback}>
-				<React.Suspense fallback={pageSkeletons[location.pathname] || <FormSkeleton />}>
+				<React.Suspense fallback={<ScreenSkeleton />}>
 					<Outlet />
 				</React.Suspense>
 			</ErrorBoundary>

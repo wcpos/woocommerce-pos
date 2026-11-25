@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Admin\Orders;
 
 use WC_Abstract_Order;
 use WC_Order;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 
 /**
@@ -101,21 +102,46 @@ class Single_Order {
 
 			// Update meta only if _pos_user has changed.
 			if ( $current_pos_cashier !== $new_pos_cashier ) {
+				if ( ! $this->can_assign_cashier( $new_pos_cashier ) ) {
+					Order_Notes::add_cashier_change_refused_note( $order, get_current_user_id(), $new_pos_cashier, $current_pos_cashier );
+					return;
+				}
+				if ( ! Fiscal_Record_Writers::instance()->record_reattribution(
+					$order,
+					get_current_user_id(),
+					$current_pos_cashier,
+					$new_pos_cashier,
+					(string) $order->get_meta( '_pos_store' ),
+					(string) $order->get_meta( '_pos_store' )
+				) ) {
+					$order->add_order_note( __( 'POS cashier or store change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
+					return;
+				}
 				$order->update_meta_data( '_pos_user', (string) $new_pos_cashier );
 				$order->save();
 
-				// Add an order note indicating the change.
-				$current_cashier    = get_userdata( $current_pos_cashier );
-				$new_cashier        = get_userdata( $new_pos_cashier );
-				$note               = sprintf(
-					// translators: 1: old POS cashier, 2: new POS cashier.
-					__( 'POS cashier changed from %1$s to %2$s.', 'woocommerce-pos' ),
-					$current_cashier ? $current_cashier->display_name : /* translators: Fallback cashier name shown when the POS cashier user cannot be found. */ __( 'Unknown', 'woocommerce-pos' ),
-					$new_cashier ? $new_cashier->display_name : /* translators: Fallback cashier name shown when the POS cashier user cannot be found. */ __( 'Unknown', 'woocommerce-pos' )
-				);
-				$order->add_order_note( $note );
+				Order_Notes::add_cashier_change_note( $order, $current_pos_cashier, $new_pos_cashier );
 			}
 		}
+	}
+
+	/**
+	 * Whether the current user may make a user the order's cashier.
+	 *
+	 * Mirrors the reassignment rule the POS order writer applies.
+	 *
+	 * @param int $user_id The proposed cashier.
+	 */
+	private function can_assign_cashier( int $user_id ): bool {
+		if ( get_current_user_id() === $user_id ) {
+			return true;
+		}
+		if ( ! current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
+			return false;
+		}
+		$user = get_userdata( $user_id );
+
+		return $user && $user->has_cap( 'access_woocommerce_pos' );
 	}
 
 	/**

@@ -170,7 +170,7 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'bootstrap_flags', $data );
 		$this->assertArrayHasKey( 'landing-variant', $data['bootstrap_flags'] );
-		$this->assertContains( $data['bootstrap_flags']['landing-variant'], array( 'indie', 'free-plus' ) );
+		$this->assertContains( $data['bootstrap_flags']['landing-variant'], array( 'plan', 'jobs' ) );
 	}
 
 	/**

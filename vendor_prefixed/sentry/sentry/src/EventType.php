@@ -43,6 +43,10 @@ final class EventType implements \Stringable
     {
         return self::getInstance('trace_metric');
     }
+    public static function profileChunk() : self
+    {
+        return self::getInstance('profile_chunk');
+    }
     public static function clientReport() : self
     {
         return self::getInstance('client_report');
@@ -54,13 +58,14 @@ final class EventType implements \Stringable
      */
     public static function cases() : array
     {
-        return [self::event(), self::transaction(), self::checkIn(), self::logs(), self::metrics(), self::clientReport()];
+        return [self::event(), self::transaction(), self::checkIn(), self::logs(), self::metrics(), self::profileChunk(), self::clientReport()];
     }
     public function requiresEventId() : bool
     {
         switch ($this) {
             case self::metrics():
             case self::logs():
+            case self::profileChunk():
             case self::clientReport():
                 return \false;
             default:

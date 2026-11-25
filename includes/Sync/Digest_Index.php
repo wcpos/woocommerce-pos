@@ -369,6 +369,9 @@ final class Digest_Index {
 	 * @return array<int, string>
 	 */
 	public function read_digests( string $collection, array $ids ): array {
+		if ( Digest_Support::is_disabled() ) {
+			return array();
+		}
 		global $wpdb;
 		// Order/customer upserts are coalesced per request and land at shutdown
 		// (see Integrity_Digest::$pending_digests). A read inside the same

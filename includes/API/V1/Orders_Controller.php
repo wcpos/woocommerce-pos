@@ -294,6 +294,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 						array(
 							'email'   => array(
 								'type'        => 'string',
+								'format'      => 'email',
 								'description' => /* translators: REST API schema field label or error message. */ __( 'Email address', 'woocommerce-pos' ),
 								'required'    => true,
 							),
@@ -635,6 +636,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		if ( 'billing' == $request['save_to'] ) {
+			// Saving the address to the order needs the right to edit that order.
+			$lane = 'wcpos/v2' === $this->namespace ? 'v2' : 'v1';
+			if ( true !== Permission_Rules::verdict( 'orders', 'edit', $order->get_id(), 0, $lane ) ) {
+				return new WP_Error( 'wcpos_rest_cannot_edit_order', __( 'Sorry, you are not allowed to edit this order.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
+			}
 			$order->set_billing_email( $email );
 			$order->save();
 			// translators: %s: email address.

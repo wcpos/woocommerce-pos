@@ -110,6 +110,464 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/** Sale-day corrections name the latest completion without changing any sale or session. */
+	public function test_sale_day_correction_appends_to_latest_sale(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$this->pay( $this->reopen( $order ) );
+		$sales = $this->sales( $order->get_id() );
+		$actor = get_current_user_id();
+		$from = '2026-11-24T09:00:00Z';
+		$to = '2026-11-23T09:00:00Z';
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, $actor, $from, $to, 'Correct sale day', '2026-11-24 10:11:12' ) );
+
+		$this->assertContains( 'sale_day_correction', Fiscal_Record_Store::TYPES );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'sale_day_correction',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sales[1]['id'], $records[0]['corrects_record_id'] );
+		$this->assertSame( $actor, $records[0]['approver_id'] );
+		$this->assertSame( 12, $records[0]['store_id'] );
+		$this->assertSame( $actor, $records[0]['cashier_id'] );
+		$this->assertSame( '2026-11-24 10:11:12', $records[0]['payload']['changed_at_gmt'] );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'sale_day',
+					'from' => $from,
+					'to' => $to,
+				),
+			),
+			$records[0]['payload']['changes']
+		);
+		$this->assertSame( 'Correct sale day', $records[0]['payload']['reason'] );
+		$this->assertSame( $actor, $records[0]['payload']['changed_by'] );
+		foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id' ) as $key ) {
+			$this->assertNull( $records[0][ $key ], $key );
+		}
+		$this->assertSame( $sales, $this->sales( $order->get_id() ) );
+	}
+
+	/** Non-numeric store identifiers never become numeric record attribution. */
+	public function test_sale_day_correction_non_numeric_store_is_not_coerced(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$order->update_meta_data( '_pos_store', '12-store' );
+		$order->save();
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'sale_day_correction',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertNull( $records[0]['store_id'] );
+		$this->assertSame( get_current_user_id(), $records[0]['cashier_id'] );
+	}
+
+	/**
+	 * A retry of the same request reuses its record; a later change appends another.
+	 */
+	public function test_sale_day_correction_retry_reuses_its_record_and_a_later_change_appends(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$writers = Fiscal_Record_Writers::instance();
+		$store   = new Fiscal_Record_Store();
+		$query   = array(
+			'order_id' => $order->get_id(),
+			'type' => 'sale_day_correction',
+		);
+		$this->assertTrue( $writers->record_sale_day_correction( $order, 1, '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		// The order's meta was not saved (the write after the record failed): the same request again.
+		$this->assertTrue( $writers->record_sale_day_correction( $order, 1, '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:20' ) );
+		$this->assertCount( 1, $store->list( $query ) );
+		$order->update_meta_data( '_wcpos_sale_day', '{"at_gmt":"2026-11-23T09:00:00Z","reason":"Correct sale day","by":1,"changed_at_gmt":"2026-11-24T10:11:12Z"}' );
+		$order->save();
+		$this->assertTrue( $writers->record_sale_day_correction( wc_get_order( $order->get_id() ), 1, '2026-11-23T09:00:00Z', '2026-11-22T09:00:00Z', 'Again', '2026-11-24 10:12:00' ) );
+		$this->assertCount( 2, $store->list( $query ) );
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_without_sale_returns_true(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		$order = $this->order();
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_reopened_legacy_without_sale_returns_true_without_record(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		// Arrange: completing outside a register leaves no history or fiscal sale.
+		$order = $this->order();
+		$order->set_date_paid( time() );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertNull( Completion_History::of( $order )->latest() );
+		$order = $this->reopen( $order );
+		$this->assertTrue( Completion_History::of( $order )->latest()['legacy'] );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+
+		// Act and assert.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_failed_insert_returns_false_without_recovery_note(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		$order = $this->order();
+		$this->pay( $order );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$failed = array();
+		$observe = static function ( $type ) use ( &$failed ): void {
+			$failed[] = $type;
+		};
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10, 2 );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
+		try {
+			$result = Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_sale_day_correction', $stuck, 10 );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
+		}
+
+		$this->assertFalse( $result );
+		$this->assertSame( array( 'sale_day_correction' ), $failed );
+		$this->assertEquals( $notes, wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'sale_day_correction',
+				)
+			)
+		);
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_latest_sale_insert_still_failing_returns_false_without_correction(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		// Arrange: the older completion has a sale, but the latest document is parked.
+		$order = $this->order();
+		$this->pay( $order );
+		$order = $this->reopen( $order );
+		$this->with_sale_inserts_failing(
+			function () use ( $order ): void {
+				$this->pay( $order );
+				$order = wc_get_order( $order->get_id() );
+				$latest = Completion_History::of( $order )->latest();
+				$this->assertSame( array( $latest['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
+
+				// Act and assert: recovery still cannot insert the latest sale.
+				$this->assertFalse( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+			}
+		);
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+		$this->assertCount( 1, $this->parked( $order->get_id() ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'sale_day_correction',
+				)
+			)
+		);
+	}
+
+	/** Sale-day correction follows the existing attribution record contract. */
+	public function test_sale_day_correction_latest_parked_sale_recovers_and_corrects_that_sale(): void {
+		$this->assertTrue( method_exists( Fiscal_Record_Writers::instance(), 'record_sale_day_correction' ) );
+		// Arrange.
+		$order = $this->order();
+		$this->pay( $order );
+		$order = $this->reopen( $order );
+		$this->with_sale_inserts_failing(
+			function () use ( $order ): void {
+				$this->pay( $order );
+			}
+		);
+		$order = wc_get_order( $order->get_id() );
+		$latest = Completion_History::of( $order )->latest();
+		$this->assertSame( array( $latest['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+
+		// Act.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, get_current_user_id(), '2026-11-24T09:00:00Z', '2026-11-23T09:00:00Z', 'Correct sale day', '2026-11-24 10:11:12' ) );
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 2, $sales );
+		$this->assertSame( $latest['id'], $sales[1]['source_id'] );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'sale_day_correction',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sales[1]['id'], $records[0]['corrects_record_id'] );
+	}
+
+	/** Repeated corrections append to the latest sale without entering a session or closure. */
+	public function test_reattribution_appends_changes_to_latest_sale_only(): void {
+		// Arrange.
+		$order = $this->order();
+		$this->pay( $order );
+		$this->pay( $this->reopen( $order ) );
+		$store = new Fiscal_Record_Store();
+		$sales = $this->sales( $order->get_id() );
+		$actor_id = get_current_user_id();
+		$writers = Fiscal_Record_Writers::instance();
+		$this->assertContains( 'reattribution', Fiscal_Record_Store::TYPES );
+
+		// Act: a second correction back to the original values is a new document.
+		$this->assertTrue( $writers->record_reattribution( $order, $actor_id, 1, 2, '12', '13' ) );
+		$this->assertTrue( $writers->record_reattribution( $order, $actor_id, 2, 1, '13', '12' ) );
+
+		// Assert.
+		$records = $store->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 2, $records );
+		$this->assertNotSame( $records[0]['source_id'], $records[1]['source_id'] );
+		$this->assertSame(
+			array(
+				array(
+					'field' => 'cashier',
+					'from' => 1,
+					'to' => 2,
+				),
+				array(
+					'field' => 'store',
+					'from' => '12',
+					'to' => '13',
+				),
+			),
+			$records[1]['payload']['changes']
+		);
+		foreach ( $records as $record ) {
+			$this->assertSame( $sales[1]['id'], $record['corrects_record_id'] );
+			foreach ( array( 'register_id', 'session_id', 'closure_id', 'carried_by_closure_id' ) as $field ) {
+				$this->assertNull( $record[ $field ], $field );
+			}
+		}
+		$this->assertSame( $sales, $this->sales( $order->get_id() ) );
+		$this->assertSame(
+			0,
+			$store->count(
+				array(
+					'type' => 'reattribution',
+					'session_id' => $order->get_meta( '_wcpos_session' ),
+				)
+			)
+		);
+	}
+
+	/** Recovering an earlier sale last does not make it the completion a correction names. */
+	public function test_reattribution_after_out_of_order_recovery_corrects_latest_completion_sale(): void {
+		// Arrange: completion 1's sale is parked, then completion 2's sale lands first.
+		$order = $this->order();
+		$enrich = static function () {
+			throw new \Error( 'boom' );
+		};
+		add_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		try {
+			$this->pay( $order );
+		} finally {
+			remove_filter( 'wcpos_fiscal_snapshot_enrich', $enrich );
+		}
+		$this->pay( $this->reopen( $order ) );
+		$order = wc_get_order( $order->get_id() );
+		$writers = Fiscal_Record_Writers::instance();
+		$writers->recover( $order );
+		$sales = $this->sales( $order->get_id() );
+		$history = Completion_History::of( $order )->entries();
+		$this->assertCount( 2, $sales );
+		$this->assertSame( $history[1]['id'], $sales[0]['source_id'] );
+		$this->assertSame( $history[0]['id'], $sales[1]['source_id'] );
+
+		// Act.
+		$this->assertTrue( $writers->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' ) );
+
+		// Assert.
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sales[0]['id'], $records[0]['corrects_record_id'] );
+	}
+
+	/** A missing latest sale must not redirect a correction to an older completion. */
+	public function test_reattribution_latest_sale_insert_still_failing_returns_false_without_correction(): void {
+		// Arrange: the older completion has a sale, but the latest document is parked.
+		$order = $this->order();
+		$this->pay( $order );
+		$order = $this->reopen( $order );
+		$this->with_sale_inserts_failing(
+			function () use ( $order ): void {
+				$this->pay( $order );
+				$order = wc_get_order( $order->get_id() );
+				$latest = Completion_History::of( $order )->latest();
+				$this->assertSame( array( $latest['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
+
+				// Act and assert: recovery still cannot insert the latest sale.
+				$this->assertFalse( Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' ) );
+			}
+		);
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+		$this->assertCount( 1, $this->parked( $order->get_id() ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
+				)
+			)
+		);
+	}
+
+	/** Recovery inserts the latest completion's parked sale before its attribution correction. */
+	public function test_reattribution_latest_parked_sale_recovers_and_corrects_that_sale(): void {
+		// Arrange.
+		$order = $this->order();
+		$this->pay( $order );
+		$order = $this->reopen( $order );
+		$this->with_sale_inserts_failing(
+			function () use ( $order ): void {
+				$this->pay( $order );
+			}
+		);
+		$order = wc_get_order( $order->get_id() );
+		$latest = Completion_History::of( $order )->latest();
+		$this->assertSame( array( $latest['id'] ), array_keys( $this->parked( $order->get_id() ) ) );
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+
+		// Act.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' ) );
+
+		// Assert.
+		$sales = $this->sales( $order->get_id() );
+		$this->assertCount( 2, $sales );
+		$this->assertSame( $latest['id'], $sales[1]['source_id'] );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$records = ( new Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sales[1]['id'], $records[0]['corrects_record_id'] );
+	}
+
+	/** Legacy orders without completion history still correct their newest sale row. */
+	public function test_reattribution_without_completion_history_corrects_newest_sale(): void {
+		// Arrange: legacy rows have no completion history on the order.
+		$order = $this->order();
+		$store = new Fiscal_Record_Store();
+		foreach ( array( 'older', 'newest' ) as $source ) {
+			$sale = $store->record(
+				array(
+					'type' => 'sale',
+					'order_id' => $order->get_id(),
+					'source_id' => $source,
+					'payload' => array(),
+				)
+			);
+			$this->assertIsArray( $sale );
+		}
+		$this->assertNull( Completion_History::of( $order )->latest() );
+
+		// Act.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' ) );
+
+		// Assert.
+		$records = $store->list(
+			array(
+				'order_id' => $order->get_id(),
+				'type' => 'reattribution',
+			)
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( $sale['id'], $records[0]['corrects_record_id'] );
+	}
+
+	/** Orders without a sale may be reassigned without a fiscal correction. */
+	public function test_reattribution_without_sale_returns_true(): void {
+		$order = $this->order();
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, 'store-a', 'store-b' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/** A reopened legacy completion without a sale has nothing to correct. */
+	public function test_reattribution_reopened_legacy_without_sale_returns_true_without_record(): void {
+		// Arrange: completing outside a register leaves no history or fiscal sale.
+		$order = $this->order();
+		$order->set_date_paid( time() );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertNull( Completion_History::of( $order )->latest() );
+		$order = $this->reopen( $order );
+		$this->assertTrue( Completion_History::of( $order )->latest()['legacy'] );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+
+		// Act and assert.
+		$this->assertTrue( Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' ) );
+		$this->assertSame( array(), ( new Fiscal_Record_Store() )->list( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/** A failed correction signals listeners but must not ask for sale recovery. */
+	public function test_reattribution_failed_insert_returns_false_without_recovery_note(): void {
+		$order = $this->order();
+		$this->pay( $order );
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$failed = array();
+		$observe = static function ( $type ) use ( &$failed ): void {
+			$failed[] = $type;
+		};
+		$stuck = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10, 2 );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
+		try {
+			$result = Fiscal_Record_Writers::instance()->record_reattribution( $order, get_current_user_id(), 1, 2, '12', '13' );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_reattribution', $stuck, 10 );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
+		}
+
+		$this->assertFalse( $result );
+		$this->assertSame( array( 'reattribution' ), $failed );
+		$this->assertEquals( $notes, wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+		$this->assertSame(
+			array(),
+			( new Fiscal_Record_Store() )->list(
+				array(
+					'order_id' => $order->get_id(),
+					'type' => 'reattribution',
+				)
+			)
+		);
+	}
+
 	/** Two completions insert two sale rows through record(), the second superseding the first. */
 	public function test_two_completions_write_two_sale_rows_through_record(): void {
 		// Arrange.
@@ -635,7 +1093,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
-	/** recover() reads the parked map fresh, so a document parked after the caller loaded the order survives. */
+	/** Recovery reads the parked map fresh, so a document parked after the caller loaded the order survives. */
 	public function test_recover_reads_the_parked_map_fresh_so_a_document_parked_after_the_caller_loaded_the_order_survives(): void {
 		// Arrange: completion 1's sale insert fails; the caller loads the order; completion 2's insert fails too.
 		$order  = $this->order();
@@ -661,7 +1119,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), $this->parked( $order->get_id() ) );
 	}
 
-	/** recover() reads the history fresh too, so a completion parked after the caller loaded the order keeps its late correction. */
+	/** Recovery reads the history fresh too, so a completion parked after the caller loaded the order keeps its late correction. */
 	public function test_recover_writes_the_late_sale_of_a_completion_parked_after_the_caller_loaded_the_order(): void {
 		// Arrange: completion 1 in open session A and completion 2 in closed session B, both inserts
 		// failing; the caller loaded the order between them.
@@ -1368,7 +1826,14 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$order   = $this->closure_ledger( $session );
 		$rows    = array_map(
 			static function ( array $row ): array {
-				$row['commands'] = array( wp_generate_uuid4() => array( 'fp' => 'sha256:x', 'kind' => 'capture', 'ref' => null, 'at_gmt' => gmdate( 'c' ) ) );
+				$row['commands'] = array(
+					wp_generate_uuid4() => array(
+						'fp' => 'sha256:x',
+						'kind' => 'capture',
+						'ref' => null,
+						'at_gmt' => gmdate( 'c' ),
+					),
+				);
 				return $row;
 			},
 			Ledger::instance()->read( $order )
@@ -1984,5 +2449,126 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 1, $late );
 		$this->assertSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
 		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
+	}
+
+	/** A deferred correction whose legs a later completion's late_sale carried writes nothing on its retry. */
+	public function test_correction_legs_carried_by_a_later_completion_late_sale_are_not_written_again(): void {
+		// Arrange: the correction's late check is deferred by a held register.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$name      = 'wcpos_register_' . strtolower( $session['register_id'] );
+		$rewrite   = static fn( $sql ) => str_replace( "GET_LOCK( '" . $name . "', 10 )", "GET_LOCK( '" . $name . "', 0 )", $sql );
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$minus     = null;
+		$plus      = null;
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) );
+			add_filter( 'query', $rewrite );
+			try {
+				list( , $minus, $plus ) = $this->correct_to_cash( $order, $card['id'] );
+			} finally {
+				remove_filter( 'query', $rewrite );
+			}
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+			$contender->close();
+		}
+		$retry = array( $order->get_id(), $plus['id'], 2 );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', $retry ) );
+
+		// The order is reopened and completed again in the same, closed session: its late_sale carries both legs.
+		Register_Sale::complete(
+			$this->reopen( $order ),
+			array(
+				'register_id' => $session['register_id'],
+				'session_id'  => $session['id'],
+			)
+		);
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertNotSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		$this->assertEqualsCanonicalizing( array( $minus['id'], $plus['id'] ), array_column( $late[0]['payload']['tender_rows'], 'id' ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry_correction( ...$retry );
+
+		// Assert: no tender_correction late_sale, and the move is counted once.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertSame( array(), array_filter( $late, static fn( $record ) => 'tender_correction' === ( $record['payload']['kind'] ?? null ) ) );
+		$totals = array(
+			'card' => 0.0,
+			'cash' => 0.0,
+		);
+		foreach ( $late as $record ) {
+			foreach ( array_keys( $totals ) as $key ) {
+				$totals[ $key ] += (float) ( $record['payload']['expected_delta'][ $key ] ?? 0 );
+			}
+		}
+		$this->assertSame( '-10.0000', sprintf( '%.4f', $totals['card'] ) );
+		$this->assertSame( '10.0000', sprintf( '%.4f', $totals['cash'] ) );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
+	}
+
+	/** A correction whose late_sale insert fails is retried, and the retry writes the record. */
+	public function test_correction_insert_failure_schedules_retry_that_writes_the_late_sale(): void {
+		// Arrange.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$stuck = static fn( $value, $old ) => $old;
+		$plus  = null;
+
+		// Act: the late_sale sequence cannot advance, so the insert fails.
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10, 2 );
+		try {
+			list( , , $plus ) = $this->correct_to_cash( $order, $card['id'] );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10 );
+		}
+
+		// Assert: nothing written, the retry scheduled.
+		$retry = array( $order->get_id(), $plus['id'], 2 );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', $retry ) );
+
+		// Act: the retry runs once inserts work again.
+		Fiscal_Record_Writers::instance()->retry_correction( ...$retry );
+
+		// Assert.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
+	}
+
+	/** A returned line in a net-positive sale keeps its signed quantity and unit price in the sale snapshot. */
+	public function test_sale_record_snapshot_keeps_returned_line_signed_quantity(): void {
+		// Arrange: 2 sold at 10.00 and 1 returned at 10.00, order total 10.00.
+		$order = $this->order();
+		$sold = new \WC_Order_Item_Product();
+		$sold->set_name( 'Sold item' );
+		$sold->set_quantity( 2 );
+		$sold->set_subtotal( 20 );
+		$sold->set_total( 20 );
+		$order->add_item( $sold );
+		$returned = new \WC_Order_Item_Product();
+		$returned->set_name( 'Returned item' );
+		$returned->set_quantity( -1 );
+		$returned->set_subtotal( -10 );
+		$returned->set_total( -10 );
+		$order->add_item( $returned );
+		$order->calculate_totals( false );
+		$order->save();
+
+		// Act.
+		$this->pay( $order );
+
+		// Assert.
+		$lines = $this->sales( $order->get_id() )[0]['payload']['lines'];
+		$this->assertEqualsWithDelta( 2.0, $lines[0]['qty'], 0.001 );
+		$this->assertEqualsWithDelta( -1.0, $lines[1]['qty'], 0.001 );
+		$this->assertEqualsWithDelta( 10.0, $lines[1]['unit_price_incl'], 0.001 );
 	}
 }

@@ -10,11 +10,14 @@
 namespace WCPOS\WooCommercePOS\API\V2\Writers;
 
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
+use WCPOS\WooCommercePOS\Payments\Contract\Completion_Origin;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
 use WCPOS\WooCommercePOS\Payments\Contract\Sale_State;
+use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Order_Notes;
 use WCPOS\WooCommercePOS\Services\Order_Write_Intent;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
@@ -22,6 +25,7 @@ use WCPOS\WooCommercePOS\Services\Quick_Discount;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Sync\Meta_Entry;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Order_Write_Payload;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -128,12 +132,17 @@ class Order_Writer extends Null_Writer {
 
 	/**
 	 * Hold the order lock (the one the money commands hold) from the
-	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b),
+	 * revision read through the wc/v3 write when the push can move money (ADR 0040 rule 6b) or carries `_wcpos_sale_day_request`,
 	 * so a capture cannot land between the compare and the write. The Mutation_Store record
 	 * lock is already held; Order_Lock falls back to its option lease on servers that cannot
 	 * nest named locks. A note-only push takes no order lock.
 	 */
 	public function with_write_lock( int $id, array $payload, callable $work ) {
+		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
+			if ( '_wcpos_sale_day_request' === Meta_Entry::key( $entry ) ) {
+				return self::under_order_lock( $id, $work );
+			}
+		}
 		if ( ! array_intersect( self::MONEY_SENSITIVE_KEYS, array_keys( $payload ) ) ) {
 			return $work();
 		}
@@ -284,6 +293,7 @@ class Order_Writer extends Null_Writer {
 		$this->stamp_order_till_meta( $id, $payload );
 		$this->order_payload->persist_tax_ids( $id, $payload, false );
 		$this->persist_cashier_store_reassignment( $id, $current, $response_data, $context );
+		$this->persist_sale_day_correction( $id, $current, $response_data, $context );
 		if ( ! empty( $context['frozen_addresses'] ) ) {
 			// A non-editable order's address change lands without wc/v3's calculate_totals().
 			$order = wc_get_order( $id );
@@ -522,7 +532,7 @@ class Order_Writer extends Null_Writer {
 		require_once WC()->plugin_path() . '/includes/admin/wc-admin-functions.php';
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			list( $product_id, $variation_id, $reduced, $name ) = $bindings[ $item->get_id() ] ?? array( 0, 0, 0, '' );
-			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product
+			if ( 0 != $reduced && $item instanceof \WC_Order_Item_Product
 				&& ( $product_id !== $item->get_product_id() || $variation_id !== $item->get_variation_id() ) ) {
 				if ( ! $reduced_now ) {
 					self::move_stock( $order, $item->get_product(), $item->get_name(), $reduced, 'decrease' );
@@ -613,7 +623,7 @@ class Order_Writer extends Null_Writer {
 	}
 
 	/**
-	 * Capture and authorize the cashier/store reassignment lifecycle.
+	 * Capture cashier/store reassignment and the `_wcpos_sale_day_request` row from the incoming document.
 	 *
 	 * @param int      $id          Order ID.
 	 * @param array    $payload     Client order document.
@@ -627,9 +637,13 @@ class Order_Writer extends Null_Writer {
 			return $forward;
 		}
 		$reassignment = array();
+		$sale_day = null;
 		$clear_register = false;
 		foreach ( is_array( $payload['meta_data'] ?? null ) ? $payload['meta_data'] : array() as $entry ) {
 			$key = Meta_Entry::key( $entry );
+			if ( '_wcpos_sale_day_request' === $key ) {
+				$sale_day = Meta_Entry::value( $entry );
+			}
 			if ( '_wcpos_register' === $key ) {
 				$clear_register = '' === Meta_Entry::value( $entry );
 			}
@@ -695,6 +709,7 @@ class Order_Writer extends Null_Writer {
 			'clear_email' => $clear_email,
 			'clear_register' => $clear_register,
 			'reassignment' => $reassignment,
+			'sale_day' => $sale_day,
 			'store_authorized' => $authorized,
 			'pre_store' => $pre_store,
 			'fill_meta' => $fill_meta,
@@ -708,6 +723,7 @@ class Order_Writer extends Null_Writer {
 		// One state from the locked pre-read; adopt_original_tender() moves neither the status nor the completion.
 		$state         = $order ? Ledger::instance()->sale_state( $order ) : null;
 		$reopens       = $state && $state->reopens( (string) ( $forward['status'] ?? '' ) );
+		$context['reopens'] = $reopens;
 		$refusal       = $state ? $this->money_gate( $order, $state, $forward, $lines_changed ) : null;
 		if ( null === $refusal && $reopens ) {
 			$refusal = self::adopt_original_tender( $order );
@@ -736,7 +752,7 @@ class Order_Writer extends Null_Writer {
 		$context['bindings'] = array();
 		foreach ( $context['adjust_stock'] ? $order->get_items( 'line_item' ) : array() as $item ) {
 			$reduced = wc_stock_amount( $item->get_meta( '_reduced_stock', true ) );
-			if ( $reduced > 0 && $item instanceof \WC_Order_Item_Product ) {
+			if ( 0 != $reduced && $item instanceof \WC_Order_Item_Product ) {
 				$context['bindings'][ $item->get_id() ] = array( $item->get_product_id(), $item->get_variation_id(), $reduced, $item->get_name() );
 			}
 		}
@@ -800,6 +816,75 @@ class Order_Writer extends Null_Writer {
 		return new WP_Error( 'wcpos_money_in_motion', 'A payment on this order is still in progress; finish or cancel it first.', array( 'status' => 422 ) + $named );
 	}
 
+	/** Correct a paid sale's reporting day only after its change record has been written. */
+	private function persist_sale_day_correction( int $id, array $current, array $data, array $context ): void {
+		$order = wc_get_order( $id );
+		if ( ! $order ) {
+			return;
+		}
+		// A reopen drops the correction with its completion (Completion_Stamp::reopen()).
+		if ( ! empty( $context['reopens'] ) ) {
+			return;
+		}
+		$value = $context['sale_day'] ?? null;
+		if ( ! is_string( $value ) || strlen( $value ) > 4096 || ! current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
+			return;
+		}
+		$change = json_decode( $value, true );
+		if ( ! is_array( $change ) || ! is_string( $change['at_gmt'] ?? null ) || ! is_string( $change['reason'] ?? null ) || ! is_string( $change['from'] ?? null ) ) {
+			return;
+		}
+		$timestamp = $this->order_payload->validate_client_created_gmt( array( 'date_created_gmt' => $change['at_gmt'] ) );
+		$reason = trim( sanitize_textarea_field( $change['reason'] ) );
+		if ( ! is_int( $timestamp ) || $timestamp > time() || ! preg_match( '/\S/u', $reason ) || Pos_Order_Audit::char_length( $reason ) > 500 ) {
+			return;
+		}
+		// A standing completion: a sale reopened since has no completion to correct.
+		if ( ! is_array( Completion_History::of( $order )->standing() ) || ( ! $order->get_date_paid() && null === Completion_Origin::latest_captured( $order ) ) ) {
+			return;
+		}
+		$to_gmt = gmdate( 'Y-m-d\TH:i:s\Z', $timestamp );
+		$stored = Meta_Normalizer::decode_to_array( $order->get_meta( '_wcpos_sale_day' ) );
+		if ( ( is_string( $stored['at_gmt'] ?? null ) ? $stored['at_gmt'] : '' ) !== $change['from'] ) {
+			return;
+		}
+		$from_gmt = is_string( $stored['at_gmt'] ?? null ) ? $stored['at_gmt'] : ( $order->get_date_paid() ? gmdate( 'Y-m-d\TH:i:s\Z', $order->get_date_paid()->getTimestamp() ) : '' );
+		if ( $from_gmt === $to_gmt ) {
+			return;
+		}
+		$actor = get_current_user_id();
+		$changed_at = time();
+		if ( ! Fiscal_Record_Writers::instance()->record_sale_day_correction( $order, $actor, $from_gmt, $to_gmt, $reason, gmdate( 'Y-m-d H:i:s', $changed_at ) ) ) {
+			$order->add_order_note( __( 'POS sale day change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
+			return;
+		}
+		// A reused record (the retry of a request whose save failed) keeps its own change time; the order follows the record.
+		$record = ( new \WCPOS\WooCommercePOS\Services\Fiscal_Record_Store() )->list(
+			array(
+				'order_id' => $id,
+				'type' => 'sale_day_correction',
+				'per_page' => 1,
+			)
+		)[0] ?? null;
+		if ( $record && ( $record['payload']['changes'][0]['to'] ?? null ) === $to_gmt && ! empty( $record['payload']['changed_at_gmt'] ) ) {
+			$changed_at = (int) strtotime( $record['payload']['changed_at_gmt'] . ' UTC' );
+		}
+		$order->update_meta_data(
+			'_wcpos_sale_day',
+			wp_json_encode(
+				array(
+					'at_gmt' => $to_gmt,
+					'reason' => $reason,
+					'by' => $actor,
+					'changed_at_gmt' => gmdate( 'Y-m-d\TH:i:s\Z', $changed_at ),
+				)
+			)
+		);
+		$order->update_meta_data( '_wcpos_sale_day_at', (string) $timestamp );
+		$order->save();
+		Order_Notes::add_sale_day_change_note( $order, $from_gmt, $to_gmt, $reason );
+	}
+
 	/** Persist reassignment and its mutually exclusive order-note policy. */
 	private function persist_cashier_store_reassignment( int $id, array $current, array $data, array $context ): void {
 		$order = wc_get_order( $id );
@@ -815,11 +900,34 @@ class Order_Writer extends Null_Writer {
 		$change       = $context['reassignment'];
 		$old_user     = $order->get_meta( '_pos_user' );
 		$old_store    = null !== $context['pre_store'] ? $context['pre_store'] : $order->get_meta( '_pos_store' );
-		$cashier_changed = isset( $change['_pos_user'] ) && is_numeric( $change['_pos_user'] )
-			&& (int) $change['_pos_user'] === $current_user && (string) $old_user !== (string) $current_user;
+		$new_user = isset( $change['_pos_user'] ) && is_numeric( $change['_pos_user'] ) ? (int) $change['_pos_user'] : null;
+		$cashier_allowed = $new_user === $current_user;
+		if ( null !== $new_user && ! $cashier_allowed && current_user_can( 'reassign_woocommerce_pos_sales' ) ) {
+			$target_user = get_userdata( $new_user );
+			$cashier_allowed = $target_user && $target_user->has_cap( 'access_woocommerce_pos' );
+		}
+		$cashier_changed = null !== $new_user && $cashier_allowed && (string) $old_user !== (string) $new_user;
 		$store_changed = $context['store_authorized'] && (string) $old_store !== (string) $change['_pos_store'];
+		$reopens = 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' );
+		if ( ( $cashier_changed || $store_changed ) && ! $reopens && ! Fiscal_Record_Writers::instance()->record_reattribution(
+			$order,
+			$current_user,
+			(int) $old_user,
+			$cashier_changed ? $new_user : (int) $old_user,
+			(string) $old_store,
+			$store_changed ? (string) $change['_pos_store'] : (string) $old_store
+		) ) {
+			if ( $store_changed ) {
+				// fill_meta may already have persisted the requested store; restore the pre-push value.
+				$order->update_meta_data( '_pos_store', (string) $old_store );
+				$order->save();
+			}
+			$cashier_changed = false;
+			$store_changed = false;
+			$order->add_order_note( __( 'POS cashier or store change was not applied because its change record could not be written. Try again.', 'woocommerce-pos' ), 0, true );
+		}
 		if ( $cashier_changed ) {
-			$order->update_meta_data( '_pos_user', (string) $current_user );
+			$order->update_meta_data( '_pos_user', (string) $new_user );
 		}
 		if ( $store_changed ) {
 			$order->update_meta_data( '_pos_store', (string) $change['_pos_store'] );
@@ -827,11 +935,11 @@ class Order_Writer extends Null_Writer {
 		if ( $cashier_changed || $store_changed ) {
 			$order->save();
 		}
-		if ( 'pos-open' === ( $data['status'] ?? '' ) && 'pos-open' !== ( $current['status'] ?? '' ) ) {
+		if ( $reopens ) {
 			Order_Notes::add_reopen_note( $order, $current_user, $order->get_meta( '_pos_store' ) );
 		} else {
 			if ( $cashier_changed ) {
-				Order_Notes::add_cashier_change_note( $order, $old_user, $current_user );
+				Order_Notes::add_cashier_change_note( $order, $old_user, $new_user );
 			}
 			if ( $store_changed ) {
 				Order_Notes::add_store_change_note( $order, $old_store, $change['_pos_store'] );

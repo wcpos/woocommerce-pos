@@ -258,6 +258,375 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNull( ( new Register_Session_Store() )->get( $fields['session_id'] ) );
 	}
 
+	/** Dispatch a v2 write under the given store reach answer.
+	 *
+	 * @param array  $answer Store reach filter answer.
+	 * @param string $route Resource path.
+	 * @param array  $fields Request fields.
+	 */
+	private function post_in_reach( array $answer, string $route, array $fields ) {
+		$reach = static function () use ( $answer ) {
+			return $answer;
+		};
+		add_filter( Store_Reach::FILTER, $reach );
+		try {
+			return $this->post( $route, $fields );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+		}
+	}
+
+	/** A status change on another store's session reads as an unknown session and changes nothing. */
+	public function test_session_status_other_store_session_returns_404(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$route = 'sessions/' . $id . '/status';
+		$counting = array(
+			'status' => 'counting',
+			'at' => '2026-09-11T11:00:00Z',
+		);
+		$closing = array(
+			'status' => 'closed',
+			'counted' => array( 'cash' => '0' ),
+			'at' => '2026-09-11T11:00:00Z',
+		);
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), $route, $counting );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$row = ( new Register_Session_Store() )->get( $id );
+		$this->assertSame( 'open', $row['status'] );
+		$this->assertNull( $row['counting_by'] );
+
+		// Arrange.
+		$this->assertSame( 200, $this->post( $route, $counting )->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), $route, $closing );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+	}
+
+	/** Approval on another store's session reads as an unknown session and records no approver. */
+	public function test_session_approve_other_store_session_returns_404(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$this->post(
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'user_pass' => 'approval-fixture',
+			)
+		);
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$approved_by = ( new Register_Session_Store() )->get( $id )['approved_by'];
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/approve',
+			array(
+				'username' => $manager->user_login,
+				'password' => 'approval-fixture',
+				'counted'  => array( 'cash' => '0' ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( $approved_by, ( new Register_Session_Store() )->get( $id )['approved_by'] );
+	}
+
+	/** Replaying another store's session id reads as an unknown session and returns no figures. */
+	public function test_session_replay_other_store_returns_404(): void {
+		// Arrange.
+		$fields = $this->fields( 456 );
+		$this->assertSame( 201, $this->post( 'sessions', $fields )->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), 'sessions', $fields );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'expected_float', $response->get_data() );
+		$this->assertArrayNotHasKey( 'counted_float', $response->get_data() );
+	}
+
+	/** Status, approval and carry on another store's session answer exactly as on an unknown session. */
+	public function test_session_routes_other_store_answers_as_unknown_session(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$unknown_id = wp_generate_uuid4();
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'user_pass' => 'approval-fixture',
+			)
+		);
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+		$bodies = array(
+			'status' => array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			),
+			'approve' => array(
+				'username' => $manager->user_login,
+				'password' => 'approval-fixture',
+				'counted'  => array( 'cash' => '0' ),
+			),
+			'carry' => $this->carry_fields(),
+		);
+		$reach = array( 'store_id' => array( 789 ) );
+
+		foreach ( $bodies as $action => $body ) {
+			// Act.
+			$unknown = $this->post_in_reach( $reach, 'sessions/' . $unknown_id . '/' . $action, $body );
+			$response = $this->post_in_reach( $reach, 'sessions/' . $id . '/' . $action, $body );
+
+			// Assert.
+			$this->assertSame( $unknown->get_status(), $response->get_status(), $action );
+			$this->assertSame( $unknown->get_data(), $response->get_data(), $action );
+		}
+		$this->assertSame( 'open', ( new Register_Session_Store() )->get( $id )['status'] );
+	}
+
+	/** A session on an unassigned register is written only under the unassigned reach, which opens no other store. */
+	public function test_session_status_unassigned_session_follows_unassigned_reach(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( null ) )->get_data()['id'];
+		$other = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$counting = array(
+			'status' => 'counting',
+			'at' => '2026-09-11T11:00:00Z',
+		);
+
+		// Act.
+		$refused = $this->post_in_reach( array( 'store_id' => array( 789 ) ), 'sessions/' . $id . '/status', $counting );
+		$other_store = $this->post_in_reach(
+			array(
+				'store_id' => array( 789 ),
+				'unassigned' => true,
+			),
+			'sessions/' . $other . '/status',
+			$counting
+		);
+		$admitted = $this->post_in_reach(
+			array(
+				'store_id' => array( 789 ),
+				'unassigned' => true,
+			),
+			'sessions/' . $id . '/status',
+			$counting
+		);
+
+		// Assert.
+		$this->assertSame( 404, $refused->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $refused->get_data()['code'] );
+		$this->assertSame( 404, $other_store->get_status() );
+		$this->assertSame( 200, $admitted->get_status() );
+		$this->assertSame( 'counting', $admitted->get_data()['status'] );
+	}
+
+	/** A session in reach keeps its write routes. */
+	public function test_session_status_session_in_reach_succeeds(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( 789 ) )->get_data()['id'];
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'counting', $response->get_data()['status'] );
+	}
+
+	/** Open a store-456 session and start counting while the reach still includes that store. */
+	private function counting_session_in_store_456(): string {
+		$both = array( 'store_id' => array( 456, 789 ) );
+		$response = $this->post_in_reach( $both, 'sessions', $this->fields( 456 ) );
+		$this->assertSame( 201, $response->get_status() );
+		$id = $response->get_data()['id'];
+		$counting = $this->post_in_reach(
+			$both,
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$this->assertSame( 200, $counting->get_status() );
+		return $id;
+	}
+
+	/** A close after the user's reach lost the session's store reads as an unknown session. */
+	public function test_session_status_close_after_store_lost_returns_404(): void {
+		// Arrange.
+		$id = $this->counting_session_in_store_456();
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/status',
+			array(
+				'status' => 'closed',
+				'counted' => array( 'cash' => '100' ),
+				'at' => '2026-09-11T12:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'counting', ( new Register_Session_Store() )->get( $id )['status'] );
+	}
+
+	/** An approval after the user's reach lost the session's store reads as an unknown session. */
+	public function test_session_approve_after_store_lost_returns_404(): void {
+		// Arrange.
+		$id = $this->counting_session_in_store_456();
+		$manager = self::factory()->user->create_and_get(
+			array(
+				'role' => 'subscriber',
+				'user_pass' => 'approval-fixture',
+			)
+		);
+		$manager->add_cap( 'manage_woocommerce_pos_closures' );
+
+		// Act.
+		$response = $this->post_in_reach(
+			array( 'store_id' => array( 789 ) ),
+			'sessions/' . $id . '/approve',
+			array(
+				'username' => $manager->user_login,
+				'password' => 'approval-fixture',
+				'counted'  => array( 'cash' => '0' ),
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertNull( ( new Register_Session_Store() )->get( $id )['approved_by'] );
+	}
+
+	/** Replaying an opening after the user's reach lost the session's store reads as an unknown session. */
+	public function test_session_opening_replay_after_store_lost_returns_404(): void {
+		// Arrange.
+		$fields = $this->fields( 456 );
+		$this->assertSame( 201, $this->post_in_reach( array( 'store_id' => array( 456, 789 ) ), 'sessions', $fields )->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach( array( 'store_id' => array( 789 ) ), 'sessions', $fields );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_found', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'counted_float', $response->get_data() );
+	}
+
+	/** An unassigned session is written when the reach names no stores at all. */
+	public function test_session_status_unassigned_session_admitted_when_reach_unrestricted(): void {
+		// Arrange.
+		$id = $this->post( 'sessions', $this->fields( null ) )->get_data()['id'];
+		$route = 'sessions/' . $id . '/status';
+		$counting = $this->post_in_reach(
+			array(),
+			$route,
+			array(
+				'status' => 'counting',
+				'at' => '2026-09-11T11:00:00Z',
+			)
+		);
+		$this->assertSame( 200, $counting->get_status() );
+
+		// Act.
+		$response = $this->post_in_reach(
+			array(),
+			$route,
+			array(
+				'status' => 'closed',
+				'counted' => array( 'cash' => '100' ),
+				'at' => '2026-09-11T12:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'closed', $response->get_data()['status'] );
+	}
+
+	/** A backdated movement into a closed session outside the reach answers as an unknown session and writes nothing. */
+	public function test_movement_late_into_other_store_closed_session_answers_as_unknown_session(): void {
+		// Arrange.
+		$id = $this->counting_session_in_store_456();
+		$session = ( new Register_Session_Store() )->get( $id );
+		( new Closure_Store() )->create(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $id,
+				'number' => 1,
+				'opened_at_gmt' => $session['opened_at_gmt'],
+				'closed_at_gmt' => '2026-09-11 12:00:00',
+				'till_expected' => array( 'cash' => '100.0000' ),
+				'counted' => array( 'cash' => '100.0000' ),
+				'period_sales_total' => '0.0000',
+				'period_refunds_total' => '0.0000',
+				'perpetual_sales_total' => '0.0000',
+				'perpetual_refunds_total' => '0.0000',
+				'unsynced_count' => 0,
+				'unsynced_total' => '0.0000',
+				'first_sale_counter' => null,
+				'last_sale_counter' => null,
+				'software_version' => 'fixture',
+				'printed_at_gmt' => null,
+				'breakdowns' => array( 'transaction_count' => 0 ),
+			)
+		);
+		$this->assertSame( 'closed', ( new Register_Session_Store() )->get( $id )['status'] );
+		$late = array( 'type' => 'late_movement' );
+		$before = ( new Fiscal_Record_Store() )->count( $late );
+		$movement = array(
+			'id' => wp_generate_uuid4(),
+			'type' => 'paid_out',
+			'amount' => '40',
+			'reason' => 'Backdated',
+			'created_at' => '2026-09-11T10:59:59Z',
+		);
+
+		// Act.
+		$unknown = $this->movement_in_reach_789( array( 'session_id' => wp_generate_uuid4() ) + $movement );
+		$response = $this->movement_in_reach_789( array( 'session_id' => $id ) + $movement );
+
+		// Assert.
+		$this->assertSame( $unknown->get_status(), $response->get_status() );
+		$this->assertSame( $unknown->get_data(), $response->get_data() );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_open', $response->get_data()['code'] );
+		$this->assertNull( ( new Cash_Movement_Store() )->get( $id, $movement['id'] ) );
+		$this->assertSame( $before, ( new Fiscal_Record_Store() )->count( $late ) );
+	}
+
 	/** Ids that name another store's rows are refused by identity, before any row is read or returned. */
 	public function test_carry_replay_checks_the_returned_rows_store_reach(): void {
 		$hidden = $this->fields( 456 );
@@ -1866,6 +2235,145 @@ class Test_Sessions_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertSame( 409, $this->post( 'movements', $fields )->get_status() );
 		}
 	}
+
+	/** Post a cash movement while the request's store reach is store 789 only.
+	 *
+	 * @param array $fields Request fields.
+	 */
+	private function movement_in_reach_789( array $fields ) {
+		$reach = static function () {
+			return array( 'store_id' => array( 789 ) );
+		};
+		add_filter( Store_Reach::FILTER, $reach );
+		try {
+			return $this->post( 'movements', $fields );
+		} finally {
+			remove_filter( Store_Reach::FILTER, $reach );
+		}
+	}
+
+	/** A movement on a session outside the store reach answers exactly as one on an unknown session. */
+	public function test_movement_create_other_store_session_answers_as_unknown_session(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$movement = array(
+			'id' => wp_generate_uuid4(),
+			'type' => 'paid_out',
+			'amount' => '200',
+			'reason' => 'Supplies',
+			'created_at' => '2026-09-11T10:00:00Z',
+		);
+
+		// Act.
+		$unknown = $this->movement_in_reach_789( array( 'session_id' => wp_generate_uuid4() ) + $movement );
+		$response = $this->movement_in_reach_789( array( 'session_id' => $session_id ) + $movement );
+
+		// Assert.
+		$this->assertSame( $unknown->get_status(), $response->get_status() );
+		$this->assertSame( $unknown->get_data(), $response->get_data() );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_open', $response->get_data()['code'] );
+		$this->assertSame( array(), ( new Cash_Movement_Store() )->list( $session_id ) );
+	}
+
+	/** A reversal on a session outside the store reach answers as an unknown session and leaves its target unvoided. */
+	public function test_movement_void_other_store_session_answers_as_unknown_session(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$target = $this->movement( $session_id, 'paid_in', '20', 'Change' );
+		$movement = array(
+			'id' => wp_generate_uuid4(),
+			'type' => 'void',
+			'amount' => '0',
+			'voids' => $target,
+			'reason' => '',
+			'created_at' => '2026-09-11T10:00:00Z',
+		);
+
+		// Act.
+		$unknown = $this->movement_in_reach_789( array( 'session_id' => wp_generate_uuid4() ) + $movement );
+		$response = $this->movement_in_reach_789( array( 'session_id' => $session_id ) + $movement );
+
+		// Assert.
+		$this->assertSame( $unknown->get_status(), $response->get_status() );
+		$this->assertSame( $unknown->get_data(), $response->get_data() );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_open', $response->get_data()['code'] );
+		$this->assertNull( ( new Cash_Movement_Store() )->get( $session_id, $target )['voided_by'] );
+	}
+
+	/** A replay naming a movement outside the store reach answers as an unknown session and returns no movement. */
+	public function test_movement_replay_other_store_answers_as_unknown_session(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 456 ) )->get_data()['id'];
+		$movement_id = $this->movement( $session_id, 'paid_in', '20', 'Change' );
+
+		// Act.
+		$unknown = $this->movement_in_reach_789(
+			array(
+				'id' => $movement_id,
+				'session_id' => wp_generate_uuid4(),
+			)
+		);
+		$response = $this->movement_in_reach_789(
+			array(
+				'id' => $movement_id,
+				'session_id' => $session_id,
+			)
+		);
+
+		// Assert.
+		$this->assertSame( $unknown->get_status(), $response->get_status() );
+		$this->assertSame( $unknown->get_data(), $response->get_data() );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'amount', $response->get_data() );
+		$this->assertArrayNotHasKey( 'reason', $response->get_data() );
+
+		// Arrange.
+		$movement = array(
+			'id' => $movement_id,
+			'type' => 'paid_in',
+			'amount' => '20',
+			'reason' => 'Change',
+			'created_at' => '2026-09-11T10:00:00Z',
+		);
+
+		// Act.
+		$unknown = $this->movement_in_reach_789( array( 'session_id' => wp_generate_uuid4() ) + $movement );
+		$response = $this->movement_in_reach_789( array( 'session_id' => $session_id ) + $movement );
+
+		// Assert.
+		$this->assertSame( $unknown->get_status(), $response->get_status() );
+		$this->assertSame( $unknown->get_data(), $response->get_data() );
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'wcpos_session_not_open', $response->get_data()['code'] );
+		$this->assertArrayNotHasKey( 'amount', $response->get_data() );
+		$this->assertArrayNotHasKey( 'reason', $response->get_data() );
+	}
+
+	/** A movement on a session inside the store reach is recorded. */
+	public function test_movement_session_in_reach_succeeds(): void {
+		// Arrange.
+		$session_id = $this->post( 'sessions', $this->fields( 789 ) )->get_data()['id'];
+
+		// Act.
+		$response = $this->movement_in_reach_789(
+			array(
+				'id' => wp_generate_uuid4(),
+				'session_id' => $session_id,
+				'type' => 'paid_in',
+				'amount' => '20',
+				'reason' => 'Change',
+				'created_at' => '2026-09-11T10:00:00Z',
+			)
+		);
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertCount( 1, ( new Cash_Movement_Store() )->list( $session_id ) );
+	}
+
 	/** Lists are newest first, paginated, validated and extension-scoped. */
 	public function test_list_pagination_and_extension_filters(): void {
 		$a = $this->post( 'sessions', $this->fields( 765 ) )->get_data();

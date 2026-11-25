@@ -345,7 +345,15 @@ class Receipts_Controller extends WP_REST_Controller {
 		} catch ( Print_Counter_Busy_Exception $e ) {
 			return $this->counter_busy();
 		} catch ( \Throwable $e ) {
-			Logger::log( sprintf( 'Receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
+			Logger::error(
+				'Receipt PDF render failed',
+				array(
+					'order_id'  => $order->get_id(),
+					'exception' => get_class( $e ),
+					'message'   => $e->getMessage(),
+					'at'        => basename( $e->getFile() ) . ':' . $e->getLine(),
+				)
+			);
 
 			return new WP_Error(
 				'wcpos_receipt_pdf_failed',

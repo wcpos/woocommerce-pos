@@ -155,7 +155,10 @@ final class Integrity_Digest {
 		if ( ! function_exists( 'dbDelta' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		}
-		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
+		$table = $this->table_name();
+		dbDelta( $this->schema_sql( $table, $wpdb->get_charset_collate() ) );
+		$db_error = (string) $wpdb->last_error; // Read before the probe below clears it.
+		Health::log_if_missing( $table, $db_error );
 	}
 
 
@@ -166,6 +169,10 @@ final class Integrity_Digest {
 	 * range-checksum candidate, whose checksum covers the full rate row).
 	 */
 	public function register_hooks(): void {
+		if ( Digest_Support::is_disabled() ) {
+			add_filter( 'site_status_tests', array( __CLASS__, 'site_status_tests' ) );
+			return;
+		}
 		add_action( 'woocommerce_new_product', array( $this, 'record_post_saved' ), 10, 1 );
 		add_action( 'woocommerce_update_product', array( $this, 'record_post_saved' ), 10, 1 );
 		add_action( 'woocommerce_new_product_variation', array( $this, 'record_post_saved' ), 10, 1 );
@@ -237,6 +244,10 @@ final class Integrity_Digest {
 	 */
 	public static function run_scheduled_rebuild(): void {
 		$lease = get_transient( self::REBUILD_LOCK );
+		if ( Digest_Support::is_disabled() ) {
+			self::release_rebuild_lock( $lease );
+			return;
+		}
 		try {
 			( new self() )->rebuild( true );
 		} catch ( \Throwable $exception ) {
@@ -411,6 +422,9 @@ final class Integrity_Digest {
 	 * self-heals. Safe to call repeatedly — a flushed digest is no longer pending.
 	 */
 	public static function flush_pending_digests(): void {
+		if ( Digest_Support::is_disabled() ) {
+			return;
+		}
 		if ( null !== self::$pending ) {
 			self::$pending->flush();
 		}
@@ -421,6 +435,41 @@ final class Integrity_Digest {
 	 */
 	public static function flush_pending_digests_at_shutdown(): void {
 		self::queue()->flush_at_shutdown();
+	}
+
+	/**
+	 * Add the Site Health notice; registered only when the digest is off.
+	 *
+	 * @param array $tests Site Health tests.
+	 *
+	 * @return array
+	 */
+	public static function site_status_tests( array $tests ): array {
+		$tests['direct']['wcpos_sync_digest_sqlite'] = array(
+			'label' => __( 'WCPOS sync integrity checks', 'woocommerce-pos' ),
+			'test'  => array( __CLASS__, 'site_health_test' ),
+		);
+
+		return $tests;
+	}
+
+	/**
+	 * Site Health result: the integrity digest is off on SQLite (#2661).
+	 *
+	 * @return array
+	 */
+	public static function site_health_test(): array {
+		return array(
+			'test'        => 'wcpos_sync_digest_sqlite',
+			'status'      => 'recommended',
+			'badge'       => array(
+				'label' => __( 'WCPOS', 'woocommerce-pos' ),
+				'color' => 'orange',
+			),
+			'label'       => __( 'WCPOS sync integrity checks are off on SQLite', 'woocommerce-pos' ),
+			'description' => '<p>' . esc_html__( 'The POS still syncs through its change log, but the background integrity check that catches changes made outside WordPress (direct database edits, some imports) does not run on this database. SQLite is not a supported database for WCPOS.', 'woocommerce-pos' ) . '</p>',
+			'actions'     => '',
+		);
 	}
 
 	/**

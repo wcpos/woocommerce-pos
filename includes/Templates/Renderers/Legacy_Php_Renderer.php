@@ -39,8 +39,11 @@ class Legacy_Php_Renderer implements Receipt_Renderer_Interface {
 			throw new \RuntimeException( esc_html__( 'Failed to create temporary template file.', 'woocommerce-pos' ) );
 		}
 
-		include $temp_file;
-		@unlink( $temp_file );
+		try {
+			include $temp_file;
+		} finally {
+			@unlink( $temp_file );
+		}
 	}
 
 	/**
