@@ -1517,6 +1517,7 @@ class Receipt_Data_Schema {
 					'name' => __( 'Payment Method', 'woocommerce-pos' ),
 					'sales' => __( 'Sales', 'woocommerce-pos' ),
 					'refunds' => __( 'Refunds', 'woocommerce-pos' ),
+					'corrections' => __( 'Corrections', 'woocommerce-pos' ),
 				),
 				'tax_rates' => array(
 					'name' => __( 'Tax Rate', 'woocommerce-pos' ),

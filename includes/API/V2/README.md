@@ -158,6 +158,21 @@ wire (`payment.commands` is never answered). `record`'s mismatched replay is 422
 `wcpos_command_conflict` (was 409 `wcpos_payment_conflict`); `wcpos_payment_conflict` remains the
 state conflict (a `submit` of a cancelled or superseded attempt, a live payment on the order).
 
+## Correcting a payment: `POST …/payments/{uuid}/correct` (2.0.x)
+
+A money command (envelope above) that moves a captured manual row's money to another method: it appends R- and R+ and edits no row.
+
+- Body: `method_id` and an optional `reference` string (tags stripped, capped at 100 characters), stored on R+ and named in the order note.
+- Target: any POS-enabled method except stored value. R+ is always a manual row with no provider.
+- 200: `payment` is R+. When the target is not a plain manual method (a gateway or provider the customer paid on the side),
+  R+ carries `unverified: true`, permanently: the money was recorded by hand and no provider confirmed it.
+  A client must never offer a provider refund or void for such a row.
+- Known behaviour: the order's payment method becomes the target, so WP Admin offers its own "Refund via <gateway>" on it. WCPOS never hides
+  or blocks that button; the gateway holds no transaction for this payment and answers for itself.
+- 422 `wcpos_payment_not_correctable` with `reason`: `not_captured`, `voidable`, `is_reversal`, `already_corrected`, `refunded`,
+  `provider_row`, `method_invalid`, `same_method`, or `off_rounding_increment` (with `increment` and `amount`).
+- 403 `wcpos_tender_correction_unavailable` while a fiscal module is active.
+
 ## Gateway attempts whose outcome is unknown (2.0.0, ADR 0040 rule 7)
 
 A `submit` attempt is stored `sent` before the gateway runs. When the gateway's answer is lost (it threw after

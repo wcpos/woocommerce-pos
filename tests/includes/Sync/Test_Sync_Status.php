@@ -162,7 +162,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 					$wpdb->prefix . 'wcpos_sync_mutations',
 				),
 				'schema_version' => null,
-				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment', 'order_sale_day_correction' ),
+				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment', 'order_sale_day_correction', 'tender_correction' ),
 			),
 			$response->get_data()
 		);
@@ -184,7 +184,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 				'healthy'        => true,
 				'missing_tables' => array(),
 				'schema_version' => Api::SCHEMA_VERSION,
-				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment', 'order_sale_day_correction' ),
+				'capabilities'   => array( 'products_id_fast_path', 'order_cashier_reassignment', 'order_sale_day_correction', 'tender_correction' ),
 			),
 			$response->get_data()
 		);
@@ -367,5 +367,30 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array_values( $capabilities ), $capabilities );
 		$this->assertContains( 'products_id_fast_path', $capabilities );
 		$this->assertContains( 'order_cashier_reassignment', $capabilities );
+	}
+
+	/**
+	 * Status advertises tender correction by default.
+	 */
+	public function test_sync_status_lists_tender_correction_by_default(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertContains( 'tender_correction', $response->get_data()['capabilities'] );
+	}
+
+	/**
+	 * A fiscal module withdraws tender correction from the status capabilities.
+	 */
+	public function test_sync_status_with_fiscal_module_active_omits_tender_correction(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+		add_filter( 'wcpos_fiscal_module_active', '__return_true' );
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'products_id_fast_path', 'order_cashier_reassignment', 'order_sale_day_correction' ), $response->get_data()['capabilities'] );
 	}
 }

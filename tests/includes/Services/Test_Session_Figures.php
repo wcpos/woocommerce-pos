@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_Stamp;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed;
@@ -1088,5 +1089,125 @@ class Test_Session_Figures extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertSame( array( $session['id'] ), $this->indexed_sessions( $order ) );
 		$this->assertSame( array( $rows[0]['id'] ), array_column( Session_Figures::for_session( $session )->legs()[ $order->get_id() ] ?? array(), 'id' ) );
+	}
+
+	/**
+	 * A 10.00 sale completed in a session by one tender of the method, and its row.
+	 *
+	 * @param array  $session   Session row.
+	 * @param string $method_id Tender method.
+	 * @return array{0: \WC_Order, 1: array}
+	 */
+	private function ten_in( array $session, string $method_id ): array {
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_total( '10.00' );
+		$order->save();
+		$row = Register_Sale::cash(
+			$order,
+			array(
+				'method_id'   => $method_id,
+				'amount'      => '10.00',
+				'register_id' => $session['register_id'],
+				'session_id'  => $session['id'],
+			),
+			array(
+				'register_id' => $session['register_id'],
+				'session_id'  => $session['id'],
+			)
+		);
+		$this->assertIsArray( $row );
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		return array( wc_get_order( $order->get_id() ), $row );
+	}
+
+	/**
+	 * The drawer equation's terms add up to expected cash.
+	 *
+	 * @param Session_Figures $figures Figures.
+	 */
+	private function assert_drawer_identity( Session_Figures $figures ): void {
+		$terms   = $figures->terms();
+		$amounts = array( $terms['float'], $terms['cash_sales']['amount'], $terms['cash_corrections'] ?? '0', '-' . $terms['paid_out']['amount'], '-' . $terms['cash_refunds']['amount'] );
+		foreach ( $terms['paid_in'] as $paid_in ) {
+			$amounts[] = $paid_in['amount'];
+		}
+		$this->assertSame( $figures->expected()['cash'], Closure_Store::sum( $amounts ) );
+	}
+
+	/** A card sale corrected to cash in an open session moves its money to the drawer as a correction, never a sale or a refund. */
+	public function test_figures_card_corrected_to_cash_in_open_session_count_a_cash_correction(): void {
+		// Arrange.
+		$session             = $this->closure_session( null, 'open' );
+		list( $order, $row ) = $this->ten_in( $session, 'pos_card' );
+
+		// Act.
+		$this->assertIsArray( Ledger::instance()->correct( $order, $row['id'], 'pos_cash' ) );
+		$figures = Session_Figures::for_session( $session );
+
+		// Assert.
+		$terms    = $figures->terms();
+		$expected = $figures->expected();
+		$this->assertSame( '0.0000', $expected['card'] );
+		$this->assertSame( Closure_Store::sum( array( $terms['float'], '10' ) ), $expected['cash'] );
+		$this->assertSame(
+			array(
+				'amount' => '0.0000',
+				'count'  => 0,
+			),
+			$terms['cash_sales']
+		);
+		$this->assertSame(
+			array(
+				'amount' => '0.0000',
+				'count'  => 0,
+			),
+			$terms['cash_refunds']
+		);
+		$this->assertSame( '10.0000', $terms['cash_corrections'] ?? null );
+		$this->assertSame( 0, $figures->refund_count() );
+		$methods = $figures->payment_methods();
+		$this->assertSame( '10.0000', $methods['card']['sales'] );
+		$this->assertSame( '0.0000', $methods['card']['refunds'] );
+		$this->assertSame( '-10.0000', $methods['card']['corrections'] ?? null );
+		$this->assertSame( '0.0000', $methods['cash']['sales'] );
+		$this->assertSame( '0.0000', $methods['cash']['refunds'] );
+		$this->assertSame( '10.0000', $methods['cash']['corrections'] ?? null );
+		$period = $figures->period_amounts();
+		$this->assertSame( '10.0000', Closure_Store::sum( $period['sales'] ) );
+		$this->assertSame( '0.0000', Closure_Store::sum( $period['refunds'] ) );
+		$this->assert_drawer_identity( $figures );
+	}
+
+	/** A cash sale corrected to card leaves the drawer as a negative correction, never a refund. */
+	public function test_figures_cash_corrected_to_card_count_a_negative_cash_correction(): void {
+		// Arrange.
+		$session             = $this->closure_session( null, 'open' );
+		list( $order, $row ) = $this->ten_in( $session, 'pos_cash' );
+
+		// Act.
+		$this->assertIsArray( Ledger::instance()->correct( $order, $row['id'], 'pos_card' ) );
+		$figures = Session_Figures::for_session( $session );
+
+		// Assert.
+		$terms = $figures->terms();
+		$this->assertSame( '-10.0000', $terms['cash_corrections'] ?? null );
+		$this->assertSame(
+			array(
+				'amount' => '0.0000',
+				'count'  => 0,
+			),
+			$terms['cash_refunds']
+		);
+		$this->assertSame( 0, $figures->refund_count() );
+		$this->assertSame(
+			array(
+				'amount' => '10.0000',
+				'count'  => 1,
+			),
+			$terms['cash_sales']
+		);
+		$this->assert_drawer_identity( $figures );
 	}
 }

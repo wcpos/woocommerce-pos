@@ -11,6 +11,7 @@ use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Service_Groups;
@@ -33,6 +34,7 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		add_action( 'woocommerce_order_status_cancelled', array( $writers, 'handle_cancellation' ), 10, 2 );
 		add_action( 'woocommerce_order_refunded', array( $writers, 'handle_refund' ), 10, 2 );
 		add_action( 'wcpos_sale_completed', array( $writers, 'handle_sale_completed' ), 10, 2 );
+		add_action( 'wcpos_payment_corrected', array( $writers, 'handle_correction' ), 10, 4 );
 		foreach ( Fiscal_Record_Store::TYPES as $type ) {
 			delete_option( 'wcpos_fiscal_sequence_' . $type );
 		}
@@ -2275,6 +2277,270 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 				)
 			)
 		);
+	}
+
+	/**
+	 * A 10.00 card sale completed in a session, and its card row.
+	 *
+	 * @param array $session Session row.
+	 * @return array{0: \WC_Order, 1: array}
+	 */
+	private function card_sale_in( array $session ): array {
+		$order = $this->order();
+		$order->set_total( '10.00' );
+		$order->save();
+		$row = Register_Sale::cash(
+			$order,
+			array(
+				'method_id'   => 'pos_card',
+				'amount'      => '10.00',
+				'register_id' => $session['register_id'],
+				'session_id'  => $session['id'],
+			),
+			array(
+				'register_id' => $session['register_id'],
+				'session_id'  => $session['id'],
+			)
+		);
+		$this->assertIsArray( $row );
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		return array( wc_get_order( $order->get_id() ), $row );
+	}
+
+	/**
+	 * Correct a row to cash and answer the original, R- and R+ as stored.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @param string    $id    Row id.
+	 * @return array{0: array, 1: array, 2: array}
+	 */
+	private function correct_to_cash( \WC_Order $order, string $id ): array {
+		$plus = Ledger::instance()->correct( wc_get_order( $order->get_id() ), $id, 'pos_cash' );
+		$this->assertIsArray( $plus );
+		$rows  = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+		$minus = current( array_filter( $rows, static fn( $row ) => $id === ( $row['reverses'] ?? null ) ) );
+		$this->assertIsArray( $minus );
+		return array( (array) Ledger::instance()->find( wc_get_order( $order->get_id() ), $id ), $minus, $plus );
+	}
+
+	/**
+	 * The order's late_sale records.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function late_sales( int $order_id ): array {
+		return ( new Fiscal_Record_Store() )->list(
+			array(
+				'type'     => 'late_sale',
+				'order_id' => $order_id,
+			)
+		);
+	}
+
+	/** A correction after its session's closure writes one late_sale that moves the money between tenders. */
+	public function test_correction_in_closed_session_writes_one_tender_correction_late_sale(): void {
+		// Arrange.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		$closure             = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$sales               = $this->sales( $order->get_id() );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+
+		// Act.
+		list( , $minus, $plus ) = $this->correct_to_cash( $order, $card['id'] );
+
+		// Assert.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		$this->assertSame( array( $minus['id'], $plus['id'] ), array_column( $late[0]['payload']['tender_rows'], 'id' ) );
+		$this->assertSame( '-10.0000', $late[0]['payload']['expected_delta']['card'] );
+		$this->assertSame( '10.0000', $late[0]['payload']['expected_delta']['cash'] );
+		$this->assertSame( $closure['id'], $late[0]['closure_id'] );
+		$this->assertSame( $sales[0]['id'], $late[0]['corrects_record_id'] );
+		$this->assertSame( Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] ), $late[0]['source_id'] );
+		$this->assertSame( $sales, $this->sales( $order->get_id() ) );
+	}
+
+	/** Running the correction writer again writes nothing twice. */
+	public function test_correction_handled_twice_writes_one_late_sale(): void {
+		// Arrange.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		list( $original, $minus, $plus ) = $this->correct_to_cash( $order, $card['id'] );
+		$this->assertCount( 1, $this->late_sales( $order->get_id() ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->handle_correction( wc_get_order( $order->get_id() ), $original, $minus, $plus );
+
+		// Assert.
+		$this->assertCount( 1, $this->late_sales( $order->get_id() ) );
+	}
+
+	/** A correction in a session still open is left to the close. */
+	public function test_correction_in_open_session_writes_no_late_sale(): void {
+		// Arrange.
+		$session             = $this->closure_session( null, 'open' );
+		list( $order, $card ) = $this->card_sale_in( $session );
+
+		// Act.
+		$this->correct_to_cash( $order, $card['id'] );
+
+		// Assert.
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+	}
+
+	/** The closure reads a correction's late_sale as a tender move: no sales, no refunds. */
+	public function test_correction_late_sale_corrections_for_closure_nets_sales_and_refunds_to_zero(): void {
+		// Arrange.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		$closure             = ( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$this->correct_to_cash( $order, $card['id'] );
+
+		// Act.
+		$corrections = array_values( array_filter( ( new Closure_Store() )->corrections_for( $closure['id'] ), static fn( $row ) => 'late_sale' === $row['type'] ) );
+
+		// Assert.
+		$this->assertCount( 1, $corrections );
+		$figures = $corrections[0]['figures'];
+		$this->assertSame( '-10.0000', $figures['expected_delta']['card'] );
+		$this->assertSame( '10.0000', $figures['expected_delta']['cash'] );
+		$this->assertSame( '0.0000', $figures['sales_delta'] );
+		$this->assertSame( '0.0000', $figures['refunds_delta'] );
+	}
+
+	/** A correction a close's register lock turns away is retried, and the retry writes the record. */
+	public function test_correction_while_register_is_held_schedules_retry_that_writes_the_late_sale(): void {
+		// Arrange.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$name      = 'wcpos_register_' . strtolower( $session['register_id'] );
+		$rewrite   = static fn( $sql ) => str_replace( "GET_LOCK( '" . $name . "', 10 )", "GET_LOCK( '" . $name . "', 0 )", $sql );
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$plus      = null;
+
+		// Act: another connection holds the register; the writer's wait becomes none.
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) );
+			add_filter( 'query', $rewrite );
+			try {
+				list( , , $plus ) = $this->correct_to_cash( $order, $card['id'] );
+			} finally {
+				remove_filter( 'query', $rewrite );
+			}
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+			$contender->close();
+		}
+
+		// Assert: nothing written, the retry scheduled.
+		$retry = array( $order->get_id(), $plus['id'], 2 );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', $retry ) );
+
+		// Act: the retry runs once the register is free.
+		Fiscal_Record_Writers::instance()->retry_correction( ...$retry );
+
+		// Assert.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
+	}
+
+	/** A deferred correction whose legs a later completion's late_sale carried writes nothing on its retry. */
+	public function test_correction_legs_carried_by_a_later_completion_late_sale_are_not_written_again(): void {
+		// Arrange: the correction's late check is deferred by a held register.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$name      = 'wcpos_register_' . strtolower( $session['register_id'] );
+		$rewrite   = static fn( $sql ) => str_replace( "GET_LOCK( '" . $name . "', 10 )", "GET_LOCK( '" . $name . "', 0 )", $sql );
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$minus     = null;
+		$plus      = null;
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) );
+			add_filter( 'query', $rewrite );
+			try {
+				list( , $minus, $plus ) = $this->correct_to_cash( $order, $card['id'] );
+			} finally {
+				remove_filter( 'query', $rewrite );
+			}
+		} finally {
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+			$contender->close();
+		}
+		$retry = array( $order->get_id(), $plus['id'], 2 );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', $retry ) );
+
+		// The order is reopened and completed again in the same, closed session: its late_sale carries both legs.
+		Register_Sale::complete(
+			$this->reopen( $order ),
+			array(
+				'register_id' => $session['register_id'],
+				'session_id'  => $session['id'],
+			)
+		);
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertNotSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		$this->assertEqualsCanonicalizing( array( $minus['id'], $plus['id'] ), array_column( $late[0]['payload']['tender_rows'], 'id' ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry_correction( ...$retry );
+
+		// Assert: no tender_correction late_sale, and the move is counted once.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertSame( array(), array_filter( $late, static fn( $record ) => 'tender_correction' === ( $record['payload']['kind'] ?? null ) ) );
+		$totals = array(
+			'card' => 0.0,
+			'cash' => 0.0,
+		);
+		foreach ( $late as $record ) {
+			foreach ( array_keys( $totals ) as $key ) {
+				$totals[ $key ] += (float) ( $record['payload']['expected_delta'][ $key ] ?? 0 );
+			}
+		}
+		$this->assertSame( '-10.0000', sprintf( '%.4f', $totals['card'] ) );
+		$this->assertSame( '10.0000', sprintf( '%.4f', $totals['cash'] ) );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
+	}
+
+	/** A correction whose late_sale insert fails is retried, and the retry writes the record. */
+	public function test_correction_insert_failure_schedules_retry_that_writes_the_late_sale(): void {
+		// Arrange.
+		$session             = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$stuck = static fn( $value, $old ) => $old;
+		$plus  = null;
+
+		// Act: the late_sale sequence cannot advance, so the insert fails.
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10, 2 );
+		try {
+			list( , , $plus ) = $this->correct_to_cash( $order, $card['id'] );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10 );
+		}
+
+		// Assert: nothing written, the retry scheduled.
+		$retry = array( $order->get_id(), $plus['id'], 2 );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertNotFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', $retry ) );
+
+		// Act: the retry runs once inserts work again.
+		Fiscal_Record_Writers::instance()->retry_correction( ...$retry );
+
+		// Assert.
+		$late = $this->late_sales( $order->get_id() );
+		$this->assertCount( 1, $late );
+		$this->assertSame( 'tender_correction', $late[0]['payload']['kind'] ?? null );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
 	}
 
 	/** A returned line in a net-positive sale keeps its signed quantity and unit price in the sale snapshot. */

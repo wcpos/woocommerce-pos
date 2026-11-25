@@ -51,6 +51,9 @@ final class Fiscal_Record_Writers {
 	/** WP-Cron hook that retries a reallocation after its register was held by a close. */
 	public const ALLOCATION_RETRY_HOOK = 'wcpos_fiscal_allocation_retry';
 
+	/** WP-Cron hook that retries a tender correction's late check after its register was held by a close. */
+	public const CORRECTION_RETRY_HOOK = 'wcpos_fiscal_correction_retry';
+
 	/** A close holds its register for seconds, so a minute later it has committed or failed. */
 	private const LATE_RETRY_DELAY_SECONDS = 60;
 
@@ -83,6 +86,8 @@ final class Fiscal_Record_Writers {
 		add_action( 'woocommerce_order_refunded', array( $this, 'handle_refund' ), 10, 2 );
 		add_action( self::REFUND_RETRY_HOOK, array( $this, 'handle_refund' ), 10, 3 );
 		add_action( self::ALLOCATION_RETRY_HOOK, array( $this, 'retry_allocation' ), 10, 5 );
+		add_action( 'wcpos_payment_corrected', array( $this, 'handle_correction' ), 10, 4 );
+		add_action( self::CORRECTION_RETRY_HOOK, array( $this, 'retry_correction' ), 10, 3 );
 	}
 
 	/** Construct once from the order-services-ready hook. */
@@ -568,19 +573,8 @@ final class Fiscal_Record_Writers {
 		if ( $closure && $sale ) {
 			$source_id = Fiscal_Record_Store::digest_source_id( 'late_sale:' . $sale['id'] );
 			// Legs an earlier completion's late correction already carried are not late again.
-			$carried = array();
-			foreach ( $this->store->list(
-				array(
-					'order_id' => $order->get_id(),
-					'type'     => 'late_sale',
-					'per_page' => Fiscal_Record_Store::MAX_PER_PAGE,
-				)
-			) as $earlier ) {
-				if ( $earlier['source_id'] !== $source_id ) {
-					$carried = array_merge( $carried, array_column( (array) ( $earlier['payload']['tender_rows'] ?? array() ), 'id' ) );
-				}
-			}
-			$rows = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => ! in_array( $leg['id'] ?? null, $carried, true ) ) );
+			$carried = $this->carried_leg_ids( $order->get_id(), $source_id );
+			$rows    = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => ! in_array( $leg['id'] ?? null, $carried, true ) ) );
 			if ( $rows ) {
 				$delta = Session_Figures::tender_totals( $rows );
 				// Where and when the completion took the money, as the sale row says (the order's write-once
@@ -614,6 +608,30 @@ final class Fiscal_Record_Writers {
 				);
 			}
 		}
+	}
+
+	/**
+	 * The ids of the legs the order's other late_sale records already carry: a leg one late_sale
+	 * names is counted, and no second late_sale may name it again.
+	 *
+	 * @param int    $order_id         Order ID.
+	 * @param string $except_source_id The caller's own late_sale source id, whose legs a replay may rewrite.
+	 * @return array Leg ids.
+	 */
+	private function carried_leg_ids( int $order_id, string $except_source_id ): array {
+		$carried = array();
+		foreach ( $this->store->list(
+			array(
+				'order_id' => $order_id,
+				'type'     => 'late_sale',
+				'per_page' => Fiscal_Record_Store::MAX_PER_PAGE,
+			)
+		) as $earlier ) {
+			if ( $earlier['source_id'] !== $except_source_id ) {
+				$carried = array_merge( $carried, array_column( (array) ( $earlier['payload']['tender_rows'] ?? array() ), 'id' ) );
+			}
+		}
+		return $carried;
 	}
 
 	/**
@@ -1098,6 +1116,118 @@ final class Fiscal_Record_Writers {
 	 */
 	private function log_retry_dropped( int $order_id, int $refund_id, int $attempt ): void {
 		Logger::log( sprintf( 'Fiscal late check for refund #%d on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $refund_id, $order_id, $attempt ) );
+	}
+
+	/**
+	 * Record a tender correction (#3647) its session's closure did not count: the money moved between tenders.
+	 *
+	 * @param WC_Order $order    Order.
+	 * @param array    $original The corrected row.
+	 * @param array    $minus    R-, the row's money out of its method.
+	 * @param array    $plus     R+, the same money on the target method.
+	 * @param int      $attempt  Attempt, counted by the retry hook.
+	 */
+	public function handle_correction( WC_Order $order, array $original, array $minus, array $plus, int $attempt = 1 ): void {
+		try {
+			$session_id = strtolower( (string) ( $plus['session_id'] ?? '' ) );
+			if ( ! Pos_Uuid::is_uuid( $session_id ) ) {
+				return;
+			}
+			$written = true;
+			$locked  = $this->under_close_locks(
+				$order->get_id(),
+				$session_id,
+				function () use ( $order, $minus, $plus, $session_id, &$written ): void {
+					$written = $this->record_correction( $order, $minus, $plus, $session_id );
+				}
+			);
+			if ( ! $locked ) {
+				Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d could not take the order and register locks.', $plus['id'], $order->get_id() ) );
+			}
+			// Nothing else rebuilds a correction, so a refused insert (write() noted it) retries like a held lock.
+			if ( ! $locked || ! $written ) {
+				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::CORRECTION_RETRY_HOOK, array( $order->get_id(), (string) $plus['id'], $attempt + 1 ) ) ) {
+					Logger::log( sprintf( 'Fiscal late check for payment correction %s on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $plus['id'], $order->get_id(), $attempt ) );
+				}
+			}
+		} catch ( \Throwable $error ) {
+			// The correction is already saved; fiscal bookkeeping must not fail the request.
+			Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d failed: %s', $plus['id'] ?? '', $order->get_id(), $error->getMessage() ) );
+		}
+	}
+
+	/**
+	 * The correction retry hook: reload the rows handle_correction() needs and run it again. The
+	 * record's source id is a digest of R+'s id, so a replay writes nothing twice.
+	 *
+	 * @param int    $order_id Order ID.
+	 * @param string $plus_id  R+'s id.
+	 * @param int    $attempt  This attempt.
+	 */
+	public function retry_correction( int $order_id, string $plus_id, int $attempt ): void {
+		$order    = wc_get_order( $order_id );
+		$plus     = $order instanceof WC_Order ? Ledger::instance()->find( $order, $plus_id ) : null;
+		$original = $plus ? Ledger::instance()->find( $order, (string) ( $plus['corrects'] ?? '' ) ) : null;
+		$minus    = null;
+		foreach ( $original ? Ledger::instance()->read( $order ) : array() as $row ) {
+			if ( 'captured' === ( $row['status'] ?? null ) && ( $row['reverses'] ?? null ) === $plus['corrects'] ) {
+				$minus = $row;
+			}
+		}
+		if ( ! $minus ) {
+			Logger::log( sprintf( 'Fiscal correction retry for payment %s on order #%d found no correction to record.', $plus_id, $order_id ) );
+			return;
+		}
+		$this->handle_correction( $order, (array) $original, $minus, (array) $plus, $attempt );
+	}
+
+	/** The write behind handle_correction(), under the close's locks.
+	 *
+	 * @param WC_Order $order      Order.
+	 * @param array    $minus      R-.
+	 * @param array    $plus       R+.
+	 * @param string   $session_id Lowercase session id.
+	 * @return bool False only when the insert failed; true when written or when nothing is owed.
+	 */
+	private function record_correction( WC_Order $order, array $minus, array $plus, string $session_id ): bool {
+		$closure = ( new Closure_Store() )->for_session( $session_id );
+		if ( null === $closure ) {
+			return true; // The session is open: its close counts both legs as corrections.
+		}
+		$source_id = Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] );
+		$ids       = array( $minus['id'], $plus['id'] );
+		// A later completion's late_sale may already carry both legs (this check was deferred meanwhile).
+		$carried = $this->carried_leg_ids( $order->get_id(), $source_id );
+		$rows    = array_values( array_filter( Session_Figures::late_legs( $order, $closure ), static fn( $leg ) => in_array( $leg['id'] ?? null, $ids, true ) && ! in_array( $leg['id'] ?? null, $carried, true ) ) );
+		if ( count( $rows ) < 2 ) {
+			return true; // The closure counted them, or another late_sale carries them.
+		}
+		$delta      = Session_Figures::tender_totals( $rows );
+		$provenance = $this->store->provenance_from_order( $order );
+		return $this->write(
+			$order,
+			array_merge(
+				$provenance,
+				array(
+					'type' => 'late_sale',
+					'order_id' => $order->get_id(),
+					'source_id' => $source_id,
+					'closure_id' => $closure['id'],
+					'corrects_record_id' => $this->store->find_sale( $order->get_id() )['id'] ?? null,
+					'register_id' => $plus['register_id'] ?? $provenance['register_id'],
+					'session_id' => $session_id,
+					'cashier_id' => (int) $plus['cashier_id'],
+					'device_time' => null,
+					'device_tz' => null,
+					'payload' => array(
+						'kind' => 'tender_correction',
+						'tender_rows' => self::tender_rows( $rows ),
+						'expected_delta' => $delta,
+						'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
+					),
+				)
+			)
+		);
 	}
 
 	/** The write behind handle_allocation(), under the close's locks: a succeeded, non-cash allocation the closure did not count shifts the drawer.
