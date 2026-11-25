@@ -240,6 +240,8 @@ final class Collection_Rules {
 	 *                    outright (see the `when => search` note in the class docblock).
 	 *   - `any_of`    => per-storage column/meta carriers, for a value matching either the
 	 *                    HPOS column or an index meta row (multiple meta keys on posts).
+	 *   - `numeric_range` => `array( 'key' => <meta key>, 'compare' => '>='|'<=' )`,
+	 *                    an inclusive bound; nonnegative numeric inputs are cast to integers.
 	 *   - `sanitize`  => optional `'key'` or `'gateway_id'`, applied to each claimed value.
 	 *
 	 * @internal
@@ -332,6 +334,18 @@ final class Collection_Rules {
 					'pos_register' => array(
 						'meta'     => array( 'key' => '_wcpos_register' ),
 						'sanitize' => 'key',
+					),
+					'pos_sale_day_after' => array(
+						'numeric_range' => array(
+							'key' => '_wcpos_sale_day_at',
+							'compare' => '>=',
+						),
+					),
+					'pos_sale_day_before' => array(
+						'numeric_range' => array(
+							'key' => '_wcpos_sale_day_at',
+							'compare' => '<=',
+						),
 					),
 					// v2-only row, like created_via; the frozen v1 map and schema omit it.
 					'payment_method' => array(

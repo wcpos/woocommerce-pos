@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-24T21:28:35+00:00\n"
+"POT-Creation-Date: 2026-11-24T22:24:50+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -5179,19 +5179,19 @@ msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/Sync/Collection_Rules.php:191
-#: tests/includes/Sync/Test_Collection_Rules_Plan.php:247
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:304
 msgid "Filter orders by POS cashier."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/Sync/Collection_Rules.php:197
-#: tests/includes/Sync/Test_Collection_Rules_Plan.php:252
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:309
 msgid "Filter orders by POS store."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/Sync/Collection_Rules.php:202
-#: tests/includes/Sync/Test_Collection_Rules_Plan.php:257
+#: tests/includes/Sync/Test_Collection_Rules_Plan.php:314
 msgid "Filter orders by POS register."
 msgstr ""
 

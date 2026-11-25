@@ -158,6 +158,10 @@ class Test_Pushable_Document extends WP_UnitTestCase {
 				'value' => '1',
 			),
 			array(
+				'key'   => '_wcpos_sale_day_request',
+				'value' => '{"at_gmt":"2026-11-23T09:12:00Z","reason":"Correct sale day","from":""}',
+			),
+			array(
 				'key'   => '_wcpos_payments',
 				'value' => 'by-key',
 			),
