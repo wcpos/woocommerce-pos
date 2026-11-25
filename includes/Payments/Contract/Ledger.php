@@ -44,6 +44,8 @@ class Ledger {
 	 * persistence, so Free enforces the cap; newest entries win.
 	 */
 	public const EVENTS_MAX = 100;
+	/** Longest reference a tender correction stores, in characters: a slip or provider id, never a note. */
+	private const CORRECTION_REFERENCE_MAX = 100;
 	/**
 	 * Top-level keys `record()` takes from the till. Everything else on a recorded
 	 * row is the server's: money and method are re-derived from the validated
@@ -2020,15 +2022,18 @@ class Ledger {
 	/**
 	 * Correct a captured manual row's tender (#3647): append R- (the row's money out of its method) and R+
 	 * (the same money on the target method) in one write, never editing the row. The pair nets to zero, so
-	 * paid, balance, status and completions do not move.
+	 * paid, balance, status and completions do not move. The target is any POS-enabled method but stored value;
+	 * R+ is always a manual, provider-free row, and on a target that is not a plain manual method it carries
+	 * `unverified`: the money was recorded by hand and no provider confirmed it.
 	 *
 	 * @param WC_Order           $order     Order object.
 	 * @param string             $id        Payment ID.
 	 * @param string             $method_id Target payment method.
 	 * @param Money_Command|null $command   The till's command; its entry rides the corrected row.
+	 * @param string             $reference Optional reference the cashier gave (a slip or provider id), stored on R+.
 	 * @return array|WP_Error R+, or the refusal.
 	 */
-	public function correct( WC_Order $order, string $id, string $method_id, ?Money_Command $command = null ) {
+	public function correct( WC_Order $order, string $id, string $method_id, ?Money_Command $command = null, string $reference = '' ) {
 		if ( ! self::tender_correction_available() ) {
 			return new WP_Error( 'wcpos_tender_correction_unavailable', __( 'Tender correction is not available while a fiscal module is active.', 'woocommerce-pos' ), array( 'status' => 403 ) );
 		}
@@ -2049,8 +2054,7 @@ class Ledger {
 			// Any refund on the order, allocated to a row or not: the app's refunds route never allocates.
 			'refunded'               => fn() => ! empty( $row['refunds'] ) || $order->get_refunds(),
 			'provider_row'           => fn() => 'manual' !== ( $row['capture_mode'] ?? '' ) || 'app' !== ( $row['source'] ?? '' ) || ! empty( $row['provider'] ),
-			'method_invalid'         => fn() => null === $target || ! $target['pos_enabled'] || null !== $target['capture']['provider']
-				|| ! in_array( 'manual', array_column( $target['capture']['modes'], 'mode' ), true ) || 'stored_value' === $target['kind'],
+			'method_invalid'         => fn() => null === $target || ! $target['pos_enabled'] || 'stored_value' === $target['kind'],
 			'same_method'            => fn() => $target['id'] === $row['method_id'],
 			// Never re-rounded: the money taken is the money moved. A step under one minor unit (0.05 on a 0-decimal store)
 			// never refuses: every stored amount is whole minor units, so already a multiple of it.
@@ -2071,8 +2075,10 @@ class Ledger {
 				return new WP_Error( 'wcpos_payment_not_correctable', __( 'This payment cannot be corrected.', 'woocommerce-pos' ), $data );
 			}
 		}
-		$now   = gmdate( 'c' );
-		$leg   = array(
+		$plain     = null === $target['capture']['provider'] && in_array( 'manual', array_column( $target['capture']['modes'], 'mode' ), true );
+		$reference = mb_substr( sanitize_text_field( $reference ), 0, self::CORRECTION_REFERENCE_MAX );
+		$now       = gmdate( 'c' );
+		$leg       = array(
 			'source'          => 'app',
 			'order_id'        => $order->get_id(),
 			'provider'        => null,
@@ -2108,7 +2114,10 @@ class Ledger {
 				'amount'    => $row['amount'],
 				'tendered'  => $row['amount'],
 				'corrects'  => $row['id'],
-			)
+			),
+			// The money was recorded by hand and no provider confirmed it; the mark is permanent.
+			$plain ? array() : array( 'unverified' => true ),
+			'' === $reference ? array() : array( 'reference' => $reference )
 		);
 		// One draft: both legs and the corrected row's link to R+ land in the same S1 or none does. The answer is R+; the
 		// entry stays on the target row. The link lets available_for_refund() answer 0 for the corrected row alone.
@@ -2126,8 +2135,11 @@ class Ledger {
 		$this->refresh( $order );
 		$old = Descriptor_Builder::instance()->get( (string) $row['method_id'] );
 		$order->add_order_note(
-			/* translators: 1: payment row uuid, 2: old payment method title, 3: new payment method title, 4: amount. */
-			sprintf( __( 'WCPOS payment %1$s corrected: %2$s to %3$s (%4$s)', 'woocommerce-pos' ), $row['id'], $old ? $old['title'] : $row['method_id'], $target['title'], $row['amount'] )
+			'' === $reference
+				/* translators: 1: payment row uuid, 2: old payment method title, 3: new payment method title, 4: amount. */
+				? sprintf( __( 'WCPOS payment %1$s corrected: %2$s to %3$s (%4$s)', 'woocommerce-pos' ), $row['id'], $old ? $old['title'] : $row['method_id'], $target['title'], $row['amount'] )
+				/* translators: 1: payment row uuid, 2: old payment method title, 3: new payment method title, 4: amount, 5: reference the cashier gave. */
+				: sprintf( __( 'WCPOS payment %1$s corrected: %2$s to %3$s (%4$s), reference %5$s', 'woocommerce-pos' ), $row['id'], $old ? $old['title'] : $row['method_id'], $target['title'], $row['amount'], $reference )
 		);
 		Logger::log( sprintf( 'WCPOS payment %s on order #%d corrected from %s to %s (%s %s) by cashier #%d', $row['id'], $order->get_id(), $row['method_id'], $target['id'], $row['amount'], $row['currency'], get_current_user_id() ) );
 		/**

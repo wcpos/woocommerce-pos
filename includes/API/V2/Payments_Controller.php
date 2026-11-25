@@ -82,6 +82,7 @@ class Payments_Controller extends WC_REST_Controller {
 						'type'     => 'string',
 						'required' => true,
 					),
+					'reference' => array( 'type' => 'string' ),
 				),
 			),
 		);
@@ -310,7 +311,7 @@ class Payments_Controller extends WC_REST_Controller {
 		if ( is_wp_error( $order ) ) {
 			return $order;
 		}
-		$row = Ledger::instance()->correct( $order, strtolower( (string) $request['uuid'] ), (string) $request['method_id'], $command );
+		$row = Ledger::instance()->correct( $order, strtolower( (string) $request['uuid'] ), (string) $request['method_id'], $command, (string) $request['reference'] );
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
