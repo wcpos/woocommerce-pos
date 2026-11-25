@@ -304,12 +304,12 @@ Older releases are listed on [GitHub](https://github.com/wcpos/woocommerce-pos/r
 Paying for orders, the POS login and manager approvals are better protected, and a card hold no longer stays on the customer's card after its order is deleted.
 
 * Security: paying for an order, checking it out or changing its email needs the right to edit it; if you limited cashiers' order rights, test payments.
-* Security: manager approvals lock after five wrong passwords, like the POS login; cashiers can no longer change another store's register sessions.
+* Security: manager approvals lock after five wrong passwords, like the POS login; failed sign-ins can no longer fill the store's database.
 * WCPOS now cancels a card hold when its order is deleted, and releases the hold of an order in the trash once it runs out.
 * Moving a returned item to another product on a reopened sale now moves its stock too.
 * New: a store copied from another store's database can give its users new POS identities in WooCommerce > Status > Tools, so cashiers sign in to both.
 * New: the plugin saves a manager's correction of the day a paid sale counts on, with a reason and an order note; the app adds the control later.
-* Also fixes security in WP Admin pages, settings screens on a phone, memory use during sync and sites running on SQLite; the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/v2.0.6).
+* Also fixes security in WP Admin pages and register sessions, phone settings screens, sync memory use and SQLite sites; the full list is on [GitHub](https://github.com/wcpos/woocommerce-pos/releases/tag/v2.0.6).
 
 = 2.0.5 - 2026/11/20 =
 
