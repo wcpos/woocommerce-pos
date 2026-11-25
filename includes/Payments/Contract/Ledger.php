@@ -1601,11 +1601,14 @@ class Ledger {
 
 	/**
 	 * Pending and succeeded allocations reserve the leg. A failed one releases its
-	 * amount. Minor units, never negative.
+	 * amount. Minor units, never negative. A corrected row and an R- carry no refund capacity: the money moved to R+.
 	 *
 	 * @param array $row Payment row.
 	 */
 	public static function available_for_refund( array $row ): int {
+		if ( ! empty( $row['reverses'] ) || ! empty( $row['corrected_by'] ) ) {
+			return 0;
+		}
 		return max( 0, Money::minor( $row['amount'] ?? 0 ) - self::reserved_total( $row ) );
 	}
 
@@ -2036,6 +2039,7 @@ class Ledger {
 		}
 		$target    = Descriptor_Builder::instance()->get( $method_id );
 		$increment = $target['defaults']['rounding']['increment'] ?? null;
+		$step      = Money::minor( $increment );
 		// In this order; the voidable rule is the void path's own, so the two never both refuse a captured row.
 		$checks = array(
 			'not_captured'           => fn() => 'captured' !== $row['status'],
@@ -2048,8 +2052,9 @@ class Ledger {
 			'method_invalid'         => fn() => null === $target || ! $target['pos_enabled'] || null !== $target['capture']['provider']
 				|| ! in_array( 'manual', array_column( $target['capture']['modes'], 'mode' ), true ) || 'stored_value' === $target['kind'],
 			'same_method'            => fn() => $target['id'] === $row['method_id'],
-			// Never re-rounded: the money taken is the money moved.
-			'off_rounding_increment' => fn() => null !== $increment && 0 !== Money::minor( $row['amount'] ) % Money::minor( $increment ),
+			// Never re-rounded: the money taken is the money moved. A step under one minor unit (0.05 on a 0-decimal store)
+			// never refuses: every stored amount is whole minor units, so already a multiple of it.
+			'off_rounding_increment' => fn() => null !== $increment && $step > 0 && 0 !== Money::minor( $row['amount'] ) % $step,
 		);
 		foreach ( $checks as $reason => $refused ) {
 			if ( $refused() ) {
@@ -2105,12 +2110,14 @@ class Ledger {
 				'corrects'  => $row['id'],
 			)
 		);
-		// One draft: both legs land in the same S1 or neither does. The answer is R+; the entry stays on the target row.
+		// One draft: both legs and the corrected row's link to R+ land in the same S1 or none does. The answer is R+; the
+		// entry stays on the target row. The link lets available_for_refund() answer 0 for the corrected row alone.
 		$this->write(
 			$order,
 			static function ( Ledger_Draft $draft ) use ( $minus, $plus ): array {
 				$draft->put( $minus );
 				$draft->put( $plus );
+				$draft->put( array_merge( (array) $draft->row( $minus['reverses'] ), array( 'corrected_by' => $plus['id'] ) ) );
 				return $plus;
 			},
 			self::MODE_AUTO,

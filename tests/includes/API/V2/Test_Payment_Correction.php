@@ -11,6 +11,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Payments\Contract\Completion_History;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Projection;
 use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Store;
@@ -69,7 +70,7 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'captured', $reversal['status'] );
 		$this->assertSame( '10.00', $this->row( $order, $payment['id'] )['tendered'] );
 		$this->assertSame( '0.00', $this->row( $order, $payment['id'] )['change'] );
-		$this->assertSame( $before, $this->without_commands( $this->row( $order, $card['id'] ) ) );
+		$this->assertSame( $before + array( 'corrected_by' => $payment['id'] ), $this->without_commands( $this->row( $order, $card['id'] ) ) );
 		$this->assertSame( $paid, Ledger::instance()->paid( $rows ) );
 		$this->assertSame( $balance, Ledger::instance()->signed_balance( $order, $rows ) );
 		$this->assertSame( 'completed', $order->get_status() );
@@ -340,6 +341,106 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'succeeded', $moved['refunds'][0]['status'] );
 	}
 
+	/** A corrected row and its R- report no refund capacity: the money moved to R+, and the uncorrected leg keeps its own. */
+	public function test_correction_leaves_corrected_row_and_reversal_without_refund_capacity(): void {
+		// Arrange.
+		list( $order, $card, $cash ) = $this->split_sale();
+
+		// Act.
+		$response = $this->correct( $order, $cash['id'], 'pos_card' );
+		$minus    = $this->reversal_of( Ledger::instance()->read( wc_get_order( $order->get_id() ) ), $cash['id'] );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->row( $order, $cash['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $minus ) );
+		$this->assertSame( Money::minor( '60.00' ), Ledger::available_for_refund( $this->row( $order, $response->get_data()['payment']['id'] ) ) );
+		$this->assertSame( Money::minor( '40.00' ), Ledger::available_for_refund( $this->row( $order, $card['id'] ) ) );
+	}
+
+	/** Pro's allocator walk: every captured row reporting capacity after a correction accepts a refund of that capacity. */
+	public function test_every_row_with_refund_capacity_after_correction_accepts_a_refund_of_it(): void {
+		// Arrange.
+		list( $order, , $cash ) = $this->split_sale();
+		$this->assertSame( 200, $this->correct( $order, $cash['id'], 'pos_card' )->get_status() );
+		$order     = wc_get_order( $order->get_id() );
+		$refund    = wc_create_refund(
+			array(
+				'order_id'       => $order->get_id(),
+				'amount'         => '100.00',
+				'refund_payment' => false,
+			)
+		);
+		$remaining = Money::minor( '100.00' );
+		$allocated = 0;
+		$results   = array();
+
+		// Act: newest row first, as Pro's allocator walks them.
+		foreach ( array_reverse( Ledger::instance()->read( $order ) ) as $row ) {
+			$capacity = Ledger::available_for_refund( $row );
+			if ( 'captured' !== $row['status'] || $capacity <= 0 || $remaining <= 0 ) {
+				continue;
+			}
+			$take                  = min( $capacity, $remaining );
+			$results[ $row['id'] ] = Ledger::instance()->refund( wc_get_order( $order->get_id() ), $row['id'], $refund->get_id(), Money::format( $take ) );
+			$remaining            -= $take;
+			$allocated            += is_wp_error( $results[ $row['id'] ] ) ? 0 : $take;
+		}
+
+		// Assert.
+		foreach ( $results as $id => $result ) {
+			$this->assertNotWPError( $result, $id );
+		}
+		$this->assertSame( Money::minor( '100.00' ), $allocated );
+	}
+
+	/** A correction of a correction leaves only its last R+ refundable. */
+	public function test_correction_of_a_correction_leaves_only_the_last_leg_refundable(): void {
+		// Arrange.
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$first                = $this->correct( $order, $cash['id'], 'pos_card' )->get_data()['payment'];
+
+		// Act.
+		$response = $this->correct( $order, $first['id'], 'pos_cash' );
+		$rows     = Ledger::instance()->read( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->row( $order, $cash['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->reversal_of( $rows, $cash['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->row( $order, $first['id'] ) ) );
+		$this->assertSame( 0, Ledger::available_for_refund( $this->reversal_of( $rows, $first['id'] ) ) );
+		$this->assertSame( Money::minor( '10.00' ), Ledger::available_for_refund( $this->row( $order, $response->get_data()['payment']['id'] ) ) );
+	}
+
+	/** On a 0-decimal store a 0.05 increment is below one minor unit, so every whole amount is on it. */
+	public function test_correction_on_zero_decimal_store_with_sub_unit_increment_succeeds(): void {
+		// Arrange.
+		add_filter( 'wc_get_price_decimals', '__return_zero' );
+		try {
+			$order = $this->seeded( $this->row_of( 'pos_card', 'card', '60' ) );
+			$this->gateway_settings(
+				array(
+					'pos_cash' => array(
+						'enabled'            => true,
+						'rounding_increment' => '0.05',
+					),
+					'pos_card' => array( 'enabled' => true ),
+				)
+			);
+
+			// Act.
+			$response = $this->correct( $order, $this->only_id( $order ), 'pos_cash' );
+		} finally {
+			remove_filter( 'wc_get_price_decimals', '__return_zero' );
+		}
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'pos_cash', $response->get_data()['payment']['method_id'] );
+		$this->assertSame( '60', $response->get_data()['payment']['amount'] );
+	}
+
 	/**
 	 * Assert a 422 refusal with its reason.
 	 *
@@ -366,6 +467,20 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$order = wc_get_order( $order->get_id() );
 		$this->assertSame( 'completed', $order->get_status() );
 		return array( $order, $response->get_data()['payment'] );
+	}
+
+	/**
+	 * A completed 100.00 sale paid card 40.00 first, then cash 60.00.
+	 *
+	 * @return array{0: \WC_Order, 1: array, 2: array} The completed order, the card answer and the cash answer.
+	 */
+	private function split_sale(): array {
+		$order = $this->create_pos_order( '100.00' );
+		$card  = $this->record( $order, $this->payment( 'pos_card', '40.00' ) )->get_data()['payment'];
+		$cash  = $this->record( wc_get_order( $order->get_id() ), $this->payment( 'pos_cash', '60.00' ) )->get_data()['payment'];
+		$order = wc_get_order( $order->get_id() );
+		$this->assertSame( 'completed', $order->get_status() );
+		return array( $order, $card, $cash );
 	}
 
 	/**
@@ -440,7 +555,7 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function reversal_of( array $rows, string $id ): array {
 		foreach ( $rows as $row ) {
-			if ( $id === ( $row['reverses'] ?? null ) ) {
+			if ( ( $row['reverses'] ?? null ) === $id ) {
 				return $row;
 			}
 		}
