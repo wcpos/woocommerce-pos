@@ -108,7 +108,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 213.239.218.130 >> ~/.ssh/known_hosts
+          # Pinned server host key (public). If the server is rebuilt the deploy fails here:
+          # read the new key on the server itself, never from ssh-keyscan.
+          echo '213.239.218.130 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKbmOb9Bic/JfkQtj4L7Bjd4kk5nuRv++77tU6l3v822' > ~/.ssh/known_hosts
 
       - name: 🚀 Deploy to dev sites
         env:
@@ -165,14 +167,38 @@ jobs:
               # inside it (bash errexit rule) — every critical command carries an
               # explicit `|| exit 1` instead.
               if (
-                PLUGIN_DIR="/data/wordpress/${SITE}/html/wp-content/plugins/woocommerce-pos"
+                SLUG="woocommerce-pos"
+                PLUGIN_DIR="/data/wordpress/${SITE}/html/wp-content/plugins/${SLUG}"
+                TMP_DIR="${PLUGIN_DIR}.tmp"
+                OLD_DIR="${PLUGIN_DIR}.old"
+                # Put the live copy back if this stops between the two moves below.
+                trap '[ -e "$PLUGIN_DIR" ] || [ ! -e "$OLD_DIR" ] || mv -T "$OLD_DIR" "$PLUGIN_DIR"' EXIT
 
-                rm -rf "$PLUGIN_DIR" || exit 1
-                mkdir -p "$PLUGIN_DIR" || exit 1
-                tar -xzf "/tmp/${TARBALL}" -C "$PLUGIN_DIR" || exit 1
-                echo "$RUN_ID" > "$PLUGIN_DIR/.wcpos-deploy-run" || exit 1
+                # A run that was killed there left the only copy in OLD_DIR.
+                if [ ! -e "$PLUGIN_DIR" ] && [ -e "$OLD_DIR" ]; then
+                  mv -T "$OLD_DIR" "$PLUGIN_DIR" || exit 1
+                fi
+                rm -rf "$TMP_DIR" "$OLD_DIR" || exit 1
+                mkdir "$TMP_DIR" || exit 1
+                tar --no-same-owner -xzf "/tmp/${TARBALL}" -C "$TMP_DIR" || exit 1
 
-                chown -R 82:82 "$PLUGIN_DIR" || exit 1
+                # This runs as root on the host: a link in the package must not lead out of it.
+                BAD_LINKS=$(find "$TMP_DIR" -type l \( -lname '/*' -o -lname '*..*' \)) || exit 1
+                if [ -n "$BAD_LINKS" ]; then
+                  echo "❌ ${SITE}: package rejected, links outside the plugin:" >&2
+                  echo "$BAD_LINKS" >&2
+                  rm -rf "$TMP_DIR"
+                  exit 1
+                fi
+                rm -rf "$TMP_DIR/.wcpos-deploy-run" || exit 1
+                echo "$RUN_ID" > "$TMP_DIR/.wcpos-deploy-run" || exit 1
+                chown -R 82:82 "$TMP_DIR" || exit 1
+
+                if [ -e "$PLUGIN_DIR" ]; then
+                  mv -T "$PLUGIN_DIR" "$OLD_DIR" || exit 1
+                fi
+                mv -T "$TMP_DIR" "$PLUGIN_DIR" || exit 1
+                rm -rf "$OLD_DIR" || exit 1
 
                 # A green extract is not proof the runtime picked it up: php-fpm
                 # reads the html tree through its own bind mount, which can hold
