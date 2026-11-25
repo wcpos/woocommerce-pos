@@ -191,6 +191,91 @@ class Test_Sync_Journal_Hold_Back extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * An empty tail settles nothing, so a row that lands after it waits for the next page.
+	 */
+	public function test_hold_back_empty_tail_holds_row_that_lands_after_it(): void {
+		// Arrange.
+		global $wpdb;
+		$landed = false;
+		$land   = function ( $query ) use ( &$landed ) {
+			if ( ! $landed && 0 === strpos( (string) $query, 'SELECT sequence, object_id,' ) ) {
+				$landed = true;
+				$this->row( 2, 'order', self::YOUNG );
+			}
+			return $query;
+		};
+		add_filter( 'query', $land );
+
+		// Act.
+		try {
+			$page = $this->page( $this->floor );
+		} finally {
+			remove_filter( 'query', $land );
+		}
+
+		// Assert.
+		$this->assertSame( (string) ( $this->floor + 2 ), $wpdb->get_var( 'SELECT MAX(sequence) FROM ' . $this->journal->table_name() ), 'Precondition: the row landed.' );
+		$this->assertSame( array(), array_column( $page['rows'], 'sequence' ) );
+		$this->assertSame( $this->floor, $page['head'] );
+	}
+
+	/**
+	 * A failed tail read settles nothing, whatever rows are there.
+	 */
+	public function test_hold_back_failed_tail_read_holds_every_row(): void {
+		// Arrange.
+		global $wpdb;
+		$this->row( 1, 'order', self::OLD );
+		$this->row( 2, 'order', self::YOUNG );
+		$changed = false;
+		$break   = static function ( $query ) use ( &$changed ) {
+			$broken  = str_replace( 'SELECT sequence, created_gmt', 'SELECT sequence, no_such_column', (string) $query );
+			$changed = $changed || $broken !== $query;
+			return $broken;
+		};
+		add_filter( 'query', $break );
+		$suppress = $wpdb->suppress_errors( true );
+
+		// Act.
+		try {
+			$failed = $this->page( $this->floor );
+		} finally {
+			$wpdb->suppress_errors( $suppress );
+			remove_filter( 'query', $break );
+		}
+		$read = $this->page( $this->floor );
+
+		// Assert.
+		$this->assertTrue( $changed, 'Precondition: the filter changed a query.' );
+		$this->assertSame( array(), array_column( $failed['rows'], 'sequence' ) );
+		$this->assertSame( $this->floor, $failed['head'] );
+		$this->assertSame( $this->seq( 1, 2 ), array_column( $read['rows'], 'sequence' ) );
+		$this->assertSame( $this->floor + 2, $read['head'] );
+	}
+
+	/**
+	 * A row's age is read as UTC whatever PHP's default timezone is.
+	 */
+	public function test_hold_back_age_does_not_depend_on_php_timezone(): void {
+		// Arrange.
+		$this->row( 1, 'order', self::YOUNG );
+		$this->row( 3, 'order', self::YOUNG );
+		$timezone = date_default_timezone_get();
+
+		// Act.
+		try {
+			date_default_timezone_set( 'Europe/Madrid' ); // phpcs:ignore WordPress.DateTime.RestrictedFunctions.timezone_change_date_default_timezone_set -- The case is a non-UTC PHP timezone; put back below.
+			$page = $this->page( $this->floor );
+		} finally {
+			date_default_timezone_set( $timezone ); // phpcs:ignore WordPress.DateTime.RestrictedFunctions.timezone_change_date_default_timezone_set -- Restores the suite's timezone.
+		}
+
+		// Assert.
+		$this->assertSame( $this->seq( 1 ), array_column( $page['rows'], 'sequence' ) );
+		$this->assertSame( $this->floor + 1, $page['head'] );
+	}
+
+	/**
 	 * Without the hold-back the page reads exactly what it always has.
 	 */
 	public function test_hold_back_off_reads_rows_and_queries_unchanged(): void {
