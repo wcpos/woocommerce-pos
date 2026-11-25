@@ -169,12 +169,14 @@ case "$TAR_AFTER" in
 esac
 STUB
 # MV_FAIL fails the move of the per-run copy into place ("term" also stops the deploy).
+# MV_FAIL=put-back: every move of the moved-aside copy fails instead.
 # MV_LINK=1: once the live copy is moved aside, a link to OTHER takes its place.
 # MV_LINK=put-back: just before the moved-aside copy is put back, a link to OTHER takes the live path.
 cat >"$STUBS/mv" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$MV_LOG"
-if [[ -n "$MV_FAIL" && "${@: -2:1}" == *.4242 ]]; then
+FAILS=.4242; [[ "$MV_FAIL" != put-back ]] || FAILS=.old
+if [[ -n "$MV_FAIL" && "${@: -2:1}" == *"$FAILS" ]]; then
   [[ "$MV_FAIL" != term ]] || kill -TERM "$PPID"
   exit 1
 fi
@@ -526,6 +528,13 @@ for KNOB_CASE in 24 25; do
   CHOWN_FAIL="${KNOB_CASE#25}" FIND_FAIL="${KNOB_CASE#24}" deploy
   check_run "$KNOB_CASE" fail "$BEFORE"
 done
+
+# 26: only the moved-aside copy exists, and the move back fails.
+new_case; mkdir -m 700 "$PRIV"; add_old_copy "$OLD"; pack; BEFORE="$(snapshot "$OLD")"
+MV_FAIL=put-back deploy
+check_run 26 fail absent priv=dev-free.woocommerce-pos.old
+no_tar 26
+[[ "$(snapshot "$OLD")" == "$BEFORE" ]] || fail 'unpack case 26: the moved-aside copy must not change'
 
 if [[ "$FAILURES" -ne 0 ]]; then
   exit 1
