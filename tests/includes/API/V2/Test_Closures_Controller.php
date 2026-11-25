@@ -540,7 +540,15 @@ class Test_Closures_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		\WCPOS\WooCommercePOS\Tests\Helpers\Ledger_Seed::rows( $order, array( $row ), false );
 		$this->assertIsArray( \WCPOS\WooCommercePOS\Payments\Contract\Ledger::instance()->correct( wc_get_order( $order->get_id() ), $id, 'pos_card' ) );
-		$this->assertIsArray( ( new Closure_Store() )->create( $this->closure_fields( $session ) ) );
+		$fields = $this->closure_fields( $session );
+		// The app's net form: the corrected sale shows under card only. A closure sent no rows stores none.
+		$fields['breakdowns']['payment_methods'] = array(
+			'cash' => array(
+				'sales' => '0.0000',
+				'refunds' => '0.0000',
+			),
+		);
+		$this->assertIsArray( ( new Closure_Store() )->create( $fields ) );
 
 		// Act.
 		$csv = $this->export_csv( $this->get( 'closures/export' ) );

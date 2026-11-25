@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Services\Closure_Store;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Register_Session_Store;
+use WCPOS\WooCommercePOS\Services\Session_Carry;
 use WCPOS\WooCommercePOS\Services\Session_Figures;
 use WCPOS\WooCommercePOS\Services\Store_Reach;
 use WCPOS\WooCommercePOS\Templates;
@@ -1248,6 +1249,103 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $sent, $row['breakdowns']['payment_methods'] );
 	}
 
+	/** A 50.00 POS sale on bacs in the session, never corrected.
+	 *
+	 * @param array $session Session row.
+	 */
+	private function uncorrected_bacs_sale( array $session ): void {
+		$order = new \WC_Order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'on-hold' );
+		$order->set_total( '50' );
+		$order->save();
+		$row = array(
+			'id' => wp_generate_uuid4(),
+			'method_id' => 'bacs',
+			'kind' => 'card',
+			'capture_mode' => 'manual',
+			'source' => 'app',
+			'amount' => '50.00',
+			'currency' => 'USD',
+			'status' => 'captured',
+			'session_id' => $session['id'],
+		);
+		Ledger_Seed::rows( $order, array( $row ), false );
+	}
+
+	/** A closer that sent no tender rows: the key absent, or an empty table. */
+	public function no_client_tender_rows_provider(): array {
+		return array(
+			'no table' => array( false ),
+			'empty table' => array( true ),
+		);
+	}
+
+	/**
+	 * A corrected session closed without client tender rows stores none, not a table of the corrected tenders alone.
+	 *
+	 * @dataProvider no_client_tender_rows_provider
+	 *
+	 * @param bool $send_empty Whether the client sends an empty payment_methods.
+	 */
+	public function test_closure_create_without_client_tender_rows_stores_no_partial_tender_table( bool $send_empty ): void {
+		// Arrange.
+		$session = $this->closure_session();
+		$this->corrected_sale( $session, 'pos_cash', 'pos_card' );
+		$this->uncorrected_bacs_sale( $session );
+		$fields = $this->closure_fields( $session );
+		if ( $send_empty ) {
+			$fields['breakdowns']['payment_methods'] = array();
+		}
+		$store = new Closure_Store();
+
+		// Act.
+		$row = $store->get( $store->create( $fields )['id'] );
+		$data = ( new Receipt_Data_Builder() )->build_closure_document( $row );
+
+		// Assert.
+		$expected = array(
+			'cash' => '100.0000',
+			'bacs' => '50.0000',
+			'card' => '12.0000',
+		);
+		$this->assertSame( count( $expected ), count( $row['expected'] ) );
+		foreach ( $expected as $tender => $amount ) {
+			$this->assertSame( $amount, $row['expected'][ $tender ] ?? null, $tender );
+		}
+		$this->assertSame( array(), $row['breakdowns']['payment_methods'] ?? array() );
+		$this->assertFalse( $data['closure']['has_payment_methods'] );
+		$this->assertFalse( $data['closure']['has_corrections_line'] );
+	}
+
+	/** A store-switch carry of a corrected session stores no tender rows, as the carry sent none. */
+	public function test_carry_of_a_corrected_session_stores_no_partial_tender_table(): void {
+		// Arrange.
+		$source = $this->closure_session( null, 'open' );
+		$this->corrected_sale( $source, 'pos_cash', 'pos_card' );
+		$this->uncorrected_bacs_sale( $source );
+		$this->use_multi_register_repository();
+		$target = $this->create_register( array( 'store_id' => 789 ) );
+		$this->closure_registers[] = $target['id'];
+		$ids = array(
+			'closure_id' => wp_generate_uuid4(),
+			'session_id' => wp_generate_uuid4(),
+		);
+
+		// Act.
+		$result = ( new Session_Carry() )->carry( $source, $target, $ids, '2026-09-11 12:00:00' );
+
+		// Assert.
+		$this->assertNotWPError( $result );
+		$closure = $result['closure'];
+		$data = ( new Receipt_Data_Builder() )->build_closure_document( $closure );
+		$this->assertSame( 'store_switch', $closure['reason'] );
+		$this->assertSame( '50.0000', $closure['expected']['bacs'] );
+		$this->assertSame( array(), $closure['breakdowns']['payment_methods'] ?? array() );
+		$this->assertFalse( $data['closure']['has_payment_methods'] );
+		$this->assertFalse( $data['closure']['has_corrections_line'] );
+	}
+
 	/** Each tender's printed lines add up to its expected figure, live and stored. */
 	public function test_closure_document_with_tender_correction_adds_up_to_expected(): void {
 		// Arrange.
@@ -1300,6 +1398,14 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		$builder = new Receipt_Data_Builder();
 		$corrected = $this->closure_session();
 		$this->corrected_sale( $corrected, 'pos_cash', 'pos_card' );
+		$corrected_fields = $this->closure_fields( $corrected );
+		// The app's net form: the corrected sale shows under card only. A closure sent no rows stores none.
+		$corrected_fields['breakdowns']['payment_methods'] = array(
+			'cash' => array(
+				'sales' => '0.0000',
+				'refunds' => '0.0000',
+			),
+		);
 		$plain = $this->closure_session();
 		$this->closure_ledger( $plain );
 		$plain_fields = $this->closure_fields( $plain );
@@ -1315,7 +1421,7 @@ class Test_Closure_Receipts extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		// Act.
-		$data = $builder->build_closure_document( $store->get( $store->create( $this->closure_fields( $corrected ) )['id'] ) );
+		$data = $builder->build_closure_document( $store->get( $store->create( $corrected_fields )['id'] ) );
 		// The X-report's rows carry corrections '0.0000', which must print no line.
 		$plain_xreport = $builder->build_closure_document( $plain, true );
 		$plain_data = $builder->build_closure_document( $store->get( $store->create( $plain_fields )['id'] ) );
