@@ -62,6 +62,7 @@ class Products {
 
 		if ( $pos_only_products ) {
 			add_filter( 'rest_pre_dispatch', array( $this, 'record_rest_route' ), 10, 3 );
+			add_filter( 'rest_request_after_callbacks', array( $this, 'hide_pos_only_store_api_single' ), 10, 3 );
 			// Last, so a later callback that sets suppress_filters or post__in, or edits
 			// the WHERE clause, has already run when the exclusion is decided.
 			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ), PHP_INT_MAX );
@@ -259,6 +260,48 @@ class Products {
 	}
 
 	/**
+	 * Hide a POS Only item behind WooCommerce's own missing-product response.
+	 *
+	 * WooCommerce's single-product Store API routes check only is_publicly_viewable() and
+	 * never run a product query, so the catalogue's POS Only query filters never apply (#2653).
+	 * Every guard leaves the response untouched when unsure. Use rest_request_after_callbacks
+	 * rather than rest_post_dispatch because rest_do_request() does not apply rest_post_dispatch.
+	 *
+	 * @param mixed            $response The route callback result.
+	 * @param array            $handler  The route handler.
+	 * @param \WP_REST_Request $request  The request being dispatched.
+	 *
+	 * @return mixed The original response or WooCommerce's missing-product error.
+	 */
+	public function hide_pos_only_store_api_single( $response, $handler, $request ) {
+		if ( ! $response instanceof \WP_REST_Response || 200 !== $response->get_status() ) {
+			return $response;
+		}
+		if ( ! $request instanceof \WP_REST_Request || ! preg_match( '#^/wc/store(?:/v\d+)?/products/([^/]+)$#', strtolower( $request->get_route() ), $matches ) ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+		if ( ! \is_array( $data ) || ! isset( $data['id'] ) || ! is_numeric( $data['id'] ) || ! $this->is_hidden_on_storefront( (int) $data['id'] ) ) {
+			return $response;
+		}
+
+		if ( ctype_digit( $matches[1] ) ) {
+			return new \WP_Error(
+				'woocommerce_rest_product_invalid_id',
+				__( 'Invalid product ID.', 'woocommerce' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- WooCommerce's own string, so the 404 matches a missing product.
+				array( 'status' => 404 )
+			);
+		}
+
+		return new \WP_Error(
+			'woocommerce_rest_product_invalid_slug',
+			__( 'Invalid product slug.', 'woocommerce' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- WooCommerce's own string, so the 404 matches a missing product.
+			array( 'status' => 404 )
+		);
+	}
+
+	/**
 	 * Whether a product or variation id is POS Only and the request is a storefront one.
 	 *
 	 * @param int $id The product or variation id.
@@ -310,6 +353,7 @@ class Products {
 		 * feeds and sitemaps) and false in wp-admin, WP-CLI, the WooCommerce admin
 		 * REST namespaces and the POS itself. Return false to let a context of
 		 * your own see POS Only products.
+		 * This filter governs product queries; single-item reads (is_visible and the Store API single-product routes) use the storefront check alone.
 		 *
 		 * @param bool      $hide  Whether to exclude POS Only products from this query.
 		 * @param \WP_Query $query The query being decided.
