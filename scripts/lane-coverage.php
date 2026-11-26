@@ -49,7 +49,7 @@ function lanes_from_text( $text, $reference = false ) {
 	$lanes = array();
 	$map   = $reference
 		? array( '\\API\\V1\\' => 'v1', '\\API\\V2\\' => 'v2' )
-		: array( 'wcpos/v1' => 'v1', 'wcpos/v2' => 'v2', 'wc/v3' => 'wc3', 'wp/v2' => 'wp2' );
+		: array( 'wcpos/v1' => 'v1', 'wcpos/v2' => 'v2', 'wc/v3' => 'wc3', 'wp/v2' => 'wp2', 'wc/store/' => 'storefront', 'oembed/1.0' => 'storefront' );
 	foreach ( $map as $needle => $lane ) {
 		if ( false !== strpos( $text, $needle ) ) {
 			$lanes[ $lane ] = true;
@@ -444,10 +444,15 @@ function build_inventory( $classes, $annotations ) {
 			$judged_lanes = empty( $own_positive ) ? $lanes : $own_lanes;
 			$on_current  = in_array( 'v2', $judged_lanes, true ) || in_array( 'wc3', $judged_lanes, true );
 			$v1_only     = in_array( 'v1', $lanes, true ) && ! $on_current && $has_legacy;
+			// The app does not call storefront routes: they are out of scope, not unproven.
+			// An own runtime route or any other judged positive lane rules out that exemption.
+			$judged_positive = array_values( array_diff( $judged_lanes, array( 'unresolved' ) ) );
+			$storefront      = ! $on_current && ! $v1_only && ! in_array( 'unresolved', $own_lanes, true )
+				&& ! empty( $judged_positive ) && empty( array_diff( $judged_positive, array( 'storefront', 'wp2' ) ) );
 			// Both categories are "not proven to cover current behaviour", and the ratchet guards
 			// their union — otherwise a new test could slip past the gate simply by building its
 			// route out of variables.
-			$unresolved  = in_array( 'unresolved', $lanes, true ) && ! $on_current && ! $v1_only;
+			$unresolved  = in_array( 'unresolved', $lanes, true ) && ! $on_current && ! $v1_only && ! $storefront;
 			$warnings = array_merge( $class['warnings'], $method['warnings'] );
 			if ( $method['has_assertion'] && $method['has_response_access'] ) {
 				foreach ( array_keys( $method['stub_sites'] ) as $line ) {
@@ -461,7 +466,7 @@ function build_inventory( $classes, $annotations ) {
 			$cases[] = array(
 				'key' => $key, 'file' => $class['file'], 'class' => $class['name'], 'method' => $method['name'],
 				'behavior' => $behavior, 'own_lanes' => $own_lanes, 'class_lanes' => $class_lanes,
-				'lanes' => $lanes, 'judged_lanes' => $judged_lanes, 'v1_only' => $v1_only, 'unresolved' => $unresolved, 'verdict' => $verdict,
+				'lanes' => $lanes, 'judged_lanes' => $judged_lanes, 'v1_only' => $v1_only, 'unresolved' => $unresolved, 'storefront' => $storefront, 'verdict' => $verdict,
 				'note' => isset( $annotation['note'] ) ? $annotation['note'] : null, 'warnings' => $warnings,
 			);
 			$case_keys[ $key ] = true;
@@ -491,11 +496,12 @@ function build_inventory( $classes, $annotations ) {
 		}
 	}
 	usort( $cases, function ( $a, $b ) { return strcmp( $a['key'], $b['key'] ); } );
-	$summary = array( 'cases' => count( $cases ), 'v1_only' => 0, 'unresolved' => 0, 'by_lane' => array( 'v1' => 0, 'v2' => 0, 'wc3' => 0, 'wp2' => 0, 'unresolved' => 0, 'unit' => 0 ),
+	$summary = array( 'cases' => count( $cases ), 'v1_only' => 0, 'unresolved' => 0, 'storefront' => 0, 'by_lane' => array( 'v1' => 0, 'v2' => 0, 'wc3' => 0, 'wp2' => 0, 'storefront' => 0, 'unresolved' => 0, 'unit' => 0 ),
 		'warnings' => array( 'self-installed-hook' => 0, 'asserted-stubbed-response' => 0 ) );
 	foreach ( $cases as $case ) {
 		$summary['v1_only']    += $case['v1_only'] ? 1 : 0;
 		$summary['unresolved'] += $case['unresolved'] ? 1 : 0;
+		$summary['storefront'] += $case['storefront'] ? 1 : 0;
 		$patterns = array();
 		foreach ( $case['warnings'] as $warning ) { $patterns[ $warning['pattern'] ] = true; }
 		foreach ( array_keys( $patterns ) as $pattern ) { $summary['warnings'][ $pattern ]++; }
@@ -567,21 +573,25 @@ function inventory_markdown( $inventory ) {
 		. "actually calls. v1-route tests are legacy pins and do not count — see README.md here.\n\n";
 	$output .= "- Cases: {$summary['cases']}\n- v1-only cases: {$summary['v1_only']}\n"
 		. "- Unresolved-route cases (not proven current, not claimed v1): {$summary['unresolved']}\n";
+	$output .= "- Storefront cases (out of scope: wc/store, oembed, wp/v2 routes; listed, not gated): {$summary['storefront']}\n";
 	$output .= '- By lane (overlapping; a case touching two lanes is counted twice): v1 ' . $summary['by_lane']['v1']
 		. ', v2 ' . $summary['by_lane']['v2'] . ', wc3 ' . $summary['by_lane']['wc3']
-		. ', wp2 ' . $summary['by_lane']['wp2'] . ', unresolved ' . $summary['by_lane']['unresolved']
+		. ', wp2 ' . $summary['by_lane']['wp2'] . ', storefront ' . $summary['by_lane']['storefront'] . ', unresolved ' . $summary['by_lane']['unresolved']
 		. ', pure unit ' . $summary['by_lane']['unit'] . "\n";
 	$output .= '- Blind-test warnings (advisory): self-installed-hook ' . $summary['warnings']['self-installed-hook']
 		. ', asserted-stubbed-response ' . $summary['warnings']['asserted-stubbed-response'] . "\n\n";
 	$v1_only     = array_values( array_filter( $inventory['cases'], function ( $case ) { return $case['v1_only']; } ) );
 	$unresolved  = array_values( array_filter( $inventory['cases'], function ( $case ) { return $case['unresolved']; } ) );
-	$other       = array_values( array_filter( $inventory['cases'], function ( $case ) { return ! $case['v1_only'] && ! $case['unresolved']; } ) );
+	$storefront  = array_values( array_filter( $inventory['cases'], function ( $case ) { return $case['storefront']; } ) );
+	$other       = array_values( array_filter( $inventory['cases'], function ( $case ) { return ! $case['v1_only'] && ! $case['unresolved'] && ! $case['storefront']; } ) );
 	$output .= "## Behaviours whose only coverage is a v1 route\n\n" . markdown_table( $v1_only );
 	$output .= "\n## Cases whose dispatched route could not be resolved\n\n"
 		. "Their route is assembled at runtime, so the scanner cannot show they exercise a current\n"
 		. "lane. They are NOT claimed to be v1 — only unproven — and the CI ratchet guards them\n"
 		. "alongside the v1-only list so a new test cannot slip past by building its route from\n"
 		. "variables.\n\n" . markdown_table( $unresolved );
+	$output .= "\n## Storefront cases (out of scope)\n\n"
+		. "These cases exercise only storefront routes the app does not call. The ratchet does not gate them.\n\n" . markdown_table( $storefront );
 	$output .= "\n" . warnings_markdown( $inventory );
 	$output .= "\n## All other behaviours\n\n" . markdown_table( $other );
 	return $output;
@@ -659,6 +669,7 @@ function compare_to_baseline( $inventory, $baseline_path, $renames = array() ) {
 		. count( $base_keys ) . ' (baseline) -> ' . count( $head_keys ) . " (this branch)\n";
 	echo '  of which provably v1-only on this branch: ' . $inventory['summary']['v1_only']
 		. '; unresolved route: ' . $inventory['summary']['unresolved'] . "\n";
+	echo '  storefront, out of scope (listed, not gated): ' . $inventory['summary']['storefront'] . "\n";
 	foreach ( $removed as $key ) { echo '  ported or retired: ' . $key . "\n"; }
 	if ( empty( $added ) ) {
 		echo "No new v1-only coverage.\n";
