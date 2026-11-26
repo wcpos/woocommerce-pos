@@ -197,7 +197,8 @@ class Activator {
 		);
 
 		$marker = \is_array( $synced ) && isset( $synced['_introduced'] ) && \is_array( $synced['_introduced'] ) ? $synced['_introduced'] : array();
-		$marker = $this->grant_introduced_capabilities( $marker );
+		$marker_failed = false;
+		$marker        = $this->grant_introduced_capabilities( $marker, $marker_failed );
 
 		$stored_roles        = get_option( wp_roles()->role_key, array() );
 		$roles_are_persisted = is_array( $stored_roles );
@@ -221,7 +222,10 @@ class Activator {
 			// Snapshot first: a fingerprint that advanced past a failed snapshot
 			// write would never retry it.
 			update_option( 'woocommerce_pos_role_caps_synced', $capability_names + array( '_introduced' => $marker ), true );
-			update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
+			// A failed marker write leaves the fingerprint stale so version_check() retries the grant.
+			if ( ! $marker_failed ) {
+				update_option( 'woocommerce_pos_role_caps_fingerprint', $this->role_caps_fingerprint(), true );
+			}
 		}
 
 		// Flag the consent pop-up for the next admin page load, and open the
@@ -1317,16 +1321,27 @@ class Activator {
 	/**
 	 * Grant each newly introduced capability once, preserving later owner removals.
 	 *
-	 * @param array $marker Capability names mapped to their introduced version.
+	 * Grants go to roles only. A user given access_woocommerce_pos directly (by a role-editor
+	 * plugin) is not granted a new capability and must be given it the same way: permissions
+	 * are per role, and a missing grant fails closed.
+	 *
+	 * @param array $marker        Capability names mapped to their introduced version.
+	 * @param bool  $marker_failed Set true when a marker write failed and its grant was skipped.
 	 * @return array Updated marker, including legacy capabilities recorded without grants.
 	 */
-	private function grant_introduced_capabilities( array $marker ): array {
+	private function grant_introduced_capabilities( array $marker, bool &$marker_failed ): array {
 		foreach ( Permission_Registry::entries() as $entry ) {
 			$capability = $entry['capability'];
 			if ( isset( $marker[ $capability ] ) ) {
 				continue;
 			}
 			if ( version_compare( $entry['introduced'], Permission_Registry::MARKER_BASELINE, '>=' ) ) {
+				// Marker first: a grant whose marker failed to persist is skipped and retried,
+				// never repeated after the owner removes it.
+				if ( ! $this->persist_introduced_marker( $marker + array( $capability => $entry['introduced'] ), $capability ) ) {
+					$marker_failed = true;
+					continue;
+				}
 				$source = $entry['split_from'] ?? 'access_woocommerce_pos';
 				foreach ( wp_roles()->role_objects as $role ) {
 					if ( $role->has_cap( $source ) && ! $role->has_cap( $capability ) ) {
@@ -1337,6 +1352,23 @@ class Activator {
 			$marker[ $capability ] = $entry['introduced'];
 		}
 		return $marker;
+	}
+
+	/**
+	 * Merge the marker into the stored snapshot before a grant.
+	 *
+	 * @param array  $marker     Capability names mapped to their introduced version.
+	 * @param string $capability Capability about to be granted.
+	 * @return bool Whether the stored marker now records the capability.
+	 */
+	private function persist_introduced_marker( array $marker, string $capability ): bool {
+		$stored                = get_option( 'woocommerce_pos_role_caps_synced', array() );
+		$stored                = \is_array( $stored ) ? $stored : array();
+		$known                 = isset( $stored['_introduced'] ) && \is_array( $stored['_introduced'] ) ? $stored['_introduced'] : array();
+		$stored['_introduced'] = $marker + $known;
+		update_option( 'woocommerce_pos_role_caps_synced', $stored, true );
+		$after = get_option( 'woocommerce_pos_role_caps_synced' );
+		return \is_array( $after ) && isset( $after['_introduced'][ $capability ] );
 	}
 
 	/**

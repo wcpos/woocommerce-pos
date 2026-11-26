@@ -244,6 +244,10 @@ class Test_Init_Hook_Wiring extends WC_Unit_Test_Case {
 			'rest_allowed_cors_headers'                             => array( 10 ),
 			'rest_pre_dispatch'                                     => array( 10 ),
 			'rest_request_after_callbacks'                          => array( 999 ),
+			// Withheld_Fields (roadmap#623): cost is withheld on token-authenticated wc/v3
+			// requests too, which carry no marker, so both seams are unconditional.
+			'rest_request_before_callbacks'                         => array( 10 ),
+			'rest_pre_echo_response'                                => array( 999 ),
 			// Both of these now come from Rest_Cors::register_hooks(), which the
 			// constructor calls. They are still registered during construction, so
 			// they belong in this set — but the wire contract is no longer Init's:

@@ -399,9 +399,127 @@ class Test_Activator extends WP_UnitTestCase {
 		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
 
 		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_products' ) );
-		foreach ( Permission_Registry::capability_names() as $capability ) {
-			$this->assertSame( '2.0.0', get_option( self::ROLE_CAPS_SYNCED_OPTION )['_introduced'][ $capability ] );
+		foreach ( Permission_Registry::entries() as $entry ) {
+			$this->assertSame( $entry['introduced'], get_option( self::ROLE_CAPS_SYNCED_OPTION )['_introduced'][ $entry['capability'] ] );
 		}
+		$this->assertSame( '2.0.0', get_option( self::ROLE_CAPS_SYNCED_OPTION )['_introduced']['edit_products'] );
+	}
+
+	/** An upgrade from a 2.1 marker grants view_woocommerce_pos_costs once, never after removal. */
+	public function test_upgrade_from_two_point_one_marker_grants_costs_once_and_not_after_removal(): void {
+		$activator = new Activator();
+		$this->arrange_two_point_one_install( $activator );
+
+		$activator->single_activate( false, false );
+
+		foreach ( array( 'administrator', 'shop_manager', 'cashier' ) as $role ) {
+			$this->assertTrue( get_role( $role )->has_cap( 'view_woocommerce_pos_costs' ), $role );
+		}
+		$this->assertSame( '2.2.0', get_option( self::ROLE_CAPS_SYNCED_OPTION )['_introduced']['view_woocommerce_pos_costs'] );
+		get_role( 'cashier' )->remove_cap( 'view_woocommerce_pos_costs' );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, 'stale' );
+
+		$activator->single_activate( false, false );
+
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+		$this->assertTrue( get_role( 'shop_manager' )->has_cap( 'view_woocommerce_pos_costs' ) );
+	}
+
+	/** A grant whose marker could not be written is skipped, so a later removal sticks. */
+	public function test_failed_marker_write_cannot_regrant_removed_capability(): void {
+		$activator = new Activator();
+		$this->arrange_two_point_one_install( $activator );
+		$reject = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+
+		add_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10, 2 );
+		$activator->single_activate( false, false );
+		remove_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10 );
+
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+
+		$activator->single_activate( false, false );
+		$this->assertTrue( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+		get_role( 'cashier' )->remove_cap( 'view_woocommerce_pos_costs' );
+
+		add_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10, 2 );
+		$activator->single_activate( false, false );
+		remove_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10 );
+
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+	}
+
+	/** A marker write that fails during an upgrade leaves the role-caps sync pending, so the next check grants. */
+	public function test_failed_marker_write_during_version_check_leaves_sync_pending_and_retries(): void {
+		// Arrange.
+		remove_all_actions( 'init' );
+		$activator = new Activator();
+		$this->arrange_two_point_one_install( $activator );
+		update_option( self::DB_VERSION_OPTION, \WCPOS\WooCommercePOS\VERSION );
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+		$reject = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+
+		// Act 1: the marker write is rejected.
+		add_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10, 2 );
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+		remove_filter( 'pre_update_option_' . self::ROLE_CAPS_SYNCED_OPTION, $reject, 10 );
+
+		// Assert 1.
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+		$this->assertNotSame( $this->role_caps_fingerprint(), get_option( self::ROLE_CAPS_FINGERPRINT_OPTION ) );
+
+		// Act 2: the next check retries.
+		remove_all_actions( 'init' );
+		delete_option( self::DB_UPGRADE_LOCK_OPTION );
+		$version_check->invoke( $activator );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress lifecycle hook under test.
+
+		// Assert 2.
+		$this->assertTrue( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
+		$this->assertSame( $this->role_caps_fingerprint(), get_option( self::ROLE_CAPS_FINGERPRINT_OPTION ) );
+	}
+
+	/** A fresh install grants view_woocommerce_pos_costs to the three default roles. */
+	public function test_fresh_install_grants_costs_to_the_default_roles(): void {
+		delete_option( self::ROLE_CAPS_SYNCED_OPTION );
+		delete_option( self::ROLE_CAPS_FINGERPRINT_OPTION );
+		remove_role( 'cashier' );
+		foreach ( array( 'administrator', 'shop_manager' ) as $role ) {
+			get_role( $role )->remove_cap( 'view_woocommerce_pos_costs' );
+		}
+
+		( new Activator() )->single_activate( false );
+
+		foreach ( array( 'administrator', 'shop_manager', 'cashier' ) as $role ) {
+			$this->assertTrue( get_role( $role )->has_cap( 'view_woocommerce_pos_costs' ), $role );
+		}
+		$this->assertSame( '2.2.0', get_option( self::ROLE_CAPS_SYNCED_OPTION )['_introduced']['view_woocommerce_pos_costs'] );
+	}
+
+	/**
+	 * A 2.1 site: roles synced, the marker recording every 2.0.0 capability, no cost grant yet.
+	 *
+	 * @param Activator $activator Activator.
+	 */
+	private function arrange_two_point_one_install( Activator $activator ): void {
+		$activator->single_activate( false );
+		foreach ( array( 'administrator', 'shop_manager', 'cashier' ) as $role ) {
+			get_role( $role )->remove_cap( 'view_woocommerce_pos_costs' );
+		}
+		$synced = get_option( self::ROLE_CAPS_SYNCED_OPTION );
+		unset( $synced['_introduced']['view_woocommerce_pos_costs'] );
+		foreach ( array( 'administrator', 'shop_manager', 'cashier' ) as $role ) {
+			$synced[ $role ] = array_values( array_diff( $synced[ $role ], array( 'view_woocommerce_pos_costs' ) ) );
+		}
+		update_option( self::ROLE_CAPS_SYNCED_OPTION, $synced );
+		update_option( self::ROLE_CAPS_FINGERPRINT_OPTION, 'stale' );
+		$this->assertFalse( get_role( 'cashier' )->has_cap( 'view_woocommerce_pos_costs' ) );
 	}
 
 	/**

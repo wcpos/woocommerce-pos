@@ -47,6 +47,7 @@ class Test_Permission_Registry extends WP_UnitTestCase {
 				'view_woocommerce_pos_reports',
 				'manage_woocommerce_pos_closures',
 				'reassign_woocommerce_pos_sales',
+				'view_woocommerce_pos_costs',
 			),
 			'wc' => array(
 				$customer_create_cap,
@@ -123,6 +124,7 @@ class Test_Permission_Registry extends WP_UnitTestCase {
 			'edit_private_shop_coupons'    => true,
 			'edit_others_shop_coupons'     => true,
 			'manage_product_terms'         => true,
+			'view_woocommerce_pos_costs'   => true,
 		);
 
 		$expected = array(
@@ -147,6 +149,7 @@ class Test_Permission_Registry extends WP_UnitTestCase {
 				'delete_others_wcpos_stores',
 				'edit_private_wcpos_stores',
 				'edit_published_wcpos_stores',
+				'view_woocommerce_pos_costs',
 			),
 			'shop_manager'  => array(
 				'manage_woocommerce_pos',
@@ -155,6 +158,7 @@ class Test_Permission_Registry extends WP_UnitTestCase {
 				'view_woocommerce_pos_reports',
 				'manage_woocommerce_pos_closures',
 				'reassign_woocommerce_pos_sales',
+				'view_woocommerce_pos_costs',
 			),
 		);
 		$actual = Activator::role_capability_definition();
@@ -200,6 +204,22 @@ class Test_Permission_Registry extends WP_UnitTestCase {
 		foreach ( Permission_Registry::labels() as $label ) {
 			$this->assertNotEmpty( $label );
 		}
+	}
+
+	/** Seeing cost is a data permission introduced in 2.2.0 under its own label. */
+	public function test_view_costs_is_a_data_permission_introduced_in_two_point_two(): void {
+		$entries = array_column( Permission_Registry::entries(), null, 'capability' );
+
+		$this->assertArrayHasKey( 'view_woocommerce_pos_costs', $entries );
+		$entry = $entries['view_woocommerce_pos_costs'];
+		$this->assertSame( 'view_costs', $entry['row'] );
+		$this->assertSame( 'products', $entry['group'] );
+		$this->assertSame( 'data', $entry['kind'] );
+		$this->assertSame( 'store', $entry['tier'] );
+		$this->assertSame( array( 'administrator', 'shop_manager', 'cashier' ), $entry['defaults'] );
+		$this->assertSame( '2.2.0', $entry['introduced'] );
+		$this->assertNull( $entry['split_from'] );
+		$this->assertSame( 'See cost, profit and margin', Permission_Registry::labels()['view_costs'] );
 	}
 
 	/** A capability exposed by an extension is served when the cashier holds it. */
