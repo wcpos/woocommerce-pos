@@ -68,6 +68,9 @@ class Products {
 			add_filter( 'rest_request_before_callbacks', array( $this, 'hide_pos_only_wp_rest_single' ), PHP_INT_MIN, 3 );
 			add_filter( 'oembed_response_data', array( $this, 'hide_pos_only_oembed' ), PHP_INT_MAX, 2 );
 			add_filter( 'redirect_canonical', array( $this, 'prevent_pos_only_canonical_redirect' ), PHP_INT_MAX );
+			// Last, so the ids are merged after any other callback has set post__in or post__not_in.
+			add_action( 'pre_get_comments', array( $this, 'hide_pos_only_product_comments' ), PHP_INT_MAX );
+			add_filter( 'comment_feed_where', array( $this, 'exclude_pos_only_from_comment_feed' ), PHP_INT_MAX, 2 );
 			// Last, so a later callback that sets suppress_filters or post__in, or edits
 			// the WHERE clause, has already run when the exclusion is decided.
 			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ), PHP_INT_MAX );
@@ -385,6 +388,53 @@ class Products {
 	}
 
 	/**
+	 * Run in pre_get_comments, before the cache key and both the item and count queries.
+	 * The Store API reviews list, its X-WP-Total and X-WP-TotalPages, the wp/v2 comments
+	 * list and the Recent Reviews widget all leave out POS Only products' comments.
+	 *
+	 * @param \WP_Comment_Query $query The comment query being prepared.
+	 */
+	public function hide_pos_only_product_comments( $query ): void {
+		if ( ! $query instanceof \WP_Comment_Query || ! $this->pos_only_comment_exclusion_applies() ) {
+			return;
+		}
+		$ids = $this->pos_only_product_ids();
+		if ( empty( $ids ) ) {
+			return;
+		}
+
+		$post_id = (int) ( $query->query_vars['post_id'] ?? 0 );
+		if ( $post_id && ! \in_array( $post_id, $ids, true ) ) {
+			return;
+		}
+		$post__in = wp_parse_id_list( $query->query_vars['post__in'] ?? array() );
+		if ( $post__in && ! array_intersect( $post__in, $ids ) ) {
+			return;
+		}
+
+		$query->query_vars['post__not_in'] = array_values( array_unique( array_merge( wp_parse_id_list( $query->query_vars['post__not_in'] ?? array() ), $ids ) ) );
+	}
+
+	/**
+	 * The comments feed builds its SQL in WP_Query::get_posts(), so pre_get_comments does not reach it.
+	 *
+	 * @param string    $where The feed's existing WHERE clause.
+	 * @param \WP_Query $query The feed query.
+	 */
+	public function exclude_pos_only_from_comment_feed( $where, $query ): string {
+		global $wpdb;
+		if ( ! $this->pos_only_comment_exclusion_applies() ) {
+			return $where;
+		}
+		$ids = $this->pos_only_product_ids();
+		if ( empty( $ids ) ) {
+			return $where;
+		}
+
+		return $where . " AND {$wpdb->comments}.comment_post_ID NOT IN (" . implode( ',', array_map( 'intval', $ids ) ) . ')';
+	}
+
+	/**
 	 * Whether a product or variation id is POS Only and the request is a storefront one.
 	 *
 	 * @param int $id The product or variation id.
@@ -400,6 +450,24 @@ class Products {
 	 */
 	private function is_hidden_from_viewer( int $id ): bool {
 		return $this->is_hidden_on_storefront( $id ) && ! current_user_can( 'edit_post', $id );
+	}
+
+	/**
+	 * Whether comment queries on this request leave out comments on POS Only products:
+	 * a storefront request by a user who cannot edit products.
+	 */
+	private function pos_only_comment_exclusion_applies(): bool {
+		return $this->is_storefront_request() && ! current_user_can( 'edit_products' );
+	}
+
+	/**
+	 * Get the POS Only product ids excluded from shopper comment queries.
+	 *
+	 * @return int[]
+	 */
+	private function pos_only_product_ids(): array {
+		$settings = Settings::instance()->get_pos_only_product_visibility_settings();
+		return \is_array( $settings ) ? wp_parse_id_list( $settings['ids'] ?? array() ) : array();
 	}
 
 	/**
@@ -445,7 +513,7 @@ class Products {
 		 * feeds and sitemaps) and false in wp-admin, WP-CLI, the WooCommerce admin
 		 * REST namespaces and the POS itself. Return false to let a context of
 		 * your own see POS Only products.
-		 * This filter governs product queries; single-item reads (is_visible, the Store API and wp/v2 single-item routes, oEmbed and the canonical redirect) do not apply it.
+			 * This filter governs product queries; single-item reads (is_visible, the Store API and wp/v2 single-item routes, oEmbed and the canonical redirect) and comment queries do not apply it.
 		 *
 		 * @param bool      $hide  Whether to exclude POS Only products from this query.
 		 * @param \WP_Query $query The query being decided.

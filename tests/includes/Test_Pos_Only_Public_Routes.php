@@ -38,6 +38,27 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 	private $visible;
 
 	/**
+	 * Product category id shared by both products.
+	 *
+	 * @var int
+	 */
+	private $term_id;
+
+	/**
+	 * Published blog post id.
+	 *
+	 * @var int
+	 */
+	private $blog_post;
+
+	/**
+	 * Approved comment id on the blog post.
+	 *
+	 * @var int
+	 */
+	private $blog_comment;
+
+	/**
 	 * Review ids by product fixture.
 	 *
 	 * @var array<string, int>
@@ -61,18 +82,22 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
 		new Products();
 
+		$term           = wp_insert_term( 'Public Routes Category', 'product_cat' );
+		$this->term_id  = (int) $term['term_id'];
 		$this->pos_only = ProductHelper::create_simple_product(
 			array(
-				'name' => 'Public Routes POS Only Alpha',
-				'slug' => 'public-routes-pos-only-alpha',
-				'sku'  => 'PR-POS-ONLY',
+				'name'         => 'Public Routes POS Only Alpha',
+				'slug'         => 'public-routes-pos-only-alpha',
+				'sku'          => 'PR-POS-ONLY',
+				'category_ids' => array( $this->term_id ),
 			)
 		)->get_id();
 		$this->visible  = ProductHelper::create_simple_product(
 			array(
-				'name' => 'Public Routes Visible Bravo',
-				'slug' => 'public-routes-visible-bravo',
-				'sku'  => 'PR-VISIBLE',
+				'name'         => 'Public Routes Visible Bravo',
+				'slug'         => 'public-routes-visible-bravo',
+				'sku'          => 'PR-VISIBLE',
+				'category_ids' => array( $this->term_id ),
 			)
 		)->get_id();
 
@@ -85,7 +110,11 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 
-		foreach ( array( 'pos_only' => $this->pos_only, 'visible' => $this->visible ) as $key => $product_id ) {
+		$products = array(
+			'pos_only' => $this->pos_only,
+			'visible'  => $this->visible,
+		);
+		foreach ( $products as $key => $product_id ) {
 			$id = wp_insert_comment(
 				array(
 					'comment_post_ID'  => $product_id,
@@ -98,6 +127,22 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 			update_comment_meta( $id, 'rating', 5 );
 			$this->reviews[ $key ] = $id;
 		}
+
+		$this->blog_post    = self::factory()->post->create( array( 'post_title' => 'Public Routes Blog Post' ) );
+		$this->blog_comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $this->blog_post,
+				'comment_approved' => 1,
+			)
+		);
+
+		$this->reviews['pos_only_comment'] = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $this->pos_only,
+				'comment_approved' => 1,
+				'comment_content'  => 'Comment on Public Routes POS Only Alpha',
+			)
+		);
 
 		foreach ( array( 'shop_manager', 'customer' ) as $role ) {
 			$this->users[ $role ] = self::factory()->user->create( array( 'role' => $role ) );
@@ -260,9 +305,19 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function wp_v2_search_cases(): array {
 		return array(
-			'product search' => array( array( 'search' => 'Public Routes POS Only Alpha', 'subtype' => 'product' ) ),
+			'product search' => array(
+				array(
+					'search'  => 'Public Routes POS Only Alpha',
+					'subtype' => 'product',
+				),
+			),
 			'all subtypes'   => array( array( 'search' => 'Public Routes POS Only Alpha' ) ),
-			'include'        => array( array( 'include' => true, 'subtype' => 'product' ) ),
+			'include'        => array(
+				array(
+					'include' => true,
+					'subtype' => 'product',
+				),
+			),
 		);
 	}
 
@@ -432,6 +487,168 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->get( '/wp/v2/comments/' . $this->reviews['visible'] );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $this->reviews['visible'], $response->get_data()['id'] );
+	}
+
+	/** The shopper's review list and both totals describe only the visible review. */
+	public function test_store_api_reviews_list_omits_pos_only_product_review_and_counts(): void {
+		$response = $this->get( '/wc/store/v1/products/reviews' );
+		$this->assertSame( array( $this->reviews['visible'] ), $this->review_ids( $response ) );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-TotalPages'] );
+		$this->assertStringNotContainsString( 'Public Routes POS Only Alpha', wp_json_encode( $response->get_data() ) );
+	}
+
+	/** A one-review page leaves no second page for the hidden review. */
+	public function test_store_api_reviews_paged_list_counts_exclude_pos_only_review(): void {
+		$params   = array( 'per_page' => 1 );
+		$response = $this->get( '/wc/store/v1/products/reviews', $params );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-TotalPages'] );
+
+		$params['page'] = 2;
+		$response       = $this->get( '/wc/store/v1/products/reviews', $params );
+		$this->assertSame( array(), $response->get_data() );
+	}
+
+	/** The separate count query for an empty page still excludes the hidden review. */
+	public function test_store_api_reviews_out_of_range_page_total_excludes_pos_only_review(): void {
+		$response = $this->get(
+			'/wc/store/v1/products/reviews',
+			array(
+				'per_page' => 1,
+				'page'     => 5,
+			)
+		);
+		$this->assertSame( array(), $response->get_data() );
+		$this->assertSame( 1, (int) $response->get_headers()['X-WP-Total'] );
+	}
+
+	/** Filtering reviews by a hidden product is indistinguishable from filtering by a missing one. */
+	public function test_store_api_reviews_product_id_of_pos_only_product_matches_missing_product(): void {
+		$hidden  = $this->get( '/wc/store/v1/products/reviews', array( 'product_id' => $this->pos_only ) );
+		$missing = $this->get( '/wc/store/v1/products/reviews', array( 'product_id' => 999999 ) );
+		$this->assertSame( $missing->get_data(), $hidden->get_data() );
+		$this->assertSame( $missing->get_headers()['X-WP-Total'], $hidden->get_headers()['X-WP-Total'] );
+		$this->assertSame( $missing->get_headers()['X-WP-TotalPages'], $hidden->get_headers()['X-WP-TotalPages'] );
+		$this->assertSame( array(), $hidden->get_data() );
+	}
+
+	/** A mixed list of product ids returns only the visible product's review. */
+	public function test_store_api_reviews_product_ids_mixed_returns_only_visible_review(): void {
+		$response = $this->get( '/wc/store/v1/products/reviews', array( 'product_id' => $this->pos_only . ',' . $this->visible ) );
+		$this->assertSame( array( $this->reviews['visible'] ), $this->review_ids( $response ) );
+	}
+
+	/** The shared category returns only the visible product's review. */
+	public function test_store_api_reviews_category_id_omits_pos_only_product_review(): void {
+		$response = $this->get( '/wc/store/v1/products/reviews', array( 'category_id' => $this->term_id ) );
+		$this->assertSame( array( $this->reviews['visible'] ), $this->review_ids( $response ) );
+	}
+
+	/** A shop manager can list both product reviews. */
+	public function test_store_api_reviews_for_shop_manager_include_pos_only_review(): void {
+		wp_set_current_user( $this->users['shop_manager'] );
+		$response = $this->get( '/wc/store/v1/products/reviews' );
+		$ids      = $this->review_ids( $response );
+		$this->assertContains( $this->reviews['pos_only'], $ids );
+		$this->assertContains( $this->reviews['visible'], $ids );
+		$this->assertSame( 2, (int) $response->get_headers()['X-WP-Total'] );
+	}
+
+	/** A POS request can list both product reviews. */
+	public function test_store_api_reviews_on_pos_request_include_pos_only_review(): void {
+		$response = $this->as_pos(
+			function () {
+				return $this->get( '/wc/store/v1/products/reviews' );
+			}
+		);
+		$ids      = $this->review_ids( $response );
+		$this->assertContains( $this->reviews['pos_only'], $ids );
+		$this->assertContains( $this->reviews['visible'], $ids );
+		$this->assertSame( 2, (int) $response->get_headers()['X-WP-Total'] );
+	}
+
+	/** A shopper cannot reuse the cached list or count from a POS request. */
+	public function test_store_api_reviews_after_pos_request_still_omit_pos_only_review(): void {
+		$get_reviews = function () {
+			return $this->get( '/wc/store/v1/products/reviews' );
+		};
+		$pos         = $this->as_pos( $get_reviews );
+		$ids         = $this->review_ids( $pos );
+		$this->assertContains( $this->reviews['pos_only'], $ids );
+		$this->assertContains( $this->reviews['visible'], $ids );
+		$this->assertSame( 2, (int) $pos->get_headers()['X-WP-Total'] );
+
+		$shopper = $get_reviews();
+		$this->assertSame( array( $this->reviews['visible'] ), $this->review_ids( $shopper ) );
+		$this->assertSame( 1, (int) $shopper->get_headers()['X-WP-Total'] );
+	}
+
+	/** Disabling POS Only products restores both reviews to the shopper's list. */
+	public function test_store_api_reviews_with_pos_only_setting_off_include_pos_only_review(): void {
+		$this->set_pos_only_flag_on_next_request( false );
+		$response = $this->get( '/wc/store/v1/products/reviews' );
+		$ids      = $this->review_ids( $response );
+		$this->assertContains( $this->reviews['pos_only'], $ids );
+		$this->assertContains( $this->reviews['visible'], $ids );
+		$this->assertSame( 2, (int) $response->get_headers()['X-WP-Total'] );
+	}
+
+	/** The public comments collection includes the blog comment but not the hidden product's comment. */
+	public function test_wp_v2_comments_list_omits_comment_on_pos_only_product(): void {
+		$response = $this->get( '/wp/v2/comments' );
+		$ids      = $this->review_ids( $response );
+		$this->assertNotContains( $this->reviews['pos_only_comment'], $ids );
+		$this->assertContains( $this->blog_comment, $ids );
+		$this->assertSame( count( $response->get_data() ), (int) $response->get_headers()['X-WP-Total'] );
+	}
+
+	/** A shop manager can list the regular comment on a hidden product. */
+	public function test_wp_v2_comments_list_for_shop_manager_includes_comment_on_pos_only_product(): void {
+		wp_set_current_user( $this->users['shop_manager'] );
+		$response = $this->get( '/wp/v2/comments' );
+		$this->assertContains( $this->reviews['pos_only_comment'], $this->review_ids( $response ) );
+	}
+
+	/** The comments feed omits both kinds of comment on the hidden product. */
+	public function test_comments_feed_omits_pos_only_product_review(): void {
+		$this->go_to( home_url( '/?feed=comments-rss2' ) );
+		$ids = array_map( 'intval', wp_list_pluck( $GLOBALS['wp_query']->comments, 'comment_ID' ) );
+		$this->assertNotContains( $this->reviews['pos_only'], $ids );
+		$this->assertNotContains( $this->reviews['pos_only_comment'], $ids );
+		$this->assertContains( $this->reviews['visible'], $ids );
+	}
+
+	/** The Recent Reviews widget names the visible product but not the hidden one. */
+	public function test_recent_reviews_widget_omits_pos_only_product_name(): void {
+		ob_start();
+		the_widget(
+			'WC_Widget_Recent_Reviews',
+			array(
+				'title'  => 'Recent',
+				'number' => 10,
+			)
+		);
+		$output = ob_get_clean();
+		$this->assertStringNotContainsString( 'Public Routes POS Only Alpha', $output );
+		$this->assertStringContainsString( 'Public Routes Visible Bravo', $output );
+	}
+
+	/** A query pinned to a blog post keeps its exclusions and returns its comment. */
+	public function test_comment_query_pinned_to_other_post_keeps_query_vars_unchanged(): void {
+		$query    = new \WP_Comment_Query();
+		$comments = $query->query( array( 'post_id' => $this->blog_post ) );
+		$this->assertEmpty( $query->query_vars['post__not_in'] );
+		$this->assertSame( array( $this->blog_comment ), array_map( 'intval', wp_list_pluck( $comments, 'comment_ID' ) ) );
+	}
+
+	/**
+	 * Read the integer ids from a review or comment collection.
+	 *
+	 * @param WP_REST_Response $response The collection response.
+	 */
+	private function review_ids( $response ): array {
+		return array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
 	}
 
 	/**
