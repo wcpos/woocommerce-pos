@@ -1300,7 +1300,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$before = Ledger::instance()->read( wc_get_order( $id ) );
 
 		// Act.
-		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+		$response = $this->wc_refund(
+			$order,
+			array(
+				'amount' => '4.00',
+				'api_refund' => true,
+			)
+		);
 
 		// Assert.
 		$this->assertSame( 409, $response->get_status() );
@@ -1348,7 +1354,14 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$before = Ledger::instance()->read( wc_get_order( $id ) );
 
 		// Act.
-		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ), 'v2' );
+		$response = $this->wc_refund(
+			$order,
+			array(
+				'amount' => '4.00',
+				'api_refund' => true,
+			),
+			'v2'
+		);
 
 		// Assert.
 		$this->assertSame( 409, $response->get_status() );
@@ -1370,7 +1383,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 200, $correction->get_status() );
 
 		// Act.
-		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => false ) );
+		$response = $this->wc_refund(
+			$order,
+			array(
+				'amount' => '4.00',
+				'api_refund' => false,
+			)
+		);
 
 		// Assert.
 		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
@@ -1389,7 +1408,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		Ledger_Seed::rows( $order, array( $this->captured_row( 'wcpos_adopt_refund_test', 'card', '10.00' ) ), false );
 
 		// Act.
-		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+		$response = $this->wc_refund(
+			$order,
+			array(
+				'amount' => '4.00',
+				'api_refund' => true,
+			)
+		);
 
 		// Assert.
 		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
@@ -1410,7 +1435,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		Ledger_Seed::rows( $order, array( $other, $verified ), false );
 
 		// Act.
-		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+		$response = $this->wc_refund(
+			$order,
+			array(
+				'amount' => '4.00',
+				'api_refund' => true,
+			)
+		);
 
 		// Assert.
 		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
@@ -1428,7 +1459,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
 
 		// Act.
-		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+		$response = $this->wc_refund(
+			$order,
+			array(
+				'amount' => '4.00',
+				'api_refund' => true,
+			)
+		);
 
 		// Assert.
 		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
@@ -1445,7 +1482,13 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'subscriber' ) ) );
 
 		// Act.
-		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+		$response = $this->wc_refund(
+			$order,
+			array(
+				'amount' => '4.00',
+				'api_refund' => true,
+			)
+		);
 
 		// Assert.
 		$this->assertContains( $response->get_status(), array( 401, 403 ) );
