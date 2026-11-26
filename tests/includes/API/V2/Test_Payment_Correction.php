@@ -613,6 +613,37 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Create a refund through WooCommerce's own REST route.
+	 *
+	 * @param \WC_Order $order   Order to refund.
+	 * @param array     $body    Request body.
+	 * @param string    $version WooCommerce route version.
+	 */
+	private function wc_refund( \WC_Order $order, array $body, string $version = 'v3' ): \WP_REST_Response {
+		$request = new \WP_REST_Request( 'POST', '/wc/' . $version . '/orders/' . $order->get_id() . '/refunds' );
+		$request->set_body_params( $body );
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * A captured row to stage without projecting the order's gateway.
+	 *
+	 * @param string $method_id Method.
+	 * @param string $kind      Kind.
+	 * @param string $amount    Captured amount.
+	 */
+	private function captured_row( string $method_id, string $kind, string $amount ): array {
+		return array(
+			'id'           => wp_generate_uuid4(),
+			'method_id'    => $method_id,
+			'kind'         => $kind,
+			'capture_mode' => 'manual',
+			'amount'       => $amount,
+			'status'       => 'captured',
+		);
+	}
+
+	/**
 	 * POST a money command body.
 	 *
 	 * @param string $path Route path.
@@ -1256,6 +1287,170 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		} finally {
 			remove_filter( 'wcpos_payment_method_kind', $stored_value, 10 );
 		}
+	}
+
+	/** An explicit provider refund of a hand-recorded replacement writes nothing. */
+	public function test_wc_refund_with_api_refund_of_unverified_replacement_returns_409_and_writes_nothing(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$correction           = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+		$this->assertSame( 200, $correction->get_status() );
+		$id     = $order->get_id();
+		$before = Ledger::instance()->read( wc_get_order( $id ) );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'wcpos_refund_unverified_payment', $data['code'] );
+		$this->assertSame( 'unverified', $data['data']['reason'] );
+		$this->assertSame( $correction->get_data()['payment']['id'], $data['data']['payment_id'] );
+		$this->assertEmpty( wc_get_order( $id )->get_refunds() );
+		$this->assertSame( $before, Ledger::instance()->read( wc_get_order( $id ) ) );
+		$this->assertSame( 0, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** Omitting api_refund still requests a provider refund on the v3 route. */
+	public function test_wc_refund_without_api_refund_field_of_unverified_replacement_returns_409(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$correction           = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+		$this->assertSame( 200, $correction->get_status() );
+		$id     = $order->get_id();
+		$before = Ledger::instance()->read( wc_get_order( $id ) );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00' ) );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'wcpos_refund_unverified_payment', $data['code'] );
+		$this->assertSame( 'unverified', $data['data']['reason'] );
+		$this->assertSame( $correction->get_data()['payment']['id'], $data['data']['payment_id'] );
+		$this->assertEmpty( wc_get_order( $id )->get_refunds() );
+		$this->assertSame( $before, Ledger::instance()->read( wc_get_order( $id ) ) );
+		$this->assertSame( 0, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** The v2 refund route also refuses an unverified payment without writing. */
+	public function test_wc_v2_refund_with_api_refund_of_unverified_replacement_returns_409(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$correction           = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+		$this->assertSame( 200, $correction->get_status() );
+		$id     = $order->get_id();
+		$before = Ledger::instance()->read( wc_get_order( $id ) );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ), 'v2' );
+
+		// Assert.
+		$this->assertSame( 409, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'wcpos_refund_unverified_payment', $data['code'] );
+		$this->assertSame( 'unverified', $data['data']['reason'] );
+		$this->assertSame( $correction->get_data()['payment']['id'], $data['data']['payment_id'] );
+		$this->assertEmpty( wc_get_order( $id )->get_refunds() );
+		$this->assertSame( $before, Ledger::instance()->read( wc_get_order( $id ) ) );
+		$this->assertSame( 0, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** WooCommerce can record a manual refund of the replacement without calling its gateway. */
+	public function test_wc_refund_to_other_method_of_unverified_replacement_succeeds_without_gateway_call(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$correction           = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+		$this->assertSame( 200, $correction->get_status() );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => false ) );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertCount( 1, wc_get_order( $order->get_id() )->get_refunds() );
+		$this->assertSame( 0, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** A verified row on the order's gateway can be refunded through the provider. */
+	public function test_wc_refund_with_api_refund_of_verified_gateway_row_calls_gateway(): void {
+		// Arrange.
+		$this->online_gateway();
+		$order = $this->create_pos_order( '10.00' );
+		$order->set_payment_method( 'wcpos_adopt_refund_test' );
+		$order->set_status( 'completed' );
+		$order->save();
+		Ledger_Seed::rows( $order, array( $this->captured_row( 'wcpos_adopt_refund_test', 'card', '10.00' ) ), false );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 1, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** An unverified row on another method does not prevent a refund by the order's gateway. */
+	public function test_wc_refund_with_unverified_row_of_another_method_calls_gateway(): void {
+		// Arrange.
+		$this->online_gateway();
+		$order = $this->create_pos_order( '10.00' );
+		$order->set_payment_method( 'wcpos_adopt_refund_test' );
+		$order->set_status( 'completed' );
+		$order->save();
+		$other               = $this->captured_row( 'pos_card', 'card', '4.00' );
+		$other['unverified'] = true;
+		$verified            = $this->captured_row( 'wcpos_adopt_refund_test', 'card', '6.00' );
+		Ledger_Seed::rows( $order, array( $other, $verified ), false );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 1, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** An order with no ledger can still refund through its gateway. */
+	public function test_wc_refund_with_api_refund_on_order_without_ledger_calls_gateway(): void {
+		// Arrange.
+		$this->online_gateway();
+		$order = $this->create_pos_order( '10.00' );
+		$order->set_payment_method( 'wcpos_adopt_refund_test' );
+		$order->set_status( 'completed' );
+		$order->save();
+		$this->assertSame( array(), Ledger::instance()->read( wc_get_order( $order->get_id() ) ) );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status(), (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 1, Adopt_Refund_Test_Gateway::$calls );
+	}
+
+	/** A subscriber sees WooCommerce's permission error, not the unverified row. */
+	public function test_wc_refund_by_user_without_permission_returns_core_permission_error_not_guard_code(): void {
+		// Arrange.
+		$this->online_gateway();
+		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
+		$correction           = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
+		$this->assertSame( 200, $correction->get_status() );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'subscriber' ) ) );
+
+		// Act.
+		$response = $this->wc_refund( $order, array( 'amount' => '4.00', 'api_refund' => true ) );
+
+		// Assert.
+		$this->assertContains( $response->get_status(), array( 401, 403 ) );
+		$this->assertSame( 'woocommerce_rest_cannot_create', $response->get_data()['code'] );
+		$this->assertEmpty( wc_get_order( $order->get_id() )->get_refunds() );
 	}
 
 	/** Register the online card gateway fixture, enabled for POS beside cash and card, with its refund count reset. */
