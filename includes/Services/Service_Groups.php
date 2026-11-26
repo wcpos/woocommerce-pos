@@ -189,6 +189,7 @@ final class Service_Groups {
 		Stock_Validator::instance();
 		Order_Write_Intent::register();
 		Role_Meta_Guard::register();
+		Unverified_Refund_Guard::register();
 	}
 
 	/**
