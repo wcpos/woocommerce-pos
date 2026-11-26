@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use Automattic\WooCommerce\StoreApi\Exceptions\NotPurchasableException;
+use Automattic\WooCommerce\StoreApi\Exceptions\RouteException;
 use WC_Product;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Settings;
@@ -69,6 +70,10 @@ class Products {
 			add_filter( 'woocommerce_product_is_visible', array( $this, 'filter_pos_only_product_visibility' ), 10, 2 );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
 			add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_prevent_pos_only_add_to_cart' ) );
+			// Last, so the id checked is the one WooCommerce will look up.
+			add_filter( 'woocommerce_store_api_add_to_cart_data', array( $this, 'refuse_pos_only_store_api_add_to_cart' ), PHP_INT_MAX );
+			add_filter( 'woocommerce_add_cart_item_data', array( $this, 'refuse_pos_only_cart_item_data' ), PHP_INT_MAX, 3 );
+			add_filter( 'woocommerce_cart_redirect_after_error', array( $this, 'hide_pos_only_redirect_after_error' ), 10, 2 );
 
 			// NOTE: this hook is marked as deprecated.
 			add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'prevent_pos_only_add_to_cart' ), 10, 2 );
@@ -417,6 +422,98 @@ class Products {
 				esc_html( $product->get_name() )
 			);
 		}
+	}
+
+	/**
+	 * Refuse a POS Only Store API add-to-cart request as if the product did not exist.
+	 * WooCommerce's own checks name the product before the add-to-cart validation hooks run.
+	 *
+	 * @param array $data Add-to-cart data: id, quantity, variation, cart_item_data.
+	 * @throws RouteException If the product is hidden from the cart.
+	 * @return array
+	 */
+	public function refuse_pos_only_store_api_add_to_cart( $data ) {
+		$id = isset( $data['id'] ) && \is_scalar( $data['id'] ) ? $data['id'] : 0;
+		if ( $this->is_hidden_from_cart( absint( $id ) ) ) {
+			$this->throw_product_not_found( $id );
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Refuse a hidden product on Store API routes without an add-to-cart data filter
+	 * (the cart items route), before WooCommerce's purchasable and stock checks.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 * @param int   $product_id     Product ID.
+	 * @param int   $variation_id   Variation ID, or zero for a product.
+	 * @throws RouteException If the product is hidden from the cart.
+	 * @return array
+	 */
+	public function refuse_pos_only_cart_item_data( $cart_item_data, $product_id, $variation_id ) {
+		if ( 0 !== strpos( $this->rest_route, '/wc/store/' ) ) {
+			return $cart_item_data;
+		}
+
+		$id = $variation_id ? $variation_id : $product_id;
+		if ( $this->is_hidden_from_cart( absint( $id ) ) ) {
+			$this->throw_product_not_found( $id );
+		}
+
+		return $cart_item_data;
+	}
+
+	/**
+	 * Drop a hidden product's URL from classic AJAX add-to-cart errors to match a missing product's false permalink.
+	 *
+	 * @param string|false $url        Product URL.
+	 * @param int          $product_id Product ID.
+	 * @return string|false
+	 */
+	public function hide_pos_only_redirect_after_error( $url, $product_id ) {
+		return $this->is_hidden_from_cart( absint( $product_id ) ) ? false : $url;
+	}
+
+	/**
+	 * Hide listed POS Only products and variations, including variations of a listed parent,
+	 * unless the user can edit the product (the parent for a variation), regardless of request headers.
+	 *
+	 * @param int $id Product or variation ID.
+	 * @return bool
+	 */
+	private function is_hidden_from_cart( int $id ): bool {
+		if ( $id <= 0 ) {
+			return false;
+		}
+
+		$settings   = Settings::instance();
+		$product_id = $id;
+		$pos_only   = $settings->is_product_pos_only( $id ) || $settings->is_variation_pos_only( $id );
+		if ( 'product_variation' === get_post_type( $id ) ) {
+			$product_id = (int) wp_get_post_parent_id( $id );
+			$pos_only   = $pos_only || ( $product_id > 0 && $settings->is_product_pos_only( $product_id ) );
+		}
+
+		return $pos_only && ! current_user_can( 'edit_post', $product_id );
+	}
+
+	/**
+	 * Return WooCommerce's missing-product error for the requested ID.
+	 *
+	 * @param int|string $id The product id as the request gave it.
+	 * @throws RouteException The Store API missing-product error.
+	 */
+	private function throw_product_not_found( $id ): void {
+		throw new RouteException(
+			'woocommerce_rest_cart_invalid_product',
+			sprintf(
+				/* translators: %s: product ID */
+				esc_html__( 'Product with ID "%s" was not found and cannot be added to the cart.', 'woocommerce' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- WooCommerce's own message, so the answer matches a missing product in every language.
+				esc_html( (string) $id )
+			),
+			400
+		);
 	}
 
 	/**
