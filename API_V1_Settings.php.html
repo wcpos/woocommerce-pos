@@ -43,6 +43,7 @@ namespace WCPOS\WooCommercePOS\API\V1;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
@@ -261,7 +262,7 @@ class Settings extends WP_REST_Controller {
 			return $this->section_not_registered_error();
 		}
 
-		return new WP_REST_Response( $section->read(), 200 );
+		return new WP_REST_Response( $this->screen_view( $id, $section->read() ), 200 );
 	}
 
 	/**
@@ -289,6 +290,9 @@ class Settings extends WP_REST_Controller {
 		}
 
 		$result = $section->write( $section->merge( $section->read(), (array) $payload ) );
+		if ( \is_array( $result ) ) {
+			$result = $this->screen_view( $id, $result );
+		}
 
 		if ( is_wp_error( $result ) &amp;&amp; \in_array( $id, self::FLAT_ERROR_SECTIONS, true ) ) {
 			// Keep the historical error body shape {code, message} — clients do
@@ -303,6 +307,19 @@ class Settings extends WP_REST_Controller {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Add the fields only the settings screen reads, which are too costly for the
+	 * section's read (that read also feeds checkout, order writes and receipts).
+	 *
+	 * @param string $id   Section id.
+	 * @param array  $view The section's read view.
+	 *
+	 * @return array
+	 */
+	private function screen_view( string $id, array $view ): array {
+		return 'payment_gateways' === $id ? Payment_Gateways_Section::with_needs_setup( $view ) : $view;
 	}
 
 	/**

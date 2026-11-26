@@ -40,6 +40,7 @@
 
 namespace WCPOS\WooCommercePOS\Services\Settings;
 
+use WC_Payment_Gateway;
 use WC_Payment_Gateways;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
@@ -137,6 +138,37 @@ class Payment_Gateways_Section extends Abstract_Section {
 	}
 
 	/**
+	 * Add, per gateway, whether its own WooCommerce settings still need finishing.
+	 *
+	 * For the settings screen's REST response only: never call this from read(),
+	 * which feeds checkout, order writes and receipts, because a gateway's check can
+	 * block on a remote call. WC_Payment_Gateway::needs_setup() returns false for
+	 * every gateway that does not override it, so only an override can answer;
+	 * otherwise, or when the check throws, the answer is null (unknown).
+	 *
+	 * @param array $view The section's read view.
+	 * @return array
+	 */
+	public static function with_needs_setup( array $view ): array {
+		$registered = WC_Payment_Gateways::instance()->payment_gateways();
+		foreach ( $view['gateways'] ?? array() as $id => $settings ) {
+			$gateway     = $registered[ $id ] ?? null;
+			$needs_setup = null;
+			try {
+				if ( $gateway instanceof WC_Payment_Gateway
+					&amp;&amp; WC_Payment_Gateway::class !== ( new \ReflectionMethod( $gateway, 'needs_setup' ) )->getDeclaringClass()->getName() ) {
+					$needs_setup = (bool) $gateway->needs_setup();
+				}
+			} catch ( \Throwable $e ) {
+				$needs_setup = null;
+			}
+			$view['gateways'][ $id ]['needs_setup'] = $needs_setup;
+		}
+
+		return $view;
+	}
+
+	/**
 	 * REST endpoint args for payment-gateway updates.
 	 */
 	public function endpoint_args(): array {
@@ -183,11 +215,20 @@ class Payment_Gateways_Section extends Abstract_Section {
 	/**
 	 * Replace reader lists wholesale while retaining PATCH semantics elsewhere.
 	 *
+	 * The view lists only the gateways registered right now, so the stored settings
+	 * of any other gateway (its plugin inactive at the moment) are carried through
+	 * untouched rather than erased by the save.
+	 *
 	 * @param array $existing Existing settings.
 	 * @param array $patch    Incoming settings.
 	 * @return array
 	 */
 	public function merge( array $existing, array $patch ): array {
+		foreach ( $this->read_raw()['gateways'] ?? array() as $id => $stored ) {
+			if ( \is_array( $stored ) &amp;&amp; ! isset( $existing['gateways'][ $id ] ) ) {
+				$existing['gateways'][ $id ] = $stored;
+			}
+		}
 		foreach ( $patch['gateways'] ?? array() as $id => $gateway ) {
 			if ( \array_key_exists( 'allowed_readers', $gateway ) ) {
 				unset( $existing['gateways'][ $id ]['allowed_readers'] );
@@ -205,7 +246,7 @@ class Payment_Gateways_Section extends Abstract_Section {
 	protected function sanitize( array $settings ): array {
 		foreach ( $settings['gateways'] ?? array() as $id => $gateway ) {
 			// Computed on every read; a PATCH echoes the view back, so keep it out of the option.
-			unset( $settings['gateways'][ $id ]['capture_mode'], $settings['gateways'][ $id ]['kind'] );
+			unset( $settings['gateways'][ $id ]['capture_mode'], $settings['gateways'][ $id ]['kind'], $settings['gateways'][ $id ]['needs_setup'] );
 			// A writer that skipped the endpoint (save_settings) cannot store a value the list and the
 			// till would refuse; it becomes no rounding. The pre-save filter runs after this.
 			$increment = (string) ( $gateway['rounding_increment'] ?? '' );
